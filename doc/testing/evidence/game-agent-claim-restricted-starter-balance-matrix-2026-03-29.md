@@ -49,3 +49,5 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime explorer_p1
   - 还没有 `issuance_reason / issuer_id / expires_at_epoch` 持久化状态与事件。
   - 还没有 restricted grant 的过期/回收和经济审计证据。
 - 下一步应回到 `producer_system_designer` 执行 `TASK-GAME-048`，决定是收敛 PRD 范围，还是重新打开 runtime/liveops 任务补齐 grant lifecycle。
+- 追记（2026-03-29，同日后续）:
+  - 上述 blocker 已在 `TASK-GAME-049/050/051` 中被逐步补齐；正式 successor evidence 见 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`。

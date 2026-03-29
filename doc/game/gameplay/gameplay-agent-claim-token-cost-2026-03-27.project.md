@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 7
+审计轮次: 8
 
 ## 任务拆解
 
@@ -19,7 +19,7 @@
 - [x] TASK-GAMEPLAY-AGC-010 (`PRD-GAME-011`) [test_tier_required]: `producer_system_designer` 已基于 QA `block` 结论完成首轮复核，决定维持 `slot-1 only / non-transferable / provenance-preserving` 边界，不收窄 restricted grant 的 lifecycle / audit 要求，并重新打开后续 runtime / liveops / QA 补齐链路。
 - [x] TASK-GAMEPLAY-AGC-011 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已落地 restricted grant lifecycle：补齐 `issuance_reason / issuer_id / expires_at_epoch` 持久化状态、issue/expire/revoke canonical 事件、issuer-scoped 发放/回收动作与 main token 源汇审计链路，并将 grant 终态后的 restricted bond refund 重定向回 treasury。
 - [x] TASK-GAMEPLAY-AGC-012 (`PRD-GAME-011`) [test_tier_required]: `liveops_community` 已建立 restricted grant 的运营发放口径与回收 runbook，冻结 `allowlist / qa_seed / liveops_campaign` 的 issuer 边界、过期策略、撤销条件与 incident fallback；v1 统一使用 `issuer_id=liveops`，并把 `issuance_reason` 收口到三类允许值。
-- [ ] TASK-GAMEPLAY-AGC-013 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `qa_engineer` 建立 restricted grant lifecycle / audit matrix，验证 issuance metadata、expiry/revoke、source-sink 审计与 transfer non-bypass 全部闭环。
+- [x] TASK-GAMEPLAY-AGC-013 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted grant lifecycle / audit matrix，验证 issuance metadata、expiry/revoke、source-sink 审计与 transfer non-bypass 全部闭环；专题 evidence 已收口到 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`。
 
 ## 依赖
 
@@ -32,9 +32,9 @@
 ## 状态
 
 - 更新日期: 2026-03-29
-- 当前状态: in_progress
-- 当前 owner: `qa_engineer`
-- 下一任务: `TASK-GAMEPLAY-AGC-013`（建立 restricted grant lifecycle / audit matrix，验证 expiry/revoke/source-sink 与 non-bypass）
+- 当前状态: completed
+- 当前 owner: `producer_system_designer`
+- 下一任务: `无（当前专题已闭环；后续仅在真实 claim 分布、liveops 或 QA 信号异常时再重开）`
 - 已完成补充:
   - `TASK-GAMEPLAY-AGC-001` 已新增 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.{prd,design,project}.md`，并将 `PRD-GAME-011` 挂入 game 根 PRD / project / 索引 / README。
   - `TASK-GAMEPLAY-AGC-002` 已在 `crates/oasis7/src/runtime/` 落地 `ClaimAgent / ReleaseAgentClaim` 动作、claim 状态持久化、自动 upkeep/grace/idle reclaim processor 与 main token 账本联动。
@@ -49,6 +49,7 @@
   - `TASK-GAMEPLAY-AGC-011` 已在 `crates/oasis7/src/runtime/` 增加 `RestrictedStarterClaimGrantState/Status`、issue/revoke 动作与 issued/expired/revoked 事件、`restricted_starter_claim_grants` 持久化 map、epoch 自动过期处理与 issuer-scope 校验；grant 发放从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，grant 撤销/过期则把剩余 restricted spendable 退回同一 treasury bucket，形成 source-sink 审计闭环。
   - `TASK-GAMEPLAY-AGC-011` 同步把 claim release / forced reclaim 的 restricted refund sink 显式写入 canonical 事件；当 grant 已 `expired/revoked` 时，后续 restricted bond refund 不再回到 beneficiary restricted bucket，而是定向退回 treasury，避免受限启动金在生命周期终态后被重新激活。
   - `TASK-GAMEPLAY-AGC-012` 已新增 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`，将 v1 运营口径收口为：统一使用 `issuer_id=liveops`，仅允许 `preview_allowlist / qa_seed / liveops_campaign` 三类 `issuance_reason`，并明确发放前检查、expiry 策略、推荐 `revoke_reason` 与 incident fallback；`qa_seed` 请求仍可由 `qa_engineer` 发起，但正式 issue / revoke 统一由 `liveops_community` 执行。
+  - `TASK-GAMEPLAY-AGC-013` 已新增 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`，并以 fresh required/full 复跑确认：issue metadata、expiry/revoke、ecosystem treasury source-sink、grant 终态后的 restricted refund sink redirect、viewer compat 与 transfer/explorer non-bypass 全部 `pass`；因此 `PRD-GAME-011` 的 restricted grant blocker 已正式解除。
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，本轮 producer review 结论为先不因 restricted starter balance 额外改价，后续仅在 lifecycle/liveops 真实数据出现异常时再新开调参专题。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：
@@ -69,12 +70,19 @@
     - `rg -n "issuer_id = liveops|preview_allowlist|qa_seed|liveops_campaign|revoke_reason|Incident Fallback" doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+  - 本轮 QA grant required/full 验证已覆盖：
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required runtime::tests::agent_claims:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full runtime::tests::agent_claims:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib viewer::runtime_live::tests::compat_snapshot_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime preflight_transfer_rejects_restricted_only_balance -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime transfer_accounts_endpoint_exposes_restricted_balance_separately -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime explorer_p1_endpoints_return_expected_payloads -- --nocapture`
 - 阻断条件:
   - 若 runtime 无法保证同一 agent 的单 owner 原子性，则 claim 功能不得进入实现态。
   - 若 restricted starter balance 能通过普通转账、slot-2/3 claim 或 explorer 总额误读洗成可转账资产，则不得合入。
   - 若 viewer / pure API 无法给出 canonical claim 成本、funding source 与倒计时，则不得宣称 claim 机制可正式使用。
   - 若经济审计无法覆盖 activation fee、upkeep、refund/slash 与 restricted grant，则不得合入。
-  - 当前 runtime grant lifecycle 与 liveops issuer runbook 已闭环，但 QA lifecycle/audit matrix 仍缺正式结论，因此本专题统一 QA verdict 继续保持 `block`，直到 `TASK-GAMEPLAY-AGC-013` 闭环。
+  - 当前专题已无活跃 blocker；若后续真实运行信号显示 grant source-sink、expiry/revoke 或 transfer non-bypass 出现偏差，必须重新打开 `PRD-GAME-011`。
 - 说明:
   - 本专题是 gameplay 规则与经济边界，不是现实货币付费系统。
   - v1 默认不拍死绝对价格，只先冻结结构、状态机与不可突破的边界。
