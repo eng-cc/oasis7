@@ -43,4 +43,5 @@ artifacts/owr4_baseline/
 .playwright
 .playwright-cli
 crates/oasis7_viewer/dist
+crates/oasis7/explorer-index.json
 tools/openclaw/oasis7_runtime_workspace/.openclaw/
