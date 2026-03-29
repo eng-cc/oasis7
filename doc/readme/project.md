@@ -359,6 +359,21 @@
     - `rg -n "AI时代，你变\"懒\"了么|异星工厂|缺氧|补带子|拉管线|先扩哪边|先保哪边|要不要大改" doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md site/social/xiaohongshu-ai-laziness-game-mode.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-038 (PRD-README-028) [test_tier_required]: 为小红书第六篇“作为游戏工作室主理人，今年春招我会看什么人”补齐独立素材包与封面图，固定标题、正文、互动问题、关键词与热点借势边界。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
+    - `site/social/xiaohongshu-spring-recruit-cover.html`
+    - `site/social/xiaohongshu-spring-recruit-cover.png`
+    - `doc/devlog/2026-03-29.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "作为游戏工作室主理人，今年春招我会看什么人|我先看，你能不能把事接住|做得完的人|怎么用 AI|有没有玩家感觉" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-cover.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -371,15 +386,14 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-26
+- 更新日期: 2026-03-29
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-038`（已为小红书第六篇固定“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面图与热点借势边界。）
 - 最新完成: `TASK-README-037`（已为小红书第五篇固定“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口。）
 - 最新完成: `TASK-README-036`（已为小红书第四篇固定“玩家为什么不能直接控制角色”的标题、正文、轮播结构、互动问题与玩家控制边界口径。）
 - 最新完成: `TASK-README-035`（已为小红书第三篇固定“游戏是什么”的标题、正文、轮播结构、互动问题与技术预览边界。）
 - 最新完成: `TASK-README-034`（已为小红书持续运营补齐独立 runbook，并把角色卡中的第三方渠道 SOP 范围明确扩展到小红书。）
-- 最新完成: `TASK-README-033`（已为小红书第二篇固定 7 位 agent 队友介绍轮播结构、逐页文案与可截图 HTML。）
-- 最新完成: `TASK-README-030`（已为 limited preview 早期贡献奖励补齐 liveops 操作包，固定评分模板、证据字段、奖励建议档位与禁语清单，并明确不依赖 invite-only 也不公开固定 token 汇率。）
 - 最新完成: `TASK-README-029`（已为 invite-only limited preview 首轮执行补齐 liveops 操作包，固定文案、巡检窗口、信号分桶与 producer 摘要字段。）
 - 最新完成: `TASK-README-028`（已将当前有效对外文档统一收口到 `limited playable technical preview` 口径，并保持 `closed beta / play now / live now` 禁语不变。）
 - 最新完成: `TASK-README-027`（已将 Moltbook 首轮真实执行的讨论钩子与 spam 风险回写到 runbook，供后续运营复用。）

@@ -2,7 +2,7 @@
 
 审计轮次: 8
 
-更新时间：2026-03-26
+更新时间：2026-03-29
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -41,6 +41,7 @@
 | `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md` | `-` | `-` |
 | `doc/readme/governance/readme-xiaohongshu-player-boundary-post-pack-2026-03-25.md` | `-` | `-` |
 | `doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md` | `-` | `-` |
+| `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md` | `-` | `-` |
 | `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` | `-` | `-` |
 | `doc/readme/governance/readme-world-rules-consolidation.prd.md` | `doc/readme/governance/readme-world-rules-consolidation.design.md` | `doc/readme/governance/readme-world-rules-consolidation.project.md` |
 | `doc/readme/production/readme-llm-p1p2-production-closure.prd.md` | `doc/readme/production/readme-llm-p1p2-production-closure.design.md` | `doc/readme/production/readme-llm-p1p2-production-closure.project.md` |

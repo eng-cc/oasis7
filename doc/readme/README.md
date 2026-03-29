@@ -39,6 +39,7 @@
 - `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md`
 - `doc/readme/governance/readme-xiaohongshu-player-boundary-post-pack-2026-03-25.md`
 - `doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md`
+- `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 
 ## 根目录收口
