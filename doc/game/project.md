@@ -1,6 +1,6 @@
 # game PRD Project
 
-审计轮次: 10
+审计轮次: 11
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-GAME-001 (PRD-GAME-001) [test_tier_required]: 完成 game PRD 改写，建立玩法设计总入口。
@@ -134,9 +134,14 @@
 - [ ] TASK-GAME-038 (PRD-GAME-010) [test_tier_required]: `producer_system_designer` 基于 `TASK-GAME-036/037` 的真实执行样本，正式决定继续维持、收紧节奏，或触发下一轮阶段评审。
 - [x] TASK-GAME-039 (PRD-GAME-011) [test_tier_required]: 新增“agent 认领代币成本与维护机制”专题 PRD / design / project，并完成 game 根 PRD、project、索引、README 与 devlog 挂载。
 - [x] TASK-GAME-040 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 已落地 agent claim canonical 状态机、claim bond/upkeep/reclaim 记账、单 owner 原子性与审计事件，并补齐 required 定向回归。
-- [ ] TASK-GAME-041 (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 落地 claim quote、cooldown/grace/idle reclaim 倒计时、tier cap 阻断原因与 pure API 字段对齐。
-- [ ] TASK-GAME-042 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 验证 claim 并发、欠费、闲置回收、refund/slash 和经济源汇审计没有旁路。
-- [ ] TASK-GAME-043 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 基于首轮 balance 样本复核 claim 成本曲线与 tier cap，决定是否新开调参专题。
+- [x] TASK-GAME-041 (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已落地 claim quote、cooldown/grace/idle reclaim 倒计时、tier cap 阻断原因与 pure API 字段对齐。
+- [x] TASK-GAME-042 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 已验证 claim 并发、欠费、闲置回收、refund/slash 和经济源汇审计没有旁路。
+- [x] TASK-GAME-043 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 已基于首轮 balance 样本复核 claim 成本曲线与 tier cap，决定当前不新开调参专题。
+- [x] TASK-GAME-044 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 已将 `restricted starter claim balance` 写入 claim 专题 PRD / design / project 与 game 根入口，明确 `slot-1` 可用受限 bucket 启动但首个 claim 仍非免费。
+- [ ] TASK-GAME-045 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 落地 `restricted starter claim balance` bucket、slot-1 claim/upkeep 专用扣费、bond provenance、refund 拆分、transfer guard 与 snapshot/replay 兼容回归。
+- [ ] TASK-GAME-046 (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 补齐 restricted/liquid 余额拆分、funding mix、slot-1/slot-2 blocker、pure API canonical 字段与 explorer 展示口径。
+- [ ] TASK-GAME-047 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 建立 allowlist/QA seed 发放、过期/回收、slot-1 专用消费、transfer guard、refund provenance 与经济审计矩阵。
+- [ ] TASK-GAME-048 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 基于首轮 preview/liveops/QA 数据复核 starter balance 额度、过期和发放边界，决定维持、收紧或扩展。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -151,9 +156,14 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-27
+- 更新日期: 2026-03-29
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
+- 已登记待排任务: `TASK-GAME-045/046/047/048`（PRD-GAME-011 restricted starter claim balance 落地闭环）
+- 最新完成: `TASK-GAME-044`（已将 `restricted starter claim balance` 正式写入 `PRD-GAME-011`：`slot-1` 可使用受限 bucket 启动、refund 保持 provenance、公开转账面不得消费该余额。）
+- 最新完成: `TASK-GAME-043`（`producer_system_designer` 已完成首轮 claim balance 复核，结论为维持 `slot multiplier / grace / penalty / tier cap` 默认值，不新开调参专题。）
+- 最新完成: `TASK-GAME-042`（`qa_engineer` 已完成 claim 并发、欠费、闲置、refund/slash 与经济审计矩阵，确认旧版 liquid-only claim 闭环无旁路。）
+- 最新完成: `TASK-GAME-041`（`viewer_engineer` 已完成 claim quote、倒计时、tier cap blocker 与 pure API canonical 字段对齐。）
 - 最新完成: `TASK-GAME-040`（`runtime_engineer` 已在 `oasis7` runtime 内落地 `ClaimAgent / ReleaseAgentClaim`、claim bond/upkeep/grace/idle reclaim 状态机与 main token 账本联动；当前 runtime v1 暂以 `100/200/25` base defaults 和 `0/10/25` reputation score tier gates 闭环，后续仍待 `TASK-GAME-043` 复核调参。）
 - 最新完成: `TASK-GAME-039`（已新增 `PRD-GAME-011` agent 认领代币成本专题，正式冻结“首个 claim 也不免费”的规则口径，并将 claim bond / upkeep / reclaim / tier cap 挂入 game 根入口。）
 - 最新完成: `TASK-GAME-035`（已新增 `PRD-GAME-010` 受控 limited preview 执行专题，并将 owner、handoff、done 定义与验证方式正式挂载到 game 根入口。）
@@ -233,8 +243,8 @@
 - ROUND-050 进展: `producer_system_designer` 已完成 `TASK-GAMEPLAY-AGC-005`，基于当前 runtime/viewer/QA 闭环与仍然缺失的真实 claim 分布数据，正式决定继续维持 agent claim 的 v1 默认参数，不新开调参专题；`PRD-GAME-011` 当前已整体闭环，后续仅在 liveops / QA / 真实持有数据出现异常信号时再重启平衡任务。
 - ROUND-051 进展: `liveops_community` 先按 approved invite pack 尝试用 Moltbook 启动 `LTP-20260322-R1`，但执行前检查发现无可复用登录态，且 `agent-browser --session-name moltbook-ltp open https://www.moltbook.com/` 直接返回 `ERR_CONNECTION_CLOSED`；该渠道 incident 已落档。
 - ROUND-052 进展: 在用户明确要求“渠道换成 GitHub issue”后，`liveops_community` 已将 round-1 primary channel 切到 GitHub issue `eng-cc/oasis7#48`，并用 `limited playable technical preview / not a closed beta announcement / not a public launch` 的 approved boundary 完成 builder thread 发布。当前 callout 已发出，但首批有效 builder signals 仍为 `0`，因此 `TASK-GAME-036` 继续保持 `in_progress`，下一步转入 issue 评论与 linked issue/PR 巡检。
-- 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md` 与 `doc/devlog/2026-03-18.md`。
-  - 最新过程记录补充见 `doc/devlog/2026-03-21.md`。
+- ROUND-053 进展: `producer_system_designer` 已完成 `TASK-GAME-044`，把 `PRD-GAME-011` 从“claim 只消费 liquid main token”更新为“首个 claim 仍保持非零 canonical 成本，但 `slot-1` 可消费 `restricted starter claim balance`”，并追加 `TASK-GAME-045/046/047/048` 跟踪 runtime bucket、viewer/pure API 表达、QA provenance/transfer guard 矩阵与后续 producer 复核。
+- 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md`、`doc/devlog/2026-03-18.md`、`doc/devlog/2026-03-21.md` 与 `doc/devlog/2026-03-29.md`。
 
 ## 阶段收口角色交接
 ### Meta
