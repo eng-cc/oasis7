@@ -1,6 +1,6 @@
 # game PRD
 
-审计轮次: 9
+审计轮次: 10
 
 ## 目标
 - 建立 game 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -222,7 +222,7 @@
 | PRD-GAME-008 | TASK-GAME-023 + TASK-GAMEPLAY-API-001/002/003/004 | `test_tier_required` + `test_tier_full` | 文档治理检查、协议字段对账、纯 API 长玩回归、UI/API parity matrix、full-tier 长稳抽样 | 纯 API 正式入口、阶段承接、持续游玩等价性 |
 | PRD-GAME-009 | TASK-GAME-028/029/030/031/032/033 | `test_tier_required` + `test_tier_full` | 文档治理检查、统一 release gate、趋势基线对账、longrun/recovery 证据、runbook 口径检查 | 当前阶段判断、封闭 Beta 准入、对外口径一致性 |
 | PRD-GAME-010 | TASK-GAME-035/036/037/038 | `test_tier_required` | 文档治理检查、limited preview callout 与回流模板核验、QA 守门结论、producer 复盘记录 | 受控预览执行、claim drift、继续/暂停决策 |
-| PRD-GAME-011 | TASK-GAME-039/040/041/042/043/044/045/046/047/048 | `test_tier_required` + `test_tier_full` | 文档治理检查、claim/upkeep/reclaim 状态机回归、restricted bucket 与 provenance 回归、Viewer/API parity、经济审计与 abuse suite | agent 占有边界、token sink、受限启动余额、回收与可观测性 |
+| PRD-GAME-011 | TASK-GAME-039/040/041/042/043/044/045/046/047/048/049/050/051 | `test_tier_required` + `test_tier_full` | 文档治理检查、claim/upkeep/reclaim 状态机回归、restricted bucket 与 provenance 回归、grant lifecycle 与 issuer runbook、Viewer/API parity、经济审计与 abuse suite | agent 占有边界、token sink、受限启动余额、回收与可观测性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

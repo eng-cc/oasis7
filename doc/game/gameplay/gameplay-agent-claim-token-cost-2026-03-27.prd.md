@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
 
-审计轮次: 2
+审计轮次: 3
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。
@@ -149,6 +149,9 @@
 | PRD-GAME-011 | `TASK-GAME-046` | `test_tier_required` | Viewer / pure API 余额拆分、funding mix、blocked reason 与 explorer 展示回归 | 玩家表达层、资产可读性、UI/API 一致性 |
 | PRD-GAME-011 | `TASK-GAME-047` | `test_tier_required` + `test_tier_full` | allowlist/QA seed 发放、slot-1/slot-2 guard、refund provenance、过期/回收与经济审计 matrix | QA 守门、反滥用、经济审计 |
 | PRD-GAME-011 | `TASK-GAME-048` | `test_tier_required` | producer 对 starter balance 额度、过期与发放边界的首轮复核与继续/回退决策 | limited preview 节奏、版本平衡、运营口径 |
+| PRD-GAME-011 | `TASK-GAME-049` | `test_tier_required` + `test_tier_full` | restricted grant 的 `issuance_reason / issuer_id / expires_at_epoch` 状态、issue/expire/revoke 事件、issuer-scoped 发放/回收动作与 token audit linkage 回归 | runtime grant lifecycle、经济源汇审计、资金来源约束 |
+| PRD-GAME-011 | `TASK-GAME-050` | `test_tier_required` | liveops issuer 边界、allowlist/QA seed/campaign 发放口径、过期/撤销 runbook 与 incident fallback 核验 | 运营发放、对外口径、风险收敛 |
+| PRD-GAME-011 | `TASK-GAME-051` | `test_tier_required` + `test_tier_full` | restricted grant lifecycle / audit matrix、expiry/revoke/source-sink 对账与 non-bypass 验证 | QA 守门、反滥用、经济审计 |
 
 - Decision Log:
 
@@ -164,3 +167,4 @@
 | DEC-AGC-008 | refund / reclaim 必须保留 funding-source provenance，restricted 来源的 bond 退款回 restricted bucket | 所有 bond refund 统一退回 liquid main token | 若 refund 统一回 liquid，玩家可把启动补贴通过 claim/release 洗成可转账资产。 |
 | DEC-AGC-009 | restricted bucket 只允许 `slot-1 claim + slot-1 upkeep` 的窄用途，不扩成通用非流通代币 | 让 restricted bucket 覆盖任意 claim、任意 upkeep 甚至其他 main-token 动作 | 窄用途更利于 limited preview / onboarding 启动，不会意外制造第二套通用资产语义。 |
 | DEC-AGC-010 | 允许 `slot-1` 使用 `restricted + liquid` 混合支付，并记录 provenance | 要么全部 restricted，要么全部 liquid | 混合支付能避免“restricted 不够一点就完全不能用”的体验断点，同时仍可通过 provenance 保证 refund 不洗钱。 |
+| DEC-AGC-011 | 不收窄 `PRD-GAME-011` 对 restricted grant lifecycle / audit 的要求，并保持 starter balance 继续是 `slot-1` 专用、不可转账、可过期可撤销的受限余额 | 把当前实现退化为“只有一个数值 bucket、没有 issuer/expiry/audit 的临时补贴”并据此宣称专题完成 | QA 已证明 bucket 记账与展示闭环正确，但没有正式发放元数据、过期/撤销事件和审计链，就无法证明该补贴受治理、可回收、可复盘。 |
