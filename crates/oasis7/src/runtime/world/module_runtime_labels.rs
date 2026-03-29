@@ -57,6 +57,15 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::MainTokenTreasuryDistributed { .. } => {
                 "domain.main_token.treasury_distributed"
             }
+            DomainEvent::RestrictedStarterClaimGrantIssued { .. } => {
+                "domain.main_token.restricted_claim_grant_issued"
+            }
+            DomainEvent::RestrictedStarterClaimGrantExpired { .. } => {
+                "domain.main_token.restricted_claim_grant_expired"
+            }
+            DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
+                "domain.main_token.restricted_claim_grant_revoked"
+            }
             DomainEvent::AgentClaimed { .. } => "domain.gameplay.agent_claimed",
             DomainEvent::AgentClaimReleaseRequested { .. } => {
                 "domain.gameplay.agent_claim_release_requested"
@@ -206,6 +215,12 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::SettleMainTokenFee { .. } => "action.main_token.settle_fee",
         Action::UpdateMainTokenPolicy { .. } => "action.main_token.update_policy",
         Action::DistributeMainTokenTreasury { .. } => "action.main_token.distribute_treasury",
+        Action::IssueRestrictedStarterClaimGrant { .. } => {
+            "action.main_token.issue_restricted_claim_grant"
+        }
+        Action::RevokeRestrictedStarterClaimGrant { .. } => {
+            "action.main_token.revoke_restricted_claim_grant"
+        }
         Action::ClaimAgent { .. } => "action.gameplay.claim_agent",
         Action::ReleaseAgentClaim { .. } => "action.gameplay.release_agent_claim",
         Action::TransferMaterial { .. } => "action.transfer_material",

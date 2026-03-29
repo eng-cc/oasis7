@@ -27,6 +27,7 @@ mod persistence;
 mod policy;
 mod release_manifest;
 mod resources;
+mod restricted_claim_grants;
 mod rules;
 mod scheduling;
 mod snapshot;

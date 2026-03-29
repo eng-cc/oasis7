@@ -27,7 +27,7 @@ use super::main_token::{
     MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
     MainTokenNodePointsBridgeDistribution, MainTokenNodePointsBridgeEpochRecord,
     MainTokenScheduledPolicyUpdate, MainTokenSupplyState, MainTokenTreasuryDistributionRecord,
-    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    RestrictedStarterClaimGrantState, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::{
@@ -472,6 +472,8 @@ pub struct WorldState {
     #[serde(default)]
     pub main_token_balances: BTreeMap<String, MainTokenAccountBalance>,
     #[serde(default)]
+    pub restricted_starter_claim_grants: BTreeMap<String, RestrictedStarterClaimGrantState>,
+    #[serde(default)]
     pub main_token_genesis_buckets: BTreeMap<String, MainTokenGenesisAllocationBucketState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub main_token_epoch_issuance_records: BTreeMap<u64, MainTokenEpochIssuanceRecord>,
@@ -561,6 +563,7 @@ impl Default for WorldState {
             main_token_config: MainTokenConfig::default(),
             main_token_supply: MainTokenSupplyState::default(),
             main_token_balances: BTreeMap::new(),
+            restricted_starter_claim_grants: BTreeMap::new(),
             main_token_genesis_buckets: BTreeMap::new(),
             main_token_epoch_issuance_records: BTreeMap::new(),
             main_token_treasury_balances: BTreeMap::new(),
@@ -912,6 +915,9 @@ impl WorldState {
             | DomainEvent::MainTokenFeeSettled { .. }
             | DomainEvent::MainTokenPolicyUpdateScheduled { .. }
             | DomainEvent::MainTokenTreasuryDistributed { .. }
+            | DomainEvent::RestrictedStarterClaimGrantIssued { .. }
+            | DomainEvent::RestrictedStarterClaimGrantExpired { .. }
+            | DomainEvent::RestrictedStarterClaimGrantRevoked { .. }
             | DomainEvent::MaterialTransferred { .. }
             | DomainEvent::MaterialTransitStarted { .. }
             | DomainEvent::MaterialTransitCompleted { .. }

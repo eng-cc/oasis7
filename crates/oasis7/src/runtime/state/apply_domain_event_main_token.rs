@@ -1,6 +1,7 @@
 use super::super::events::MainTokenFeeKind;
 use super::super::main_token::{
     is_main_token_treasury_distribution_bucket, validate_main_token_config_bounds,
+    RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE,
     MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
@@ -831,6 +832,280 @@ impl WorldState {
                     },
                 );
             }
+            DomainEvent::RestrictedStarterClaimGrantIssued {
+                issuer_id,
+                beneficiary_account_id,
+                source_treasury_bucket_id,
+                amount,
+                issuance_reason,
+                spend_scope,
+                issued_at_epoch,
+                expires_at_epoch,
+            } => {
+                let issuer_id = issuer_id.trim();
+                if issuer_id.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant issuer_id cannot be empty".to_string(),
+                    });
+                }
+                let beneficiary_account_id = beneficiary_account_id.trim();
+                if beneficiary_account_id.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant beneficiary_account_id cannot be empty"
+                            .to_string(),
+                    });
+                }
+                let source_treasury_bucket_id = source_treasury_bucket_id.trim();
+                if source_treasury_bucket_id.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant source_treasury_bucket_id cannot be empty"
+                            .to_string(),
+                    });
+                }
+                let issuance_reason = issuance_reason.trim();
+                if issuance_reason.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant issuance_reason cannot be empty".to_string(),
+                    });
+                }
+                let spend_scope = spend_scope.trim();
+                if spend_scope.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant spend_scope cannot be empty".to_string(),
+                    });
+                }
+                if *amount == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant amount must be > 0".to_string(),
+                    });
+                }
+                if *expires_at_epoch <= *issued_at_epoch {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant expires_at_epoch must be > issued_at_epoch: expires={} issued={}",
+                            expires_at_epoch, issued_at_epoch
+                        ),
+                    });
+                }
+                if !restricted_starter_claim_grant_can_be_inserted(self, beneficiary_account_id) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant already active or pending settlement: beneficiary={beneficiary_account_id}"
+                        ),
+                    });
+                }
+                if self
+                    .main_token_balances
+                    .get(beneficiary_account_id)
+                    .map(|balance| balance.restricted_starter_claim_balance)
+                    .unwrap_or(0)
+                    > 0
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant beneficiary already has restricted balance: beneficiary={beneficiary_account_id}"
+                        ),
+                    });
+                }
+
+                debit_main_token_treasury_balance(
+                    &mut self.main_token_treasury_balances,
+                    source_treasury_bucket_id,
+                    *amount,
+                )?;
+                let account = self
+                    .main_token_balances
+                    .entry(beneficiary_account_id.to_string())
+                    .or_insert_with(|| MainTokenAccountBalance {
+                        account_id: beneficiary_account_id.to_string(),
+                        ..MainTokenAccountBalance::default()
+                    });
+                account.restricted_starter_claim_balance =
+                    account
+                        .restricted_starter_claim_balance
+                        .checked_add(*amount)
+                        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                            reason: format!(
+                            "restricted grant credit overflow: beneficiary={} current={} amount={}",
+                            beneficiary_account_id, account.restricted_starter_claim_balance, amount
+                        ),
+                        })?;
+                self.main_token_supply.circulating_supply = self
+                    .main_token_supply
+                    .circulating_supply
+                    .checked_add(*amount)
+                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant circulating overflow: current={} amount={}",
+                            self.main_token_supply.circulating_supply, amount
+                        ),
+                    })?;
+                if self.main_token_supply.circulating_supply > self.main_token_supply.total_supply {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant circulating exceeds total: circulating={} total={}",
+                            self.main_token_supply.circulating_supply,
+                            self.main_token_supply.total_supply
+                        ),
+                    });
+                }
+                self.restricted_starter_claim_grants.insert(
+                    beneficiary_account_id.to_string(),
+                    RestrictedStarterClaimGrantState {
+                        beneficiary_account_id: beneficiary_account_id.to_string(),
+                        issuer_id: issuer_id.to_string(),
+                        issuance_reason: issuance_reason.to_string(),
+                        spend_scope: spend_scope.to_string(),
+                        source_treasury_bucket_id: source_treasury_bucket_id.to_string(),
+                        issued_amount: *amount,
+                        issued_at_epoch: *issued_at_epoch,
+                        expires_at_epoch: *expires_at_epoch,
+                        status: RestrictedStarterClaimGrantStatus::Issued,
+                        status_updated_at_epoch: None,
+                        status_reason: None,
+                    },
+                );
+            }
+            DomainEvent::RestrictedStarterClaimGrantExpired {
+                beneficiary_account_id,
+                issuer_id,
+                issuance_reason,
+                spend_scope,
+                source_treasury_bucket_id,
+                issued_amount,
+                expired_amount,
+                issued_at_epoch,
+                expired_at_epoch,
+                configured_expires_at_epoch,
+            } => {
+                let grant = self.restricted_starter_claim_grants.get_mut(beneficiary_account_id)
+                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant not found for expiration: beneficiary={beneficiary_account_id}"
+                        ),
+                    })?;
+                if grant.status != RestrictedStarterClaimGrantStatus::Issued {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant already terminal before expiration: beneficiary={} status={:?}",
+                            beneficiary_account_id, grant.status
+                        ),
+                    });
+                }
+                if grant.issuer_id != *issuer_id
+                    || grant.issuance_reason != *issuance_reason
+                    || grant.spend_scope != *spend_scope
+                    || grant.source_treasury_bucket_id != *source_treasury_bucket_id
+                    || grant.issued_amount != *issued_amount
+                    || grant.issued_at_epoch != *issued_at_epoch
+                    || grant.expires_at_epoch != *configured_expires_at_epoch
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant expiration metadata mismatch: beneficiary={beneficiary_account_id}"
+                        ),
+                    });
+                }
+                if *expired_at_epoch < *configured_expires_at_epoch {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant expired before configured epoch: beneficiary={} configured={} actual={}",
+                            beneficiary_account_id, configured_expires_at_epoch, expired_at_epoch
+                        ),
+                    });
+                }
+                debit_main_token_restricted_starter_claim_balance(
+                    &mut self.main_token_balances,
+                    beneficiary_account_id,
+                    *expired_amount,
+                )?;
+                add_main_token_treasury_balance(
+                    &mut self.main_token_treasury_balances,
+                    source_treasury_bucket_id,
+                    *expired_amount,
+                )?;
+                if self.main_token_supply.circulating_supply < *expired_amount {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant expiration circulating insufficient: circulating={} amount={}",
+                            self.main_token_supply.circulating_supply, expired_amount
+                        ),
+                    });
+                }
+                self.main_token_supply.circulating_supply -= *expired_amount;
+                grant.status = RestrictedStarterClaimGrantStatus::Expired;
+                grant.status_updated_at_epoch = Some(*expired_at_epoch);
+                grant.status_reason = Some("expired".to_string());
+            }
+            DomainEvent::RestrictedStarterClaimGrantRevoked {
+                beneficiary_account_id,
+                issuer_id,
+                issuance_reason,
+                spend_scope,
+                source_treasury_bucket_id,
+                issued_amount,
+                revoked_amount,
+                issued_at_epoch,
+                revoked_at_epoch,
+                configured_expires_at_epoch,
+                revoke_reason,
+            } => {
+                let grant = self.restricted_starter_claim_grants.get_mut(beneficiary_account_id)
+                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant not found for revoke: beneficiary={beneficiary_account_id}"
+                        ),
+                    })?;
+                if grant.status != RestrictedStarterClaimGrantStatus::Issued {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant already terminal before revoke: beneficiary={} status={:?}",
+                            beneficiary_account_id, grant.status
+                        ),
+                    });
+                }
+                if grant.issuer_id != *issuer_id
+                    || grant.issuance_reason != *issuance_reason
+                    || grant.spend_scope != *spend_scope
+                    || grant.source_treasury_bucket_id != *source_treasury_bucket_id
+                    || grant.issued_amount != *issued_amount
+                    || grant.issued_at_epoch != *issued_at_epoch
+                    || grant.expires_at_epoch != *configured_expires_at_epoch
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant revoke metadata mismatch: beneficiary={beneficiary_account_id}"
+                        ),
+                    });
+                }
+                if revoke_reason.trim().is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted grant revoke_reason cannot be empty".to_string(),
+                    });
+                }
+                debit_main_token_restricted_starter_claim_balance(
+                    &mut self.main_token_balances,
+                    beneficiary_account_id,
+                    *revoked_amount,
+                )?;
+                add_main_token_treasury_balance(
+                    &mut self.main_token_treasury_balances,
+                    source_treasury_bucket_id,
+                    *revoked_amount,
+                )?;
+                if self.main_token_supply.circulating_supply < *revoked_amount {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted grant revoke circulating insufficient: circulating={} amount={}",
+                            self.main_token_supply.circulating_supply, revoked_amount
+                        ),
+                    });
+                }
+                self.main_token_supply.circulating_supply -= *revoked_amount;
+                grant.status = RestrictedStarterClaimGrantStatus::Revoked;
+                grant.status_updated_at_epoch = Some(*revoked_at_epoch);
+                grant.status_reason = Some(revoke_reason.clone());
+            }
             _ => unreachable!("apply_domain_event_main_token received unsupported event variant"),
         }
         Ok(())
@@ -855,6 +1130,77 @@ fn add_main_token_treasury_balance(
         })?;
     balances.insert(bucket_id.to_string(), next);
     Ok(())
+}
+
+fn debit_main_token_treasury_balance(
+    balances: &mut BTreeMap<String, u64>,
+    bucket_id: &str,
+    amount: u64,
+) -> Result<(), WorldError> {
+    let current = balances.get(bucket_id).copied().unwrap_or(0);
+    if current < amount {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "main token treasury insufficient: bucket={} balance={} amount={}",
+                bucket_id, current, amount
+            ),
+        });
+    }
+    balances.insert(bucket_id.to_string(), current - amount);
+    Ok(())
+}
+
+fn debit_main_token_restricted_starter_claim_balance(
+    balances: &mut BTreeMap<String, MainTokenAccountBalance>,
+    account_id: &str,
+    amount: u64,
+) -> Result<(), WorldError> {
+    let Some(account) = balances.get_mut(account_id) else {
+        if amount == 0 {
+            return Ok(());
+        }
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!("restricted grant account not found: {account_id}"),
+        });
+    };
+    if account.restricted_starter_claim_balance < amount {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "restricted grant balance insufficient: account={} balance={} amount={}",
+                account_id, account.restricted_starter_claim_balance, amount
+            ),
+        });
+    }
+    account.restricted_starter_claim_balance -= amount;
+    Ok(())
+}
+
+fn restricted_starter_claim_grant_can_be_inserted(
+    state: &WorldState,
+    beneficiary_account_id: &str,
+) -> bool {
+    let Some(grant) = state
+        .restricted_starter_claim_grants
+        .get(beneficiary_account_id)
+    else {
+        return true;
+    };
+    if grant.status == RestrictedStarterClaimGrantStatus::Issued {
+        return false;
+    }
+    let restricted_balance = state
+        .main_token_balances
+        .get(beneficiary_account_id)
+        .map(|balance| balance.restricted_starter_claim_balance)
+        .unwrap_or(0);
+    let locked_restricted = state
+        .agent_claims
+        .values()
+        .filter(|claim| claim.claim_owner_id == beneficiary_account_id)
+        .fold(0_u64, |acc, claim| {
+            acc.saturating_add(claim.claim_bond_locked_restricted_amount)
+        });
+    restricted_balance == 0 && locked_restricted == 0
 }
 
 fn main_token_fee_treasury_bucket(fee_kind: MainTokenFeeKind) -> &'static str {

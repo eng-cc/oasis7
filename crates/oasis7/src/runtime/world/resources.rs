@@ -13,8 +13,9 @@ use super::super::{
     MainTokenNodePointsBridgeEpochRecord, MainTokenScheduledPolicyUpdate, MainTokenSupplyState,
     MainTokenTreasuryDistributionRecord, MaterialLedgerId, MaterialProfileV1, MaterialStack,
     NodeAssetBalance, NodeRewardMintRecord, ProductProfileV1, ProtocolPowerReserve,
-    RecipeProfileV1, RewardAssetConfig, RewardAssetInvariantReport, RewardAssetInvariantViolation,
-    RewardSignatureGovernancePolicy, SystemOrderPoolBudget,
+    RecipeProfileV1, RestrictedStarterClaimGrantState, RewardAssetConfig,
+    RewardAssetInvariantReport, RewardAssetInvariantViolation, RewardSignatureGovernancePolicy,
+    SystemOrderPoolBudget,
 };
 use super::World;
 use crate::simulator::ResourceKind;
@@ -73,6 +74,13 @@ impl World {
 
     pub fn main_token_account_balances(&self) -> Vec<MainTokenAccountBalance> {
         self.state.main_token_balances.values().cloned().collect()
+    }
+
+    pub fn restricted_starter_claim_grant(
+        &self,
+        account_id: &str,
+    ) -> Option<&RestrictedStarterClaimGrantState> {
+        self.state.restricted_starter_claim_grants.get(account_id)
     }
 
     pub fn set_main_token_account_balance(

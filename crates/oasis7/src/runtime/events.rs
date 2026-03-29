@@ -16,6 +16,7 @@ use super::governance::GovernanceFinalityCertificate;
 use super::main_token::{
     MainTokenConfig, MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
     MainTokenNodePointsBridgeDistribution, MainTokenTreasuryDistribution,
+    RestrictedStarterClaimRefundSink,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::NodeRewardMintRecord;
@@ -378,6 +379,18 @@ pub enum Action {
         bucket_id: String,
         distributions: Vec<MainTokenTreasuryDistribution>,
     },
+    IssueRestrictedStarterClaimGrant {
+        issuer_account_id: String,
+        beneficiary_account_id: String,
+        amount: u64,
+        issuance_reason: String,
+        expires_at_epoch: u64,
+    },
+    RevokeRestrictedStarterClaimGrant {
+        issuer_account_id: String,
+        beneficiary_account_id: String,
+        revoke_reason: String,
+    },
     ClaimAgent {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -662,6 +675,12 @@ impl Action {
             | Action::SettleMainTokenFee { .. }
             | Action::UpdateMainTokenPolicy { .. }
             | Action::DistributeMainTokenTreasury { .. } => None,
+            Action::IssueRestrictedStarterClaimGrant {
+                issuer_account_id, ..
+            }
+            | Action::RevokeRestrictedStarterClaimGrant {
+                issuer_account_id, ..
+            } => Some(issuer_account_id.as_str()),
             Action::ClaimAgent {
                 claimer_agent_id, ..
             }
@@ -1063,6 +1082,41 @@ pub enum DomainEvent {
         total_amount: u64,
         distributions: Vec<MainTokenTreasuryDistribution>,
     },
+    RestrictedStarterClaimGrantIssued {
+        issuer_id: String,
+        beneficiary_account_id: String,
+        source_treasury_bucket_id: String,
+        amount: u64,
+        issuance_reason: String,
+        spend_scope: String,
+        issued_at_epoch: u64,
+        expires_at_epoch: u64,
+    },
+    RestrictedStarterClaimGrantExpired {
+        beneficiary_account_id: String,
+        issuer_id: String,
+        issuance_reason: String,
+        spend_scope: String,
+        source_treasury_bucket_id: String,
+        issued_amount: u64,
+        expired_amount: u64,
+        issued_at_epoch: u64,
+        expired_at_epoch: u64,
+        configured_expires_at_epoch: u64,
+    },
+    RestrictedStarterClaimGrantRevoked {
+        beneficiary_account_id: String,
+        issuer_id: String,
+        issuance_reason: String,
+        spend_scope: String,
+        source_treasury_bucket_id: String,
+        issued_amount: u64,
+        revoked_amount: u64,
+        issued_at_epoch: u64,
+        revoked_at_epoch: u64,
+        configured_expires_at_epoch: u64,
+        revoke_reason: String,
+    },
     AgentClaimed {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -1129,6 +1183,10 @@ pub enum DomainEvent {
         refunded_bond_restricted_amount: u64,
         #[serde(default)]
         refunded_bond_liquid_amount: u64,
+        #[serde(default)]
+        refunded_bond_restricted_sink: RestrictedStarterClaimRefundSink,
+        #[serde(default)]
+        refunded_bond_restricted_sink_bucket_id: String,
     },
     AgentClaimReclaimed {
         claimer_agent_id: String,
@@ -1143,6 +1201,10 @@ pub enum DomainEvent {
         refunded_bond_restricted_amount: u64,
         #[serde(default)]
         refunded_bond_liquid_amount: u64,
+        #[serde(default)]
+        refunded_bond_restricted_sink: RestrictedStarterClaimRefundSink,
+        #[serde(default)]
+        refunded_bond_restricted_sink_bucket_id: String,
     },
     MaterialTransferred {
         requester_agent_id: String,
@@ -1523,6 +1585,11 @@ impl DomainEvent {
             DomainEvent::MainTokenFeeSettled { .. } => None,
             DomainEvent::MainTokenPolicyUpdateScheduled { .. } => None,
             DomainEvent::MainTokenTreasuryDistributed { .. } => None,
+            DomainEvent::RestrictedStarterClaimGrantIssued { issuer_id, .. }
+            | DomainEvent::RestrictedStarterClaimGrantRevoked { issuer_id, .. } => {
+                Some(issuer_id.as_str())
+            }
+            DomainEvent::RestrictedStarterClaimGrantExpired { .. } => None,
             DomainEvent::AgentClaimed {
                 claimer_agent_id, ..
             }

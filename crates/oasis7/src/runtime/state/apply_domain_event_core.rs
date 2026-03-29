@@ -1540,6 +1540,15 @@ impl WorldState {
             event @ DomainEvent::MainTokenTreasuryDistributed { .. } => {
                 self.apply_domain_event_main_token(event, now)?;
             }
+            event @ DomainEvent::RestrictedStarterClaimGrantIssued { .. } => {
+                self.apply_domain_event_main_token(event, now)?;
+            }
+            event @ DomainEvent::RestrictedStarterClaimGrantExpired { .. } => {
+                self.apply_domain_event_main_token(event, now)?;
+            }
+            event @ DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
+                self.apply_domain_event_main_token(event, now)?;
+            }
             event @ DomainEvent::MaterialTransferred { .. } => {
                 self.apply_domain_event_industry(event, now)?;
             }

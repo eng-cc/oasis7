@@ -1,6 +1,6 @@
 # game PRD Project
 
-审计轮次: 12
+审计轮次: 13
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-GAME-001 (PRD-GAME-001) [test_tier_required]: 完成 game PRD 改写，建立玩法设计总入口。
@@ -142,7 +142,7 @@
 - [x] TASK-GAME-046 (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已补齐 restricted/liquid 余额拆分、funding mix、slot-1/slot-2 blocker、pure API canonical 字段、viewer 文案与 explorer 展示口径。
 - [x] TASK-GAME-047 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted starter balance QA 矩阵，并确认 claim/upkeep/refund/transfer guard/viewer parity 为 `pass`；当前 blocker 收敛为 restricted grant 的发放元数据、过期/回收与经济审计链未实现，证据见 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`。
 - [x] TASK-GAME-048 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 已基于 QA `block` 结论完成首轮复核，决定维持 `slot-1 only / non-transferable / provenance-preserving` 边界，不收窄 restricted grant 的 lifecycle / audit 要求，并重新打开后续补齐链路。
-- [ ] TASK-GAME-049 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 补齐 restricted grant lifecycle：实现 `issuance_reason / issuer_id / expires_at_epoch` 状态、issue/expire/revoke 事件、issuer-scoped 发放/回收动作与 main token 审计链路。
+- [x] TASK-GAME-049 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 已补齐 restricted grant lifecycle：实现 `issuance_reason / issuer_id / expires_at_epoch` 状态、issue/expire/revoke 事件、issuer-scoped 发放/回收动作与 main token 审计链路，并将终态 grant 的 restricted refund 回收到 treasury。
 - [ ] TASK-GAME-050 (PRD-GAME-011) [test_tier_required]: `liveops_community` 建立 restricted grant 的运营发放/撤销/过期 runbook，冻结 `allowlist / qa_seed / liveops_campaign` issuer 边界、回收条件与 incident fallback。
 - [ ] TASK-GAME-051 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 建立 restricted grant lifecycle / audit matrix，验证 issuance metadata、expiry/revoke、source-sink 对账与 transfer non-bypass 全部闭环。
 
@@ -161,8 +161,9 @@
 ## 状态
 - 更新日期: 2026-03-29
 - 当前状态: in_progress
-- 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
-- 已登记待排任务: `TASK-GAME-049/050/051`（PRD-GAME-011 restricted grant metadata / liveops issuer runbook / QA lifecycle-audit 矩阵补齐）
+- 下一任务: `TASK-GAME-050`（`liveops_community` 冻结 restricted grant 的 issuer runbook、过期策略、撤销条件与 incident fallback）
+- 已登记待排任务: `TASK-GAME-050/051`（PRD-GAME-011 restricted grant liveops issuer runbook / QA lifecycle-audit 矩阵补齐）
+- 最新完成: `TASK-GAME-049`（`runtime_engineer` 已落地 restricted grant metadata、issue/expire/revoke 生命周期、issuer-scope 发放/回收动作与 treasury source-sink 审计链；claim 在 grant 终态后的 restricted refund 也会定向退回 treasury。）
 - 最新完成: `TASK-GAME-048`（`producer_system_designer` 已明确维持 restricted starter balance 的窄用途边界，不缩 PRD 范围；当前专题继续保持 `block`，并新增 `TASK-GAME-049/050/051` 去补齐 grant lifecycle 与审计链。）
 - 最新完成: `TASK-GAME-047`（`qa_engineer` 已完成 restricted starter balance QA matrix；已实现的 claim/upkeep/refund/transfer guard/viewer parity 全部 `pass`，但 restricted grant lifecycle/audit 仍 `block`。）
 - 最新完成: `TASK-GAME-046`（`viewer_engineer` 已把 claim canonical 快照、viewer 文案、transfer API 与 explorer 输出统一补齐 restricted/liquid/eligible 字段、funding mix 与 slot blocker。）
@@ -255,6 +256,7 @@
 - ROUND-055 进展: `viewer_engineer` 已完成 `TASK-GAME-046`，把 claim snapshot、pure API、viewer agent 详情、transfer account API 与 explorer address/assets 输出统一补齐 restricted/liquid/eligible/funding-mix 字段，并用 `slot-1`/`slot-2` blocker 区分 restricted 可用范围。
 - ROUND-056 进展: `qa_engineer` 已完成 `TASK-GAME-047`，新增 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`，确认已实现的 slot-1 restricted 消费、mixed funding refund provenance、transfer guard、explorer 非转账口径与 pure API blocker 全部 `pass`；但 `issuance_reason / issuer_id / expires_at_epoch` grant lifecycle 与对应经济审计仍未落实现，因此统一 QA verdict 维持 `block`。
 - ROUND-057 进展: `producer_system_designer` 已完成 `TASK-GAME-048`，基于 QA 阻断结论决定不收窄 `PRD-GAME-011` 的 restricted grant lifecycle / audit 范围，也不把 starter balance 扩成更宽用途余额；当前继续维持 `slot-1` 专用、不可转账、refund 保留 provenance 的边界，并正式追加 `TASK-GAME-049/050/051` 去补齐 runtime metadata+event 审计、liveops issuer runbook 与 QA lifecycle/audit matrix。
+- ROUND-058 进展: `runtime_engineer` 已完成 `TASK-GAME-049`，在 `oasis7` runtime 中新增 restricted grant 持久化状态、issue/revoke 动作、issued/expired/revoked canonical 事件与 epoch 自动过期处理；grant 发放现从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，撤销/过期则把剩余 restricted spendable 退回同一 treasury bucket，且 claim release / forced reclaim 在 grant 已终态时会将 restricted refund 定向回 treasury。定向验证 `cargo check -p oasis7 --lib` 与 `runtime::tests::agent_claims` required/full 全部通过，当前 blocker 收敛为 `TASK-GAME-050/051` 的 liveops issuer runbook 与 QA lifecycle/audit matrix。
 - 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md`、`doc/devlog/2026-03-18.md`、`doc/devlog/2026-03-21.md` 与 `doc/devlog/2026-03-29.md`。
 
 ## 阶段收口角色交接

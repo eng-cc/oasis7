@@ -55,6 +55,43 @@ fn setup_claim_world_with_balances(
     world
 }
 
+fn setup_claim_world_with_treasury(
+    treasury_balance: u64,
+    alice_liquid_balance: u64,
+    reputation_score: i64,
+) -> World {
+    let mut world = World::new();
+    world
+        .set_governance_execution_policy(GovernanceExecutionPolicy {
+            epoch_length_ticks: 1,
+            ..GovernanceExecutionPolicy::default()
+        })
+        .expect("set governance epoch length");
+    register_agent(&mut world, "alice");
+    register_agent(&mut world, "bob");
+    register_agent(&mut world, "carol");
+    world
+        .set_agent_reputation_score("alice", reputation_score)
+        .expect("set alice reputation");
+    world.set_main_token_supply(MainTokenSupplyState {
+        total_supply: treasury_balance.saturating_add(alice_liquid_balance),
+        circulating_supply: alice_liquid_balance,
+        ..MainTokenSupplyState::default()
+    });
+    world
+        .set_main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+            treasury_balance,
+        )
+        .expect("seed ecosystem treasury");
+    if alice_liquid_balance > 0 {
+        world
+            .set_main_token_account_balance("alice", alice_liquid_balance, 0)
+            .expect("seed alice liquid balance");
+    }
+    world
+}
+
 fn claim_upfront_amount(claim: &AgentClaimState) -> u64 {
     claim.activation_fee_amount + claim.claim_bond_amount + claim.upkeep_per_epoch
 }
@@ -644,4 +681,204 @@ fn forced_reclaim_preserves_refund_provenance_after_mixed_funding() {
         }
         other => panic!("expected AgentClaimReclaimed, got {other:?}"),
     }
+}
+
+#[test]
+fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_balance() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 325,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 5,
+    });
+    world.step().expect("issue restricted grant");
+
+    let grant = world
+        .restricted_starter_claim_grant("alice")
+        .expect("grant state persisted");
+    assert_eq!(grant.issuer_id, "liveops");
+    assert_eq!(grant.issuance_reason, "qa_seed");
+    assert_eq!(
+        grant.spend_scope,
+        RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY
+    );
+    assert_eq!(grant.issued_amount, 325);
+    assert_eq!(grant.expires_at_epoch, 5);
+    assert_eq!(grant.status, RestrictedStarterClaimGrantStatus::Issued);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        325
+    );
+    assert_eq!(
+        world.main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        675
+    );
+    assert_eq!(world.main_token_supply().circulating_supply, 325);
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantIssued {
+            issuer_id,
+            beneficiary_account_id,
+            amount,
+            issuance_reason,
+            expires_at_epoch,
+            ..
+        }) => {
+            assert_eq!(issuer_id, "liveops");
+            assert_eq!(beneficiary_account_id, "alice");
+            assert_eq!(*amount, 325);
+            assert_eq!(issuance_reason, "qa_seed");
+            assert_eq!(*expires_at_epoch, 5);
+        }
+        other => panic!("expected RestrictedStarterClaimGrantIssued, got {other:?}"),
+    }
+}
+
+#[test]
+fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refund_to_treasury() {
+    let mut world = setup_claim_world_with_treasury(1_000, 150, 0);
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 500,
+        issuance_reason: "preview_allowlist".to_string(),
+        expires_at_epoch: 6,
+    });
+    world.step().expect("issue restricted grant");
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim using restricted grant");
+    let claim = world.agent_claim("bob").expect("claim exists").clone();
+    assert_eq!(claim.claim_bond_locked_restricted_amount, 200);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        175
+    );
+
+    world.step().expect("expire grant and settle upkeep");
+    let grant = world
+        .restricted_starter_claim_grant("alice")
+        .expect("grant still tracked after expiry");
+    assert_eq!(grant.status, RestrictedStarterClaimGrantStatus::Expired);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
+
+    world.submit_action(Action::ReleaseAgentClaim {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("request release after grant expiry");
+    for _ in 0..claim.release_cooldown_epochs.saturating_sub(1) {
+        world.step().expect("advance release cooldown after expiry");
+    }
+    world.step().expect("finalize release after grant expiry");
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::AgentClaimReleased {
+            refunded_bond_restricted_amount,
+            refunded_bond_restricted_sink,
+            refunded_bond_restricted_sink_bucket_id,
+            ..
+        }) => {
+            assert_eq!(*refunded_bond_restricted_amount, 200);
+            assert_eq!(
+                *refunded_bond_restricted_sink,
+                RestrictedStarterClaimRefundSink::SourceTreasuryBucket
+            );
+            assert_eq!(
+                refunded_bond_restricted_sink_bucket_id,
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+            );
+        }
+        other => panic!("expected AgentClaimReleased, got {other:?}"),
+    }
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
+}
+
+#[test]
+fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refund_to_treasury() {
+    let mut world = setup_claim_world_with_treasury(1_000, 150, 0);
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 400,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 10,
+    });
+    world.step().expect("issue restricted grant");
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim with restricted grant");
+    let claim = world.agent_claim("bob").expect("claim exists").clone();
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        75
+    );
+
+    world.submit_action(Action::RevokeRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        revoke_reason: "campaign_closed".to_string(),
+    });
+    world.step().expect("revoke restricted grant");
+
+    let grant = world
+        .restricted_starter_claim_grant("alice")
+        .expect("revoked grant remains tracked");
+    assert_eq!(grant.status, RestrictedStarterClaimGrantStatus::Revoked);
+    assert_eq!(grant.status_reason.as_deref(), Some("campaign_closed"));
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
+
+    world.submit_action(Action::ReleaseAgentClaim {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("request release after revoke");
+    for _ in 0..claim.release_cooldown_epochs.saturating_sub(1) {
+        world.step().expect("advance release cooldown after revoke");
+    }
+    world.step().expect("finalize release after revoke");
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::AgentClaimReleased {
+            refunded_bond_restricted_amount,
+            refunded_bond_restricted_sink,
+            refunded_bond_restricted_sink_bucket_id,
+            ..
+        }) => {
+            assert_eq!(*refunded_bond_restricted_amount, 200);
+            assert_eq!(
+                *refunded_bond_restricted_sink,
+                RestrictedStarterClaimRefundSink::SourceTreasuryBucket
+            );
+            assert_eq!(
+                refunded_bond_restricted_sink_bucket_id,
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+            );
+        }
+        other => panic!("expected AgentClaimReleased, got {other:?}"),
+    }
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
 }

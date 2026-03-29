@@ -1,6 +1,8 @@
 use super::*;
 use crate::runtime::main_token::{
     is_main_token_treasury_distribution_bucket, MainTokenTreasuryDistribution,
+    RestrictedStarterClaimGrantStatus, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY,
 };
 use std::collections::BTreeSet;
 
@@ -458,6 +460,34 @@ impl World {
                     distributions.as_slice(),
                 ),
             )),
+            Action::IssueRestrictedStarterClaimGrant {
+                issuer_account_id,
+                beneficiary_account_id,
+                amount,
+                issuance_reason,
+                expires_at_epoch,
+            } => Ok(WorldEventBody::Domain(
+                self.evaluate_issue_restricted_starter_claim_grant_action(
+                    action_id,
+                    issuer_account_id.as_str(),
+                    beneficiary_account_id.as_str(),
+                    *amount,
+                    issuance_reason.as_str(),
+                    *expires_at_epoch,
+                ),
+            )),
+            Action::RevokeRestrictedStarterClaimGrant {
+                issuer_account_id,
+                beneficiary_account_id,
+                revoke_reason,
+            } => Ok(WorldEventBody::Domain(
+                self.evaluate_revoke_restricted_starter_claim_grant_action(
+                    action_id,
+                    issuer_account_id.as_str(),
+                    beneficiary_account_id.as_str(),
+                    revoke_reason.as_str(),
+                ),
+            )),
             Action::TransferMaterial {
                 requester_agent_id,
                 from_ledger,
@@ -821,6 +851,214 @@ impl World {
                 action_id,
                 reason: RejectReason::RuleDenied {
                     notes: vec![format!("distribute main token treasury rejected: {err:?}")],
+                },
+            };
+        }
+        event
+    }
+
+    fn evaluate_issue_restricted_starter_claim_grant_action(
+        &self,
+        action_id: ActionId,
+        issuer_account_id: &str,
+        beneficiary_account_id: &str,
+        amount: u64,
+        issuance_reason: &str,
+        expires_at_epoch: u64,
+    ) -> DomainEvent {
+        let issuer_account_id = issuer_account_id.trim();
+        if issuer_account_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["issuer_account_id cannot be empty".to_string()],
+                },
+            };
+        }
+        let beneficiary_account_id = beneficiary_account_id.trim();
+        if beneficiary_account_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["beneficiary_account_id cannot be empty".to_string()],
+                },
+            };
+        }
+        if amount == 0 {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["restricted grant amount must be > 0".to_string()],
+                },
+            };
+        }
+        let issuance_reason = issuance_reason.trim();
+        if issuance_reason.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["issuance_reason cannot be empty".to_string()],
+                },
+            };
+        }
+        let current_epoch = self.current_governance_epoch();
+        if expires_at_epoch <= current_epoch {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant expires_at_epoch must be > current_epoch ({expires_at_epoch} <= {current_epoch})"
+                    )],
+                },
+            };
+        }
+        let source_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL;
+        let source_bucket_balance = self.main_token_treasury_balance(source_bucket_id);
+        if source_bucket_balance < amount {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant treasury insufficient: bucket={source_bucket_id} balance={source_bucket_balance} amount={amount}"
+                    )],
+                },
+            };
+        }
+        if !self.restricted_starter_claim_grant_can_be_reissued(beneficiary_account_id) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant already active or pending settlement: beneficiary={beneficiary_account_id}"
+                    )],
+                },
+            };
+        }
+        if self.main_token_restricted_starter_claim_balance(beneficiary_account_id) > 0 {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant beneficiary already has seeded restricted balance without reusable grant slot: beneficiary={beneficiary_account_id}"
+                    )],
+                },
+            };
+        }
+
+        let event = DomainEvent::RestrictedStarterClaimGrantIssued {
+            issuer_id: issuer_account_id.to_string(),
+            beneficiary_account_id: beneficiary_account_id.to_string(),
+            source_treasury_bucket_id: source_bucket_id.to_string(),
+            amount,
+            issuance_reason: issuance_reason.to_string(),
+            spend_scope: RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY.to_string(),
+            issued_at_epoch: current_epoch,
+            expires_at_epoch,
+        };
+        let mut preview_state = self.state.clone();
+        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!("issue restricted grant rejected: {err:?}")],
+                },
+            };
+        }
+        event
+    }
+
+    fn evaluate_revoke_restricted_starter_claim_grant_action(
+        &self,
+        action_id: ActionId,
+        issuer_account_id: &str,
+        beneficiary_account_id: &str,
+        revoke_reason: &str,
+    ) -> DomainEvent {
+        let issuer_account_id = issuer_account_id.trim();
+        if issuer_account_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["issuer_account_id cannot be empty".to_string()],
+                },
+            };
+        }
+        let beneficiary_account_id = beneficiary_account_id.trim();
+        if beneficiary_account_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["beneficiary_account_id cannot be empty".to_string()],
+                },
+            };
+        }
+        let revoke_reason = revoke_reason.trim();
+        if revoke_reason.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["revoke_reason cannot be empty".to_string()],
+                },
+            };
+        }
+
+        let Some(grant) = self
+            .state
+            .restricted_starter_claim_grants
+            .get(beneficiary_account_id)
+        else {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant not found: beneficiary={beneficiary_account_id}"
+                    )],
+                },
+            };
+        };
+        if grant.status != RestrictedStarterClaimGrantStatus::Issued {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant is no longer active: beneficiary={} status={:?}",
+                        beneficiary_account_id, grant.status
+                    )],
+                },
+            };
+        }
+        if grant.issuer_id != issuer_account_id {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted grant issuer mismatch: beneficiary={} expected={} actual={}",
+                        beneficiary_account_id, grant.issuer_id, issuer_account_id
+                    )],
+                },
+            };
+        }
+
+        let event = DomainEvent::RestrictedStarterClaimGrantRevoked {
+            beneficiary_account_id: beneficiary_account_id.to_string(),
+            issuer_id: issuer_account_id.to_string(),
+            issuance_reason: grant.issuance_reason.clone(),
+            spend_scope: grant.spend_scope.clone(),
+            source_treasury_bucket_id: grant.source_treasury_bucket_id.clone(),
+            issued_amount: grant.issued_amount,
+            revoked_amount: self
+                .main_token_restricted_starter_claim_balance(beneficiary_account_id),
+            issued_at_epoch: grant.issued_at_epoch,
+            revoked_at_epoch: self.current_governance_epoch(),
+            configured_expires_at_epoch: grant.expires_at_epoch,
+            revoke_reason: revoke_reason.to_string(),
+        };
+        let mut preview_state = self.state.clone();
+        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!("revoke restricted grant rejected: {err:?}")],
                 },
             };
         }

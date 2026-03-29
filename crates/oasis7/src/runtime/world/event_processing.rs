@@ -171,6 +171,8 @@ impl World {
             | Action::SettleMainTokenFee { .. }
             | Action::UpdateMainTokenPolicy { .. }
             | Action::DistributeMainTokenTreasury { .. }
+            | Action::IssueRestrictedStarterClaimGrant { .. }
+            | Action::RevokeRestrictedStarterClaimGrant { .. }
             | Action::TransferMaterial { .. } => {
                 self.action_to_event_core(action_id, &envelope.action)
             }

@@ -118,6 +118,8 @@ impl World {
                         amount_due,
                         latest_claim.forced_reclaim_penalty_bps,
                     );
+                let refund_sink =
+                    self.restricted_starter_claim_refund_sink(latest_claim.claim_owner_id.as_str());
                 let refunded_bond_split = split_agent_claim_bond_refund(
                     latest_claim.claim_bond_locked_restricted_amount,
                     latest_claim.claim_bond_locked_liquid_amount,
@@ -136,6 +138,10 @@ impl World {
                         refunded_bond_amount,
                         refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
                         refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
+                        refunded_bond_restricted_sink: refund_sink.sink,
+                        refunded_bond_restricted_sink_bucket_id: refund_sink
+                            .treasury_bucket_id
+                            .unwrap_or_default(),
                     },
                     emitted,
                 )?;
@@ -166,6 +172,8 @@ impl World {
     ) -> Result<(), WorldError> {
         if let Some(ready_at_epoch) = claim.release_ready_at_epoch {
             if current_epoch >= ready_at_epoch {
+                let refund_sink =
+                    self.restricted_starter_claim_refund_sink(claim.claim_owner_id.as_str());
                 let refunded_bond_split = split_agent_claim_bond_refund(
                     claim.claim_bond_locked_restricted_amount,
                     claim.claim_bond_locked_liquid_amount,
@@ -180,6 +188,10 @@ impl World {
                         refunded_bond_amount: claim.locked_bond_amount,
                         refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
                         refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
+                        refunded_bond_restricted_sink: refund_sink.sink,
+                        refunded_bond_restricted_sink_bucket_id: refund_sink
+                            .treasury_bucket_id
+                            .unwrap_or_default(),
                     },
                     emitted,
                 )?;
@@ -195,6 +207,8 @@ impl World {
                 0,
                 claim.forced_reclaim_penalty_bps,
             );
+            let refund_sink =
+                self.restricted_starter_claim_refund_sink(claim.claim_owner_id.as_str());
             let refunded_bond_split = split_agent_claim_bond_refund(
                 claim.claim_bond_locked_restricted_amount,
                 claim.claim_bond_locked_liquid_amount,
@@ -213,6 +227,10 @@ impl World {
                     refunded_bond_amount,
                     refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
                     refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
+                    refunded_bond_restricted_sink: refund_sink.sink,
+                    refunded_bond_restricted_sink_bucket_id: refund_sink
+                        .treasury_bucket_id
+                        .unwrap_or_default(),
                 },
                 emitted,
             )?;

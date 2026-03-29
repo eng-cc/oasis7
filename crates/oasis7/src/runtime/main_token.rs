@@ -25,6 +25,7 @@ pub const MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE: &str = "security_reserve"
 pub const MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE: &str = "gas_fee_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_SLASH: &str = "slash_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE: &str = "module_fee_treasury";
+pub const RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY: &str = "slot_1_claim_and_upkeep";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MainTokenInflationPolicy {
@@ -125,6 +126,41 @@ pub struct MainTokenAccountBalance {
     pub vested_balance: u64,
     #[serde(default)]
     pub restricted_starter_claim_balance: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RestrictedStarterClaimGrantStatus {
+    #[default]
+    Issued,
+    Expired,
+    Revoked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RestrictedStarterClaimGrantState {
+    pub beneficiary_account_id: String,
+    pub issuer_id: String,
+    pub issuance_reason: String,
+    pub spend_scope: String,
+    pub source_treasury_bucket_id: String,
+    pub issued_amount: u64,
+    pub issued_at_epoch: u64,
+    pub expires_at_epoch: u64,
+    #[serde(default)]
+    pub status: RestrictedStarterClaimGrantStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_updated_at_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RestrictedStarterClaimRefundSink {
+    #[default]
+    BeneficiaryRestrictedBalance,
+    SourceTreasuryBucket,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

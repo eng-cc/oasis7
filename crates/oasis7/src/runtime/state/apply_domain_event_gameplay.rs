@@ -3,6 +3,7 @@ use super::super::agent_claims::{
     split_agent_claim_upfront_funding,
 };
 use super::super::main_token::{
+    RestrictedStarterClaimGrantStatus, RestrictedStarterClaimRefundSink,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
 };
 use super::*;
@@ -900,6 +901,8 @@ impl WorldState {
                 refunded_bond_amount,
                 refunded_bond_restricted_amount,
                 refunded_bond_liquid_amount,
+                refunded_bond_restricted_sink,
+                refunded_bond_restricted_sink_bucket_id,
             } => {
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
@@ -943,17 +946,55 @@ impl WorldState {
                         ),
                     });
                 }
-                credit_main_token_restricted_starter_claim_balance(
-                    self,
-                    claimer_agent_id,
-                    *refunded_bond_restricted_amount,
-                )?;
+                let (expected_sink, expected_sink_bucket_id) =
+                    restricted_refund_sink_for_account(self, claimer_agent_id);
+                if *refunded_bond_restricted_sink != expected_sink
+                    || *refunded_bond_restricted_sink_bucket_id != expected_sink_bucket_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim release restricted refund sink mismatch: target={} expected={:?}/{} actual={:?}/{}",
+                            target_agent_id,
+                            expected_sink,
+                            expected_sink_bucket_id,
+                            refunded_bond_restricted_sink,
+                            refunded_bond_restricted_sink_bucket_id
+                        ),
+                    });
+                }
+                let mut circulating_refund_amount = *refunded_bond_liquid_amount;
+                match refunded_bond_restricted_sink {
+                    RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance => {
+                        credit_main_token_restricted_starter_claim_balance(
+                            self,
+                            claimer_agent_id,
+                            *refunded_bond_restricted_amount,
+                        )?;
+                        circulating_refund_amount = circulating_refund_amount
+                            .checked_add(*refunded_bond_restricted_amount)
+                            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                                reason: format!(
+                                    "agent claim release circulating refund overflow: target={} liquid={} restricted={}",
+                                    target_agent_id,
+                                    refunded_bond_liquid_amount,
+                                    refunded_bond_restricted_amount
+                                ),
+                            })?;
+                    }
+                    RestrictedStarterClaimRefundSink::SourceTreasuryBucket => {
+                        add_main_token_treasury_balance(
+                            self,
+                            refunded_bond_restricted_sink_bucket_id,
+                            *refunded_bond_restricted_amount,
+                        )?;
+                    }
+                }
                 credit_main_token_liquid_balance(
                     self,
                     claimer_agent_id,
                     *refunded_bond_liquid_amount,
                 )?;
-                increase_main_token_circulating_supply(self, *refunded_bond_amount)?;
+                increase_main_token_circulating_supply(self, circulating_refund_amount)?;
                 self.agent_claim_last_processed_epoch = self
                     .agent_claim_last_processed_epoch
                     .max(*released_at_epoch);
@@ -973,6 +1014,8 @@ impl WorldState {
                 refunded_bond_amount,
                 refunded_bond_restricted_amount,
                 refunded_bond_liquid_amount,
+                refunded_bond_restricted_sink,
+                refunded_bond_restricted_sink_bucket_id,
             } => {
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
@@ -1026,6 +1069,22 @@ impl WorldState {
                         ),
                     });
                 }
+                let (expected_sink, expected_sink_bucket_id) =
+                    restricted_refund_sink_for_account(self, claimer_agent_id);
+                if *refunded_bond_restricted_sink != expected_sink
+                    || *refunded_bond_restricted_sink_bucket_id != expected_sink_bucket_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim reclaim restricted refund sink mismatch: target={} expected={:?}/{} actual={:?}/{}",
+                            target_agent_id,
+                            expected_sink,
+                            expected_sink_bucket_id,
+                            refunded_bond_restricted_sink,
+                            refunded_bond_restricted_sink_bucket_id
+                        ),
+                    });
+                }
                 if *collected_upkeep_amount > 0 {
                     add_main_token_treasury_balance(
                         self,
@@ -1041,17 +1100,39 @@ impl WorldState {
                     )?;
                 }
                 if *refunded_bond_amount > 0 {
-                    credit_main_token_restricted_starter_claim_balance(
-                        self,
-                        claimer_agent_id,
-                        *refunded_bond_restricted_amount,
-                    )?;
+                    let mut circulating_refund_amount = *refunded_bond_liquid_amount;
+                    match refunded_bond_restricted_sink {
+                        RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance => {
+                            credit_main_token_restricted_starter_claim_balance(
+                                self,
+                                claimer_agent_id,
+                                *refunded_bond_restricted_amount,
+                            )?;
+                            circulating_refund_amount = circulating_refund_amount
+                                .checked_add(*refunded_bond_restricted_amount)
+                                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                                    reason: format!(
+                                        "agent claim reclaim circulating refund overflow: target={} liquid={} restricted={}",
+                                        target_agent_id,
+                                        refunded_bond_liquid_amount,
+                                        refunded_bond_restricted_amount
+                                    ),
+                                })?;
+                        }
+                        RestrictedStarterClaimRefundSink::SourceTreasuryBucket => {
+                            add_main_token_treasury_balance(
+                                self,
+                                refunded_bond_restricted_sink_bucket_id,
+                                *refunded_bond_restricted_amount,
+                            )?;
+                        }
+                    }
                     credit_main_token_liquid_balance(
                         self,
                         claimer_agent_id,
                         *refunded_bond_liquid_amount,
                     )?;
-                    increase_main_token_circulating_supply(self, *refunded_bond_amount)?;
+                    increase_main_token_circulating_supply(self, circulating_refund_amount)?;
                 }
                 self.agent_claim_last_processed_epoch = self
                     .agent_claim_last_processed_epoch
@@ -1613,4 +1694,28 @@ fn increase_main_token_circulating_supply(
         });
     }
     Ok(())
+}
+
+fn restricted_refund_sink_for_account(
+    state: &WorldState,
+    account_id: &str,
+) -> (RestrictedStarterClaimRefundSink, String) {
+    let Some(grant) = state.restricted_starter_claim_grants.get(account_id) else {
+        return (
+            RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance,
+            String::new(),
+        );
+    };
+    match grant.status {
+        RestrictedStarterClaimGrantStatus::Issued => (
+            RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance,
+            String::new(),
+        ),
+        RestrictedStarterClaimGrantStatus::Expired | RestrictedStarterClaimGrantStatus::Revoked => {
+            (
+                RestrictedStarterClaimRefundSink::SourceTreasuryBucket,
+                grant.source_treasury_bucket_id.clone(),
+            )
+        }
+    }
 }

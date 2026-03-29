@@ -37,6 +37,8 @@ impl World {
                 | Action::SettleEconomicContract { .. }
                 | Action::ClaimAgent { .. }
                 | Action::ReleaseAgentClaim { .. }
+                | Action::IssueRestrictedStarterClaimGrant { .. }
+                | Action::RevokeRestrictedStarterClaimGrant { .. }
         )
     }
 
@@ -230,6 +232,7 @@ impl World {
         let _ = self.process_due_economy_jobs()?;
         let _ = self.process_due_material_transits()?;
         let _ = self.process_gameplay_cycles()?;
+        let _ = self.process_restricted_starter_claim_grant_epochs()?;
         let _ = self.process_agent_claim_epochs()?;
         self.refresh_threat_heatmap();
         self.record_tick_consensus()?;
@@ -377,6 +380,9 @@ impl World {
             self.route_event_to_modules(&event, sandbox)?;
         }
         for event in self.process_gameplay_cycles_with_modules(sandbox)? {
+            self.route_event_to_modules(&event, sandbox)?;
+        }
+        for event in self.process_restricted_starter_claim_grant_epochs()? {
             self.route_event_to_modules(&event, sandbox)?;
         }
         for event in self.process_agent_claim_epochs()? {
