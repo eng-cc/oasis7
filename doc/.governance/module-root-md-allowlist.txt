@@ -42,6 +42,9 @@ doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.
 doc/engineering/oversized-rust-file-splitting-2026-02-23.design.md
 doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md
 doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md
+doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md
+doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md
+doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md
 doc/engineering/prd.index.md
 doc/engineering/prd.md
 doc/engineering/project.md

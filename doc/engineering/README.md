@@ -20,6 +20,7 @@
 
 ## 近期专题
 - `doc/engineering/doc-structure-standard.prd.md`
+- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `doc/engineering/governance/engineering-governance-trend-tracking-2026-03-11.prd.md`
 - `doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`

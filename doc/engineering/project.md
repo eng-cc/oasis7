@@ -60,6 +60,13 @@
     - `rg -n "^# oasis7" doc/engineering --glob '!third_party/**'`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-ENGINEERING-051 (PRD-ENGINEERING-R1200-001/002/005) [test_tier_required]: 建立 Rust 1200 行根治治理专题 `prd/design/project`，同步回写 engineering 模块索引、README、主项目和 devlog。
+- [ ] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
+- [ ] TASK-ENGINEERING-053 (PRD-ENGINEERING-R1200-002/003) [test_tier_required]: 落地 `touch-and-shrink` 与 `split_part/include!` 完成态阻断规则。
+- [ ] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理。
+- [ ] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理。
+- [ ] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批 UI / automation 超限文件治理。
+- [ ] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略与冻结尾债清单。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -73,6 +80,9 @@
 - `doc/engineering/*.md`
 - `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
 - `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
+- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md`
+- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
@@ -86,14 +96,15 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-03-19
-- 当前状态: completed
-- 下一任务: 无（当前 engineering 主项目已完成）
+- 更新日期: 2026-03-29
+- 当前状态: active
+- 下一任务: `TASK-ENGINEERING-052`（Rust 文件体量检查脚本、冻结基线与 required gate 接入）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 最新完成: `TASK-ENGINEERING-049`（根 `AGENTS.md` 顶部协作执行语义收敛为角色视角切换）。
 - 最新完成: `TASK-ENGINEERING-050`（engineering 模块仍可读治理专题标题统一切到 `oasis7` 品牌）。
+- 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
