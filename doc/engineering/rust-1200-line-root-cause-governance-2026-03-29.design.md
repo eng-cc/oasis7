@@ -10,7 +10,7 @@
 - 为后续 runtime / viewer / launcher 超限文件治理冻结统一完成态，禁止继续用 `split_part` 伪装治理完成。
 
 ## 当前现状
-- 当前扫描结果：32 个生产 Rust 文件和 15 个测试 Rust 文件超过 1200 行。
+- 当前扫描结果：31 个生产 Rust 文件和 14 个测试 Rust 文件超过 1200 行。
 - 主要集中区：
   - `crates/oasis7`：21 个生产超限文件，集中在 `chain_runtime`、`viewer runtime_live`、`runtime state/events/world`。
   - `crates/oasis7_viewer`：8 个生产超限文件，集中在 `player guide`、`automation`、`web test api`、`timeline` 等 UI/automation 混合区域。
@@ -28,6 +28,7 @@
   - 输出三类结果：新增超限、存量基线、触碰后未缩小。
 - 基线层：
   - 冻结当前超限清单，记录 `path / line_count / is_test / owner / priority_batch`。
+  - 基线文件固定为 `doc/.governance/rust-oversized-file-baseline.tsv`。
   - 新文件一律不得进入基线。
 - 规则层：
   - 新增或重命名出的 `split_part*` / `part1` / `part2` / `include!` 完成态一律阻断。

@@ -7,7 +7,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-ENGINEERING-051 (PRD-ENGINEERING-R1200-001/002/005) [test_tier_required]: 产出 Rust 1200 行根治治理专题 `prd/design/project`，并同步回写 engineering 模块入口、索引与 devlog。
-- [ ] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
+- [x] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
 - [ ] TASK-ENGINEERING-053 (PRD-ENGINEERING-R1200-002/003) [test_tier_required]: 在门禁中增加 `touch-and-shrink` 与 `split_part/include!` 完成态阻断规则。
 - [ ] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理，优先处理 `oasis7_chain_runtime.rs` 与 `execution_bridge.rs`。
 - [ ] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理，并补齐对应 live / Web 验证链路。
@@ -31,11 +31,12 @@
 ## 状态
 - 更新日期: 2026-03-29
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-051` 已完成；`TASK-ENGINEERING-052` 为 next task。
+- 当前任务: `TASK-ENGINEERING-052` 已完成；`TASK-ENGINEERING-053` 为 next task。
 - 阻塞项:
-  - 现有仓库仍有 32 个生产 Rust 文件和 15 个测试 Rust 文件超过 1200 行，若不先冻结基线与门禁，后续任何重构都可能继续回弹。
+  - 现有仓库仍有 31 个生产 Rust 文件和 14 个测试 Rust 文件超过 1200 行，若不先冻结基线与门禁，后续任何重构都可能继续回弹。
   - `runtime_live` / `chain_runtime` / `viewer` 三个高风险域缺少统一目标目录边界，直接并行改代码会高概率冲突。
 - 最新完成:
   - `TASK-ENGINEERING-051`：建立 1200 行根治治理专题三件套，并同步回写 engineering 入口、索引和 devlog。
+  - `TASK-ENGINEERING-052`：新增 Rust 文件体量检查脚本、冻结 `rust-oversized-file-baseline.tsv`，并接入 `scripts/ci-tests.sh required`。
 - 下一步:
-  - 先执行 `TASK-ENGINEERING-052`，把现状扫描、冻结基线和 required gate 接起来，再进入代码治理批次。
+  - 先执行 `TASK-ENGINEERING-053`，把 `touch-and-shrink` 与 `split_part/include!` 完成态阻断规则接到同一门禁链路，再进入代码治理批次。

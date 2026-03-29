@@ -66,6 +66,7 @@
 - 入口 A：`scripts/ci-tests.sh`（主流程）
 - `required`：
   - `./scripts/doc-governance-check.sh`
+  - `./scripts/check-rust-file-size.sh`
   - `cargo fmt --check`
   - `cargo test -p oasis7 --tests --features test_tier_required`
   - `cargo test -p oasis7_consensus --lib`
@@ -134,6 +135,7 @@
 ### S0：基础门禁套件（L0）
 ```bash
 ./scripts/doc-governance-check.sh
+./scripts/check-rust-file-size.sh
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
 ```

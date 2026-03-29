@@ -8,14 +8,14 @@
 - 对应标准执行入口: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 仓库已重新出现大规模 Rust 超限文件，当前实况为 32 个生产文件和 15 个测试文件超过 1200 行，说明“拆一次大文件”没有真正解决文件继续膨胀的问题。现有 round3 治理偏向 `include!`/`split_part` 结构切片，未把职责边界、目录模型和 CI 阻断做成长期机制。
+- Problem Statement: 仓库已重新出现大规模 Rust 超限文件，当前实况为 31 个生产文件和 14 个测试文件超过 1200 行，说明“拆一次大文件”没有真正解决文件继续膨胀的问题。现有 round3 治理偏向 `include!`/`split_part` 结构切片，未把职责边界、目录模型和 CI 阻断做成长期机制。
 - Proposed Solution: 将“1200 行限制”从一次性清债任务升级为长期工程治理专题：冻结当前超限基线、在 required gate 中引入 Rust 文件体量检查、禁止新增 `split_part` 作为完成态、对被触碰的超限文件执行“touch-and-shrink”规则，并按 runtime/viewer/launcher 三个高风险域分批做职责拆分。
 - Success Criteria:
   - SC-1: 基线冻结后，新增生产 Rust 超限文件数为 0，新增测试 Rust 超限文件数为 0。
   - SC-2: `scripts/ci-tests.sh required` 默认包含 Rust 文件体量检查，且该检查单次执行时间 <= 15 秒。
   - SC-3: 新增或改动文件中，`split_part` / `part1` / `part2` / `include!` 不再被用作超限治理完成态；新增违规数为 0。
   - SC-4: 被本次任务触碰的超限文件，行数必须单调下降，且对应职责边界说明与回归证据齐全率 100%。
-  - SC-5: Phase-2 收口时，生产 Rust 超限文件从 32 降到 0，测试 Rust 超限文件从 15 降到 <= 3，并为剩余测试债务建立冻结清单与下一批治理计划。
+  - SC-5: Phase-2 收口时，生产 Rust 超限文件从 31 降到 0，测试 Rust 超限文件从 14 降到 <= 3，并为剩余测试债务建立冻结清单与下一批治理计划。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -50,7 +50,7 @@
 | 子系统 burn-down | `subsystem`、`owner_role`、`target_files`、`target_boundaries`、`required_tests`、`full_tests` | 在 project 中分批登记 runtime/viewer/launcher 治理任务 | `planned -> in_progress -> verified -> closed` | 优先级按风险和行数叠加排序；`chain_runtime`、`runtime_live`、`viewer guide` 为首批 | owner role 牵头，QA 负责验证结论 |
 | 评审结论 | `finding`、`boundary_ok`、`test_evidence`、`baseline_update` | 评审时输出 `pass / blocked / risky` | `draft -> reviewed -> merged/rejected` | 优先关注边界真实性，其次关注行数结果 | reviewer / qa_engineer 主判，owner 回写 |
 - Acceptance Criteria:
-  - AC-1: 新增专题将当前“32 个生产文件 + 15 个测试文件超限”的事实基线写入正式文档，并在 project 中拆成可执行批次。
+  - AC-1: 新增专题将当前“31 个生产文件 + 14 个测试文件超限”的事实基线写入正式文档，并在 project 中拆成可执行批次。
   - AC-2: required gate 的目标态明确要求默认执行 Rust 文件体量检查，并区分生产代码、测试代码、`third_party/` 与生成目录。
   - AC-3: PRD 明确禁止把 `split_part` / `include!` 机械切片作为治理完成态，并定义可接受的目录模块化完成态。
   - AC-4: 每个治理批次都必须声明目标目录边界、触碰即缩小规则、回归命令和证据落点。
@@ -81,6 +81,7 @@
   - `doc/engineering/README.md`
   - `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
   - `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+  - `doc/.governance/rust-oversized-file-baseline.tsv`
   - `scripts/ci-tests.sh`
   - `scripts/doc-governance-check.sh`
   - `testing-manual.md`
@@ -146,7 +147,7 @@
   - ✔ 是否明确说明本期解决什么问题：第 1 章给出“规则回弹、机械切片、长期机制缺失”的问题定义。
   - ✔ 是否定义成功指标（可量化）：SC-1~SC-5、NFR-R1200-1~8 明确了数量、时长、覆盖率和完成条件。
   - ✔ 是否与公司/项目阶段目标一致：与 engineering 模块“控制技术债、建立稳定门禁”的目标一致。
-  - ✔ 是否说明优先级来源：基于当前 32 个生产文件与 15 个测试文件超限的现状，以及高风险入口文件分布。
+  - ✔ 是否说明优先级来源：基于当前 31 个生产文件与 14 个测试文件超限的现状，以及高风险入口文件分布。
 - 用户与场景（Who / When）:
   - ✔ 是否明确目标用户是谁：工程维护者、开发者、评审者、QA/发布维护者。
   - ✔ 是否区分主用户与边缘用户：主用户为维护者/开发者/评审者，QA/发布为验证链路相关角色。
@@ -176,7 +177,7 @@
   - ✔ 是否定义性能要求：NFR-R1200-1。
   - ✔ 是否定义兼容性要求：Linux/macOS 可执行。
   - ✔ 是否定义安全要求：Security & Privacy 已覆盖。
-  - ✔ 是否定义数据规模预期：以当前 32 + 15 超限文件为治理规模基线。
+  - ✔ 是否定义数据规模预期：以当前 31 + 14 超限文件为治理规模基线。
   - ✔ 是否定义可扩展性约束：禁止把债务转移到新 god file 或复制定义中。
 - 可测试性（Testability）:
   - ✔ 是否定义验收标准：AC-1~AC-6。
@@ -197,7 +198,7 @@
 - 决策透明度（Decision Record）:
   - ✔ 是否说明方案选择原因：DEC-R1200-001~005。
   - ✔ 是否记录被否决方案：一次性大拆、机械切片等已列为否决方案。
-  - ✔ 是否有数据支持：以 32 个生产文件 + 15 个测试文件超限现状为证据。
+  - ✔ 是否有数据支持：以 31 个生产文件 + 14 个测试文件超限现状为证据。
 - 文档树一致性与结构约束（Documentation Architecture）:
   - ✔ 本 PRD 是否明确归属于某个模块目录：`doc/engineering/` 根下专题。
   - ✔ 是否符合文档树层级规范：按 `*.prd.md / *.design.md / *.project.md` 三件套落位。
