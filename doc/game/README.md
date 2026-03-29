@@ -1,6 +1,6 @@
 # game 文档索引
 
-审计轮次: 9
+审计轮次: 10
 
 ## 入口
 - PRD: `doc/game/prd.md`
@@ -15,12 +15,14 @@
 - 承接当前阶段判断、封闭 Beta 准入门禁与对外口径收口。
 - 承接 `limited playable technical preview` 的受控执行、回流与继续/暂停决策。
 - 承接 agent 认领的 token 成本、claim bond、upkeep 与 reclaim 规则。
+- 承接 agent claim restricted grant 的运营发放、撤销、过期与 incident runbook。
 
 ## 主题文档
 - `gameplay/`：玩法、经济、治理、战争、长稳与发布闭环专题。
 
 ## 近期专题
 - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+- `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
