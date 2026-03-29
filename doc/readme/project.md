@@ -414,6 +414,25 @@
     - `rg -n "春季招聘季刊|校园公告栏|简历筛选板|春招主题|不是招聘启事" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-cover.html site/social/xiaohongshu-spring-recruit-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-041 (PRD-README-028/029) [test_tier_required]: 为小红书第六篇春招视觉再做配色换版，切到更像校园招聘公告栏的海盐蓝 / 奶油黄 / 校园红方案，保持标题、正文结构与轮播节奏不变。
+  - 产物文件:
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
+    - `doc/devlog/2026-03-29.md`
+    - `site/social/xiaohongshu-spring-recruit-cover.html`
+    - `site/social/xiaohongshu-spring-recruit-cover.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel.html`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide1.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide2.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide3.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide4.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide5.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide6.png`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "海盐蓝|奶油黄|校园红|公告栏" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -429,6 +448,7 @@
 - 更新日期: 2026-03-29
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-041`（已将小红书第六篇封面与轮播图的配色切到更像校园招聘公告栏的海盐蓝 / 奶油黄 / 校园红方案。）
 - 最新完成: `TASK-README-040`（已将小红书第六篇封面与轮播图刷新为更贴春招语境的视觉主题，并提升版面层次与手机端读感。）
 - 最新完成: `TASK-README-039`（已为小红书第六篇补齐 6 页轮播版素材包、HTML 与逐页 PNG，保持与长文版标题和互动问题一致。）
 - 最新完成: `TASK-README-038`（已为小红书第六篇固定“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面图与热点借势边界。）

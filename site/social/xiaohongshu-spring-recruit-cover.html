@@ -12,21 +12,21 @@
     />
     <style>
       :root {
-        --sky: #f6f5ef;
-        --mint: #e6f0df;
-        --mint-deep: #c8d9be;
-        --blossom: #f3d8d7;
-        --peach: #f4cbb2;
-        --paper: rgba(255, 251, 246, 0.88);
-        --paper-solid: #fffaf4;
-        --ink: #241b16;
-        --muted: rgba(36, 27, 22, 0.7);
-        --soft: rgba(36, 27, 22, 0.45);
-        --sage: #5c7558;
-        --coral: #d66a4f;
-        --gold: #c89a46;
-        --line: rgba(36, 27, 22, 0.1);
-        --shadow: 0 28px 64px rgba(73, 51, 39, 0.12);
+        --sky: #eef4fb;
+        --mint: #dbe7f2;
+        --mint-deep: #b8cbe0;
+        --blossom: #f5e19f;
+        --peach: #efb2a4;
+        --paper: rgba(255, 252, 247, 0.9);
+        --paper-solid: #fffbf6;
+        --ink: #241a17;
+        --muted: rgba(36, 26, 23, 0.72);
+        --soft: rgba(36, 26, 23, 0.46);
+        --sage: #55786a;
+        --coral: #c65a45;
+        --gold: #d4a548;
+        --line: rgba(36, 26, 23, 0.09);
+        --shadow: 0 30px 70px rgba(54, 63, 79, 0.12);
       }
 
       * {
@@ -39,9 +39,9 @@
         display: grid;
         place-items: center;
         background:
-          radial-gradient(circle at 14% 14%, rgba(214, 106, 79, 0.16), transparent 20%),
-          radial-gradient(circle at 82% 18%, rgba(92, 117, 88, 0.18), transparent 22%),
-          linear-gradient(145deg, #eef3e9 0%, #f8f3ec 42%, #f7ebe3 100%);
+          radial-gradient(circle at 14% 14%, rgba(198, 90, 69, 0.16), transparent 20%),
+          radial-gradient(circle at 82% 18%, rgba(85, 120, 106, 0.16), transparent 22%),
+          linear-gradient(145deg, #e7eff9 0%, #f8f4ea 45%, #f6ede3 100%);
         color: var(--ink);
         font-family: "Manrope", sans-serif;
       }
@@ -52,10 +52,10 @@
         height: 1440px;
         overflow: hidden;
         background:
-          radial-gradient(circle at 12% 16%, rgba(243, 216, 215, 0.9), transparent 24%),
-          radial-gradient(circle at 88% 14%, rgba(230, 240, 223, 0.92), transparent 22%),
+          radial-gradient(circle at 12% 16%, rgba(245, 225, 159, 0.88), transparent 24%),
+          radial-gradient(circle at 88% 14%, rgba(219, 231, 242, 0.92), transparent 22%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 22%),
-          linear-gradient(140deg, #f8f4ee, #f6f2e9 44%, #eff4e8);
+          linear-gradient(140deg, #f7fbff, #f8f3e9 46%, #e9f0fb);
       }
 
       .grain,
@@ -92,7 +92,7 @@
         right: -120px;
         top: -90px;
         border-radius: 999px;
-        background: radial-gradient(circle, rgba(244, 203, 178, 0.42), rgba(244, 203, 178, 0.06) 55%, transparent 72%);
+        background: radial-gradient(circle, rgba(245, 225, 159, 0.46), rgba(245, 225, 159, 0.08) 55%, transparent 72%);
       }
 
       .petals::before,
@@ -100,14 +100,14 @@
         content: "";
         position: absolute;
         border-radius: 80% 20% 70% 30%;
-        background: rgba(243, 216, 215, 0.66);
+        background: rgba(219, 231, 242, 0.72);
         transform: rotate(-18deg);
         box-shadow:
-          120px 38px 0 -18px rgba(243, 216, 215, 0.58),
-          240px -28px 0 -10px rgba(244, 203, 178, 0.48),
-          440px 104px 0 -28px rgba(243, 216, 215, 0.42),
-          604px 18px 0 -8px rgba(230, 240, 223, 0.52),
-          748px 162px 0 -24px rgba(243, 216, 215, 0.42);
+          120px 38px 0 -18px rgba(245, 225, 159, 0.56),
+          240px -28px 0 -10px rgba(239, 178, 164, 0.46),
+          440px 104px 0 -28px rgba(219, 231, 242, 0.44),
+          604px 18px 0 -8px rgba(219, 232, 223, 0.52),
+          748px 162px 0 -24px rgba(245, 225, 159, 0.4);
       }
 
       .petals::before {
@@ -153,7 +153,7 @@
         width: 10px;
         height: 10px;
         background: var(--coral);
-        box-shadow: 0 0 0 8px rgba(214, 106, 79, 0.12);
+        box-shadow: 0 0 0 8px rgba(198, 90, 69, 0.12);
       }
 
       .season-ticket {
@@ -161,9 +161,9 @@
         right: 82px;
         top: 122px;
         padding: 14px 20px;
-        border: 1px solid rgba(92, 117, 88, 0.14);
+        border: 1px solid rgba(85, 120, 106, 0.16);
         border-radius: 999px;
-        background: rgba(255, 251, 246, 0.7);
+        background: rgba(255, 252, 247, 0.74);
         color: var(--sage);
         font-family: "IBM Plex Mono", monospace;
         font-size: 17px;
@@ -246,7 +246,7 @@
       .sheet.back {
         inset: 54px 34px 0 auto;
         height: 270px;
-        background: linear-gradient(180deg, rgba(230, 240, 223, 0.92), rgba(255, 251, 246, 0.82));
+        background: linear-gradient(180deg, rgba(219, 231, 242, 0.94), rgba(255, 252, 247, 0.84));
         transform: rotate(7deg);
       }
 
@@ -298,7 +298,7 @@
         width: 108px;
         height: 28px;
         border-radius: 999px;
-        background: rgba(200, 154, 70, 0.26);
+        background: rgba(245, 225, 159, 0.42);
         transform: rotate(-8deg);
       }
 
@@ -322,22 +322,22 @@
       }
 
       .quality:nth-child(1) {
-        background: linear-gradient(180deg, rgba(230, 240, 223, 0.96), rgba(255, 251, 246, 0.86));
+        background: linear-gradient(180deg, rgba(219, 231, 242, 0.96), rgba(255, 252, 247, 0.88));
         transform: rotate(-2deg);
       }
 
       .quality:nth-child(2) {
-        background: linear-gradient(180deg, rgba(243, 216, 215, 0.96), rgba(255, 251, 246, 0.88));
+        background: linear-gradient(180deg, rgba(245, 225, 159, 0.96), rgba(255, 252, 247, 0.88));
         transform: rotate(1.6deg);
       }
 
       .quality:nth-child(3) {
-        background: linear-gradient(180deg, rgba(244, 203, 178, 0.9), rgba(255, 251, 246, 0.88));
+        background: linear-gradient(180deg, rgba(239, 178, 164, 0.92), rgba(255, 252, 247, 0.88));
         transform: rotate(-1.4deg);
       }
 
       .quality:nth-child(4) {
-        background: linear-gradient(180deg, rgba(234, 223, 205, 0.95), rgba(255, 251, 246, 0.88));
+        background: linear-gradient(180deg, rgba(219, 232, 223, 0.95), rgba(255, 252, 247, 0.88));
         transform: rotate(2deg);
       }
 
