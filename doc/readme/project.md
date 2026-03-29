@@ -395,6 +395,25 @@
     - `rg -n "今年春招，我会看什么人|AI 把\\\"会一点\\\"的人变多了|讲得清|做得完|玩家感觉|你觉得自己最强的是哪一项" doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-040 (PRD-README-028/029) [test_tier_required]: 为小红书第六篇封面与轮播图做春招主题视觉刷新，提升春季招聘语境识别度、版面层次和手机端读感，不改变标题、正文边界与互动问题。
+  - 产物文件:
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
+    - `doc/devlog/2026-03-29.md`
+    - `site/social/xiaohongshu-spring-recruit-cover.html`
+    - `site/social/xiaohongshu-spring-recruit-cover.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel.html`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide1.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide2.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide3.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide4.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide5.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide6.png`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "春季招聘季刊|校园公告栏|简历筛选板|春招主题|不是招聘启事" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-cover.html site/social/xiaohongshu-spring-recruit-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -410,6 +429,7 @@
 - 更新日期: 2026-03-29
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-040`（已将小红书第六篇封面与轮播图刷新为更贴春招语境的视觉主题，并提升版面层次与手机端读感。）
 - 最新完成: `TASK-README-039`（已为小红书第六篇补齐 6 页轮播版素材包、HTML 与逐页 PNG，保持与长文版标题和互动问题一致。）
 - 最新完成: `TASK-README-038`（已为小红书第六篇固定“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面图与热点借势边界。）
 - 最新完成: `TASK-README-037`（已为小红书第五篇固定“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口。）

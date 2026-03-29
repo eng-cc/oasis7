@@ -7,23 +7,26 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Noto+Serif+SC:wght@600;700;900&family=IBM+Plex+Mono:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Manrope:wght@500;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --paper: #f4ede2;
-        --paper-deep: #eadfce;
-        --ink: #1f1914;
-        --muted: rgba(31, 25, 20, 0.68);
-        --soft: rgba(31, 25, 20, 0.44);
-        --brick: #c14d2d;
-        --brick-soft: rgba(193, 77, 45, 0.16);
-        --olive: #6a705a;
-        --olive-soft: rgba(106, 112, 90, 0.16);
-        --line: rgba(31, 25, 20, 0.1);
-        --panel: rgba(255, 250, 244, 0.84);
-        --shadow: 0 28px 64px rgba(58, 39, 24, 0.14);
+        --sky: #f6f5ef;
+        --mint: #e6f0df;
+        --mint-deep: #c8d9be;
+        --blossom: #f3d8d7;
+        --peach: #f4cbb2;
+        --paper: rgba(255, 251, 246, 0.88);
+        --paper-solid: #fffaf4;
+        --ink: #241b16;
+        --muted: rgba(36, 27, 22, 0.7);
+        --soft: rgba(36, 27, 22, 0.45);
+        --sage: #5c7558;
+        --coral: #d66a4f;
+        --gold: #c89a46;
+        --line: rgba(36, 27, 22, 0.1);
+        --shadow: 0 28px 64px rgba(73, 51, 39, 0.12);
       }
 
       * {
@@ -36,9 +39,9 @@
         display: grid;
         place-items: center;
         background:
-          radial-gradient(circle at 12% 14%, var(--brick-soft), transparent 24%),
-          radial-gradient(circle at 84% 18%, var(--olive-soft), transparent 22%),
-          linear-gradient(140deg, #efe3d3, #f5eee4 42%, #e9dece);
+          radial-gradient(circle at 14% 14%, rgba(214, 106, 79, 0.16), transparent 20%),
+          radial-gradient(circle at 82% 18%, rgba(92, 117, 88, 0.18), transparent 22%),
+          linear-gradient(145deg, #eef3e9 0%, #f8f3ec 42%, #f7ebe3 100%);
         color: var(--ink);
         font-family: "Manrope", sans-serif;
       }
@@ -49,25 +52,27 @@
         height: 1440px;
         overflow: hidden;
         background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 22%),
-          linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.06)),
-          var(--paper);
+          radial-gradient(circle at 12% 16%, rgba(243, 216, 215, 0.9), transparent 24%),
+          radial-gradient(circle at 88% 14%, rgba(230, 240, 223, 0.92), transparent 22%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 22%),
+          linear-gradient(140deg, #f8f4ee, #f6f2e9 44%, #eff4e8);
       }
 
       .grain,
       .grid,
-      .rings {
+      .petals,
+      .sun-wash {
         position: absolute;
         inset: 0;
         pointer-events: none;
       }
 
       .grain {
-        opacity: 0.1;
+        opacity: 0.12;
         background-image:
-          radial-gradient(circle at 18% 20%, rgba(0, 0, 0, 0.7) 0.8px, transparent 0.9px),
-          radial-gradient(circle at 74% 32%, rgba(0, 0, 0, 0.55) 0.7px, transparent 0.8px),
-          radial-gradient(circle at 38% 84%, rgba(0, 0, 0, 0.5) 0.7px, transparent 0.8px);
+          radial-gradient(circle at 20% 20%, rgba(0, 0, 0, 0.75) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 75% 28%, rgba(0, 0, 0, 0.55) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 36% 80%, rgba(0, 0, 0, 0.45) 0.7px, transparent 0.8px);
         background-size: 22px 22px, 28px 28px, 34px 34px;
       }
 
@@ -76,47 +81,65 @@
           linear-gradient(to right, var(--line) 1px, transparent 1px),
           linear-gradient(to bottom, var(--line) 1px, transparent 1px);
         background-size: 72px 72px;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 88%);
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 90%);
       }
 
-      .rings::before,
-      .rings::after {
+      .sun-wash::before {
         content: "";
         position: absolute;
-        border: 1px solid rgba(31, 25, 20, 0.09);
+        width: 520px;
+        height: 520px;
+        right: -120px;
+        top: -90px;
         border-radius: 999px;
+        background: radial-gradient(circle, rgba(244, 203, 178, 0.42), rgba(244, 203, 178, 0.06) 55%, transparent 72%);
       }
 
-      .rings::before {
-        width: 720px;
-        height: 720px;
-        top: -180px;
-        right: -160px;
+      .petals::before,
+      .petals::after {
+        content: "";
+        position: absolute;
+        border-radius: 80% 20% 70% 30%;
+        background: rgba(243, 216, 215, 0.66);
+        transform: rotate(-18deg);
+        box-shadow:
+          120px 38px 0 -18px rgba(243, 216, 215, 0.58),
+          240px -28px 0 -10px rgba(244, 203, 178, 0.48),
+          440px 104px 0 -28px rgba(243, 216, 215, 0.42),
+          604px 18px 0 -8px rgba(230, 240, 223, 0.52),
+          748px 162px 0 -24px rgba(243, 216, 215, 0.42);
       }
 
-      .rings::after {
-        width: 660px;
-        height: 660px;
-        left: -220px;
-        bottom: -220px;
+      .petals::before {
+        width: 68px;
+        height: 34px;
+        left: 52px;
+        top: 134px;
+      }
+
+      .petals::after {
+        width: 74px;
+        height: 38px;
+        right: 140px;
+        bottom: 360px;
       }
 
       .masthead {
         position: absolute;
-        top: 74px;
-        left: 78px;
-        right: 78px;
+        top: 72px;
+        left: 76px;
+        right: 76px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-family: "IBM Plex Mono", monospace;
-        font-size: 20px;
+        font-size: 18px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
       }
 
-      .masthead .brand,
-      .masthead .kicker {
+      .brand,
+      .season {
         display: inline-flex;
         align-items: center;
         gap: 12px;
@@ -124,63 +147,89 @@
         font-weight: 700;
       }
 
-      .masthead .brand::before,
-      .masthead .kicker::before {
+      .brand::before,
+      .season::before {
         content: "";
         width: 10px;
         height: 10px;
-        background: var(--brick);
-        box-shadow: 0 0 0 7px rgba(193, 77, 45, 0.12);
+        background: var(--coral);
+        box-shadow: 0 0 0 8px rgba(214, 106, 79, 0.12);
+      }
+
+      .season-ticket {
+        position: absolute;
+        right: 82px;
+        top: 122px;
+        padding: 14px 20px;
+        border: 1px solid rgba(92, 117, 88, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 251, 246, 0.7);
+        color: var(--sage);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
       }
 
       .hero {
         position: absolute;
-        left: 82px;
-        right: 82px;
-        top: 206px;
+        left: 78px;
+        right: 78px;
+        top: 196px;
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 28px;
       }
 
-      .hero .eyebrow {
-        margin-bottom: 28px;
-        color: var(--olive);
+      .hero-copy .eyebrow {
+        display: inline-block;
+        margin-bottom: 24px;
+        color: var(--sage);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 22px;
-        letter-spacing: 0.16em;
+        font-size: 20px;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
         font-weight: 700;
       }
 
       .hero h1 {
         margin: 0;
-        max-width: 840px;
+        max-width: 620px;
         font-family: "Noto Serif SC", serif;
-        font-size: 96px;
-        line-height: 1.08;
-        letter-spacing: -0.05em;
+        font-size: 102px;
+        line-height: 1.02;
+        letter-spacing: -0.06em;
       }
 
       .hero h1 .accent {
-        color: var(--brick);
+        color: var(--coral);
       }
 
       .hero p {
-        margin: 26px 0 0;
-        max-width: 760px;
-        font-size: 31px;
-        line-height: 1.58;
+        margin: 28px 0 0;
+        max-width: 540px;
+        font-size: 30px;
+        line-height: 1.56;
         color: var(--muted);
       }
 
-      .panel {
-        position: absolute;
-        border: 1px solid rgba(31, 25, 20, 0.09);
-        border-radius: 28px;
-        background: var(--panel);
-        backdrop-filter: blur(16px);
-        box-shadow: var(--shadow);
+      .resume-stack {
+        position: relative;
+        min-height: 430px;
       }
 
-      .panel::before {
+      .sheet {
+        position: absolute;
+        width: 100%;
+        border-radius: 28px;
+        background: var(--paper);
+        border: 1px solid rgba(36, 27, 22, 0.08);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .sheet::before {
         content: "";
         position: absolute;
         top: 18px;
@@ -188,113 +237,159 @@
         width: 12px;
         height: 12px;
         border-radius: 999px;
-        background: rgba(31, 25, 20, 0.16);
+        background: rgba(36, 27, 22, 0.14);
         box-shadow:
-          24px 0 0 rgba(31, 25, 20, 0.1),
-          48px 0 0 rgba(31, 25, 20, 0.1);
+          24px 0 0 rgba(36, 27, 22, 0.08),
+          48px 0 0 rgba(36, 27, 22, 0.08);
       }
 
-      .checklist {
-        left: 70px;
-        bottom: 92px;
-        width: 622px;
-        min-height: 470px;
-        padding: 54px 32px 28px;
-        transform: rotate(-2.2deg);
+      .sheet.back {
+        inset: 54px 34px 0 auto;
+        height: 270px;
+        background: linear-gradient(180deg, rgba(230, 240, 223, 0.92), rgba(255, 251, 246, 0.82));
+        transform: rotate(7deg);
       }
 
-      .label {
-        display: inline-block;
-        margin-bottom: 18px;
+      .sheet.front {
+        inset: 16px 0 auto auto;
+        height: 330px;
+        padding: 52px 28px 26px;
+        transform: rotate(-3deg);
+      }
+
+      .sheet .title {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
         color: var(--soft);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 18px;
-        letter-spacing: 0.16em;
+        font-size: 14px;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
         font-weight: 700;
       }
 
-      .item {
-        display: grid;
-        grid-template-columns: 42px 1fr;
-        gap: 16px;
-        padding: 16px 0;
-        border-top: 1px solid rgba(31, 25, 20, 0.08);
+      .sheet .title::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        background: var(--gold);
+        border-radius: 999px;
       }
 
-      .item:first-of-type {
-        border-top: 0;
-        padding-top: 0;
-      }
-
-      .tick {
-        width: 42px;
-        height: 42px;
-        display: grid;
-        place-items: center;
-        border-radius: 14px;
-        background: rgba(106, 112, 90, 0.12);
-        color: var(--olive);
-        font-size: 22px;
-        font-weight: 800;
-      }
-
-      .item strong {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 27px;
-        line-height: 1.35;
-      }
-
-      .item span {
-        display: block;
-        color: var(--muted);
-        font-size: 20px;
-        line-height: 1.5;
-      }
-
-      .note {
-        right: 86px;
-        bottom: 146px;
-        width: 308px;
-        padding: 56px 24px 24px;
-        transform: rotate(4deg);
-      }
-
-      .note h2 {
-        margin: 0 0 18px;
+      .sheet h2 {
+        margin: 18px 0 14px;
         font-family: "Noto Serif SC", serif;
-        font-size: 42px;
-        line-height: 1.18;
+        font-size: 48px;
+        line-height: 1.14;
         letter-spacing: -0.04em;
       }
 
-      .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
+      .sheet p {
+        color: var(--muted);
+        font-size: 22px;
+        line-height: 1.5;
       }
 
-      .chip {
-        padding: 10px 14px;
+      .pin {
+        position: absolute;
+        top: -14px;
+        right: 42px;
+        width: 108px;
+        height: 28px;
         border-radius: 999px;
-        border: 1px solid rgba(31, 25, 20, 0.08);
-        background: rgba(255, 255, 255, 0.64);
-        font-size: 18px;
+        background: rgba(200, 154, 70, 0.26);
+        transform: rotate(-8deg);
+      }
+
+      .qualities {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 102px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+      }
+
+      .quality {
+        position: relative;
+        min-height: 228px;
+        padding: 34px 22px 24px;
+        border-radius: 24px;
+        border: 1px solid rgba(36, 27, 22, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .quality:nth-child(1) {
+        background: linear-gradient(180deg, rgba(230, 240, 223, 0.96), rgba(255, 251, 246, 0.86));
+        transform: rotate(-2deg);
+      }
+
+      .quality:nth-child(2) {
+        background: linear-gradient(180deg, rgba(243, 216, 215, 0.96), rgba(255, 251, 246, 0.88));
+        transform: rotate(1.6deg);
+      }
+
+      .quality:nth-child(3) {
+        background: linear-gradient(180deg, rgba(244, 203, 178, 0.9), rgba(255, 251, 246, 0.88));
+        transform: rotate(-1.4deg);
+      }
+
+      .quality:nth-child(4) {
+        background: linear-gradient(180deg, rgba(234, 223, 205, 0.95), rgba(255, 251, 246, 0.88));
+        transform: rotate(2deg);
+      }
+
+      .quality::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 24px;
+        width: 96px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.44);
+        transform: rotate(-8deg);
+      }
+
+      .quality .label {
+        display: block;
+        margin-bottom: 18px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .quality strong {
+        display: block;
+        margin-bottom: 8px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 42px;
+        line-height: 1.12;
+      }
+
+      .quality span {
+        display: block;
         color: var(--muted);
+        font-size: 19px;
+        line-height: 1.48;
       }
 
       .footer {
         position: absolute;
-        left: 80px;
-        right: 80px;
+        left: 78px;
+        right: 78px;
         bottom: 42px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         color: var(--soft);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 18px;
+        font-size: 17px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
       }
@@ -302,72 +397,68 @@
   </head>
   <body>
     <main class="cover">
+      <div class="sun-wash"></div>
+      <div class="petals"></div>
       <div class="grain"></div>
       <div class="grid"></div>
-      <div class="rings"></div>
 
       <header class="masthead">
         <div class="brand">oasis7 notes</div>
-        <div class="kicker">spring recruit</div>
+        <div class="season">spring recruit</div>
       </header>
+      <div class="season-ticket">campus review season</div>
 
       <section class="hero">
-        <div class="eyebrow">studio lead memo</div>
-        <h1>
-          今年春招<br />
-          <span class="accent">我会看什么人</span>
-        </h1>
-        <p>
-          不先看你会多少工具。<br />
-          先看你能不能把事接住。
-        </p>
-      </section>
+        <div class="hero-copy">
+          <div class="eyebrow">studio lead memo</div>
+          <h1>
+            今年春招，<br />
+            <span class="accent">我会看什么人</span>
+          </h1>
+          <p>
+            不先看你会多少工具。<br />
+            先看你能不能把事接住。
+          </p>
+        </div>
 
-      <section class="panel checklist">
-        <div class="label">what I actually check</div>
-        <div class="item">
-          <div class="tick">01</div>
-          <div>
-            <strong>讲得清</strong>
-            <span>不是“参与过”，是你具体做了什么，最后怎么收的。</span>
-          </div>
-        </div>
-        <div class="item">
-          <div class="tick">02</div>
-          <div>
-            <strong>做得完</strong>
-            <span>项目可以小，但不能全是半成品。</span>
-          </div>
-        </div>
-        <div class="item">
-          <div class="tick">03</div>
-          <div>
-            <strong>会用 AI</strong>
-            <span>不是拿它代打，是拿它提速，最后自己判断。</span>
-          </div>
-        </div>
-        <div class="item">
-          <div class="tick">04</div>
-          <div>
-            <strong>有玩家感觉</strong>
-            <span>知道玩家会不会点，哪里会烦，哪里会留下来。</span>
+        <div class="resume-stack">
+          <div class="sheet back"></div>
+          <div class="sheet front">
+            <div class="pin"></div>
+            <div class="title">what this is not</div>
+            <h2>不是招聘启事</h2>
+            <p>
+              这是一个做项目的人，在春招季真的会拿来判断人的标准。
+            </p>
           </div>
         </div>
       </section>
 
-      <aside class="panel note">
-        <div class="label">more than resume</div>
-        <h2>判断<br />执行<br />收口</h2>
-        <div class="chips">
-          <div class="chip">#春招</div>
-          <div class="chip">#求职</div>
-          <div class="chip">#游戏行业</div>
-          <div class="chip">#AI时代</div>
-        </div>
-      </aside>
+      <section class="qualities">
+        <article class="quality">
+          <span class="label">01</span>
+          <strong>讲得清</strong>
+          <span>不是“参与过”，是你到底做了什么。</span>
+        </article>
+        <article class="quality">
+          <span class="label">02</span>
+          <strong>做得完</strong>
+          <span>项目可以小，但不能全是半成品。</span>
+        </article>
+        <article class="quality">
+          <span class="label">03</span>
+          <strong>会用 AI</strong>
+          <span>不是代打，是提速，但最后自己判断。</span>
+        </article>
+        <article class="quality">
+          <span class="label">04</span>
+          <strong>玩家感觉</strong>
+          <span>知道玩家会不会点，哪里会烦，哪里会留下。</span>
+        </article>
+      </section>
 
       <footer class="footer">
-        <span>xiaohongshu post pack</span>
+        <span>spring editorial cover</span>
         <span>2026.03.29</span>
       </footer>
     </main>

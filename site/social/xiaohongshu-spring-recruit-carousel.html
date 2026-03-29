@@ -7,24 +7,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;700&family=Noto+Sans+SC:wght@400;500;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Manrope:wght@500;700;800&family=Noto+Sans+SC:wght@400;500;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --paper: #f5eee4;
-        --paper-deep: #eadfcd;
-        --paper-light: #fbf7f1;
-        --ink: #211a14;
-        --muted: rgba(33, 26, 20, 0.74);
-        --soft: rgba(33, 26, 20, 0.45);
-        --line: rgba(33, 26, 20, 0.1);
-        --brick: #c54f31;
-        --brick-soft: rgba(197, 79, 49, 0.14);
-        --olive: #68705d;
-        --olive-soft: rgba(104, 112, 93, 0.16);
-        --panel: rgba(255, 251, 245, 0.86);
-        --shadow: 0 30px 72px rgba(63, 42, 27, 0.15);
+        --sky: #f7f5ef;
+        --mint: #e6f0df;
+        --mint-deep: #c9dac0;
+        --blossom: #f3d8d7;
+        --peach: #f4cbb2;
+        --butter: #f6e4b6;
+        --paper: rgba(255, 251, 246, 0.9);
+        --paper-soft: rgba(255, 252, 248, 0.82);
+        --ink: #241c16;
+        --muted: rgba(36, 28, 22, 0.74);
+        --soft: rgba(36, 28, 22, 0.45);
+        --sage: #5e7759;
+        --coral: #d86b50;
+        --gold: #c79a45;
+        --line: rgba(36, 28, 22, 0.1);
+        --shadow: 0 30px 74px rgba(75, 50, 39, 0.12);
       }
 
       * {
@@ -35,11 +38,11 @@
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at 14% 12%, var(--brick-soft), transparent 22%),
-          radial-gradient(circle at 86% 18%, var(--olive-soft), transparent 22%),
-          linear-gradient(145deg, #efe4d5, #f6efe6 42%, #ebe0d0);
+          radial-gradient(circle at 14% 12%, rgba(216, 107, 80, 0.14), transparent 20%),
+          radial-gradient(circle at 86% 16%, rgba(94, 119, 89, 0.18), transparent 22%),
+          linear-gradient(150deg, #eef4e8 0%, #f7f3ea 44%, #f6ece4 100%);
         color: var(--ink);
-        font-family: "Albert Sans", "Noto Sans SC", sans-serif;
+        font-family: "Manrope", "Noto Sans SC", sans-serif;
       }
 
       .gallery {
@@ -56,9 +59,10 @@
         overflow: hidden;
         border-radius: 28px;
         background:
+          radial-gradient(circle at 14% 16%, rgba(243, 216, 215, 0.78), transparent 24%),
+          radial-gradient(circle at 84% 12%, rgba(230, 240, 223, 0.86), transparent 22%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 18%),
-          linear-gradient(145deg, rgba(255, 249, 241, 0.94), rgba(243, 232, 216, 0.98)),
-          var(--paper);
+          linear-gradient(145deg, #fbf7f1, #f7f3ea 42%, #edf4e6);
         box-shadow: var(--shadow);
       }
 
@@ -73,36 +77,30 @@
         box-shadow: none;
       }
 
-      .wash,
       .grain,
-      .rules,
+      .grid,
+      .petals,
       .frame {
         position: absolute;
         inset: 0;
         pointer-events: none;
       }
 
-      .wash {
-        background:
-          radial-gradient(circle at 16% 16%, rgba(197, 79, 49, 0.12), transparent 21%),
-          radial-gradient(circle at 82% 12%, rgba(104, 112, 93, 0.15), transparent 18%),
-          radial-gradient(circle at 56% 86%, rgba(197, 79, 49, 0.08), transparent 26%);
-      }
-
       .grain {
-        opacity: 0.2;
+        opacity: 0.12;
         background-image:
-          radial-gradient(circle at 20% 20%, rgba(33, 26, 20, 0.18) 0.6px, transparent 0.8px),
-          radial-gradient(circle at 80% 30%, rgba(33, 26, 20, 0.16) 0.7px, transparent 0.9px),
-          radial-gradient(circle at 30% 72%, rgba(33, 26, 20, 0.14) 0.6px, transparent 0.8px);
-        background-size: 34px 34px, 42px 42px, 56px 56px;
+          radial-gradient(circle at 20% 20%, rgba(0, 0, 0, 0.65) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 80% 30%, rgba(0, 0, 0, 0.5) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 30% 72%, rgba(0, 0, 0, 0.42) 0.7px, transparent 0.8px);
+        background-size: 28px 28px, 34px 34px, 44px 44px;
       }
 
-      .rules {
+      .grid {
         background-image:
-          linear-gradient(to bottom, rgba(33, 26, 20, 0.05) 1px, transparent 1px);
-        background-size: 100% 96px;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 90%);
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.42), transparent 92%);
       }
 
       .frame::before,
@@ -110,15 +108,44 @@
         content: "";
         position: absolute;
         inset: 26px;
-        border: 1px solid rgba(33, 26, 20, 0.08);
+        border: 1px solid rgba(36, 28, 22, 0.08);
         border-radius: 22px;
       }
 
       .frame::after {
         inset: 42px;
         border-style: dashed;
-        border-color: rgba(33, 26, 20, 0.05);
+        border-color: rgba(36, 28, 22, 0.05);
         border-radius: 16px;
+      }
+
+      .petals::before,
+      .petals::after {
+        content: "";
+        position: absolute;
+        border-radius: 80% 20% 70% 30%;
+        background: rgba(243, 216, 215, 0.58);
+        transform: rotate(-18deg);
+      }
+
+      .petals::before {
+        width: 70px;
+        height: 34px;
+        left: 52px;
+        top: 110px;
+        box-shadow:
+          140px 42px 0 -18px rgba(243, 216, 215, 0.54),
+          256px -14px 0 -10px rgba(244, 203, 178, 0.44);
+      }
+
+      .petals::after {
+        width: 80px;
+        height: 40px;
+        right: 104px;
+        bottom: 220px;
+        box-shadow:
+          -110px -64px 0 -20px rgba(230, 240, 223, 0.56),
+          -240px 12px 0 -14px rgba(243, 216, 215, 0.42);
       }
 
       .header,
@@ -136,7 +163,7 @@
       }
 
       .footer {
-        bottom: 56px;
+        bottom: 54px;
         color: var(--soft);
         font-family: "IBM Plex Mono", monospace;
         font-size: 18px;
@@ -146,7 +173,6 @@
 
       .brand,
       .kicker,
-      .chip,
       .eyebrow {
         display: inline-flex;
         align-items: center;
@@ -167,16 +193,16 @@
       .kicker::before,
       .eyebrow::before {
         content: "";
-        width: 12px;
-        height: 12px;
-        background: var(--brick);
-        box-shadow: 5px 5px 0 rgba(197, 79, 49, 0.14);
+        width: 11px;
+        height: 11px;
+        background: var(--coral);
+        box-shadow: 5px 5px 0 rgba(216, 107, 80, 0.12);
       }
 
       .eyebrow {
-        color: var(--olive);
+        color: var(--sage);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 18px;
+        font-size: 17px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         font-weight: 700;
@@ -191,55 +217,53 @@
 
       h1 {
         font-family: "Noto Serif SC", serif;
-        font-size: 96px;
-        line-height: 1.06;
+        font-size: 98px;
+        line-height: 1.04;
         letter-spacing: -0.05em;
         font-weight: 900;
       }
 
       h2 {
         font-family: "Noto Serif SC", serif;
-        font-size: 70px;
-        line-height: 1.12;
+        font-size: 66px;
+        line-height: 1.1;
         letter-spacing: -0.04em;
         font-weight: 900;
       }
 
       h3 {
-        font-size: 36px;
+        font-size: 34px;
         line-height: 1.24;
         font-weight: 900;
       }
 
-      p,
-      li {
+      p {
         color: var(--muted);
         font-size: 28px;
         line-height: 1.52;
       }
 
       .accent {
-        color: var(--brick);
+        color: var(--coral);
       }
 
-      .subaccent {
-        color: var(--olive);
+      .sage {
+        color: var(--sage);
       }
 
       .panel,
-      .note,
-      .stat,
-      .card,
-      .quote {
+      .ticket,
+      .board-card,
+      .stat {
         position: relative;
-        border: 1px solid rgba(33, 26, 20, 0.08);
-        background: var(--panel);
+        border: 1px solid rgba(36, 28, 22, 0.08);
+        background: var(--paper);
         box-shadow: var(--shadow);
       }
 
       .panel::before,
-      .note::before,
-      .card::before {
+      .ticket::before,
+      .board-card::before {
         content: "";
         position: absolute;
         top: 18px;
@@ -247,71 +271,73 @@
         width: 12px;
         height: 12px;
         border-radius: 999px;
-        background: rgba(33, 26, 20, 0.16);
+        background: rgba(36, 28, 22, 0.14);
         box-shadow:
-          24px 0 0 rgba(33, 26, 20, 0.09),
-          48px 0 0 rgba(33, 26, 20, 0.09);
+          24px 0 0 rgba(36, 28, 22, 0.08),
+          48px 0 0 rgba(36, 28, 22, 0.08);
       }
 
-      .hero {
+      .tape {
+        position: absolute;
+        top: -10px;
+        left: 26px;
+        width: 96px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.46);
+        transform: rotate(-8deg);
+      }
+
+      .hero-grid,
+      .content-grid {
         position: absolute;
         left: 78px;
         right: 78px;
         top: 152px;
+        bottom: 118px;
+      }
+
+      .hero-grid {
         display: grid;
         grid-template-columns: 1.08fr 0.92fr;
         gap: 26px;
-        align-items: start;
       }
 
       .hero-copy p {
         max-width: 560px;
-        margin-top: 26px;
-        font-size: 29px;
+        margin-top: 24px;
       }
 
-      .hero-note {
-        min-height: 310px;
-        padding: 42px 30px 28px;
+      .hero-side {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+
+      .ticket {
         border-radius: 26px;
-        transform: rotate(1.8deg);
+        padding: 44px 28px 26px;
       }
 
-      .hero-note h3 {
-        margin-bottom: 18px;
+      .ticket h3 {
+        margin: 16px 0 12px;
       }
 
-      .hero-note .micro {
-        font-size: 21px;
+      .ticket p {
+        font-size: 24px;
         line-height: 1.48;
       }
 
-      .cover-bottom {
-        position: absolute;
-        left: 78px;
-        right: 78px;
-        bottom: 118px;
-        display: grid;
-        grid-template-columns: 1.08fr 0.92fr;
-        gap: 22px;
-      }
-
-      .compare,
-      .prompt {
-        padding: 34px 30px 28px;
-        border-radius: 24px;
-      }
-
-      .compare-grid {
+      .mini-strip {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 18px;
-        margin-top: 18px;
+        gap: 14px;
       }
 
       .mini {
         padding: 18px 16px;
-        border: 1px solid rgba(33, 26, 20, 0.08);
+        border-radius: 18px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
         background: rgba(255, 255, 255, 0.56);
       }
 
@@ -320,7 +346,7 @@
         margin-bottom: 10px;
         color: var(--soft);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 14px;
+        font-size: 13px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         font-weight: 700;
@@ -328,125 +354,189 @@
 
       .mini p {
         color: var(--ink);
-        font-size: 28px;
-        line-height: 1.3;
+        font-size: 26px;
+        line-height: 1.28;
         font-weight: 800;
       }
 
-      .prompt-window {
-        margin-top: 20px;
-        padding: 16px 18px 18px;
-        border: 1px solid rgba(33, 26, 20, 0.12);
-        background: rgba(248, 244, 237, 0.86);
-      }
-
-      .prompt-window p {
-        color: var(--ink);
-        font-size: 25px;
-        line-height: 1.42;
-        font-weight: 700;
-      }
-
-      .body-grid {
+      .qualities {
         position: absolute;
         left: 78px;
         right: 78px;
-        top: 158px;
-        bottom: 118px;
+        bottom: 116px;
         display: grid;
-        grid-template-columns: 0.88fr 1.12fr;
-        gap: 24px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
       }
 
-      .note {
-        align-self: start;
-        padding: 42px 30px 30px;
-        border-radius: 26px;
-        transform: rotate(-2.2deg);
+      .quality {
+        position: relative;
+        min-height: 210px;
+        padding: 30px 22px 22px;
+        border-radius: 22px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
+        box-shadow: var(--shadow);
       }
 
-      .note p {
-        margin-top: 18px;
-        color: var(--ink);
-        font-size: 34px;
-        line-height: 1.32;
-        font-weight: 800;
+      .quality:nth-child(1) {
+        background: linear-gradient(180deg, rgba(230, 240, 223, 0.96), rgba(255, 251, 246, 0.9));
       }
 
-      .stack {
+      .quality:nth-child(2) {
+        background: linear-gradient(180deg, rgba(243, 216, 215, 0.96), rgba(255, 251, 246, 0.9));
+      }
+
+      .quality:nth-child(3) {
+        background: linear-gradient(180deg, rgba(244, 203, 178, 0.94), rgba(255, 251, 246, 0.9));
+      }
+
+      .quality:nth-child(4) {
+        background: linear-gradient(180deg, rgba(246, 228, 182, 0.92), rgba(255, 251, 246, 0.9));
+      }
+
+      .quality strong {
+        display: block;
+        margin: 10px 0 8px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 38px;
+        line-height: 1.1;
+      }
+
+      .quality span {
+        display: block;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.46;
+      }
+
+      .quality .label {
+        display: block;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .content-grid {
+        display: grid;
+        grid-template-columns: 0.84fr 1.16fr;
+        gap: 22px;
+      }
+
+      .note-stack {
         display: grid;
         gap: 18px;
+        align-content: start;
       }
 
-      .card {
-        padding: 42px 32px 28px;
-        border-radius: 24px;
+      .note-stack .board-card {
+        padding: 42px 28px 28px;
+        border-radius: 26px;
       }
 
-      .card p {
+      .board-card h2,
+      .board-card h3 {
+        margin-top: 14px;
+      }
+
+      .board-card p {
         margin-top: 16px;
-        font-size: 27px;
       }
 
-      .bullets {
-        margin-top: 18px;
+      .resume-board {
         display: grid;
-        gap: 12px;
+        gap: 18px;
+        align-content: start;
+      }
+
+      .resume-card {
+        position: relative;
+        padding: 40px 32px 26px;
+        border-radius: 24px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .resume-card.green {
+        background: linear-gradient(180deg, rgba(230, 240, 223, 0.94), rgba(255, 251, 246, 0.92));
+      }
+
+      .resume-card.pink {
+        background: linear-gradient(180deg, rgba(243, 216, 215, 0.94), rgba(255, 251, 246, 0.92));
+      }
+
+      .resume-card.peach {
+        background: linear-gradient(180deg, rgba(244, 203, 178, 0.92), rgba(255, 251, 246, 0.92));
+      }
+
+      .resume-card.butter {
+        background: linear-gradient(180deg, rgba(246, 228, 182, 0.9), rgba(255, 251, 246, 0.92));
+      }
+
+      .resume-card::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 30px;
+        width: 100px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.44);
+        transform: rotate(-8deg);
+      }
+
+      .resume-card .label {
+        display: block;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .resume-card p {
+        margin-top: 16px;
+        font-size: 25px;
+      }
+
+      .bullet-list {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
       }
 
       .bullet {
         display: grid;
-        grid-template-columns: 42px 1fr;
+        grid-template-columns: 38px 1fr;
         gap: 14px;
         align-items: start;
       }
 
-      .num {
-        width: 42px;
-        height: 42px;
+      .bubble {
+        width: 38px;
+        height: 38px;
         display: grid;
         place-items: center;
-        border-radius: 14px;
-        background: rgba(104, 112, 93, 0.12);
-        color: var(--olive);
-        font-size: 18px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--sage);
+        font-size: 16px;
         font-weight: 800;
       }
 
       .bullet p {
         margin: 0;
-        font-size: 25px;
-        line-height: 1.46;
+        font-size: 24px;
+        line-height: 1.45;
       }
 
-      .callout {
-        position: absolute;
-        right: 88px;
-        bottom: 124px;
-        width: 280px;
-        padding: 38px 24px 24px;
-        border-radius: 22px;
-        background:
-          linear-gradient(180deg, rgba(104, 112, 93, 0.08), rgba(255, 251, 245, 0.9)),
-          rgba(255, 251, 245, 0.9);
-        box-shadow: var(--shadow);
-      }
-
-      .callout .label {
-        display: block;
-        margin-bottom: 12px;
-        color: var(--soft);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 14px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-
-      .callout p {
-        color: var(--ink);
-        font-size: 30px;
-        line-height: 1.32;
-        font-weight: 800;
+      .split-compare {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
       }
 
       .closing {
@@ -454,48 +544,65 @@
         left: 86px;
         right: 86px;
         top: 168px;
-        bottom: 130px;
+        bottom: 124px;
         display: grid;
-        grid-template-rows: auto 1fr auto;
-        gap: 28px;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 24px;
       }
 
       .closing-main {
-        max-width: 700px;
+        max-width: 680px;
       }
 
-      .closing-grid {
+      .closing-main h1 {
+        font-size: 94px;
+      }
+
+      .stats {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 18px;
       }
 
       .stat {
-        padding: 28px 22px 22px;
+        padding: 26px 22px 22px;
         border-radius: 22px;
         text-align: center;
+      }
+
+      .stat:nth-child(1) {
+        background: linear-gradient(180deg, rgba(230, 240, 223, 0.96), rgba(255, 251, 246, 0.9));
+      }
+
+      .stat:nth-child(2) {
+        background: linear-gradient(180deg, rgba(243, 216, 215, 0.96), rgba(255, 251, 246, 0.9));
+      }
+
+      .stat:nth-child(3) {
+        background: linear-gradient(180deg, rgba(244, 203, 178, 0.94), rgba(255, 251, 246, 0.9));
       }
 
       .stat strong {
         display: block;
         margin-bottom: 10px;
         font-family: "Noto Serif SC", serif;
-        font-size: 46px;
-        line-height: 1.1;
+        font-size: 44px;
+        line-height: 1.06;
       }
 
       .stat span {
         color: var(--muted);
-        font-size: 22px;
-        line-height: 1.4;
+        font-size: 21px;
+        line-height: 1.44;
       }
 
       .question {
-        padding: 34px 30px 28px;
+        padding: 32px 30px 26px;
         border-radius: 24px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
         background:
-          linear-gradient(180deg, rgba(197, 79, 49, 0.08), rgba(255, 251, 245, 0.92)),
-          rgba(255, 251, 245, 0.92);
+          linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 26%),
+          linear-gradient(145deg, rgba(246, 228, 182, 0.78), rgba(255, 251, 246, 0.94));
         box-shadow: var(--shadow);
       }
 
@@ -505,20 +612,69 @@
         line-height: 1.42;
         font-weight: 800;
       }
+
+      .choice-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 20px;
+      }
+
+      .choice {
+        padding: 12px 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .bottom-ribbon {
+        position: absolute;
+        left: 86px;
+        right: 86px;
+        bottom: 132px;
+        padding: 24px 26px 22px;
+        border-radius: 22px;
+        border: 1px solid rgba(36, 28, 22, 0.08);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 28%),
+          linear-gradient(145deg, rgba(246, 228, 182, 0.74), rgba(255, 251, 246, 0.92));
+        box-shadow: var(--shadow);
+      }
+
+      .bottom-ribbon .label {
+        display: block;
+        margin-bottom: 12px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .bottom-ribbon p {
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.42;
+        font-weight: 800;
+      }
     </style>
   </head>
   <body>
     <main class="gallery">
       <section class="slide" data-slide="1">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
           <div class="kicker">spring recruit</div>
         </header>
-        <div class="hero">
+        <div class="hero-grid">
           <div class="hero-copy">
             <div class="eyebrow">studio lead memo</div>
             <h1>
@@ -527,15 +683,14 @@
             </h1>
             <p>不先看你会多少工具。<br />先看你能不能把事接住。</p>
           </div>
-          <div class="hero-note panel">
-            <h3>这不是招聘启事</h3>
-            <p class="micro">是一个做项目的人，真的会在意什么。</p>
-          </div>
-        </div>
-        <div class="cover-bottom">
-          <div class="compare panel">
-            <div class="eyebrow">before / now</div>
-            <div class="compare-grid">
+          <div class="hero-side">
+            <article class="ticket">
+              <div class="tape"></div>
+              <div class="eyebrow">what this is</div>
+              <h3>不是招聘启事</h3>
+              <p>是一个做项目的人，真的会在意什么。</p>
+            </article>
+            <div class="mini-strip">
               <div class="mini">
                 <span class="label">以前</span>
                 <p>会一点<br />已经算加分</p>
@@ -546,85 +701,118 @@
               </div>
             </div>
           </div>
-          <div class="prompt panel">
-            <div class="eyebrow">core filter</div>
-            <div class="prompt-window">
-              <p>真正稀缺的，<br />反而是能把事接住的人。</p>
-            </div>
-          </div>
         </div>
+        <section class="qualities">
+          <article class="quality">
+            <span class="label">01</span>
+            <strong>讲得清</strong>
+            <span>不是“参与过”，是你具体做了什么。</span>
+          </article>
+          <article class="quality">
+            <span class="label">02</span>
+            <strong>做得完</strong>
+            <span>项目可以小，但不能全是半成品。</span>
+          </article>
+          <article class="quality">
+            <span class="label">03</span>
+            <strong>会用 AI</strong>
+            <span>不是代打，是提速，但最后自己判断。</span>
+          </article>
+          <article class="quality">
+            <span class="label">04</span>
+            <strong>玩家感觉</strong>
+            <span>知道玩家会不会点，哪里会留下来。</span>
+          </article>
+        </section>
         <footer class="footer">
           <span>slide 1 / 6</span>
-          <span>xiaohongshu carousel</span>
+          <span>spring board</span>
         </footer>
       </section>
 
       <section class="slide" data-slide="2">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
-          <div class="kicker">why this changed</div>
+          <div class="kicker">why now</div>
         </header>
-        <div class="body-grid">
-          <div class="note">
-            <div class="eyebrow">2026 spring</div>
-            <h2>AI 把<br /><span class="accent">“会一点”</span><br />的人变多了</h2>
-            <p>代码、设计、内容、原型，看起来像样的人突然多了很多。</p>
+        <div class="content-grid">
+          <div class="note-stack">
+            <article class="board-card">
+              <div class="tape"></div>
+              <div class="eyebrow">2026 spring</div>
+              <h2>
+                AI 把<br />
+                <span class="accent">“会一点”</span><br />
+                的人变多了
+              </h2>
+            </article>
+            <article class="board-card">
+              <div class="eyebrow">what changed</div>
+              <p>现在最像样的简历和 demo 会更多，但真正让人放心的标准并没有一起变便宜。</p>
+            </article>
           </div>
-          <div class="stack">
-            <div class="card">
-              <div class="eyebrow">so what</div>
-              <h3>门槛下来了</h3>
-              <p>但真正让人放心的标准，并没有一起变便宜。</p>
-            </div>
-            <div class="card">
-              <div class="eyebrow">what stays rare</div>
-              <h3>真正稀缺的不是“都会一点”</h3>
-              <p>而是能把事情讲清楚、做扎实、最后还能收回来的人。</p>
-            </div>
+          <div class="resume-board">
+            <article class="resume-card green">
+              <span class="label">surface layer</span>
+              <h3>会一点的人变多了</h3>
+              <p>代码、设计、内容、原型，看起来像样的人突然多了很多。</p>
+            </article>
+            <article class="resume-card pink">
+              <span class="label">real filter</span>
+              <h3>能把事接住的人还是少</h3>
+              <p>真正稀缺的，不是“都会一点”，而是讲得清、做得完、出问题还能收回来的人。</p>
+            </article>
           </div>
+        </div>
+        <div class="bottom-ribbon">
+          <span class="label">what this really means</span>
+          <p>会一点的人变多了，不等于能接住事的人也一起变多了。</p>
         </div>
         <footer class="footer">
           <span>slide 2 / 6</span>
-          <span>judgment first</span>
+          <span>context first</span>
         </footer>
       </section>
 
       <section class="slide" data-slide="3">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
-          <div class="kicker">first two checks</div>
+          <div class="kicker">first checks</div>
         </header>
-        <div class="body-grid">
-          <div class="note">
-            <div class="eyebrow">what I check first</div>
-            <h2>讲得清<br /><span class="subaccent">做得完</span></h2>
-            <p>这两条过不了，后面工具和概念说再多也没用。</p>
+        <div class="content-grid">
+          <div class="note-stack">
+            <article class="board-card">
+              <div class="tape"></div>
+              <div class="eyebrow">what I check first</div>
+              <h2>讲得清<br /><span class="sage">做得完</span></h2>
+              <p>这两条过不了，工具和概念说再多也没什么意义。</p>
+            </article>
           </div>
-          <div class="stack">
-            <div class="card">
-              <div class="eyebrow">01</div>
+          <div class="resume-board">
+            <article class="resume-card green">
+              <span class="label">01 clear ownership</span>
               <h3>讲得清</h3>
-              <div class="bullets">
-                <div class="bullet"><div class="num">A</div><p>别只说“参与过项目”。</p></div>
-                <div class="bullet"><div class="num">B</div><p>我更想知道，你具体做了什么，卡在哪，最后怎么收的。</p></div>
+              <div class="bullet-list">
+                <div class="bullet"><div class="bubble">A</div><p>别只说“参与过项目”。</p></div>
+                <div class="bullet"><div class="bubble">B</div><p>我更想知道，你具体做了什么，卡在哪，最后怎么收的。</p></div>
               </div>
-            </div>
-            <div class="card">
-              <div class="eyebrow">02</div>
+            </article>
+            <article class="resume-card blossom pink">
+              <span class="label">02 real closure</span>
               <h3>做得完</h3>
-              <div class="bullets">
-                <div class="bullet"><div class="num">A</div><p>我不怕项目小，我怕全是半成品。</p></div>
-                <div class="bullet"><div class="num">B</div><p>比起十个做了六成的作品，我更愿意看一个认真收过尾的。</p></div>
+              <div class="bullet-list">
+                <div class="bullet"><div class="bubble">A</div><p>我不怕项目小，我怕全是半成品。</p></div>
+                <div class="bullet"><div class="bubble">B</div><p>比起十个做了六成的作品，我更愿意看一个认真收过尾的。</p></div>
               </div>
-            </div>
+            </article>
           </div>
         </div>
         <footer class="footer">
@@ -634,72 +822,86 @@
       </section>
 
       <section class="slide" data-slide="4">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
           <div class="kicker">ai usage</div>
         </header>
-        <div class="body-grid">
-          <div class="note">
-            <div class="eyebrow">third check</div>
-            <h2>“我会用 AI”<br />已经<br /><span class="accent">不算亮点了</span></h2>
-            <p>现在大家都会说这句话。差别在后面。</p>
+        <div class="content-grid">
+          <div class="note-stack">
+            <article class="board-card">
+              <div class="tape"></div>
+              <div class="eyebrow">third check</div>
+              <h2>
+                “我会用 AI”<br />
+                已经<br />
+                <span class="accent">不算亮点了</span>
+              </h2>
+            </article>
           </div>
-          <div class="stack">
-            <div class="card">
-              <div class="eyebrow">what matters</div>
-              <h3>我更在意的是</h3>
-              <div class="bullets">
-                <div class="bullet"><div class="num">1</div><p>你拿它代打。</p></div>
-                <div class="bullet"><div class="num">2</div><p>还是拿它提速，但最后自己判断、自己验收。</p></div>
-              </div>
-            </div>
-            <div class="card">
-              <div class="eyebrow">why</div>
-              <h3>前一种看着热闹</h3>
-              <p>后一种交出来的东西，才会让我更放心。</p>
-            </div>
+          <div class="resume-board split-compare">
+            <article class="resume-card pink">
+              <span class="label">option a</span>
+              <h3>拿它代打</h3>
+              <p>东西看着很多，一细问就空。</p>
+            </article>
+            <article class="resume-card green">
+              <span class="label">option b</span>
+              <h3>拿它提速</h3>
+              <p>先用它起草、试错、补初版，最后自己判断、删改、验收。</p>
+            </article>
+            <article class="resume-card butter" style="grid-column: 1 / -1;">
+              <span class="label">what matters</span>
+              <h3>不是会不会用，而是怎么用</h3>
+              <p>前一种交出来的东西热闹，后一种交出来的东西才更让人放心。</p>
+            </article>
           </div>
         </div>
-        <div class="callout">
+        <div class="bottom-ribbon">
           <span class="label">bottom line</span>
-          <p>不是会不会用。<br />是怎么用。</p>
+          <p>不是会不会用 AI，而是工具一停下，你还能不能继续判断。</p>
         </div>
         <footer class="footer">
           <span>slide 4 / 6</span>
-          <span>tool vs judgment</span>
+          <span>tool or judgment</span>
         </footer>
       </section>
 
       <section class="slide" data-slide="5">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
           <div class="kicker">player sense</div>
         </header>
-        <div class="body-grid">
-          <div class="note">
-            <div class="eyebrow">two more checks</div>
-            <h2>有没有<br />玩家感觉<br /><span class="subaccent">会不会往前推</span></h2>
-            <p>做游戏和做项目，这两条都很伤真章。</p>
+        <div class="content-grid">
+          <div class="note-stack">
+            <article class="board-card">
+              <div class="tape"></div>
+              <div class="eyebrow">two more checks</div>
+              <h2>
+                玩家感觉<br />
+                <span class="sage">往前推</span>
+              </h2>
+              <p>做游戏和做项目，这两条都很伤真章。</p>
+            </article>
           </div>
-          <div class="stack">
-            <div class="card">
-              <div class="eyebrow">04</div>
+          <div class="resume-board">
+            <article class="resume-card peach">
+              <span class="label">04 player sense</span>
               <h3>有没有玩家感觉</h3>
               <p>做游戏不是堆功能。是你知不知道玩家会不会点，玩到哪里会烦，哪里会留下来。</p>
-            </div>
-            <div class="card">
-              <div class="eyebrow">05</div>
+            </article>
+            <article class="resume-card green">
+              <span class="label">05 problem handling</span>
               <h3>出问题会不会往前推</h3>
               <p>我更想看到的，不是“做不下去”，而是“我先给一个能落地的方案”。</p>
-            </div>
+            </article>
           </div>
         </div>
         <footer class="footer">
@@ -709,9 +911,9 @@
       </section>
 
       <section class="slide" data-slide="6">
-        <div class="wash"></div>
+        <div class="petals"></div>
         <div class="grain"></div>
-        <div class="rules"></div>
+        <div class="grid"></div>
         <div class="frame"></div>
         <header class="header">
           <div class="brand">oasis7 notes</div>
@@ -726,22 +928,27 @@
               收口
             </h1>
           </div>
-          <div class="closing-grid">
-            <div class="stat">
+          <div class="stats">
+            <article class="stat">
               <strong>判断</strong>
               <span>会不会选方向<br />会不会做取舍</span>
-            </div>
-            <div class="stat">
+            </article>
+            <article class="stat">
               <strong>执行</strong>
               <span>能不能真的往前推<br />不是只会说</span>
-            </div>
-            <div class="stat">
+            </article>
+            <article class="stat">
               <strong>收口</strong>
               <span>出了问题以后<br />能不能把事收回来</span>
-            </div>
+            </article>
           </div>
           <div class="question">
             <p>如果你现在还在春招，<br />你觉得自己最强的是哪一项？</p>
+            <div class="choice-row">
+              <span class="choice">想法</span>
+              <span class="choice">执行</span>
+              <span class="choice">收口</span>
+            </div>
           </div>
         </div>
         <footer class="footer">
