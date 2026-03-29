@@ -69,7 +69,9 @@ pub(crate) fn load_builtin_wasm_with_fetch_fallback(
         }
     }
 
-    if let Some(cached_hash) = cached_module_hash_for(module_id, distfs_root) {
+    if let Some(cached_hash) =
+        cached_expected_module_hash_for(module_id, expected_hashes, distfs_root)
+    {
         if let Ok(bytes) = store.get_verified(&cached_hash) {
             return Ok(bytes);
         }
@@ -245,7 +247,7 @@ fn compile_via_command(
 
 fn compile_via_default_script(
     module_id: &str,
-    _expected_hashes: &[&str],
+    expected_hashes: &[&str],
 ) -> Result<Vec<u8>, WorldError> {
     let repo_root = repo_root();
     let build_script = repo_root
@@ -254,79 +256,42 @@ fn compile_via_default_script(
     let out_dir = temp_build_dir(module_id);
     fs::create_dir_all(&out_dir)?;
 
-    let mut command = Command::new(&build_script);
-    // Tests may run under a stable rustup alias (for example 1.92.0-...); fallback
-    // build should pick the canonical wasm toolchain on its own.
-    command.env_remove("RUSTUP_TOOLCHAIN");
-    if host_native_wasm_build_ready() {
-        // Prefer a host-native wasm build when the pinned nightly toolchain is
-        // already installed. This avoids flaky network/docker metadata fetches
-        // during test-time builtin materialization while keeping the existing
-        // Docker path available as a fallback on machines without the toolchain.
-        command.env("OASIS7_WASM_BUILD_IN_CONTAINER", "1");
-        command.env(
-            "OASIS7_WASM_TOOLCHAIN",
-            wasm_env_or_default("TOOLCHAIN", DEFAULT_WASM_TOOLCHAIN),
-        );
-        command.env(
-            "OASIS7_WASM_TARGET",
-            wasm_env_or_default("TARGET", DEFAULT_WASM_TARGET),
-        );
-        command.env(
-            "OASIS7_WASM_BUILDER_IMAGE_REF",
-            wasm_env_or_default("BUILDER_IMAGE_REF", DEFAULT_WASM_BUILDER_IMAGE_REF),
-        );
-        command.env(
-            "OASIS7_WASM_BUILDER_IMAGE_DIGEST",
-            wasm_env_or_default("BUILDER_IMAGE_DIGEST", DEFAULT_WASM_BUILDER_IMAGE_DIGEST),
-        );
-        command.env(
-            "OASIS7_WASM_CANONICAL_CONTAINER_PLATFORM",
-            wasm_env_or_default(
-                "CANONICAL_CONTAINER_PLATFORM",
-                DEFAULT_WASM_CANONICAL_CONTAINER_PLATFORM,
-            ),
-        );
-    }
-    command
-        .arg("--module-id")
-        .arg(module_id)
-        .arg("--out-dir")
-        .arg(&out_dir)
-        .arg("--profile")
-        .arg(BUILTIN_WASM_BUILD_PROFILE);
-
-    if let Some(module_ids_path) = builtin_module_ids_path_for(module_id, &repo_root) {
-        command.arg("--module-ids-path").arg(module_ids_path);
-    }
-
-    let status = command
-        .status()
-        .map_err(|error| WorldError::ModuleChangeInvalid {
-            reason: format!(
-                "failed to execute fallback build script={} err={error}",
-                build_script.display()
-            ),
-        })?;
-
-    if !status.success() {
-        return Err(WorldError::ModuleChangeInvalid {
-            reason: format!(
-                "fallback build script exited non-zero script={} status={status}",
-                build_script.display()
-            ),
-        });
-    }
-
     let artifact_path = out_dir.join(format!("{module_id}.wasm"));
-    let bytes = fs::read(&artifact_path).map_err(|error| WorldError::ModuleChangeInvalid {
-        reason: format!(
-            "fallback built artifact missing module_id={module_id} path={} err={error}",
-            artifact_path.display()
-        ),
-    })?;
+    let prefer_host_native = should_prefer_host_native_builtin_wasm_build();
+    run_default_builtin_wasm_build(
+        &build_script,
+        &repo_root,
+        module_id,
+        &out_dir,
+        prefer_host_native,
+    )?;
+
+    let mut bytes = read_compiled_artifact(module_id, &artifact_path)?;
+    let mut actual_hash = util::sha256_hex(&bytes);
+    if is_expected_hash(expected_hashes, &actual_hash) {
+        let _ = fs::remove_dir_all(&out_dir);
+        return Ok(bytes);
+    }
+
+    if prefer_host_native {
+        let _ = fs::remove_dir_all(&out_dir);
+        fs::create_dir_all(&out_dir)?;
+        run_default_builtin_wasm_build(&build_script, &repo_root, module_id, &out_dir, false)?;
+        bytes = read_compiled_artifact(module_id, &artifact_path)?;
+        actual_hash = util::sha256_hex(&bytes);
+        if is_expected_hash(expected_hashes, &actual_hash) {
+            let _ = fs::remove_dir_all(&out_dir);
+            return Ok(bytes);
+        }
+    }
+
     let _ = fs::remove_dir_all(&out_dir);
-    Ok(bytes)
+    Err(WorldError::ModuleChangeInvalid {
+        reason: format!(
+            "fallback built artifact hash mismatch module_id={module_id} built_hash={actual_hash} expected_hashes=[{}]",
+            expected_hashes.join(",")
+        ),
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -373,6 +338,98 @@ fn host_native_wasm_build_ready() -> bool {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn should_prefer_host_native_builtin_wasm_build() -> bool {
+    !env_truthy("CI") && host_native_wasm_build_ready()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn run_default_builtin_wasm_build(
+    build_script: &Path,
+    repo_root: &Path,
+    module_id: &str,
+    out_dir: &Path,
+    prefer_host_native: bool,
+) -> Result<(), WorldError> {
+    let mut command = Command::new(build_script);
+    // Tests may run under a stable rustup alias (for example 1.92.0-...); fallback
+    // build should pick the canonical wasm toolchain on its own.
+    command.env_remove("RUSTUP_TOOLCHAIN");
+    command.env_remove("OASIS7_WASM_BUILD_IN_CONTAINER");
+    if prefer_host_native {
+        command.env("OASIS7_WASM_BUILD_IN_CONTAINER", "1");
+        command.env(
+            "OASIS7_WASM_TOOLCHAIN",
+            wasm_env_or_default("TOOLCHAIN", DEFAULT_WASM_TOOLCHAIN),
+        );
+        command.env(
+            "OASIS7_WASM_TARGET",
+            wasm_env_or_default("TARGET", DEFAULT_WASM_TARGET),
+        );
+        command.env(
+            "OASIS7_WASM_BUILDER_IMAGE_REF",
+            wasm_env_or_default("BUILDER_IMAGE_REF", DEFAULT_WASM_BUILDER_IMAGE_REF),
+        );
+        command.env(
+            "OASIS7_WASM_BUILDER_IMAGE_DIGEST",
+            wasm_env_or_default("BUILDER_IMAGE_DIGEST", DEFAULT_WASM_BUILDER_IMAGE_DIGEST),
+        );
+        command.env(
+            "OASIS7_WASM_CANONICAL_CONTAINER_PLATFORM",
+            wasm_env_or_default(
+                "CANONICAL_CONTAINER_PLATFORM",
+                DEFAULT_WASM_CANONICAL_CONTAINER_PLATFORM,
+            ),
+        );
+    }
+    command
+        .arg("--module-id")
+        .arg(module_id)
+        .arg("--out-dir")
+        .arg(out_dir)
+        .arg("--profile")
+        .arg(BUILTIN_WASM_BUILD_PROFILE);
+
+    if let Some(module_ids_path) = builtin_module_ids_path_for(module_id, repo_root) {
+        command.arg("--module-ids-path").arg(module_ids_path);
+    }
+
+    let status = command
+        .status()
+        .map_err(|error| WorldError::ModuleChangeInvalid {
+            reason: format!(
+                "failed to execute fallback build script={} err={error}",
+                build_script.display()
+            ),
+        })?;
+
+    if !status.success() {
+        let mode = if prefer_host_native {
+            "host-native"
+        } else {
+            "canonical-docker"
+        };
+        return Err(WorldError::ModuleChangeInvalid {
+            reason: format!(
+                "fallback build script exited non-zero script={} mode={} status={status}",
+                build_script.display(),
+                mode,
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+fn read_compiled_artifact(module_id: &str, artifact_path: &Path) -> Result<Vec<u8>, WorldError> {
+    fs::read(artifact_path).map_err(|error| WorldError::ModuleChangeInvalid {
+        reason: format!(
+            "fallback built artifact missing module_id={module_id} path={} err={error}",
+            artifact_path.display()
+        ),
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn wasm_env_or_default(suffix: &str, default: &str) -> String {
     std::env::var(format!("OASIS7_WASM_{suffix}"))
         .ok()
@@ -397,6 +454,15 @@ fn builtin_module_ids_path_for(module_id: &str, repo_root: &Path) -> Option<Path
 fn cached_module_hash_for(module_id: &str, distfs_root: &Path) -> Option<String> {
     let index = read_module_hash_index(distfs_root);
     index.get(module_id).cloned()
+}
+
+fn cached_expected_module_hash_for(
+    module_id: &str,
+    expected_hashes: &[&str],
+    distfs_root: &Path,
+) -> Option<String> {
+    let cached_hash = cached_module_hash_for(module_id, distfs_root)?;
+    is_expected_hash(expected_hashes, &cached_hash).then_some(cached_hash)
 }
 
 fn persist_cached_module_hash(
@@ -483,6 +549,17 @@ fn env_non_empty(key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn env_truthy(key: &str) -> bool {
+    matches!(
+        std::env::var(key),
+        Ok(value)
+            if matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+    )
+}
+
 fn temp_artifact_path(kind: &str, module_id: &str) -> PathBuf {
     temp_build_dir(module_id).join(format!("{module_id}.{kind}.wasm"))
 }
@@ -551,6 +628,37 @@ mod tests {
     }
 
     #[test]
+    fn cached_expected_module_hash_ignores_stale_hashes() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "oasis7-materializer-expected-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("unix epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_root).expect("create temp root");
+
+        let stale_hash = "1111111111111111111111111111111111111111111111111111111111111111";
+        let expected_hash = "2222222222222222222222222222222222222222222222222222222222222222";
+        persist_cached_module_hash("m5.gameplay.war.core", stale_hash, &temp_root)
+            .expect("persist stale hash");
+
+        assert!(
+            cached_expected_module_hash_for("m5.gameplay.war.core", &[expected_hash], &temp_root)
+                .is_none(),
+            "stale cached hash should not bypass expected hash manifest"
+        );
+        assert_eq!(
+            cached_expected_module_hash_for("m5.gameplay.war.core", &[stale_hash], &temp_root)
+                .as_deref(),
+            Some(stale_hash)
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+    }
+
+    #[test]
     fn temp_build_dir_stays_under_repo_tmp_root() {
         let temp_dir = temp_build_dir("m1.rule.move");
         assert!(
@@ -587,6 +695,18 @@ mod tests {
         );
 
         assert!(builtin_wasm_env_non_empty("FETCHER").is_none());
+    }
+
+    #[test]
+    fn env_truthy_recognizes_ci_style_values() {
+        let _env_lock = BUILTIN_WASM_ENV_LOCK.lock().expect("lock builtin wasm env");
+        let _guard = TestEnvGuard::capture("CI");
+
+        std::env::set_var("CI", "true");
+        assert!(env_truthy("CI"));
+
+        std::env::set_var("CI", "0");
+        assert!(!env_truthy("CI"));
     }
 
     struct TestEnvGuard {
