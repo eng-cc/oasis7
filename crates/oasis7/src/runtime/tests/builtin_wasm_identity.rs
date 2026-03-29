@@ -7,7 +7,7 @@ use super::super::{
 fn builtin_identity_manifest_resolves_m1_entry() {
     let identity = m1_builtin_module_artifact_identity(
         "m1.rule.move",
-        "7b4c97aa886d99a589a4ed7a2d6ef884f9f15d4ae6a11c5fa6c0ca8db6874a64",
+        "a395547deac1bc38aef18e2d85fbbc823e268389c17a800cacc9b544dddd0e3f",
     )
     .expect("resolve m1 identity");
     assert!(identity.is_complete());
@@ -67,7 +67,7 @@ fn builtin_identity_manifest_resolves_m4_entry() {
 fn builtin_identity_manifest_resolves_m5_entry() {
     let identity = m5_builtin_module_artifact_identity(
         "m5.gameplay.war.core",
-        "9c19a832b28ddb8ee4db1dcc73dd41fe34b34c077a0f9386599e45bf466f8c15",
+        "74f65cc151fafccdb7ce10ff47235d392539e0ebf5b8b42ec74576ce62877782",
     )
     .expect("resolve m5 identity");
     assert!(identity.is_complete());
