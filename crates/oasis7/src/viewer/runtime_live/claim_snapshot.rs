@@ -65,21 +65,21 @@ pub(super) fn build_player_agent_claim_snapshot(
                 idle_warning_epochs: quote.idle_warning_epochs,
                 forced_idle_reclaim_epochs: quote.forced_idle_reclaim_epochs,
                 forced_reclaim_penalty_bps: quote.forced_reclaim_penalty_bps,
-                blocked_reason: if eligible_claim_balance < total_upfront_amount {
-                    Some(format!(
-                        "insufficient_claim_eligible_main_token eligible={} liquid={} restricted={} required={}",
-                        eligible_claim_balance,
-                        liquid_main_token_balance,
-                        restricted_starter_claim_balance,
-                        total_upfront_amount
-                    ))
-                } else if quote.slot_index > 1
+                blocked_reason: if quote.slot_index > 1
                     && liquid_main_token_balance < total_upfront_amount
                     && restricted_starter_claim_balance > 0
                 {
                     Some(format!(
                         "restricted_balance_not_eligible_for_slot slot={} liquid={} restricted={} required={}",
                         quote.slot_index,
+                        liquid_main_token_balance,
+                        restricted_starter_claim_balance,
+                        total_upfront_amount
+                    ))
+                } else if eligible_claim_balance < total_upfront_amount {
+                    Some(format!(
+                        "insufficient_claim_eligible_main_token eligible={} liquid={} restricted={} required={}",
+                        eligible_claim_balance,
                         liquid_main_token_balance,
                         restricted_starter_claim_balance,
                         total_upfront_amount

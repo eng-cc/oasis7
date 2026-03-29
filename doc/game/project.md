@@ -140,7 +140,7 @@
 - [x] TASK-GAME-044 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 已将 `restricted starter claim balance` 写入 claim 专题 PRD / design / project 与 game 根入口，明确 `slot-1` 可用受限 bucket 启动但首个 claim 仍非免费。
 - [x] TASK-GAME-045 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 已落地 `restricted starter claim balance` bucket、slot-1 claim/upkeep 专用扣费、bond provenance、refund 拆分、transfer guard 与 snapshot/replay 兼容回归。
 - [x] TASK-GAME-046 (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已补齐 restricted/liquid 余额拆分、funding mix、slot-1/slot-2 blocker、pure API canonical 字段、viewer 文案与 explorer 展示口径。
-- [ ] TASK-GAME-047 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 建立 allowlist/QA seed 发放、过期/回收、slot-1 专用消费、transfer guard、refund provenance 与经济审计矩阵。
+- [x] TASK-GAME-047 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted starter balance QA 矩阵，并确认 claim/upkeep/refund/transfer guard/viewer parity 为 `pass`；当前 blocker 收敛为 restricted grant 的发放元数据、过期/回收与经济审计链未实现，证据见 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`。
 - [ ] TASK-GAME-048 (PRD-GAME-011) [test_tier_required]: `producer_system_designer` 基于首轮 preview/liveops/QA 数据复核 starter balance 额度、过期和发放边界，决定维持、收紧或扩展。
 
 ## 依赖
@@ -159,7 +159,8 @@
 - 更新日期: 2026-03-29
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
-- 已登记待排任务: `TASK-GAME-047/048`（PRD-GAME-011 restricted starter claim balance 剩余 QA / producer 复核闭环）
+- 已登记待排任务: `TASK-GAME-048`（PRD-GAME-011 restricted starter balance producer 复核与后续范围决策）
+- 最新完成: `TASK-GAME-047`（`qa_engineer` 已完成 restricted starter balance QA matrix；已实现的 claim/upkeep/refund/transfer guard/viewer parity 全部 `pass`，但 restricted grant lifecycle/audit 仍 `block`。）
 - 最新完成: `TASK-GAME-046`（`viewer_engineer` 已把 claim canonical 快照、viewer 文案、transfer API 与 explorer 输出统一补齐 restricted/liquid/eligible 字段、funding mix 与 slot blocker。）
 - 最新完成: `TASK-GAME-045`（`runtime_engineer` 已把 `restricted starter claim balance` 接入 slot-1 upfront/upkeep、bond provenance、release/reclaim refund split、transfer-only guard 与 replay 兼容字段。）
 - 最新完成: `TASK-GAME-044`（已将 `restricted starter claim balance` 正式写入 `PRD-GAME-011`：`slot-1` 可使用受限 bucket 启动、refund 保持 provenance、公开转账面不得消费该余额。）
@@ -248,6 +249,7 @@
 - ROUND-053 进展: `producer_system_designer` 已完成 `TASK-GAME-044`，把 `PRD-GAME-011` 从“claim 只消费 liquid main token”更新为“首个 claim 仍保持非零 canonical 成本，但 `slot-1` 可消费 `restricted starter claim balance`”，并追加 `TASK-GAME-045/046/047/048` 跟踪 runtime bucket、viewer/pure API 表达、QA provenance/transfer guard 矩阵与后续 producer 复核。
 - ROUND-054 进展: `runtime_engineer` 已完成 `TASK-GAME-045`，在 `oasis7` runtime 中新增 `restricted_starter_claim_balance` bucket，并把 `slot-1` 的 claim upfront / upkeep / release / forced reclaim 全部切到 restricted-first、liquid-fallback 的 provenance-aware 结算；refund 现按 bond 来源拆回 restricted/liquid bucket，`TransferMainToken` 继续只消费 transferable liquid。
 - ROUND-055 进展: `viewer_engineer` 已完成 `TASK-GAME-046`，把 claim snapshot、pure API、viewer agent 详情、transfer account API 与 explorer address/assets 输出统一补齐 restricted/liquid/eligible/funding-mix 字段，并用 `slot-1`/`slot-2` blocker 区分 restricted 可用范围。
+- ROUND-056 进展: `qa_engineer` 已完成 `TASK-GAME-047`，新增 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`，确认已实现的 slot-1 restricted 消费、mixed funding refund provenance、transfer guard、explorer 非转账口径与 pure API blocker 全部 `pass`；但 `issuance_reason / issuer_id / expires_at_epoch` grant lifecycle 与对应经济审计仍未落实现，因此统一 QA verdict 维持 `block`。
 - 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md`、`doc/devlog/2026-03-18.md`、`doc/devlog/2026-03-21.md` 与 `doc/devlog/2026-03-29.md`。
 
 ## 阶段收口角色交接

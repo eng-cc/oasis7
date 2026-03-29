@@ -1349,6 +1349,85 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
 }
 
 #[test]
+fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+
+    server
+        .world
+        .set_governance_execution_policy(crate::runtime::GovernanceExecutionPolicy {
+            epoch_length_ticks: 1,
+            ..crate::runtime::GovernanceExecutionPolicy::default()
+        })
+        .expect("set governance policy");
+    server
+        .world
+        .set_agent_reputation_score(primary_agent_id.as_str(), 10)
+        .expect("set reputation");
+    server
+        .world
+        .set_main_token_supply(crate::runtime::MainTokenSupplyState {
+            total_supply: 650,
+            circulating_supply: 650,
+            ..crate::runtime::MainTokenSupplyState::default()
+        });
+    server
+        .world
+        .set_main_token_account_balance_with_restricted(primary_agent_id.as_str(), 0, 0, 650)
+        .expect("seed restricted-only claim balance");
+    server
+        .world
+        .submit_action(crate::runtime::Action::RegisterAgent {
+            agent_id: "agent-claim-slot2-target-a".to_string(),
+            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        });
+    server
+        .world
+        .submit_action(crate::runtime::Action::RegisterAgent {
+            agent_id: "agent-claim-slot2-target-b".to_string(),
+            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        });
+    server.world.step().expect("register claim targets");
+    server
+        .world
+        .submit_action(crate::runtime::Action::ClaimAgent {
+            claimer_agent_id: primary_agent_id.clone(),
+            target_agent_id: "agent-claim-slot2-target-a".to_string(),
+        });
+    server
+        .world
+        .step()
+        .expect("claim slot 1 using restricted balance");
+
+    let snapshot = server.compat_snapshot();
+    let claim = snapshot
+        .player_gameplay
+        .as_ref()
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .expect("player agent claim snapshot");
+    let quote = claim.next_claim_quote.as_ref().expect("next claim quote");
+    assert_eq!(quote.slot_index, 2);
+    assert_eq!(quote.transferable_liquid_balance, 0);
+    assert_eq!(quote.restricted_starter_claim_balance, 325);
+    assert_eq!(quote.eligible_claim_balance, 0);
+    assert_eq!(
+        quote.blocked_reason.as_deref(),
+        Some(
+            "restricted_balance_not_eligible_for_slot slot=2 liquid=0 restricted=325 required=488"
+        )
+    );
+}
+
+#[test]
 fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))

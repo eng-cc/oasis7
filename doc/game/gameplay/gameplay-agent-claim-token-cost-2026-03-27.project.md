@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 3
+审计轮次: 4
 
 ## 任务拆解
 
@@ -15,7 +15,7 @@
 - [x] TASK-GAMEPLAY-AGC-006 (`PRD-GAME-011`) [test_tier_required]: `producer_system_designer` 已将 `restricted starter claim balance` 写入 PRD / design / project 与 game 根入口，明确“首个 claim 仍非免费、但 slot-1 可由受限 bucket 启动”的新边界。
 - [x] TASK-GAMEPLAY-AGC-007 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已落地 `restricted starter claim balance` bucket、slot-1 claim/upkeep 专用扣费、bond provenance、refund 拆分、transfer guard、snapshot/replay 兼容字段与定向回归。
 - [x] TASK-GAMEPLAY-AGC-008 (`PRD-GAME-011`) [test_tier_required]: `viewer_engineer` 已补齐 restricted/liquid 余额拆分、funding mix、slot-1/slot-2 blocker、pure API canonical 字段、viewer 文案与 explorer 展示口径。
-- [ ] TASK-GAMEPLAY-AGC-009 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `qa_engineer` 建立 allowlist/QA seed 发放、过期/回收、slot-1 专用消费、transfer guard、refund provenance 与经济审计矩阵。
+- [x] TASK-GAMEPLAY-AGC-009 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted starter balance QA 矩阵，并确认 claim/upkeep/refund/transfer guard/viewer parity 为 `pass`；当前 blocker 收敛为 `issuance_reason / issuer_id / expires_at_epoch` grant lifecycle 与对应审计链仍未实现，证据见 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`。
 - [ ] TASK-GAMEPLAY-AGC-010 (`PRD-GAME-011`) [test_tier_required]: `producer_system_designer` 基于首轮 preview/liveops/QA 数据复核 starter balance 额度、过期和发放边界，决定维持、收紧或扩展。
 
 ## 依赖
@@ -31,7 +31,7 @@
 - 更新日期: 2026-03-29
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: `TASK-GAMEPLAY-AGC-009`（QA restricted starter balance abuse / provenance / transfer guard matrix）
+- 下一任务: `TASK-GAMEPLAY-AGC-010`（producer 基于 QA verdict 决定收敛当前范围还是重新打开 restricted grant lifecycle 实现）
 - 已完成补充:
   - `TASK-GAMEPLAY-AGC-001` 已新增 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.{prd,design,project}.md`，并将 `PRD-GAME-011` 挂入 game 根 PRD / project / 索引 / README。
   - `TASK-GAMEPLAY-AGC-002` 已在 `crates/oasis7/src/runtime/` 落地 `ClaimAgent / ReleaseAgentClaim` 动作、claim 状态持久化、自动 upkeep/grace/idle reclaim processor 与 main token 账本联动。
@@ -41,6 +41,7 @@
   - `TASK-GAMEPLAY-AGC-006` 已将 `restricted starter claim balance` 正式写入 PRD / design / project，并同步回写 `doc/game/prd.md` 与 `doc/game/project.md`：首个 claim 仍保持非零 canonical 成本，但允许 `slot-1` 使用受限 bucket 启动，不再要求 limited preview / allowlist 账号必须先持有可转账 liquid。
   - `TASK-GAMEPLAY-AGC-007` 已在 `crates/oasis7/src/runtime/` 为主账本增加 `restricted_starter_claim_balance` bucket，并把 claim upfront、epoch upkeep、release refund、forced reclaim refund 全部切到 provenance-aware split：`slot-1` 先花 restricted 再补 liquid，`slot-2/3` 仍只能花 liquid；bond refund 也按 restricted/liquid 来源回写原 bucket，不再洗回 transferable balance。
   - `TASK-GAMEPLAY-AGC-008` 已在 `crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs`、`crates/oasis7/src/simulator/persist.rs`、`crates/oasis7_viewer/src/ui_text_claims.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api,transfer_submit_explorer_p1_api}.rs` 补齐 restricted/liquid/eligible canonical 字段、funding mix、slot blocker、transfer-only guard 文案与 explorer 显示。
+  - `TASK-GAMEPLAY-AGC-009` 已新增 `doc/testing/evidence/game-agent-claim-restricted-starter-balance-matrix-2026-03-29.md`，并通过 runtime/viewer/transfer/explorer 定向用例确认：`slot-1` restricted 消费、mixed funding refund provenance、`slot-2` blocker、restricted-only transfer reject 与 explorer 非转账口径都已闭环；但 restricted grant 的 `issuance_reason / issuer_id / expires_at_epoch` 发放与过期回收仍缺实现，因此 QA 总 verdict 为 `block` 而非 `pass`。
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，后续仍由 `TASK-GAMEPLAY-AGC-010` 复核。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：
@@ -52,11 +53,16 @@
   - 本轮 QA required/full 验证已覆盖：
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required runtime::tests::agent_claims:: -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full runtime::tests::agent_claims:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib viewer::runtime_live::tests::compat_snapshot_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime preflight_transfer_rejects_restricted_only_balance -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime transfer_accounts_endpoint_exposes_restricted_balance_separately -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime explorer_p1_endpoints_return_expected_payloads -- --nocapture`
 - 阻断条件:
   - 若 runtime 无法保证同一 agent 的单 owner 原子性，则 claim 功能不得进入实现态。
   - 若 restricted starter balance 能通过普通转账、slot-2/3 claim 或 explorer 总额误读洗成可转账资产，则不得合入。
   - 若 viewer / pure API 无法给出 canonical claim 成本、funding source 与倒计时，则不得宣称 claim 机制可正式使用。
   - 若经济审计无法覆盖 activation fee、upkeep、refund/slash 与 restricted grant，则不得合入。
+  - 当前已实现部分的 QA 真值虽然通过，但 restricted grant lifecycle 仍缺实现，因此本专题统一 QA verdict 继续保持 `block`。
 - 说明:
   - 本专题是 gameplay 规则与经济边界，不是现实货币付费系统。
   - v1 默认不拍死绝对价格，只先冻结结构、状态机与不可突破的边界。

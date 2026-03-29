@@ -8,8 +8,9 @@ use super::explorer_p1_api::{
 use super::{
     build_transfer_submit_action_payload, maybe_handle_transfer_submit_request,
     parse_transfer_submit_request, verify_transfer_submit_request_auth,
-    ChainExplorerOverviewResponse, ChainTransferHistoryResponse, ChainTransferStatusResponse,
-    ChainTransferSubmitRequest, ChainTransferSubmitResponse, TransferLifecycleStatus,
+    ChainExplorerOverviewResponse, ChainTransferAccountsResponse, ChainTransferHistoryResponse,
+    ChainTransferStatusResponse, ChainTransferSubmitRequest, ChainTransferSubmitResponse,
+    TransferLifecycleStatus,
 };
 use crate::transfer_submit_api::preflight_validate_transfer_request;
 use ed25519_dalek::SigningKey;
@@ -193,7 +194,7 @@ fn seed_world_for_explorer_p1(temp_dir: &Path) {
             account_id: "player:alice".to_string(),
             liquid_balance: 1200,
             vested_balance: 300,
-            restricted_starter_claim_balance: 0,
+            restricted_starter_claim_balance: 125,
         },
     );
     state
@@ -410,6 +411,59 @@ fn preflight_transfer_rejects_restricted_only_balance() {
     assert!(err.1.contains("transferable_balance=0"));
     assert!(err.1.contains("restricted_starter_claim_balance=125"));
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn transfer_accounts_endpoint_exposes_restricted_balance_separately() {
+    let _guard = lock_transfer_test_state();
+    let temp_dir = make_temp_dir("transfer_accounts_restricted");
+    seed_world_for_explorer_p1(temp_dir.as_path());
+    let runtime = Arc::new(Mutex::new(NodeRuntime::new(
+        NodeConfig::new(
+            "node-transfer-accounts-restricted",
+            "world-transfer-accounts-restricted",
+            NodeRole::Sequencer,
+        )
+        .expect("node config"),
+    )));
+
+    let (mut server, mut client) = tcp_stream_pair();
+    let request = "GET /v1/chain/transfer/accounts HTTP/1.1\r\nHost: 127.0.0.1:5121\r\n\r\n";
+    let handled = maybe_handle_transfer_submit_request(
+        &mut server,
+        request.as_bytes(),
+        &runtime,
+        "GET",
+        "/v1/chain/transfer/accounts",
+        "node-transfer-accounts-restricted",
+        "world-transfer-accounts-restricted",
+        temp_dir.as_path(),
+    )
+    .expect("accounts request should be handled");
+    assert!(handled);
+    drop(server);
+
+    client
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("set timeout");
+    let mut response_bytes = Vec::new();
+    client
+        .read_to_end(&mut response_bytes)
+        .expect("read accounts response");
+    let (status, response): (u16, ChainTransferAccountsResponse) =
+        decode_http_json_response(&response_bytes);
+    assert_eq!(status, 200);
+    assert!(response.ok);
+    let alice = response
+        .accounts
+        .iter()
+        .find(|account| account.account_id == "player:alice")
+        .expect("alice account entry");
+    assert_eq!(alice.liquid_balance, 1200);
+    assert_eq!(alice.vested_balance, 300);
+    assert_eq!(alice.restricted_starter_claim_balance, 125);
+
+    let _ = fs::remove_dir_all(temp_dir);
 }
 
 #[test]
@@ -1246,7 +1300,7 @@ fn explorer_p1_endpoints_return_expected_payloads() {
     assert!(address.ok);
     assert_eq!(address.account_id.as_deref(), Some("player:alice"));
     assert_eq!(address.liquid_balance, 1200);
-    assert_eq!(address.restricted_starter_claim_balance, 0);
+    assert_eq!(address.restricted_starter_claim_balance, 125);
     assert_eq!(address.last_transfer_nonce, Some(7));
     assert!(!address.items.is_empty());
 
@@ -1338,9 +1392,16 @@ fn explorer_p1_endpoints_return_expected_payloads() {
         .holders
         .iter()
         .any(|item| item.account_id == "player:alice"));
-    assert!(assets.holders.iter().any(
-        |item| item.account_id == "player:alice" && item.restricted_starter_claim_balance == 0
-    ));
+    assert!(assets
+        .holders
+        .iter()
+        .any(|item| item.account_id == "player:alice"
+            && item.restricted_starter_claim_balance == 125
+            && item.total_balance == 1500));
+    assert!(assets
+        .holders
+        .iter()
+        .all(|item| item.total_balance == item.liquid_balance + item.vested_balance));
     assert!(!assets.nft_supported);
 
     let (mut mempool_server, mut mempool_client) = tcp_stream_pair();
