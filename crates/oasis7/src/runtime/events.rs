@@ -1072,6 +1072,14 @@ pub enum DomainEvent {
         activation_fee_burn_amount: u64,
         activation_fee_treasury_amount: u64,
         claim_bond_amount: u64,
+        #[serde(default)]
+        upfront_restricted_spent_amount: u64,
+        #[serde(default)]
+        upfront_liquid_spent_amount: u64,
+        #[serde(default)]
+        claim_bond_locked_restricted_amount: u64,
+        #[serde(default)]
+        claim_bond_locked_liquid_amount: u64,
         upkeep_per_epoch: u64,
         claimed_at_epoch: u64,
         upkeep_paid_through_epoch: u64,
@@ -1093,6 +1101,10 @@ pub enum DomainEvent {
         settled_at_epoch: u64,
         charged_epochs: u64,
         amount: u64,
+        #[serde(default)]
+        restricted_spent_amount: u64,
+        #[serde(default)]
+        liquid_spent_amount: u64,
         upkeep_paid_through_epoch: u64,
     },
     AgentClaimEnteredGrace {
@@ -1113,6 +1125,10 @@ pub enum DomainEvent {
         target_agent_id: String,
         released_at_epoch: u64,
         refunded_bond_amount: u64,
+        #[serde(default)]
+        refunded_bond_restricted_amount: u64,
+        #[serde(default)]
+        refunded_bond_liquid_amount: u64,
     },
     AgentClaimReclaimed {
         claimer_agent_id: String,
@@ -1123,6 +1139,10 @@ pub enum DomainEvent {
         collected_upkeep_amount: u64,
         penalty_amount: u64,
         refunded_bond_amount: u64,
+        #[serde(default)]
+        refunded_bond_restricted_amount: u64,
+        #[serde(default)]
+        refunded_bond_liquid_amount: u64,
     },
     MaterialTransferred {
         requester_agent_id: String,

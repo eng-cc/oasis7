@@ -58,6 +58,13 @@ fn extend_claim_lines_from_runtime_snapshot(
         value_u64(claim.get("locked_bond_amount")),
         value_u64(claim.get("upkeep_per_epoch"))
     ));
+    lines.push(format!(
+        "- Funding Mix: upfront restricted={} liquid={} | bond restricted={} liquid={}",
+        value_u64(claim.get("upfront_restricted_spent_amount")),
+        value_u64(claim.get("upfront_liquid_spent_amount")),
+        value_u64(claim.get("claim_bond_locked_restricted_amount")),
+        value_u64(claim.get("claim_bond_locked_liquid_amount"))
+    ));
 
     if let Some(remaining) = claim
         .get("release_ready_at_epoch")
@@ -141,14 +148,17 @@ fn extend_claim_quote_lines(agent_id: &str, snapshot: &WorldSnapshot, lines: &mu
     };
 
     lines.push(format!(
-        "- Quote For {}: slot={} tier={} cap={} owned={} upfront={} upkeep={}",
+        "- Quote For {}: slot={} tier={} cap={} owned={} upfront={} upkeep={} liquid={} restricted={} eligible={}",
         primary_claim.claimer_agent_id,
         quote.slot_index,
         quote.reputation_tier,
         quote.claim_cap,
         quote.owned_claim_count,
         quote.total_upfront_amount,
-        quote.upkeep_per_epoch
+        quote.upkeep_per_epoch,
+        quote.transferable_liquid_balance,
+        quote.restricted_starter_claim_balance,
+        quote.eligible_claim_balance
     ));
     if let Some(reason) = quote.blocked_reason.as_deref() {
         lines.push(format!("- Claim Blocker: {reason}"));

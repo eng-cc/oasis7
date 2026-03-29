@@ -201,6 +201,7 @@ pub(super) struct ChainTransferAccountEntry {
     pub(super) account_id: String,
     pub(super) liquid_balance: u64,
     pub(super) vested_balance: u64,
+    pub(super) restricted_starter_claim_balance: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) last_transfer_nonce: Option<u64>,
     pub(super) next_nonce_hint: u64,
@@ -903,6 +904,7 @@ fn build_transfer_accounts_response(
                 account_id: balance.account_id,
                 liquid_balance: balance.liquid_balance,
                 vested_balance: balance.vested_balance,
+                restricted_starter_claim_balance: balance.restricted_starter_claim_balance,
                 last_transfer_nonce: last_nonce,
                 next_nonce_hint,
             }
@@ -923,6 +925,7 @@ fn build_transfer_accounts_response(
                 account_id: node_account.to_string(),
                 liquid_balance: balance.liquid_balance,
                 vested_balance: balance.vested_balance,
+                restricted_starter_claim_balance: balance.restricted_starter_claim_balance,
                 last_transfer_nonce: last_nonce,
                 next_nonce_hint: last_nonce.unwrap_or(0).saturating_add(1),
             });
@@ -952,8 +955,11 @@ fn preflight_validate_transfer_request(
             return Err((
                 "insufficient_balance".to_string(),
                 format!(
-                    "insufficient balance: account={} balance={} amount={}",
-                    request.from_account_id, from_account.liquid_balance, request.amount
+                    "insufficient balance: account={} transferable_balance={} restricted_starter_claim_balance={} amount={}",
+                    request.from_account_id,
+                    from_account.liquid_balance,
+                    from_account.restricted_starter_claim_balance,
+                    request.amount
                 ),
             ));
         }

@@ -105,6 +105,12 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     pub claim_bond_amount: u64,
     pub upkeep_per_epoch: u64,
     pub total_upfront_amount: u64,
+    #[serde(default)]
+    pub transferable_liquid_balance: u64,
+    #[serde(default)]
+    pub restricted_starter_claim_balance: u64,
+    #[serde(default)]
+    pub eligible_claim_balance: u64,
     pub release_cooldown_epochs: u64,
     pub grace_epochs: u64,
     pub idle_warning_epochs: u64,
@@ -119,6 +125,14 @@ pub struct PlayerAgentClaimOwnedSnapshot {
     pub target_agent_id: String,
     pub status: String,
     pub upkeep_paid_through_epoch: u64,
+    #[serde(default)]
+    pub upfront_restricted_spent_amount: u64,
+    #[serde(default)]
+    pub upfront_liquid_spent_amount: u64,
+    #[serde(default)]
+    pub claim_bond_locked_restricted_amount: u64,
+    #[serde(default)]
+    pub claim_bond_locked_liquid_amount: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_ready_at_epoch: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,6 +155,10 @@ pub struct PlayerAgentClaimSnapshot {
     pub claim_cap: u8,
     pub owned_claim_count: u8,
     pub liquid_main_token_balance: u64,
+    #[serde(default)]
+    pub restricted_starter_claim_balance: u64,
+    #[serde(default)]
+    pub slot_1_eligible_claim_balance: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_claim_quote: Option<PlayerAgentClaimQuoteSnapshot>,
     #[serde(default)]

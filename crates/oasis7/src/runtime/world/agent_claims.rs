@@ -1,4 +1,6 @@
-use super::super::agent_claims::{agent_claim_quote, AgentClaimCostQuote};
+use super::super::agent_claims::{
+    agent_claim_quote, split_agent_claim_bond_refund, split_agent_claim_spend, AgentClaimCostQuote,
+};
 use super::super::{AgentClaimState, DomainEvent, WorldError, WorldEvent, WorldEventBody};
 use super::World;
 
@@ -73,8 +75,13 @@ impl World {
             return self.process_agent_claim_release_or_idle(current_epoch, &latest_claim, emitted);
         };
 
-        let liquid_balance = self.main_token_liquid_balance(latest_claim.claim_owner_id.as_str());
-        if liquid_balance >= amount_due {
+        let funding = split_agent_claim_spend(
+            latest_claim.slot_index,
+            self.main_token_liquid_balance(latest_claim.claim_owner_id.as_str()),
+            self.main_token_restricted_starter_claim_balance(latest_claim.claim_owner_id.as_str()),
+            amount_due,
+        );
+        if let Ok(funding) = funding {
             self.append_agent_claim_event(
                 DomainEvent::AgentClaimUpkeepSettled {
                     claimer_agent_id: latest_claim.claim_owner_id.clone(),
@@ -82,6 +89,8 @@ impl World {
                     settled_at_epoch: current_epoch,
                     charged_epochs,
                     amount: amount_due,
+                    restricted_spent_amount: funding.restricted_amount,
+                    liquid_spent_amount: funding.liquid_amount,
                     upkeep_paid_through_epoch: current_epoch,
                 },
                 emitted,
@@ -109,6 +118,12 @@ impl World {
                         amount_due,
                         latest_claim.forced_reclaim_penalty_bps,
                     );
+                let refunded_bond_split = split_agent_claim_bond_refund(
+                    latest_claim.claim_bond_locked_restricted_amount,
+                    latest_claim.claim_bond_locked_liquid_amount,
+                    collected_upkeep_amount.saturating_add(penalty_amount),
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
                 self.append_agent_claim_event(
                     DomainEvent::AgentClaimReclaimed {
                         claimer_agent_id: latest_claim.claim_owner_id.clone(),
@@ -119,6 +134,8 @@ impl World {
                         collected_upkeep_amount,
                         penalty_amount,
                         refunded_bond_amount,
+                        refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
+                        refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
                     },
                     emitted,
                 )?;
@@ -149,12 +166,20 @@ impl World {
     ) -> Result<(), WorldError> {
         if let Some(ready_at_epoch) = claim.release_ready_at_epoch {
             if current_epoch >= ready_at_epoch {
+                let refunded_bond_split = split_agent_claim_bond_refund(
+                    claim.claim_bond_locked_restricted_amount,
+                    claim.claim_bond_locked_liquid_amount,
+                    0,
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
                 self.append_agent_claim_event(
                     DomainEvent::AgentClaimReleased {
                         claimer_agent_id: claim.claim_owner_id.clone(),
                         target_agent_id: claim.target_agent_id.clone(),
                         released_at_epoch: current_epoch,
                         refunded_bond_amount: claim.locked_bond_amount,
+                        refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
+                        refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
                     },
                     emitted,
                 )?;
@@ -170,6 +195,12 @@ impl World {
                 0,
                 claim.forced_reclaim_penalty_bps,
             );
+            let refunded_bond_split = split_agent_claim_bond_refund(
+                claim.claim_bond_locked_restricted_amount,
+                claim.claim_bond_locked_liquid_amount,
+                penalty_amount,
+            )
+            .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
             self.append_agent_claim_event(
                 DomainEvent::AgentClaimReclaimed {
                     claimer_agent_id: claim.claim_owner_id.clone(),
@@ -180,6 +211,8 @@ impl World {
                     collected_upkeep_amount: 0,
                     penalty_amount,
                     refunded_bond_amount,
+                    refunded_bond_restricted_amount: refunded_bond_split.restricted_amount,
+                    refunded_bond_liquid_amount: refunded_bond_split.liquid_amount,
                 },
                 emitted,
             )?;

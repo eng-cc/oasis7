@@ -31,6 +31,18 @@ pub struct AgentClaimCostQuote {
     pub forced_reclaim_penalty_bps: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AgentClaimFundingSplit {
+    pub restricted_amount: u64,
+    pub liquid_amount: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AgentClaimUpfrontFundingBreakdown {
+    pub upfront: AgentClaimFundingSplit,
+    pub claim_bond: AgentClaimFundingSplit,
+}
+
 pub fn agent_claim_reputation_tier(reputation_score: i64) -> u8 {
     if reputation_score >= AGENT_CLAIM_TIER2_MIN_REPUTATION_SCORE {
         2
@@ -114,4 +126,123 @@ fn scale_amount_ceil(base: u64, multiplier_numerator: u64) -> Result<u64, String
         .checked_add(SLOT_MULTIPLIER_DENOMINATOR - 1)
         .ok_or_else(|| format!("agent claim amount ceil overflow: scaled={scaled}"))
         .map(|value| value / SLOT_MULTIPLIER_DENOMINATOR)
+}
+
+pub(crate) fn agent_claim_eligible_balance(
+    slot_index: u8,
+    liquid_balance: u64,
+    restricted_balance: u64,
+) -> u64 {
+    match slot_index {
+        1 => liquid_balance.saturating_add(restricted_balance),
+        _ => liquid_balance,
+    }
+}
+
+pub(crate) fn split_agent_claim_upfront_funding(
+    slot_index: u8,
+    liquid_balance: u64,
+    restricted_balance: u64,
+    activation_fee_amount: u64,
+    claim_bond_amount: u64,
+    upkeep_per_epoch: u64,
+) -> Result<AgentClaimUpfrontFundingBreakdown, String> {
+    let upfront_amount = activation_fee_amount
+        .checked_add(claim_bond_amount)
+        .and_then(|value| value.checked_add(upkeep_per_epoch))
+        .ok_or_else(|| {
+            format!(
+                "agent claim upfront overflow: slot={} activation={} bond={} upkeep={}",
+                slot_index, activation_fee_amount, claim_bond_amount, upkeep_per_epoch
+            )
+        })?;
+    let upfront = split_agent_claim_spend(
+        slot_index,
+        liquid_balance,
+        restricted_balance,
+        upfront_amount,
+    )?;
+    let restricted_after_activation = upfront
+        .restricted_amount
+        .saturating_sub(activation_fee_amount);
+    let claim_bond_restricted_amount = restricted_after_activation.min(claim_bond_amount);
+    let claim_bond_liquid_amount = claim_bond_amount.saturating_sub(claim_bond_restricted_amount);
+    Ok(AgentClaimUpfrontFundingBreakdown {
+        upfront,
+        claim_bond: AgentClaimFundingSplit {
+            restricted_amount: claim_bond_restricted_amount,
+            liquid_amount: claim_bond_liquid_amount,
+        },
+    })
+}
+
+pub(crate) fn split_agent_claim_spend(
+    slot_index: u8,
+    liquid_balance: u64,
+    restricted_balance: u64,
+    amount: u64,
+) -> Result<AgentClaimFundingSplit, String> {
+    if amount == 0 {
+        return Ok(AgentClaimFundingSplit {
+            restricted_amount: 0,
+            liquid_amount: 0,
+        });
+    }
+    match slot_index {
+        1 => {
+            let eligible =
+                agent_claim_eligible_balance(slot_index, liquid_balance, restricted_balance);
+            if eligible < amount {
+                return Err(format!(
+                    "slot-1 eligible claim balance insufficient: eligible={} liquid={} restricted={} amount={}",
+                    eligible, liquid_balance, restricted_balance, amount
+                ));
+            }
+            let restricted_amount = restricted_balance.min(amount);
+            Ok(AgentClaimFundingSplit {
+                restricted_amount,
+                liquid_amount: amount.saturating_sub(restricted_amount),
+            })
+        }
+        2 | 3 => {
+            if liquid_balance < amount {
+                return Err(format!(
+                    "slot-{} liquid claim balance insufficient: liquid={} amount={}",
+                    slot_index, liquid_balance, amount
+                ));
+            }
+            Ok(AgentClaimFundingSplit {
+                restricted_amount: 0,
+                liquid_amount: amount,
+            })
+        }
+        _ => Err(format!("unsupported agent claim slot index: {slot_index}")),
+    }
+}
+
+pub(crate) fn split_agent_claim_bond_refund(
+    claim_bond_locked_restricted_amount: u64,
+    claim_bond_locked_liquid_amount: u64,
+    consumed_bond_amount: u64,
+) -> Result<AgentClaimFundingSplit, String> {
+    let locked_bond_amount = claim_bond_locked_restricted_amount
+        .checked_add(claim_bond_locked_liquid_amount)
+        .ok_or_else(|| {
+            format!(
+                "agent claim bond provenance overflow: restricted={} liquid={}",
+                claim_bond_locked_restricted_amount, claim_bond_locked_liquid_amount
+            )
+        })?;
+    if consumed_bond_amount > locked_bond_amount {
+        return Err(format!(
+            "agent claim consumed bond exceeds locked amount: consumed={} locked={}",
+            consumed_bond_amount, locked_bond_amount
+        ));
+    }
+    let restricted_consumed = claim_bond_locked_restricted_amount.min(consumed_bond_amount);
+    let liquid_consumed = consumed_bond_amount.saturating_sub(restricted_consumed);
+    Ok(AgentClaimFundingSplit {
+        restricted_amount: claim_bond_locked_restricted_amount.saturating_sub(restricted_consumed),
+        liquid_amount: claim_bond_locked_liquid_amount.saturating_sub(liquid_consumed),
+    })
 }

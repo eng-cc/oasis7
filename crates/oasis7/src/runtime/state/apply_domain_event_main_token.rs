@@ -140,6 +140,7 @@ impl WorldState {
                             account_id: recipient,
                             liquid_balance: 0,
                             vested_balance: vested_amount,
+                            restricted_starter_claim_balance: 0,
                         },
                     );
                 }

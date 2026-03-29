@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::agent_claims::split_agent_claim_upfront_funding;
 
 impl World {
     pub(super) fn action_to_event_gameplay(
@@ -49,6 +50,26 @@ impl World {
                         }));
                     }
                 };
+                let funding = match split_agent_claim_upfront_funding(
+                    quote.slot_index,
+                    self.main_token_liquid_balance(claimer_agent_id),
+                    self.main_token_restricted_starter_claim_balance(claimer_agent_id),
+                    quote.activation_fee_amount,
+                    quote.claim_bond_amount,
+                    quote.upkeep_per_epoch,
+                ) {
+                    Ok(funding) => funding,
+                    Err(reason) => {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "claim agent rejected: restricted/liquid funding unavailable: {reason}"
+                                )],
+                            },
+                        }));
+                    }
+                };
                 let current_epoch = self.current_governance_epoch();
                 let event = DomainEvent::AgentClaimed {
                     claimer_agent_id: claimer_agent_id.clone(),
@@ -59,6 +80,10 @@ impl World {
                     activation_fee_burn_amount: quote.activation_fee_burn_amount,
                     activation_fee_treasury_amount: quote.activation_fee_treasury_amount,
                     claim_bond_amount: quote.claim_bond_amount,
+                    upfront_restricted_spent_amount: funding.upfront.restricted_amount,
+                    upfront_liquid_spent_amount: funding.upfront.liquid_amount,
+                    claim_bond_locked_restricted_amount: funding.claim_bond.restricted_amount,
+                    claim_bond_locked_liquid_amount: funding.claim_bond.liquid_amount,
                     upkeep_per_epoch: quote.upkeep_per_epoch,
                     claimed_at_epoch: current_epoch,
                     upkeep_paid_through_epoch: current_epoch,

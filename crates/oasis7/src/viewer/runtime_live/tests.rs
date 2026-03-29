@@ -1328,8 +1328,12 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
     assert_eq!(claim.claim_cap, 1);
     assert_eq!(claim.owned_claim_count, 1);
     assert_eq!(claim.current_epoch, snapshot.time);
+    assert_eq!(claim.restricted_starter_claim_balance, 0);
+    assert_eq!(claim.slot_1_eligible_claim_balance, 650);
 
     let quote = claim.next_claim_quote.as_ref().expect("next claim quote");
+    assert_eq!(quote.transferable_liquid_balance, 650);
+    assert_eq!(quote.restricted_starter_claim_balance, 0);
     assert_eq!(
         quote.blocked_reason.as_deref(),
         Some("agent claim cap exceeded: owned=1 cap=1")
@@ -1338,6 +1342,8 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
     let owned = claim.owned_claims.first().expect("owned claim entry");
     assert_eq!(owned.target_agent_id, "agent-claim-target");
     assert_eq!(owned.status, "release_cooldown");
+    assert_eq!(owned.claim_bond_locked_restricted_amount, 0);
+    assert_eq!(owned.claim_bond_locked_liquid_amount, 200);
     assert!(owned.release_ready_in_epochs.is_some());
     assert!(owned.forced_reclaim_in_epochs.is_some());
 }

@@ -31,6 +31,11 @@ pub(super) fn build_player_agent_claim_snapshot(
         .get(primary_agent_id)
         .map(|balance| balance.liquid_balance)
         .unwrap_or(0);
+    let restricted_starter_claim_balance = state
+        .main_token_balances
+        .get(primary_agent_id)
+        .map(|balance| balance.restricted_starter_claim_balance)
+        .unwrap_or(0);
 
     let next_claim_quote = match agent_claim_quote(reputation_score, owned_claims_count) {
         Ok(quote) => {
@@ -38,6 +43,11 @@ pub(super) fn build_player_agent_claim_snapshot(
                 .activation_fee_amount
                 .saturating_add(quote.claim_bond_amount)
                 .saturating_add(quote.upkeep_per_epoch);
+            let eligible_claim_balance = if quote.slot_index == 1 {
+                liquid_main_token_balance.saturating_add(restricted_starter_claim_balance)
+            } else {
+                liquid_main_token_balance
+            };
             Some(PlayerAgentClaimQuoteSnapshot {
                 slot_index: quote.slot_index,
                 reputation_tier: quote.reputation_tier,
@@ -47,17 +57,36 @@ pub(super) fn build_player_agent_claim_snapshot(
                 claim_bond_amount: quote.claim_bond_amount,
                 upkeep_per_epoch: quote.upkeep_per_epoch,
                 total_upfront_amount,
+                transferable_liquid_balance: liquid_main_token_balance,
+                restricted_starter_claim_balance,
+                eligible_claim_balance,
                 release_cooldown_epochs: quote.release_cooldown_epochs,
                 grace_epochs: quote.grace_epochs,
                 idle_warning_epochs: quote.idle_warning_epochs,
                 forced_idle_reclaim_epochs: quote.forced_idle_reclaim_epochs,
                 forced_reclaim_penalty_bps: quote.forced_reclaim_penalty_bps,
-                blocked_reason: (liquid_main_token_balance < total_upfront_amount).then(|| {
-                    format!(
-                        "insufficient_liquid_main_token balance={} required={}",
-                        liquid_main_token_balance, total_upfront_amount
-                    )
-                }),
+                blocked_reason: if eligible_claim_balance < total_upfront_amount {
+                    Some(format!(
+                        "insufficient_claim_eligible_main_token eligible={} liquid={} restricted={} required={}",
+                        eligible_claim_balance,
+                        liquid_main_token_balance,
+                        restricted_starter_claim_balance,
+                        total_upfront_amount
+                    ))
+                } else if quote.slot_index > 1
+                    && liquid_main_token_balance < total_upfront_amount
+                    && restricted_starter_claim_balance > 0
+                {
+                    Some(format!(
+                        "restricted_balance_not_eligible_for_slot slot={} liquid={} restricted={} required={}",
+                        quote.slot_index,
+                        liquid_main_token_balance,
+                        restricted_starter_claim_balance,
+                        total_upfront_amount
+                    ))
+                } else {
+                    None
+                },
             })
         }
         Err(reason) => Some(PlayerAgentClaimQuoteSnapshot {
@@ -69,6 +98,10 @@ pub(super) fn build_player_agent_claim_snapshot(
             claim_bond_amount: 0,
             upkeep_per_epoch: 0,
             total_upfront_amount: 0,
+            transferable_liquid_balance: liquid_main_token_balance,
+            restricted_starter_claim_balance,
+            eligible_claim_balance: liquid_main_token_balance
+                .saturating_add(restricted_starter_claim_balance),
             release_cooldown_epochs: 0,
             grace_epochs: 0,
             idle_warning_epochs: 0,
@@ -93,6 +126,9 @@ pub(super) fn build_player_agent_claim_snapshot(
         claim_cap: agent_claim_cap_for_tier(agent_claim_reputation_tier(reputation_score)),
         owned_claim_count: u8::try_from(owned_claims_count).unwrap_or(u8::MAX),
         liquid_main_token_balance,
+        restricted_starter_claim_balance,
+        slot_1_eligible_claim_balance: liquid_main_token_balance
+            .saturating_add(restricted_starter_claim_balance),
         next_claim_quote,
         owned_claims: owned_claims
             .iter()
@@ -134,6 +170,10 @@ fn owned_claim_to_snapshot(
         target_agent_id: claim.target_agent_id.clone(),
         status: status.to_string(),
         upkeep_paid_through_epoch: claim.upkeep_paid_through_epoch,
+        upfront_restricted_spent_amount: claim.upfront_restricted_spent_amount,
+        upfront_liquid_spent_amount: claim.upfront_liquid_spent_amount,
+        claim_bond_locked_restricted_amount: claim.claim_bond_locked_restricted_amount,
+        claim_bond_locked_liquid_amount: claim.claim_bond_locked_liquid_amount,
         release_ready_at_epoch: claim.release_ready_at_epoch,
         release_ready_in_epochs,
         grace_deadline_epoch: claim.grace_deadline_epoch,

@@ -11,6 +11,7 @@ use super::{
     ChainExplorerOverviewResponse, ChainTransferHistoryResponse, ChainTransferStatusResponse,
     ChainTransferSubmitRequest, ChainTransferSubmitResponse, TransferLifecycleStatus,
 };
+use crate::transfer_submit_api::preflight_validate_transfer_request;
 use ed25519_dalek::SigningKey;
 use oasis7::consensus_action_payload::{
     decode_consensus_action_payload, sign_main_token_runtime_action_auth,
@@ -192,6 +193,7 @@ fn seed_world_for_explorer_p1(temp_dir: &Path) {
             account_id: "player:alice".to_string(),
             liquid_balance: 1200,
             vested_balance: 300,
+            restricted_starter_claim_balance: 0,
         },
     );
     state
@@ -367,6 +369,47 @@ fn transfer_submit_handler_returns_invalid_request_for_bad_payload() {
     assert_eq!(status, 400);
     assert!(!response.ok);
     assert_eq!(response.error_code.as_deref(), Some("invalid_request"));
+}
+
+#[test]
+fn preflight_transfer_rejects_restricted_only_balance() {
+    let _guard = lock_transfer_test_state();
+    let temp_dir = env::temp_dir().join(format!(
+        "oasis7-transfer-preflight-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let mut world = World::new();
+    world.set_main_token_supply(MainTokenSupplyState {
+        total_supply: 125,
+        circulating_supply: 125,
+        ..MainTokenSupplyState::default()
+    });
+    world
+        .set_main_token_account_balance_with_restricted("player:starter", 0, 0, 125)
+        .expect("seed restricted-only account");
+    world
+        .save_to_dir(temp_dir.as_path())
+        .expect("save execution world");
+
+    let request = ChainTransferSubmitRequest {
+        from_account_id: "player:starter".to_string(),
+        to_account_id: "player:receiver".to_string(),
+        amount: 1,
+        nonce: 1,
+        public_key: "test-public-key".to_string(),
+        signature: "test-signature".to_string(),
+    };
+
+    let err = preflight_validate_transfer_request(temp_dir.as_path(), &request)
+        .expect_err("restricted-only transfer should fail");
+    assert_eq!(err.0, "insufficient_balance");
+    assert!(err.1.contains("transferable_balance=0"));
+    assert!(err.1.contains("restricted_starter_claim_balance=125"));
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[test]
@@ -1203,6 +1246,7 @@ fn explorer_p1_endpoints_return_expected_payloads() {
     assert!(address.ok);
     assert_eq!(address.account_id.as_deref(), Some("player:alice"));
     assert_eq!(address.liquid_balance, 1200);
+    assert_eq!(address.restricted_starter_claim_balance, 0);
     assert_eq!(address.last_transfer_nonce, Some(7));
     assert!(!address.items.is_empty());
 
@@ -1294,6 +1338,9 @@ fn explorer_p1_endpoints_return_expected_payloads() {
         .holders
         .iter()
         .any(|item| item.account_id == "player:alice"));
+    assert!(assets.holders.iter().any(
+        |item| item.account_id == "player:alice" && item.restricted_starter_claim_balance == 0
+    ));
     assert!(!assets.nft_supported);
 
     let (mut mempool_server, mut mempool_client) = tcp_stream_pair();

@@ -96,6 +96,7 @@ fn main_token_snapshot_roundtrip_persists_state() {
             account_id: "player:alice".to_string(),
             liquid_balance: 1_250_000,
             vested_balance: 350_000,
+            restricted_starter_claim_balance: 0,
         })
     );
     assert_eq!(

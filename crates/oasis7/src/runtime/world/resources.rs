@@ -54,6 +54,23 @@ impl World {
             .unwrap_or(0)
     }
 
+    pub fn main_token_restricted_starter_claim_balance(&self, account_id: &str) -> u64 {
+        self.state
+            .main_token_balances
+            .get(account_id)
+            .map(|balance| balance.restricted_starter_claim_balance)
+            .unwrap_or(0)
+    }
+
+    pub fn main_token_claim_eligible_balance(&self, account_id: &str, slot_index: u8) -> u64 {
+        match slot_index {
+            1 => self
+                .main_token_liquid_balance(account_id)
+                .saturating_add(self.main_token_restricted_starter_claim_balance(account_id)),
+            _ => self.main_token_liquid_balance(account_id),
+        }
+    }
+
     pub fn main_token_account_balances(&self) -> Vec<MainTokenAccountBalance> {
         self.state.main_token_balances.values().cloned().collect()
     }
@@ -63,6 +80,21 @@ impl World {
         account_id: &str,
         liquid_balance: u64,
         vested_balance: u64,
+    ) -> Result<(), WorldError> {
+        self.set_main_token_account_balance_with_restricted(
+            account_id,
+            liquid_balance,
+            vested_balance,
+            0,
+        )
+    }
+
+    pub fn set_main_token_account_balance_with_restricted(
+        &mut self,
+        account_id: &str,
+        liquid_balance: u64,
+        vested_balance: u64,
+        restricted_starter_claim_balance: u64,
     ) -> Result<(), WorldError> {
         let account_id = account_id.trim();
         if account_id.is_empty() {
@@ -76,6 +108,7 @@ impl World {
                 account_id: account_id.to_string(),
                 liquid_balance,
                 vested_balance,
+                restricted_starter_claim_balance,
             },
         );
         Ok(())

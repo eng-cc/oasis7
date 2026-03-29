@@ -297,6 +297,14 @@ pub struct AgentClaimState {
     #[serde(default)]
     pub locked_bond_amount: u64,
     #[serde(default)]
+    pub upfront_restricted_spent_amount: u64,
+    #[serde(default)]
+    pub upfront_liquid_spent_amount: u64,
+    #[serde(default)]
+    pub claim_bond_locked_restricted_amount: u64,
+    #[serde(default)]
+    pub claim_bond_locked_liquid_amount: u64,
+    #[serde(default)]
     pub upkeep_per_epoch: u64,
     #[serde(default)]
     pub release_cooldown_epochs: u64,

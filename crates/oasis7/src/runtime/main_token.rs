@@ -123,6 +123,8 @@ pub struct MainTokenAccountBalance {
     pub account_id: String,
     pub liquid_balance: u64,
     pub vested_balance: u64,
+    #[serde(default)]
+    pub restricted_starter_claim_balance: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

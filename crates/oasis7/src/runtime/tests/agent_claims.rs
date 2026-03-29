@@ -10,6 +10,14 @@ fn register_agent(world: &mut World, agent_id: &str) {
 }
 
 fn setup_claim_world(balance: u64, reputation_score: i64) -> World {
+    setup_claim_world_with_balances(balance, 0, reputation_score)
+}
+
+fn setup_claim_world_with_balances(
+    liquid_balance: u64,
+    restricted_balance: u64,
+    reputation_score: i64,
+) -> World {
     let mut world = World::new();
     world
         .set_governance_execution_policy(GovernanceExecutionPolicy {
@@ -24,15 +32,25 @@ fn setup_claim_world(balance: u64, reputation_score: i64) -> World {
         .set_agent_reputation_score("alice", reputation_score)
         .expect("set alice reputation");
     world.set_main_token_supply(MainTokenSupplyState {
-        total_supply: balance,
-        circulating_supply: balance,
+        total_supply: liquid_balance.saturating_add(restricted_balance),
+        circulating_supply: liquid_balance.saturating_add(restricted_balance),
         ..MainTokenSupplyState::default()
     });
     world
-        .set_main_token_account_balance("alice", balance, 0)
+        .set_main_token_account_balance_with_restricted(
+            "alice",
+            liquid_balance,
+            0,
+            restricted_balance,
+        )
         .expect("seed alice main token balance");
     world
-        .set_main_token_account_balance("carol", balance, 0)
+        .set_main_token_account_balance_with_restricted(
+            "carol",
+            liquid_balance,
+            0,
+            restricted_balance,
+        )
         .expect("seed carol main token balance");
     world
 }
@@ -447,4 +465,183 @@ fn idle_claim_emits_warning_then_reclaims() {
         world.main_token_liquid_balance("alice"),
         2_000 - claim_upfront_amount(&claim) - settled_upkeep + 160
     );
+}
+
+#[test]
+fn slot_1_claim_can_spend_restricted_balance() {
+    let mut world = setup_claim_world_with_balances(50, 325, 0);
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world
+        .step()
+        .expect("claim first agent with restricted balance");
+
+    let claim = world.agent_claim("bob").expect("claim persisted");
+    assert_eq!(claim.upfront_restricted_spent_amount, 325);
+    assert_eq!(claim.upfront_liquid_spent_amount, 0);
+    assert_eq!(claim.claim_bond_locked_restricted_amount, 200);
+    assert_eq!(claim.claim_bond_locked_liquid_amount, 0);
+    assert_eq!(world.main_token_liquid_balance("alice"), 50);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
+}
+
+#[test]
+fn mixed_slot_1_claim_tracks_bond_provenance_and_refunds_back_to_source_buckets() {
+    let mut world = setup_claim_world_with_balances(500, 150, 0);
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim first agent with mixed funding");
+    let claim = world.agent_claim("bob").expect("claim exists").clone();
+    assert_eq!(claim.upfront_restricted_spent_amount, 150);
+    assert_eq!(claim.upfront_liquid_spent_amount, 175);
+    assert_eq!(claim.claim_bond_locked_restricted_amount, 50);
+    assert_eq!(claim.claim_bond_locked_liquid_amount, 150);
+
+    world.submit_action(Action::ReleaseAgentClaim {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("request release");
+    for _ in 0..claim.release_cooldown_epochs.saturating_sub(1) {
+        world.step().expect("advance release cooldown");
+    }
+    world.step().expect("finalize release");
+
+    assert!(world.agent_claim("bob").is_none());
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        50
+    );
+    assert_eq!(
+        world.main_token_liquid_balance("alice"),
+        500 - 175 - upkeep_settlement_total(&world, "bob") + 150
+    );
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::AgentClaimReleased {
+            refunded_bond_restricted_amount,
+            refunded_bond_liquid_amount,
+            ..
+        }) => {
+            assert_eq!(*refunded_bond_restricted_amount, 50);
+            assert_eq!(*refunded_bond_liquid_amount, 150);
+        }
+        other => panic!("expected AgentClaimReleased, got {other:?}"),
+    }
+}
+
+#[test]
+fn slot_2_claim_cannot_spend_restricted_balance() {
+    let mut world = setup_claim_world_with_balances(200, 500, 10);
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim slot 1");
+
+    let journal_len_before = world.journal().events.len();
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "carol".to_string(),
+    });
+    world.step().expect("reject slot 2 without enough liquid");
+
+    assert!(world.agent_claim("carol").is_none());
+    let rejection = world.journal().events[journal_len_before..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => Some(reason),
+            _ => None,
+        })
+        .expect("slot 2 rejection");
+    match rejection {
+        RejectReason::RuleDenied { notes } => {
+            assert!(notes
+                .iter()
+                .any(|note| note.contains("restricted/liquid funding unavailable")));
+        }
+        other => panic!("expected rule denied, got {other:?}"),
+    }
+}
+
+#[test]
+fn slot_1_upkeep_uses_restricted_balance_before_liquid() {
+    let mut world = setup_claim_world_with_balances(100, 350, 0);
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim first agent");
+    let claimed_at_epoch = world
+        .agent_claim("bob")
+        .expect("claim exists after activation")
+        .claimed_at_epoch;
+
+    world.step().expect("settle slot 1 upkeep from restricted");
+
+    let claim = world.agent_claim("bob").expect("claim still active");
+    assert_eq!(claim.upkeep_paid_through_epoch, claimed_at_epoch + 1);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        0
+    );
+    assert_eq!(world.main_token_liquid_balance("alice"), 100);
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::AgentClaimUpkeepSettled {
+            restricted_spent_amount,
+            liquid_spent_amount,
+            ..
+        }) => {
+            assert_eq!(*restricted_spent_amount, 25);
+            assert_eq!(*liquid_spent_amount, 0);
+        }
+        other => panic!("expected AgentClaimUpkeepSettled, got {other:?}"),
+    }
+}
+
+#[test]
+fn forced_reclaim_preserves_refund_provenance_after_mixed_funding() {
+    let mut world = setup_claim_world_with_balances(1_000, 150, 0);
+
+    world.submit_action(Action::ClaimAgent {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    });
+    world.step().expect("claim first agent");
+    let claim = world.agent_claim("bob").expect("claim exists").clone();
+
+    while world.agent_claim("bob").is_some() {
+        world.step().expect("advance to idle reclaim");
+    }
+
+    let settled_upkeep = upkeep_settlement_total(&world, "bob");
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        10
+    );
+    assert_eq!(
+        world.main_token_liquid_balance("alice"),
+        1_000 - claim.upfront_liquid_spent_amount - settled_upkeep + 150
+    );
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::AgentClaimReclaimed {
+            refunded_bond_restricted_amount,
+            refunded_bond_liquid_amount,
+            ..
+        }) => {
+            assert_eq!(*refunded_bond_restricted_amount, 10);
+            assert_eq!(*refunded_bond_liquid_amount, 150);
+        }
+        other => panic!("expected AgentClaimReclaimed, got {other:?}"),
+    }
 }

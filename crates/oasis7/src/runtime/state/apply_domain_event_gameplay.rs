@@ -1,4 +1,7 @@
-use super::super::agent_claims::agent_claim_quote;
+use super::super::agent_claims::{
+    agent_claim_quote, split_agent_claim_bond_refund, split_agent_claim_spend,
+    split_agent_claim_upfront_funding,
+};
 use super::super::main_token::{
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
 };
@@ -493,6 +496,10 @@ impl WorldState {
                 activation_fee_burn_amount,
                 activation_fee_treasury_amount,
                 claim_bond_amount,
+                upfront_restricted_spent_amount,
+                upfront_liquid_spent_amount,
+                claim_bond_locked_restricted_amount,
+                claim_bond_locked_liquid_amount,
                 upkeep_per_epoch,
                 claimed_at_epoch,
                 upkeep_paid_through_epoch,
@@ -570,7 +577,53 @@ impl WorldState {
                             target_agent_id, activation_fee_amount, claim_bond_amount, upkeep_per_epoch
                         ),
                     })?;
-                debit_main_token_liquid_balance(self, claimer_agent_id, upfront_amount)?;
+                let liquid_balance = self
+                    .main_token_balances
+                    .get(claimer_agent_id)
+                    .map(|balance| balance.liquid_balance)
+                    .unwrap_or(0);
+                let restricted_balance = self
+                    .main_token_balances
+                    .get(claimer_agent_id)
+                    .map(|balance| balance.restricted_starter_claim_balance)
+                    .unwrap_or(0);
+                let expected_funding = split_agent_claim_upfront_funding(
+                    *slot_index,
+                    liquid_balance,
+                    restricted_balance,
+                    *activation_fee_amount,
+                    *claim_bond_amount,
+                    *upkeep_per_epoch,
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
+                if expected_funding.upfront.restricted_amount != *upfront_restricted_spent_amount
+                    || expected_funding.upfront.liquid_amount != *upfront_liquid_spent_amount
+                    || expected_funding.claim_bond.restricted_amount
+                        != *claim_bond_locked_restricted_amount
+                    || expected_funding.claim_bond.liquid_amount != *claim_bond_locked_liquid_amount
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim funding split mismatch: target={} slot={} upfront_restricted={} upfront_liquid={} bond_restricted={} bond_liquid={}",
+                            target_agent_id,
+                            slot_index,
+                            upfront_restricted_spent_amount,
+                            upfront_liquid_spent_amount,
+                            claim_bond_locked_restricted_amount,
+                            claim_bond_locked_liquid_amount
+                        ),
+                    });
+                }
+                debit_main_token_restricted_starter_claim_balance(
+                    self,
+                    claimer_agent_id,
+                    *upfront_restricted_spent_amount,
+                )?;
+                debit_main_token_liquid_balance(
+                    self,
+                    claimer_agent_id,
+                    *upfront_liquid_spent_amount,
+                )?;
                 decrease_main_token_circulating_supply(self, upfront_amount)?;
                 burn_main_token_supply(self, *activation_fee_burn_amount)?;
                 add_main_token_treasury_balance(
@@ -600,6 +653,10 @@ impl WorldState {
                         activation_fee_treasury_amount: *activation_fee_treasury_amount,
                         claim_bond_amount: *claim_bond_amount,
                         locked_bond_amount: *claim_bond_amount,
+                        upfront_restricted_spent_amount: *upfront_restricted_spent_amount,
+                        upfront_liquid_spent_amount: *upfront_liquid_spent_amount,
+                        claim_bond_locked_restricted_amount: *claim_bond_locked_restricted_amount,
+                        claim_bond_locked_liquid_amount: *claim_bond_locked_liquid_amount,
                         upkeep_per_epoch: *upkeep_per_epoch,
                         release_cooldown_epochs: *release_cooldown_epochs,
                         grace_epochs: *grace_epochs,
@@ -669,6 +726,8 @@ impl WorldState {
                 settled_at_epoch,
                 charged_epochs,
                 amount,
+                restricted_spent_amount,
+                liquid_spent_amount,
                 upkeep_paid_through_epoch,
             } => {
                 let claim = self.agent_claims.get(target_agent_id).ok_or_else(|| {
@@ -708,7 +767,42 @@ impl WorldState {
                         ),
                     });
                 }
-                debit_main_token_liquid_balance(self, claimer_agent_id, *amount)?;
+                let liquid_balance = self
+                    .main_token_balances
+                    .get(claimer_agent_id)
+                    .map(|balance| balance.liquid_balance)
+                    .unwrap_or(0);
+                let restricted_balance = self
+                    .main_token_balances
+                    .get(claimer_agent_id)
+                    .map(|balance| balance.restricted_starter_claim_balance)
+                    .unwrap_or(0);
+                let expected_funding = split_agent_claim_spend(
+                    claim.slot_index,
+                    liquid_balance,
+                    restricted_balance,
+                    *amount,
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
+                if expected_funding.restricted_amount != *restricted_spent_amount
+                    || expected_funding.liquid_amount != *liquid_spent_amount
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim upkeep funding split mismatch: target={} slot={} restricted={} liquid={}",
+                            target_agent_id,
+                            claim.slot_index,
+                            restricted_spent_amount,
+                            liquid_spent_amount
+                        ),
+                    });
+                }
+                debit_main_token_restricted_starter_claim_balance(
+                    self,
+                    claimer_agent_id,
+                    *restricted_spent_amount,
+                )?;
+                debit_main_token_liquid_balance(self, claimer_agent_id, *liquid_spent_amount)?;
                 decrease_main_token_circulating_supply(self, *amount)?;
                 add_main_token_treasury_balance(
                     self,
@@ -804,6 +898,8 @@ impl WorldState {
                 target_agent_id,
                 released_at_epoch,
                 refunded_bond_amount,
+                refunded_bond_restricted_amount,
+                refunded_bond_liquid_amount,
             } => {
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
@@ -826,7 +922,37 @@ impl WorldState {
                         ),
                     });
                 }
-                credit_main_token_liquid_balance(self, claimer_agent_id, *refunded_bond_amount)?;
+                let expected_refund = split_agent_claim_bond_refund(
+                    claim.claim_bond_locked_restricted_amount,
+                    claim.claim_bond_locked_liquid_amount,
+                    0,
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
+                if expected_refund.restricted_amount != *refunded_bond_restricted_amount
+                    || expected_refund.liquid_amount != *refunded_bond_liquid_amount
+                    || refunded_bond_restricted_amount.saturating_add(*refunded_bond_liquid_amount)
+                        != *refunded_bond_amount
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim release refund provenance mismatch: target={} restricted={} liquid={} total={}",
+                            target_agent_id,
+                            refunded_bond_restricted_amount,
+                            refunded_bond_liquid_amount,
+                            refunded_bond_amount
+                        ),
+                    });
+                }
+                credit_main_token_restricted_starter_claim_balance(
+                    self,
+                    claimer_agent_id,
+                    *refunded_bond_restricted_amount,
+                )?;
+                credit_main_token_liquid_balance(
+                    self,
+                    claimer_agent_id,
+                    *refunded_bond_liquid_amount,
+                )?;
                 increase_main_token_circulating_supply(self, *refunded_bond_amount)?;
                 self.agent_claim_last_processed_epoch = self
                     .agent_claim_last_processed_epoch
@@ -845,6 +971,8 @@ impl WorldState {
                 collected_upkeep_amount,
                 penalty_amount,
                 refunded_bond_amount,
+                refunded_bond_restricted_amount,
+                refunded_bond_liquid_amount,
             } => {
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
@@ -877,6 +1005,27 @@ impl WorldState {
                         ),
                     });
                 }
+                let expected_refund_split = split_agent_claim_bond_refund(
+                    claim.claim_bond_locked_restricted_amount,
+                    claim.claim_bond_locked_liquid_amount,
+                    collected_upkeep_amount.saturating_add(*penalty_amount),
+                )
+                .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
+                if expected_refund_split.restricted_amount != *refunded_bond_restricted_amount
+                    || expected_refund_split.liquid_amount != *refunded_bond_liquid_amount
+                    || refunded_bond_restricted_amount.saturating_add(*refunded_bond_liquid_amount)
+                        != *refunded_bond_amount
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim reclaim refund provenance mismatch: target={} restricted={} liquid={} total={}",
+                            target_agent_id,
+                            refunded_bond_restricted_amount,
+                            refunded_bond_liquid_amount,
+                            refunded_bond_amount
+                        ),
+                    });
+                }
                 if *collected_upkeep_amount > 0 {
                     add_main_token_treasury_balance(
                         self,
@@ -892,10 +1041,15 @@ impl WorldState {
                     )?;
                 }
                 if *refunded_bond_amount > 0 {
+                    credit_main_token_restricted_starter_claim_balance(
+                        self,
+                        claimer_agent_id,
+                        *refunded_bond_restricted_amount,
+                    )?;
                     credit_main_token_liquid_balance(
                         self,
                         claimer_agent_id,
-                        *refunded_bond_amount,
+                        *refunded_bond_liquid_amount,
                     )?;
                     increase_main_token_circulating_supply(self, *refunded_bond_amount)?;
                 }
@@ -1304,6 +1458,29 @@ fn debit_main_token_liquid_balance(
     Ok(())
 }
 
+fn debit_main_token_restricted_starter_claim_balance(
+    state: &mut WorldState,
+    account_id: &str,
+    amount: u64,
+) -> Result<(), WorldError> {
+    let account = state
+        .main_token_balances
+        .get_mut(account_id)
+        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+            reason: format!("main token account not found: {account_id}"),
+        })?;
+    if account.restricted_starter_claim_balance < amount {
+        return Err(WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "restricted starter claim balance insufficient: account={} balance={} amount={}",
+                account_id, account.restricted_starter_claim_balance, amount
+            ),
+        });
+    }
+    account.restricted_starter_claim_balance -= amount;
+    Ok(())
+}
+
 fn credit_main_token_liquid_balance(
     state: &mut WorldState,
     account_id: &str,
@@ -1324,6 +1501,30 @@ fn credit_main_token_liquid_balance(
             ),
         }
     })?;
+    Ok(())
+}
+
+fn credit_main_token_restricted_starter_claim_balance(
+    state: &mut WorldState,
+    account_id: &str,
+    amount: u64,
+) -> Result<(), WorldError> {
+    let account = state
+        .main_token_balances
+        .entry(account_id.to_string())
+        .or_insert_with(|| MainTokenAccountBalance {
+            account_id: account_id.to_string(),
+            ..MainTokenAccountBalance::default()
+        });
+    account.restricted_starter_claim_balance = account
+        .restricted_starter_claim_balance
+        .checked_add(amount)
+        .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+            reason: format!(
+                "restricted starter claim credit overflow: account={} current={} amount={}",
+                account_id, account.restricted_starter_claim_balance, amount
+            ),
+        })?;
     Ok(())
 }
 
