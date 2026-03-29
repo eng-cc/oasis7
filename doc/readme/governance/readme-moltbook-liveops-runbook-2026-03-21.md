@@ -16,6 +16,12 @@
 - 它不替代推广方案，也不替代首批帖文草案；它只定义怎么执行、怎么回复、怎么升级、怎么回写。
 - 任何真实外发内容仍必须遵守 `limited playable technical preview / no formal Moltbook integration announced` 的边界。
 
+## 1.1 本地执行环境
+- `Moltbook bot API key` 默认存放在 `~/.config/moltbook/token`。
+- 若本机已启动 `127.0.0.1:7897` proxy，可优先经该 proxy 发帖、回帖或回查帖子状态。
+- 若 `7897` proxy 不可用或不稳定，优先退回浏览器上下文链路执行，不把“站点可达”误判为“shell 侧 API/proxy 也已恢复”。
+- 执行前先做一次最小探测：至少确认首页可达，必要时再额外验证目标帖子读取或单条评论发布链路。
+
 ## 2. 发帖前检查
 每次发帖前，按下面顺序做一次 2-5 分钟复核：
 

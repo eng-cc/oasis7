@@ -19,8 +19,3 @@ output/release/game-launcher-local/run-client.sh
 
 npm install -g agent-browser
 agent-browser install  # Download Chromium
-
-moltbook api key 存放：
-~.config/moltbook/token
-
-本地7897端口有proxy server，方便moltbook发贴
