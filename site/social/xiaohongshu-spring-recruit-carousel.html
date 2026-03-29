@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Spring Recruit Carousel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;700&family=Noto+Sans+SC:wght@400;500;700;800;900&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f5eee4;
+        --paper-deep: #eadfcd;
+        --paper-light: #fbf7f1;
+        --ink: #211a14;
+        --muted: rgba(33, 26, 20, 0.74);
+        --soft: rgba(33, 26, 20, 0.45);
+        --line: rgba(33, 26, 20, 0.1);
+        --brick: #c54f31;
+        --brick-soft: rgba(197, 79, 49, 0.14);
+        --olive: #68705d;
+        --olive-soft: rgba(104, 112, 93, 0.16);
+        --panel: rgba(255, 251, 245, 0.86);
+        --shadow: 0 30px 72px rgba(63, 42, 27, 0.15);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 14% 12%, var(--brick-soft), transparent 22%),
+          radial-gradient(circle at 86% 18%, var(--olive-soft), transparent 22%),
+          linear-gradient(145deg, #efe4d5, #f6efe6 42%, #ebe0d0);
+        color: var(--ink);
+        font-family: "Albert Sans", "Noto Sans SC", sans-serif;
+      }
+
+      .gallery {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 18%),
+          linear-gradient(145deg, rgba(255, 249, 241, 0.94), rgba(243, 232, 216, 0.98)),
+          var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .wash,
+      .grain,
+      .rules,
+      .frame {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .wash {
+        background:
+          radial-gradient(circle at 16% 16%, rgba(197, 79, 49, 0.12), transparent 21%),
+          radial-gradient(circle at 82% 12%, rgba(104, 112, 93, 0.15), transparent 18%),
+          radial-gradient(circle at 56% 86%, rgba(197, 79, 49, 0.08), transparent 26%);
+      }
+
+      .grain {
+        opacity: 0.2;
+        background-image:
+          radial-gradient(circle at 20% 20%, rgba(33, 26, 20, 0.18) 0.6px, transparent 0.8px),
+          radial-gradient(circle at 80% 30%, rgba(33, 26, 20, 0.16) 0.7px, transparent 0.9px),
+          radial-gradient(circle at 30% 72%, rgba(33, 26, 20, 0.14) 0.6px, transparent 0.8px);
+        background-size: 34px 34px, 42px 42px, 56px 56px;
+      }
+
+      .rules {
+        background-image:
+          linear-gradient(to bottom, rgba(33, 26, 20, 0.05) 1px, transparent 1px);
+        background-size: 100% 96px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.34), transparent 90%);
+      }
+
+      .frame::before,
+      .frame::after {
+        content: "";
+        position: absolute;
+        inset: 26px;
+        border: 1px solid rgba(33, 26, 20, 0.08);
+        border-radius: 22px;
+      }
+
+      .frame::after {
+        inset: 42px;
+        border-style: dashed;
+        border-color: rgba(33, 26, 20, 0.05);
+        border-radius: 16px;
+      }
+
+      .header,
+      .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .header {
+        top: 62px;
+      }
+
+      .footer {
+        bottom: 56px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .kicker,
+      .chip,
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand,
+      .kicker {
+        color: var(--ink);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .brand::before,
+      .kicker::before,
+      .eyebrow::before {
+        content: "";
+        width: 12px;
+        height: 12px;
+        background: var(--brick);
+        box-shadow: 5px 5px 0 rgba(197, 79, 49, 0.14);
+      }
+
+      .eyebrow {
+        color: var(--olive);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 96px;
+        line-height: 1.06;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      h2 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 70px;
+        line-height: 1.12;
+        letter-spacing: -0.04em;
+        font-weight: 900;
+      }
+
+      h3 {
+        font-size: 36px;
+        line-height: 1.24;
+        font-weight: 900;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        font-size: 28px;
+        line-height: 1.52;
+      }
+
+      .accent {
+        color: var(--brick);
+      }
+
+      .subaccent {
+        color: var(--olive);
+      }
+
+      .panel,
+      .note,
+      .stat,
+      .card,
+      .quote {
+        position: relative;
+        border: 1px solid rgba(33, 26, 20, 0.08);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .panel::before,
+      .note::before,
+      .card::before {
+        content: "";
+        position: absolute;
+        top: 18px;
+        left: 22px;
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(33, 26, 20, 0.16);
+        box-shadow:
+          24px 0 0 rgba(33, 26, 20, 0.09),
+          48px 0 0 rgba(33, 26, 20, 0.09);
+      }
+
+      .hero {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 152px;
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 26px;
+        align-items: start;
+      }
+
+      .hero-copy p {
+        max-width: 560px;
+        margin-top: 26px;
+        font-size: 29px;
+      }
+
+      .hero-note {
+        min-height: 310px;
+        padding: 42px 30px 28px;
+        border-radius: 26px;
+        transform: rotate(1.8deg);
+      }
+
+      .hero-note h3 {
+        margin-bottom: 18px;
+      }
+
+      .hero-note .micro {
+        font-size: 21px;
+        line-height: 1.48;
+      }
+
+      .cover-bottom {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        bottom: 118px;
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 22px;
+      }
+
+      .compare,
+      .prompt {
+        padding: 34px 30px 28px;
+        border-radius: 24px;
+      }
+
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .mini {
+        padding: 18px 16px;
+        border: 1px solid rgba(33, 26, 20, 0.08);
+        background: rgba(255, 255, 255, 0.56);
+      }
+
+      .mini .label {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .mini p {
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.3;
+        font-weight: 800;
+      }
+
+      .prompt-window {
+        margin-top: 20px;
+        padding: 16px 18px 18px;
+        border: 1px solid rgba(33, 26, 20, 0.12);
+        background: rgba(248, 244, 237, 0.86);
+      }
+
+      .prompt-window p {
+        color: var(--ink);
+        font-size: 25px;
+        line-height: 1.42;
+        font-weight: 700;
+      }
+
+      .body-grid {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 158px;
+        bottom: 118px;
+        display: grid;
+        grid-template-columns: 0.88fr 1.12fr;
+        gap: 24px;
+      }
+
+      .note {
+        align-self: start;
+        padding: 42px 30px 30px;
+        border-radius: 26px;
+        transform: rotate(-2.2deg);
+      }
+
+      .note p {
+        margin-top: 18px;
+        color: var(--ink);
+        font-size: 34px;
+        line-height: 1.32;
+        font-weight: 800;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .card {
+        padding: 42px 32px 28px;
+        border-radius: 24px;
+      }
+
+      .card p {
+        margin-top: 16px;
+        font-size: 27px;
+      }
+
+      .bullets {
+        margin-top: 18px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .bullet {
+        display: grid;
+        grid-template-columns: 42px 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+
+      .num {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: rgba(104, 112, 93, 0.12);
+        color: var(--olive);
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .bullet p {
+        margin: 0;
+        font-size: 25px;
+        line-height: 1.46;
+      }
+
+      .callout {
+        position: absolute;
+        right: 88px;
+        bottom: 124px;
+        width: 280px;
+        padding: 38px 24px 24px;
+        border-radius: 22px;
+        background:
+          linear-gradient(180deg, rgba(104, 112, 93, 0.08), rgba(255, 251, 245, 0.9)),
+          rgba(255, 251, 245, 0.9);
+        box-shadow: var(--shadow);
+      }
+
+      .callout .label {
+        display: block;
+        margin-bottom: 12px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .callout p {
+        color: var(--ink);
+        font-size: 30px;
+        line-height: 1.32;
+        font-weight: 800;
+      }
+
+      .closing {
+        position: absolute;
+        left: 86px;
+        right: 86px;
+        top: 168px;
+        bottom: 130px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 28px;
+      }
+
+      .closing-main {
+        max-width: 700px;
+      }
+
+      .closing-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+
+      .stat {
+        padding: 28px 22px 22px;
+        border-radius: 22px;
+        text-align: center;
+      }
+
+      .stat strong {
+        display: block;
+        margin-bottom: 10px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 46px;
+        line-height: 1.1;
+      }
+
+      .stat span {
+        color: var(--muted);
+        font-size: 22px;
+        line-height: 1.4;
+      }
+
+      .question {
+        padding: 34px 30px 28px;
+        border-radius: 24px;
+        background:
+          linear-gradient(180deg, rgba(197, 79, 49, 0.08), rgba(255, 251, 245, 0.92)),
+          rgba(255, 251, 245, 0.92);
+        box-shadow: var(--shadow);
+      }
+
+      .question p {
+        color: var(--ink);
+        font-size: 34px;
+        line-height: 1.42;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide" data-slide="1">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">spring recruit</div>
+        </header>
+        <div class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">studio lead memo</div>
+            <h1>
+              今年春招，<br />
+              <span class="accent">我会看什么人</span>
+            </h1>
+            <p>不先看你会多少工具。<br />先看你能不能把事接住。</p>
+          </div>
+          <div class="hero-note panel">
+            <h3>这不是招聘启事</h3>
+            <p class="micro">是一个做项目的人，真的会在意什么。</p>
+          </div>
+        </div>
+        <div class="cover-bottom">
+          <div class="compare panel">
+            <div class="eyebrow">before / now</div>
+            <div class="compare-grid">
+              <div class="mini">
+                <span class="label">以前</span>
+                <p>会一点<br />已经算加分</p>
+              </div>
+              <div class="mini">
+                <span class="label">现在</span>
+                <p>会一点的人<br />一下子变多了</p>
+              </div>
+            </div>
+          </div>
+          <div class="prompt panel">
+            <div class="eyebrow">core filter</div>
+            <div class="prompt-window">
+              <p>真正稀缺的，<br />反而是能把事接住的人。</p>
+            </div>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 1 / 6</span>
+          <span>xiaohongshu carousel</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="2">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">why this changed</div>
+        </header>
+        <div class="body-grid">
+          <div class="note">
+            <div class="eyebrow">2026 spring</div>
+            <h2>AI 把<br /><span class="accent">“会一点”</span><br />的人变多了</h2>
+            <p>代码、设计、内容、原型，看起来像样的人突然多了很多。</p>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="eyebrow">so what</div>
+              <h3>门槛下来了</h3>
+              <p>但真正让人放心的标准，并没有一起变便宜。</p>
+            </div>
+            <div class="card">
+              <div class="eyebrow">what stays rare</div>
+              <h3>真正稀缺的不是“都会一点”</h3>
+              <p>而是能把事情讲清楚、做扎实、最后还能收回来的人。</p>
+            </div>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 2 / 6</span>
+          <span>judgment first</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="3">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">first two checks</div>
+        </header>
+        <div class="body-grid">
+          <div class="note">
+            <div class="eyebrow">what I check first</div>
+            <h2>讲得清<br /><span class="subaccent">做得完</span></h2>
+            <p>这两条过不了，后面工具和概念说再多也没用。</p>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="eyebrow">01</div>
+              <h3>讲得清</h3>
+              <div class="bullets">
+                <div class="bullet"><div class="num">A</div><p>别只说“参与过项目”。</p></div>
+                <div class="bullet"><div class="num">B</div><p>我更想知道，你具体做了什么，卡在哪，最后怎么收的。</p></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="eyebrow">02</div>
+              <h3>做得完</h3>
+              <div class="bullets">
+                <div class="bullet"><div class="num">A</div><p>我不怕项目小，我怕全是半成品。</p></div>
+                <div class="bullet"><div class="num">B</div><p>比起十个做了六成的作品，我更愿意看一个认真收过尾的。</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 3 / 6</span>
+          <span>clear and complete</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="4">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">ai usage</div>
+        </header>
+        <div class="body-grid">
+          <div class="note">
+            <div class="eyebrow">third check</div>
+            <h2>“我会用 AI”<br />已经<br /><span class="accent">不算亮点了</span></h2>
+            <p>现在大家都会说这句话。差别在后面。</p>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="eyebrow">what matters</div>
+              <h3>我更在意的是</h3>
+              <div class="bullets">
+                <div class="bullet"><div class="num">1</div><p>你拿它代打。</p></div>
+                <div class="bullet"><div class="num">2</div><p>还是拿它提速，但最后自己判断、自己验收。</p></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="eyebrow">why</div>
+              <h3>前一种看着热闹</h3>
+              <p>后一种交出来的东西，才会让我更放心。</p>
+            </div>
+          </div>
+        </div>
+        <div class="callout">
+          <span class="label">bottom line</span>
+          <p>不是会不会用。<br />是怎么用。</p>
+        </div>
+        <footer class="footer">
+          <span>slide 4 / 6</span>
+          <span>tool vs judgment</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="5">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">player sense</div>
+        </header>
+        <div class="body-grid">
+          <div class="note">
+            <div class="eyebrow">two more checks</div>
+            <h2>有没有<br />玩家感觉<br /><span class="subaccent">会不会往前推</span></h2>
+            <p>做游戏和做项目，这两条都很伤真章。</p>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <div class="eyebrow">04</div>
+              <h3>有没有玩家感觉</h3>
+              <p>做游戏不是堆功能。是你知不知道玩家会不会点，玩到哪里会烦，哪里会留下来。</p>
+            </div>
+            <div class="card">
+              <div class="eyebrow">05</div>
+              <h3>出问题会不会往前推</h3>
+              <p>我更想看到的，不是“做不下去”，而是“我先给一个能落地的方案”。</p>
+            </div>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 5 / 6</span>
+          <span>from player to project</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="6">
+        <div class="wash"></div>
+        <div class="grain"></div>
+        <div class="rules"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">your turn</div>
+        </header>
+        <div class="closing">
+          <div class="closing-main">
+            <div class="eyebrow">so I end up checking</div>
+            <h1>
+              判断<br />
+              <span class="accent">执行</span><br />
+              收口
+            </h1>
+          </div>
+          <div class="closing-grid">
+            <div class="stat">
+              <strong>判断</strong>
+              <span>会不会选方向<br />会不会做取舍</span>
+            </div>
+            <div class="stat">
+              <strong>执行</strong>
+              <span>能不能真的往前推<br />不是只会说</span>
+            </div>
+            <div class="stat">
+              <strong>收口</strong>
+              <span>出了问题以后<br />能不能把事收回来</span>
+            </div>
+          </div>
+          <div class="question">
+            <p>如果你现在还在春招，<br />你觉得自己最强的是哪一项？</p>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 6 / 6</span>
+          <span>comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slide = params.get("slide");
+      if (slide) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((node) => {
+          node.style.display = node.dataset.slide === slide ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>

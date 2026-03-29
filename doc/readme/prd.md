@@ -76,6 +76,7 @@
 - PRD-README-026: As a `liveops_community`, I want a reusable Xiaohongshu player-boundary post pack, so that the fourth post can explain why players guide the world instead of directly puppeting one role, without slipping into either control-scheme jargon or unsafe playability claims.
 - PRD-README-027: As a `liveops_community`, I want a reusable Xiaohongshu AI-laziness-to-game-mode post pack, so that the fifth post can start from a familiar AI-era feeling and pull the discussion toward what games should still ask humans to judge, choose, and carry.
 - PRD-README-028: As a `liveops_community`, I want a reusable Xiaohongshu spring-recruit post pack from the studio lead perspective, so that we can borrow current job-market anxiety to talk about judgment, delivery, and player sense without drifting into either generic job-board content or hollow motivation copy.
+- PRD-README-029: As a `liveops_community`, I want a reusable Xiaohongshu spring-recruit carousel pack derived from the approved long-form post, so that the same topic can publish as a mobile-native swipe format with stronger retention and comment prompts instead of only one long caption block.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -94,6 +95,7 @@
   15. Flow-RM-015: `确定第四篇“玩家为什么不能直接控制角色”表达 -> 冻结标题/正文/轮播页/互动问题 -> 用人类开发者口吻解释玩家与 agent 的控制边界 -> 保持 limited playable technical preview 边界`
   16. Flow-RM-016: `确定第五篇“AI时代，你变"懒"了么”表达 -> 从熟悉的 AI 使用感切入 -> 收口到“游戏模式里什么还该交给人” -> 冻结标题/正文/轮播页/互动问题并避免滑向泛 AI 焦虑帖`
   17. Flow-RM-017: `确定第六篇“作为游戏工作室主理人，今年春招我会看什么人”表达 -> 借春招/求职焦虑框架讲团队判断标准 -> 冻结标题/正文/封面/互动问题并避免滑向岗位汇总或空泛鸡汤`
+  18. Flow-RM-018: `将第六篇长文版压成轮播版 -> 拆成封面/判断前提/核心标准/收束提问 6 页 -> 导出逐页 PNG -> 保持标题、关键词和互动问题一致`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -127,6 +129,7 @@
 - AC-15: 若小红书内容链路进入第四篇，必须补齐“玩家控制边界”素材包，明确标题、正文、轮播结构、互动问题，并把“玩家不能直接控制角色，但能给方向”的正式口径收进人类开发者叙事。
 - AC-16: 若小红书内容链路进入第五篇，必须补齐“AI时代，你变"懒"了么”素材包，明确如何从 AI 使用习惯切到游戏模式讨论，并保持人类开发者视角与 `limited playable technical preview` 边界。
 - AC-17: 若小红书内容链路进入第六篇，必须补齐“作为游戏工作室主理人，今年春招我会看什么人”素材包，明确标题、正文、封面、互动问题、关键词与禁滑坡边界，并把春招热点收口到团队判断、完成度、AI 使用方式与玩家感觉。
+- AC-18: 若第六篇需要轮播版，必须补齐独立轮播素材包，明确页数、逐页文案、HTML、逐页 PNG 与评论区收束页分工，并保持与长文版标题、边界和互动问题一致。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
   - 不在 readme PRD 中替代各模块详细设计。
@@ -206,6 +209,7 @@
 | PRD-README-026 | TASK-README-036 | `test_tier_required` | 小红书第四帖素材包明确“玩家为什么不能直接控制角色”的标题、正文、轮播结构、互动问题与控制边界口径 | 渠道内容从“游戏是什么”过渡到“玩家如何介入世界”的可理解性 |
 | PRD-README-027 | TASK-README-037 | `test_tier_required` | 小红书第五帖素材包明确“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口 | 渠道内容从“玩家怎么介入”过渡到“AI时代下游戏应该把什么留给人”的可讨论性 |
 | PRD-README-028 | TASK-README-038 | `test_tier_required` | 小红书第六篇素材包明确“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面文案、互动问题与热点借势边界 | 渠道内容从游戏判断延展到团队判断与 AI 时代用人标准的可讨论性 |
+| PRD-README-029 | TASK-README-039 | `test_tier_required` | 小红书第六篇轮播版素材包明确逐页文案、HTML、逐页 PNG 与评论区收束页 | 第六篇从长文版扩展到 feed-native 轮播版的可发布性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -236,3 +240,4 @@
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |
 | DEC-RM-026 | 第五篇采用“AI 使用感受 -> 游戏模式判断”而非直接泛聊 AI 让人变懒 | 只发一条泛 AI 焦虑/效率感想，或直接转去讲 `oasis7` 具体机制 | “AI时代，你变"懒"了么”本身容易引讨论，但如果不收口会太泛；把它拉回“游戏还该把什么留给人”更贴账号主线，也更能承接项目设计判断。 |
 | DEC-RM-027 | 第六篇采用“春招判断标准”而非“岗位清单/求职资料” | 直接做免笔试汇总、岗位投递清单，或输出泛求职鸡汤 | 春招话题有热度，但账号主线仍是人类开发者视角下的团队判断与项目收口；借热点讲“我会看什么人”更贴现有内容链，也更容易带出高质量讨论。 |
+| DEC-RM-028 | 第六篇轮播版采用“6 页短判断卡”而非把长文硬切成多页 | 直接把长文等分成 4-8 页纯文字截图 | 小红书轮播更吃“每页只讲一个判断”的手机端节奏；重新拆页比机械分段更利于读完率、收藏和评论承接。 |

@@ -374,6 +374,27 @@
     - `rg -n "作为游戏工作室主理人，今年春招我会看什么人|我先看，你能不能把事接住|做得完的人|怎么用 AI|有没有玩家感觉" doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-cover.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-039 (PRD-README-029) [test_tier_required]: 为小红书第六篇补齐 6 页轮播版素材包，固定逐页文案、HTML、逐页 PNG 与评论区收束页。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
+    - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
+    - `site/social/xiaohongshu-spring-recruit-carousel.html`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide1.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide2.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide3.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide4.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide5.png`
+    - `site/social/xiaohongshu-spring-recruit-carousel-slide6.png`
+    - `doc/devlog/2026-03-29.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "今年春招，我会看什么人|AI 把\\\"会一点\\\"的人变多了|讲得清|做得完|玩家感觉|你觉得自己最强的是哪一项" doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md site/social/xiaohongshu-spring-recruit-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -389,6 +410,7 @@
 - 更新日期: 2026-03-29
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-039`（已为小红书第六篇补齐 6 页轮播版素材包、HTML 与逐页 PNG，保持与长文版标题和互动问题一致。）
 - 最新完成: `TASK-README-038`（已为小红书第六篇固定“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面图与热点借势边界。）
 - 最新完成: `TASK-README-037`（已为小红书第五篇固定“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口。）
 - 最新完成: `TASK-README-036`（已为小红书第四篇固定“玩家为什么不能直接控制角色”的标题、正文、轮播结构、互动问题与玩家控制边界口径。）
