@@ -10,7 +10,7 @@
 
 ## 2. 设计结构
 - Meta: owner、阶段前提、claim envelope、禁止承诺项。
-- Execution Loop: invite-only callout、固定巡检窗口、信号分类、same-day 回写。
+- Execution Loop: controlled builder-facing thread、固定巡检窗口、信号分类、same-day 回写。
 - QA Guard: unified gate watch、趋势窗口、failure signature、`go / conditional go / no-go`。
 - Producer Review: 继续维持、收紧节奏或触发下一轮阶段评审。
 
@@ -26,6 +26,7 @@
 - 阶段仍是 `internal_playable_alpha_late`，本专题不自动升级阶段。
 - 对外只能使用 `limited playable technical preview`、`candidate access`、`builder feedback`、`GitHub issue/PR CTA` 一类表述。
 - `closed beta / play now / live now / public launch / official integration announced` 仍为禁语。
+- round-1 primary channel 可按执行真值切到 GitHub issue 等 builder-facing thread，但不能把“渠道切换”解释成阶段升级或公开上线。
 - 先验证“受控执行是否稳定”，再讨论是否扩大节奏或触发下一轮阶段评审。
 
 ## 5. 设计演进计划

@@ -129,7 +129,7 @@
     - `rg -n "PRD-GAME-010|limited playable technical preview|continue / hold / reassess|claim drift" doc/game/prd.md doc/game/project.md doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md doc/game/gameplay/producer-to-liveops-task-game-036-limited-preview-execution-2026-03-22.md doc/game/gameplay/producer-to-qa-task-game-037-limited-preview-gate-watch-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [ ] TASK-GAME-036 (PRD-GAME-010) [test_tier_required]: `liveops_community` 执行 1 轮 invite-only builder callout，按固定巡检窗口归档 `Blocking / Opportunity / Idea` 信号，并在出现 claim drift 时当轮纠偏。
+- [ ] TASK-GAME-036 (PRD-GAME-010) [test_tier_required]: `liveops_community` 执行 1 轮 controlled builder-facing callout，按固定巡检窗口归档 `Blocking / Opportunity / Idea` 信号，并在出现 claim drift 时当轮纠偏；`2026-03-27` 首次 Moltbook 尝试因 `ERR_CONNECTION_CLOSED` 被记为渠道 incident，随后 round-1 primary channel 已切到 GitHub issue `eng-cc/oasis7#48` 并完成发布，当前待首批有效 signal 回流。
 - [ ] TASK-GAME-037 (PRD-GAME-010) [test_tier_required]: `qa_engineer` 输出 `QA Weekly / Event Verdict`，确认当前 unified gate 是否仍保持 `pass`，并在真实反馈触发时建议 `continue / conditional go / no-go`。
 - [ ] TASK-GAME-038 (PRD-GAME-010) [test_tier_required]: `producer_system_designer` 基于 `TASK-GAME-036/037` 的真实执行样本，正式决定继续维持、收紧节奏，或触发下一轮阶段评审。
 - [x] TASK-GAME-039 (PRD-GAME-011) [test_tier_required]: 新增“agent 认领代币成本与维护机制”专题 PRD / design / project，并完成 game 根 PRD、project、索引、README 与 devlog 挂载。
@@ -153,7 +153,7 @@
 ## 状态
 - 更新日期: 2026-03-27
 - 当前状态: in_progress
-- 下一任务: `TASK-GAME-036（执行 1 轮受控 limited preview builder callout，并回流首批真实信号）`
+- 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
 - 最新完成: `TASK-GAME-040`（`runtime_engineer` 已在 `oasis7` runtime 内落地 `ClaimAgent / ReleaseAgentClaim`、claim bond/upkeep/grace/idle reclaim 状态机与 main token 账本联动；当前 runtime v1 暂以 `100/200/25` base defaults 和 `0/10/25` reputation score tier gates 闭环，后续仍待 `TASK-GAME-043` 复核调参。）
 - 最新完成: `TASK-GAME-039`（已新增 `PRD-GAME-011` agent 认领代币成本专题，正式冻结“首个 claim 也不免费”的规则口径，并将 claim bond / upkeep / reclaim / tier cap 挂入 game 根入口。）
 - 最新完成: `TASK-GAME-035`（已新增 `PRD-GAME-010` 受控 limited preview 执行专题，并将 owner、handoff、done 定义与验证方式正式挂载到 game 根入口。）
@@ -179,7 +179,7 @@
 - 下一阶段目标: `closed_beta_candidate`
 - 阻断条件: 若统一 `closed_beta_candidate` release gate 尚未建立或任一关键 lane `block`，当前项目仍不得升级为 `closed beta` 对外口径。
 - 当前评审结论: unified gate 已 `pass`，但本轮 producer 决策继续维持 `limited playable technical preview` claim envelope，因此阶段暂不提升到 `closed_beta_candidate`。
-- 当前执行重点: 将 `limited playable technical preview` 从文案边界推进为 1 轮受控、invite-only、可回流的真实执行闭环；若出现 claim drift 或 unified gate 回退，必须立即收紧节奏。
+- 当前执行重点: 将 `limited playable technical preview` 从文案边界推进为 1 轮受控、controlled builder-facing、可回流的真实执行闭环；round-1 主线程已切到 GitHub issue `eng-cc/oasis7#48`，当前待 issue 评论 / linked issue / linked PR 进入首批 `Blocking / Opportunity / Idea` 分桶；若出现 claim drift 或 unified gate 回退，必须立即收紧节奏。
 - 承接约束: `TASK-GAME-029/030/031/032` 必须以同一候选版本互链，不能用不同批次专题 `pass` 拼凑升阶结论。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-002 进展: gameplay 子簇主从化完成，`TASK-GAMEPLAY-MLF-001/002/003/004` 与 `TASK-GAME-007` 已闭环；分布式长期在线专题已完成设计建档（`TASK-GAME-008`）与执行共识首个实现切片（`TASK-GAME-009`）。
@@ -226,11 +226,13 @@
 - ROUND-043 进展: `qa_engineer` 已将 `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md` 刷新为最近 7 天窗口（`2026-03-19` ~ `2026-03-22`）真值，纳入 7 个 candidate 相关样本后得到 `first-pass=100% / escape=0% / fix-time=0d`，并据此把 unified gate 更新为 `pass`。项目当前已无 QA 技术 blocker，但阶段仍保持 `internal_playable_alpha_late`，下一步必须由 `producer_system_designer` 执行 `TASK-GAME-033` 决定是否继续保持当前阶段或进入下一阶段候选口径。
 - ROUND-044 进展: `producer_system_designer` 已完成 `TASK-GAME-033` 阶段评审，并正式决定继续保持 `internal_playable_alpha_late`。理由不是 QA 技术 blocker，而是当前 release / 招募节奏仍按受控技术预览管理；在 producer 明确打开下一阶段 claim envelope 之前，`closed_beta_candidate` 继续只作为目标态，不作为当前对外口径。
 - ROUND-045 进展: `producer_system_designer` 已完成 `TASK-GAME-034`，将当前有效对外口径正式收口为 `limited playable technical preview`；该调整只放宽“完全不可玩”的表述，不改变阶段判断，也不放开 `closed beta / play now / live now` 禁语。
-- ROUND-046 进展: `producer_system_designer` 已完成 `TASK-GAME-035`，新增 `PRD-GAME-010` 受控 limited preview 执行专题，并正式把下一步拆成 `TASK-GAME-036/037/038`：先由 `liveops_community` 执行 1 轮 invite-only callout，再由 `qa_engineer` 给出 `QA Weekly / Event Verdict`，最后由制作人决定 `continue / hold / reassess`。
+- ROUND-046 进展: `producer_system_designer` 已完成 `TASK-GAME-035`，新增 `PRD-GAME-010` 受控 limited preview 执行专题，并正式把下一步拆成 `TASK-GAME-036/037/038`：先由 `liveops_community` 执行 1 轮 controlled builder-facing callout，再由 `qa_engineer` 给出 `QA Weekly / Event Verdict`，最后由制作人决定 `continue / hold / reassess`。
 - ROUND-047 进展: `producer_system_designer` 已完成 `TASK-GAME-039`，新增 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.{prd,design,project}.md`，正式冻结“所有 agent claim 都要消耗 main token，首个也不免费”的规则边界；v1 采用 `activation fee + claim bond + upkeep` 三段式，并要求 `tier cap / cooldown / grace / forced reclaim / idle reclaim` 全部进入正式任务追踪。
 - ROUND-048 进展: `viewer_engineer` 已完成 `TASK-GAMEPLAY-AGC-003`，把 agent claim canonical 概览接入 `player_gameplay.agent_claim`，使 pure API `--player-gameplay-only` 可直接输出 claim quote / claimed state / cooldown-grace-idle reclaim 倒计时 / cap blocker；同时 viewer 选中 agent 详情现已显示 claim owner、bond/upkeep 与剩余 epoch 文案，下一步转入 `qa_engineer` 执行 `TASK-GAMEPLAY-AGC-004` 的并发与经济审计矩阵。
 - ROUND-049 进展: `qa_engineer` 已完成 `TASK-GAMEPLAY-AGC-004`，在 `crates/oasis7/src/runtime/tests/agent_claims.rs` 补齐 claim 并发、tier cap、grace 恢复、release refund、欠费/闲置 reclaim slash-refund 对账断言，并新增 `doc/testing/evidence/game-agent-claim-abuse-matrix-2026-03-27.md` 收口 required/full 证据；当前 claim 专题下一步转入 `producer_system_designer` 执行 `TASK-GAMEPLAY-AGC-005` 的平衡复核。
 - ROUND-050 进展: `producer_system_designer` 已完成 `TASK-GAMEPLAY-AGC-005`，基于当前 runtime/viewer/QA 闭环与仍然缺失的真实 claim 分布数据，正式决定继续维持 agent claim 的 v1 默认参数，不新开调参专题；`PRD-GAME-011` 当前已整体闭环，后续仅在 liveops / QA / 真实持有数据出现异常信号时再重启平衡任务。
+- ROUND-051 进展: `liveops_community` 先按 approved invite pack 尝试用 Moltbook 启动 `LTP-20260322-R1`，但执行前检查发现无可复用登录态，且 `agent-browser --session-name moltbook-ltp open https://www.moltbook.com/` 直接返回 `ERR_CONNECTION_CLOSED`；该渠道 incident 已落档。
+- ROUND-052 进展: 在用户明确要求“渠道换成 GitHub issue”后，`liveops_community` 已将 round-1 primary channel 切到 GitHub issue `eng-cc/oasis7#48`，并用 `limited playable technical preview / not a closed beta announcement / not a public launch` 的 approved boundary 完成 builder thread 发布。当前 callout 已发出，但首批有效 builder signals 仍为 `0`，因此 `TASK-GAME-036` 继续保持 `in_progress`，下一步转入 issue 评论与 linked issue/PR 巡检。
 - 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md` 与 `doc/devlog/2026-03-18.md`。
   - 最新过程记录补充见 `doc/devlog/2026-03-21.md`。
 

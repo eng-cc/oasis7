@@ -8,7 +8,7 @@
 - ## Meta
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
-- Channel Focus: `Moltbook` + `GitHub Builder Channels`
+- Channel Focus: `GitHub issue` + `GitHub Builder Channels` + `Moltbook`（optional fallback）
 - Scope: `closed beta candidate 招募/反馈/事故回流 + technical preview 口径守护`
 - Source Docs:
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
@@ -20,7 +20,7 @@
 - 让 `liveops_community` 在 unified release gate 前能提供稳定 evidence link 与 runbook。
 
 ## 范围
-- 本文档覆盖 Moltbook/Builder channel 的招募呼叫、反馈分类与 incident 升级流程，不包含真正 release announcement。
+- 本文档覆盖 GitHub issue / Builder channel / Moltbook fallback 的招募呼叫、反馈分类与 incident 升级流程，不包含真正 release announcement。
 - 不涉及时程/资源/融资的业务宣发，只聚焦 `technical preview` 体验反馈。
 
 ## 接口 / 数据
@@ -42,11 +42,11 @@
 ## 1. Runbook Intent
 - 本跑道面向 `PRD-GAME-009` 中的 `closed_beta_candidate` 准入节奏。所有活动都必须默认 `limited playable technical preview` 口径，公开声明不能含 `closed beta / live now / play now`。
 - 目标是把候选版本的招募、反馈、事故三个闭环沉淀成可重复模板，便于 producer 在阶段评审前对外同步一致的 evidence link 与禁语。
-- 本跑道不替代 Moltbook 日常运营 SOP，完成招聘/反馈/事故闭环后需把信号回流给 `producer_system_designer` 决策阶段升级或维持当前技术预览声明。
+- 本跑道不把 primary channel 绑定到单一平台；可优先采用 GitHub issue 线程，也可在需要时复用 Moltbook 等外部 builder channel。完成招聘/反馈/事故闭环后需把信号回流给 `producer_system_designer` 决策阶段升级或维持当前技术预览声明。
 
 ## 2. Recruitment Template
 ### Key Messaging
-1. `Invite only builder callout`: “Inspect the technical preview, then huddle onto GitHub issue/PR for follow-up.”（不要说“come play now”）
+1. `Controlled builder-facing callout`: “Inspect the technical preview, then huddle onto GitHub issue/PR for follow-up.”（不要说“come play now”）
 2. `Candidate constraints`: 明确“limited slots, technical preview posture, hotfix-level response”。
 3. `CTA`: Provide `GitHub issue template URL` or `builder inbox` (no direct `public launch` claim).
 
@@ -58,7 +58,7 @@ Body:
 - Evidence: canonical candidate release gate link: `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`.
 - Goal: gather builder feedback for `closed_beta_candidate` gate.
 - CTA: open a GitHub issue with `candidate-feedback` tag or provide PR/patch.
-- Response promise: we monitor Moltbook comments (+24h and +72h) and will escalate issues marked `blocking`.
+- Response promise: we monitor the primary thread/comments and will escalate issues marked `blocking`.
 ```
 先通过上面 block 内给出 disclaimers，再在 comments/pinned mention `@liveops-community` for urgent escalations.
 
@@ -70,7 +70,7 @@ Body:
    - `Idea`: deferred to producer_system_designer review queue.
 3. `Action`:
    - Blocking: escalate via `liveops-to-qa` template, link to output evidence + start `inspection thread`.
-   - Non-blocking: respond on Moltbook with “Thanks, filing `issue-track-*` and share ETA once triaged,” keep tone `technical preview`.
+   - Non-blocking: respond in the primary thread with “Thanks, filing `issue-track-*` and share ETA once triaged,” keep tone `technical preview`.
 4. `Log`:
    - Add to `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md` (template below).
    - Attach `issue/PR link`, `owner`, `next action`.
@@ -95,7 +95,7 @@ Body:
 - `Feedback template`: 
   ```
   Signal type: `bug / friction / idea`
-  Source: `Moltbook comment / DM / issue`
+  Source: `GitHub issue comment / linked issue / DM / Moltbook comment`
   Evidence link: candidate release gate doc
   Owner: `qa_engineer/runtime_engineer/liveops_community`
   Next action: e.g., `issue created, awaiting QA triage`

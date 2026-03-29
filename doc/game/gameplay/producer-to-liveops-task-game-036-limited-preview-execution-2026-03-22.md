@@ -12,7 +12,7 @@
 - Priority: `P0`
 
 ## Goal
-- 执行 1 轮 invite-only 的 `limited playable technical preview` builder callout，并把反馈、事故与 claim drift 信号完整回流。
+- 执行 1 轮 controlled builder-facing 的 `limited playable technical preview` builder callout，并把反馈、事故与 claim drift 信号完整回流。
 
 ## Why Now
 - 当前 unified gate 已 `pass`，但团队还没有验证这层新 claim envelope 在真实外部信号中是否稳定。
@@ -25,13 +25,13 @@
 - 依赖前置项：现有 feedback/incident 模板与 GitHub CTA 已存在
 
 ## Expected Output
-- 接收方交付物 1：1 条 invite-only builder callout 与固定窗口巡检记录
+- 接收方交付物 1：1 条 controlled builder-facing callout 与固定窗口巡检记录（当前 round-1 主线程：`eng-cc/oasis7#48`）
 - 接收方交付物 2：按 `Blocking / Opportunity / Idea` 归档的首批外部信号
 - 接收方交付物 3：producer 可读的聚合摘要（来源、频次、owner、next action）
 - 需要回写的文档 / 日志：`doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`、`doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`、`doc/devlog/2026-03-22.md`
 
 ## Done Definition
-- [ ] 完成 1 条 invite-only callout，并显式使用 `limited playable technical preview` 与 GitHub CTA
+- [ ] 完成 1 条 controlled builder-facing callout，并显式使用 `limited playable technical preview` 与 GitHub CTA
 - [ ] 至少收集 3 条有效信号，并完成 owner / next action 归档
 - [ ] 所有高可见度 claim drift 都在同轮巡检中被纠偏并留痕
 
@@ -42,9 +42,9 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`rg -n "limited playable technical preview|candidate-feedback|Blocking|Opportunity|Idea|closed beta|play now|live now" doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md doc/devlog/2026-03-22.md`
+- 建议验证命令：`rg -n "limited playable technical preview|candidate-feedback|Blocking|Opportunity|Idea|closed beta|play now|live now|blocked_before_publish" doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md doc/devlog/2026-03-27.md`
 
 ## Notes
-- 接收方确认范围：`待 liveops_community 确认`
-- 接收方确认 ETA：`待 liveops_community 确认`
-- 接收方新增风险：`待 liveops_community 回写`
+- 接收方确认范围：`按 readme-limited-preview-invite-pack-2026-03-22.md 的 approved main copy / first comment / monitoring windows 执行，不扩大 claim envelope`
+- 接收方确认 ETA：`2026-03-27 已通过 GitHub issue 发布 round-1 主线程；接下来 24h 内完成首轮巡检与 signal 归档`
+- 接收方新增风险：`Moltbook 在 2026-03-27 首次尝试时返回 ERR_CONNECTION_CLOSED，因此 round-1 主线程已切换为 GitHub issue eng-cc/oasis7#48；当前风险转为“首批有效 builder signals 尚未落地”而非“无法发布 callout”`

@@ -6,16 +6,16 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Round ID: `LTP-20260322-R1`
-- Channel Focus: `Moltbook` + `GitHub Builder Channels`
+- Channel Focus: `GitHub issue`（primary for round-1） + `GitHub Builder Channels`
 - Candidate Reference: `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - Claim Envelope: `limited playable technical preview`
 
 ## 1. Round Goal
-- Run one invite-only builder callout without claim drift.
+- Run one controlled builder-facing callout without claim drift.
 - Collect the first 3 valid signals for producer / QA review.
 - Convert at least 1 signal into GitHub issue/PR or internal owner follow-up.
 
-## 2. Invite-only Builder Callout
+## 2. Controlled Builder-Facing Callout
 ### Main Copy
 ```text
 oasis7 is currently a limited playable technical preview.
@@ -29,14 +29,14 @@ Current focus:
 - pure_api parity
 - recovery after failure
 
-Reply if you want the evidence link and builder route.
+Reply in this thread if you want the evidence link and builder route.
 ```
 
-### First Comment
+### Follow-up Comment
 ```text
 Boundary stays explicit:
 - limited playable technical preview
-- invite-only builder access
+- controlled builder-facing access
 - not a closed beta announcement
 - not a public launch
 
@@ -71,7 +71,7 @@ Mark `claim drift = yes` if the external statement implies any of the following:
 - `live now`
 - `public launch`
 - `official integration announced`
-- broad public playability instead of invite-only builder access
+- broad public playability instead of controlled builder-facing access
 
 If `claim drift = yes`:
 1. Correct the statement in the same monitoring window.
@@ -99,7 +99,7 @@ Pause the round and escalate immediately if:
 - repeated claim drift suggests the current callout wording is still too loose
 
 ## 8. Completion Definition
-- 1 invite-only builder callout is prepared and approved for use.
+- 1 controlled builder-facing callout is prepared and approved for use.
 - Monitoring windows and correction rules are fixed before posting.
 - Feedback / incident templates can capture every signal with `Round ID`, bucket, owner, and next action.
 - Producer can read one summary row and decide `continue / hold / reassess`.

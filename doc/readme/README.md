@@ -34,6 +34,7 @@
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
 - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
+- `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`
 - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
 - `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md`
 - `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md`

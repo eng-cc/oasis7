@@ -89,7 +89,7 @@
 | PostOnboarding 目标链 | `stage_id`、`goal_id`、`goal_type`、`progress`、`blocker_primary`、`next_step_hint` | 完成首次行动闭环后生成主目标并持续更新 | `introduced -> active -> blocked -> completed -> branch_ready` | 默认工业持续能力优先，完成首个里程碑后再展开治理 / 冲突 / 扩张方向 | 玩家可见，系统生成，玩法负责人定义口径 |
 | 纯 API 客户端等价 | `player_gameplay_snapshot`、`available_actions`、`recent_feedback`、`parity_level` | 客户端查看阶段/目标/阻塞、执行推进/聊天/命令、恢复会话 | `observer_only -> playable -> parity_verified` | UI/API 共用 canonical 语义，不允许各算一套 | 已连接客户端可读；写操作按玩家鉴权 |
 | 阶段准入门禁 | `current_stage`、`candidate_stage`、`claim_envelope`、`trend_status`、`gate_lane_status` | 汇总 headed Web/UI、pure API、no-UI、longrun/recovery 与 liveops 口径，输出升阶或维持原阶段结论 | `internal_playable_alpha -> internal_playable_alpha_late -> closed_beta_candidate -> closed_beta` | 先统一 gate，再允许升级对外口径；任一关键 lane 阻断即整体阻断 | `producer_system_designer` 最终拍板；`qa_engineer` 可独立给阻断建议 |
-| 受控 limited preview 执行 | `preview_round_status`、`callout_id`、`signal_quality`、`claim_drift_status`、`qa_recommendation` | 发起 invite-only 预览、归档真实信号、持续校验 gate、输出 continue/hold/reassess 结论 | `ready_to_run -> running -> reviewed -> continue/hold/reassess` | 先验证口径是否受控，再判断是否扩大节奏 | `producer_system_designer` 最终拍板；`liveops_community` 执行；`qa_engineer` 守门 |
+| 受控 limited preview 执行 | `preview_round_status`、`callout_id`、`signal_quality`、`claim_drift_status`、`qa_recommendation` | 发起 controlled builder-facing 预览、归档真实信号、持续校验 gate、输出 continue/hold/reassess 结论 | `ready_to_run -> running -> reviewed -> continue/hold/reassess` | 先验证口径是否受控，再判断是否扩大节奏 | `producer_system_designer` 最终拍板；`liveops_community` 执行；`qa_engineer` 守门 |
 | Agent 认领成本与维护 | `claim_owner_id`、`claim_slot_index`、`activation_fee_amount`、`claim_bond_amount`、`upkeep_per_epoch`、`grace_deadline_epoch`、`release_cooldown_epochs` | 玩家确认认领、系统结算 upkeep、主动释放或强制回收 | `unclaimed -> claimed_active -> upkeep_grace -> released/forced_reclaimed -> unclaimed` | 首个 claim 也必须收费；`slot-2/3` 成本单调递增并受 `reputation_tier` cap 限制 | runtime 原子校验单 owner；viewer/pure API 只读取 canonical 字段 |
 - 核心玩法循环验收矩阵（TASK-GAME-002）:
 | 循环 | 验收场景（Given / When / Then） | 规则层边界（PRD-GAME-002） | 证据事件/状态 | `test_tier_required` 入口 | 通过阈值（Done） | 失败处置 |
@@ -143,7 +143,7 @@
   - AC-11: 新增 `PostOnboarding` 专题 PRD，明确首次行动闭环后的阶段目标、阻塞分类、阶段完成与中循环承接，并可映射到 `#46` 的 required-tier 验收。
   - AC-12: 新增纯 API 等价专题 PRD，明确 canonical 玩家语义、动作集合、恢复逻辑与 UI/API parity matrix，并可映射到纯 API 长玩 required/full 验收。
   - AC-13: 新增 `PRD-GAME-009` 封闭 Beta 准入专题，明确当前阶段、统一 release gate、趋势阈值和对外口径边界，并能直接驱动跨角色 handoff。
-  - AC-14: 新增 `PRD-GAME-010` 受控 limited preview 执行专题，明确 invite-only 外放、claim drift 纠偏、QA 持续守门与制作人 continue/hold/reassess 决策。
+  - AC-14: 新增 `PRD-GAME-010` 受控 limited preview 执行专题，明确 controlled builder-facing 外放、claim drift 纠偏、QA 持续守门与制作人 continue/hold/reassess 决策。
   - AC-15: 新增 `PRD-GAME-011` agent 认领成本专题，明确“首个也不免费”、claim bond/upkeep、闲置/欠费回收、tier cap 与 UI/API canonical 字段。
 - Non-Goals:
   - 不在本 PRD 中给出逐条数值参数表。
