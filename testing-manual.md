@@ -139,6 +139,7 @@
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
 ```
+- `./scripts/check-rust-file-size.sh` 现同时校验超限基线、`touch-and-shrink` 和 `split_part/include!` 结构切片基线，不再只是“有没有新 >1200 文件”。
 - 可选（按需执行 builtin wasm hash 校验）：
 ```bash
 ./scripts/sync-m1-builtin-wasm-artifacts.sh --check

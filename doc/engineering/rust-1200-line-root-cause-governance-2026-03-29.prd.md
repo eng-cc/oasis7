@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 仓库已重新出现大规模 Rust 超限文件，当前实况为 31 个生产文件和 14 个测试文件超过 1200 行，说明“拆一次大文件”没有真正解决文件继续膨胀的问题。现有 round3 治理偏向 `include!`/`split_part` 结构切片，未把职责边界、目录模型和 CI 阻断做成长期机制。
-- Proposed Solution: 将“1200 行限制”从一次性清债任务升级为长期工程治理专题：冻结当前超限基线、在 required gate 中引入 Rust 文件体量检查、禁止新增 `split_part` 作为完成态、对被触碰的超限文件执行“touch-and-shrink”规则，并按 runtime/viewer/launcher 三个高风险域分批做职责拆分。
+- Proposed Solution: 将“1200 行限制”从一次性清债任务升级为长期工程治理专题：冻结当前超限基线与结构切片基线、在 required gate 中引入 Rust 文件体量检查、禁止新增 `split_part` 作为完成态、对被触碰的超限文件执行“touch-and-shrink”规则，并按 runtime/viewer/launcher 三个高风险域分批做职责拆分。
 - Success Criteria:
   - SC-1: 基线冻结后，新增生产 Rust 超限文件数为 0，新增测试 Rust 超限文件数为 0。
   - SC-2: `scripts/ci-tests.sh required` 默认包含 Rust 文件体量检查，且该检查单次执行时间 <= 15 秒。
@@ -51,7 +51,7 @@
 | 评审结论 | `finding`、`boundary_ok`、`test_evidence`、`baseline_update` | 评审时输出 `pass / blocked / risky` | `draft -> reviewed -> merged/rejected` | 优先关注边界真实性，其次关注行数结果 | reviewer / qa_engineer 主判，owner 回写 |
 - Acceptance Criteria:
   - AC-1: 新增专题将当前“31 个生产文件 + 14 个测试文件超限”的事实基线写入正式文档，并在 project 中拆成可执行批次。
-  - AC-2: required gate 的目标态明确要求默认执行 Rust 文件体量检查，并区分生产代码、测试代码、`third_party/` 与生成目录。
+  - AC-2: required gate 的目标态明确要求默认执行 Rust 文件体量检查，并区分生产代码、测试代码、`third_party/` 与生成目录；脚本需同时校验超限基线、触碰即缩小与结构切片基线。
   - AC-3: PRD 明确禁止把 `split_part` / `include!` 机械切片作为治理完成态，并定义可接受的目录模块化完成态。
   - AC-4: 每个治理批次都必须声明目标目录边界、触碰即缩小规则、回归命令和证据落点。
   - AC-5: 主题 project 至少覆盖：基线冻结、门禁脚本、迁移规则、runtime 首批治理、viewer 首批治理、测试债务收口六类任务。
@@ -70,7 +70,7 @@
 - Architecture Overview:
   - 治理入口层：`doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.{prd,design,project}.md` 定义规则、批次和追踪。
   - 扫描与门禁层：新增 `scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 `crates/**/src/*.rs` 与测试文件并输出基线差异；`scripts/ci-tests.sh required` 调用该脚本。
-  - 基线层：在工程治理目录中维护冻结清单，记录当前允许存在但必须逐步收缩的超限文件；新文件不允许进入基线。
+  - 基线层：在工程治理目录中维护 `rust-oversized-file-baseline.tsv` 与 `rust-structural-slicing-baseline.tsv` 两份冻结清单，分别记录当前允许存在但必须逐步收缩的超限文件和存量 `split_part/include!` 结构债；新文件不允许进入基线。
   - 迁移层：以目录模块（`mod.rs + 子模块文件`）或按职责拆分的独立模块替代 `include!` 分段；每次迁移必须在 project 中定义目标边界与回归集。
   - 验证层：每批治理至少执行 `test_tier_required` 定向回归，涉及 viewer live、链运行时或 launcher 等关键入口时追加 `test_tier_full`、脚本 smoke 或 Web 闭环验证。
 - Integration Points:
@@ -82,6 +82,7 @@
   - `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
   - `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
   - `doc/.governance/rust-oversized-file-baseline.tsv`
+  - `doc/.governance/rust-structural-slicing-baseline.tsv`
   - `scripts/ci-tests.sh`
   - `scripts/doc-governance-check.sh`
   - `testing-manual.md`

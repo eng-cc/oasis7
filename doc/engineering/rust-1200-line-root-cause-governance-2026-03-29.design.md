@@ -14,7 +14,7 @@
 - 主要集中区：
   - `crates/oasis7`：21 个生产超限文件，集中在 `chain_runtime`、`viewer runtime_live`、`runtime state/events/world`。
   - `crates/oasis7_viewer`：8 个生产超限文件，集中在 `player guide`、`automation`、`web test api`、`timeline` 等 UI/automation 混合区域。
-  - 测试侧仍有 15 个超限文件，最大热点为 `runtime_live/tests.rs`、`module_action_loop_split_part3.rs`、`economy.rs`、`main_tests.rs`。
+  - 测试侧仍有 14 个超限文件，最大热点为 `runtime_live/tests.rs`、`module_action_loop_split_part3.rs`、`economy.rs`、`main_tests.rs`。
 - 失败根因：
   - round3 的完成态过度依赖 `include!`/`split_part`，未真正建立目录模块边界。
   - required gate 未默认执行 Rust 文件体量检查。
@@ -29,10 +29,11 @@
 - 基线层：
   - 冻结当前超限清单，记录 `path / line_count / is_test / owner / priority_batch`。
   - 基线文件固定为 `doc/.governance/rust-oversized-file-baseline.tsv`。
+  - 结构切片基线固定为 `doc/.governance/rust-structural-slicing-baseline.tsv`，记录存量 `slice_file` 与 `include_target` 债务。
   - 新文件一律不得进入基线。
 - 规则层：
   - 新增或重命名出的 `split_part*` / `part1` / `part2` / `include!` 完成态一律阻断。
-  - 触碰基线内超限文件时，必须满足 `after_lines < before_lines`，或将旧文件职责迁出并从基线中退休。
+  - 触碰基线内超限文件时，必须满足 `after_lines < before_lines`，比较基准取当前工作树相对 `HEAD` / `HEAD^` 的上一版本行数；或将旧文件职责迁出并从基线中退休。
 - 结构层：
   - 最终完成态统一采用“目录模块 + 职责模块”。
   - 示例：
@@ -42,8 +43,8 @@
 
 ## 分批策略
 ### Batch A: 门禁与基线
-- 产出扫描脚本、冻结基线、接入 `scripts/ci-tests.sh required`。
-- 新增命名与 `include!` 完成态阻断。
+- 产出扫描脚本、冻结超限/结构切片双基线、接入 `scripts/ci-tests.sh required`。
+- 新增命名与 `include!` 完成态阻断，并对触碰到的超限文件执行 `touch-and-shrink`。
 
 ### Batch B: 高风险入口治理
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
@@ -69,6 +70,7 @@
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-rust-file-size.sh`
   - `git diff --check`
+  - 如需验证 required 链路，执行 `./scripts/ci-tests.sh required`；当前仓库若仍被无关编译红灯阻断，需在 devlog 中明确标注失败点与归因。
 - Batch B / C:
   - 对应 crate 的 `test_tier_required`
   - 入口文件涉及联机/Viewer 时追加 `test_tier_full`
@@ -92,4 +94,6 @@
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`
+- `doc/.governance/rust-oversized-file-baseline.tsv`
+- `doc/.governance/rust-structural-slicing-baseline.tsv`
 - `doc/devlog/2026-03-29.md`
