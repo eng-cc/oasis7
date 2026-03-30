@@ -4,8 +4,10 @@ owner_role: producer_system_designer
 worktree_hint: null
 status: candidate
 priority: P2
+source_signal: null
 source_refs: []
 doc_refs: []
+related_prd: []
 acceptance: []
 handoff_to: []
 updated_at: 2026-03-30T00:00:00+08:00

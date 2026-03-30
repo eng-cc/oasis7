@@ -18,7 +18,7 @@
 - `doc/engineering/README.md`
 - `AGENTS.md`
 - `.agents/roles/*.md`
-- `.pm/inbox/signals.jsonl`（待建）
+- `.pm/inbox/signals.jsonl`
 - `.pm/roles/*/memory/*.yaml`
 
 ## 状态
@@ -26,9 +26,10 @@
 - 当前阶段: planned
 - 当前任务: `TASK-ENGINEERING-081`
 - 阻塞项:
-  - `signal inbox` 正式文件与 promotion 链路仍未落地，memory 还无法从 signal 做真实提升。
+  - `signal inbox` 与 `candidate task` promotion 已落地，但 memory 仍无法从 signal 做真实提升。
   - memory 样例记录、promotion/supersede 脚本与 lint/report 仍未建档。
 - 最新完成:
+  - `TASK-ENGINEERING-076`：已落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路，后续 memory promotion 可直接复用 signal inbox 作为输入层。
   - `TASK-ENGINEERING-075`：已建立 `.pm` 基础骨架，并为 7 个标准角色生成 `memory/{active,superseded}.yaml` 容器，长期 memory 后续任务可直接在仓库内演进。
   - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与 devlog。
 - 下一步:
