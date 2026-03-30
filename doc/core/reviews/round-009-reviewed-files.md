@@ -43,7 +43,7 @@
 | `doc/testing/README.md` | testing 模块索引 | 手册总入口与分册关系是否足够清楚 | keep | P1 | `qa_engineer` | scoped | I9-002 | 当前结构相对清楚，重点在手册语义 |
 | `doc/world-runtime/README.md` | world-runtime 模块索引 | 高体量模块入口可消费性抽样 | defer | P2 | `producer_system_designer` | scoped | I9-005 | 低于 world-simulator/readme 热点优先级 |
 | `doc/world-simulator/README.md` | world-simulator 模块索引 | 高体量模块入口与专项手册关系是否清楚 | split | P1 | `viewer_engineer` | issue_open | I9-005 | 当前主题目录清楚，但缺读者导向分流 |
-| `doc/ui_review_result/README.md` | 活跃样本目录说明 | 是否继续作为标准模块外例外目录存在 | split | P1 | `viewer_engineer` | issue_open | I9-004 | 当前更像样本池，不像正式模块 |
+| `doc/ui_review_result/README.md` | 活跃样本目录说明 | 是否继续作为标准模块外例外目录存在 | split | P1 | `viewer_engineer` | aligned | I9-004 | 已明确其为活跃评审样本池，补齐根级例外目录的进入/退出条件，不再伪装成正式模块 |
 | `doc/readme/prd.index.md` | readme 文件级索引 | 规范文档与素材包并列导致索引语义混杂 | split | P0 | `liveops_community` | aligned | I9-003 | 已将索引拆成 `canonical` 与 `material/execution/SOP` 两层，并标注使用边界 |
 | `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | Web UI 分册手册 | 是否应迁移为 `*.manual.md` | migrate | P0 | `qa_engineer` | aligned | I9-002 | 已新增 `web-ui-agent-browser-closure-manual.manual.md` 承接操作步骤；PRD 保留需求/验收权威源 |
 | `doc/world-simulator/viewer/viewer-manual.md` | Viewer 高频手册 | 是否保留 legacy 命名或迁移为 `*.manual.md` | migrate | P0 | `viewer_engineer` | aligned | I9-002 | 已新增 `viewer-manual.manual.md` 作为 canonical 手册，旧路径降级为兼容入口 |

@@ -224,6 +224,7 @@
 - [x] TASK-CORE-034 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Viewer 与 Web UI 闭环建立 canonical `*.manual.md` 入口，并同步回写高频入口与 ROUND 台账。
 - [x] TASK-CORE-035 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 入口层首批分流收口，为 `README.md`、`doc/README.md` 与静态 docs hub 增加按目标进入的阅读路径。
 - [x] TASK-CORE-036 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `readme` 模块边界首批收口，为 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 补齐 `canonical / runbook / material / execution_log` 分层。
+- [x] TASK-CORE-037 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `ui_review_result` 目录定位收口，明确其为活跃评审样本池而非正式模块，并补齐进入/退出条件。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -264,6 +265,7 @@
 - 最新完成: `TASK-CORE-034`（已为 Viewer 与 Web UI 闭环建立 canonical `*.manual.md` 入口，并完成首批 README / static docs hub / ROUND-009 台账回写。）
 - 最新完成: `TASK-CORE-035`（已为 repo / 工程总入口 / 静态 docs hub 补齐按目标进入的阅读路径，首批收口 `I9-001` 的高频入口对象。）
 - 最新完成: `TASK-CORE-036`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log`，首批收口 `I9-003` 的边界混用问题。）
+- 最新完成: `TASK-CORE-037`（已将 `ui_review_result` 明确为活跃评审样本池，并补齐根级例外目录的进入/退出条件。）
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。
