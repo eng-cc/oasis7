@@ -1073,7 +1073,6 @@ impl World {
             )?;
             return Ok(true);
         }
-
         let target_manifest = target_record.manifest.clone();
         let fee_kind = ResourceKind::Electricity;
         let fee_amount = Self::module_install_fee_amount(&target_manifest);
@@ -1119,7 +1118,6 @@ impl World {
             return Ok(true);
         };
         content.insert("module_changes".to_string(), module_changes_value);
-
         let proposal_id =
             match self.propose_manifest_update(manifest_update, operator_agent_id.to_string()) {
                 Ok(proposal_id) => proposal_id,
@@ -1180,7 +1178,6 @@ impl World {
                     return Ok(true);
                 }
             };
-
         self.append_event(
             WorldEventBody::Domain(DomainEvent::ModuleRollbackApplied {
                 operator_agent_id: operator_agent_id.to_string(),

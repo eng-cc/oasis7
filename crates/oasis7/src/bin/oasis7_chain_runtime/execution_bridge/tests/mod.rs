@@ -1,0 +1,521 @@
+use std::fs;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use super::*;
+use super::checkpoint::{
+    execution_bridge_record_path, execution_checkpoint_latest_path,
+    execution_checkpoint_manifest_path, load_execution_bridge_record,
+    load_execution_checkpoint_manifest, load_latest_execution_checkpoint_manifest,
+    persist_execution_bridge_record, persist_execution_bridge_record_only,
+    persist_execution_checkpoint_manifest,
+    run_execution_bridge_retention_maintenance,
+};
+use super::driver::{
+    bridge_committed_heights, load_execution_bridge_state, persist_execution_bridge_state,
+};
+use super::external_effect::{
+    execution_committed_actions_hash, execution_module_anchor_hash,
+    persist_execution_external_effect_materialization,
+};
+use ed25519_dalek::{Signer, SigningKey};
+use oasis7::runtime::{
+    BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld,
+};
+use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
+use oasis7_wasm_abi::ModuleOutput;
+use oasis7_wasm_executor::FixedSandbox;
+use sha2::{Digest, Sha256};
+
+mod driver;
+mod replay;
+mod retention;
+
+const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
+
+fn signed_test_artifact_identity(wasm_hash: &str) -> ModuleArtifactIdentity {
+    let source_hash = sha256_hex(format!("test-src:{wasm_hash}").as_bytes());
+    let build_manifest_hash = sha256_hex(b"test-build-manifest-v1");
+    let payload = ModuleArtifactIdentity::signing_payload_v1(
+        wasm_hash,
+        source_hash.as_str(),
+        build_manifest_hash.as_str(),
+        TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
+    );
+    let signing_key = test_module_artifact_signing_key();
+    let signature = signing_key.sign(payload.as_slice());
+    ModuleArtifactIdentity {
+        source_hash,
+        build_manifest_hash,
+        signer_node_id: TEST_MODULE_ARTIFACT_SIGNER_NODE_ID.to_string(),
+        signature_scheme: ModuleArtifactIdentity::SIGNATURE_SCHEME_ED25519.to_string(),
+        artifact_signature: format!(
+            "{}{}",
+            ModuleArtifactIdentity::SIGNATURE_PREFIX_ED25519_V1,
+            hex::encode(signature.to_bytes())
+        ),
+    }
+}
+
+fn test_module_artifact_signing_key() -> SigningKey {
+    let seed_bytes = sha256_bytes(b"oasis7-test-module-artifact-signer-v1");
+    SigningKey::from_bytes(&seed_bytes)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(sha256_bytes(bytes))
+}
+
+fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher.finalize().into()
+}
+
+fn temp_dir(prefix: &str) -> std::path::PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("duration")
+        .as_nanos();
+    std::env::temp_dir().join(format!("oasis7-execution-{prefix}-{unique}"))
+}
+
+fn sample_snapshot(committed_height: u64, block_hash: Option<&str>) -> NodeSnapshot {
+    NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "node-a".to_string(),
+        world_id: "w1".to_string(),
+        role: NodeRole::Sequencer,
+        running: true,
+        tick_count: 10,
+        last_tick_unix_ms: Some(10),
+        consensus: NodeConsensusSnapshot {
+            committed_height,
+            last_block_hash: block_hash.map(ToOwned::to_owned),
+            ..NodeConsensusSnapshot::default()
+        },
+        last_error: None,
+    }
+}
+
+#[test]
+fn bridge_committed_heights_persists_records_and_state() {
+    let dir = temp_dir("execution-bridge");
+    let store = LocalCasStore::new(dir.join("store"));
+    let mut world = RuntimeWorld::new();
+    let mut sandbox = FixedSandbox::succeed(ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    });
+    let mut state = ExecutionBridgeState::default();
+    let records_dir = dir.join("records");
+
+    let snapshot = sample_snapshot(2, Some("node-h2"));
+    let records = bridge_committed_heights(
+        &snapshot,
+        1_000,
+        &mut world,
+        &mut sandbox,
+        &store,
+        records_dir.as_path(),
+        &mut state,
+    )
+    .expect("bridge");
+
+    assert_eq!(records.len(), 2);
+    assert_eq!(state.last_applied_committed_height, 2);
+    assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h2"));
+    assert!(records_dir.join("00000000000000000001.json").exists());
+    assert!(records_dir.join("00000000000000000002.json").exists());
+    assert!(records_dir.join("latest.json").exists());
+
+    let latest_bytes = fs::read(records_dir.join("latest.json")).expect("read latest record");
+    let latest_record: ExecutionBridgeRecord =
+        serde_json::from_slice(latest_bytes.as_slice()).expect("parse latest record");
+    assert_eq!(
+        latest_record.schema_version,
+        EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+    );
+    assert_eq!(
+        latest_record.latest_state_ref.as_deref(),
+        latest_record.snapshot_ref.as_deref()
+    );
+    assert!(latest_record.commit_log_ref.is_none());
+    assert!(latest_record.checkpoint_ref.is_none());
+    assert!(latest_record.external_effect_ref.is_none());
+
+    let latest_json: serde_json::Value =
+        serde_json::from_slice(latest_bytes.as_slice()).expect("parse latest json");
+    assert!(latest_json.get("schema_version").is_some());
+    assert!(latest_json.get("latest_state_ref").is_some());
+    assert!(latest_json.get("commit_log_ref").is_none());
+    assert!(latest_json.get("checkpoint_ref").is_none());
+    assert!(latest_json.get("external_effect_ref").is_none());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn bridge_committed_heights_is_noop_when_height_not_advanced() {
+    let dir = temp_dir("execution-bridge-noop");
+    let store = LocalCasStore::new(dir.join("store"));
+    let mut world = RuntimeWorld::new();
+    let mut sandbox = FixedSandbox::succeed(ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    });
+    let mut state = ExecutionBridgeState {
+        last_applied_committed_height: 3,
+        last_execution_block_hash: Some("h3".to_string()),
+        last_execution_state_root: Some("s3".to_string()),
+        last_node_block_hash: Some("node-h3".to_string()),
+    };
+
+    let snapshot = sample_snapshot(3, Some("node-h3"));
+    let records = bridge_committed_heights(
+        &snapshot,
+        1_100,
+        &mut world,
+        &mut sandbox,
+        &store,
+        dir.join("records").as_path(),
+        &mut state,
+    )
+    .expect("bridge");
+
+    assert!(records.is_empty());
+    assert_eq!(state.last_applied_committed_height, 3);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_bridge_state_roundtrip() {
+    let dir = temp_dir("execution-bridge-state");
+    let state_path = dir.join("state.json");
+    let state = ExecutionBridgeState {
+        last_applied_committed_height: 9,
+        last_execution_block_hash: Some("exec-h9".to_string()),
+        last_execution_state_root: Some("exec-s9".to_string()),
+        last_node_block_hash: Some("node-h9".to_string()),
+    };
+
+    persist_execution_bridge_state(state_path.as_path(), &state).expect("persist");
+    let loaded = load_execution_bridge_state(state_path.as_path()).expect("load");
+    assert_eq!(loaded, state);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_bridge_record_legacy_payload_defaults_latest_state_ref() {
+    let legacy = serde_json::json!({
+        "world_id": "w1",
+        "height": 7,
+        "node_block_hash": "node-h7",
+        "execution_block_hash": "exec-h7",
+        "execution_state_root": "state-r7",
+        "journal_len": 3,
+        "snapshot_ref": "cas:snapshot-7",
+        "journal_ref": "cas:journal-7",
+        "timestamp_ms": 7000
+    });
+    let record: ExecutionBridgeRecord =
+        serde_json::from_value(legacy).expect("parse legacy execution bridge record");
+
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
+    assert_eq!(record.latest_state_ref.as_deref(), Some("cas:snapshot-7"));
+    assert_eq!(record.snapshot_ref.as_deref(), Some("cas:snapshot-7"));
+    assert_eq!(record.journal_ref.as_deref(), Some("cas:journal-7"));
+    assert!(record.commit_log_ref.is_none());
+    assert!(record.checkpoint_ref.is_none());
+    assert!(record.external_effect_ref.is_none());
+}
+
+#[test]
+fn persist_execution_bridge_record_only_migrates_legacy_record_to_v2() {
+    let dir = temp_dir("execution-bridge-legacy-migrate");
+    let records_dir = dir.join("records");
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+    let legacy = serde_json::json!({
+        "world_id": "w1",
+        "height": 7,
+        "node_block_hash": "node-h7",
+        "execution_block_hash": "exec-h7",
+        "execution_state_root": "state-r7",
+        "journal_len": 7,
+        "snapshot_ref": "cas:snapshot-7",
+        "journal_ref": "cas:journal-7",
+        "timestamp_ms": 7000
+    });
+    let legacy_bytes = serde_json::to_vec_pretty(&legacy).expect("serialize legacy record");
+    crate::write_bytes_atomic(
+        execution_bridge_record_path(records_dir.as_path(), 7).as_path(),
+        legacy_bytes.as_slice(),
+    )
+    .expect("persist legacy record");
+
+    let record = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 7).as_path(),
+    )
+    .expect("load legacy record");
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
+    persist_execution_bridge_record_only(records_dir.as_path(), &record)
+        .expect("rewrite legacy record as v2");
+
+    let migrated = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 7).as_path(),
+    )
+    .expect("load migrated record");
+    assert_eq!(migrated.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V2);
+    assert_eq!(migrated.latest_state_ref.as_deref(), Some("cas:snapshot-7"));
+    assert_eq!(migrated.snapshot_ref.as_deref(), Some("cas:snapshot-7"));
+    assert_eq!(migrated.journal_ref.as_deref(), Some("cas:journal-7"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_bridge_retention_maintenance_skips_aggressive_sweep_for_legacy_records() {
+    let dir = temp_dir("execution-bridge-legacy-safe-mode");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+
+    let snapshot_ref = store
+        .put_bytes(b"legacy-snapshot")
+        .expect("store legacy snapshot");
+    let journal_ref = store
+        .put_bytes(b"legacy-journal")
+        .expect("store legacy journal");
+    let legacy = serde_json::json!({
+        "world_id": "w1",
+        "height": 1,
+        "node_block_hash": "node-h1",
+        "execution_block_hash": "exec-h1",
+        "execution_state_root": "state-r1",
+        "journal_len": 1,
+        "snapshot_ref": snapshot_ref,
+        "journal_ref": journal_ref,
+        "timestamp_ms": 1000
+    });
+    let legacy_bytes = serde_json::to_vec_pretty(&legacy).expect("serialize legacy record");
+    crate::write_bytes_atomic(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+        legacy_bytes.as_slice(),
+    )
+    .expect("persist legacy record");
+    crate::write_bytes_atomic(
+        records_dir.join("latest.json").as_path(),
+        legacy_bytes.as_slice(),
+    )
+    .expect("persist legacy latest pointer");
+
+    let freed_bytes =
+        run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 1)
+            .expect("run retention maintenance");
+    assert_eq!(freed_bytes, 0);
+    let record = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+    )
+    .expect("load legacy record after maintenance");
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
+    assert!(record.snapshot_ref.is_some());
+    assert!(record.journal_ref.is_some());
+    assert!(store
+        .has(record.snapshot_ref.as_deref().expect("legacy snapshot ref"))
+        .expect("legacy snapshot still exists"));
+    assert!(store
+        .has(record.journal_ref.as_deref().expect("legacy journal ref"))
+        .expect("legacy journal still exists"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_checkpoint_manifest_roundtrip_updates_latest_pointer() {
+    let dir = temp_dir("execution-checkpoint-manifest");
+    let records_dir = dir.join("records");
+    let manifest = ExecutionCheckpointManifest::new(
+        "w1".to_string(),
+        12,
+        "exec-h12".to_string(),
+        "state-r12".to_string(),
+        "cas:snapshot-12".to_string(),
+        Some("cas:snapshot-12".to_string()),
+        Some("cas:journal-12".to_string()),
+        12_000,
+    )
+    .expect("build manifest");
+
+    persist_execution_checkpoint_manifest(records_dir.as_path(), &manifest)
+        .expect("persist manifest");
+    let loaded = load_execution_checkpoint_manifest(
+        execution_checkpoint_manifest_path(records_dir.as_path(), 12).as_path(),
+    )
+    .expect("load manifest");
+    let latest = load_latest_execution_checkpoint_manifest(records_dir.as_path())
+        .expect("load latest manifest")
+        .expect("latest manifest should exist");
+
+    assert_eq!(loaded, manifest);
+    assert_eq!(latest, manifest);
+    assert_eq!(
+        latest.pinned_refs,
+        vec!["cas:journal-12".to_string(), "cas:snapshot-12".to_string()]
+    );
+    assert!(execution_checkpoint_latest_path(records_dir.as_path()).exists());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_checkpoint_manifest_rejects_tampered_latest_pointer() {
+    let dir = temp_dir("execution-checkpoint-manifest-tamper");
+    let records_dir = dir.join("records");
+    let manifest = ExecutionCheckpointManifest::new(
+        "w1".to_string(),
+        4,
+        "exec-h4".to_string(),
+        "state-r4".to_string(),
+        "cas:snapshot-4".to_string(),
+        Some("cas:snapshot-4".to_string()),
+        Some("cas:journal-4".to_string()),
+        4_000,
+    )
+    .expect("build manifest");
+    persist_execution_checkpoint_manifest(records_dir.as_path(), &manifest)
+        .expect("persist manifest");
+
+    let latest_path = execution_checkpoint_latest_path(records_dir.as_path());
+    let mut latest_json: serde_json::Value = serde_json::from_slice(
+        fs::read(latest_path.as_path())
+            .expect("read latest pointer")
+            .as_slice(),
+    )
+    .expect("parse latest pointer");
+    latest_json["manifest_hash"] = serde_json::Value::String("tampered".to_string());
+    let latest_bytes =
+        serde_json::to_vec_pretty(&latest_json).expect("serialize tampered latest pointer");
+    crate::write_bytes_atomic(latest_path.as_path(), latest_bytes.as_slice())
+        .expect("persist tampered latest pointer");
+
+    let err = load_latest_execution_checkpoint_manifest(records_dir.as_path())
+        .expect_err("tampered latest pointer should fail");
+    assert!(
+        err.contains("hash mismatch"),
+        "unexpected latest pointer error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+fn persist_test_execution_record(
+    records_dir: &Path,
+    height: u64,
+    block_hash: &str,
+) -> ExecutionBridgeRecord {
+    let record = ExecutionBridgeRecord::new_v2(
+        "w1".to_string(),
+        height,
+        Some(format!("node-h{height}")),
+        block_hash.to_string(),
+        format!("state-r{height}"),
+        height as usize,
+        format!("cas:snapshot-{height}"),
+        format!("cas:journal-{height}"),
+        None,
+        None,
+        height as i64 * 1_000,
+    );
+    persist_execution_bridge_record(records_dir, &record)
+        .expect("persist test execution record");
+    record
+}
+
+fn persist_test_execution_record_with_store_refs(
+    records_dir: &Path,
+    store: &LocalCasStore,
+    height: u64,
+) -> ExecutionBridgeRecord {
+    let snapshot_ref = store
+        .put_bytes(format!("record-snapshot-{height}").as_bytes())
+        .expect("store snapshot");
+    let journal_ref = store
+        .put_bytes(format!("record-journal-{height}").as_bytes())
+        .expect("store journal");
+    let simulator_snapshot_ref = store
+        .put_bytes(format!("simulator-snapshot-{height}").as_bytes())
+        .expect("store simulator snapshot");
+    let simulator_journal_ref = store
+        .put_bytes(format!("simulator-journal-{height}").as_bytes())
+        .expect("store simulator journal");
+    let external_effect_ref =
+        persist_test_external_effect(store, "w1", height, format!("node-h{height}").as_str());
+    let record = ExecutionBridgeRecord {
+        latest_state_ref: Some(snapshot_ref.clone()),
+        snapshot_ref: Some(snapshot_ref),
+        journal_ref: Some(journal_ref),
+        external_effect_ref: Some(external_effect_ref),
+        simulator_mirror: Some(ExecutionSimulatorMirrorRecord {
+            action_count: height as usize,
+            rejected_action_count: 0,
+            journal_len: height as usize,
+            snapshot_ref: simulator_snapshot_ref,
+            journal_ref: simulator_journal_ref,
+            state_root: format!("simulator-state-{height}"),
+        }),
+        ..ExecutionBridgeRecord::new_v2(
+            "w1".to_string(),
+            height,
+            Some(format!("node-h{height}")),
+            format!("exec-h{height}"),
+            format!("state-root-{height}"),
+            height as usize,
+            "placeholder-snapshot".to_string(),
+            "placeholder-journal".to_string(),
+            None,
+            None,
+            height as i64 * 1_000,
+        )
+    };
+    persist_execution_bridge_record(records_dir, &record)
+        .expect("persist test execution record with store refs");
+    record
+}
+
+fn persist_test_external_effect(
+    store: &LocalCasStore,
+    world_id: &str,
+    height: u64,
+    node_block_hash: &str,
+) -> String {
+    let materialization = ExecutionExternalEffectMaterialization {
+        schema_version: EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1,
+        contract: EXECUTION_EXTERNAL_EFFECT_CONTRACT_CLOSED_WORLD_V1.to_string(),
+        world_id: world_id.to_string(),
+        node_id: "node-a".to_string(),
+        height,
+        slot: height.saturating_sub(1),
+        epoch: 0,
+        node_block_hash: node_block_hash.to_string(),
+        action_root: format!("action-root-{height}"),
+        committed_at_unix_ms: height as i64 * 1_000,
+        pre_step_execution_state_root: format!("pre-step-state-{height}"),
+        world_manifest_hash: format!("manifest-hash-{height}"),
+        active_modules_hash: execution_module_anchor_hash(&[]).expect("empty module hash"),
+        committed_actions_hash: execution_committed_actions_hash(&[])
+            .expect("empty actions hash"),
+        active_modules: Vec::new(),
+        committed_actions: Vec::new(),
+        unresolved_inputs: Vec::new(),
+    };
+    persist_execution_external_effect_materialization(store, &materialization)
+        .expect("persist test external effect")
+}

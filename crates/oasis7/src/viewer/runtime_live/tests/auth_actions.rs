@@ -1,0 +1,819 @@
+use super::*;
+
+#[test]
+fn runtime_agent_chat_script_mode_requires_llm_mode() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let err = server
+        .handle_agent_chat(crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: None,
+            intent_seq: None,
+        })
+        .expect_err("script mode should reject chat");
+    assert_eq!(err.code, "llm_mode_required");
+}
+
+#[test]
+fn runtime_gameplay_action_requires_auth() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let err = server
+        .handle_gameplay_action(crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id,
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        })
+        .expect_err("missing auth should fail");
+    assert_eq!(err.code, "auth_proof_required");
+}
+
+#[test]
+fn runtime_agent_chat_requires_explicit_session_registration() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(24);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: Some(1),
+            intent_seq: Some(2),
+        },
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_agent_chat(request)
+        .expect_err("session register should be required before agent chat");
+    assert_eq!(err.code, "session_not_found");
+}
+
+#[test]
+fn runtime_session_register_rejects_same_player_binding_to_second_agent() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_ids: Vec<_> = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .cloned()
+        .take(2)
+        .collect();
+    assert!(
+        agent_ids.len() >= 2,
+        "expected at least two agents in two_bases scenario"
+    );
+    let (public_key, private_key) = test_signer(25);
+
+    let first_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_ids[0].as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        first_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(first_ack.agent_id.as_deref(), Some(agent_ids[0].as_str()));
+
+    let conflict_request = signed_session_register_request(
+        crate::viewer::AuthoritativeSessionRegisterRequest {
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+            requested_agent_id: Some(agent_ids[1].clone()),
+            force_rebind: false,
+        },
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: conflict_request,
+        })
+        .expect_err("same player should not silently rebind to another agent");
+    assert_eq!(err.code, "player_bind_failed");
+    assert!(err.message.contains("explicit rebind required"));
+}
+
+#[test]
+fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_ids: Vec<_> = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .cloned()
+        .take(2)
+        .collect();
+    assert!(
+        agent_ids.len() >= 2,
+        "expected at least two agents in two_bases scenario"
+    );
+    let (public_key, private_key) = test_signer(26);
+
+    let first_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_ids[0].as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        first_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(first_ack.agent_id.as_deref(), Some(agent_ids[0].as_str()));
+
+    let second_ack = register_runtime_session_with_options(
+        &mut server,
+        "player-a",
+        Some(agent_ids[1].as_str()),
+        true,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        second_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(second_ack.agent_id.as_deref(), Some(agent_ids[1].as_str()));
+    assert_eq!(
+        server.llm_sidecar.bound_agent_for_player("player-a"),
+        Some(agent_ids[1].as_str())
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get(agent_ids[0].as_str()),
+        None
+    );
+}
+
+#[test]
+fn runtime_gameplay_action_can_reach_first_capability_milestone_without_ui() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(31);
+
+    let build_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id.clone(),
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        31,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        30,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let build_ack = server
+        .handle_gameplay_action(build_request)
+        .expect("queue smelter build");
+    assert_eq!(build_ack.action_id, "build_factory_smelter_mk1");
+    for _ in 0..2 {
+        server.world.step().expect("settle smelter build");
+    }
+    assert!(server.world.has_factory("factory.smelter.mk1"));
+
+    let recipe_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
+            target_agent_id: agent_id,
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        32,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let recipe_ack = server
+        .handle_gameplay_action(recipe_request)
+        .expect("queue iron ingot recipe");
+    assert_eq!(recipe_ack.action_id, "schedule_recipe_smelter_iron_ingot");
+    for _ in 0..4 {
+        server.world.step().expect("settle recipe");
+        if server.world.material_balance("iron_ingot") > 0 {
+            break;
+        }
+    }
+
+    assert!(server.world.material_balance("iron_ingot") > 0);
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .expect("player gameplay after industrial progress");
+    assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
+    assert_eq!(gameplay.progress_percent, 100);
+}
+
+#[test]
+fn runtime_agent_chat_openclaw_mode_reports_unsupported() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "openclaw_local_http");
+    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let err = server
+        .handle_agent_chat(crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: None,
+            intent_seq: None,
+        })
+        .expect_err("openclaw mode should reject chat");
+    assert_eq!(err.code, "agent_provider_chat_unsupported");
+    clear_runtime_openclaw_env();
+}
+
+#[test]
+fn runtime_agent_chat_replay_returns_idempotent_ack() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(21);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: Some(7),
+            intent_seq: Some(5),
+        },
+        5,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        4,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let first = server
+        .handle_agent_chat(request.clone())
+        .expect("first request accepted");
+    assert_eq!(first.intent_tick, Some(7));
+    assert_eq!(first.intent_seq, Some(5));
+    assert!(!first.idempotent_replay);
+
+    let replay = server
+        .handle_agent_chat(request)
+        .expect("replay request accepted");
+    assert_eq!(replay.agent_id, first.agent_id);
+    assert_eq!(replay.accepted_at_tick, first.accepted_at_tick);
+    assert_eq!(replay.message_len, first.message_len);
+    assert_eq!(replay.player_id, first.player_id);
+    assert_eq!(replay.intent_tick, first.intent_tick);
+    assert_eq!(replay.intent_seq, first.intent_seq);
+    assert!(replay.idempotent_replay);
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-a")
+            .copied(),
+        Some(5)
+    );
+}
+
+#[test]
+fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
+    let _guard = lock_test_llm_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(31);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello runtime echo".to_string(),
+            intent_tick: Some(9),
+            intent_seq: Some(31),
+        },
+        31,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        30,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+
+    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
+    assert!(events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "[qa-echo] hello runtime echo"
+    )));
+}
+
+#[test]
+fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
+    let _guard = lock_test_llm_env();
+    std::env::set_var(
+        removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
+        "1",
+    );
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(32);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello removed old brand runtime echo".to_string(),
+            intent_tick: Some(10),
+            intent_seq: Some(32),
+        },
+        32,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        31,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+
+    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
+    assert!(!events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "[qa-echo] hello removed old brand runtime echo"
+    )));
+}
+
+#[test]
+fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(22);
+    let first = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: Some(10),
+            intent_seq: Some(6),
+        },
+        6,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        5,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    server
+        .handle_agent_chat(first)
+        .expect("first request accepted");
+
+    let conflict = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "changed".to_string(),
+            intent_tick: Some(10),
+            intent_seq: Some(6),
+        },
+        6,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_agent_chat(conflict)
+        .expect_err("same seq with different payload must fail");
+    assert_eq!(err.code, "intent_seq_conflict");
+}
+
+#[test]
+fn runtime_agent_chat_rejects_intent_seq_nonce_mismatch() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(23);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: Some(3),
+            intent_seq: Some(8),
+        },
+        9,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        8,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let err = server
+        .handle_agent_chat(request)
+        .expect_err("intent seq mismatch should fail");
+    assert_eq!(err.code, "intent_seq_invalid");
+}
+
+#[test]
+fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_chat() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key_v1, private_key_v1) = test_signer(31);
+    let (public_key_v2, private_key_v2) = test_signer(32);
+
+    let first_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello".to_string(),
+            intent_tick: Some(1),
+            intent_seq: Some(2),
+        },
+        2,
+        public_key_v1.as_str(),
+        private_key_v1.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        1,
+        public_key_v1.as_str(),
+        private_key_v1.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(register_ack.agent_id.as_deref(), Some(agent_id.as_str()));
+    let _ = server
+        .handle_agent_chat(first_request)
+        .expect("first key should be accepted");
+
+    let (rotate_ack, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RotateSession {
+            request: AuthoritativeSessionRotateRequest {
+                player_id: "player-a".to_string(),
+                old_session_pubkey: public_key_v1.clone(),
+                new_session_pubkey: public_key_v2.clone(),
+                rotate_reason: "security_rotation".to_string(),
+                rotated_by: Some("ops".to_string()),
+            },
+        })
+        .expect("rotate session");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        rotate_ack.status,
+        AuthoritativeRecoveryStatus::SessionRotated
+    );
+    assert_eq!(
+        rotate_ack.session_pubkey.as_deref(),
+        Some(public_key_v1.as_str())
+    );
+    assert_eq!(
+        rotate_ack.replaced_by_pubkey.as_deref(),
+        Some(public_key_v2.as_str())
+    );
+
+    let stale_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "stale".to_string(),
+            intent_tick: Some(2),
+            intent_seq: Some(2),
+        },
+        2,
+        public_key_v1.as_str(),
+        private_key_v1.as_str(),
+    );
+    let stale_err = server
+        .handle_agent_chat(stale_request)
+        .expect_err("old key should be rejected after rotation");
+    assert_eq!(stale_err.code, "session_revoked");
+
+    let rotated_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "rotated".to_string(),
+            intent_tick: Some(3),
+            intent_seq: Some(1),
+        },
+        1,
+        public_key_v2.as_str(),
+        private_key_v2.as_str(),
+    );
+    let _ = server
+        .handle_agent_chat(rotated_request)
+        .expect("new key should be accepted");
+
+    let (revoke_ack, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: "player-a".to_string(),
+                session_pubkey: Some(public_key_v2.clone()),
+                revoke_reason: "compromised".to_string(),
+                revoked_by: Some("ops".to_string()),
+            },
+        })
+        .expect("revoke session");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        revoke_ack.status,
+        AuthoritativeRecoveryStatus::SessionRevoked
+    );
+    assert_eq!(revoke_ack.revoke_reason.as_deref(), Some("compromised"));
+    assert_eq!(revoke_ack.revoked_by.as_deref(), Some("ops"));
+
+    let revoked_reconnect_err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: "player-a".to_string(),
+                session_pubkey: Some(public_key_v2.clone()),
+                last_known_log_cursor: None,
+                expected_reorg_epoch: None,
+            },
+        })
+        .expect_err("reconnect should surface revoke metadata");
+    assert_eq!(revoked_reconnect_err.code, "session_revoked");
+    assert_eq!(
+        revoked_reconnect_err.revoke_reason.as_deref(),
+        Some("compromised")
+    );
+    assert_eq!(revoked_reconnect_err.revoked_by.as_deref(), Some("ops"));
+
+    let revoked_register_request = signed_session_register_request(
+        crate::viewer::AuthoritativeSessionRegisterRequest {
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+            requested_agent_id: Some(agent_id.clone()),
+            force_rebind: false,
+        },
+        5,
+        public_key_v2.as_str(),
+        private_key_v2.as_str(),
+    );
+    let revoked_register_err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: revoked_register_request,
+        })
+        .expect_err("register should surface revoke metadata");
+    assert_eq!(revoked_register_err.code, "session_revoked");
+    assert_eq!(
+        revoked_register_err.revoke_reason.as_deref(),
+        Some("compromised")
+    );
+    assert_eq!(revoked_register_err.revoked_by.as_deref(), Some("ops"));
+
+    let revoked_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id,
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "revoked".to_string(),
+            intent_tick: Some(4),
+            intent_seq: Some(2),
+        },
+        2,
+        public_key_v2.as_str(),
+        private_key_v2.as_str(),
+    );
+    let revoked_err = server
+        .handle_agent_chat(revoked_request)
+        .expect_err("revoked key should be rejected");
+    assert_eq!(revoked_err.code, "session_revoked");
+}

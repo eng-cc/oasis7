@@ -9,9 +9,12 @@ use oasis7::consensus_action_payload::{
 use oasis7::runtime::Action;
 use oasis7_node::NodeCommittedActionBatch;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::transfer_submit_api::{ChainTransferSubmitRequest, TransferLifecycleStatus};
+use explorer_p0_api_support::{build_tx_hash, lock_store};
+
+#[path = "explorer_p0_api_support.rs"]
+mod explorer_p0_api_support;
 
 const EXPLORER_ERROR_INVALID_REQUEST: &str = "invalid_request";
 const EXPLORER_ERROR_NOT_FOUND: &str = "not_found";
@@ -1181,37 +1184,7 @@ fn hex_value(raw: u8) -> Option<u8> {
     }
 }
 
-fn build_tx_hash(
-    action_id: u64,
-    from_account_id: &str,
-    to_account_id: &str,
-    amount: u64,
-    nonce: u64,
-) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(action_id.to_be_bytes());
-    hasher.update(from_account_id.as_bytes());
-    hasher.update([0]);
-    hasher.update(to_account_id.as_bytes());
-    hasher.update([0]);
-    hasher.update(amount.to_be_bytes());
-    hasher.update(nonce.to_be_bytes());
-    format!("0x{:x}", hasher.finalize())
-}
-
-fn lock_store() -> std::sync::MutexGuard<'static, ExplorerStore> {
-    EXPLORER_STORE
-        .get_or_init(|| Mutex::new(ExplorerStore::default()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 #[cfg(test)]
 pub(super) fn reset_store_for_tests() {
-    let mut store = lock_store();
-    store.persistence_path = None;
-    store.loaded = false;
-    store.blocks_by_height.clear();
-    store.txs_by_hash.clear();
-    store.tx_hash_by_action_id.clear();
+    explorer_p0_api_support::reset_store_for_tests();
 }

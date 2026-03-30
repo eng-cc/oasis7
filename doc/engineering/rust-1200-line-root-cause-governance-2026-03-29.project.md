@@ -9,10 +9,10 @@
 - [x] TASK-ENGINEERING-051 (PRD-ENGINEERING-R1200-001/002/005) [test_tier_required]: 产出 Rust 1200 行根治治理专题 `prd/design/project`，并同步回写 engineering 模块入口、索引与 devlog。
 - [x] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
 - [x] TASK-ENGINEERING-053 (PRD-ENGINEERING-R1200-002/003) [test_tier_required]: 在门禁中增加 `touch-and-shrink` 与 `split_part/include!` 完成态阻断规则。
-- [ ] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理，优先处理 `oasis7_chain_runtime.rs` 与 `execution_bridge.rs`。
-- [ ] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理，并补齐对应 live / Web 验证链路。
-- [ ] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批治理，优先处理 `egui_right_panel_player_guide.rs`、`web_test_api.rs` 与相关 automation/UI 混装文件。
-- [ ] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略，冻结残余测试尾债并建立下一批 burn-down 清单。
+- [x] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理，优先处理 `oasis7_chain_runtime.rs` 与 `execution_bridge.rs`。
+- [x] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理，并补齐对应 live / Web 验证链路。
+- [x] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批治理，并继续清理 runtime / launcher 余量；本轮门禁已将生产 Rust 超限文件清零。
+- [x] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略，冻结残余 13 个测试尾债并建立下一批 burn-down 清单。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -32,15 +32,15 @@
 - Batch B/C/D (`TASK-ENGINEERING-054~057`) 依赖 `TASK-ENGINEERING-052/053` 先把门禁、基线与完成态建立起来。
 
 ## 状态
-- 更新日期: 2026-03-29
-- 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-053` 已完成；`TASK-ENGINEERING-054` 为 next task。
+- 更新日期: 2026-03-30
+- 当前阶段: verified
+- 当前任务: `TASK-ENGINEERING-056` / `TASK-ENGINEERING-057` 已完成；`scripts/check-rust-file-size.sh` 当前结果为 `oversized code files=0, test files=13`。
 - 阻塞项:
-  - 现有仓库仍有 31 个生产 Rust 文件和 14 个测试 Rust 文件超过 1200 行，若不先冻结基线与门禁，后续任何重构都可能继续回弹。
-  - `runtime_live` / `chain_runtime` / `viewer` 三个高风险域缺少统一目标目录边界，直接并行改代码会高概率冲突。
+  - `crates/oasis7_viewer` 的 `--tests` 编译链路仍有独立测试债：`tests_selection_details.rs` 中 `AgentClaimState` 初始化缺少新字段；该问题不属于本轮 1200 行生产文件治理阻断项。
 - 最新完成:
-  - `TASK-ENGINEERING-051`：建立 1200 行根治治理专题三件套，并同步回写 engineering 入口、索引和 devlog。
-  - `TASK-ENGINEERING-052`：新增 Rust 文件体量检查脚本、冻结 `rust-oversized-file-baseline.tsv`，并接入 `scripts/ci-tests.sh required`。
-  - `TASK-ENGINEERING-053`：在同一门禁脚本中补齐 `touch-and-shrink`、`rust-structural-slicing-baseline.tsv` 与 `split_part/include!` 完成态阻断规则。
+  - `TASK-ENGINEERING-054`：`oasis7_chain_runtime.rs` 拆出 `cli.rs`，`execution_bridge.rs` 迁移为目录模块，门禁基线已退休旧入口超限项。
+  - `TASK-ENGINEERING-055`：`viewer/runtime_live.rs` 与测试集拆为目录模块；同时把 `runtime/events.rs`、`state.rs`、`apply_domain_event_*`、`world/event_processing.rs` 压回 1200 行内，清零本批新增 runtime 超限。
+  - `TASK-ENGINEERING-056`：`oasis7_viewer` 首批治理与本轮 runtime / launcher 收尾已完成，退役了 `egui_right_panel_player_guide.rs`、`web_test_api.rs`、`viewer_automation.rs` 以及 `oasis7_openclaw_parity_bench.rs`、`oasis7_pure_api_client.rs`、`oasis7_openclaw_local_bridge.rs`、`oasis7_web_launcher/control_plane.rs`、`runtime/world/persistence.rs`、`viewer/live_split_part1.rs`、`runtime/world/governance.rs`、`runtime/world/module_actions_impl_part2.rs` 的生产超限基线。
+  - `TASK-ENGINEERING-057`：`rust-oversized-file-baseline.tsv` 已刷新为只保留 13 个测试尾债；`module_actions_impl_part2` 新增 `release_support.rs`，`governance_internal.rs` 已放宽必要 helper 可见性，相关 `cargo check` 与尺寸门禁已通过。
 - 下一步:
-  - 先执行 `TASK-ENGINEERING-054`，开始 `chain_runtime` 首批目录模块化治理，并用新门禁持续压降超限基线。
+  - 下一批 burn-down 以冻结测试尾债为唯一输入，优先顺序如下：`crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api_tests.rs`、`crates/oasis7/src/runtime/tests/economy.rs`、`crates/oasis7/src/runtime/tests/economy_priority_logistics.rs`、`crates/oasis7/src/runtime/tests/gameplay_protocol_split_part1.rs`、`crates/oasis7/src/runtime/tests/module_action_loop_split_part1.rs`、`crates/oasis7/src/runtime/tests/module_action_loop_split_part3.rs`、`crates/oasis7/src/runtime/tests/persistence.rs`、`crates/oasis7/src/viewer/live/tests.rs`、`crates/oasis7_client_launcher/src/main_tests.rs`、`crates/oasis7_node/src/tests_action_payload.rs`、`crates/oasis7_node/src/tests_split_part1.rs`、`crates/oasis7_node/src/tests_split_part2.rs`、`crates/oasis7_viewer/src/egui_right_panel_tests.rs`。
