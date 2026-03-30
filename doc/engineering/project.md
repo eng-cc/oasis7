@@ -81,6 +81,7 @@
 - [x] TASK-ENGINEERING-069 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `scripts` 入口映射治理，为工具模块 README 增加 task-worktree / landing / harness 的轻量入口与索引边界说明。
 - [x] TASK-ENGINEERING-070 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `game` 入口分流治理，为玩法模块 README 增加轻量阅读顺序，并明确 README 与 `prd.index.md` / 高频专题之间的职责边界。
 - [x] TASK-ENGINEERING-071 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `playability_test_result` 入口分流治理，为证据模块 README 增加 evidence-first 阅读顺序，并明确 README 与 `topics/` / `evidence/` / `prd.index.md` 的职责边界。
+- [x] TASK-ENGINEERING-072 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口分流治理，为命名迁移模块 README 增加轻量阅读顺序，并明确 README 与 `nonviewer/` / `checklists/` / `templates/` / `prd.index.md` 的职责边界。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -138,6 +139,7 @@
 - 最新完成: `TASK-ENGINEERING-069`（已为 `scripts` README 增加 task-worktree bootstrap / landing / harness 的轻量入口，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
 - 最新完成: `TASK-ENGINEERING-070`（已为 `game` README 增加轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 专题的阅读顺序，避免 README 继续膨胀成第二份专题索引。）
 - 最新完成: `TASK-ENGINEERING-071`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代详细证据目录。）
+- 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。

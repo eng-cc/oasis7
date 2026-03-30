@@ -24,7 +24,7 @@
 - 审查/治理时间窗: `2026-03-30`
 - owner role: `producer_system_designer`
 - 协作角色: `qa_engineer`（证据/测试模块入口复核）
-- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，`world-runtime`、`p2p`、`scripts`、`game` 与 `playability_test_result` 已完成；后续按“headless-runtime -> QA 复审”继续治理。
+- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，6 个对象均已完成入口回写；下一步进入 `qa_engineer` 复审与 ROUND-010 关轮。
 
 状态判定：
 - `not_started`: 仅记录轮次意图，尚未冻结范围与问题域。
@@ -83,9 +83,9 @@
 | A10-001 | 建立 ROUND-010 台账、focused scope 清单、kickoff worklist 与进度日志 | `producer_system_designer` | 2026-03-30 | `test -f doc/core/reviews/consistency-review-round-010.md && test -f doc/core/reviews/round-010-reviewed-files.md && test -f doc/core/reviews/round-010-kickoff-worklist.md && test -f doc/core/reviews/round-010-audit-progress-log.md` | done |
 | A10-002 | 冻结 ROUND-010 focused scope、问题池与批次口径 | `producer_system_designer` | 2026-03-30 | `rg -n "ROUND-010|focused scope|I10-|G10-" doc/core/reviews/consistency-review-round-010.md` | done |
 | A10-003 | 先完成 `world-runtime` 入口治理，验证 ROUND-010 的首片模式 | `producer_system_designer` | 待定 | `./scripts/doc-governance-check.sh` | done |
-| A10-004 | 完成剩余模块 README 的 `aligned/deferred` 决议 | 对应 owner | 待定 | `./scripts/doc-governance-check.sh` | pending |
+| A10-004 | 完成剩余模块 README 的 `aligned/deferred` 决议 | 对应 owner | 待定 | `./scripts/doc-governance-check.sh` | done |
 | A10-005 | ROUND-010 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | pending |
 
 ## 复审结果
 - 当前结论: `in_progress`
-- 备注: ROUND-010 已完成 `world-runtime / p2p / scripts / game / playability_test_result` 五片收口；剩余 `headless-runtime` 与最终 `qa_engineer` 复审。
+- 备注: ROUND-010 的 6 个 focused scope README 已全部完成 `aligned/deferred` 判定；剩余最终 `qa_engineer` 复审与关轮。

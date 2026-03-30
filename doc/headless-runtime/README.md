@@ -1,6 +1,6 @@
 # headless-runtime 文档索引（原 nonviewer）
 
-审计轮次: 6
+审计轮次: 10
 
 ## 说明
 - 模块目录已从旧名称 `nonviewer` 重命名为 `headless-runtime`。
@@ -12,6 +12,13 @@
 - 设计总览: `doc/headless-runtime/design.md`
 - 标准执行入口: `doc/headless-runtime/project.md`
 - 文件级索引: `doc/headless-runtime/prd.index.md`
+
+## 从这里开始
+- 想先确认 headless-runtime 当前职责、生命周期边界与发布接口：先读 `doc/headless-runtime/prd.md`。
+- 想看这个模块还有没有活跃执行项、最近一次收口了什么：先读 `doc/headless-runtime/project.md`。
+- 想理解旧 `nonviewer` 命名为什么还保留在专题文件里：先读上面的“说明”，再进入 `doc/headless-runtime/nonviewer/`。
+- 想查生命周期 / 鉴权一致性自检入口：先读 `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`。
+- 想查长稳归档、事故追溯或 release gate 对接模板：进入 `doc/headless-runtime/templates/`。
 
 ## 模块职责
 - 维护无界面运行链路的生命周期、鉴权与长稳追溯口径。
@@ -37,3 +44,4 @@
 - 无界面运行链路行为变更，优先回写 `prd.md` 与 `project.md`。
 - 历史专题文件名可保留 `nonviewer-*`，但新文档优先使用 `headless-runtime-*` 前缀。
 - 新增专题后，需同步回写 `doc/headless-runtime/prd.index.md` 与本目录索引。
+- README 负责解释命名迁移与入口顺序，不替代 `nonviewer/`、`checklists/`、`templates/` 或 `prd.index.md` 的详细内容。
