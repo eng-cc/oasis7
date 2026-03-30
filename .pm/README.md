@@ -32,7 +32,15 @@
 当前已落地的 Phase 2 基础链路：
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
 - `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/TASK-PM-*.yaml`，并同步更新 task registry 与 owner 的 `backlog/candidate.yaml`。
+- `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
+- `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
+- `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type devlog --source-ref doc/devlog/2026-03-30.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
 - `./scripts/pm/promote-signal.sh --source-type incident --source-ref doc/devlog/2026-03-30.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+
+状态迁移基础用法：
+- `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status committed`
+- `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status deferred`
+- `./scripts/pm/supersede-memory.sh --role qa_engineer --memory-id MEM-QA-0001 --superseded-by MEM-QA-0002 --supersede-reason signature_refined`

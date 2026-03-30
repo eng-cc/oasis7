@@ -27,12 +27,13 @@
 - 当前任务: `TASK-ENGINEERING-081`
 - 阻塞项:
   - `signal inbox` 与 `candidate task` promotion 已落地，但 memory 仍无法从 signal 做真实提升。
-  - memory 样例记录、promotion/supersede 脚本与 lint/report 仍未建档。
+  - `supersede-memory` 与 `memory-lint` 已通过 `TASK-ENGINEERING-077` 先行落地，但 memory 样例记录、`promote-memory` 与 `memory-report` 仍未建档。
 - 最新完成:
+  - `TASK-ENGINEERING-077`：已在 `self-evolution` 主专题先行落地 `supersede-memory.sh`、`memory-lint.sh` 与 role/shared memory 基础 lint 规则，后续长期 memory 子专题可在此基础上继续补样例、promotion 和 report。
   - `TASK-ENGINEERING-076`：已落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路，后续 memory promotion 可直接复用 signal inbox 作为输入层。
   - `TASK-ENGINEERING-075`：已建立 `.pm` 基础骨架，并为 7 个标准角色生成 `memory/{active,superseded}.yaml` 容器，长期 memory 后续任务可直接在仓库内演进。
   - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与 devlog。
 - 下一步:
-  - 先跟随 `TASK-ENGINEERING-075` 建立 `.pm` 基础骨架；
-  - 再执行 `TASK-ENGINEERING-081/082`，收口 memory 模板与 promotion/supersede 规则；
+  - 先执行 `TASK-ENGINEERING-081`，补齐 `producer_system_designer`、`qa_engineer`、`liveops_community` 首批 memory 样例；
+  - 再执行 `TASK-ENGINEERING-082`，收口 `promote-memory` 契约与 promotion_reason 白名单；
   - 最后执行 `TASK-ENGINEERING-083`，跑通 lint/report 和扩容验证。
