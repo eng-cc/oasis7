@@ -235,6 +235,7 @@
     - `rg -n "oasis7_(consensus|distfs|node|proto)|crates/oasis7/" doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.* doc/p2p/blockchain/production-grade-blockchain-p2pfs-phaseb-consensus-execution.* doc/p2p/blockchain/production-grade-blockchain-p2pfs-phasec-distfs-proof-network.project.md doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.* doc/p2p/blockchain/blockchain-p2pfs-hardening-phase3.* doc/p2p/blockchain/blockchain-p2pfs-hardening-phase4.project.md doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.project.md doc/p2p/blockchain/blockchain-p2pfs-hardening-phase6.project.md doc/p2p/blockchain/blockchain-p2pfs-hardening-phase7.project.md doc/p2p/blockchain/blockchain-p2pfs-hardening-phase8.project.md doc/p2p/blockchain/p2p-blockchain-security-hardening-2026-02-23.prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-P2P-038 (PRD-P2P-001) [test_tier_required]: 执行 ROUND-010 `p2p` 模块入口分流治理，明确 README、`prd.index.md` 与主链安全 / hosted world / token-governance signer 高频专题的阅读边界。
 - [x] TASK-P2P-027 (PRD-P2P-001/004) [test_tier_required]: 收口 `node/consensus` 活跃专题中仍把旧 `oasis7*` crate/path 写成当前实现载体的口径，统一到 `oasis7*`。
   - 产物文件:
     - `doc/p2p/node/node-net-stack-unification-readme.prd.md`
@@ -426,6 +427,7 @@
 - 最新完成: `TASK-P2P-040`（已完成 `RTMIN-4A` short-window follow-up：`shared-devnet-20260324-06` 已在 candidate `shared-devnet-20260324-05` 上留下真实 S9/S10 evidence，shared-devnet 剩余 blocker 现仅为 `shared_access` 与 `rollback_target_ready`。）
 - 最新完成: `TASK-P2P-038`（已完成 mainnet/public claims policy 复评专题建档，正式冻结当前只允许 `limited playable technical preview` + `crypto-hardened preview`，并把 `mainnet-grade`、`production mint ready` 等口径放入 denylist。）
 - 最新完成: `TASK-P2P-039`（已完成主流公链测试体系对标专题建档，正式把 oasis7 当前 testing foundations、真实 drill 缺口、`fuzz/property` 缺口与 `shared network/release train` 缺口纳入统一矩阵。）
+- 最新完成: `TASK-P2P-038`（已为 `p2p/README.md` 增加任务导向入口，并明确 README、长表索引与主链安全 / hosted world / token-governance signer 高频专题的阅读边界。）
 - 最新完成: `TASK-P2P-037`（已完成创世 freeze / ceremony / QA gate 专题建档，正式把 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding`、`ready_pending_address_binding` 与 QA 非 `pass` 结论全部冻结为 mint-ready blocker。）
 - 最新完成: `TASK-P2P-036`（已完成治理 signer 外部化与轮换门禁专题建档，正式把 deterministic local seed 与 `NodeConfig` 本地 controller signer policy 定义为 preview/local 真值，并冻结 externalized source-of-truth、failover/rotation/revocation/operator ownership gate。）
 - 最新完成: `TASK-P2P-035`（已完成生产级 signer custody / keystore 基线专题建档，正式把 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 定义为 preview-only signer path，并冻结 rotation/revocation/audit/environment policy gate。）

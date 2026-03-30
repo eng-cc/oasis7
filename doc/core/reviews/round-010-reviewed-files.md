@@ -29,7 +29,7 @@
 | 文档路径 | 当前角色 | 关注点 | 建议动作 | 优先级 | owner role | 当前状态 | 问题编号 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `doc/world-runtime/README.md` | 高体量 runtime 模块入口 | 是否需要补“先读哪里”与长表索引边界 | split | P0 | `producer_system_designer` | aligned | I10-001 | 已补“从这里开始”与入口分工，明确 README / `prd.index.md` / 高频 runtime/wasm/module 专题的阅读边界 |
-| `doc/p2p/README.md` | 高体量网络模块入口 | 是否需要补任务导向起点与高频主题分流 | split | P1 | `producer_system_designer` | scoped | I10-001 | 主题层较多，可能与 `world-runtime` 采用相似收口方式 |
+| `doc/p2p/README.md` | 高体量网络模块入口 | 是否需要补任务导向起点与高频主题分流 | split | P1 | `producer_system_designer` | aligned | I10-001 | 已补任务导向入口，并明确 README / `prd.index.md` / 主链安全 / hosted world / token-governance signer 高频专题的阅读边界 |
 | `doc/scripts/README.md` | 工具模块入口 | 是否要补读者角色与“先用哪个脚本入口” | keep | P1 | `producer_system_designer` | scoped | I10-002 | 当前入口已较工程化，先复核是否只需轻量映射 |
 | `doc/game/README.md` | 玩法模块入口 | 是否需要补产品目标 / 玩法 / 发布口径的阅读顺序 | keep | P1 | `producer_system_designer` | scoped | I10-003 | 当前近期专题较密集，需确认是否有必要再加入口层 |
 | `doc/playability_test_result/README.md` | 证据模块入口 | 是否需明确“证据使用者优先”而非新读者 landing | keep | P1 | `qa_engineer` | scoped | I10-003 | 先确认是否维持 QA/追溯导向即可 |

@@ -1,12 +1,27 @@
 # p2p 文档索引
 
-审计轮次: 12
+审计轮次: 10
+
+## 从这里开始
+- 想先理解 P2P / 主链 / DistFS / 节点奖励的总边界：`doc/p2p/prd.md`
+- 想看当前活跃任务、阻断与最新完成项：`doc/p2p/project.md`
+- 想按专题文件名精确查某个 blockchain / token / node / distfs 文档：`doc/p2p/prd.index.md`
+- 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
+- 想先看 hosted world 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+- 想先看 Token 分配 / 治理签名 / 生产 signer 外部化：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 
 ## 入口
 - PRD: `doc/p2p/prd.md`
 - 设计总览: `doc/p2p/design.md`
 - 标准执行入口: `doc/p2p/project.md`
 - 文件级索引: `doc/p2p/prd.index.md`
+
+## 入口分工
+- `README.md` 只承担 landing page 职责：帮助读者先选“总边界 / 当前执行 / 精确索引 / 高频专题”中的正确入口。
+- `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted world 的统一边界。
+- `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted world 相关任务的推进状态。
+- `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
+- 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-hosted-world-player-access-and-session-auth` 负责玩家接入与会话鉴权；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
 ## 模块职责
 - 维护 P2P、共识、DistFS、节点奖励与网络桥接等核心链路口径。
@@ -52,3 +67,4 @@
 - 新文档按主题目录落位，不再默认平铺在模块根目录。
 - 模块行为、默认参数或跨模块分布式口径变化时，需同步更新 `prd.md` 与 `project.md`。
 - 新增专题后，需同步回写 `doc/p2p/prd.index.md` 与本目录索引。
+- 若主链安全、hosted world 或 token/governance signer 的高频入口变化，需同步回写本目录“从这里开始”，避免 README 重新退化成长表前置页。
