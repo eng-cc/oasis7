@@ -11,7 +11,9 @@
 - Related Project: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
 - Runtime Dependencies:
   - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
+  - `crates/oasis7/src/runtime/world/event_processing/action_to_event_policy_contract.rs`
   - `crates/oasis7/src/runtime/state/apply_domain_event_main_token.rs`
+  - `crates/oasis7/src/runtime/world/governance.rs`
   - `crates/oasis7/src/runtime/tests/agent_claims.rs`
 
 ## 1. 目的
@@ -23,6 +25,7 @@
 - 发放动作只能走 `IssueRestrictedStarterClaimGrant`，撤销动作只能走 `RevokeRestrictedStarterClaimGrant`；不要再用手工余额注入去替代正式发放。
 - runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
 - runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
+- 若 `liveops` 尚未在 admin registry 中，必须先由已通过的 governance proposal proposer 执行 `UpdateRestrictedStarterClaimAdminRegistry` 把 `liveops` 加入 allowlist；runbook 本身不能替代这一步正式治理动作。
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
 - 撤销必须由同一 `issuer_id` 发起；如果发放时 `issuer_id` 写错，后续只能用同一个错误值去 revoke，因此发放前必须双人复核字段。
@@ -86,6 +89,7 @@
 1. 确认申请属于 `preview_allowlist`、`qa_seed`、`liveops_campaign` 三类之一。
 2. 确认本次发放统一使用 `issuer_id = liveops`。
 3. 确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
+   若未登记，先走 passed governance proposal 对应的 `UpdateRestrictedStarterClaimAdminRegistry`，不要回退到离线 import 或手工改 world 文件。
 4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
 5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
 6. 确认 `expires_at_epoch` 覆盖完整窗口，不会在正常使用中途提前终态。
@@ -108,6 +112,7 @@
 - event 内 `source_treasury_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL`
 - beneficiary 的 restricted balance 与 issue amount 一致
 - treasury 对应 bucket 按同额扣减
+- 若本次先做过 admin registry 热更新，再额外确认 journal 中已存在 `RestrictedStarterClaimAdminRegistryUpdated` governance event，且 `next_admin_account_ids` 含 `liveops`
 
 ## 8. 到期与巡检
 - `preview_allowlist` 与 `liveops_campaign` 至少在到期前 `1` 个运营检查窗口做一次预检。

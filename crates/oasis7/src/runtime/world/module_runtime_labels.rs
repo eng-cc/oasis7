@@ -234,6 +234,9 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::ResolveCrisis { .. } => "action.gameplay.resolve_crisis",
         Action::GrantMetaProgress { .. } => "action.gameplay.grant_meta_progress",
         Action::UpdateGameplayPolicy { .. } => "action.gameplay.update_policy",
+        Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
+            "action.governance.update_restricted_claim_admin_registry"
+        }
         Action::OpenEconomicContract { .. } => "action.gameplay.open_economic_contract",
         Action::AcceptEconomicContract { .. } => "action.gameplay.accept_economic_contract",
         Action::SettleEconomicContract { .. } => "action.gameplay.settle_economic_contract",

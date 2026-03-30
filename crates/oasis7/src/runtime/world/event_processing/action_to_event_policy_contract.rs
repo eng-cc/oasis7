@@ -116,6 +116,74 @@ impl World {
                     forbidden_location_ids: normalized_forbidden_location_ids.into_iter().collect(),
                 }))
             }
+            Action::UpdateRestrictedStarterClaimAdminRegistry {
+                operator_agent_id,
+                proposal_key,
+                next_admin_account_ids,
+            } => {
+                if let Err(err) = self.validate_policy_execution_governance_authorization(
+                    operator_agent_id.as_str(),
+                    proposal_key.as_str(),
+                ) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: match err {
+                            WorldError::AgentNotFound { agent_id } => {
+                                RejectReason::AgentNotFound { agent_id }
+                            }
+                            other => RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "update restricted claim admin registry rejected: {other:?}"
+                                )],
+                            },
+                        },
+                    }));
+                }
+                let Some(current_registry) = self.governance_main_token_controller_registry() else {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "update restricted claim admin registry rejected: main token controller registry is not configured"
+                                    .to_string(),
+                            ],
+                        },
+                    }));
+                };
+                let next_admin_account_ids = next_admin_account_ids
+                    .iter()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .map(ToString::to_string)
+                    .collect::<BTreeSet<String>>();
+                let mut next_registry = current_registry.clone();
+                next_registry.restricted_starter_claim_admin_account_ids =
+                    next_admin_account_ids.clone();
+                if let Err(err) =
+                    Self::validate_governance_main_token_controller_registry(next_registry)
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "update restricted claim admin registry rejected: {err:?}"
+                            )],
+                        },
+                    }));
+                }
+                Ok(WorldEventBody::Governance(
+                    GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
+                        operator_agent_id: operator_agent_id.clone(),
+                        proposal_key: proposal_key.trim().to_string(),
+                        previous_admin_account_ids: current_registry
+                            .restricted_starter_claim_admin_account_ids
+                            .iter()
+                            .cloned()
+                            .collect(),
+                        next_admin_account_ids: next_admin_account_ids.into_iter().collect(),
+                    },
+                ))
+            }
             Action::OpenEconomicContract {
                 creator_agent_id,
                 contract_id,

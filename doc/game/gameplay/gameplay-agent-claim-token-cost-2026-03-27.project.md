@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 9
+审计轮次: 10
 
 ## 任务拆解
 
@@ -21,6 +21,7 @@
 - [x] TASK-GAMEPLAY-AGC-012 (`PRD-GAME-011`) [test_tier_required]: `liveops_community` 已建立 restricted grant 的运营发放口径与回收 runbook，冻结 `allowlist / qa_seed / liveops_campaign` 的 issuer 边界、过期策略、撤销条件与 incident fallback；v1 统一使用 `issuer_id=liveops`，并把 `issuance_reason` 收口到三类允许值。
 - [x] TASK-GAMEPLAY-AGC-013 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted grant lifecycle / audit matrix，验证 issuance metadata、expiry/revoke、source-sink 审计与 transfer non-bypass 全部闭环；专题 evidence 已收口到 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`。
 - [x] TASK-GAMEPLAY-AGC-014 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已在 `governance_main_token_controller_registry` 增加正式 `restricted starter claim admin registry`，要求 admin account 必须绑定现有 signer allowlist policy，并在 `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 进入 grant 状态机前直接拒绝 registry 缺失或非 admin issuer。
+- [x] TASK-GAMEPLAY-AGC-015 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已新增 `UpdateRestrictedStarterClaimAdminRegistry` runtime governance action，使 restricted grant admin roster 可在 world 运行中由 passed governance proposal 正式热更新，并保持 signer allowlist policy 校验、governance event 审计和“先授权 admin 再发 grant”的闭环。
 
 ## 依赖
 
@@ -53,6 +54,8 @@
   - `TASK-GAMEPLAY-AGC-013` 已新增 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`，并以 fresh required/full 复跑确认：issue metadata、expiry/revoke、ecosystem treasury source-sink、grant 终态后的 restricted refund sink redirect、viewer compat 与 transfer/explorer non-bypass 全部 `pass`；因此 `PRD-GAME-011` 的 restricted grant blocker 已正式解除。
   - `TASK-GAMEPLAY-AGC-014` 已在 `crates/oasis7/src/runtime/governance.rs` / `world/governance.rs` 为 `governance_main_token_controller_registry` 增加 `restricted_starter_claim_admin_account_ids`，并要求每个 admin account 都能命中既有 `controller_signer_policies`；`IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 现在会先检查 registry 是否存在、admin allowlist 是否非空、`issuer_account_id` 是否在 allowlist 内，再决定是否进入 grant / treasury / beneficiary 校验。
   - `TASK-GAMEPLAY-AGC-014` 已在 `crates/oasis7/src/runtime/tests/agent_claims.rs` / `crates/oasis7/src/runtime/tests/governance.rs` 补齐定向回归，覆盖 `registry missing`、`non-admin issuer`、`allowlisted admin pass` 与 `revoke non-admin early reject`；这次变更把 `issuer_id=liveops` 从 runbook 约定升级成 runtime 正式门禁，而不是继续接受任意自由文本 issuer 进入 grant action。
+  - `TASK-GAMEPLAY-AGC-015` 已在 `crates/oasis7/src/runtime/events.rs`、`world/event_processing/action_to_event_policy_contract.rs`、`world/governance.rs` 新增 `UpdateRestrictedStarterClaimAdminRegistry` -> `GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated` 的运行时治理链路：只有 passed proposal 的 proposer 才能更新 restricted admin allowlist，且更新结果仍必须通过既有 controller signer allowlist policy 校验；当 controller registry 尚未 bootstrap、proposal 不存在/未通过、或目标 admin 没有 signer policy 时，action 会在 apply 前直接拒绝。
+  - `TASK-GAMEPLAY-AGC-015` 已在 `crates/oasis7/src/runtime/tests/governance.rs` 补齐 proposal gate、policy gate 与 governance event apply 回归，并在 `crates/oasis7/src/runtime/tests/agent_claims.rs` 增加“先用 governance action 启用 liveops admin，再成功 issue restricted grant”的闭环测试，确认 admin registry 不再只能依赖离线 import / 启动注入。
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，本轮 producer review 结论为先不因 restricted starter balance 额外改价，后续仅在 lifecycle/liveops 真实数据出现异常时再新开调参专题。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：
@@ -87,12 +90,16 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime::tests::agent_claims::restricted_grant_revoke_rejects_non_admin_before_issuer_match_checks -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required runtime::tests::agent_claims:: -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required runtime::tests::governance:: -- --nocapture`
+  - 本轮 runtime admin registry update required/full 验证已覆盖：
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --lib`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime::tests::governance::update_restricted_claim_admin_registry_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime::tests::agent_claims::governance_action_can_enable_restricted_grant_admin_before_issue -- --nocapture`
 - 阻断条件:
   - 若 runtime 无法保证同一 agent 的单 owner 原子性，则 claim 功能不得进入实现态。
   - 若 restricted starter balance 能通过普通转账、slot-2/3 claim 或 explorer 总额误读洗成可转账资产，则不得合入。
   - 若 viewer / pure API 无法给出 canonical claim 成本、funding source 与倒计时，则不得宣称 claim 机制可正式使用。
   - 若经济审计无法覆盖 activation fee、upkeep、refund/slash 与 restricted grant，则不得合入。
-  - 当前专题已无活跃 blocker；若后续真实运行信号显示 grant source-sink、expiry/revoke、transfer non-bypass 或 admin registry drift 出现偏差，必须重新打开 `PRD-GAME-011`。
+  - 当前专题已无活跃 blocker；若后续真实运行信号显示 grant source-sink、expiry/revoke、transfer non-bypass、admin registry drift 或 runtime registry update proposal flow 出现偏差，必须重新打开 `PRD-GAME-011`。
 - 说明:
   - 本专题是 gameplay 规则与经济边界，不是现实货币付费系统。
   - v1 默认不拍死绝对价格，只先冻结结构、状态机与不可突破的边界。

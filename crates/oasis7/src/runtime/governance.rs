@@ -345,6 +345,12 @@ pub enum GovernanceEvent {
         accepted: bool,
         reason: String,
     },
+    RestrictedStarterClaimAdminRegistryUpdated {
+        operator_agent_id: String,
+        proposal_key: String,
+        previous_admin_account_ids: Vec<String>,
+        next_admin_account_ids: Vec<String>,
+    },
 }
 
 /// Schedule entry for agent activation.

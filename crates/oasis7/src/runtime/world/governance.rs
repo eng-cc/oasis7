@@ -903,7 +903,7 @@ impl World {
         Ok(policy)
     }
 
-    fn validate_governance_main_token_controller_registry(
+    pub(super) fn validate_governance_main_token_controller_registry(
         mut registry: GovernanceMainTokenControllerRegistry,
     ) -> Result<GovernanceMainTokenControllerRegistry, WorldError> {
         registry.genesis_controller_account_id =
@@ -1658,6 +1658,49 @@ impl World {
                     profile.status = identity_status_before;
                 }
                 profile.updated_at = self.state.time;
+            }
+            GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
+                operator_agent_id,
+                proposal_key,
+                previous_admin_account_ids,
+                next_admin_account_ids,
+            } => {
+                self.validate_policy_execution_governance_authorization(
+                    operator_agent_id.as_str(),
+                    proposal_key.as_str(),
+                )?;
+                let Some(current_registry) =
+                    self.state.governance_main_token_controller_registry.clone()
+                else {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason:
+                            "restricted claim admin registry update requires controller registry"
+                                .to_string(),
+                    });
+                };
+                let current_admins = current_registry
+                    .restricted_starter_claim_admin_account_ids
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if current_admins != *previous_admin_account_ids {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "restricted claim admin registry drift before apply: expected_previous={:?} actual_current={:?}",
+                            previous_admin_account_ids, current_admins
+                        ),
+                    });
+                }
+                let mut next_registry = current_registry;
+                next_registry.restricted_starter_claim_admin_account_ids = next_admin_account_ids
+                    .iter()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .map(ToString::to_string)
+                    .collect();
+                next_registry =
+                    Self::validate_governance_main_token_controller_registry(next_registry)?;
+                self.state.governance_main_token_controller_registry = Some(next_registry);
             }
         }
         Ok(())

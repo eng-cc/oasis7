@@ -32,6 +32,7 @@ impl World {
                 | Action::ResolveCrisis { .. }
                 | Action::GrantMetaProgress { .. }
                 | Action::UpdateGameplayPolicy { .. }
+                | Action::UpdateRestrictedStarterClaimAdminRegistry { .. }
                 | Action::OpenEconomicContract { .. }
                 | Action::AcceptEconomicContract { .. }
                 | Action::SettleEconomicContract { .. }

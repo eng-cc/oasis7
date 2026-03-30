@@ -94,35 +94,37 @@ fn setup_claim_world_with_treasury(
 }
 
 fn allowlist_restricted_grant_admins(world: &mut World, admin_account_ids: &[&str]) {
-    let mut controller_signer_policies = BTreeMap::from([
-        (
-            "msig.genesis.v1".to_string(),
-            GovernanceThresholdSignerPolicy {
-                threshold: 1,
-                allowed_public_keys: BTreeSet::from([
-                    "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30".to_string(),
-                ]),
-            },
-        ),
-        (
-            "msig.ecosystem_governance.v1".to_string(),
-            GovernanceThresholdSignerPolicy {
-                threshold: 1,
-                allowed_public_keys: BTreeSet::from([
-                    "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20".to_string(),
-                ]),
-            },
-        ),
-    ]);
-    let mut restricted_starter_claim_admin_account_ids = BTreeSet::new();
-    for (index, account_id) in admin_account_ids.iter().enumerate() {
+    configure_restricted_grant_registry(world, &["msig.ecosystem_governance.v1"], admin_account_ids);
+}
+
+fn configure_restricted_grant_registry(
+    world: &mut World,
+    policy_account_ids: &[&str],
+    admin_account_ids: &[&str],
+) {
+    let mut controller_signer_policies = BTreeMap::from([(
+        "msig.genesis.v1".to_string(),
+        GovernanceThresholdSignerPolicy {
+            threshold: 1,
+            allowed_public_keys: BTreeSet::from([
+                "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30".to_string(),
+            ]),
+        },
+    )]);
+    let mut all_policy_account_ids = policy_account_ids
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<BTreeSet<_>>();
+    for account_id in admin_account_ids {
         let account_id = account_id.trim();
-        if account_id.is_empty() {
-            continue;
+        if !account_id.is_empty() {
+            all_policy_account_ids.insert(account_id.to_string());
         }
-        restricted_starter_claim_admin_account_ids.insert(account_id.to_string());
+    }
+    for (index, account_id) in all_policy_account_ids.into_iter().enumerate() {
         controller_signer_policies.insert(
-            account_id.to_string(),
+            account_id,
             GovernanceThresholdSignerPolicy {
                 threshold: 1,
                 allowed_public_keys: BTreeSet::from([format!("{:064x}", index + 3)]),
@@ -134,12 +136,57 @@ fn allowlist_restricted_grant_admins(world: &mut World, admin_account_ids: &[&st
             genesis_controller_account_id: "msig.genesis.v1".to_string(),
             treasury_bucket_controller_slots: BTreeMap::from([(
                 MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string(),
-                "msig.ecosystem_governance.v1".to_string(),
+                policy_account_ids
+                    .first()
+                    .copied()
+                    .unwrap_or("msig.ecosystem_governance.v1")
+                    .to_string(),
             )]),
-            restricted_starter_claim_admin_account_ids,
+            restricted_starter_claim_admin_account_ids: admin_account_ids
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
             controller_signer_policies,
         })
         .expect("set restricted grant admin registry");
+}
+
+fn authorize_restricted_admin_registry_update(
+    world: &mut World,
+    operator_agent_id: &str,
+    proposal_key: &str,
+) {
+    world.submit_action(Action::OpenGovernanceProposal {
+        proposer_agent_id: operator_agent_id.to_string(),
+        proposal_key: proposal_key.to_string(),
+        title: "authorize restricted admin registry update".to_string(),
+        description: "authorize restricted claim admin registry update".to_string(),
+        options: vec!["approve".to_string(), "reject".to_string()],
+        voting_window_ticks: 1,
+        quorum_weight: 3,
+        pass_threshold_bps: 5_000,
+    });
+    world.step().expect("open governance proposal");
+
+    world.submit_action(Action::CastGovernanceVote {
+        voter_agent_id: operator_agent_id.to_string(),
+        proposal_key: proposal_key.to_string(),
+        option: "approve".to_string(),
+        weight: 3,
+    });
+    world.step().expect("cast governance vote");
+
+    for _ in 0..2 {
+        let proposal = world
+            .state()
+            .governance_proposals
+            .get(proposal_key)
+            .expect("proposal exists");
+        if proposal.status != GovernanceProposalStatus::Open {
+            break;
+        }
+        world.step().expect("finalize governance proposal");
+    }
 }
 
 fn claim_upfront_amount(claim: &AgentClaimState) -> u64 {
@@ -1046,4 +1093,57 @@ fn restricted_grant_revoke_rejects_non_admin_before_issuer_match_checks() {
             .status,
         RestrictedStarterClaimGrantStatus::Issued
     );
+}
+
+#[test]
+fn governance_action_can_enable_restricted_grant_admin_before_issue() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    configure_restricted_grant_registry(&mut world, &["liveops"], &[]);
+    authorize_restricted_admin_registry_update(
+        &mut world,
+        "alice",
+        "proposal.registry.enable-liveops",
+    );
+
+    world.submit_action(Action::UpdateRestrictedStarterClaimAdminRegistry {
+        operator_agent_id: "alice".to_string(),
+        proposal_key: "proposal.registry.enable-liveops".to_string(),
+        next_admin_account_ids: vec!["liveops".to_string()],
+    });
+    world.step().expect("enable liveops admin via governance action");
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 325,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 10,
+    });
+    world.step().expect("issue grant after governance update");
+
+    assert!(world.journal().events.iter().any(|event| {
+        matches!(
+            &event.body,
+            WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantIssued {
+                beneficiary_account_id,
+                issuer_id,
+                amount,
+                ..
+            }) if beneficiary_account_id == "alice"
+                && issuer_id == "liveops"
+                && *amount == 325
+        )
+    }));
+
+    assert_eq!(
+        world
+            .governance_main_token_controller_registry()
+            .expect("registry")
+            .restricted_starter_claim_admin_account_ids
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["liveops".to_string()]
+    );
+    assert_eq!(world.main_token_restricted_starter_claim_balance("alice"), 325);
 }
