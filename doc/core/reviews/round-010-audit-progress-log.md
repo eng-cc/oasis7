@@ -10,3 +10,4 @@
 | 时间 | 执行角色 | 文档路径/范围 | 复核动作 | 结果(pass/issue_open/blocked) | 问题编号 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-03-30 16:28:08 +0800 | `producer_system_designer` | `ROUND-010 deferred scope` | `backfill` | pass | none | 已从 ROUND-009 的 deferred 清单中冻结 6 个模块 README，建立 ROUND-010 台账、清单、kickoff worklist 与进度日志 |
+| 2026-03-30 16:34:23 +0800 | `producer_system_designer` | `doc/world-runtime/README.md` | `split` | pass | I10-001 | 已为高体量 runtime 模块入口补“从这里开始”分流，并明确 README、长表索引与三个高频专题的阅读边界 |

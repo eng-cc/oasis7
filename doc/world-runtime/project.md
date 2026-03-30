@@ -178,6 +178,7 @@
     - `rg -n "oasis7_builtin_wasm|OASIS7_CHAIN_STORAGE_PROFILE|OASIS7_WASM_|OASIS7_BUILTIN_WASM_" doc/world-runtime/runtime/bootstrap-power-modules.design.md doc/world-runtime/runtime/bootstrap-power-modules.project.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.project.md doc/world-runtime/module/agent-default-modules.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-WORLD_RUNTIME-053 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 执行 ROUND-010 `world-runtime` 模块入口分流治理，明确 README、`prd.index.md` 与三个高频 runtime/wasm/module 专题的阅读边界。
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -193,9 +194,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-20
+- 更新日期: 2026-03-30
 - 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；`TASK-WORLD_RUNTIME-044` 已完成 production source compile gate）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `TASK-WORLD_RUNTIME-053`（已为 `world-runtime/README.md` 增加“从这里开始”分流，并明确 README / `prd.index.md` / Docker canonical build / storage retention / online module release legality 三类高频入口的职责边界。）
 - 最新完成: `TASK-WORLD_RUNTIME-052`（已完成 `world-runtime` 活跃专题中 builtin 模块命名、storage profile 覆盖 key 与 wasm operator env 当前入口口径的 `oasis7_builtin_wasm` / `OASIS7_CHAIN_STORAGE_PROFILE` / `OASIS7_WASM_*` / `OASIS7_BUILTIN_WASM_*` 收口。）
 - 最新完成: `TASK-WORLD_RUNTIME-051`（已完成 `world-runtime` 其余活跃 module/testing/governance 与 numeric-correctness 专题中旧 `oasis7*` crate/path/command 当前真值口径的 `oasis7*` 收口。）
 - 最新完成: `TASK-WORLD_RUNTIME-050`（已完成 `world-runtime runtime/module/governance` 活跃专题中旧 `oasis7*` crate/path 当前真值口径与已迁移源码路径的 `oasis7*` 收口。）

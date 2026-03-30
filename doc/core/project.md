@@ -229,6 +229,7 @@
 - [x] TASK-CORE-039 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射收口，明确 site 模块 README、公开 docs hub、手册镜像策略与仓库权威手册的消费边界。
 - [x] TASK-CORE-040 (PRD-CORE-003/008) [test_tier_required]: 完成 ROUND-009 `qa_engineer` 复审与关轮，冻结 focused scope 的 `aligned/deferred` 终态并回写阻断结论。
 - [x] TASK-CORE-041 (PRD-CORE-003/008) [test_tier_required]: 建立 ROUND-010“延期模块入口分流跟进轮”台账，冻结来自 ROUND-009 deferred 项的 6 个模块 README focused scope。
+- [x] TASK-CORE-042 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 首片 `world-runtime` 入口分流收口，验证高体量 runtime 模块 README 的任务导向入口模式。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -274,6 +275,7 @@
 - 最新完成: `TASK-CORE-039`（已为 `site` README 补齐 site 模块、公开 docs hub、手册镜像策略与仓库权威手册之间的入口映射。）
 - 最新完成: `TASK-CORE-040`（ROUND-009 已完成 QA 复审，focused scope 终态冻结为 `15 aligned + 8 deferred`，无新增阻断。）
 - 最新完成: `TASK-CORE-041`（已建立 ROUND-010 小分母治理台账，从 ROUND-009 deferred 项中冻结 `world-runtime / p2p / scripts / game / playability_test_result / headless-runtime` 六个模块 README。）
+- 最新完成: `TASK-CORE-042`（已为 `world-runtime` README 增加任务导向入口，并明确 README、长表索引与高频 runtime/wasm/module 专题的阅读边界。）
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。
