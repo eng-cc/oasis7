@@ -145,6 +145,7 @@
 - [x] TASK-GAME-049 (PRD-GAME-011) [test_tier_required + test_tier_full]: `runtime_engineer` 已补齐 restricted grant lifecycle：实现 `issuance_reason / issuer_id / expires_at_epoch` 状态、issue/expire/revoke 事件、issuer-scoped 发放/回收动作与 main token 审计链路，并将终态 grant 的 restricted refund 回收到 treasury。
 - [x] TASK-GAME-050 (PRD-GAME-011) [test_tier_required]: `liveops_community` 已建立 restricted grant 的运营发放/撤销/过期 runbook，冻结 `allowlist / qa_seed / liveops_campaign` issuer 边界、回收条件与 incident fallback；v1 统一使用 `issuer_id=liveops`，并把 `issuance_reason` 收口到三类允许值。
 - [x] TASK-GAME-051 (PRD-GAME-011) [test_tier_required + test_tier_full]: `qa_engineer` 已建立 restricted grant lifecycle / audit matrix，验证 issuance metadata、expiry/revoke、source-sink 对账与 transfer non-bypass 全部闭环，证据见 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`。
+- [x] TASK-GAME-054 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已新增 `oasis7_liveops_grant_cli` 作为 restricted grant 的日常运营入口，封装 `issue/revoke/status` 并保持 runtime canonical action / world-state 真值，不开放 admin roster 直改旁路。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -162,8 +163,8 @@
 - 更新日期: 2026-03-29
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
-- 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环）`
-- 最新完成: `TASK-GAME-051`（`qa_engineer` 已新增 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`，以 fresh required/full 验证确认 issue/expire/revoke/source-sink/refund-sink/transfer non-bypass 全部 `pass`；`PRD-GAME-011` 的 restricted grant blocker 已解除。）
+- 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环；当前新增的是运营入口层，不改变底层规则边界）`
+- 最新完成: `TASK-GAME-054`（`runtime_engineer` 已新增 `oasis7_liveops_grant_cli`，将 restricted grant 的日常 `issue/revoke/status` 收口为运营可执行 CLI，同时继续保留 controller-governed admin roster 边界。）
 - 最新完成: `TASK-GAME-050`（`liveops_community` 已新增 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`，冻结 `issuer_id=liveops`、`preview_allowlist/qa_seed/liveops_campaign` 三类 `issuance_reason`、按 reason 区分的 expiry 策略、推荐 revoke 条件与 incident fallback。）
 - 最新完成: `TASK-GAME-049`（`runtime_engineer` 已落地 restricted grant metadata、issue/expire/revoke 生命周期、issuer-scope 发放/回收动作与 treasury source-sink 审计链；claim 在 grant 终态后的 restricted refund 也会定向退回 treasury。）
 - 最新完成: `TASK-GAME-048`（`producer_system_designer` 已明确维持 restricted starter balance 的窄用途边界，不缩 PRD 范围；当前专题继续保持 `block`，并新增 `TASK-GAME-049/050/051` 去补齐 grant lifecycle 与审计链。）

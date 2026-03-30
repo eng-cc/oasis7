@@ -1,6 +1,6 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
-审计轮次: 1
+审计轮次: 2
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -25,7 +25,7 @@
 - 发放动作只能走 `IssueRestrictedStarterClaimGrant`，撤销动作只能走 `RevokeRestrictedStarterClaimGrant`；不要再用手工余额注入去替代正式发放。
 - runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
 - runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
-- 若 `liveops` 尚未在 admin registry 中，必须先由已通过的 governance proposal proposer 执行 `UpdateRestrictedStarterClaimAdminRegistry` 把 `liveops` 加入 allowlist；runbook 本身不能替代这一步正式治理动作。
+- 若 `liveops` 尚未在 admin registry 中，必须先由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 提交 `UpdateRestrictedStarterClaimAdminRegistry` 把 `liveops` 加入 allowlist；runbook 本身不能替代这一步正式治理动作。
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
 - 撤销必须由同一 `issuer_id` 发起；如果发放时 `issuer_id` 写错，后续只能用同一个错误值去 revoke，因此发放前必须双人复核字段。
@@ -36,6 +36,14 @@
 - v1 统一使用 `issuer_id = liveops`。
 - 这样可以保证撤销 owner 单一，避免因为多个 `issuer_id` 并行发放导致 revoke 权限碎片化。
 - `qa_engineer` 可以发起 `qa_seed` 请求，但正式 issue / revoke 仍由 `liveops_community` 以 `issuer_id = liveops` 执行。
+
+### 3.1A Recommended operator entry
+- 日常推荐入口是 `oasis7_liveops_grant_cli`，不要再让运营同事手工拼接 runtime action JSON。
+- 推荐命令：
+  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- status --world-dir <world_dir> --beneficiary-account-id <account>`
+  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- issue --world-dir <world_dir> --beneficiary-account-id <account> --amount <n> --issuance-reason preview_allowlist --expires-at-epoch <epoch>`
+  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- revoke --world-dir <world_dir> --beneficiary-account-id <account> --revoke-reason qa_window_closed`
+- 该 CLI 默认 `issuer_id=liveops`，支持 `--dry-run` 与 `--json`，但不提供 admin roster 直改命令；admin 轮换仍必须走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`。
 
 ### 3.2 Allowed issuance_reason
 仅允许以下 3 个 `issuance_reason`：
@@ -88,8 +96,8 @@
 
 1. 确认申请属于 `preview_allowlist`、`qa_seed`、`liveops_campaign` 三类之一。
 2. 确认本次发放统一使用 `issuer_id = liveops`。
-3. 确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
-   若未登记，先走 passed governance proposal 对应的 `UpdateRestrictedStarterClaimAdminRegistry`，不要回退到离线 import 或手工改 world 文件。
+3. 先执行 `oasis7_liveops_grant_cli status --world-dir <world_dir>`，确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
+   若未登记，先走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`，不要回退到离线 import、手工改 world 文件或给运营临时放开旁路。
 4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
 5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
 6. 确认 `expires_at_epoch` 覆盖完整窗口，不会在正常使用中途提前终态。

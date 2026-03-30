@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
 
-审计轮次: 5
+审计轮次: 6
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。
@@ -17,6 +17,7 @@
   - SC-6: `activation fee`、`upkeep`、`bond refund/slash` 与 restricted grant 的发放/消费/退款/过期必须全部形成可审计事件，并能进入现有 main token 源汇审计链路。
   - SC-7: `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 在进入 runtime grant 状态机前必须先通过正式 `admin registry` 门禁；当 registry 缺失、issuer 未登记或未绑定 signer allowlist policy 时，误放过率为 `0`。
   - SC-8: restricted grant admin registry 必须支持通过正式 runtime action 热更新；仅允许当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 变更 `restricted_starter_claim_admin_account_ids` 子集，且变更 action 必须携带通过 signer allowlist / threshold policy 校验的主链签名 proof。
+  - SC-9: `liveops_community` 的日常 restricted grant 发放/撤销/状态检查必须支持正式 CLI 入口，直接复用 runtime canonical action 与 world-state 真值，而不是要求运营手工拼接原始 action JSON 或直接编辑 world 文件。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -27,6 +28,7 @@
   - `qa_engineer`: 需要验证并发争抢、欠费、闲置、多号囤积、transfer guard 和经济审计没有旁路。
   - `liveops_community`: 需要向 limited preview / allowlist / QA seed 账号发放受限启动余额，并在需要时回收、停用或过期。
   - restricted grant admin operator: 需要一条正式 runtime 真值来判断 `issuer_id=liveops` 是否真的具备发放/撤销权限，而不是只依赖 runbook 约定。
+  - restricted grant liveops operator: 需要低摩擦的日常操作入口来 issue/revoke/status restricted grant，而不是每次都理解底层 runtime action 或 controller payload 细节。
 - User Scenarios & Frequency:
   - 首次建立组织能力时：每个认真进入中循环的玩家至少 1 次。
   - limited preview / allowlist 发放时：每轮受控外放、QA 种子建号或运营定向补助时发生。
@@ -160,6 +162,7 @@
 | PRD-GAME-011 | `TASK-GAME-051` | `test_tier_required` + `test_tier_full` | restricted grant lifecycle / audit matrix、expiry/revoke/source-sink 对账与 non-bypass 验证 | QA 守门、反滥用、经济审计 |
 | PRD-GAME-011 | `TASK-GAME-052` | `test_tier_required` + `test_tier_full` | governance main-token controller registry 补齐 restricted grant admin registry / signer allowlist 绑定，并验证 registry 缺失、非 admin、非 allowlisted issuer 与 allowlisted admin 的 runtime action gate | runtime admin 真值、发放/撤销入口门禁、运营安全边界 |
 | PRD-GAME-011 | `TASK-GAME-053` | `test_tier_required` + `test_tier_full` | 新增 `UpdateRestrictedStarterClaimAdminRegistry` controller-governed runtime action，验证 `ecosystem_pool` controller account 绑定、signer policy 约束、governance event apply 与“先更新 registry 再发 grant”的闭环 | runtime admin registry 热更新、主链钱包治理审计、运营解锁链路 |
+| PRD-GAME-011 | `TASK-GAME-054` | `test_tier_required` | 新增 `oasis7_liveops_grant_cli`，封装 restricted grant 的 `issue/revoke/status` 日常操作，验证 CLI 仍复用 canonical runtime action / world-state 真值，且不开放 admin roster 直改旁路 | 运营操作降摩擦、runtime 真值复用、治理边界保持 |
 
 - Decision Log:
 
@@ -178,3 +181,4 @@
 | DEC-AGC-011 | 不收窄 `PRD-GAME-011` 对 restricted grant lifecycle / audit 的要求，并保持 starter balance 继续是 `slot-1` 专用、不可转账、可过期可撤销的受限余额 | 把当前实现退化为“只有一个数值 bucket、没有 issuer/expiry/audit 的临时补贴”并据此宣称专题完成 | QA 已证明 bucket 记账与展示闭环正确，但没有正式发放元数据、过期/撤销事件和审计链，就无法证明该补贴受治理、可回收、可复盘。 |
 | DEC-AGC-012 | 在 runtime world-state 里把 restricted grant admin 收口到正式 registry，并要求每个 admin account 同时绑定现有 controller signer allowlist policy；issue/revoke 先过 admin gate，再进入 grant 业务校验 | 继续只依赖 runbook 约定 `issuer_id=liveops`；或另起一套与 controller policy 脱钩的独立 admin 配置 | `issuer_id` 只是业务字段，不足以证明操作者具备正式权限；复用既有 governance controller signer policy 能避免平行治理真值，同时把“非 admin”阻断前置到 runtime action 入口。 |
 | DEC-AGC-013 | 不开放整份 controller registry 的任意热编辑，只新增一条由 `ecosystem_pool` treasury controller account 签名驱动的 `UpdateRestrictedStarterClaimAdminRegistry` 动作，专门更新 restricted grant admin 子集 | 继续只允许离线 import / 启动注入变更 registry；或把 admin roster 继续绑定到模拟内 passed proposal proposer；或开放完整 controller registry runtime 任意改写 | restricted grant admin roster 属于主链资产治理面，不应继续依赖模拟内 agent/proposal 真值；收窄到单一字段更新，并复用既有 controller slot + signer allowlist / threshold policy，能把 liveops/admin 轮换放回正式钱包治理路径，同时避免把更高风险的 controller policy / treasury slot 编辑一并放开。 |
+| DEC-AGC-014 | 为运营补一层薄 CLI `oasis7_liveops_grant_cli`，只封装 `issue/revoke/status` 并继续复用底层 runtime canonical action | 继续让运营手工拼 action JSON；或让 CLI 直接编辑 world snapshot/journal；或顺手开放 admin roster 直改命令 | 问题在于日常操作摩擦过大，不在于底层规则错误；薄 CLI 能降低运营使用成本，同时保持 runtime/state/journal 真值与 controller 治理边界，不引入新旁路。 |
