@@ -487,6 +487,18 @@
     - `rg -n "AI人格很火|人格不只是|比如这些时候|如果是你|xiaohongshu-ai-persona-carousel.html" doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-047 (PRD-README-031) [test_tier_required]: 重做第七篇轮播版前两页视觉骨架，修复元素重叠并降低装饰噪音，收口成更稳的编辑部判断卡布局，不改动逐页主题和评论区问题。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `site/social/xiaohongshu-ai-persona-carousel.html`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide1.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
+    - `doc/devlog/2026-03-30.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "headline-card|contrast-card|judgment-grid|reason-card|thin-card|thick-card" site/social/xiaohongshu-ai-persona-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -502,6 +514,7 @@
 - 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-047`（已重做第七篇轮播版前两页视觉骨架，修复元素重叠并收口为更稳的编辑部判断卡布局。）
 - 最新完成: `TASK-README-046`（已为小红书第七篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，保持“会聊天 vs 会行动”的核心判断与评论区站队问题一致。）
 - 最新完成: `TASK-README-045`（已为小红书第七篇补齐“聊天框 vs 世界内行动”分割封面 HTML 与 PNG，强化“会说话”和“会行动”的区别。）
 - 最新完成: `TASK-README-044`（已为小红书第七篇固定“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”的表达边界。）
