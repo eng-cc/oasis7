@@ -43,6 +43,7 @@
     - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SITE-019 (PRD-SITE-002/003) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，明确 `doc/site/README.md`、公开 docs hub、手册镜像策略与仓库权威手册的职责边界。
 
 ## 依赖
 - 模块设计总览：`doc/site/design.md`
@@ -58,6 +59,7 @@
 - 更新日期: 2026-03-20
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SITE-019`（已为 `doc/site/README.md` 补齐 site 模块与公开 docs hub、静态手册镜像、仓库权威手册之间的入口映射。）
 - 最新完成: `TASK-SITE-018`（`doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径已统一切到 `oasis7_viewer` / `crates/oasis7*` 当前口径。）
 - 最新完成: `TASK-SITE-017`（`release-packages.yml` 的 Web dist / soak prewarm 当前路径与包名已切到 `oasis7*`，相关 github-pages 发布链路文档已同步。）
 - 最新完成: `TASK-SITE-015`（公开站点、release 下载入口与站点脚本已统一切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径）。

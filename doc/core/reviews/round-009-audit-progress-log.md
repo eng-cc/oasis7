@@ -22,3 +22,4 @@
 | 2026-03-30 16:03:00 +0800 | `liveops_community` | `doc/readme/README.md` + `doc/readme/prd.index.md` | `split` | pass | I9-003 | 已为 `readme` 模块索引显式拆分 `canonical / runbook / material / execution_log` 四层消费语义，避免规范与素材混排 |
 | 2026-03-30 16:19:00 +0800 | `viewer_engineer` | `doc/ui_review_result/README.md` + `doc/ui_review_result/ui_review_list.md` | `split` | pass | I9-004 | 已明确 `ui_review_result` 为活跃评审样本池，并补齐根级例外目录的进入/退出条件与索引说明 |
 | 2026-03-30 16:06:02 +0800 | `viewer_engineer` | `doc/world-simulator/README.md` + `site/doc/{cn,en}/viewer-manual.html` | `split/defer` | pass | I9-005 | 已为高体量模块入口补“从这里开始”分流，并明确仓库 README、`prd.index.md`、canonical Viewer 手册与公开静态镜像的职责边界；静态镜像继续保持 defer |
+| 2026-03-30 16:14:33 +0800 | `producer_system_designer` | `doc/site/README.md` | `keep` | pass | I9-005 | 已明确 site 模块 README 负责 repo 内治理映射，公开 docs hub 与静态手册镜像继续由 `site/doc/**` 承担，不再让模块 README 与公开页面抢入口语义 |

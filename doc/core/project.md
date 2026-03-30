@@ -226,6 +226,7 @@
 - [x] TASK-CORE-036 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `readme` 模块边界首批收口，为 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 补齐 `canonical / runbook / material / execution_log` 分层。
 - [x] TASK-CORE-037 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `ui_review_result` 目录定位收口，明确其为活跃评审样本池而非正式模块，并补齐进入/退出条件。
 - [x] TASK-CORE-038 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `world-simulator` 模块入口分流收口，明确 README、文件级索引、canonical Viewer 手册与公开静态镜像的阅读边界。
+- [x] TASK-CORE-039 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射收口，明确 site 模块 README、公开 docs hub、手册镜像策略与仓库权威手册的消费边界。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -268,6 +269,7 @@
 - 最新完成: `TASK-CORE-036`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log`，首批收口 `I9-003` 的边界混用问题。）
 - 最新完成: `TASK-CORE-037`（已将 `ui_review_result` 明确为活跃评审样本池，并补齐根级例外目录的进入/退出条件。）
 - 最新完成: `TASK-CORE-038`（已为 `world-simulator` README 增加按目标进入分流，并明确 README / `prd.index.md` / canonical Viewer 手册 / 公开静态镜像的职责边界。）
+- 最新完成: `TASK-CORE-039`（已为 `site` README 补齐 site 模块、公开 docs hub、手册镜像策略与仓库权威手册之间的入口映射。）
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。

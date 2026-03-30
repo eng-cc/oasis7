@@ -39,7 +39,7 @@
 | `doc/playability_test_result/README.md` | 证据模块索引 | 是否需新增消费层说明 | defer | P2 | `qa_engineer` | scoped | I9-001 | 当前以 QA/证据使用者为主 |
 | `doc/readme/README.md` | readme 模块索引 | 模块职责是否混合规范/素材/执行包 | split | P0 | `liveops_community` | aligned | I9-003 | 已显式拆分 `canonical / runbook / material / execution_log`，模块入口边界已可消费 |
 | `doc/scripts/README.md` | scripts 模块索引 | 入口可消费性抽样 | defer | P2 | `producer_system_designer` | scoped | I9-001 | 本轮不优先动 scripts |
-| `doc/site/README.md` | site 模块索引 | 是否与静态 docs hub 形成清晰映射 | keep | P1 | `producer_system_designer` | scoped | I9-005 | 仍需补站点模块 README 与公开 docs hub 的角色映射 |
+| `doc/site/README.md` | site 模块索引 | 是否与静态 docs hub 形成清晰映射 | keep | P1 | `producer_system_designer` | aligned | I9-005 | 已明确 `doc/site/README.md` 只负责模块治理入口映射，公开 docs hub 与静态手册镜像继续由 `site/doc/**` 承担 |
 | `doc/testing/README.md` | testing 模块索引 | 手册总入口与分册关系是否足够清楚 | keep | P1 | `qa_engineer` | scoped | I9-002 | 当前结构相对清楚，重点在手册语义 |
 | `doc/world-runtime/README.md` | world-runtime 模块索引 | 高体量模块入口可消费性抽样 | defer | P2 | `producer_system_designer` | scoped | I9-005 | 低于 world-simulator/readme 热点优先级 |
 | `doc/world-simulator/README.md` | world-simulator 模块索引 | 高体量模块入口与专项手册关系是否清楚 | split | P1 | `viewer_engineer` | aligned | I9-005 | 已补“从这里开始”分流，并明确 README / `prd.index.md` / canonical 手册 / 公开静态镜像边界 |
