@@ -7,25 +7,25 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Manrope:wght@500;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@700;900&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --paper: #f8f1e6;
-        --paper-2: #efe5d8;
-        --paper-3: #fff8f0;
-        --ink: #1f1814;
-        --muted: rgba(31, 24, 20, 0.72);
-        --soft: rgba(31, 24, 20, 0.45);
-        --line: rgba(31, 24, 20, 0.08);
-        --teal: #174952;
-        --teal-soft: #d8e7e4;
-        --rust: #c85f3d;
-        --rust-soft: #edd0c2;
-        --sage: #6e8271;
-        --amber: #ddb06a;
-        --shadow: 0 30px 74px rgba(40, 32, 26, 0.14);
+        --bg: #efe7de;
+        --paper: #fffaf5;
+        --paper-2: #fff3ea;
+        --paper-3: #f6efe7;
+        --ink: #231815;
+        --muted: rgba(35, 24, 21, 0.7);
+        --soft: rgba(35, 24, 21, 0.45);
+        --line: rgba(35, 24, 21, 0.1);
+        --accent: #ff6f61;
+        --accent-soft: #ffd7d1;
+        --green: #dce9dc;
+        --yellow: #ffe8ae;
+        --blue: #d8e8f3;
+        --shadow: 0 26px 72px rgba(69, 45, 31, 0.12);
       }
 
       * {
@@ -36,37 +36,36 @@
         margin: 0;
         min-height: 100vh;
         background:
-          radial-gradient(circle at 14% 12%, rgba(200, 95, 61, 0.16), transparent 20%),
-          radial-gradient(circle at 86% 18%, rgba(23, 73, 82, 0.16), transparent 22%),
-          linear-gradient(150deg, #efe5d7 0%, #f8f3ea 44%, #e7eceb 100%);
+          radial-gradient(circle at 12% 14%, rgba(255, 111, 97, 0.12), transparent 22%),
+          radial-gradient(circle at 86% 18%, rgba(216, 232, 243, 0.58), transparent 24%),
+          linear-gradient(180deg, #f7f1ea 0%, var(--bg) 100%);
         color: var(--ink);
-        font-family: "Manrope", sans-serif;
+        font-family: "Noto Sans SC", sans-serif;
       }
 
       .gallery {
-        max-width: 1180px;
+        max-width: 1160px;
         margin: 0 auto;
-        padding: 28px 0 72px;
+        padding: 24px 0 72px;
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
       }
 
       .slide {
         position: relative;
         width: 1080px;
         height: 1440px;
-        margin: 0 auto 28px;
+        margin: 0 auto 26px;
         overflow: hidden;
-        border-radius: 28px;
+        border-radius: 34px;
         background:
-          radial-gradient(circle at 14% 16%, rgba(221, 176, 106, 0.18), transparent 22%),
-          radial-gradient(circle at 84% 14%, rgba(23, 73, 82, 0.12), transparent 22%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 18%),
-          linear-gradient(145deg, #fcf6ef, #f8f1e6 44%, #eef2ef 100%);
+          radial-gradient(circle at 20% 18%, rgba(255, 111, 97, 0.08), transparent 22%),
+          radial-gradient(circle at 82% 22%, rgba(216, 232, 243, 0.75), transparent 22%),
+          linear-gradient(180deg, #fff9f4 0%, #f6efe8 100%);
         box-shadow: var(--shadow);
-      }
-
-      .single .gallery {
-        max-width: none;
-        padding: 0;
       }
 
       .single .slide {
@@ -75,120 +74,252 @@
         box-shadow: none;
       }
 
-      .grain,
-      .grid,
-      .frame,
-      .halo {
+      .texture,
+      .blob,
+      .dots {
         position: absolute;
         inset: 0;
         pointer-events: none;
       }
 
-      .grain {
-        opacity: 0.14;
+      .texture {
+        opacity: 0.16;
         background-image:
-          radial-gradient(circle at 18% 20%, rgba(0, 0, 0, 0.72) 0.7px, transparent 0.8px),
-          radial-gradient(circle at 80% 28%, rgba(0, 0, 0, 0.48) 0.7px, transparent 0.8px),
-          radial-gradient(circle at 32% 78%, rgba(0, 0, 0, 0.42) 0.7px, transparent 0.8px);
-        background-size: 28px 28px, 34px 34px, 44px 44px;
+          radial-gradient(circle at 18% 22%, rgba(0, 0, 0, 0.42) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 70% 34%, rgba(0, 0, 0, 0.34) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 44% 74%, rgba(0, 0, 0, 0.26) 0.8px, transparent 0.9px);
+        background-size: 28px 28px, 34px 34px, 42px 42px;
       }
 
-      .grid {
-        background-image:
-          linear-gradient(to right, var(--line) 1px, transparent 1px),
-          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
-        background-size: 72px 72px;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.44), transparent 92%);
-      }
-
-      .frame::before,
-      .frame::after {
+      .blob::before,
+      .blob::after {
         content: "";
         position: absolute;
-        inset: 26px;
-        border: 1px solid rgba(31, 24, 20, 0.08);
-        border-radius: 22px;
-      }
-
-      .frame::after {
-        inset: 42px;
-        border-style: dashed;
-        border-color: rgba(31, 24, 20, 0.05);
-        border-radius: 16px;
-      }
-
-      .halo::before {
-        content: "";
-        position: absolute;
-        right: -140px;
-        top: 120px;
-        width: 560px;
-        height: 560px;
         border-radius: 999px;
-        border: 1px solid rgba(23, 73, 82, 0.12);
-        box-shadow:
-          -92px 92px 0 -140px rgba(200, 95, 61, 0.08),
-          -64px 60px 0 -120px rgba(221, 176, 106, 0.12);
+        filter: blur(2px);
       }
 
-      .header,
+      .blob::before {
+        right: -90px;
+        top: 108px;
+        width: 300px;
+        height: 300px;
+        background: rgba(255, 111, 97, 0.08);
+      }
+
+      .blob::after {
+        left: -80px;
+        bottom: 210px;
+        width: 240px;
+        height: 240px;
+        background: rgba(255, 232, 174, 0.18);
+      }
+
+      .dots::before {
+        content: "";
+        position: absolute;
+        right: 74px;
+        top: 134px;
+        width: 88px;
+        height: 88px;
+        border-radius: 22px;
+        opacity: 0.28;
+        background-image: radial-gradient(circle, rgba(35, 24, 21, 0.26) 1.2px, transparent 1.3px);
+        background-size: 16px 16px;
+      }
+
+      .appbar,
       .footer {
         position: absolute;
-        left: 72px;
-        right: 72px;
+        left: 58px;
+        right: 58px;
         display: flex;
         align-items: center;
         justify-content: space-between;
       }
 
-      .header {
-        top: 62px;
+      .appbar {
+        top: 48px;
       }
 
       .footer {
-        bottom: 52px;
-        color: var(--soft);
+        bottom: 44px;
+      }
+
+      .author {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .avatar {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #ff8f7c, #ff6f61);
+        color: #fff;
+        font-size: 22px;
+        font-weight: 900;
+        box-shadow: 0 10px 24px rgba(255, 111, 97, 0.24);
+      }
+
+      .author-text strong,
+      .author-text span,
+      .app-meta,
+      .tag,
+      .page-chip,
+      .comment-meta,
+      .mini-label {
         font-family: "IBM Plex Mono", monospace;
-        font-size: 17px;
-        letter-spacing: 0.12em;
+      }
+
+      .author-text strong {
+        display: block;
+        font-size: 16px;
+        letter-spacing: 0.04em;
+      }
+
+      .author-text span {
+        display: block;
+        margin-top: 4px;
+        color: var(--soft);
+        font-size: 12px;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
       }
 
-      .brand,
-      .kicker,
-      .eyebrow {
+      .app-meta {
         display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid rgba(35, 24, 21, 0.08);
+        font-size: 13px;
+        color: var(--soft);
+        letter-spacing: 0.04em;
+      }
+
+      .heart {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        background: var(--accent);
+        transform: rotate(45deg);
+      }
+
+      .heart::before,
+      .heart::after {
+        content: "";
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .heart::before {
+        left: -5px;
+      }
+
+      .heart::after {
+        top: -5px;
+      }
+
+      .footer-left {
+        display: flex;
         align-items: center;
         gap: 12px;
       }
 
-      .brand,
-      .kicker {
-        color: var(--ink);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 18px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .brand::before,
-      .kicker::before,
-      .eyebrow::before {
-        content: "";
+      .dot {
         width: 10px;
         height: 10px;
-        background: var(--rust);
-        box-shadow: 0 0 0 8px rgba(200, 95, 61, 0.12);
+        border-radius: 50%;
+        background: rgba(35, 24, 21, 0.12);
       }
 
-      .eyebrow {
-        color: var(--teal);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 17px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
+      .dot.active {
+        width: 28px;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+
+      .page-chip {
+        padding: 12px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(35, 24, 21, 0.08);
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--soft);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+
+      .canvas {
+        position: absolute;
+        left: 58px;
+        right: 58px;
+        top: 138px;
+        bottom: 110px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(35, 24, 21, 0.08);
+        color: var(--soft);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+
+      .tag::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .note-card,
+      .bubble-card,
+      .sticky,
+      .poll-card,
+      .comment-card,
+      .scenario,
+      .stack-card {
+        position: relative;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(35, 24, 21, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .note-card::before,
+      .bubble-card::before,
+      .poll-card::before,
+      .comment-card::before,
+      .scenario::before,
+      .stack-card::before {
+        content: "";
+        position: absolute;
+        top: -12px;
+        left: 28px;
+        width: 98px;
+        height: 26px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.58);
+        transform: rotate(-7deg);
+      }
+
+      .hand {
+        font-family: "Ma Shan Zheng", cursive;
+        color: var(--accent);
       }
 
       h1,
@@ -198,1118 +329,814 @@
         margin: 0;
       }
 
-      h1 {
-        font-family: "Noto Serif SC", serif;
-        font-size: 96px;
-        line-height: 1.04;
-        letter-spacing: -0.06em;
-        font-weight: 900;
-      }
-
+      h1,
       h2 {
         font-family: "Noto Serif SC", serif;
-        font-size: 70px;
-        line-height: 1.08;
-        letter-spacing: -0.05em;
-        font-weight: 900;
-      }
-
-      h3 {
-        font-family: "Noto Serif SC", serif;
-        font-size: 42px;
         line-height: 1.12;
         letter-spacing: -0.04em;
       }
 
-      p,
-      li {
+      p {
         color: var(--muted);
-        font-size: 28px;
-        line-height: 1.5;
+        line-height: 1.6;
       }
 
-      .accent {
-        color: var(--rust);
-      }
-
-      .sage {
-        color: var(--sage);
-      }
-
-      .paper-card,
-      .world-card,
-      .choice-chip,
-      .metric,
-      .note {
+      .highlight {
         position: relative;
-        border: 1px solid rgba(31, 24, 20, 0.08);
-        box-shadow: var(--shadow);
+        z-index: 0;
+        white-space: nowrap;
       }
 
-      .paper-card,
-      .note,
-      .choice-chip {
-        background: rgba(255, 251, 246, 0.86);
-      }
-
-      .world-card {
-        background: linear-gradient(180deg, rgba(20, 60, 67, 0.98), rgba(25, 72, 78, 0.98));
-        color: #fff7ec;
-      }
-
-      .paper-card::before,
-      .world-card::before,
-      .note::before {
+      .highlight::after {
         content: "";
         position: absolute;
-        top: -10px;
-        left: 24px;
-        width: 90px;
+        left: -4px;
+        right: -4px;
+        bottom: 8px;
         height: 22px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.42);
-        transform: rotate(-7deg);
+        background: rgba(255, 232, 174, 0.78);
+        z-index: -1;
       }
 
-      .hero-grid,
-      .content-grid,
-      .closing {
-        position: absolute;
-        left: 78px;
-        right: 78px;
-        top: 152px;
-        bottom: 116px;
-      }
-
-      .hero-grid,
-      .content-grid {
+      .slide-1 .canvas,
+      .slide-2 .canvas,
+      .slide-3 .canvas,
+      .slide-4 .canvas {
         display: grid;
-        grid-template-columns: 0.98fr 1.02fr;
-        gap: 28px;
       }
 
-      .hero-copy p {
-        max-width: 420px;
-        margin-top: 26px;
+      .slide-1 .canvas {
+        grid-template-rows: auto auto 1fr;
+        gap: 24px;
       }
 
-      .hero-side {
-        position: relative;
-      }
-
-      .chat-panel {
-        position: absolute;
-        left: 0;
-        top: 34px;
-        width: 46%;
-        height: 520px;
-        padding: 54px 22px 22px;
-        border-radius: 28px;
-        transform: rotate(-2.4deg);
-      }
-
-      .chat-bubble {
-        margin-bottom: 16px;
-        padding: 18px 18px 16px;
-        border-radius: 22px;
-        background: rgba(255, 255, 255, 0.92);
-        color: var(--muted);
-        font-size: 22px;
-        line-height: 1.42;
-      }
-
-      .chat-bubble.user {
-        margin-left: 42px;
-        background: linear-gradient(180deg, rgba(216, 231, 228, 0.96), rgba(240, 247, 245, 0.94));
-      }
-
-      .world-panel {
-        position: absolute;
-        right: 0;
-        top: 0;
-        width: 56%;
-        height: 650px;
-        padding: 54px 24px 24px;
-        border-radius: 30px;
-        transform: rotate(2deg);
-      }
-
-      .panel-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 20px;
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 14px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .paper-card .panel-label,
-      .note .panel-label {
-        color: var(--soft);
-      }
-
-      .world-card .panel-label {
-        color: rgba(255, 247, 236, 0.62);
-      }
-
-      .panel-label::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--amber);
-      }
-
-      .world-grid {
-        position: relative;
-        height: 430px;
-        margin-top: 12px;
-        border-radius: 24px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 247, 236, 0.08);
-        background:
-          radial-gradient(circle at 72% 22%, rgba(200, 95, 61, 0.18), transparent 16%),
-          radial-gradient(circle at 24% 68%, rgba(221, 176, 106, 0.14), transparent 18%),
-          linear-gradient(to right, rgba(255, 247, 236, 0.06) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 247, 236, 0.06) 1px, transparent 1px);
-        background-size: auto, auto, 74px 74px, 74px 74px;
-      }
-
-      .orbit {
-        position: absolute;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 247, 236, 0.12);
-      }
-
-      .orbit.a {
-        inset: 44px 84px 164px 58px;
-      }
-
-      .orbit.b {
-        inset: 126px 48px 70px 128px;
-      }
-
-      .node {
-        position: absolute;
-        width: 128px;
-        min-height: 98px;
-        padding: 14px 14px 12px;
-        border-radius: 22px;
-        border: 1px solid rgba(255, 247, 236, 0.08);
-        background: rgba(255, 247, 236, 0.08);
-      }
-
-      .node .name {
-        display: block;
-        margin-bottom: 8px;
-        color: #fff6ea;
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .node .desc {
-        display: block;
-        color: rgba(255, 247, 236, 0.78);
-        font-size: 16px;
-        line-height: 1.36;
-      }
-
-      .node.n1 { left: 46px; top: 56px; }
-      .node.n2 { right: 44px; top: 96px; }
-      .node.n3 { left: 128px; bottom: 40px; }
-
-      .signal {
-        position: absolute;
-        height: 2px;
-        background: linear-gradient(90deg, rgba(200, 95, 61, 0), rgba(200, 95, 61, 0.88), rgba(221, 176, 106, 0));
-      }
-
-      .signal.s1 { left: 164px; top: 164px; width: 242px; transform: rotate(-18deg); }
-      .signal.s2 { left: 204px; bottom: 142px; width: 206px; transform: rotate(22deg); }
-      .signal.s3 { right: 118px; bottom: 154px; width: 170px; transform: rotate(-58deg); }
-
-      .metrics {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        margin-top: 18px;
-      }
-
-      .metric {
-        padding: 14px 14px 12px;
-        border-radius: 18px;
-        border: 1px solid rgba(255, 247, 236, 0.1);
-        background: rgba(255, 247, 236, 0.08);
-      }
-
-      .metric .k {
-        display: block;
-        margin-bottom: 8px;
-        color: rgba(255, 247, 236, 0.56);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .metric .v {
-        display: block;
-        color: #fff6ea;
-        font-size: 22px;
-        line-height: 1.1;
-        font-weight: 700;
-      }
-
-      .main-card {
-        padding: 56px 34px 34px;
+      .headline-note {
+        width: 100%;
+        padding: 46px 38px 30px;
         border-radius: 34px;
       }
 
-      .main-card p {
-        margin-top: 22px;
-        max-width: 460px;
+      .headline-note .tag {
+        margin-bottom: 20px;
       }
 
-      .sub-stack {
-        display: grid;
-        gap: 18px;
-        align-content: start;
+      .headline-note h1 {
+        font-size: 76px;
       }
 
-      .note {
-        padding: 50px 24px 22px;
-        border-radius: 26px;
-      }
-
-      .note p {
-        font-size: 24px;
-      }
-
-      .example-grid {
-        display: grid;
-        gap: 18px;
-        align-content: start;
-      }
-
-      .example {
-        padding: 26px 22px 22px;
-        border-radius: 26px;
-      }
-
-      .example h3 {
-        margin-bottom: 12px;
-      }
-
-      .closing {
-        display: grid;
-        grid-template-rows: auto auto 1fr;
-        gap: 22px;
-      }
-
-      .closing-main {
+      .headline-note p {
         max-width: 760px;
+        margin-top: 20px;
+        font-size: 26px;
       }
 
-      .closing-main p {
-        margin-top: 22px;
-        max-width: 680px;
-      }
-
-      .choice-row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-      }
-
-      .choice-chip {
-        padding: 24px 20px;
-        border-radius: 24px;
-        text-align: center;
-      }
-
-      .choice-chip strong {
-        display: block;
-        margin-bottom: 10px;
-        font-family: "Noto Serif SC", serif;
-        font-size: 32px;
-        line-height: 1.16;
-      }
-
-      .choice-chip span {
-        display: block;
-        color: var(--muted);
-        font-size: 20px;
-        line-height: 1.4;
-      }
-
-      .question-card {
-        padding: 30px 28px 26px;
-        border-radius: 28px;
-      }
-
-      .question-card p {
-        color: var(--ink);
-        font-size: 34px;
-        line-height: 1.38;
-        font-weight: 800;
-      }
-
-      .editorial-grid {
+      .headline-hand {
         position: absolute;
-        left: 78px;
-        right: 78px;
-        top: 154px;
-        bottom: 118px;
+        right: 38px;
+        top: 34px;
+        font-size: 38px;
+        transform: rotate(-4deg);
+      }
+
+      .duo-grid {
         display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .bubble-card,
+      .stack-card {
+        border-radius: 30px;
+        padding: 36px 24px 24px;
+      }
+
+      .bubble-card {
+        background: linear-gradient(180deg, rgba(255, 245, 238, 0.96), rgba(255, 255, 255, 0.88));
+      }
+
+      .stack-card {
+        background: linear-gradient(180deg, rgba(220, 233, 220, 0.88), rgba(255, 255, 255, 0.9));
+      }
+
+      .mini-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 18px;
+        color: var(--soft);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+
+      .mini-label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .bubble-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .chat {
+        max-width: 85%;
+        padding: 16px 18px;
+        border-radius: 22px;
+        font-size: 22px;
+        line-height: 1.5;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.94);
+      }
+
+      .chat.user {
+        margin-left: auto;
+        background: #ffe4df;
+      }
+
+      .stack-card h3,
+      .bubble-card h3 {
+        font-size: 36px;
+        line-height: 1.28;
+      }
+
+      .stack-card p {
+        margin-top: 14px;
+        font-size: 22px;
+      }
+
+      .trace-list {
+        margin-top: 18px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .trace-item {
+        padding: 14px 16px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.7);
+        font-size: 20px;
+        color: var(--ink);
+      }
+
+      .trace-item span {
+        display: block;
+        margin-top: 6px;
+        font-size: 17px;
+        color: var(--muted);
+      }
+
+      .sticky-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .sticky {
+        padding: 16px 18px 14px;
+        border-radius: 22px;
+        box-shadow: 0 20px 34px rgba(69, 45, 31, 0.08);
+      }
+
+      .sticky.left {
+        background: var(--yellow);
+        transform: rotate(-3deg);
+      }
+
+      .sticky.right {
+        background: #fde1d7;
+        transform: rotate(2deg);
+      }
+
+      .sticky strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1.35;
+      }
+
+      .sticky span {
+        display: block;
+        margin-top: 8px;
+        color: rgba(35, 24, 21, 0.66);
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .slide-2 .canvas {
         grid-template-columns: 1.02fr 0.98fr;
-        gap: 26px;
+        gap: 24px;
         align-items: start;
       }
 
-      .headline-card,
-      .contrast-card,
-      .mini-card,
-      .reason-card,
-      .thin-card,
-      .thick-card {
-        position: relative;
-        border-radius: 30px;
-        border: 1px solid rgba(31, 24, 20, 0.08);
-        box-shadow: var(--shadow);
+      .big-judge {
+        padding: 54px 40px 38px;
+        border-radius: 34px;
       }
 
-      .headline-card,
-      .mini-card,
-      .reason-card,
-      .thin-card,
-      .thick-card {
-        background: rgba(255, 251, 246, 0.88);
+      .big-judge h2 {
+        margin-top: 18px;
+        font-size: 76px;
       }
 
-      .headline-card,
-      .reason-card {
-        padding: 56px 34px 34px;
-      }
-
-      .headline-card::before,
-      .contrast-card::before,
-      .mini-card::before,
-      .reason-card::before,
-      .thin-card::before,
-      .thick-card::before {
-        content: "";
-        position: absolute;
-        top: -10px;
-        left: 24px;
-        width: 90px;
-        height: 22px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.42);
-        transform: rotate(-7deg);
-      }
-
-      .headline-card h1 {
-        font-size: 84px;
-        line-height: 1.02;
-      }
-
-      .headline-card p {
-        max-width: 420px;
+      .big-judge p {
+        max-width: 470px;
         margin-top: 24px;
         font-size: 28px;
       }
 
-      .headline-note {
-        margin-top: 30px;
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 18px;
-        border-radius: 999px;
-        background: rgba(200, 95, 61, 0.08);
-        color: var(--rust);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 13px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .headline-note::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: currentColor;
-      }
-
-      .editorial-side {
-        display: grid;
-        gap: 18px;
-      }
-
-      .contrast-card {
-        padding: 54px 24px 24px;
-        background: linear-gradient(180deg, rgba(20, 60, 67, 0.98), rgba(25, 72, 78, 0.98));
-        color: #fff7ec;
-      }
-
-      .contrast-head {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        gap: 12px;
-        align-items: center;
-        margin-bottom: 18px;
-      }
-
-      .contrast-side {
-        padding: 18px 16px;
-        border-radius: 22px;
-        border: 1px solid rgba(255, 247, 236, 0.1);
-        background: rgba(255, 247, 236, 0.08);
-      }
-
-      .contrast-side .tag {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 10px;
-        color: rgba(255, 247, 236, 0.62);
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-
-      .contrast-side .tag::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--amber);
-      }
-
-      .contrast-side strong {
-        display: block;
-        color: #fff7ec;
-        font-family: "Noto Serif SC", serif;
-        font-size: 30px;
-        line-height: 1.14;
-      }
-
-      .contrast-side p {
-        margin-top: 10px;
-        color: rgba(255, 247, 236, 0.76);
-        font-size: 18px;
-        line-height: 1.42;
-      }
-
-      .contrast-arrow {
-        display: grid;
-        place-items: center;
-        width: 56px;
-        height: 56px;
-        border-radius: 999px;
-        background: rgba(255, 247, 236, 0.1);
-        color: #fff7ec;
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 20px;
-        font-weight: 700;
-      }
-
-      .world-trace {
-        position: relative;
-        height: 286px;
-        margin-top: 10px;
-        border-radius: 24px;
-        overflow: hidden;
-        border: 1px solid rgba(255, 247, 236, 0.08);
-        background:
-          radial-gradient(circle at 74% 22%, rgba(200, 95, 61, 0.16), transparent 16%),
-          radial-gradient(circle at 24% 70%, rgba(221, 176, 106, 0.14), transparent 18%),
-          linear-gradient(to right, rgba(255, 247, 236, 0.06) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 247, 236, 0.06) 1px, transparent 1px);
-        background-size: auto, auto, 70px 70px, 70px 70px;
-      }
-
-      .trace-ring,
-      .trace-ring.two {
-        position: absolute;
-        border-radius: 999px;
-        border: 1px solid rgba(255, 247, 236, 0.12);
-      }
-
-      .trace-ring {
-        inset: 28px 86px 98px 36px;
-      }
-
-      .trace-ring.two {
-        inset: 96px 28px 28px 118px;
-      }
-
-      .trace-node {
-        position: absolute;
-        padding: 12px 14px 11px;
-        border-radius: 18px;
-        border: 1px solid rgba(255, 247, 236, 0.08);
-        background: rgba(255, 247, 236, 0.08);
-      }
-
-      .trace-node strong {
-        display: block;
-        color: #fff6ea;
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 12px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-
-      .trace-node span {
-        display: block;
-        margin-top: 6px;
-        color: rgba(255, 247, 236, 0.76);
-        font-size: 15px;
-        line-height: 1.34;
-      }
-
-      .trace-node.one { left: 28px; top: 32px; }
-      .trace-node.two { right: 26px; top: 74px; }
-      .trace-node.three { left: 126px; bottom: 24px; }
-
-      .mini-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 18px;
-      }
-
-      .mini-card {
-        min-height: 212px;
-        padding: 48px 22px 22px;
-      }
-
-      .mini-card h3 {
-        font-size: 30px;
-      }
-
-      .mini-card p {
-        margin-top: 12px;
-        font-size: 20px;
-        line-height: 1.42;
-      }
-
-      .judgment-grid {
-        position: absolute;
-        left: 78px;
-        right: 78px;
-        top: 156px;
-        bottom: 118px;
-        display: grid;
-        grid-template-columns: 1.06fr 0.94fr;
-        gap: 26px;
-        align-items: start;
-      }
-
-      .reason-card {
-        min-height: 760px;
-      }
-
-      .reason-card h2 {
-        font-size: 76px;
-      }
-
-      .reason-card p {
-        max-width: 460px;
-      }
-
-      .reason-strip {
-        margin-top: 26px;
+      .bullet-stack {
+        margin-top: 28px;
         display: grid;
         gap: 14px;
       }
 
-      .reason-chip {
+      .bullet {
         display: grid;
         grid-template-columns: auto 1fr;
-        gap: 14px;
+        gap: 16px;
         align-items: start;
-        padding: 16px 18px;
-        border-radius: 22px;
-        background: rgba(23, 73, 82, 0.06);
+        padding: 18px 20px;
+        border-radius: 24px;
+        background: rgba(255, 243, 234, 0.82);
       }
 
-      .reason-chip .num {
+      .bullet-index {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
         display: grid;
         place-items: center;
-        width: 36px;
-        height: 36px;
-        border-radius: 999px;
-        background: rgba(200, 95, 61, 0.12);
-        color: var(--rust);
+        background: #fff;
+        color: var(--accent);
         font-family: "IBM Plex Mono", monospace;
-        font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-size: 14px;
         font-weight: 700;
       }
 
-      .reason-chip p {
-        margin: 0;
-        max-width: none;
-        font-size: 21px;
-        line-height: 1.42;
+      .bullet strong {
+        display: block;
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.35;
       }
 
-      .thin-card,
-      .thick-card {
-        padding: 50px 24px 22px;
+      .bullet span {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.5;
       }
 
-      .thin-card h3,
-      .thick-card h3 {
-        font-size: 34px;
-      }
-
-      .thin-card p,
-      .thick-card p {
-        margin-top: 12px;
-        font-size: 22px;
-        line-height: 1.45;
-      }
-
-      .thin-card {
-        background: linear-gradient(180deg, rgba(237, 208, 194, 0.64), rgba(255, 251, 246, 0.92));
-      }
-
-      .thick-card {
-        background: linear-gradient(180deg, rgba(216, 231, 228, 0.78), rgba(255, 251, 246, 0.92));
-      }
-
-      .scenario-grid {
-        position: absolute;
-        left: 78px;
-        right: 78px;
-        top: 156px;
-        bottom: 118px;
+      .side-column {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 26px;
-        align-items: start;
+        gap: 18px;
       }
 
-      .scenario-main,
-      .scenario-card,
-      .vote-main,
-      .vote-option,
-      .vote-question {
-        position: relative;
+      .quote-box,
+      .compare-box,
+      .comment-card {
         border-radius: 30px;
-        border: 1px solid rgba(31, 24, 20, 0.08);
+        padding: 40px 26px 26px;
+      }
+
+      .quote-box,
+      .compare-box {
+        position: relative;
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(35, 24, 21, 0.08);
         box-shadow: var(--shadow);
       }
 
-      .scenario-main,
-      .vote-main {
-        background: linear-gradient(180deg, rgba(20, 60, 67, 0.98), rgba(25, 72, 78, 0.98));
-        color: #fff7ec;
-      }
-
-      .scenario-card,
-      .vote-option,
-      .vote-question {
-        background: rgba(255, 251, 246, 0.9);
-      }
-
-      .scenario-main,
-      .vote-main {
-        padding: 56px 34px 34px;
-      }
-
-      .scenario-main::before,
-      .scenario-card::before,
-      .vote-main::before,
-      .vote-option::before,
-      .vote-question::before {
+      .quote-box::before,
+      .compare-box::before {
         content: "";
         position: absolute;
-        top: -10px;
+        top: -12px;
         left: 24px;
-        width: 90px;
-        height: 22px;
+        width: 92px;
+        height: 24px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.42);
+        background: rgba(255, 255, 255, 0.58);
         transform: rotate(-7deg);
       }
 
-      .scenario-main .eyebrow,
-      .vote-main .eyebrow {
-        color: rgba(255, 247, 236, 0.68);
+      .quote-box {
+        background: linear-gradient(180deg, rgba(255, 232, 174, 0.56), rgba(255, 255, 255, 0.92));
       }
 
-      .scenario-main h2,
-      .vote-main h1 {
-        color: #fff7ec;
+      .quote-box strong {
+        display: block;
+        font-size: 42px;
+        line-height: 1.32;
       }
 
-      .scenario-main p {
-        max-width: 470px;
-        margin-top: 22px;
-        color: rgba(255, 247, 236, 0.78);
+      .quote-box span {
+        display: block;
+        margin-top: 16px;
+        color: var(--soft);
+        font-size: 20px;
       }
 
-      .scenario-ribbon {
-        margin-top: 28px;
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 18px;
-        border-radius: 999px;
-        background: rgba(255, 247, 236, 0.08);
-        color: #fff7ec;
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 13px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        font-weight: 700;
+      .compare-box {
+        background: linear-gradient(180deg, rgba(216, 232, 243, 0.72), rgba(255, 255, 255, 0.9));
       }
 
-      .scenario-ribbon::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--amber);
+      .compare-box h3 {
+        font-size: 34px;
+        line-height: 1.34;
       }
 
-      .scenario-stack {
+      .compare-rows {
+        margin-top: 18px;
         display: grid;
+        gap: 12px;
+      }
+
+      .compare-row {
+        display: grid;
+        grid-template-columns: 124px 1fr;
+        gap: 14px;
+        align-items: center;
+        padding: 14px 16px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .compare-row strong {
+        font-size: 20px;
+      }
+
+      .compare-row span {
+        font-size: 20px;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .slide-3 .canvas {
+        grid-template-rows: auto 1fr;
+        gap: 22px;
+      }
+
+      .scenario-top {
+        padding: 50px 40px 34px;
+        border-radius: 34px;
+      }
+
+      .scenario-top h2 {
+        margin-top: 18px;
+        font-size: 72px;
+      }
+
+      .scenario-top p {
+        max-width: 780px;
+        margin-top: 22px;
+        font-size: 27px;
+      }
+
+      .scenario-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
         gap: 18px;
       }
 
-      .scenario-card {
-        min-height: 224px;
-        padding: 48px 24px 22px;
+      .scenario {
+        min-height: 470px;
+        padding: 42px 26px 28px;
+        border-radius: 30px;
       }
 
-      .scenario-card h3 {
-        font-size: 34px;
+      .scenario.energy {
+        background: linear-gradient(180deg, rgba(216, 232, 243, 0.7), rgba(255, 255, 255, 0.9));
       }
 
-      .scenario-card p {
-        margin-top: 12px;
-        font-size: 22px;
-        line-height: 1.42;
+      .scenario.trade {
+        background: linear-gradient(180deg, rgba(255, 243, 234, 0.86), rgba(255, 255, 255, 0.9));
       }
 
-      .scenario-card.energy {
-        background: linear-gradient(180deg, rgba(216, 231, 228, 0.82), rgba(255, 251, 246, 0.92));
+      .scenario.ally {
+        background: linear-gradient(180deg, rgba(220, 233, 220, 0.9), rgba(255, 255, 255, 0.9));
       }
 
-      .scenario-card.trade {
-        background: linear-gradient(180deg, rgba(237, 208, 194, 0.7), rgba(255, 251, 246, 0.92));
+      .scenario h3 {
+        margin-top: 10px;
+        font-size: 40px;
+        line-height: 1.28;
       }
 
-      .scenario-card.ally {
-        background: linear-gradient(180deg, rgba(221, 176, 106, 0.34), rgba(255, 251, 246, 0.92));
+      .scenario p {
+        margin-top: 18px;
+        font-size: 24px;
       }
 
-      .vote-layout {
+      .scenario ul {
+        margin: 20px 0 0;
+        padding-left: 24px;
+        color: var(--muted);
+        font-size: 21px;
+        line-height: 1.7;
+      }
+
+      .scenario ul li + li {
+        margin-top: 8px;
+      }
+
+      .corner-hand {
         position: absolute;
-        left: 78px;
-        right: 78px;
-        top: 156px;
-        bottom: 118px;
-        display: grid;
+        right: 18px;
+        bottom: 16px;
+        font-size: 34px;
+        transform: rotate(-5deg);
+      }
+
+      .slide-4 .canvas {
         grid-template-rows: auto auto 1fr;
         gap: 22px;
       }
 
-      .vote-main {
-        min-height: 360px;
+      .vote-head {
+        padding: 54px 40px 38px;
+        border-radius: 34px;
       }
 
-      .vote-main p {
-        max-width: 700px;
-        margin-top: 22px;
-        color: rgba(255, 247, 236, 0.78);
-        font-size: 30px;
+      .vote-head h1 {
+        margin-top: 18px;
+        font-size: 76px;
       }
 
-      .vote-options {
+      .vote-head p {
+        max-width: 760px;
+        margin-top: 24px;
+        font-size: 28px;
+      }
+
+      .poll-grid {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 16px;
       }
 
-      .vote-option {
-        padding: 46px 22px 24px;
+      .poll-card {
+        padding: 40px 24px 24px;
+        border-radius: 28px;
         text-align: center;
       }
 
-      .vote-option strong {
-        display: block;
-        margin-bottom: 12px;
-        font-family: "Noto Serif SC", serif;
-        font-size: 34px;
-        line-height: 1.14;
+      .poll-card.chat {
+        background: linear-gradient(180deg, rgba(255, 243, 234, 0.88), rgba(255, 255, 255, 0.9));
       }
 
-      .vote-option span {
+      .poll-card.world {
+        background: linear-gradient(180deg, rgba(216, 232, 243, 0.82), rgba(255, 255, 255, 0.92));
+      }
+
+      .poll-card.both {
+        background: linear-gradient(180deg, rgba(255, 232, 174, 0.62), rgba(255, 255, 255, 0.92));
+      }
+
+      .poll-no {
+        display: inline-grid;
+        place-items: center;
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        margin-bottom: 18px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--accent);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .poll-card strong {
         display: block;
+        font-size: 34px;
+        line-height: 1.28;
+      }
+
+      .poll-card span {
+        display: block;
+        margin-top: 12px;
         color: var(--muted);
-        font-size: 21px;
-        line-height: 1.4;
+        font-size: 22px;
+        line-height: 1.48;
       }
 
-      .vote-option.chat {
-        background: linear-gradient(180deg, rgba(237, 208, 194, 0.62), rgba(255, 251, 246, 0.92));
+      .comment-card {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 16px;
       }
 
-      .vote-option.world {
-        background: linear-gradient(180deg, rgba(216, 231, 228, 0.8), rgba(255, 251, 246, 0.92));
+      .comment-card strong {
+        font-size: 36px;
+        line-height: 1.34;
       }
 
-      .vote-option.both {
-        background: linear-gradient(180deg, rgba(221, 176, 106, 0.28), rgba(255, 251, 246, 0.92));
+      .comment-meta {
+        color: var(--soft);
+        font-size: 14px;
+        letter-spacing: 0.04em;
       }
 
-      .vote-question {
-        padding: 30px 28px 26px;
-      }
-
-      .vote-question p {
+      .comment-bubble {
+        align-self: start;
+        padding: 22px 24px;
+        border-radius: 24px;
+        background: rgba(255, 243, 234, 0.78);
         color: var(--ink);
-        font-size: 34px;
-        line-height: 1.38;
-        font-weight: 800;
+        font-size: 26px;
+        line-height: 1.55;
       }
     </style>
   </head>
   <body>
     <main class="gallery">
-      <section class="slide" data-slide="1">
-        <div class="halo"></div>
-        <div class="grain"></div>
-        <div class="grid"></div>
-        <div class="frame"></div>
-        <header class="header">
-          <div class="brand">oasis7 notes</div>
-          <div class="kicker">ai persona</div>
+      <section class="slide slide-1" data-slide="1">
+        <div class="texture"></div>
+        <div class="blob"></div>
+        <div class="dots"></div>
+        <header class="appbar">
+          <div class="author">
+            <div class="avatar">O7</div>
+            <div class="author-text">
+              <strong>oasis7 studio</strong>
+              <span>human dev + agent team</span>
+            </div>
+          </div>
+          <div class="app-meta"><span class="heart"></span> 3月选题 / AI人格</div>
         </header>
-        <div class="editorial-grid">
-          <article class="headline-card">
-            <div class="eyebrow">studio lead take</div>
+        <div class="canvas">
+          <article class="note-card headline-note">
+            <div class="tag">第 1 页 / 先把立场说清</div>
+            <div class="headline-hand hand">先说结论</div>
             <h1>
-              AI人格很火<br />
-              但我不想做<br />
-              <span class="accent">陪聊搭子</span>
+              AI人格很火，
+              <span class="highlight">但我不想做</span><br />
+              只会陪聊的搭子
             </h1>
-            <p>我更想做的，是会在世界里自己行动、判断、留下后果的角色。</p>
-            <div class="headline-note">not a companion app take</div>
+            <p>我更想做的，是会在世界里自己行动、判断、犯错、留下后果的角色。</p>
           </article>
 
-          <div class="editorial-side">
-            <article class="contrast-card">
-              <div class="panel-label">chat vs world</div>
-              <div class="contrast-head">
-                <div class="contrast-side">
-                  <span class="tag">chat</span>
-                  <strong>会接话</strong>
-                  <p>在聊天框里听起来很像人。</p>
-                </div>
-                <div class="contrast-arrow">vs</div>
-                <div class="contrast-side">
-                  <span class="tag">world</span>
-                  <strong>会行动</strong>
-                  <p>离开聊天框以后，仍然像一个角色。</p>
-                </div>
-              </div>
-              <div class="world-trace">
-                <div class="trace-ring"></div>
-                <div class="trace-ring two"></div>
-                <article class="trace-node one">
-                  <strong>energy first</strong>
-                  <span>资源紧张时先保供能</span>
-                </article>
-                <article class="trace-node two">
-                  <strong>trade memory</strong>
-                  <span>吃过亏后下一轮更谨慎</span>
-                </article>
-                <article class="trace-node three">
-                  <strong>ally failure</strong>
-                  <span>同伴掉链子时补位还是退出</span>
-                </article>
+          <div class="duo-grid">
+            <article class="bubble-card">
+              <div class="mini-label">很多产品会停在这里</div>
+              <h3>会聊天，当然重要</h3>
+              <div class="bubble-list">
+                <div class="chat">懂接话、懂情绪、懂陪伴感。</div>
+                <div class="chat user">但离开聊天框之后，它还剩下什么？</div>
               </div>
             </article>
 
-            <div class="mini-grid">
-              <article class="mini-card">
-                <div class="panel-label">too easy</div>
-                <h3>只会说话</h3>
-                <p>这更像一个界面里的陪伴功能，不像世界里的角色。</p>
-              </article>
-              <article class="mini-card">
-                <div class="panel-label">what I want</div>
-                <h3>会判断<br />会留痕</h3>
-                <p>做过选择，承担后果，还会被别的角色记住。</p>
-              </article>
+            <article class="stack-card">
+              <div class="mini-label">我更在意这一层</div>
+              <h3>放进世界里之后，<br />它还像不像一个角色</h3>
+              <p>不是说得像人，而是遇到事情时会真的去选、去做、去承担。</p>
+              <div class="trace-list">
+                <div class="trace-item">
+                  资源不够时先保什么？
+                  <span>能源、数据、同伴，优先级都暴露判断。</span>
+                </div>
+                <div class="trace-item">
+                  做错选择以后会怎样？
+                  <span>会留下痕迹，也会改变下一次行动。</span>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div class="sticky-row">
+            <div class="sticky left">
+              <strong>“像真人说话”</strong>
+              <span>更像入口层能力</span>
+            </div>
+            <div class="sticky right">
+              <strong>“像角色一样活着”</strong>
+              <span>才更像我要的游戏对象</span>
             </div>
           </div>
         </div>
         <footer class="footer">
-          <span>slide 1 / 4</span>
-          <span>cover split</span>
+          <div class="footer-left">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <div class="page-chip">01 / 04</div>
         </footer>
       </section>
 
-      <section class="slide" data-slide="2">
-        <div class="halo"></div>
-        <div class="grain"></div>
-        <div class="grid"></div>
-        <div class="frame"></div>
-        <header class="header">
-          <div class="brand">oasis7 notes</div>
-          <div class="kicker">core line</div>
+      <section class="slide slide-2" data-slide="2">
+        <div class="texture"></div>
+        <div class="blob"></div>
+        <div class="dots"></div>
+        <header class="appbar">
+          <div class="author">
+            <div class="avatar">O7</div>
+            <div class="author-text">
+              <strong>oasis7 studio</strong>
+              <span>human dev + agent team</span>
+            </div>
+          </div>
+          <div class="app-meta"><span class="heart"></span> 核心判断</div>
         </header>
-        <div class="judgment-grid">
-          <article class="reason-card">
-            <div class="eyebrow">what I actually care about</div>
-            <h2>
-              人格不只是<br />
-              <span class="accent">会聊天</span>
-            </h2>
+        <div class="canvas">
+          <article class="note-card big-judge">
+            <div class="tag">第 2 页 / 我真正判断的点</div>
+            <h2>人格，不只是<br />“它会不会聊天”</h2>
             <p>
-              如果它只会在聊天框里把话说得像真人，那还是太薄了。
-              我更在意的是，它进了世界以后会怎么选、怎么做、会留下什么后果。
+              如果它只是在聊天框里把话说得像真人，那层还太薄。
+              我更在意的是，它进了世界以后，遇到压力时到底会怎么取舍。
             </p>
-            <div class="reason-strip">
-              <div class="reason-chip">
-                <span class="num">01</span>
-                <p>像不像真人，只能说明它会表达。</p>
+            <div class="bullet-stack">
+              <div class="bullet">
+                <div class="bullet-index">01</div>
+                <div>
+                  <strong>会表达，不等于会行动</strong>
+                  <span>把一句话说圆，不代表它真有判断结构。</span>
+                </div>
               </div>
-              <div class="reason-chip">
-                <span class="num">02</span>
-                <p>真正拉开差距的是：遇到压力时，它会怎么取舍。</p>
+              <div class="bullet">
+                <div class="bullet-index">02</div>
+                <div>
+                  <strong>真正拉开差距的是取舍</strong>
+                  <span>资源紧的时候先保谁，交易亏过以后会不会改，才更见人格。</span>
+                </div>
               </div>
-              <div class="reason-chip">
-                <span class="num">03</span>
-                <p>能行动、会犯错、会留下痕迹，才更像一个角色。</p>
+              <div class="bullet">
+                <div class="bullet-index">03</div>
+                <div>
+                  <strong>会留下后果，才更像角色</strong>
+                  <span>它做出的决定，会改变世界，也会被世界记住。</span>
+                </div>
               </div>
             </div>
           </article>
 
-          <div class="sub-stack">
-            <article class="thin-card">
-              <div class="panel-label">too thin</div>
-              <h3>只剩话风</h3>
-              <p>在聊天里显得聪明，不等于在世界里像一个活着的角色。</p>
+          <div class="side-column">
+            <article class="quote-box">
+              <strong>关键不是<br />它像不像人，<br />而是它遇事<br />会不会自己选。</strong>
+              <span>这是我对“AI人格”的真实兴趣点。</span>
             </article>
-            <article class="thick-card">
-              <div class="panel-label">thicker layer</div>
-              <h3>进入世界以后</h3>
-              <p>会取舍、会犯错、会记住代价，才是我更在意的人格厚度。</p>
+
+            <article class="compare-box">
+              <div class="mini-label">一句话区分</div>
+              <h3>我会把这两层分开看</h3>
+              <div class="compare-rows">
+                <div class="compare-row">
+                  <strong>会聊天</strong>
+                  <span>更偏表达层、风格层。</span>
+                </div>
+                <div class="compare-row">
+                  <strong>会判断</strong>
+                  <span>更偏角色层、世界层。</span>
+                </div>
+                <div class="compare-row">
+                  <strong>会留痕</strong>
+                  <span>做过的选择，下一轮还能看见代价。</span>
+                </div>
+              </div>
             </article>
           </div>
         </div>
         <footer class="footer">
-          <span>slide 2 / 4</span>
-          <span>judgment card</span>
+          <div class="footer-left">
+            <span class="dot"></span>
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <div class="page-chip">02 / 04</div>
         </footer>
       </section>
 
-      <section class="slide" data-slide="3">
-        <div class="halo"></div>
-        <div class="grain"></div>
-        <div class="grid"></div>
-        <div class="frame"></div>
-        <header class="header">
-          <div class="brand">oasis7 notes</div>
-          <div class="kicker">examples</div>
+      <section class="slide slide-3" data-slide="3">
+        <div class="texture"></div>
+        <div class="blob"></div>
+        <div class="dots"></div>
+        <header class="appbar">
+          <div class="author">
+            <div class="avatar">O7</div>
+            <div class="author-text">
+              <strong>oasis7 studio</strong>
+              <span>human dev + agent team</span>
+            </div>
+          </div>
+          <div class="app-meta"><span class="heart"></span> 我会怎么看它</div>
         </header>
-        <div class="scenario-grid">
-          <article class="scenario-main">
-            <div class="eyebrow">when I judge it</div>
-            <h2>
-              比如这些时候<br />
-              <span class="accent">它会怎么选</span>
-            </h2>
-            <p>
-              我不先看它会不会接梗。我先看它面对资源、交易和协作压力时，到底会做什么选择。
-            </p>
-            <div class="scenario-ribbon">behavior reveals personality</div>
+        <div class="canvas">
+          <article class="note-card scenario-top">
+            <div class="tag">第 3 页 / 三种最能看出差异的场景</div>
+            <h2>我不会先看它会不会接梗，<br />我会先看它在压力里怎么选</h2>
+            <p>资源、交易、协作，这三类场景最容易把“人格”从空话里拽出来。因为一到这里，它就必须做决定。</p>
           </article>
-          <div class="scenario-stack">
-            <article class="scenario-card energy">
-              <div class="panel-label">case 01</div>
+
+          <div class="scenario-grid">
+            <article class="scenario energy">
+              <div class="mini-label">场景 01</div>
               <h3>资源紧张</h3>
-              <p>它先保能源，还是先保数据？</p>
+              <p>能源不够、数据也不够，它到底先保哪个？</p>
+              <ul>
+                <li>先保当前生存</li>
+                <li>还是为后面一轮留余量</li>
+                <li>这个选择本身就在暴露性格</li>
+              </ul>
+              <div class="corner-hand hand">这里最见判断</div>
             </article>
-            <article class="scenario-card trade">
-              <div class="panel-label">case 02</div>
+
+            <article class="scenario trade">
+              <div class="mini-label">场景 02</div>
               <h3>交易吃亏</h3>
-              <p>它下次会不会变得更谨慎？</p>
+              <p>它下一次会不会更谨慎，还是继续冒险？</p>
+              <ul>
+                <li>会不会记住损失</li>
+                <li>会不会调整合作对象</li>
+                <li>这比“会不会说漂亮话”更重要</li>
+              </ul>
+              <div class="corner-hand hand">看它会不会学</div>
             </article>
-            <article class="scenario-card ally">
-              <div class="panel-label">case 03</div>
+
+            <article class="scenario ally">
+              <div class="mini-label">场景 03</div>
               <h3>同伴掉链子</h3>
               <p>它会补位、甩锅，还是干脆退出？</p>
+              <ul>
+                <li>会不会承担额外成本</li>
+                <li>会不会重新评估关系</li>
+                <li>协作里的选择最像角色，而不是功能</li>
+              </ul>
+              <div class="corner-hand hand">关系也会留痕</div>
             </article>
           </div>
         </div>
         <footer class="footer">
-          <span>slide 3 / 4</span>
-          <span>behavior tests</span>
+          <div class="footer-left">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot active"></span>
+            <span class="dot"></span>
+          </div>
+          <div class="page-chip">03 / 04</div>
         </footer>
       </section>
 
-      <section class="slide" data-slide="4">
-        <div class="halo"></div>
-        <div class="grain"></div>
-        <div class="grid"></div>
-        <div class="frame"></div>
-        <header class="header">
-          <div class="brand">oasis7 notes</div>
-          <div class="kicker">your turn</div>
+      <section class="slide slide-4" data-slide="4">
+        <div class="texture"></div>
+        <div class="blob"></div>
+        <div class="dots"></div>
+        <header class="appbar">
+          <div class="author">
+            <div class="avatar">O7</div>
+            <div class="author-text">
+              <strong>oasis7 studio</strong>
+              <span>human dev + agent team</span>
+            </div>
+          </div>
+          <div class="app-meta"><span class="heart"></span> 留言区想聊这个</div>
         </header>
-        <div class="vote-layout">
-          <article class="vote-main">
-            <div class="eyebrow">so I end up wanting</div>
-            <h1>
-              不是更会聊天的搭子<br />
-              而是会在世界里<br />
-              <span class="accent">自己行动的角色</span>
-            </h1>
-            <p>如果是你，你会更想要哪一种？</p>
+        <div class="canvas">
+          <article class="note-card vote-head">
+            <div class="tag">第 4 页 / 最后的站队题</div>
+            <h1>所以我最后想要的，<br />不是更会聊天的搭子，<br />而是会在世界里自己行动的角色。</h1>
+            <p>如果是你，你会更想要哪一种？我其实很想看大家怎么站队。</p>
           </article>
-          <div class="vote-options">
-            <article class="vote-option chat">
+
+          <div class="poll-grid">
+            <article class="poll-card chat">
+              <div class="poll-no">01</div>
               <strong>会陪聊</strong>
-              <span>情绪价值强<br />一直在线接话</span>
+              <span>情绪价值拉满，<br />一直在线接话。</span>
             </article>
-            <article class="vote-option world">
+            <article class="poll-card world">
+              <div class="poll-no">02</div>
               <strong>会判断</strong>
-              <span>进了世界以后<br />真的会自己选</span>
+              <span>进了世界以后，<br />真的会自己选。</span>
             </article>
-            <article class="vote-option both">
+            <article class="poll-card both">
+              <div class="poll-no">03</div>
               <strong>两者都要</strong>
-              <span>但行动和后果<br />必须是真的</span>
+              <span>但前提是行动和后果<br />不能只是表演。</span>
             </article>
           </div>
-          <article class="vote-question">
-            <div class="eyebrow">comment hook</div>
-            <p>你会更想要一个会陪你聊天的 AI，还是一个会在世界里自己行动的角色？</p>
+
+          <article class="comment-card">
+            <div class="comment-meta">评论区引导 / 适合直接抄到正文最后一句</div>
+            <strong>你会更想要一个会陪你聊天的 AI，<br />还是一个会在世界里自己行动的角色？</strong>
+            <div class="comment-bubble">如果你只能先选一个，你会选哪边？我自己明显更偏第 2 种。</div>
           </article>
         </div>
         <footer class="footer">
-          <span>slide 4 / 4</span>
-          <span>comment hook</span>
+          <div class="footer-left">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot active"></span>
+          </div>
+          <div class="page-chip">04 / 04</div>
         </footer>
       </section>
     </main>

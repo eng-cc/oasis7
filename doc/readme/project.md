@@ -511,6 +511,21 @@
     - `rg -n "scenario-grid|scenario-main|scenario-card|vote-layout|vote-main|vote-option|vote-question" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-049 (PRD-README-031) [test_tier_required]: 将第七篇 4 页轮播从“编辑部判断卡 / 海报感”继续收口到更接近小红书原生图文卡片的视觉语言，保留逐页主题与评论区问题不变，但统一替换为更轻、更松、更像 feed 内笔记的手机端读感。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
+    - `site/social/xiaohongshu-ai-persona-carousel.html`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide1.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
+    - `doc/devlog/2026-03-30.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "Ma Shan Zheng|note-card|poll-card|comment-card|scenario-top|bubble-card|stack-card" site/social/xiaohongshu-ai-persona-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -526,6 +541,7 @@
 - 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-049`（已把第七篇 4 页轮播从编辑部判断卡继续收口到更接近小红书原生图文卡片的视觉语言，并重导全部 PNG。）
 - 最新完成: `TASK-README-048`（已重做第七篇轮播版后两页视觉骨架，把案例页与收束页收口到同一套编辑部判断卡语言。）
 - 最新完成: `TASK-README-047`（已重做第七篇轮播版前两页视觉骨架，修复元素重叠并收口为更稳的编辑部判断卡布局。）
 - 最新完成: `TASK-README-046`（已为小红书第七篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，保持“会聊天 vs 会行动”的核心判断与评论区站队问题一致。）
