@@ -20,6 +20,7 @@
 - `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`
 - `doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md`
 - `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- `doc/core/reviews/consistency-review-round-009.md`
 
 ## 维护约定
 - 跨模块边界、候选级入口或主链路变化时，优先更新 core PRD。

@@ -61,6 +61,11 @@
     - `doc/core/reviews/round-008-reviewed-files.md`
     - `doc/core/reviews/round-008-design-backfill-priority-list.md`
     - `doc/core/reviews/round-008-audit-progress-log.md`
+  - ROUND-009 启动产物（2026-03-30，文档消费入口与手册语义收口轮）:
+    - `doc/core/reviews/consistency-review-round-009.md`
+    - `doc/core/reviews/round-009-reviewed-files.md`
+    - `doc/core/reviews/round-009-kickoff-worklist.md`
+    - `doc/core/reviews/round-009-audit-progress-log.md`
   - ROUND-002 进展（2026-03-05）:
     - 已完成 A/B/C/D-E 分区重复簇盘点并回写到 ROUND-002 台账。
     - 已完成首批执行 `C2-007`：`viewer-chat-agent-prompt-default-values-inline-input` 并入 `prefill` 且旧文档已删除，替代链与索引已回写。
@@ -203,6 +208,19 @@
     - `rg -n "crates/oasis7|crates/oasis7_wasm_|crates/oasis7_viewer|crates/oasis7_client_launcher|crates/oasis7_(net|consensus|distfs|node)|crates/oasis7/src/bin" doc/core/prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-CORE-033 (PRD-CORE-003/008) [test_tier_required]: 建立 ROUND-009“文档消费入口与手册语义收口轮”台账，冻结 focused scope、问题池、工作清单与进度日志，作为后续小分母治理入口。
+  - 产物文件:
+    - `doc/core/reviews/consistency-review-round-009.md`
+    - `doc/core/reviews/round-009-reviewed-files.md`
+    - `doc/core/reviews/round-009-kickoff-worklist.md`
+    - `doc/core/reviews/round-009-audit-progress-log.md`
+  - 验收命令 (`test_tier_required`):
+    - `test -f doc/core/reviews/consistency-review-round-009.md`
+    - `test -f doc/core/reviews/round-009-reviewed-files.md`
+    - `test -f doc/core/reviews/round-009-kickoff-worklist.md`
+    - `test -f doc/core/reviews/round-009-audit-progress-log.md`
+    - `rg -n "ROUND-009|文档消费入口与手册语义收口轮|I9-|G9-" doc/core/reviews/consistency-review-round-009.md`
+    - `./scripts/doc-governance-check.sh`
 
 ## 依赖
 - doc/core/prd.index.md
@@ -217,7 +235,7 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-03-20
+- 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
@@ -239,6 +257,7 @@
 - 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，收口三模式与 execution lane 的跨模块口径）。
 - 最新完成: `TASK-CORE-030`（已完成 core / viewer 活跃入口与实际窗口标题的 `oasis7` 品牌收口）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts`、`world-runtime` 的活跃专题品牌收口）。
+- 最新完成: `TASK-CORE-033`（已建立 ROUND-009 小分母治理台账，冻结消费入口/手册语义 focused scope 与问题池）。
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。

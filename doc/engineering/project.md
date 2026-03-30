@@ -67,6 +67,7 @@
 - [ ] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理。
 - [ ] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批 UI / automation 超限文件治理。
 - [ ] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略与冻结尾债清单。
+- [x] TASK-ENGINEERING-058 (PRD-ENGINEERING-015) [test_tier_required]: 将 ROUND-009 定义为“小分母文档消费入口/手册语义治理轮”，复用既有 round 台账模式并冻结 focused scope、问题池与执行清单。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -99,7 +100,7 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-03-29
+- 更新日期: 2026-03-30
 - 当前状态: active
 - 下一任务: `TASK-ENGINEERING-054`（`chain_runtime` 首批目录模块化治理）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
@@ -110,6 +111,7 @@
 - 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。
 - 最新完成: `TASK-ENGINEERING-052`（Rust 文件体量检查脚本、冻结超限基线与 required gate 接入）。
 - 最新完成: `TASK-ENGINEERING-053`（`touch-and-shrink`、结构切片基线与 `split_part/include!` 完成态阻断规则接入 Rust 文件体量检查脚本）。
+- 最新完成: `TASK-ENGINEERING-058`（ROUND-009 以小分母方式挂靠到既有文档治理轮模式，并冻结 focused scope / 问题池 / 清单骨架）。
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
