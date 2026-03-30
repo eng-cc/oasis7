@@ -172,6 +172,17 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 
 欢迎讨论与贡献。
 
+## 从这里开始
+
+如果你现在只是想快速找到正确入口，先按目标选路径：
+
+| 你的目标 | 先读 | 再读 |
+| --- | --- | --- |
+| 想确认项目现在公开到了什么程度 | [`site/index.html`](./site/index.html) | [`site/doc/cn/index.html`](./site/doc/cn/index.html) |
+| 想本地验证 Viewer / Web / API 链路 | [`testing-manual.md`](./testing-manual.md) | [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md) |
+| 想理解世界规则、玩法和玩家边界 | [`world-rule.md`](./world-rule.md) | [`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md) |
+| 想参与开发或继续治理文档/代码 | [`doc/README.md`](./doc/README.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
+
 
 ## 世界设定与运行机制补充说明
 
