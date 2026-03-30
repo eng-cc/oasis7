@@ -209,6 +209,7 @@
     - `rg -n "sum=10000 bps|genesis_liquid|1500 bps|5000 bps|custody|treasury|verdict" doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md doc/testing/evidence/token-genesis-allocation-audit-template-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-TESTING-063 (PRD-TESTING-004) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Web UI 闭环补 canonical `*.manual.md` 操作手册，并同步主手册、模块入口与 PRD/project 职责边界。
 
 - 当前阻断摘要：`doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
 
@@ -216,15 +217,17 @@
 - 模块设计总览：`doc/testing/design.md`
 - doc/testing/prd.index.md
 - `testing-manual.md`
+- `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
 - `scripts/ci-tests.sh`
 - `.github/workflows/*`
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-22
+- 更新日期: 2026-03-30
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `TASK-TESTING-063`（已为 Web UI 闭环建立 canonical `*.manual.md` 操作手册，并将 `testing-manual`、testing README 与 PRD/project 职责边界同步收口。）
 - 最新完成: `TASK-TESTING-062`（已建立 Token 创世分配 QA 审计清单专题与执行模板，冻结比例/个人上限/流通边界/custody 语义的 QA 门禁。）
 - 最新完成: `TASK-TESTING-061`（已清理 `doc/testing/{longrun,governance,performance,ci,manual}` 活跃专题中的旧品牌 crate/path/env 当前真值，统一到 `oasis7*` / `OASIS7_*`）。
 - 最新完成: `TASK-TESTING-060`（已清理 `doc/testing/launcher/**` 活跃专题中的旧品牌 crate/path/env/command 当前真值，统一到 `oasis7*` / `OASIS7_*`）。

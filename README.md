@@ -179,7 +179,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 `README` 负责快速对齐口径，细则统一维护在权威文档中，避免多处重复维护：
 
 - 世界规则细则：[`world-rule.md`](./world-rule.md)
-- Viewer/运行使用说明：[`doc/world-simulator/viewer/viewer-manual.md`](./doc/world-simulator/viewer/viewer-manual.md)
+- Viewer/运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - 闭环测试与套件矩阵：[`testing-manual.md`](./testing-manual.md)
 - 游戏可玩性顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
 - 游戏玩法工程架构设计：[`doc/game/gameplay/gameplay-engineering-architecture.md`](./doc/game/gameplay/gameplay-engineering-architecture.md)
@@ -238,7 +238,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 细则入口：
 
 - [`doc/core/player-access-mode-contract-2026-03-19.prd.md`](./doc/core/player-access-mode-contract-2026-03-19.prd.md)
-- [`doc/world-simulator/viewer/viewer-manual.md`](./doc/world-simulator/viewer/viewer-manual.md)
+- [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - [`testing-manual.md`](./testing-manual.md)
 
 ---
@@ -265,4 +265,4 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 边界与规则入口：
 
 - [`world-rule.md`](./world-rule.md)
-- [`doc/world-simulator/viewer/viewer-manual.md`](./doc/world-simulator/viewer/viewer-manual.md)
+- [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)

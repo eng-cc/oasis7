@@ -33,7 +33,7 @@
 - 其余专题文档已迁移到对应主题目录（`viewer/`、`llm/`、`launcher/`、`scenario/`、`kernel/`、`m4/`）。
 
 ## 专项手册
-- Viewer 使用手册：`doc/world-simulator/viewer/viewer-manual.md`
+- Viewer 使用手册：`doc/world-simulator/viewer/viewer-manual.manual.md`
 
 ## 根目录 legacy
 - `doc/world-simulator.prd.md`

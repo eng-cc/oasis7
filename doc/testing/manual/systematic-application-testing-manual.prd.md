@@ -57,9 +57,10 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 以 `testing-manual.md` 为主入口，`doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` 为 Web 闭环分册，脚本入口负责执行层闭环，三者通过引用关系保持一致。
+- Architecture Overview: 以 `testing-manual.md` 为主入口，`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` 为 Web 闭环操作分册，`doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` 为需求/验收权威源，脚本入口负责执行层闭环，四者通过引用关系保持一致。
 - Integration Points:
   - `testing-manual.md`
+  - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `scripts/ci-tests.sh`
   - `scripts/viewer-release-qa-loop.sh`

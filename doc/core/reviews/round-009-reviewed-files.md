@@ -30,7 +30,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `README.md` | repo 对外入口 | 是否需要补角色/任务型阅读入口 | split | P0 | `producer_system_designer` | issue_open | I9-001 | 当前更偏项目总介绍，缺少“我现在该读什么”分流 |
 | `doc/README.md` | 工程总导航 | 是否继续仅按模块组织，还是补消费层入口 | split | P0 | `producer_system_designer` | issue_open | I9-001 | 当前导航清晰但偏治理视角 |
-| `testing-manual.md` | 系统总手册 | 是否继续作为总手册权威源 | keep | P0 | `qa_engineer` | scoped | I9-002 | 倾向保留为总手册，不直接拆散 |
+| `testing-manual.md` | 系统总手册 | 是否继续作为总手册权威源 | keep | P0 | `qa_engineer` | aligned | I9-002 | 已保留为总手册，并把 Web UI 执行步骤下沉到 `web-ui-agent-browser-closure-manual.manual.md` |
 | `doc/core/README.md` | core 模块索引 | 是否补 ROUND-009 入口与治理说明 | keep | P2 | `producer_system_designer` | scoped | none | 当前只需承担 round 可达性 |
 | `doc/engineering/README.md` | engineering 模块索引 | 是否需要记录 ROUND-009 规范挂靠 | keep | P2 | `producer_system_designer` | scoped | none | 工程挂靠以 project 为主 |
 | `doc/game/README.md` | game 模块索引 | 入口是否对新读者足够友好 | defer | P2 | `producer_system_designer` | scoped | I9-001 | 本轮仅抽样，不先扩容 |
@@ -45,8 +45,8 @@
 | `doc/world-simulator/README.md` | world-simulator 模块索引 | 高体量模块入口与专项手册关系是否清楚 | split | P1 | `viewer_engineer` | issue_open | I9-005 | 当前主题目录清楚，但缺读者导向分流 |
 | `doc/ui_review_result/README.md` | 活跃样本目录说明 | 是否继续作为标准模块外例外目录存在 | split | P1 | `viewer_engineer` | issue_open | I9-004 | 当前更像样本池，不像正式模块 |
 | `doc/readme/prd.index.md` | readme 文件级索引 | 规范文档与素材包并列导致索引语义混杂 | split | P0 | `liveops_community` | issue_open | I9-003 | 需要分出 canonical 与 material 两层 |
-| `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | Web UI 分册手册 | 是否应迁移为 `*.manual.md` | migrate | P0 | `qa_engineer` | issue_open | I9-002 | 当前标题/内容都像手册，但载体为 PRD |
-| `doc/world-simulator/viewer/viewer-manual.md` | Viewer 高频手册 | 是否保留 legacy 命名或迁移为 `*.manual.md` | migrate | P0 | `viewer_engineer` | issue_open | I9-002 | 当前是典型手册型文档 |
+| `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | Web UI 分册手册 | 是否应迁移为 `*.manual.md` | migrate | P0 | `qa_engineer` | aligned | I9-002 | 已新增 `web-ui-agent-browser-closure-manual.manual.md` 承接操作步骤；PRD 保留需求/验收权威源 |
+| `doc/world-simulator/viewer/viewer-manual.md` | Viewer 高频手册 | 是否保留 legacy 命名或迁移为 `*.manual.md` | migrate | P0 | `viewer_engineer` | aligned | I9-002 | 已新增 `viewer-manual.manual.md` 作为 canonical 手册，旧路径降级为兼容入口 |
 | `site/doc/cn/index.html` | 中文公开 docs hub 入口 | 是否需要与 repo 入口共享消费层分流 | keep | P1 | `liveops_community` | scoped | I9-001/I9-005 | 当前是精选入口，非完整站点索引 |
 | `site/doc/en/index.html` | 英文公开 docs hub 入口 | 是否需要与中文入口保持同一消费分层 | keep | P1 | `liveops_community` | scoped | I9-001/I9-005 | 需与中文页同步判断 |
 | `site/doc/cn/viewer-manual.html` | 中文静态手册镜像 | 是否需随仓库手册迁移一起改名/改链 | defer | P1 | `viewer_engineer` | scoped | I9-005 | 依赖仓库权威手册结论 |

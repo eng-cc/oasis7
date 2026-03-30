@@ -40,7 +40,7 @@
   - `site/index.html`
   - `site/en/index.html`
 - 内容来源
-  - `doc/world-simulator/viewer/viewer-manual.md`（中文原稿）
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`（中文原稿）
 
 ## 里程碑
 - M1：文档与任务拆解
@@ -56,7 +56,7 @@
 - 风险：CN/EN 内容漂移。
   - 缓解：同任务内成对维护 `cn/en` 页面，并在目录页统一挂载。
 - 风险：手册内容更新后站内版本过时。
-  - 缓解：明确 `doc/world-simulator/viewer/viewer-manual.md` 为内容基线，后续按任务滚动同步。
+  - 缓解：明确 `doc/world-simulator/viewer/viewer-manual.manual.md` 为内容基线，后续按任务滚动同步。
 - 风险：文档页样式影响首页样式。
   - 缓解：新增样式尽量限定在 `.docs-*` 命名空间内。
 

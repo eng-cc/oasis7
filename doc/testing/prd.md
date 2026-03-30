@@ -104,6 +104,7 @@
 - Architecture Overview: testing 模块是仓库级验证层，负责连接代码改动、测试触发、证据产物与发布门禁。
 - Integration Points:
   - `testing-manual.md`
+  - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`

@@ -14,3 +14,6 @@
 | 2026-03-30 11:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-manual.md` + `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` + `testing-manual.md` | `scan` | issue_open | I9-002 | 高频手册语义已确认存在 legacy/PRD 壳子漂移 |
 | 2026-03-30 11:55:00 +0800 | `producer_system_designer` | `doc/ui_review_result/**` | `scan` | issue_open | I9-004 | 当前更像活跃样本目录，未纳入标准模块骨架 |
 | 2026-03-30 12:00:21 +0800 | `producer_system_designer` | `doc/core/reviews/ROUND-009` | `backfill` | pass | none | 已建立 ROUND-009 台账、focused scope 清单、kickoff worklist 与进度日志，并冻结 23 个对象分母 |
+| 2026-03-30 13:24:52 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-manual.*` | `migrate` | pass | I9-002 | 已建立 `viewer-manual.manual.md` 作为 canonical 手册，`viewer-manual.md` 降级为兼容入口 |
+| 2026-03-30 13:24:52 +0800 | `producer_system_designer` | `doc/testing/manual/web-ui-agent-browser-closure-manual.*` + `testing-manual.md` | `migrate` | pass | I9-002 | 已建立 `web-ui-agent-browser-closure-manual.manual.md` 承接执行步骤，并将 PRD 收口为需求/验收权威源 |
+| 2026-03-30 13:24:52 +0800 | `producer_system_designer` | `README.md` + `doc/README.md` + `doc/world-simulator/README.md` + `doc/testing/README.md` + `site/doc/{cn,en}/index.html` | `backfill` | pass | I9-002 | 已将首批高频入口回写到 canonical manual 路径，并保留旧路径兼容层 |

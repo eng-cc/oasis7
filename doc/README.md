@@ -20,7 +20,7 @@
 
 ## 根目录入口说明
 - 以下文件为兼容跳转入口（legacy redirect），正文已迁移到模块目录：
-  - `doc/viewer-manual.md` -> `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/viewer-manual.md` -> `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/game-test.prd.md` -> `doc/playability_test_result/game-test.prd.md`
   - `doc/game-test.project.md` -> `doc/playability_test_result/game-test.project.md`
   - `doc/playability_test_card.md` -> `doc/playability_test_result/playability_test_card.md`

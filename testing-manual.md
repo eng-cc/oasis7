@@ -46,7 +46,7 @@
   - UI/相机/事件联动等单测散布在 `src/*.rs` 与 `src/tests_*.rs`
   - 快照基线：`crates/oasis7_viewer/tests/snapshots/*.png`
   - Web 启动入口：`oasis7_game_launcher`（内置静态服务，`run-viewer-web.sh` 仅保留为兼容/排障工具）
-  - Web 闭环采样：agent-browser CLI（详见 `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`）
+  - Web 闭环采样：agent-browser CLI（详见 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`）
 
 ### 分布式与共识子系统
 - Node：`crates/oasis7_node`
@@ -314,7 +314,8 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 
 ### S6：Web UI 闭环 smoke 套件（L4）
 - S6 详细执行步骤、agent-browser 命令、发布门禁与补充约定已拆分到：
-  - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
+  - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
+  - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`（需求边界/成功标准）
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
 - 模式总口径（`PRD-CORE-009`）：

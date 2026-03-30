@@ -993,7 +993,7 @@
 - `scripts/capture-viewer-frame.sh`
 - `testing-manual.md`
 ## 状态
-- 更新日期 / 当前状态 / 下一任务: 2026-03-21 / active / 无
+- 更新日期 / 当前状态 / 下一任务: 2026-03-30 / active / 无
 - 最新完成: `TASK-WORLD_SIMULATOR-282`（已把 `module_source`、`builtin_wasm`、`llm_agent`、`runtime_live`、`viewer`、`launcher` 与 `wasm_build_suite` 中最后一批旧品牌 env 负向输入改成动态构造，源码内不再保留连续 `OASIS7_*` 文本。）
 - 当前优先任务: `fix3` 已恢复 builtin/OpenClaw 的行为等价基线；继续压缩 OpenClaw absolute wait latency，争取把 `latency_class` 从 `B (experimental-only)` 收敛到 `A (default-candidate)` 后再讨论默认启用。
 - 当前阻断说明: `PRD-WORLD_SIMULATOR-040` 已完成 T4 对照采证并解除阻断；`PRD-WORLD_SIMULATOR-038` 在 `openclaw_builtin_parity_20260317_fix3` 中已恢复 `completion_rate=100%`、`timeout_rate=0%` 与 `move_agent=4`，且 `relative_wait_gap` 满足行为等价硬门禁，但 OpenClaw `median_extra_wait_ms=13957`、`p95_extra_wait_ms=14062` 仅达到 `latency_class B`，因此当前允许保持 `experimental` / 受限试点，仍不得默认启用。

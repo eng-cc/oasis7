@@ -1,13 +1,14 @@
 # oasis7：Web UI agent-browser 闭环测试手册（2026-02-28）
 
+- 对应操作手册: `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 对应设计文档: `doc/testing/manual/web-ui-playwright-closure-manual.design.md`
 - 对应项目管理文档: `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`
 
-审计轮次: 4
+审计轮次: 9
 
 ## 1. Executive Summary
 - Problem Statement: Web UI 验收若缺少统一启动、采样、门禁与故障分级，且未区分 Viewer 页面与 launcher 控制面的驱动优先级，容易出现“看起来可用但证据不可复现”的假通过。
-- Proposed Solution: 保留 agent-browser 作为 Viewer 页面默认闭环手册，同时显式规定 `oasis7_web_launcher` / launcher Web 控制面先用 GUI Agent 驱动产品动作，再用页面做状态与字段校验，并统一接入发布脚本与 fail-fast 处置；Viewer Web 默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径，若 headed 仍落到 software renderer 则继续按环境阻断。
+- Proposed Solution: 保留 agent-browser 作为 Viewer 页面默认闭环方案，但把“逐步执行命令与证据采样”下沉到 `web-ui-agent-browser-closure-manual.manual.md`；本 PRD 只维护边界、成功标准与发布/阻断口径。同时显式规定 `oasis7_web_launcher` / launcher Web 控制面先用 GUI Agent 驱动产品动作，再用页面做状态与字段校验，并统一接入发布脚本与 fail-fast 处置；Viewer Web 默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径，若 headed 仍落到 software renderer 则继续按环境阻断。
 - Success Criteria:
   - SC-1: S6 Web 闭环流程可由手册命令一键复现，并明确区分 Viewer 与 launcher 控制面两类 surface。
   - SC-2: 验收口径强制 `open ... --headed`，并默认附带 `--use-angle=gl,--ignore-gpu-blocklist`；若仍命中 `SwiftShader/software rendering` 继续阻断。
@@ -74,9 +75,10 @@
 - Evaluation Strategy: 通过语义动作成功率（`__AW_TEST__` 可用性）、门禁通过率和故障分级命中率评估闭环质量。
 
 ## 4. Technical Specifications
-- Architecture Overview: Web 闭环按 surface 分为两条路径：`oasis7_viewer_live` / Viewer 页面由 agent-browser 负责页面驱动与证据采样；`oasis7_web_launcher` / launcher Web 控制面由 GUI Agent 负责产品动作驱动，再由页面校验状态与字段；发布脚本承载标准化验收与总结。
+- Architecture Overview: Web 闭环按 surface 分为两条路径：`oasis7_viewer_live` / Viewer 页面由 `web-ui-agent-browser-closure-manual.manual.md` 负责逐步执行与证据采样，PRD 负责约束与验收；`oasis7_web_launcher` / launcher Web 控制面由 GUI Agent 负责产品动作驱动，再由页面校验状态与字段；发布脚本承载标准化验收与总结。
 - Integration Points:
   - `testing-manual.md`
+  - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `scripts/run-viewer-web.sh`
   - `scripts/viewer-release-qa-loop.sh`
   - `scripts/viewer-release-full-coverage.sh`

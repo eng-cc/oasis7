@@ -13,7 +13,7 @@
 
 ## 目标
 - 将分散在 `doc/world-simulator/viewer/viewer-*` 与 `doc/scripts/viewer-tools/capture-viewer-frame.prd.md` 的“用户可操作内容”并入 Viewer 使用手册。
-- 形成单一入口：`doc/world-simulator/viewer/viewer-manual.md`（中文基线）与 `site/doc/cn|en/viewer-manual.html`（站点发布版）。
+- 形成单一入口：`doc/world-simulator/viewer/viewer-manual.manual.md`（中文基线）与 `site/doc/cn|en/viewer-manual.html`（站点发布版）。
 - 保持现有“Web 默认、native fallback”的闭环策略不变。
 
 ## 范围
@@ -27,14 +27,14 @@
     - 文本可选中/复制面板
     - UI 语言切换
     - native fallback 高级参数
-  - 同步 `doc/world-simulator/viewer/viewer-manual.md` 与 `site/doc/cn|en/viewer-manual.html`。
+  - 同步 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `site/doc/cn|en/viewer-manual.html`。
 - 范围外
   - 迁移 `.project.md`、`devlog`、runtime 架构设计文档。
   - 改动 viewer 协议或功能实现代码。
 
 ## 接口/数据
 - 输入文档
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
   - `doc/world-simulator/viewer/viewer-auto-select-capture.prd.md`
   - `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md`
@@ -44,7 +44,7 @@
   - `doc/world-simulator/viewer/viewer-copyable-text.prd.md`
   - `doc/world-simulator/viewer/viewer-i18n.prd.md`
 - 输出文件
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `site/doc/cn/viewer-manual.html`
   - `site/doc/en/viewer-manual.html`
 

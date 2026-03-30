@@ -28,7 +28,7 @@
 - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`
 - `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.prd.md`
 - `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md`
-- `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
+- `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
