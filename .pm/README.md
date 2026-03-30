@@ -11,7 +11,7 @@
 
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
-- `devlog` 继续保存原始事件流；长期 memory/backlog 由后续任务负责从 signal 提升。
+- `devlog` 继续保存原始事件流；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 提升。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
 首批标准角色：
@@ -33,6 +33,7 @@
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
 - `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/TASK-PM-*.yaml`，并同步更新 task registry 与 owner 的 `backlog/candidate.yaml`。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
+- `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
@@ -45,7 +46,15 @@ QA / liveops 基础用法：
 状态迁移基础用法：
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status committed`
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status deferred`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`
 - `./scripts/pm/supersede-memory.sh --role qa_engineer --memory-id MEM-QA-0001 --superseded-by MEM-QA-0002 --supersede-reason signature_refined`
+
+长期 memory promotion 约束：
+- `promotion_reason` 白名单：`stage_decision`、`failure_signature`、`policy_boundary`、`stable_pattern`、`engineering_constraint`
+- `reject_reason` 白名单：`one_off_operation`、`unverified_hypothesis`、`short_lived_execution_detail`、`task_status_update`
+- `--scope shared` 仅允许 `producer_system_designer` 执行；shared 正式 memory 不接受其他角色直写
 
 阶段汇总基础用法：
 - `./scripts/pm/stage-report.sh`

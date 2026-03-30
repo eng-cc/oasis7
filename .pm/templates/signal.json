@@ -5,5 +5,6 @@
   "role_hint": "producer_system_designer",
   "severity": "medium",
   "summary": "replace me",
-  "promotion_state": "new"
+  "promotion_state": "new",
+  "memory_promotion_state": "pending"
 }

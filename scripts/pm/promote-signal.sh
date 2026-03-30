@@ -250,6 +250,7 @@ payload = {
     "severity": sys.argv[6],
     "summary": sys.argv[7],
     "promotion_state": sys.argv[8],
+    "memory_promotion_state": "pending",
 }
 
 with signals_path.open("a", encoding="utf-8") as handle:

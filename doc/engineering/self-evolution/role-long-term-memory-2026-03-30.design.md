@@ -66,16 +66,29 @@
   - 已确认的对外口径边界
   - 重复出现的稳定模式
   - 关键工程约束
+- `promotion_reason` 白名单：
+  - `stage_decision`
+  - `failure_signature`
+  - `policy_boundary`
+  - `stable_pattern`
+  - `engineering_constraint`
 - 不可提升到长期 memory：
   - 一次性操作记录
   - 未验证猜测
   - 短期执行细节
   - 纯 task status 更新
+- `reject_reason` 白名单：
+  - `one_off_operation`
+  - `unverified_hypothesis`
+  - `short_lived_execution_detail`
+  - `task_status_update`
 
 ## 脚本设计
 - `scripts/pm/promote-memory.sh`
-  - 输入：`signal_id`、`role`、`topic`、`promotion_reason`
-  - 输出：写入 active memory 或返回 reject
+  - 输入：`signal_id`、`scope`、`role`、`topic`、`promotion_reason`
+  - accepted 输出：写入 active memory，并回写 signal 的 `memory_promotion_state=promoted`、`memory_id`、`memory_scope`、`memory_topic`
+  - rejected/deferred 输出：不写 memory，只回写 signal 的 `memory_promotion_state` 与对应 reason
+  - 约束：`--scope shared` 仅允许 `producer_system_designer`
 - `scripts/pm/supersede-memory.sh`
   - 输入：`memory_id`、`new_memory_id`、`supersede_reason`
   - 输出：旧记录移动到 superseded
@@ -100,7 +113,7 @@
 - 风险：memory 过期无人 review
   - 缓解：report 标 `needs_review`
 - 风险：signal 噪声污染 memory
-  - 缓解：promotion_reason 白名单与 reject 规则
+  - 缓解：promotion_reason / reject_reason 白名单与 signal 决策回写
 
 ## 交付物
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`

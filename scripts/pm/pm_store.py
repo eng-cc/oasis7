@@ -12,6 +12,30 @@ SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
 ALLOWED_SIGNAL_STATES = {"new", "triaged", "promoted_candidate_task", "discarded", "deferred"}
+ALLOWED_MEMORY_PROMOTION_STATES = {"pending", "promoted", "rejected", "deferred"}
+ALLOWED_PROMOTION_REASONS = {
+    "engineering_constraint",
+    "failure_signature",
+    "policy_boundary",
+    "stable_pattern",
+    "stage_decision",
+}
+ALLOWED_MEMORY_REJECTION_REASONS = {
+    "one_off_operation",
+    "short_lived_execution_detail",
+    "task_status_update",
+    "unverified_hypothesis",
+}
+ROLE_MEMORY_PREFIXES = {
+    "agent_engineer": "AGENT",
+    "liveops_community": "LIVEOPS",
+    "producer_system_designer": "PRODUCER",
+    "qa_engineer": "QA",
+    "runtime_engineer": "RUNTIME",
+    "shared": "SHARED",
+    "viewer_engineer": "VIEWER",
+    "wasm_platform_engineer": "WASM",
+}
 
 
 def now_iso() -> str:
@@ -234,12 +258,7 @@ def find_registry_task(root: pathlib.Path, task_id: str) -> tuple[OrderedDict[st
 def collect_signals(root: pathlib.Path) -> tuple[set[str], set[str]]:
     signal_ids: set[str] = set()
     promoted_signal_ids: set[str] = set()
-    signals_path = root / ".pm/inbox/signals.jsonl"
-    for line_no, raw_line in enumerate(signals_path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        payload = json.loads(line)
+    for payload in load_signal_entries(root):
         signal_id = payload["signal_id"]
         if signal_id in signal_ids:
             raise ValueError(f"duplicate signal_id in inbox: {signal_id}")
@@ -247,6 +266,37 @@ def collect_signals(root: pathlib.Path) -> tuple[set[str], set[str]]:
         if payload["promotion_state"] == "promoted_candidate_task":
             promoted_signal_ids.add(signal_id)
     return signal_ids, promoted_signal_ids
+
+
+def load_signal_entries(root: pathlib.Path) -> list[OrderedDict[str, object]]:
+    signals_path = root / ".pm/inbox/signals.jsonl"
+    entries: list[OrderedDict[str, object]] = []
+    if not signals_path.exists():
+        return entries
+    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        entries.append(json.loads(line, object_pairs_hook=OrderedDict))
+    return entries
+
+
+def dump_signal_entries(root: pathlib.Path, entries: list[OrderedDict[str, object]]) -> None:
+    signals_path = root / ".pm/inbox/signals.jsonl"
+    with signals_path.open("w", encoding="utf-8") as handle:
+        for payload in entries:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def find_signal_entry(
+    root: pathlib.Path,
+    signal_id: str,
+) -> tuple[list[OrderedDict[str, object]], OrderedDict[str, object]]:
+    entries = load_signal_entries(root)
+    for payload in entries:
+        if payload.get("signal_id") == signal_id:
+            return entries, payload
+    raise ValueError(f"signal not found in inbox: {signal_id}")
 
 
 def parse_reference_path(value: str) -> str:
@@ -265,6 +315,51 @@ def collect_memory_documents(root: pathlib.Path) -> list[tuple[pathlib.Path, str
         header, records = load_list_document(path, "records")
         documents.append((path, "shared", "shared", header, records))
     return documents
+
+
+def resolve_memory_documents(
+    root: pathlib.Path,
+    scope: str,
+    role: str | None,
+) -> tuple[pathlib.Path, pathlib.Path, str, str]:
+    if scope == "shared":
+        if role != "producer_system_designer":
+            raise ValueError("shared memory promotion is restricted to producer_system_designer")
+        return (
+            root / ".pm/shared/memory/active.yaml",
+            root / ".pm/shared/memory/superseded.yaml",
+            "shared",
+            "shared",
+        )
+
+    if not role:
+        raise ValueError("--role is required when --scope=role")
+    if role not in load_roles(root):
+        raise ValueError(f"unknown role: {role}")
+    return (
+        root / f".pm/roles/{role}/memory/active.yaml",
+        root / f".pm/roles/{role}/memory/superseded.yaml",
+        role,
+        role,
+    )
+
+
+def next_memory_id(root: pathlib.Path, record_owner: str) -> str:
+    prefix = ROLE_MEMORY_PREFIXES.get(record_owner)
+    if prefix is None:
+        raise ValueError(f"missing memory prefix for owner: {record_owner}")
+
+    max_sequence = 0
+    for path, _, owner, _, records in collect_memory_documents(root):
+        del path
+        if owner != record_owner:
+            continue
+        for record in records:
+            record_id = str(record.get("id") or "")
+            match = re.fullmatch(rf"MEM-{prefix}-(\d{{4}})", record_id)
+            if match:
+                max_sequence = max(max_sequence, int(match.group(1)))
+    return f"MEM-{prefix}-{max_sequence + 1:04d}"
 
 
 def run_memory_lint(root: pathlib.Path) -> None:
@@ -349,6 +444,10 @@ def run_memory_lint(root: pathlib.Path) -> None:
                 except ValueError:
                     fail(f"{path.relative_to(root)} {record_id} invalid superseded_at={record['superseded_at']}")
 
+            promotion_reason = record.get("promotion_reason")
+            if promotion_reason is not None and promotion_reason not in ALLOWED_PROMOTION_REASONS:
+                fail(f"{path.relative_to(root)} {record_id} invalid promotion_reason: {promotion_reason}")
+
             if expected_kind == "memory_active":
                 topic_key = (owner, str(record["topic"]))
                 if topic_key in active_topics:
@@ -411,6 +510,50 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             fail(f"signal role_hint not registered: {payload['signal_id']} -> {payload['role_hint']}")
         if payload["promotion_state"] not in ALLOWED_SIGNAL_STATES:
             fail(f"signal promotion_state invalid: {payload['signal_id']} -> {payload['promotion_state']}")
+        memory_state = str(payload.get("memory_promotion_state", "pending"))
+        if memory_state not in ALLOWED_MEMORY_PROMOTION_STATES:
+            fail(f"signal memory_promotion_state invalid: {payload['signal_id']} -> {memory_state}")
+        if memory_state == "promoted":
+            missing_memory_keys = sorted(
+                {
+                    "memory_decision_at",
+                    "memory_id",
+                    "memory_promotion_reason",
+                    "memory_role",
+                    "memory_scope",
+                    "memory_topic",
+                }
+                - payload.keys()
+            )
+            if missing_memory_keys:
+                fail(
+                    f"signal promoted memory missing keys: {payload['signal_id']} -> "
+                    + ", ".join(missing_memory_keys)
+                )
+            elif payload["memory_promotion_reason"] not in ALLOWED_PROMOTION_REASONS:
+                fail(
+                    f"signal memory_promotion_reason invalid: "
+                    f"{payload['signal_id']} -> {payload['memory_promotion_reason']}"
+                )
+        elif memory_state == "rejected":
+            missing_rejection_keys = sorted({"memory_decision_at", "memory_rejection_reason"} - payload.keys())
+            if missing_rejection_keys:
+                fail(
+                    f"signal rejected memory missing keys: {payload['signal_id']} -> "
+                    + ", ".join(missing_rejection_keys)
+                )
+            elif payload["memory_rejection_reason"] not in ALLOWED_MEMORY_REJECTION_REASONS:
+                fail(
+                    f"signal memory_rejection_reason invalid: "
+                    f"{payload['signal_id']} -> {payload['memory_rejection_reason']}"
+                )
+        elif memory_state == "deferred":
+            missing_deferred_keys = sorted({"memory_decision_at", "memory_deferred_reason"} - payload.keys())
+            if missing_deferred_keys:
+                fail(
+                    f"signal deferred memory missing keys: {payload['signal_id']} -> "
+                    + ", ".join(missing_deferred_keys)
+                )
 
     registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
     next_sequence = registry_header.get("next_sequence")
@@ -681,6 +824,117 @@ def cmd_supersede_memory(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_promote_memory(args: argparse.Namespace) -> int:
+    root = args.root
+    updated_at = args.effective_at or now_iso()
+    signal_entries, signal_entry = find_signal_entry(root, args.signal_id)
+
+    memory_state = str(signal_entry.get("memory_promotion_state", "pending"))
+    if memory_state != "pending":
+        raise ValueError(f"signal already decided for memory promotion: {args.signal_id} -> {memory_state}")
+
+    if args.reject_reason:
+        if args.reject_reason not in ALLOWED_MEMORY_REJECTION_REASONS:
+            raise ValueError(f"unsupported rejection reason: {args.reject_reason}")
+        signal_entry["memory_promotion_state"] = "rejected"
+        signal_entry["memory_rejection_reason"] = args.reject_reason
+        signal_entry["memory_decision_at"] = updated_at
+        dump_signal_entries(root, signal_entries)
+        result = {
+            "signal_id": args.signal_id,
+            "decision": "rejected",
+            "rejection_reason": args.reject_reason,
+            "decided_at": updated_at,
+        }
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(f"promote-memory: rejected {args.signal_id} ({args.reject_reason})")
+        return 0
+
+    if args.defer_reason:
+        signal_entry["memory_promotion_state"] = "deferred"
+        signal_entry["memory_deferred_reason"] = args.defer_reason
+        signal_entry["memory_decision_at"] = updated_at
+        dump_signal_entries(root, signal_entries)
+        result = {
+            "signal_id": args.signal_id,
+            "decision": "deferred",
+            "defer_reason": args.defer_reason,
+            "decided_at": updated_at,
+        }
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(f"promote-memory: deferred {args.signal_id} ({args.defer_reason})")
+        return 0
+
+    if args.promotion_reason not in ALLOWED_PROMOTION_REASONS:
+        raise ValueError(f"unsupported promotion_reason: {args.promotion_reason}")
+    if not args.topic:
+        raise ValueError("--topic is required when promoting memory")
+
+    role = args.role or str(signal_entry["role_hint"])
+    active_path, _, record_owner, record_role = resolve_memory_documents(root, args.scope, role)
+    active_header, active_records = load_list_document(active_path, "records")
+
+    if any(str(record.get("topic")) == args.topic for record in active_records):
+        raise ValueError(f"active memory topic already exists for {record_owner}: {args.topic}")
+
+    memory_id = args.memory_id or next_memory_id(root, record_owner)
+    if any(str(record.get("id")) == memory_id for _, _, _, _, records in collect_memory_documents(root) for record in records):
+        raise ValueError(f"memory id already exists: {memory_id}")
+
+    source_refs: list[str] = []
+    for source_ref in [str(signal_entry["source_ref"]), *args.source_ref]:
+        if source_ref not in source_refs:
+            source_refs.append(source_ref)
+
+    summary = args.summary or str(signal_entry["summary"])
+    record = OrderedDict(
+        [
+            ("id", memory_id),
+            ("role", record_role),
+            ("topic", args.topic),
+            ("summary", summary),
+            ("source_refs", source_refs),
+            ("tags", list(args.tag)),
+            ("effective_at", updated_at),
+            ("last_reviewed_at", updated_at),
+            ("status", "active"),
+            ("confidence", args.confidence),
+            ("promotion_reason", args.promotion_reason),
+        ]
+    )
+    active_records.append(record)
+    dump_list_document(active_path, active_header, "records", active_records)
+
+    signal_entry["memory_promotion_state"] = "promoted"
+    signal_entry["memory_decision_at"] = updated_at
+    signal_entry["memory_id"] = memory_id
+    signal_entry["memory_scope"] = args.scope
+    signal_entry["memory_role"] = record_role
+    signal_entry["memory_topic"] = args.topic
+    signal_entry["memory_promotion_reason"] = args.promotion_reason
+    dump_signal_entries(root, signal_entries)
+
+    result = {
+        "signal_id": args.signal_id,
+        "decision": "promoted",
+        "memory_id": memory_id,
+        "scope": args.scope,
+        "role": record_role,
+        "topic": args.topic,
+        "promotion_reason": args.promotion_reason,
+        "effective_at": updated_at,
+    }
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(f"promote-memory: wrote {memory_id} from {args.signal_id}")
+    return 0
+
+
 def build_stage_report(root: pathlib.Path) -> dict[str, object]:
     registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
     del registry_header
@@ -855,6 +1109,24 @@ def build_parser() -> argparse.ArgumentParser:
     memory_lint = subparsers.add_parser("memory-lint")
     memory_lint.add_argument("root", type=pathlib.Path)
     memory_lint.set_defaults(func=cmd_memory_lint)
+
+    promote_memory = subparsers.add_parser("promote-memory")
+    promote_memory.add_argument("root", type=pathlib.Path)
+    promote_memory.add_argument("--signal-id", required=True)
+    promote_memory.add_argument("--scope", choices=("role", "shared"), default="role")
+    promote_memory.add_argument("--role")
+    promote_memory.add_argument("--memory-id")
+    promote_memory.add_argument("--topic")
+    promote_memory.add_argument("--summary")
+    promote_memory.add_argument("--source-ref", action="append", default=[])
+    promote_memory.add_argument("--tag", action="append", default=[])
+    promote_memory.add_argument("--confidence", default="confirmed")
+    promote_memory.add_argument("--promotion-reason")
+    promote_memory.add_argument("--reject-reason")
+    promote_memory.add_argument("--defer-reason")
+    promote_memory.add_argument("--effective-at")
+    promote_memory.add_argument("--json", action="store_true")
+    promote_memory.set_defaults(func=cmd_promote_memory)
 
     move_task = subparsers.add_parser("move-task")
     move_task.add_argument("root", type=pathlib.Path)
