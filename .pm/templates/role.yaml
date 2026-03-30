@@ -1,0 +1,9 @@
+role_name: __ROLE_NAME__
+is_active: true
+introduced_at: __INTRODUCED_AT__
+memory_active_path: .pm/roles/__ROLE_NAME__/memory/active.yaml
+memory_superseded_path: .pm/roles/__ROLE_NAME__/memory/superseded.yaml
+candidate_path: .pm/roles/__ROLE_NAME__/backlog/candidate.yaml
+committed_path: .pm/roles/__ROLE_NAME__/backlog/committed.yaml
+blocked_path: .pm/roles/__ROLE_NAME__/backlog/blocked.yaml
+done_path: .pm/roles/__ROLE_NAME__/backlog/done.yaml

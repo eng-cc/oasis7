@@ -7,7 +7,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-ENGINEERING-074 (PRD-ENGINEERING-SE-001/004/006) [test_tier_required]: 建立 `self-evolution` 专题 `prd/design/project`，并同步回写 engineering 根入口、主项目、索引与 devlog。
-- [ ] TASK-ENGINEERING-075 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，明确首批 7 角色及扩容规则。
+- [x] TASK-ENGINEERING-075 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，明确首批 7 角色及扩容规则。
 - [ ] TASK-ENGINEERING-076 (PRD-ENGINEERING-SE-002/003/004) [test_tier_required]: 落地 signal inbox 与 `promote-signal` 基础链路，优先覆盖 `qa_engineer` 与 `liveops_community`。
 - [ ] TASK-ENGINEERING-077 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required]: 落地 role memory / backlog 文件格式、`superseded` 生命周期与 lint 规则。
 - [ ] TASK-ENGINEERING-078 (PRD-ENGINEERING-SE-001/004) [test_tier_required]: 落地 `stage/gate` 文件与 `stage-report` 汇总入口，为制作人阶段评审提供 canonical 输入。
@@ -26,20 +26,21 @@
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
-- 仓库根目录 `.pm/`（待建）
-- `scripts/pm/*.sh`（待建）
+- 仓库根目录 `.pm/`
+- `scripts/pm/*.sh`
 
 ## 状态
 - 更新日期: 2026-03-30
-- 当前阶段: planned
-- 当前任务: `TASK-ENGINEERING-075`
+- 当前阶段: active
+- 当前任务: `TASK-ENGINEERING-076`
 - 阻塞项:
-  - 当前仓库尚无 `.pm/` 运行态目录与统一 task/memory schema。
-  - signal promotion、role registry 和 stage report 仍未落地脚本化入口。
+  - `signal inbox -> candidate task` 真实写入链路尚未落地，`new-task.sh` 与 `promote-signal.sh` 仍是占位入口。
+  - `stage-report.sh` / `role-report.sh` 仅完成脚本入口占位，尚未具备汇总能力。
 - 最新完成:
+  - `TASK-ENGINEERING-075`：已建立 `.pm/` 目录骨架、role registry、task registry、stage/shared 容器、首批 7 角色 memory/backlog 文件，以及 `scripts/pm/{scaffold,lint,new-task,promote-signal,stage-report,role-report}.sh` Phase 1 入口。
   - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 devlog。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
-  - 先执行 `TASK-ENGINEERING-075`，建立 `.pm/` 骨架和模板；
-  - 再执行 `TASK-ENGINEERING-076/077`，优先把 `qa_engineer` / `liveops_community` 的信号和 backlog 跑通；
+  - 先执行 `TASK-ENGINEERING-076`，把 `signal inbox -> candidate task` 基础链路落到真实文件写入；
+  - 再执行 `TASK-ENGINEERING-077`，补齐 role memory/backlog 生命周期、lint 规则和扩容约束；
   - 最后执行 `TASK-ENGINEERING-078/079`，将 stage/gate 汇总和 required-tier 验证纳入治理闭环。

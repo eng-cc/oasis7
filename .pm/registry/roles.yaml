@@ -1,0 +1,69 @@
+version: 1
+generated_from: .agents/roles/*.md
+roles:
+  - role_name: agent_engineer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/agent_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/agent_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/agent_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/agent_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/agent_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/agent_engineer/backlog/done.yaml
+  - role_name: liveops_community
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/liveops_community/memory/active.yaml
+    memory_superseded_path: .pm/roles/liveops_community/memory/superseded.yaml
+    candidate_path: .pm/roles/liveops_community/backlog/candidate.yaml
+    committed_path: .pm/roles/liveops_community/backlog/committed.yaml
+    blocked_path: .pm/roles/liveops_community/backlog/blocked.yaml
+    done_path: .pm/roles/liveops_community/backlog/done.yaml
+  - role_name: producer_system_designer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/producer_system_designer/memory/active.yaml
+    memory_superseded_path: .pm/roles/producer_system_designer/memory/superseded.yaml
+    candidate_path: .pm/roles/producer_system_designer/backlog/candidate.yaml
+    committed_path: .pm/roles/producer_system_designer/backlog/committed.yaml
+    blocked_path: .pm/roles/producer_system_designer/backlog/blocked.yaml
+    done_path: .pm/roles/producer_system_designer/backlog/done.yaml
+  - role_name: qa_engineer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/qa_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/qa_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/qa_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/qa_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/qa_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/qa_engineer/backlog/done.yaml
+  - role_name: runtime_engineer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/runtime_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/runtime_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/runtime_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/runtime_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/runtime_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/runtime_engineer/backlog/done.yaml
+  - role_name: viewer_engineer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/viewer_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/viewer_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/viewer_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/viewer_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/viewer_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/viewer_engineer/backlog/done.yaml
+  - role_name: wasm_platform_engineer
+    is_active: true
+    introduced_at: 2026-03-30
+    memory_active_path: .pm/roles/wasm_platform_engineer/memory/active.yaml
+    memory_superseded_path: .pm/roles/wasm_platform_engineer/memory/superseded.yaml
+    candidate_path: .pm/roles/wasm_platform_engineer/backlog/candidate.yaml
+    committed_path: .pm/roles/wasm_platform_engineer/backlog/committed.yaml
+    blocked_path: .pm/roles/wasm_platform_engineer/backlog/blocked.yaml
+    done_path: .pm/roles/wasm_platform_engineer/backlog/done.yaml
+shared_memory:
+  active_path: .pm/shared/memory/active.yaml
+  superseded_path: .pm/shared/memory/superseded.yaml

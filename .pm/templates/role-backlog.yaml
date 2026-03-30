@@ -1,0 +1,4 @@
+version: 1
+role: __ROLE_NAME__
+status: __STATUS__
+tasks: []

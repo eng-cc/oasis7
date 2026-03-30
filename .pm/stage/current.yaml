@@ -1,0 +1,7 @@
+version: 1
+current_stage: null
+candidate_stage: null
+claim_envelope: null
+decision_date: null
+updated_from: []
+blocking_tasks: []

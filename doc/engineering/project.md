@@ -84,7 +84,7 @@
 - [x] TASK-ENGINEERING-072 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口分流治理，为命名迁移模块 README 增加轻量阅读顺序，并明确 README 与 `nonviewer/` / `checklists/` / `templates/` / `prd.index.md` 的职责边界。
 - [x] TASK-ENGINEERING-073 (PRD-ENGINEERING-015) [test_tier_required]: 完成 ROUND-010 工程侧复审关轮，冻结 focused scope 的 `aligned/deferred` 终态并记录 QA 结论。
 - [x] TASK-ENGINEERING-074 (PRD-ENGINEERING-021) [test_tier_required]: 建立 `self-evolution` 专题 `prd/design/project`，并同步回写 engineering 根入口、主项目、索引与 devlog。
-- [ ] TASK-ENGINEERING-075 (PRD-ENGINEERING-021) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，冻结首批 7 角色与扩容规则。
+- [x] TASK-ENGINEERING-075 (PRD-ENGINEERING-021) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，冻结首批 7 角色与扩容规则。
 - [ ] TASK-ENGINEERING-076 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `signal inbox -> candidate task` 基础链路，优先覆盖 `qa_engineer` 与 `liveops_community`。
 - [ ] TASK-ENGINEERING-077 (PRD-ENGINEERING-021) [test_tier_required]: 落地 role memory/backlog 文件格式、`superseded` 生命周期与 lint 规则。
 - [ ] TASK-ENGINEERING-078 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `stage/gate` 文件与 `stage-report` 汇总入口，作为制作人阶段评审输入层。
@@ -130,7 +130,7 @@
 ## 状态
 - 更新日期: 2026-03-30
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-075`（`.pm` 目录骨架、role registry、task registry 与模板建档）
+- 下一任务: `TASK-ENGINEERING-076`（`signal inbox -> candidate task` 基础链路与 `qa_engineer` / `liveops_community` 首批信号回流）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -155,6 +155,7 @@
 - 最新完成: `TASK-ENGINEERING-071`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代详细证据目录。）
 - 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
 - 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
+- 最新完成: `TASK-ENGINEERING-075`（已建立 `.pm/` 运行层骨架、registry/template、stage/shared 容器、7 个标准角色 memory/backlog 文件，以及 `scripts/pm` Phase 1 入口与结构 lint。）
 - 最新完成: `TASK-ENGINEERING-074`（已建立 `self-evolution` 专题三件套，并将“仓库内文件化项目管理 / 自我进化运行层”挂入 engineering 根入口、索引、主项目与 devlog，冻结后续 `.pm` / signal / stage 实施任务。）
 - 最新完成: `TASK-ENGINEERING-080`（已建立长期 memory 自建专题三件套，并把 active/superseded schema、promotion / supersede 规则和 memory lint/report 契约从总专题中单独冻结。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。

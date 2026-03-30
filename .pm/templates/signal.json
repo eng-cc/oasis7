@@ -1,0 +1,9 @@
+{
+  "signal_id": "SIG-EXAMPLE-0001",
+  "source_type": "devlog",
+  "source_ref": "doc/devlog/2026-03-30.md",
+  "role_hint": "producer_system_designer",
+  "severity": "medium",
+  "summary": "replace me",
+  "promotion_state": "new"
+}
