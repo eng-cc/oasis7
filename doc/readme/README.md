@@ -37,6 +37,7 @@
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
+  - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
 - execution_log：
   - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`
 
@@ -66,6 +67,7 @@
 - `doc/readme/governance/readme-xiaohongshu-ai-laziness-game-mode-post-pack-2026-03-26.md`
 - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
 - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
+- `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 
 ## 根目录收口
