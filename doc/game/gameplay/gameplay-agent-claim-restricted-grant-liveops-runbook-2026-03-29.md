@@ -1,6 +1,6 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
-审计轮次: 2
+审计轮次: 3
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -38,12 +38,14 @@
 - `qa_engineer` 可以发起 `qa_seed` 请求，但正式 issue / revoke 仍由 `liveops_community` 以 `issuer_id = liveops` 执行。
 
 ### 3.1A Recommended operator entry
-- 日常推荐入口是 `oasis7_liveops_grant_cli`，不要再让运营同事手工拼接 runtime action JSON。
+- 日常推荐入口是 `./scripts/oasis7-liveops-grant.sh`；正式 CLI `oasis7_liveops_grant_cli` 继续保留给需要更细粒度调试的工程/运营同学，不要再让运营同事手工拼接 runtime action JSON。
 - 推荐命令：
-  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- status --world-dir <world_dir> --beneficiary-account-id <account>`
-  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- issue --world-dir <world_dir> --beneficiary-account-id <account> --amount <n> --issuance-reason preview_allowlist --expires-at-epoch <epoch>`
-  - `cargo run -p oasis7 --bin oasis7_liveops_grant_cli -- revoke --world-dir <world_dir> --beneficiary-account-id <account> --revoke-reason qa_window_closed`
-- 该 CLI 默认 `issuer_id=liveops`，支持 `--dry-run` 与 `--json`，但不提供 admin roster 直改命令；admin 轮换仍必须走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`。
+  - `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`
+  - `./scripts/oasis7-liveops-grant.sh status <account> --world-dir <world_dir>`
+  - `./scripts/oasis7-liveops-grant.sh issue <account> <amount> preview_allowlist <epoch> --world-dir <world_dir>`
+  - `./scripts/oasis7-liveops-grant.sh revoke <account> qa_window_closed --world-dir <world_dir>`
+- 若当前 shell 已固定 world 目录，先执行 `export OASIS7_WORLD_DIR=<world_dir>`，之后可省略每条命令里的 `--world-dir`。
+- wrapper 默认 `issuer_id=liveops`，支持 `--dry-run`、`--json`、`--print-cmd`；底层仍只调用 `oasis7_liveops_grant_cli`，不提供 admin roster 直改命令。admin 轮换仍必须走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`。
 
 ### 3.2 Allowed issuance_reason
 仅允许以下 3 个 `issuance_reason`：
@@ -96,7 +98,7 @@
 
 1. 确认申请属于 `preview_allowlist`、`qa_seed`、`liveops_campaign` 三类之一。
 2. 确认本次发放统一使用 `issuer_id = liveops`。
-3. 先执行 `oasis7_liveops_grant_cli status --world-dir <world_dir>`，确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
+3. 先执行 `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`，确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
    若未登记，先走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`，不要回退到离线 import、手工改 world 文件或给运营临时放开旁路。
 4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
 5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
