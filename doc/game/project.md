@@ -149,6 +149,7 @@
 - [x] TASK-GAME-055 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh` 作为 `oasis7_liveops_grant_cli` 的运营 wrapper，收口 `status/issue/revoke` 的位置参数和 `OASIS7_WORLD_DIR` 缺省，继续保持底层只转发 canonical CLI，不新增任何 admin / world-file 旁路。
 - [x] TASK-GAME-056 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold，使 `liveops` 这类低权限 restricted grant admin slot 可显式使用 `1-of-2` signer policy，而 treasury/controller 主槽位继续默认 `2-of-3`；drill 脚本也同步改为按 baseline manifest 的 slot signer count/threshold 工作。
 - [x] TASK-GAME-057 (PRD-GAME-011) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的实操层 SOP，明确 `liveops 1-of-2` 的首次开通、governance registry 重导入后的恢复顺序、`status` 判读门槛，以及“slot-only manifest 不得直接 import 到 world”的风险提示。
+- [x] TASK-GAME-058 (PRD-GAME-001) [test_tier_required]: 执行 ROUND-010 `game` 模块入口治理，为 `doc/game/README.md` 增加轻量“从这里开始”分流，明确产品目标、执行追踪、玩法总览、试玩口径与高频专题之间的阅读顺序。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -167,6 +168,7 @@
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
 - 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环；当前新增的是运营入口层，不改变底层规则边界）`
+- 最新完成: `TASK-GAME-058`（已为 `game` README 增加轻量“从这里开始”分流，明确 `prd.md`、`project.md`、玩法总览、试玩口径专题与高频 claim 规则专题的阅读顺序，不再把根 README 当成第二份 `prd.index.md`。）
 - 最新完成: `TASK-GAME-057`（`liveops_community` 已补齐 restricted grant runbook 的开通/恢复/日常操作 SOP，明确 governance registry import 属于全量 registry 重写、slot-only manifest 不能直接导入 world，且每次重导入后都要重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。）
 - 最新完成: `TASK-GAME-056`（`runtime_engineer` 已将 governance registry 工具链扩成 per-slot threshold，正式支持 `liveops` 按 manifest 声明 `1-of-2`，同时不放宽 treasury/controller 主槽位的默认 `2-of-3`。）
 - 最新完成: `TASK-GAME-055`（`runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh`，把 restricted grant 日常操作进一步收口为运营短命令与环境变量约定，同时保持底层仍只走 `oasis7_liveops_grant_cli`。）
@@ -268,6 +270,7 @@
 - ROUND-058 进展: `runtime_engineer` 已完成 `TASK-GAME-049`，在 `oasis7` runtime 中新增 restricted grant 持久化状态、issue/revoke 动作、issued/expired/revoked canonical 事件与 epoch 自动过期处理；grant 发放现从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，撤销/过期则把剩余 restricted spendable 退回同一 treasury bucket，且 claim release / forced reclaim 在 grant 已终态时会将 restricted refund 定向回 treasury。定向验证 `cargo check -p oasis7 --lib` 与 `runtime::tests::agent_claims` required/full 全部通过，当前 blocker 收敛为 `TASK-GAME-050/051` 的 liveops issuer runbook 与 QA lifecycle/audit matrix。
 - ROUND-059 进展: `liveops_community` 已完成 `TASK-GAME-050`，新增 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`，把 restricted grant 的 v1 运营口径收口为单一 `issuer_id=liveops`、三类允许的 `issuance_reason`、按 reason 区分的 expiry 策略、推荐 revoke 条件与 incident fallback；这意味着 runtime lifecycle 与 liveops 操作边界都已闭环，当前 blocker 正式收敛为 `TASK-GAME-051` 的 QA lifecycle/audit matrix。
 - ROUND-060 进展: `qa_engineer` 已完成 `TASK-GAME-051`，新增 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`，并用 fresh required/full 复跑确认：grant issue metadata、expiry/revoke、ecosystem treasury source-sink、terminal refund sink redirect、viewer compat 与 transfer/explorer non-bypass 全部 `pass`。`PRD-GAME-011` 的 restricted grant blocker 已解除，game 根项目的下一条活跃任务回到 `TASK-GAME-036`。
+- ROUND-061 进展: `producer_system_designer` 已完成 `TASK-GAME-058`，为 `doc/game/README.md` 增加轻量“从这里开始”入口，显式区分产品目标、执行追踪、玩法总览、limited preview / closed beta readiness 口径与高频 claim 规则专题，避免根入口继续承担长表索引职责。
 - 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md`、`doc/devlog/2026-03-18.md`、`doc/devlog/2026-03-21.md` 与 `doc/devlog/2026-03-29.md`。
 
 ## 阶段收口角色交接

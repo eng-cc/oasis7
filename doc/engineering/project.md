@@ -79,6 +79,7 @@
 - [x] TASK-ENGINEERING-067 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 首片 `world-runtime` 入口分流治理，为高体量 runtime 模块 README 增加任务导向入口与索引边界说明。
 - [x] TASK-ENGINEERING-068 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 第二片 `p2p` 入口分流治理，为高体量网络模块 README 增加任务导向入口与索引边界说明。
 - [x] TASK-ENGINEERING-069 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `scripts` 入口映射治理，为工具模块 README 增加 task-worktree / landing / harness 的轻量入口与索引边界说明。
+- [x] TASK-ENGINEERING-070 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `game` 入口分流治理，为玩法模块 README 增加轻量阅读顺序，并明确 README 与 `prd.index.md` / 高频专题之间的职责边界。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -134,6 +135,7 @@
 - 最新完成: `TASK-ENGINEERING-067`（已为 `world-runtime` README 增加任务导向入口，并明确 README / `prd.index.md` / 高频专题的职责边界。）
 - 最新完成: `TASK-ENGINEERING-068`（已为 `p2p` README 增加任务导向入口，并明确 README / `prd.index.md` / 主链安全 / hosted world / token-governance signer 高频专题的职责边界。）
 - 最新完成: `TASK-ENGINEERING-069`（已为 `scripts` README 增加 task-worktree bootstrap / landing / harness 的轻量入口，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
+- 最新完成: `TASK-ENGINEERING-070`（已为 `game` README 增加轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 专题的阅读顺序，避免 README 继续膨胀成第二份专题索引。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
