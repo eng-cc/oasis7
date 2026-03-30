@@ -3,7 +3,7 @@
   "module_set": "m1",
   "build_recipe": {
     "profile": "release",
-    "wasm_toolchain": "nightly-2025-12-11",
+    "wasm_toolchain": "",
     "wasm_target": "wasm32-unknown-unknown",
     "wasm_build_std": "1",
     "wasm_build_std_components": "std,panic_abort",
@@ -11,8 +11,8 @@
     "wasm_deterministic_guard": "1",
     "canonicalizer_version": "strip-custom-sections-v1",
     "container_platform": "linux-x86_64",
-    "builder_image_ref": "oasis7/wasm-builder:nightly-2025-12-11",
-    "builder_image_digest": "sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a",
+    "builder_image_ref": "",
+    "builder_image_digest": "",
     "build_suite_version": "0.1.0",
     "canonical_platforms": [
       "linux-x86_64"
@@ -22,92 +22,92 @@
     {
       "module_id": "m1.body.core",
       "hash_tokens": [
-        "linux-x86_64=11f22ebefa984fe30f0d51d362cc46c98f2eed1282e37e7fbcdc17eea174e77b"
+        "linux-x86_64=d79d9779ff874bf64fcf471f77b1ba1cc1a28f8866edd410d9e04009c8af07ef"
       ],
       "source_hash": "771cd4740ec59f0acb21b23afcfe1fb0fb2e7710ea69b83a2affcdaca0e15cd3",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "dca5dbd624b05fd1fdb4d1ab40ff6a8df6c532dc0902b7806d8c6d73b9f956b7"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "af97aef73bad75c7031aa463afb6ea9b236de1147a4d423b716aa3dbaaeb69fb"
     },
     {
       "module_id": "m1.memory.core",
       "hash_tokens": [
-        "linux-x86_64=a5bf90af3bead62234b5f6435fce1e39dc60e1db0ba4770f4ed5ffa14cbea78a"
+        "linux-x86_64=ab572a39206a9253cd353b2b28113eff91305e9da1603a98005c8c2280033a26"
       ],
       "source_hash": "7a49f1362e8392b3547ca7747383cb16125bd1e01f70eeb200d01a125b13b69f",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "d48e8714b975ab19148698e19db636b3ed79235f9c7e7095dd30174082e16383"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "cf67eac8c919b6de4d4651702f05f6033568ac9095690529dc623087f87218fe"
     },
     {
       "module_id": "m1.mobility.basic",
       "hash_tokens": [
-        "linux-x86_64=a395547deac1bc38aef18e2d85fbbc823e268389c17a800cacc9b544dddd0e3f"
+        "linux-x86_64=7b4c97aa886d99a589a4ed7a2d6ef884f9f15d4ae6a11c5fa6c0ca8db6874a64"
       ],
       "source_hash": "a7d9f2a8c7c9e4b4bcf45aa86e0024e01e0cf4fcacaa0978c3845f050aedba0b",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "1314bf3067f5f2237a07fd0be68cd002f7cacefc5ed540f8140d2b6caacf1f74"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "a259d0b495e3cbe0c8f68408395b0f409c26e9f40bdf61738c09ba54a9650625"
     },
     {
       "module_id": "m1.power.radiation_harvest",
       "hash_tokens": [
-        "linux-x86_64=cad7993549e90569290eae04e4a66de1d0497f2288fb7a240ce9922438b053a6"
+        "linux-x86_64=484e8d7207ac59679d6dac2da9fdf9afd939a3520fbf7e7dfef7c8dcae744636"
       ],
       "source_hash": "7202853147728ffc4f339b20914a5cbf5106cdd7a07711ab437d2cbecc1f1b3a",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "0b8d874a727a17dc75058e93f7d0edc9e9763329e17bc68d7ef33b5af49803bd"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "e5d09564c8b94020642449074798ff9c3cae542749bc9ba4708f40125a3d1949"
     },
     {
       "module_id": "m1.power.storage",
       "hash_tokens": [
-        "linux-x86_64=482cf21a7e659c823c7c4f72ecd712cf275a4a4245d4b6573d6cfa16e20f64ac"
+        "linux-x86_64=f47b375a64bdd57bee93a8c83e9f54e314d3cd8addef7dbd5913c654f32daf1e"
       ],
       "source_hash": "94188577d9b2a8a49e15b9b868e3fff302e6b28189d0d4981905bdfebf3270f4",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "4621dcdbf00664b21b7a748aacd60f729f6f1d600388c2e065caaf9c57a93205"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "7fadb508e55f2aadcea99edaef9732611ed87cc52fbf4dbf9df8fd5349e915be"
     },
     {
       "module_id": "m1.rule.move",
       "hash_tokens": [
-        "linux-x86_64=a395547deac1bc38aef18e2d85fbbc823e268389c17a800cacc9b544dddd0e3f"
+        "linux-x86_64=7b4c97aa886d99a589a4ed7a2d6ef884f9f15d4ae6a11c5fa6c0ca8db6874a64"
       ],
       "source_hash": "59c494691789b5c180699bd61d227602ef9f0df52d813f43ece455d572071e65",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "86b8f6d72fb8681df00d8c46cf38c4272876eb1523301d010da78741557db881"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "30e1748adb9a18f1f736773dbd4c4085d335eb97c2c851851a2845aeb7d6ce5c"
     },
     {
       "module_id": "m1.rule.transfer",
       "hash_tokens": [
-        "linux-x86_64=57f113f4d81edc387eb9c6e5648bc0280f6966bc9be3eb8273b84474d3c2b220"
+        "linux-x86_64=f6906222176e25aac78b5404ea705345cb72058722266b1e0b4c208755b017e3"
       ],
       "source_hash": "f461610ae368354bf64a087e81fd8c6991f9b28171f30175f47a753ef0b59415",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "cc3c502dfa0fccacdb3f55dcbad0775a02464d1a662214dee934223d00dfdffb"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "3712d14c073f36af705ce24e2f5a2712ccb2b27087852e883abfe12423549c29"
     },
     {
       "module_id": "m1.rule.visibility",
       "hash_tokens": [
-        "linux-x86_64=a3acf2f6d756f2fec5553980253e295602d094a355f9af7cf89d676f09d13d79"
+        "linux-x86_64=775bc51917841eb15d08794b79bd1e22ebf8bc3064995af2480a5f88af59adb7"
       ],
       "source_hash": "e215cb044c89d9397b7fcd528d7d9506971ebc5f780e968803d87b895b6de4be",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "7e2d4903ff1f7f1bcc43a2a35533157f68b04f834b4f35904d2f4450b8d7d6d3"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "2dbb44e493371d49bed67cf37b2ab86e7f41a1ddd002341a594d7f39dfea5b99"
     },
     {
       "module_id": "m1.sensor.basic",
       "hash_tokens": [
-        "linux-x86_64=a3acf2f6d756f2fec5553980253e295602d094a355f9af7cf89d676f09d13d79"
+        "linux-x86_64=775bc51917841eb15d08794b79bd1e22ebf8bc3064995af2480a5f88af59adb7"
       ],
       "source_hash": "2503a71f032108762b18ffba8a2cf836c015907a75702e76d1653ba411f3f348",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "c542b1fc918e288cd7469aafd52067e296fa82fe4a7e9867b3ae2d101b06a256"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "13f754c753c97e9a48d9ae20fe5003c7178c9a9ac65934795ea7e2f951ee65e8"
     },
     {
       "module_id": "m1.storage.cargo",
       "hash_tokens": [
-        "linux-x86_64=17f8fa08ed07d552f136dcbef11068968ab1e43ec55917deeccfdee31326cdc7"
+        "linux-x86_64=f4b5037db0c1df050b1009d7904df2b13c6d8ab0d31f725b60635c5de12b278b"
       ],
       "source_hash": "837ec4412bd5af9830c7fb83c303af59eaa7c0408ae849cfdd69ee866bb53422",
-      "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
-      "identity_hash": "e4012769d3e14f05e1535d6d9a1286f95e329424134d83a3b990ae62ceae4cbf"
+      "build_manifest_hash": "8f892fcab9136c1ac965eab1c67496d4f9814c36ca44523a336579b7821e18d6",
+      "identity_hash": "972d5f0c19bd5e7b12af4c7f61eda8dec6b8dad5b5d6f95d03dcc416b118b487"
     }
   ]
 }

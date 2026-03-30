@@ -310,7 +310,6 @@ fn default_storage_cargo_module_tracks_expand_events() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn scenario_modules_limit_mobility_before_sensor_when_power_low() {
     let (mut world, mut sandbox) =
         setup_world_with_scenario_modules(M1ScenarioBootstrapConfig::default());
@@ -362,7 +361,6 @@ fn scenario_modules_limit_mobility_before_sensor_when_power_low() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn scenario_modules_replay_keeps_state_consistent() {
     let (mut world, mut sandbox) =
         setup_world_with_scenario_modules(M1ScenarioBootstrapConfig::default());
@@ -413,7 +411,6 @@ fn scenario_modules_replay_keeps_state_consistent() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent() {
     let (mut world, mut sandbox) =
         setup_world_with_scenario_modules(M1ScenarioBootstrapConfig::default());

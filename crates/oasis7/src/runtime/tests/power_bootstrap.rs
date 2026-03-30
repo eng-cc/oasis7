@@ -82,7 +82,6 @@ fn m1_builtin_module_ids_manifest_matches_runtime_constants() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn install_power_bootstrap_modules_registers_and_activates() {
     let mut world = World::new();
     world
@@ -180,7 +179,6 @@ fn install_agent_default_modules_is_idempotent() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn install_scenario_bootstrap_modules_supports_default_package_toggle() {
     let mut world = World::new();
     world
@@ -201,7 +199,6 @@ fn install_scenario_bootstrap_modules_supports_default_package_toggle() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn install_scenario_bootstrap_modules_is_idempotent() {
     let mut world = World::new();
     let config = M1ScenarioBootstrapConfig::default();
@@ -225,7 +222,6 @@ fn install_scenario_bootstrap_modules_is_idempotent() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn install_power_bootstrap_modules_is_idempotent() {
     let mut world = World::new();
     world
@@ -241,7 +237,6 @@ fn install_power_bootstrap_modules_is_idempotent() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn install_power_bootstrap_modules_reactivates_registered_version() {
     let mut world = World::new();
     world
@@ -271,7 +266,6 @@ fn install_power_bootstrap_modules_reactivates_registered_version() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn radiation_module_emits_harvest_event() {
     let mut world = World::new();
     world
@@ -313,7 +307,6 @@ fn radiation_module_emits_harvest_event() {
 }
 
 #[test]
-#[ignore = "temporary offlining: builtin identity manifest missing hash token for m1.power.radiation_harvest (TASK-WORLD_SIMULATOR-094)"]
 fn storage_module_blocks_continuous_move_when_power_runs_out() {
     let mut world = World::new();
     world

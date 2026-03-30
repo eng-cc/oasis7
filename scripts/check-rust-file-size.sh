@@ -61,6 +61,12 @@ sort_tsv_file() {
   sort -t $'\t' -k1,1 -k2,2 "$file"
 }
 
+strip_comment_and_blank_lines() {
+  local input_file="$1"
+  local output_file="$2"
+  grep -Ev '^[[:space:]]*($|#)' "$input_file" > "$output_file" || true
+}
+
 classify_rust_file_kind() {
   local path="$1"
   local base
@@ -136,7 +142,7 @@ extract_previous_baseline_file() {
     return 1
   fi
   if git show "${baseline_ref}:${baseline_file}" > "$out_file" 2>/dev/null; then
-    grep -Ev '^[[:space:]]*($|#)' "$out_file" > "${out_file}.filtered"
+    strip_comment_and_blank_lines "$out_file" "${out_file}.filtered"
     mv "${out_file}.filtered" "$out_file"
     return 0
   fi
@@ -198,7 +204,7 @@ fi
 if [[ ! -f "$OVERSIZED_BASELINE_FILE" ]]; then
   fail "baseline file missing: ${OVERSIZED_BASELINE_FILE}"
 else
-  grep -Ev '^[[:space:]]*($|#)' "$OVERSIZED_BASELINE_FILE" > "$baseline_tmp"
+  strip_comment_and_blank_lines "$OVERSIZED_BASELINE_FILE" "$baseline_tmp"
   sort_tsv_file "$baseline_tmp" > "$baseline_sorted_tmp"
 fi
 
@@ -222,7 +228,7 @@ fi
 if [[ ! -f "$STRUCTURAL_SLICE_BASELINE_FILE" ]]; then
   fail "structural slicing baseline file missing: ${STRUCTURAL_SLICE_BASELINE_FILE}"
 else
-  grep -Ev '^[[:space:]]*($|#)' "$STRUCTURAL_SLICE_BASELINE_FILE" > "$structural_baseline_tmp"
+  strip_comment_and_blank_lines "$STRUCTURAL_SLICE_BASELINE_FILE" "$structural_baseline_tmp"
   sort_tsv_file "$structural_baseline_tmp" > "$structural_baseline_sorted_tmp"
 fi
 

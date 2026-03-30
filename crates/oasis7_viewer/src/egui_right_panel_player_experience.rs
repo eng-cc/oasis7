@@ -898,8 +898,7 @@ mod egui_right_panel_player_experience_hud;
 
 use egui_right_panel_player_experience_hud::{
     render_player_compact_hud, render_player_first_session_summary, render_player_goal_hint,
-    render_player_onboarding_card, should_show_player_goal_hint,
-    should_show_player_onboarding_card,
+    render_player_onboarding_card,
 };
 
 pub(super) fn build_player_hud_snapshot(
@@ -911,6 +910,131 @@ pub(super) fn build_player_hud_snapshot(
     egui_right_panel_player_experience_hud::build_player_hud_snapshot(
         state, selection, step, locale,
     )
+}
+
+pub(super) fn should_show_player_onboarding_card(
+    onboarding: &PlayerOnboardingState,
+    step: PlayerGuideStep,
+) -> bool {
+    egui_right_panel_player_experience_hud::should_show_player_onboarding_card(onboarding, step)
+}
+
+pub(super) fn dismiss_player_onboarding_step(
+    onboarding: &mut PlayerOnboardingState,
+    step: PlayerGuideStep,
+) {
+    egui_right_panel_player_experience_hud::dismiss_player_onboarding_step(onboarding, step);
+}
+
+pub(super) fn should_show_player_goal_hint(
+    onboarding: &PlayerOnboardingState,
+    step: PlayerGuideStep,
+    layout_state: &RightPanelLayoutState,
+) -> bool {
+    egui_right_panel_player_experience_hud::should_show_player_goal_hint(
+        onboarding,
+        step,
+        layout_state,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn feedback_toast_cap() -> usize {
+    egui_right_panel_player_experience_hud::feedback_toast_cap()
+}
+
+#[cfg(test)]
+pub(super) fn feedback_toast_len(feedback: &FeedbackToastState) -> usize {
+    egui_right_panel_player_experience_hud::feedback_toast_len(feedback)
+}
+
+#[cfg(test)]
+pub(super) fn feedback_toast_ids(feedback: &FeedbackToastState) -> Vec<u64> {
+    egui_right_panel_player_experience_hud::feedback_toast_ids(feedback)
+}
+
+#[cfg(test)]
+pub(super) fn feedback_last_seen_event_id(feedback: &FeedbackToastState) -> Option<u64> {
+    egui_right_panel_player_experience_hud::feedback_last_seen_event_id(feedback)
+}
+
+#[cfg(test)]
+pub(super) fn feedback_action_feedback_seen(feedback: &FeedbackToastState) -> bool {
+    egui_right_panel_player_experience_hud::feedback_action_feedback_seen(feedback)
+}
+
+#[cfg(test)]
+pub(super) fn feedback_toast_snapshot(
+    feedback: &FeedbackToastState,
+    index: usize,
+) -> Option<(u64, FeedbackTone, &'static str)> {
+    egui_right_panel_player_experience_hud::feedback_toast_snapshot(feedback, index)
+}
+
+#[cfg(test)]
+pub(super) fn feedback_toast_detail(
+    feedback: &FeedbackToastState,
+    index: usize,
+) -> Option<String> {
+    egui_right_panel_player_experience_hud::feedback_toast_detail(feedback, index)
+}
+
+#[cfg(test)]
+pub(super) fn player_achievement_popup_cap() -> usize {
+    egui_right_panel_player_experience_hud::player_achievement_popup_cap()
+}
+
+#[cfg(test)]
+pub(super) fn player_achievement_popup_len(achievements: &PlayerAchievementState) -> usize {
+    egui_right_panel_player_experience_hud::player_achievement_popup_len(achievements)
+}
+
+#[cfg(test)]
+pub(super) fn player_achievement_popup_milestones(
+    achievements: &PlayerAchievementState,
+) -> Vec<PlayerAchievementMilestone> {
+    egui_right_panel_player_experience_hud::player_achievement_popup_milestones(achievements)
+}
+
+#[cfg(test)]
+pub(super) fn player_achievement_is_unlocked(
+    achievements: &PlayerAchievementState,
+    milestone: PlayerAchievementMilestone,
+) -> bool {
+    egui_right_panel_player_experience_hud::player_achievement_is_unlocked(
+        achievements,
+        milestone,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn player_agent_chatter_cap() -> usize {
+    egui_right_panel_player_experience_hud::player_agent_chatter_cap()
+}
+
+#[cfg(test)]
+pub(super) fn player_agent_chatter_len(achievements: &PlayerAchievementState) -> usize {
+    egui_right_panel_player_experience_hud::player_agent_chatter_len(achievements)
+}
+
+#[cfg(test)]
+pub(super) fn player_agent_chatter_last_seen_event_id(
+    achievements: &PlayerAchievementState,
+) -> Option<u64> {
+    egui_right_panel_player_experience_hud::player_agent_chatter_last_seen_event_id(achievements)
+}
+
+#[cfg(test)]
+pub(super) fn player_agent_chatter_ids(achievements: &PlayerAchievementState) -> Vec<u64> {
+    egui_right_panel_player_experience_hud::player_agent_chatter_ids(achievements)
+}
+
+#[cfg(test)]
+pub(super) fn player_agent_chatter_snapshot(
+    achievements: &PlayerAchievementState,
+    index: usize,
+) -> Option<(u64, FeedbackTone, String, String)> {
+    egui_right_panel_player_experience_hud::player_agent_chatter_snapshot(achievements, index)
 }
 
 pub(super) fn player_entry_card_style(now_secs: f64) -> (egui::Color32, egui::Stroke) {

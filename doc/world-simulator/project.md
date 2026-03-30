@@ -94,6 +94,7 @@
 - [x] TASK-WORLD_SIMULATOR-092 (PRD-WORLD_SIMULATOR-031) [test_tier_required]: 落地 `/api/gui-agent/capabilities|state|action`，覆盖人工操作全功能动作映射并补齐回归测试。
 - [x] TASK-WORLD_SIMULATOR-093 (PRD-WORLD_SIMULATOR-032) [test_tier_required]: 完成“runtime required 失败用例临时下线”PRD 建模、任务拆解与模块文档树回写。
 - [x] TASK-WORLD_SIMULATOR-094 (PRD-WORLD_SIMULATOR-032) [test_tier_required]: 对 10 个已知失败用例执行精确白名单下线（`#[ignore]`）并完成 required 回归与文档收口。
+- [x] TASK-WORLD_SIMULATOR-094A (PRD-WORLD_SIMULATOR-032) [test_tier_required]: 追平 `m1` builtin wasm hash/identity manifest 与本地 DistFS blobs，回收 10 个 runtime ignore 并恢复定向 wasmtime 回归。
 - [x] TASK-WORLD_SIMULATOR-095 (PRD-WORLD_SIMULATOR-033) [test_tier_required]: 完成“launcher execution world 输出路径收敛”PRD 建模、任务拆解与模块文档树回写。
 - [x] TASK-WORLD_SIMULATOR-096 (PRD-WORLD_SIMULATOR-033) [test_tier_required]: 在 `oasis7_game_launcher` / `oasis7_web_launcher` 显式传递 `--execution-world-dir` 到 `output/chain-runtime/<node_id>/reward-runtime-execution-world`，并补齐定向回归测试。
 - [x] TASK-WORLD_SIMULATOR-097 (PRD-WORLD_SIMULATOR-013) [test_tier_required]: 修复启动器 `self_guided` wasm 时间回归（`SystemTime::now`）并完成 Web 启动器启停闭环复验（`time not implemented` 零命中）。
@@ -993,8 +994,7 @@
 - `testing-manual.md`
 ## 状态
 - 更新日期 / 当前状态 / 下一任务: 2026-03-30 / active / 无
-- 最新完成: `TASK-WORLD_SIMULATOR-283`（已为 `world-simulator/README.md` 增加按目标进入分流，并明确模块 README、长表索引、canonical Viewer 手册与公开静态镜像的职责边界。）
-- 最新完成: `TASK-WORLD_SIMULATOR-282`（已把 `module_source`、`builtin_wasm`、`llm_agent`、`runtime_live`、`viewer`、`launcher` 与 `wasm_build_suite` 中最后一批旧品牌 env 负向输入改成动态构造，源码内不再保留连续 `OASIS7_*` 文本。）
+- 最新完成: `TASK-WORLD_SIMULATOR-094A`（已同步 `m1` builtin wasm hash/identity manifest 与 DistFS blobs，恢复 10 个 runtime 临时下线用例并移除 `#[ignore]`。）
 - 当前优先任务: `fix3` 已恢复 builtin/OpenClaw 的行为等价基线；继续压缩 OpenClaw absolute wait latency，争取把 `latency_class` 从 `B (experimental-only)` 收敛到 `A (default-candidate)` 后再讨论默认启用。
 - 当前阻断说明: `PRD-WORLD_SIMULATOR-040` 已完成 T4 对照采证并解除阻断；`PRD-WORLD_SIMULATOR-038` 在 `openclaw_builtin_parity_20260317_fix3` 中已恢复 `completion_rate=100%`、`timeout_rate=0%` 与 `move_agent=4`，且 `relative_wait_gap` 满足行为等价硬门禁，但 OpenClaw `median_extra_wait_ms=13957`、`p95_extra_wait_ms=14062` 仅达到 `latency_class B`，因此当前允许保持 `experimental` / 受限试点，仍不得默认启用。
 - 并行待办: 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`） + 继续优化 OpenClaw absolute wait latency，并在达到 `latency_class A` 后重签 `PRD-WORLD_SIMULATOR-038` 的默认启用结论

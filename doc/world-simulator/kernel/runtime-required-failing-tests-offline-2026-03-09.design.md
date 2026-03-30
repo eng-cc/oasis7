@@ -10,7 +10,7 @@
 - 白名单控制层：固定 10 个测试名，禁止模块级或通配式扩大忽略范围。
 - 注解收敛层：在测试函数级增加 `#[ignore]` 与失败原因说明，保留原实现与断言。
 - 验证链路层：required 测试继续执行非白名单项，并以 ignored 数量与失败列表校验变更边界。
-- 恢复治理层：当 `builtin identity manifest hash token` 根因修复后，逐项移除 ignore。
+- 恢复治理层：当 `m1` builtin wasm 的 hash manifest、identity manifest 与 DistFS blobs 对齐后，逐项移除 ignore 并恢复定向 wasmtime 回归。
 
 ## 3. 关键接口 / 入口
 - `crates/oasis7/src/runtime/tests/agent_default_modules.rs`
@@ -26,4 +26,4 @@
 ## 5. 设计演进计划
 - 先冻结白名单与失败签名。
 - 再在函数级精确下线并重新跑 required 套件。
-- 最后登记恢复条件，等待 hash token 根因修复后逐项回收。
+- 最后在 `m1` builtin manifest/hash/DistFS 修复后逐项回收 ignore，并执行定向 wasmtime 回归证明恢复。

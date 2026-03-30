@@ -142,6 +142,7 @@
 - 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。
 - 最新完成: `TASK-ENGINEERING-052`（Rust 文件体量检查脚本、冻结超限基线与 required gate 接入）。
 - 最新完成: `TASK-ENGINEERING-053`（`touch-and-shrink`、结构切片基线与 `split_part/include!` 完成态阻断规则接入 Rust 文件体量检查脚本）。
+- 最新完成: `TASK-ENGINEERING-054/055/056/057`（Rust 1200 行专项四项执行任务已在专项 project 进入 `verified`，主项目状态已同步追平；`egui_right_panel_tests.rs`、`viewer/live/tests.rs`、`module_action_loop_split_part1.rs`、`persistence.rs`、`gameplay_protocol_split_part1.rs`、`tests_split_part1.rs`、`tests_split_part2.rs`、`main_tests.rs`、`tests_action_payload.rs`、`transfer_submit_api_tests.rs`、`economy.rs`、`economy_priority_logistics.rs` 与 `module_action_loop_split_part3.rs` 已于 2026-03-30 完成进一步拆分，本轮冻结测试尾债已清零）。
 - 最新完成: `TASK-ENGINEERING-058`（ROUND-009 以小分母方式挂靠到既有文档治理轮模式，并冻结 focused scope / 问题池 / 清单骨架）。
 - 最新完成: `TASK-ENGINEERING-059`（已落地首批 canonical `*.manual.md` 载体，并将高频手册从 legacy `.md` / `*.prd.md` 壳子收口到兼容双入口模式。）
 - 最新完成: `TASK-ENGINEERING-060`（已为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径，首批收口 `I9-001` 的高频入口失焦问题。）
