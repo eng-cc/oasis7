@@ -87,7 +87,7 @@
 - [x] TASK-ENGINEERING-075 (PRD-ENGINEERING-021) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，冻结首批 7 角色与扩容规则。
 - [x] TASK-ENGINEERING-076 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `signal inbox -> candidate task` 基础链路，优先覆盖 `qa_engineer` 与 `liveops_community`。
 - [x] TASK-ENGINEERING-077 (PRD-ENGINEERING-021) [test_tier_required]: 落地 role memory/backlog 文件格式、`superseded` 生命周期与 lint 规则。
-- [ ] TASK-ENGINEERING-078 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `stage/gate` 文件与 `stage-report` 汇总入口，作为制作人阶段评审输入层。
+- [x] TASK-ENGINEERING-078 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `stage/gate` 文件与 `stage-report` 汇总入口，作为制作人阶段评审输入层。
 - [ ] TASK-ENGINEERING-079 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 建立 `devlog -> signal -> memory/task -> stage report` 验证链路，并评估角色扩容与多 worktree 并发回归。
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-021) [test_tier_required]: 建立长期 memory 自建专题 `prd/design/project`，将 role memory schema、promotion 与 superseded 规则从 `self-evolution` 总专题中单独冻结。
 
@@ -130,7 +130,7 @@
 ## 状态
 - 更新日期: 2026-03-30
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-078`（`stage/gate` 文件与 `stage-report` 汇总入口）
+- 下一任务: `TASK-ENGINEERING-079`（`devlog -> signal -> memory/task -> stage report` required-tier 验证链路）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -155,6 +155,7 @@
 - 最新完成: `TASK-ENGINEERING-071`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代详细证据目录。）
 - 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
 - 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
+- 最新完成: `TASK-ENGINEERING-078`（已落地 `stage-report.sh`，可汇总 stage/gate、blocked tasks、按角色 backlog 计数以及 producer/shared active memory，为阶段评审提供统一输入。）
 - 最新完成: `TASK-ENGINEERING-077`（已落地 `move-task.sh`、`supersede-memory.sh`、`memory-lint.sh` 与统一 `pm_store.py`，补齐 backlog 状态迁移、memory superseded 生命周期和 task/backlog/memory 一致性 lint。）
 - 最新完成: `TASK-ENGINEERING-076`（已落地 `.pm/inbox/signals.jsonl`、`promote-signal.sh`、`new-task.sh` 与 task/backlog registry 写入链路，首批覆盖 `qa_engineer` / `liveops_community` 信号回流。）
 - 最新完成: `TASK-ENGINEERING-075`（已建立 `.pm/` 运行层骨架、registry/template、stage/shared 容器、7 个标准角色 memory/backlog 文件，以及 `scripts/pm` Phase 1 入口与结构 lint。）

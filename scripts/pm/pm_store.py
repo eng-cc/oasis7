@@ -8,9 +8,6 @@ import re
 import sys
 from collections import OrderedDict
 from datetime import datetime
-from typing import Iterable
-
-
 SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
@@ -684,6 +681,169 @@ def cmd_supersede_memory(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_stage_report(root: pathlib.Path) -> dict[str, object]:
+    registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    del registry_header
+    tasks_by_id: dict[str, OrderedDict[str, object]] = {
+        str(entry["task_id"]): entry for entry in registry_entries if entry.get("task_id")
+    }
+
+    role_counts: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
+    for role in sorted(load_roles(root)):
+        counts: OrderedDict[str, int] = OrderedDict(
+            (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
+        )
+        for file_status in ("candidate", "committed", "blocked", "done"):
+            path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            _, entries = load_list_document(path, "tasks")
+            for entry in entries:
+                status = str(entry.get("status"))
+                if status in counts:
+                    counts[status] += 1
+        role_counts[role] = counts
+
+    task_counts: OrderedDict[str, int] = OrderedDict(
+        (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
+    )
+    for entry in registry_entries:
+        status = str(entry.get("status"))
+        if status in task_counts:
+            task_counts[status] += 1
+
+    stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
+    gate = load_mapping_document(root / ".pm/stage/gate.yaml")
+
+    def detail_task(task_id: str) -> dict[str, object]:
+        entry = tasks_by_id.get(task_id)
+        if entry is None:
+            return {"task_id": task_id, "missing": True}
+        task_path = root / str(entry["task_path"])
+        task_fields = load_mapping_document(task_path) if task_path.is_file() else OrderedDict()
+        return {
+            "task_id": task_id,
+            "missing": False,
+            "owner_role": entry.get("owner_role"),
+            "status": entry.get("status"),
+            "priority": entry.get("priority"),
+            "title": task_fields.get("title"),
+            "task_path": entry.get("task_path"),
+        }
+
+    blocking_ids: list[str] = []
+    for task_id in stage_current.get("blocking_tasks", []):
+        blocking_ids.append(str(task_id))
+    for task_id in gate.get("blocking_tasks", []):
+        task_id = str(task_id)
+        if task_id not in blocking_ids:
+            blocking_ids.append(task_id)
+    for entry in registry_entries:
+        if entry.get("status") == "blocked":
+            task_id = str(entry["task_id"])
+            if task_id not in blocking_ids:
+                blocking_ids.append(task_id)
+
+    producer_active_header, producer_active_records = load_list_document(
+        root / ".pm/roles/producer_system_designer/memory/active.yaml",
+        "records",
+    )
+    del producer_active_header
+    shared_active_header, shared_active_records = load_list_document(
+        root / ".pm/shared/memory/active.yaml",
+        "records",
+    )
+    del shared_active_header
+
+    def memory_summary(records: list[OrderedDict[str, object]]) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
+        for record in records:
+            result.append(
+                {
+                    "id": record.get("id"),
+                    "topic": record.get("topic"),
+                    "summary": record.get("summary"),
+                    "effective_at": record.get("effective_at"),
+                }
+            )
+        return result
+
+    return {
+        "current_stage": stage_current.get("current_stage"),
+        "candidate_stage": stage_current.get("candidate_stage"),
+        "claim_envelope": stage_current.get("claim_envelope"),
+        "decision_date": stage_current.get("decision_date"),
+        "updated_from": list(stage_current.get("updated_from", [])),
+        "gate": {
+            "gate_id": gate.get("gate_id"),
+            "status": gate.get("status"),
+            "lane_status": list(gate.get("lane_status", [])),
+            "updated_from": list(gate.get("updated_from", [])),
+        },
+        "task_counts": task_counts,
+        "role_counts": role_counts,
+        "blocking_tasks": [detail_task(task_id) for task_id in blocking_ids],
+        "memory_inputs": {
+            "producer_active": memory_summary(producer_active_records),
+            "shared_active": memory_summary(shared_active_records),
+        },
+    }
+
+
+def cmd_stage_report(args: argparse.Namespace) -> int:
+    report = build_stage_report(args.root)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 stage report",
+        f"- current_stage: {report['current_stage']}",
+        f"- candidate_stage: {report['candidate_stage']}",
+        f"- claim_envelope: {report['claim_envelope']}",
+        f"- decision_date: {report['decision_date']}",
+        f"- gate_id: {report['gate']['gate_id']}",
+        f"- gate_status: {report['gate']['status']}",
+        f"- task_counts: {', '.join(f'{k}={v}' for k, v in report['task_counts'].items())}",
+        f"- updated_from: {', '.join(report['updated_from']) or '(none)'}",
+        f"- gate_updated_from: {', '.join(report['gate']['updated_from']) or '(none)'}",
+        f"- gate_lane_status: {', '.join(report['gate']['lane_status']) or '(none)'}",
+        "- blocking_tasks:",
+    ]
+    if report["blocking_tasks"]:
+        for item in report["blocking_tasks"]:
+            if item.get("missing"):
+                lines.append(f"  - {item['task_id']} (missing)")
+            else:
+                lines.append(
+                    f"  - {item['task_id']} [{item['status']}] {item['owner_role']} / "
+                    f"{item['priority']} / {item['title']}"
+                )
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- role_counts:")
+    for role, counts in report["role_counts"].items():
+        lines.append(
+            f"  - {role}: " + ", ".join(f"{status}={count}" for status, count in counts.items())
+        )
+
+    lines.append("- producer_active_memory:")
+    if report["memory_inputs"]["producer_active"]:
+        for item in report["memory_inputs"]["producer_active"]:
+            lines.append(f"  - {item['id']} / {item['topic']} / {item['summary']}")
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- shared_active_memory:")
+    if report["memory_inputs"]["shared_active"]:
+        for item in report["memory_inputs"]["shared_active"]:
+            lines.append(f"  - {item['id']} / {item['topic']} / {item['summary']}")
+    else:
+        lines.append("  - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="oasis7 .pm store helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -712,6 +872,11 @@ def build_parser() -> argparse.ArgumentParser:
     supersede_memory.add_argument("--supersede-reason", required=True)
     supersede_memory.add_argument("--json", action="store_true")
     supersede_memory.set_defaults(func=cmd_supersede_memory)
+
+    stage_report = subparsers.add_parser("stage-report")
+    stage_report.add_argument("root", type=pathlib.Path)
+    stage_report.add_argument("--json", action="store_true")
+    stage_report.set_defaults(func=cmd_stage_report)
 
     return parser
 
