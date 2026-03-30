@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 13
+审计轮次: 14
 
 ## 任务拆解
 
@@ -24,6 +24,7 @@
 - [x] TASK-GAMEPLAY-AGC-015 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已将 `UpdateRestrictedStarterClaimAdminRegistry` 重构为 controller-governed runtime action，使 restricted grant admin roster 在 world 运行中由 `ecosystem_pool` treasury controller account 正式热更新，并保持 signer allowlist / threshold policy 校验、governance event 审计和“先授权 admin 再发 grant”的闭环。
 - [x] TASK-GAMEPLAY-AGC-016 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已新增 `oasis7_liveops_grant_cli`，为 `liveops_community` 提供 restricted grant 的 `issue / revoke / status` 日常入口，默认收口 `issuer_id=liveops`，继续复用 runtime canonical action / world-state 真值，并明确不开放 admin roster 直改旁路。
 - [x] TASK-GAMEPLAY-AGC-017 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh` 作为运营 wrapper，把 `status / issue / revoke` 收口成位置参数短命令，支持 `OASIS7_WORLD_DIR` 缺省、`--print-cmd` 与 `--cli-bin` smoke，但底层仍只转发到 `oasis7_liveops_grant_cli`，不复制第二份规则或开放 admin roster 旁路。
+- [x] TASK-GAMEPLAY-AGC-018 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold：旧 `2-of-3` manifest 继续兼容，`liveops` 这类低权限 slot 可在 manifest 中显式声明 `threshold=1` 形成 `1-of-2` policy，而其余 controller/finality slot 仍默认按 `2-of-3` 审计；相关 drill 脚本也不再把 slot signer count 写死成 `3`。
 
 ## 依赖
 
@@ -60,6 +61,7 @@
   - `TASK-GAMEPLAY-AGC-015` 已在 `crates/oasis7/src/consensus_action_payload.rs`、`crates/oasis7_node/src/node_runtime_core.rs`、`crates/oasis7_node/src/tests_action_payload.rs` 补齐主链签名 payload、controller slot 绑定与 NodeRuntime 提交层门禁，并在 `crates/oasis7/src/runtime/tests/governance.rs` / `crates/oasis7/src/runtime/tests/agent_claims.rs` 增加“先用 controller registry update 启用 liveops admin，再成功 issue restricted grant”的闭环测试，确认 admin registry 不再混入模拟内 proposal proposer 真值。
   - `TASK-GAMEPLAY-AGC-016` 已新增 `crates/oasis7/src/bin/oasis7_liveops_grant_cli.rs`，为 `liveops_community` 提供离线 world-admin CLI：`issue`/`revoke` 直接复用 `World::submit_action -> step -> save_to_dir` 的 canonical runtime 路径，`status` 读取 admin registry / treasury / beneficiary grant 状态；CLI 默认 `issuer_id=liveops`、支持 `--dry-run`/`--json`，但不开放 `UpdateRestrictedStarterClaimAdminRegistry` 直改命令，继续把 admin roster 轮换留给 controller-governed 钱包治理。
   - `TASK-GAMEPLAY-AGC-017` 已新增 `scripts/oasis7-liveops-grant.sh`，作为 `oasis7_liveops_grant_cli` 之上的运营薄包装：允许 `status [account]`、`issue <account> <amount> <reason> <expires_at_epoch>`、`revoke <account> <reason>` 三种位置参数短命令，并支持从 `OASIS7_WORLD_DIR` / `OASIS7_LIVEOPS_ISSUER_ID` 读默认值；脚本只负责参数整形与转发，不内嵌 grant 业务状态机，也不开放 admin registry 修改旁路。
+  - `TASK-GAMEPLAY-AGC-018` 已在 `crates/oasis7/src/bin/oasis7_governance_registry_{import,audit}.rs` 为 `public_manifest.json` 增加可选 `threshold` 字段，并把 `--controller-threshold` / `--expected-threshold` 收口为“manifest 缺省阈值”；当某个 slot 的记录显式声明 `threshold=1` 时，import 会把该 slot 写成 `1-of-N` policy，audit 也会按该 slot 自身阈值而不是全局 `2` 校验。`scripts/governance-registry-{drill,live-drill}.sh` 同步改为从 baseline manifest 读取 slot signer count/threshold，不再写死 `3`。
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，本轮 producer review 结论为先不因 restricted starter balance 额外改价，后续仅在 lifecycle/liveops 真实数据出现异常时再新开调参专题。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：
@@ -107,6 +109,11 @@
     - `./scripts/oasis7-liveops-grant.sh status --world-dir . --cli-bin /bin/echo --print-cmd`
     - `OASIS7_WORLD_DIR=. ./scripts/oasis7-liveops-grant.sh issue player.alice 325 preview_allowlist 48 --cli-bin /bin/echo`
     - `OASIS7_WORLD_DIR=. ./scripts/oasis7-liveops-grant.sh revoke player.alice qa_window_closed --cli-bin /bin/echo --json`
+  - 本轮 per-slot threshold required 验证已覆盖：
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_governance_registry_import -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_governance_registry_audit -- --nocapture`
+    - `bash -n scripts/governance-registry-drill.sh`
+    - `bash -n scripts/governance-registry-live-drill.sh`
 - 阻断条件:
   - 若 runtime 无法保证同一 agent 的单 owner 原子性，则 claim 功能不得进入实现态。
   - 若 restricted starter balance 能通过普通转账、slot-2/3 claim 或 explorer 总额误读洗成可转账资产，则不得合入。

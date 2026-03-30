@@ -19,9 +19,9 @@ Description:
   Runs a default/live-world governance registry drill with baseline/pass/block,
   and when the degraded block manifest is still importable, one rejoin phase:
   1. baseline pre-audit
-  2. pass case: replace one signer while preserving 2-of-3
-  3. block case: intentionally degrade one slot to 2-of-2 or worse
-  4. rejoin case: re-import the 2-of-3 pass manifest on top of the degraded world
+  2. pass case: replace one signer while preserving baseline signer count/threshold
+  3. block case: intentionally degrade one slot below its baseline signer count
+  4. rejoin case: re-import the baseline-compatible pass manifest on top of the degraded world
   5. restore baseline manifest and re-audit
   Note:
   - --pass-manifest-mode rotate is default
@@ -184,10 +184,11 @@ PASS_MANIFEST="$MANIFEST_DIR/rotated_pass_manifest.json"
 BLOCK_MANIFEST="$MANIFEST_DIR/degraded_block_manifest.json"
 
 BASELINE_SLOT_COUNT="$(jq --arg slot "$SLOT_ID" '[.[] | select(.slot_id == $slot)] | length' "$BASELINE_MANIFEST")"
+BASELINE_SLOT_THRESHOLD="$(jq -r --arg slot "$SLOT_ID" '[.[] | select(.slot_id == $slot) | (.threshold // 2)] | unique | if length == 0 then error("slot missing") elif length == 1 then .[0] else error("slot threshold mismatch") end' "$BASELINE_MANIFEST")"
 MATCHING_SIGNER_COUNT="$(jq --arg slot "$SLOT_ID" --arg signer "$REPLACE_SIGNER_ID" '[.[] | select(.slot_id == $slot and .signer_id == $signer)] | length' "$BASELINE_MANIFEST")"
 REPLACEMENT_SIGNER_EXISTS_COUNT="$(jq --arg slot "$SLOT_ID" --arg signer "$REPLACEMENT_SIGNER_ID" '[.[] | select(.slot_id == $slot and .signer_id == $signer)] | length' "$BASELINE_MANIFEST")"
-if [[ "$BASELINE_SLOT_COUNT" != "3" ]]; then
-  echo "expected exactly 3 manifest entries for slot $SLOT_ID, got $BASELINE_SLOT_COUNT" >&2
+if (( BASELINE_SLOT_COUNT < 2 )); then
+  echo "expected at least 2 manifest entries for slot $SLOT_ID, got $BASELINE_SLOT_COUNT" >&2
   exit 1
 fi
 if [[ "$MATCHING_SIGNER_COUNT" != "1" ]]; then
@@ -247,15 +248,15 @@ jq \
 
 PASS_SLOT_COUNT="$(jq --arg slot "$SLOT_ID" '[.[] | select(.slot_id == $slot)] | length' "$PASS_MANIFEST")"
 BLOCK_SLOT_COUNT="$(jq --arg slot "$SLOT_ID" '[.[] | select(.slot_id == $slot)] | length' "$BLOCK_MANIFEST")"
-if [[ "$PASS_SLOT_COUNT" != "3" ]]; then
-  echo "pass manifest must keep 3 entries for slot $SLOT_ID, got $PASS_SLOT_COUNT" >&2
+if [[ "$PASS_SLOT_COUNT" != "$BASELINE_SLOT_COUNT" ]]; then
+  echo "pass manifest must keep $BASELINE_SLOT_COUNT entries for slot $SLOT_ID, got $PASS_SLOT_COUNT" >&2
   exit 1
 fi
-if [[ "$BLOCK_SLOT_COUNT" -ge 3 ]]; then
-  echo "block manifest must degrade slot $SLOT_ID below 3 entries, got $BLOCK_SLOT_COUNT" >&2
+if [[ "$BLOCK_SLOT_COUNT" -ge "$BASELINE_SLOT_COUNT" ]]; then
+  echo "block manifest must degrade slot $SLOT_ID below $BASELINE_SLOT_COUNT entries, got $BLOCK_SLOT_COUNT" >&2
   exit 1
 fi
-if (( BLOCK_SLOT_COUNT < EXPECTED_THRESHOLD )); then
+if (( BLOCK_SLOT_COUNT < BASELINE_SLOT_THRESHOLD )); then
   BLOCK_ENFORCEMENT_STAGE="import_policy_reject"
 else
   BLOCK_ENFORCEMENT_STAGE="audit_failover_gate"

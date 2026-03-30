@@ -1,6 +1,6 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
-审计轮次: 3
+审计轮次: 4
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -25,6 +25,7 @@
 - 发放动作只能走 `IssueRestrictedStarterClaimGrant`，撤销动作只能走 `RevokeRestrictedStarterClaimGrant`；不要再用手工余额注入去替代正式发放。
 - runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
 - runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
+- `issuer_id=liveops` 对应的 controller signer policy 可以作为低权限运营槽位显式使用 `1-of-2`，前提是 operator-local `public_manifest.json` 为 `liveops` 记录写出 `threshold=1`，并通过 `oasis7_governance_registry_import/audit` 导入当前 world-state；该特例不会自动放宽 `ecosystem_pool` 等 treasury/controller 主槽位，它们仍默认按 `2-of-3` 运维。
 - 若 `liveops` 尚未在 admin registry 中，必须先由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 提交 `UpdateRestrictedStarterClaimAdminRegistry` 把 `liveops` 加入 allowlist；runbook 本身不能替代这一步正式治理动作。
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
@@ -46,6 +47,7 @@
   - `./scripts/oasis7-liveops-grant.sh revoke <account> qa_window_closed --world-dir <world_dir>`
 - 若当前 shell 已固定 world 目录，先执行 `export OASIS7_WORLD_DIR=<world_dir>`，之后可省略每条命令里的 `--world-dir`。
 - wrapper 默认 `issuer_id=liveops`，支持 `--dry-run`、`--json`、`--print-cmd`；底层仍只调用 `oasis7_liveops_grant_cli`，不提供 admin roster 直改命令。admin 轮换仍必须走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`。
+- 若 `liveops` signer policy 采用 `1-of-2`，建议把两把 signer 都保留在离线 custody，但日常 restricted grant issue/revoke 只要求其中一把完成 `liveops` slot 签名；这属于低权限例外，不适用于 `msig.ecosystem_governance.v1` 等高风险 treasury/controller 槽位。
 
 ### 3.2 Allowed issuance_reason
 仅允许以下 3 个 `issuance_reason`：

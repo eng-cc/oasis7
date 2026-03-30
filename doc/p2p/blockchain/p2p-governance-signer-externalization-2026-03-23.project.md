@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
 - [x] GOVSIGN-0 (PRD-P2P-GOVSIGN-001/002/003/004) [test_tier_required]: 新建治理 signer 外部化专题 PRD / design / project，并接入 `doc/p2p` 与 readiness 主追踪。
 - [x] GOVSIGN-1 (PRD-P2P-GOVSIGN-001/002) [test_tier_required]: 盘点 finality/controller signer 当前 local seed/config 真值，冻结环境等级与 blocker。
@@ -25,7 +25,7 @@
 
 ## Transition Freeze Snapshot（public-only）
 - batch id: `oasis7-governance-batch-20260323-01`
-- producer decision: all governance/controller slots default to `threshold_ed25519 2-of-3`
+- producer decision: finality 与 treasury/controller 主槽位继续默认 `threshold_ed25519 2-of-3`；低权限运营槽位允许在 manifest 中显式声明更低 threshold，当前唯一批准特例是 restricted grant `liveops` slot 可用 `1-of-2`
 - current finality signer freeze:
   - `governance.finality.v1`
   - allowed_public_keys:
@@ -61,16 +61,16 @@
 - [ ] genesis address binding / ceremony / QA pass 仍待后续 `MAINNET-3` 收口
 
 ## Operator / QA Runbook（How-to）
-1. 先审计当前 world-state registry，确认所有治理 slot 仍是预期 `2-of-3` 且具备单 signer 故障容忍：
+1. 先审计当前 world-state registry，确认所有治理 slot 都符合 manifest 声明的 threshold；若 manifest 未显式声明，则继续按默认 `2-of-3` 且具备单 signer 故障容忍：
    - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- --world-dir output/chain-runtime/viewer-live-node/reward-runtime-execution-world --public-manifest <operator-local-public-manifest.json> --strict-manifest-match --require-single-failure-tolerance`
 2. 若要做 rotation，不直接降低 threshold，也不允许先删 signer 再观望：
    - 先在离线 custody 侧生成 replacement signer
    - controller slot 可保持原 `signer_id` 并仅替换公钥；`governance.finality.v1` 不行，必须同时换成新的 signer node id（例如 `signer03 -> signer04`）
-   - 形成新的 public-only manifest，保持每个 slot 仍为 `threshold=2` 且 `3` 把有效公钥
+   - 形成新的 public-only manifest；默认 slot 继续保持 `threshold=2` 与 `3` 把有效公钥，像 `liveops` 这样的低权限特例槽位则必须在 manifest 中显式写出自己的 threshold
    - 用 `oasis7_governance_registry_import` 把新 manifest 导回 target world
    - 再次执行 `oasis7_governance_registry_audit`，只有 `overall_status=ready_for_ops_drill` 才允许重启/切流
-3. 若要做 revocation，按是否还能维持 `2-of-3` 分两类处理：
-   - 单 signer compromise / 离岗：必须在同一次导入里完成“替换 compromised signer -> 保持 2-of-3 -> 审计通过”
+3. 若要做 revocation，按该 slot 自身 threshold 与 signer_count 是否还能维持单 signer 故障容忍分两类处理：
+   - 单 signer compromise / 离岗：必须在同一次导入里完成“替换 compromised signer -> 保持该 slot 的目标 threshold/单 signer 故障容忍 -> 审计通过”
    - 两把及以上 signer 同时不可用：若导出的 finality registry 让 `signer_count < threshold`，会在 import 阶段直接命中 `GovernancePolicyInvalid`；若还能写入但失去单 signer 容忍，则在 audit 阶段记为 `failover_blocked`
    - 无论是 `import_policy_reject` 还是 `failover_blocked`，都不得宣称 governance gate 通过；需要 producer/runtime/QA 联合阻断并进入事故处理
 4. failover QA 不做口头判断，只看审计结果：
