@@ -9,7 +9,7 @@ test	crates/oasis7/src/runtime/tests/module_action_loop_split_part3.rs	2104
 test	crates/oasis7/src/runtime/tests/persistence.rs	1307
 test	crates/oasis7/src/viewer/live/tests.rs	1305
 test	crates/oasis7_client_launcher/src/main_tests.rs	1376
-test	crates/oasis7_node/src/tests_action_payload.rs	1497
+test	crates/oasis7_node/src/tests_action_payload.rs	1622
 test	crates/oasis7_node/src/tests_split_part1.rs	1232
 test	crates/oasis7_node/src/tests_split_part2.rs	1328
 test	crates/oasis7_viewer/src/egui_right_panel_tests.rs	1296
