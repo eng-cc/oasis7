@@ -7,7 +7,7 @@
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-MEM-001/004/005) [test_tier_required]: 建立长期 memory 专题 `prd/design/project`，并同步回写 `self-evolution` 主专题、engineering 索引与 devlog。
-- [ ] TASK-ENGINEERING-081 (PRD-ENGINEERING-MEM-001/002/003/005) [test_tier_required]: 建立首批 role/shared memory 文件模板与样例，优先覆盖 `producer_system_designer`、`qa_engineer`、`liveops_community`。
+- [x] TASK-ENGINEERING-081 (PRD-ENGINEERING-MEM-001/002/003/005) [test_tier_required]: 建立首批 role/shared memory 文件模板与样例，优先覆盖 `producer_system_designer`、`qa_engineer`、`liveops_community`。
 - [ ] TASK-ENGINEERING-082 (PRD-ENGINEERING-MEM-001/004) [test_tier_required]: 落地 `promote-memory` / `supersede-memory` 脚本契约与 promotion_reason 白名单。
 - [ ] TASK-ENGINEERING-083 (PRD-ENGINEERING-MEM-002/003/004/005) [test_tier_required] + [test_tier_full]: 落地 `memory-lint` / `memory-report`，并验证 active 冲突、superseded 链、stale review 与新角色扩容回归。
 
@@ -24,16 +24,16 @@
 ## 状态
 - 更新日期: 2026-03-30
 - 当前阶段: planned
-- 当前任务: `TASK-ENGINEERING-081`
+- 当前任务: `TASK-ENGINEERING-082`
 - 阻塞项:
   - `signal inbox` 与 `candidate task` promotion 已落地，但 memory 仍无法从 signal 做真实提升。
-  - `supersede-memory` 与 `memory-lint` 已通过 `TASK-ENGINEERING-077` 先行落地，但 memory 样例记录、`promote-memory` 与 `memory-report` 仍未建档。
+  - `promote-memory` 与 `memory-report` 仍未建档，memory 还缺少正式 promotion 与查询入口。
 - 最新完成:
+  - `TASK-ENGINEERING-081`：已为 `producer_system_designer`、`qa_engineer`、`liveops_community` 与 `shared` 落地首批 active/superseded 样例，覆盖 stage current、QA failure signature、community messaging boundary 与 shared claim envelope 场景。
   - `TASK-ENGINEERING-077`：已在 `self-evolution` 主专题先行落地 `supersede-memory.sh`、`memory-lint.sh` 与 role/shared memory 基础 lint 规则，后续长期 memory 子专题可在此基础上继续补样例、promotion 和 report。
   - `TASK-ENGINEERING-076`：已落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路，后续 memory promotion 可直接复用 signal inbox 作为输入层。
   - `TASK-ENGINEERING-075`：已建立 `.pm` 基础骨架，并为 7 个标准角色生成 `memory/{active,superseded}.yaml` 容器，长期 memory 后续任务可直接在仓库内演进。
   - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与 devlog。
 - 下一步:
-  - 先执行 `TASK-ENGINEERING-081`，补齐 `producer_system_designer`、`qa_engineer`、`liveops_community` 首批 memory 样例；
-  - 再执行 `TASK-ENGINEERING-082`，收口 `promote-memory` 契约与 promotion_reason 白名单；
+  - 先执行 `TASK-ENGINEERING-082`，收口 `promote-memory` 契约与 promotion_reason 白名单；
   - 最后执行 `TASK-ENGINEERING-083`，跑通 lint/report 和扩容验证。

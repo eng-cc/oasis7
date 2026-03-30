@@ -1,4 +1,19 @@
 version: 1
 role: qa_engineer
 kind: memory_active
-records: []
+records:
+  - id: MEM-QA-0001
+    role: qa_engineer
+    topic: viewer.startup.blocker
+    summary: "viewer smoke blocker repeatedly manifests at startup bridge init"
+    source_refs:
+      - doc/devlog/2026-03-30.md
+      - testing-manual.md
+    tags:
+      - failure_signature
+      - gate
+    effective_at: 2026-03-30T21:55:28+08:00
+    last_reviewed_at: 2026-03-30T22:40:32+08:00
+    status: active
+    confidence: confirmed
+    promotion_reason: failure_signature

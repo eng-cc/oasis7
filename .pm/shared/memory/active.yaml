@@ -1,4 +1,19 @@
 version: 1
 scope: shared
 kind: memory_active
-records: []
+records:
+  - id: MEM-SHARED-0001
+    role: shared
+    topic: gate.claim_envelope
+    summary: "claim envelope remains internal_only until stage gate is aligned"
+    source_refs:
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md
+      - doc/devlog/2026-03-30.md
+    tags:
+      - stage
+      - claim_envelope
+    effective_at: 2026-03-30T22:25:40+08:00
+    last_reviewed_at: 2026-03-30T22:25:40+08:00
+    status: active
+    confidence: confirmed
+    promotion_reason: stage_decision
