@@ -2,8 +2,8 @@
 
 审计轮次: 10
 
-- 当前状态: `in_progress`
-- 说明: ROUND-010 已从 ROUND-009 的 deferred 项中抽出 6 个模块 README，准备按模块入口分流继续治理。
+- 当前状态: `completed`
+- 说明: ROUND-010 已完成 6 个模块 README 的入口分流回写与 QA 复审，终态冻结为 `6 aligned + 0 deferred`。
 - 记录规则: 每次完成范围冻结、模块回写、延期判定或复审结论后即时更新。
 
 ## 日志表
@@ -16,3 +16,4 @@
 | 2026-03-30 17:00:23 +0800 | `producer_system_designer` | `doc/game/README.md` | `keep` | pass | I10-003 | 已补轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 规则专题的阅读顺序，并保留 `prd.index.md` 作为全量专题入口 |
 | 2026-03-30 17:05:28 +0800 | `qa_engineer` | `doc/playability_test_result/README.md` | `keep` | pass | I10-003 | 已补 evidence-first“从这里开始”，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保留 `topics/` / `evidence/` 作为详细消费入口 |
 | 2026-03-30 17:10:48 +0800 | `producer_system_designer` | `doc/headless-runtime/README.md` | `keep` | pass | I10-002 | 已补轻量“从这里开始”，明确命名迁移说明、执行追踪、历史 `nonviewer` 专题、检查清单与模板目录的阅读顺序，并保留子目录作为详细入口 |
+| 2026-03-30 17:14:45 +0800 | `qa_engineer` | `ROUND-010 focused scope` | `review` | pass | none | 复核 6 个对象终态，冻结为 `6 aligned + 0 deferred`；未发现剩余 `issue_open`，本轮无新增阻断，可关轮 |

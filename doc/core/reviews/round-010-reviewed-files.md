@@ -5,7 +5,7 @@
 ## 清单状态
 - 当前 focused scope 数: 6
 - 当前已完成首轮判定对象数: 6
-- 当前状态: `in_progress`
+- 当前状态: `completed`
 
 ## 字段说明
 | 字段 | 说明 |
@@ -23,7 +23,7 @@
 ## 汇总
 | 范围 | 数量 | 状态 |
 | --- | --- | --- |
-| focused scope 文档总数 | 6 | in_progress |
+| focused scope 文档总数 | 6 | completed |
 
 ## 明细
 | 文档路径 | 当前角色 | 关注点 | 建议动作 | 优先级 | owner role | 当前状态 | 问题编号 | 备注 |

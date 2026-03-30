@@ -19,12 +19,12 @@
 
 ## 轮次信息
 - 轮次编号: `ROUND-010`
-- 轮次状态: `in_progress` (`not_started` | `in_progress` | `completed`)
+- 轮次状态: `completed` (`not_started` | `in_progress` | `completed`)
 - 轮次类型: `deferred_module_entry_routing`
 - 审查/治理时间窗: `2026-03-30`
 - owner role: `producer_system_designer`
 - 协作角色: `qa_engineer`（证据/测试模块入口复核）
-- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，6 个对象均已完成入口回写；下一步进入 `qa_engineer` 复审与 ROUND-010 关轮。
+- 当前阶段说明: 已完成 6 个 focused scope README 的入口回写与 `qa_engineer` 复审；本轮终态已冻结为 `6 aligned + 0 deferred`。
 
 状态判定：
 - `not_started`: 仅记录轮次意图，尚未冻结范围与问题域。
@@ -73,9 +73,9 @@
 ## 问题池
 | 编号 | 来源 | 问题描述 | 影响范围 | 建议动作 | 当前判定 |
 | --- | --- | --- | --- | --- | --- |
-| I10-001 | ROUND-009 deferred follow-up | `world-runtime`、`p2p` 一类高体量模块仍主要按主题目录列出，缺少“先读哪里”的任务导向入口 | `doc/world-runtime/README.md`、`doc/p2p/README.md` | 优先为高体量模块补“从这里开始”与索引/手册边界说明 | open |
-| I10-002 | ROUND-009 deferred follow-up | `scripts`、`headless-runtime` 这类工具/基础设施模块可能仍偏工程内视角，未说明主要读者和使用前提 | `doc/scripts/README.md`、`doc/headless-runtime/README.md` | 明确读者角色、首读入口与非目标 | open |
-| I10-003 | ROUND-009 deferred follow-up | `game`、`playability_test_result` 的入口分别偏产品/证据，但尚未确认是否需要进一步分流 | `doc/game/README.md`、`doc/playability_test_result/README.md` | 抽样后决定 `keep` 还是补小幅读者分流 | open |
+| I10-001 | ROUND-009 deferred follow-up | `world-runtime`、`p2p` 一类高体量模块仍主要按主题目录列出，缺少“先读哪里”的任务导向入口 | `doc/world-runtime/README.md`、`doc/p2p/README.md` | 优先为高体量模块补“从这里开始”与索引/手册边界说明 | resolved |
+| I10-002 | ROUND-009 deferred follow-up | `scripts`、`headless-runtime` 这类工具/基础设施模块可能仍偏工程内视角，未说明主要读者和使用前提 | `doc/scripts/README.md`、`doc/headless-runtime/README.md` | 明确读者角色、首读入口与非目标 | resolved |
+| I10-003 | ROUND-009 deferred follow-up | `game`、`playability_test_result` 的入口分别偏产品/证据，但尚未确认是否需要进一步分流 | `doc/game/README.md`、`doc/playability_test_result/README.md` | 抽样后决定 `keep` 还是补小幅读者分流 | resolved |
 
 ## 执行项
 | 编号 | 执行动作 | owner role | 截止时间 | 验收命令 | 状态 |
@@ -84,8 +84,8 @@
 | A10-002 | 冻结 ROUND-010 focused scope、问题池与批次口径 | `producer_system_designer` | 2026-03-30 | `rg -n "ROUND-010|focused scope|I10-|G10-" doc/core/reviews/consistency-review-round-010.md` | done |
 | A10-003 | 先完成 `world-runtime` 入口治理，验证 ROUND-010 的首片模式 | `producer_system_designer` | 待定 | `./scripts/doc-governance-check.sh` | done |
 | A10-004 | 完成剩余模块 README 的 `aligned/deferred` 决议 | 对应 owner | 待定 | `./scripts/doc-governance-check.sh` | done |
-| A10-005 | ROUND-010 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | pending |
+| A10-005 | ROUND-010 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | done |
 
 ## 复审结果
-- 当前结论: `in_progress`
-- 备注: ROUND-010 的 6 个 focused scope README 已全部完成 `aligned/deferred` 判定；剩余最终 `qa_engineer` 复审与关轮。
+- 当前结论: `completed`
+- 备注: `qa_engineer` 已完成 focused scope 抽样复核，本轮冻结为 `6 aligned + 0 deferred`；无剩余 `issue_open`，无新增阻断。若后续再发现 README 入口退化，按新一轮 focused scope 继续处理，不回退到全仓逐篇重读。
