@@ -78,6 +78,7 @@
 - [x] TASK-ENGINEERING-066 (PRD-ENGINEERING-015) [test_tier_required]: 建立 ROUND-010“延期模块入口分流跟进轮”台账，冻结来自 ROUND-009 deferred 项的 6 个模块 README focused scope。
 - [x] TASK-ENGINEERING-067 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 首片 `world-runtime` 入口分流治理，为高体量 runtime 模块 README 增加任务导向入口与索引边界说明。
 - [x] TASK-ENGINEERING-068 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 第二片 `p2p` 入口分流治理，为高体量网络模块 README 增加任务导向入口与索引边界说明。
+- [x] TASK-ENGINEERING-069 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-010 `scripts` 入口映射治理，为工具模块 README 增加 task-worktree / landing / harness 的轻量入口与索引边界说明。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -132,6 +133,7 @@
 - 最新完成: `TASK-ENGINEERING-066`（已建立 ROUND-010 小分母治理台账，准备继续处理 ROUND-009 延期的 6 个模块 README 入口问题。）
 - 最新完成: `TASK-ENGINEERING-067`（已为 `world-runtime` README 增加任务导向入口，并明确 README / `prd.index.md` / 高频专题的职责边界。）
 - 最新完成: `TASK-ENGINEERING-068`（已为 `p2p` README 增加任务导向入口，并明确 README / `prd.index.md` / 主链安全 / hosted world / token-governance signer 高频专题的职责边界。）
+- 最新完成: `TASK-ENGINEERING-069`（已为 `scripts` README 增加 task-worktree bootstrap / landing / harness 的轻量入口，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。

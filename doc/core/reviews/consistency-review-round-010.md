@@ -24,7 +24,7 @@
 - 审查/治理时间窗: `2026-03-30`
 - owner role: `producer_system_designer`
 - 协作角色: `qa_engineer`（证据/测试模块入口复核）
-- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，`world-runtime` 与 `p2p` 两个高体量模块已完成；后续按“scripts -> game/playability/headless-runtime -> QA 复审”继续治理。
+- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，`world-runtime`、`p2p` 与 `scripts` 已完成；后续按“game/playability/headless-runtime -> QA 复审”继续治理。
 
 状态判定：
 - `not_started`: 仅记录轮次意图，尚未冻结范围与问题域。

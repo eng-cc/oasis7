@@ -171,6 +171,7 @@
     - `rg -n "必须.*回收|必须.*删除|Required Cleanup" AGENTS.md doc/scripts scripts/land-task-worktree.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SCRIPTS-019 (PRD-SCRIPTS-001/008) [test_tier_required]: 执行 ROUND-010 `scripts` 模块入口映射治理，明确 README、`prd.index.md` 与高频 task-worktree / landing / harness 入口的阅读边界。
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -181,9 +182,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-27
+- 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-019`（已为 `scripts/README.md` 补齐 task worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
 - 最新完成: `TASK-SCRIPTS-018`（收紧 task worktree 生命周期口径，要求 landing 成功后必须删除已完成 task worktree / branch。）
 - 最新完成: `TASK-SCRIPTS-017`（新增标准化 task worktree landing 入口，统一任务分支 rebase 到本地 `main` 并 fast-forward 合入本地 `main` 的闭环。）
 - 最新完成: `TASK-SCRIPTS-016`（为标准化 task worktree bootstrap 入口补齐 `--init-docs` 与 `--with-harness`。）

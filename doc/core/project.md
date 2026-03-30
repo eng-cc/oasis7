@@ -231,6 +231,7 @@
 - [x] TASK-CORE-041 (PRD-CORE-003/008) [test_tier_required]: 建立 ROUND-010“延期模块入口分流跟进轮”台账，冻结来自 ROUND-009 deferred 项的 6 个模块 README focused scope。
 - [x] TASK-CORE-042 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 首片 `world-runtime` 入口分流收口，验证高体量 runtime 模块 README 的任务导向入口模式。
 - [x] TASK-CORE-043 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 第二片 `p2p` 入口分流收口，验证高体量网络模块 README 的任务导向入口模式。
+- [x] TASK-CORE-044 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `scripts` 入口映射收口，明确工具模块 README 与 task-worktree / landing / harness 高频入口的边界。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -278,6 +279,7 @@
 - 最新完成: `TASK-CORE-041`（已建立 ROUND-010 小分母治理台账，从 ROUND-009 deferred 项中冻结 `world-runtime / p2p / scripts / game / playability_test_result / headless-runtime` 六个模块 README。）
 - 最新完成: `TASK-CORE-042`（已为 `world-runtime` README 增加任务导向入口，并明确 README、长表索引与高频 runtime/wasm/module 专题的阅读边界。）
 - 最新完成: `TASK-CORE-043`（已为 `p2p` README 增加任务导向入口，并明确 README、长表索引与主链安全 / hosted world / token-governance signer 高频专题的阅读边界。）
+- 最新完成: `TASK-CORE-044`（已为 `scripts` README 补齐 task-worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / 长表索引 / 高频脚本专题边界。）
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。

@@ -1,12 +1,27 @@
 # scripts 文档索引
 
-审计轮次: 6
+审计轮次: 10
+
+## 从这里开始
+- 想先理解脚本模块的边界、门禁与维护口径：`doc/scripts/prd.md`
+- 想看当前脚本治理任务与最近完成项：`doc/scripts/project.md`
+- 想按专题文件名精确查 precommit / wasm / viewer-tools / governance 文档：`doc/scripts/prd.index.md`
+- 想直接为新需求开独立 worktree：`scripts/new-task-worktree.sh` + `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
+- 想把已完成任务标准化合入本地 `main`：`scripts/land-task-worktree.sh` + `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
+- 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 
 ## 入口
 - PRD: `doc/scripts/prd.md`
 - 设计总览: `doc/scripts/design.md`
 - 标准执行入口: `doc/scripts/project.md`
 - 文件级索引: `doc/scripts/prd.index.md`
+
+## 入口分工
+- `README.md` 只承担 landing page 职责：帮助读者决定是先看规则、看项目状态，还是直接去某个高频脚本入口。
+- `prd.md` 是脚本模块的权威规格入口，适合先理解主入口分层、参数契约、稳定性趋势与隔离约束。
+- `project.md` 是执行台账，适合确认当前 worktree、landing、harness 等治理任务的完成状态。
+- `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 scripts 模块时的首读入口。
+- 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`land-task-worktree.sh` 负责标准 landing，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
 
 ## 模块职责
 - 维护仓内高频脚本的主入口、参数契约与 fallback 围栏口径。
@@ -40,3 +55,4 @@
 - 新增专题后，需同步回写 `doc/scripts/prd.index.md` 与本目录索引。
 - `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project / 当日 devlog，`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up --no-llm`。
 - `scripts/land-task-worktree.sh` 为任务完成后的默认 landing 入口；负责在干净 task worktree 与干净本地 `main` worktree 之间执行标准化 rebase + fast-forward 合入，并输出必须执行的回收命令。
+- 若默认高频脚本入口变化，需同步回写本目录“从这里开始”，避免 README 退化回纯专题目录页。
