@@ -19,12 +19,12 @@
 
 ## 轮次信息
 - 轮次编号: `ROUND-009`
-- 轮次状态: `in_progress` (`not_started` | `in_progress` | `completed`)
+- 轮次状态: `completed` (`not_started` | `in_progress` | `completed`)
 - 轮次类型: `consumer_entry_and_manual_semantics`
 - 审查/治理时间窗: `2026-03-30`
 - owner role: `producer_system_designer`
 - 协作角色: `qa_engineer`（验收/阻断）、`viewer_engineer`（Viewer 手册与静态镜像）、`liveops_community`（对外口径与素材包边界）
-- 当前阶段说明: 已完成 focused scope 冻结、首轮问题池登记与执行清单建档；后续按“入口层 -> 手册层 -> 素材/例外层”三批次治理。
+- 当前阶段说明: 已完成 focused scope 冻结、高优先级入口/手册回写、例外目录收口与 QA 复审；本轮终态已冻结为 `15 aligned + 8 deferred`。
 
 状态判定：
 - `not_started`: 仅确认轮次意图，尚未冻结范围与问题域。
@@ -84,11 +84,11 @@
 ## 问题池
 | 编号 | 来源 | 问题描述 | 影响范围 | 建议动作 | 当前判定 |
 | --- | --- | --- | --- | --- | --- |
-| I9-001 | 入口层抽样 | 当前入口主要按模块/文件类型导航，缺少按读者任务组织的消费层入口 | `README.md`、`doc/README.md`、模块 `README.md`、`site/doc/**` | 先冻结角色/任务型 landing 设计，再决定入口最小改造面 | open |
-| I9-002 | 手册层抽样 | 高频手册仍主要落在 legacy `.md` 或 `*.prd.md` 壳子中，`manual` 语义未真正落地 | `viewer-manual.md`、`web-ui-agent-browser-closure-manual.prd.md`、`testing-manual.md` | 判定哪些保留 legacy、哪些迁为 `*.manual.md`、哪些维持权威总手册 | open |
-| I9-003 | `readme` 模块抽样 | `readme` 模块混合了 README 权威源、发布口径、执行记录和素材包，消费边界不够清晰 | `doc/readme/**` | 将“规范口径”和“素材/执行包”分层，必要时拆子目录或显式标注类型 | open |
-| I9-004 | 目录例外抽样 | `ui_review_result` 当前不在标准模块骨架中，定位更像活跃样本池而非正式模块 | `doc/ui_review_result/**` | 明确保留为临时样本目录、并回写进入/退出条件；或并回所属模块 | open |
-| I9-005 | 索引可消费性抽样 | 高体量模块 `prd.index.md` 可达但不够易读，读者难以从长表中快速选择正确主题 | `doc/world-simulator/prd.index.md`、`doc/readme/prd.index.md` 等 | 先做 focused scope 设计结论，再决定是否引入二级索引/过滤式入口 | open |
+| I9-001 | 入口层抽样 | 当前入口主要按模块/文件类型导航，缺少按读者任务组织的消费层入口 | `README.md`、`doc/README.md`、模块 `README.md`、`site/doc/**` | 先冻结角色/任务型 landing 设计，再决定入口最小改造面 | resolved |
+| I9-002 | 手册层抽样 | 高频手册仍主要落在 legacy `.md` 或 `*.prd.md` 壳子中，`manual` 语义未真正落地 | `viewer-manual.md`、`web-ui-agent-browser-closure-manual.prd.md`、`testing-manual.md` | 判定哪些保留 legacy、哪些迁为 `*.manual.md`、哪些维持权威总手册 | resolved |
+| I9-003 | `readme` 模块抽样 | `readme` 模块混合了 README 权威源、发布口径、执行记录和素材包，消费边界不够清晰 | `doc/readme/**` | 将“规范口径”和“素材/执行包”分层，必要时拆子目录或显式标注类型 | resolved |
+| I9-004 | 目录例外抽样 | `ui_review_result` 当前不在标准模块骨架中，定位更像活跃样本池而非正式模块 | `doc/ui_review_result/**` | 明确保留为临时样本目录、并回写进入/退出条件；或并回所属模块 | resolved |
+| I9-005 | 索引可消费性抽样 | 高体量模块 `prd.index.md` 可达但不够易读，读者难以从长表中快速选择正确主题 | `doc/world-simulator/prd.index.md`、`doc/readme/prd.index.md` 等 | 先做 focused scope 设计结论，再决定是否引入二级索引/过滤式入口 | resolved |
 
 ## 执行项
 | 编号 | 执行动作 | owner role | 截止时间 | 验收命令 | 状态 |
@@ -97,8 +97,8 @@
 | A9-002 | 冻结 focused scope、问题池与批次口径 | `producer_system_designer` | 2026-03-30 | `rg -n "ROUND-009|focused scope|I9-|G9-" doc/core/reviews/consistency-review-round-009.md` | done |
 | A9-003 | 完成首轮范围审读并对每个对象给出 keep/migrate/split/defer 建议 | `producer_system_designer` | 待定 | `rg -n "keep|migrate|split|defer" doc/core/reviews/round-009-reviewed-files.md` | done |
 | A9-004 | 对高优先级入口/手册对象执行首批回写与互链修复 | 对应模块 owner | 待定 | `./scripts/doc-governance-check.sh` | done |
-| A9-005 | ROUND-009 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | pending |
+| A9-005 | ROUND-009 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | done |
 
 ## 复审结果
-- 当前结论: `in_progress`
-- 备注: ROUND-009 已完成 focused scope 冻结与首轮问题登记，后续按小分母治理节奏推进，不回退到全仓逐篇重读模式。
+- 当前结论: `completed`
+- 备注: `qa_engineer` 已完成 focused scope 抽样复核，本轮冻结为 `15 aligned + 8 deferred`；无剩余 `issue_open`，无新增阻断。延期项已显式登记在清单备注中，后续仅在新的入口治理轮继续处理，不回退到全仓逐篇重读模式。

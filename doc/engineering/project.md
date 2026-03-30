@@ -74,6 +74,7 @@
 - [x] TASK-ENGINEERING-062 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 根级例外目录定位治理，明确 `doc/ui_review_result/` 属于活跃样本池而非正式模块。
 - [x] TASK-ENGINEERING-063 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 `world-simulator` 高体量模块入口治理，为 README 增加任务导向分流并固定 `README / prd.index / manual / static mirror` 的语义边界。
 - [x] TASK-ENGINEERING-064 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，为 `doc/site/README.md` 明确模块治理入口、公开 docs hub 与静态手册镜像的分工。
+- [x] TASK-ENGINEERING-065 (PRD-ENGINEERING-015) [test_tier_required]: 完成 ROUND-009 工程侧复审关轮，冻结 focused scope 的 `aligned/deferred` 终态并记录 QA 结论。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -124,6 +125,7 @@
 - 最新完成: `TASK-ENGINEERING-062`（已明确 `doc/ui_review_result/` 是活跃评审样本池，不再把其视作正式模块级入口。）
 - 最新完成: `TASK-ENGINEERING-063`（已为 `world-simulator` README 增加任务导向分流，并明确仓库权威入口与公开静态镜像的职责边界。）
 - 最新完成: `TASK-ENGINEERING-064`（已为 `site` README 明确模块治理入口、公开 docs hub 与静态手册镜像之间的职责分工。）
+- 最新完成: `TASK-ENGINEERING-065`（ROUND-009 已完成 QA 复审与关轮，focused scope 终态冻结为 `15 aligned + 8 deferred`，无新增工程阻断。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
