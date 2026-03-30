@@ -1,6 +1,6 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
-审计轮次: 4
+审计轮次: 5
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -26,6 +26,8 @@
 - runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
 - runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
 - `issuer_id=liveops` 对应的 controller signer policy 可以作为低权限运营槽位显式使用 `1-of-2`，前提是 operator-local `public_manifest.json` 为 `liveops` 记录写出 `threshold=1`，并通过 `oasis7_governance_registry_import/audit` 导入当前 world-state；该特例不会自动放宽 `ecosystem_pool` 等 treasury/controller 主槽位，它们仍默认按 `2-of-3` 运维。
+- `oasis7_governance_registry_import` 当前把 `public_manifest.json` 视为整份治理 registry 快照，而不是“只补一个 slot”的 patch；重新导入时会重写 finality/controller signer registry，并把 `restricted_starter_claim_admin_account_ids` 重新置空。
+- 因此不要把只含 `liveops` 的 slot-only manifest 直接导入 production world；若 custody 把 `liveops` 单独存成 `1-of-2` bundle，必须先把它并入 operator-local 的全量治理 manifest，再执行 import/audit。
 - 若 `liveops` 尚未在 admin registry 中，必须先由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 提交 `UpdateRestrictedStarterClaimAdminRegistry` 把 `liveops` 加入 allowlist；runbook 本身不能替代这一步正式治理动作。
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
@@ -48,6 +50,56 @@
 - 若当前 shell 已固定 world 目录，先执行 `export OASIS7_WORLD_DIR=<world_dir>`，之后可省略每条命令里的 `--world-dir`。
 - wrapper 默认 `issuer_id=liveops`，支持 `--dry-run`、`--json`、`--print-cmd`；底层仍只调用 `oasis7_liveops_grant_cli`，不提供 admin roster 直改命令。admin 轮换仍必须走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`。
 - 若 `liveops` signer policy 采用 `1-of-2`，建议把两把 signer 都保留在离线 custody，但日常 restricted grant issue/revoke 只要求其中一把完成 `liveops` slot 签名；这属于低权限例外，不适用于 `msig.ecosystem_governance.v1` 等高风险 treasury/controller 槽位。
+
+### 3.1B One-time bootstrap / post-import recovery
+首次启用 `liveops`，或任何一次 governance registry 重导入之后，按下面顺序恢复运营可用态：
+
+1. 准备 operator-local 的全量 `public_manifest.json`，不要只拿 `liveops` 两条记录单独导入。
+2. 确认该全量 manifest 中，`liveops` 的每条记录都显式带 `"threshold": 1`；最小示例：
+
+```json
+[
+  {
+    "slot_id": "liveops",
+    "threshold": 1,
+    "signer_id": "signer01",
+    "scheme": "ed25519",
+    "public_key_hex": "<liveops_signer01_public_key_hex>"
+  },
+  {
+    "slot_id": "liveops",
+    "threshold": 1,
+    "signer_id": "signer02",
+    "scheme": "ed25519",
+    "public_key_hex": "<liveops_signer02_public_key_hex>"
+  }
+]
+```
+
+3. 导入全量治理 manifest：
+   `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json>`
+4. 立刻审计导入结果，不要跳过：
+   `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- --world-dir <world_dir> --public-manifest <operator_full_public_manifest.json> --strict-manifest-match --require-single-failure-tolerance`
+5. 让当前 `ecosystem_pool` treasury controller slot 对应的治理操作者提交一次 `UpdateRestrictedStarterClaimAdminRegistry`，把 `liveops` 放回 admin allowlist。payload 最少应包含：
+
+```json
+{
+  "type": "UpdateRestrictedStarterClaimAdminRegistry",
+  "data": {
+    "controller_account_id": "<ecosystem_pool_controller_account_id>",
+    "next_admin_account_ids": ["liveops"]
+  }
+}
+```
+
+6. 再执行 `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`，只有以下 3 个条件同时成立，才算恢复完成：
+   - `admin_registry_configured: true`
+   - `issuer_is_allowlisted_admin: true`
+   - `issuer_has_signer_policy: true`
+
+- 若第 4 步 audit 失败，不要继续做第 5 步。
+- 若第 6 步仍看到任一 `false`，不要继续发 grant；先回到 manifest / admin roster / controller slot 绑定检查。
+- 任何一次 signer rotation、manifest 重导入或 world 恢复，只要重新跑了 `oasis7_governance_registry_import`，都要把这 6 步再走一遍。
 
 ### 3.2 Allowed issuance_reason
 仅允许以下 3 个 `issuance_reason`：
@@ -101,6 +153,7 @@
 1. 确认申请属于 `preview_allowlist`、`qa_seed`、`liveops_campaign` 三类之一。
 2. 确认本次发放统一使用 `issuer_id = liveops`。
 3. 先执行 `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`，确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
+   最低通过线是同时看到 `admin_registry_configured: true`、`issuer_is_allowlisted_admin: true`、`issuer_has_signer_policy: true`。
    若未登记，先走 controller-governed `UpdateRestrictedStarterClaimAdminRegistry`，不要回退到离线 import、手工改 world 文件或给运营临时放开旁路。
 4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
 5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
@@ -125,6 +178,23 @@
 - beneficiary 的 restricted balance 与 issue amount 一致
 - treasury 对应 bucket 按同额扣减
 - 若本次先做过 admin registry 热更新，再额外确认 journal 中已存在 `RestrictedStarterClaimAdminRegistryUpdated` governance event，且 `next_admin_account_ids` 含 `liveops`
+
+### 7.1 Recommended command sequence
+- 发放前先看总状态：
+  `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`
+- 发放前看单个 beneficiary：
+  `./scripts/oasis7-liveops-grant.sh status <beneficiary_account_id> --world-dir <world_dir>`
+- 先 dry-run，再正式 issue：
+  `./scripts/oasis7-liveops-grant.sh issue <beneficiary_account_id> <amount> <issuance_reason> <expires_at_epoch> --world-dir <world_dir> --dry-run`
+  `./scripts/oasis7-liveops-grant.sh issue <beneficiary_account_id> <amount> <issuance_reason> <expires_at_epoch> --world-dir <world_dir>`
+- 如需撤销，也先 dry-run，再正式 revoke：
+  `./scripts/oasis7-liveops-grant.sh revoke <beneficiary_account_id> <revoke_reason> --world-dir <world_dir> --dry-run`
+  `./scripts/oasis7-liveops-grant.sh revoke <beneficiary_account_id> <revoke_reason> --world-dir <world_dir>`
+
+- `status` 里若指定 beneficiary，应重点看 `beneficiary_grant_status`、`beneficiary_grant_amount`、`beneficiary_grant_expires_at_epoch`、`beneficiary_grant_issuance_reason`。
+- `issue` 成功后应看到 `issue ok`，并附带 `beneficiary_restricted_balance_after` 与 `event.restricted_grant_issued`。
+- `revoke` 成功后应看到 `revoke ok`，并附带 `event.restricted_grant_revoked`。
+- 若命令返回 `issue rejected` 或 `revoke rejected`，不要手工修 world；先按 `rejection:` 文本回到本 runbook 的第 6 节和第 9 节排查。
 
 ## 8. 到期与巡检
 - `preview_allowlist` 与 `liveops_campaign` 至少在到期前 `1` 个运营检查窗口做一次预检。

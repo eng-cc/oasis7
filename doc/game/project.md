@@ -148,6 +148,7 @@
 - [x] TASK-GAME-054 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已新增 `oasis7_liveops_grant_cli` 作为 restricted grant 的日常运营入口，封装 `issue/revoke/status` 并保持 runtime canonical action / world-state 真值，不开放 admin roster 直改旁路。
 - [x] TASK-GAME-055 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh` 作为 `oasis7_liveops_grant_cli` 的运营 wrapper，收口 `status/issue/revoke` 的位置参数和 `OASIS7_WORLD_DIR` 缺省，继续保持底层只转发 canonical CLI，不新增任何 admin / world-file 旁路。
 - [x] TASK-GAME-056 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold，使 `liveops` 这类低权限 restricted grant admin slot 可显式使用 `1-of-2` signer policy，而 treasury/controller 主槽位继续默认 `2-of-3`；drill 脚本也同步改为按 baseline manifest 的 slot signer count/threshold 工作。
+- [x] TASK-GAME-057 (PRD-GAME-011) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的实操层 SOP，明确 `liveops 1-of-2` 的首次开通、governance registry 重导入后的恢复顺序、`status` 判读门槛，以及“slot-only manifest 不得直接 import 到 world”的风险提示。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -162,10 +163,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-29
+- 更新日期: 2026-03-30
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
 - 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环；当前新增的是运营入口层，不改变底层规则边界）`
+- 最新完成: `TASK-GAME-057`（`liveops_community` 已补齐 restricted grant runbook 的开通/恢复/日常操作 SOP，明确 governance registry import 属于全量 registry 重写、slot-only manifest 不能直接导入 world，且每次重导入后都要重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。）
 - 最新完成: `TASK-GAME-056`（`runtime_engineer` 已将 governance registry 工具链扩成 per-slot threshold，正式支持 `liveops` 按 manifest 声明 `1-of-2`，同时不放宽 treasury/controller 主槽位的默认 `2-of-3`。）
 - 最新完成: `TASK-GAME-055`（`runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh`，把 restricted grant 日常操作进一步收口为运营短命令与环境变量约定，同时保持底层仍只走 `oasis7_liveops_grant_cli`。）
 - 最新完成: `TASK-GAME-054`（`runtime_engineer` 已新增 `oasis7_liveops_grant_cli`，将 restricted grant 的日常 `issue/revoke/status` 收口为运营可执行 CLI，同时继续保留 controller-governed admin roster 边界。）
