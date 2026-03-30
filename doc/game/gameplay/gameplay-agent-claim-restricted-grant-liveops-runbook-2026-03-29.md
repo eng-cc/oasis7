@@ -1,6 +1,6 @@
 # Agent Claim Restricted Grant LiveOps Runbook（2026-03-29）
 
-审计轮次: 5
+审计轮次: 6
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -23,7 +23,8 @@
 
 ## 2. Runtime 真值边界
 - 发放动作只能走 `IssueRestrictedStarterClaimGrant`，撤销动作只能走 `RevokeRestrictedStarterClaimGrant`；不要再用手工余额注入去替代正式发放。
-- runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
+- runtime 当前把 daily restricted grant 的 source bucket 固定为 `MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL`，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
+- `MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL` 不是自由运营余额，也不是 `liveops` 账户余额；它只能通过 `TopUpRestrictedStarterClaimLiveopsPool` 从 `ecosystem_pool` 划拨资金，且该 top-up 仍必须由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 按 signer allowlist / threshold policy 签名批准。
 - runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
 - `issuer_id=liveops` 对应的 controller signer policy 可以作为低权限运营槽位显式使用 `1-of-2`，前提是 operator-local `public_manifest.json` 为 `liveops` 记录写出 `threshold=1`，并通过 `oasis7_governance_registry_import/audit` 导入当前 world-state；该特例不会自动放宽 `ecosystem_pool` 等 treasury/controller 主槽位，它们仍默认按 `2-of-3` 运维。
 - `oasis7_governance_registry_import` 当前把 `public_manifest.json` 视为整份治理 registry 快照，而不是“只补一个 slot”的 patch；重新导入时会重写 finality/controller signer registry，并把 `restricted_starter_claim_admin_account_ids` 重新置空。
@@ -32,7 +33,7 @@
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
 - 撤销必须由同一 `issuer_id` 发起；如果发放时 `issuer_id` 写错，后续只能用同一个错误值去 revoke，因此发放前必须双人复核字段。
-- grant 到期或撤销后，账户剩余 restricted spendable 会退回 ecosystem treasury；之后 claim release / forced reclaim 产生的 restricted bond refund 也会直接回 treasury，不再返还给 beneficiary。
+- grant 到期或撤销后，账户剩余 restricted spendable 会退回 `restricted_starter_claim_liveops_pool`；之后 claim release / forced reclaim 产生的 restricted bond refund 也会直接回同一专用池，不再返还给 beneficiary。
 
 ## 3. v1 运营冻结口径
 ### 3.1 Canonical issuer_id
@@ -92,14 +93,28 @@
 }
 ```
 
-6. 再执行 `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`，只有以下 3 个条件同时成立，才算恢复完成：
+6. 若 `restricted_starter_claim_liveops_pool` 余额不足，再由当前 `ecosystem_pool` controller account 提交一次 `TopUpRestrictedStarterClaimLiveopsPool`，最少 payload 形态如下：
+
+```json
+{
+  "type": "TopUpRestrictedStarterClaimLiveopsPool",
+  "data": {
+    "controller_account_id": "<ecosystem_pool_controller_account_id>",
+    "top_up_id": "liveops-topup-<YYYYMMDD>-<seq>",
+    "amount": <u64>
+  }
+}
+```
+
+7. 再执行 `./scripts/oasis7-liveops-grant.sh status --world-dir <world_dir>`，只有以下 4 个条件同时成立，才算恢复完成：
    - `admin_registry_configured: true`
    - `issuer_is_allowlisted_admin: true`
    - `issuer_has_signer_policy: true`
+   - `restricted_claim_liveops_treasury_balance > 0`
 
-- 若第 4 步 audit 失败，不要继续做第 5 步。
-- 若第 6 步仍看到任一 `false`，不要继续发 grant；先回到 manifest / admin roster / controller slot 绑定检查。
-- 任何一次 signer rotation、manifest 重导入或 world 恢复，只要重新跑了 `oasis7_governance_registry_import`，都要把这 6 步再走一遍。
+- 若第 4 步 audit 失败，不要继续做第 5/6 步。
+- 若第 7 步仍看到任一 `false`，或专用池余额仍为 `0`，不要继续发 grant；先回到 manifest / admin roster / controller slot 绑定 / top-up 记录检查。
+- 任何一次 signer rotation、manifest 重导入或 world 恢复，只要重新跑了 `oasis7_governance_registry_import`，都要把这 7 步再走一遍。
 
 ### 3.2 Allowed issuance_reason
 仅允许以下 3 个 `issuance_reason`：
@@ -158,8 +173,9 @@
 4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
 5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
 6. 确认 `expires_at_epoch` 覆盖完整窗口，不会在正常使用中途提前终态。
-7. 确认 source bucket 仍是 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL`，并记录本次占用额度。
-8. 双人复核 `beneficiary_account_id / issuer_id / issuance_reason / amount / expires_at_epoch` 后再提交动作。
+7. 确认 `restricted_claim_liveops_treasury_balance` 足够覆盖本次发放，若不足则先走 controller-governed `TopUpRestrictedStarterClaimLiveopsPool`，不要临时改成直接从 `ecosystem_pool` 发 grant。
+8. 确认 source bucket 仍是 `MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL`，并记录本次占用额度。
+9. 双人复核 `beneficiary_account_id / issuer_id / issuance_reason / amount / expires_at_epoch` 后再提交动作。
 
 ## 7. 发放执行
 最小执行记录必须包含：
@@ -174,10 +190,11 @@
 
 发放后必须核对：
 - journal 中存在 `RestrictedStarterClaimGrantIssued`
-- event 内 `source_treasury_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL`
+- event 内 `source_treasury_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL`
 - beneficiary 的 restricted balance 与 issue amount 一致
-- treasury 对应 bucket 按同额扣减
+- `restricted_claim_liveops_treasury_balance` 按同额扣减，`ecosystem_treasury_balance` 不应因为 daily issue/revoke 直接变化
 - 若本次先做过 admin registry 热更新，再额外确认 journal 中已存在 `RestrictedStarterClaimAdminRegistryUpdated` governance event，且 `next_admin_account_ids` 含 `liveops`
+- 若本次先做过 top-up，再额外确认 journal 中已存在 `RestrictedStarterClaimLiveopsPoolToppedUp`，且 `top_up_id`、`amount` 与批次记录一致
 
 ### 7.1 Recommended command sequence
 - 发放前先看总状态：
@@ -192,7 +209,8 @@
   `./scripts/oasis7-liveops-grant.sh revoke <beneficiary_account_id> <revoke_reason> --world-dir <world_dir>`
 
 - `status` 里若指定 beneficiary，应重点看 `beneficiary_grant_status`、`beneficiary_grant_amount`、`beneficiary_grant_expires_at_epoch`、`beneficiary_grant_issuance_reason`。
-- `issue` 成功后应看到 `issue ok`，并附带 `beneficiary_restricted_balance_after` 与 `event.restricted_grant_issued`。
+- `status` 至少要同时看 `ecosystem_treasury_balance` 和 `restricted_claim_liveops_treasury_balance`；前者用于判断是否还能继续 top-up，后者才是 daily issue/revoke 真正会消耗的专用池余额。
+- `issue` 成功后应看到 `issue ok`，并附带 `restricted_claim_liveops_treasury_balance_after`、`beneficiary_restricted_balance_after` 与 `event.restricted_grant_issued`。
 - `revoke` 成功后应看到 `revoke ok`，并附带 `event.restricted_grant_revoked`。
 - 若命令返回 `issue rejected` 或 `revoke rejected`，不要手工修 world；先按 `rejection:` 文本回到本 runbook 的第 6 节和第 9 节排查。
 
@@ -243,5 +261,5 @@
 
 ## 11. Out of Scope
 - 本 runbook 不定义 QA 自动化矩阵；那是 `TASK-GAME-051 / TASK-GAMEPLAY-AGC-013`。
-- 本 runbook 不改变 runtime 的 canonical 成本、slot 限制、treasury source 或 refund sink 真值。
+- 本 runbook 不改变 runtime 的 canonical 成本、slot 限制、`ecosystem_pool -> restricted_starter_claim_liveops_pool` top-up 审批边界或 restricted refund sink 真值。
 - 本 runbook 不引入第 4 类 issuer/reason，也不放宽 `slot-1 only / non-transferable / provenance-preserving` 边界。

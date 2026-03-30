@@ -16,6 +16,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedclaimliveopspoolauth:v1:";
 const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
     "awtrestrictedgrantadminauth:v1:";
 const DEFAULT_GENESIS_CONTROLLER_SLOT: &str = "msig.genesis.v1";
@@ -118,6 +120,9 @@ enum TestMainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(TestClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(TestInitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(TestDistributeMainTokenTreasurySigningData<'a>),
+    TopUpRestrictedStarterClaimLiveopsPool(
+        TestTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>,
+    ),
     UpdateRestrictedStarterClaimAdminRegistry(
         TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
     ),
@@ -152,6 +157,13 @@ struct TestDistributeMainTokenTreasurySigningData<'a> {
 }
 
 #[derive(Serialize)]
+struct TestTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a> {
+    controller_account_id: &'a str,
+    top_up_id: &'a str,
+    amount: u64,
+}
+
+#[derive(Serialize)]
 struct TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
     controller_account_id: &'a str,
     next_admin_account_ids: &'a [JsonValue],
@@ -163,6 +175,9 @@ fn test_main_token_action_signature_prefix(action_kind: &str) -> &'static str {
         "ClaimMainTokenVesting" => MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX,
         "InitializeMainTokenGenesis" => MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX,
         "DistributeMainTokenTreasury" => MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX,
+        "TopUpRestrictedStarterClaimLiveopsPool" => {
+            MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX
+        }
         "UpdateRestrictedStarterClaimAdminRegistry" => {
             MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX
         }
@@ -176,6 +191,9 @@ fn test_main_token_action_operation(action_kind: &str) -> &'static str {
         "ClaimMainTokenVesting" => "claim_main_token_vesting",
         "InitializeMainTokenGenesis" => "initialize_main_token_genesis",
         "DistributeMainTokenTreasury" => "distribute_main_token_treasury",
+        "TopUpRestrictedStarterClaimLiveopsPool" => {
+            "top_up_restricted_starter_claim_liveops_pool"
+        }
         "UpdateRestrictedStarterClaimAdminRegistry" => {
             "update_restricted_starter_claim_admin_registry"
         }
@@ -261,6 +279,24 @@ fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSign
                         .and_then(JsonValue::as_array)
                         .map(Vec::as_slice)
                         .expect("treasury distributions"),
+                },
+            )
+        }
+        "TopUpRestrictedStarterClaimLiveopsPool" => {
+            TestMainTokenActionSigningPayload::TopUpRestrictedStarterClaimLiveopsPool(
+                TestTopUpRestrictedStarterClaimLiveopsPoolSigningData {
+                    controller_account_id: data
+                        .get("controller_account_id")
+                        .and_then(JsonValue::as_str)
+                        .expect("restricted claim liveops pool top-up controller_account_id"),
+                    top_up_id: data
+                        .get("top_up_id")
+                        .and_then(JsonValue::as_str)
+                        .expect("restricted claim liveops pool top-up top_up_id"),
+                    amount: data
+                        .get("amount")
+                        .and_then(JsonValue::as_u64)
+                        .expect("restricted claim liveops pool top-up amount"),
                 },
             )
         }
@@ -861,8 +897,8 @@ fn submit_consensus_action_payload_accepts_signed_main_token_genesis_action() {
         .with_main_token_controller_binding(configured_controller_binding(
             2,
             &[0x24, 0x28],
-            2,
-            &[0x25, 0x29],
+            1,
+            &[0x25],
         ))
         .expect("controller binding"),
     );
@@ -902,8 +938,8 @@ fn submit_consensus_action_payload_rejects_signed_main_token_genesis_action_with
         .with_main_token_controller_binding(configured_controller_binding(
             2,
             &[0x24, 0x28],
-            2,
-            &[0x25, 0x29],
+            1,
+            &[0x25],
         ))
         .expect("controller binding"),
     );
@@ -1264,6 +1300,78 @@ fn submit_consensus_action_payload_rejects_treasury_when_signer_not_allowlisted(
         .submit_consensus_action_payload(1, payload)
         .expect_err("treasury signer outside allowlist must fail");
     assert!(err.to_string().contains("not allowlisted"));
+}
+
+#[test]
+fn submit_consensus_action_payload_accepts_signed_restricted_claim_liveops_pool_top_up_action() {
+    let runtime = NodeRuntime::new(
+        NodeConfig::new(
+            "node-token-liveops-pool-topup-ok",
+            "world-token-liveops-pool-topup-ok",
+            NodeRole::Observer,
+        )
+        .expect("config")
+        .with_main_token_controller_binding(configured_controller_binding(
+            2,
+            &[0x24, 0x28],
+            2,
+            &[0x25, 0x29],
+        ))
+        .expect("controller binding"),
+    );
+    let payload = encode_threshold_signed_main_token_runtime_payload(
+        json!({
+            "type": "TopUpRestrictedStarterClaimLiveopsPool",
+            "data": {
+                "controller_account_id": DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT,
+                "top_up_id": "liveops-topup-1",
+                "amount": 500
+            }
+        }),
+        DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT,
+        2,
+        &[0x25, 0x29],
+    );
+    runtime
+        .submit_consensus_action_payload(1, payload)
+        .expect("signed restricted claim liveops pool top-up payload should pass");
+}
+
+#[test]
+fn submit_consensus_action_payload_rejects_restricted_claim_liveops_pool_top_up_with_wrong_controller_slot(
+) {
+    let runtime = NodeRuntime::new(
+        NodeConfig::new(
+            "node-token-liveops-pool-topup-wrong-slot",
+            "world-token-liveops-pool-topup-wrong-slot",
+            NodeRole::Observer,
+        )
+        .expect("config")
+        .with_main_token_controller_binding(configured_controller_binding(
+            2,
+            &[0x24, 0x28],
+            2,
+            &[0x25, 0x29],
+        ))
+        .expect("controller binding"),
+    );
+    let payload = encode_threshold_signed_main_token_runtime_payload(
+        json!({
+            "type": "TopUpRestrictedStarterClaimLiveopsPool",
+            "data": {
+                "controller_account_id": "msig.foundation_ops.v1",
+                "top_up_id": "liveops-topup-1",
+                "amount": 500
+            }
+        }),
+        "msig.foundation_ops.v1",
+        2,
+        &[0x25, 0x29],
+    );
+    let err = runtime
+        .submit_consensus_action_payload(1, payload)
+        .expect_err("wrong restricted claim liveops pool top-up controller slot must fail");
+    assert!(err.to_string().contains("liveops pool top-up controller slot"));
 }
 
 #[test]

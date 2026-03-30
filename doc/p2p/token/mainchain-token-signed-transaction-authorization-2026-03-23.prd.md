@@ -12,9 +12,9 @@
   - SC-2: 只有当 `from_account_id == awt:pk:<normalized_public_key_hex>` 且 `ed25519` 签名校验通过时，转账请求才允许继续进入余额/nonce 预检与共识提交。
   - SC-3: `ConsensusActionPayloadEnvelope` 必须支持主链 Token auth proof，且 `NodeRuntime` 对 transfer/claim/genesis/treasury/restricted-admin-registry 提交时强制要求对应 proof。
   - SC-4: claim/genesis/treasury/restricted-admin-registry 即使没有公开 HTTP submit surface，也必须在共享提交层具备“无 proof 直接拒绝”的门禁。
-  - SC-5: `genesis/treasury/restricted-admin-registry` 的 `auth.account_id` 必须绑定到正式 controller slot；其中 `UpdateRestrictedStarterClaimAdminRegistry` 固定绑定 `ecosystem_pool` treasury controller slot，不能继续接受任意命名 controller label。
-  - SC-6: `InitializeMainTokenGenesis / DistributeMainTokenTreasury / UpdateRestrictedStarterClaimAdminRegistry` 必须支持 `threshold_ed25519` controller proof，并要求 proof 的 `threshold` 与 controller signer policy 一致。
-  - SC-7: `genesis/treasury/restricted-admin-registry` 在 `STRAUTH-2B2/2B3` 完成后，submit-layer 必须拒绝 signer 不在 allowlist、唯一签名数未达 threshold、或 controller signer policy 缺失的 payload。
+  - SC-5: `genesis/treasury/restricted-admin-registry/liveops-pool-top-up` 的 `auth.account_id` 必须绑定到正式 controller slot；其中 `UpdateRestrictedStarterClaimAdminRegistry` 与 `TopUpRestrictedStarterClaimLiveopsPool` 都固定绑定 `ecosystem_pool` treasury controller slot，不能继续接受任意命名 controller label。
+  - SC-6: `InitializeMainTokenGenesis / DistributeMainTokenTreasury / UpdateRestrictedStarterClaimAdminRegistry / TopUpRestrictedStarterClaimLiveopsPool` 必须支持 `threshold_ed25519` controller proof，并要求 proof 的 `threshold` 与 controller signer policy 一致。
+  - SC-7: `genesis/treasury/restricted-admin-registry/liveops-pool-top-up` 在 `STRAUTH-2B2/2B3/2B4` 完成后，submit-layer 必须拒绝 signer 不在 allowlist、唯一签名数未达 threshold、或 controller signer policy 缺失的 payload。
   - SC-8: `STRAUTH-2B2` 只完成代码级 signer allowlist / threshold enforcement，不得误写成 ceremony / HSM / external signer 已完成。
   - SC-9: `oasis7_client_launcher` 的 Web/native 转账窗口必须在提交前自行产出 `public_key + signature`，不再发送裸 `from/to/amount/nonce`。
   - SC-10: `oasis7_web_launcher` 必须把本地 signer bootstrap 注入所服务的 HTML，使 wasm 端在 trusted local deployment 下也能生成与 runtime 契约一致的 transfer 签名。

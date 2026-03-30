@@ -21,6 +21,8 @@ pub const MAIN_TOKEN_NODE_ACCOUNT_PREFIX: &str = "awt:pk:";
 pub const MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD: &str = "staking_reward_pool";
 pub const MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD: &str = "node_service_reward_pool";
 pub const MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL: &str = "ecosystem_pool";
+pub const MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL: &str =
+    "restricted_starter_claim_liveops_pool";
 pub const MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE: &str = "security_reserve";
 pub const MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE: &str = "gas_fee_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_SLASH: &str = "slash_treasury";
@@ -232,6 +234,16 @@ pub struct MainTokenTreasuryDistributionRecord {
     pub total_amount: u64,
     pub distributions: Vec<MainTokenTreasuryDistribution>,
     pub distributed_epoch: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct RestrictedStarterClaimLiveopsPoolTopUpRecord {
+    pub controller_account_id: String,
+    pub top_up_id: String,
+    pub source_treasury_bucket_id: String,
+    pub target_treasury_bucket_id: String,
+    pub amount: u64,
+    pub topped_up_at_epoch: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

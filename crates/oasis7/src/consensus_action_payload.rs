@@ -9,6 +9,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedclaimliveopspoolauth:v1:";
 const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
     "awtrestrictedgrantadminauth:v1:";
 
@@ -109,6 +111,9 @@ enum MainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(ClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(InitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(DistributeMainTokenTreasurySigningData<'a>),
+    TopUpRestrictedStarterClaimLiveopsPool(
+        TopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>,
+    ),
     UpdateRestrictedStarterClaimAdminRegistry(
         UpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
     ),
@@ -140,6 +145,13 @@ struct DistributeMainTokenTreasurySigningData<'a> {
     distribution_id: &'a str,
     bucket_id: &'a str,
     distributions: &'a [runtime::MainTokenTreasuryDistribution],
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct TopUpRestrictedStarterClaimLiveopsPoolSigningData<'a> {
+    controller_account_id: &'a str,
+    top_up_id: &'a str,
+    amount: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -184,6 +196,7 @@ pub fn main_token_action_auth_required(action: &runtime::Action) -> bool {
             | runtime::Action::ClaimMainTokenVesting { .. }
             | runtime::Action::InitializeMainTokenGenesis { .. }
             | runtime::Action::DistributeMainTokenTreasury { .. }
+            | runtime::Action::TopUpRestrictedStarterClaimLiveopsPool { .. }
             | runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. }
     )
 }
@@ -472,6 +485,19 @@ fn build_main_token_action_signing_action(
                 distributions: distributions.as_slice(),
             },
         )),
+        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool {
+            controller_account_id,
+            top_up_id,
+            amount,
+        } => Ok(
+            MainTokenActionSigningPayload::TopUpRestrictedStarterClaimLiveopsPool(
+                TopUpRestrictedStarterClaimLiveopsPoolSigningData {
+                    controller_account_id: controller_account_id.as_str(),
+                    top_up_id: top_up_id.as_str(),
+                    amount: *amount,
+                },
+            ),
+        ),
         runtime::Action::UpdateRestrictedStarterClaimAdminRegistry {
             controller_account_id,
             next_admin_account_ids,
@@ -540,6 +566,17 @@ fn validate_main_token_action_account_binding(
         }
         runtime::Action::InitializeMainTokenGenesis { .. }
         | runtime::Action::DistributeMainTokenTreasury { .. } => {}
+        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool {
+            controller_account_id,
+            ..
+        } => {
+            if account_id != controller_account_id.trim() {
+                return Err(MainTokenActionAuthError::AccountMismatch(format!(
+                    "main token auth account_id does not match restricted claim liveops pool top-up controller_account_id: expected={} actual={account_id}",
+                    controller_account_id.trim()
+                )));
+            }
+        }
         runtime::Action::UpdateRestrictedStarterClaimAdminRegistry {
             controller_account_id,
             ..
@@ -596,6 +633,9 @@ fn main_token_action_operation(
         runtime::Action::ClaimMainTokenVesting { .. } => Ok("claim_main_token_vesting"),
         runtime::Action::InitializeMainTokenGenesis { .. } => Ok("initialize_main_token_genesis"),
         runtime::Action::DistributeMainTokenTreasury { .. } => Ok("distribute_main_token_treasury"),
+        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool { .. } => {
+            Ok("top_up_restricted_starter_claim_liveops_pool")
+        }
         runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
             Ok("update_restricted_starter_claim_admin_registry")
         }
@@ -621,6 +661,9 @@ fn main_token_action_signature_prefix(
         runtime::Action::DistributeMainTokenTreasury { .. } => {
             Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX)
         }
+        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool { .. } => Ok(
+            MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX,
+        ),
         runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
             Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
         }

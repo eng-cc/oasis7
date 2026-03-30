@@ -7,12 +7,13 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] STRAUTH-0 (PRD-P2P-TXAUTH-001/002/003) [test_tier_required]: 新建“主链 Token 签名交易鉴权”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
 - [x] STRAUTH-1 (PRD-P2P-TXAUTH-001/002) [test_tier_required]: 由 `runtime_engineer` 为 `POST /v1/chain/transfer/submit` 实现 `public_key + signature` 鉴权、`awt:pk:` 账户绑定、控制面请求结构同步与定向回归。
-- [x] STRAUTH-2 (PRD-P2P-TXAUTH-001/003) [test_tier_required]: 由 `runtime_engineer` 继续把 `ClaimMainTokenVesting / InitializeMainTokenGenesis / DistributeMainTokenTreasury / UpdateRestrictedStarterClaimAdminRegistry` 纳入统一 signed transaction envelope。
+- [x] STRAUTH-2 (PRD-P2P-TXAUTH-001/003) [test_tier_required]: 由 `runtime_engineer` 继续把 `ClaimMainTokenVesting / InitializeMainTokenGenesis / DistributeMainTokenTreasury / UpdateRestrictedStarterClaimAdminRegistry / TopUpRestrictedStarterClaimLiveopsPool` 纳入统一 signed transaction envelope。
   - [x] STRAUTH-2A [test_tier_required]: 为 `ConsensusActionPayloadEnvelope` 增加主链 Token auth proof，并让 `NodeRuntime` 对 transfer/claim/genesis/treasury/restricted-admin-registry 在提交层强制验签。
   - [x] STRAUTH-2B [test_tier_required]: 将 controller-bound 资产动作的治理控制从“signed metadata”推进到正式 controller slot binding，并继续保留 signer allowlist / ceremony 后续任务。
     - [x] STRAUTH-2B1 [test_tier_required]: 为 genesis/treasury 建立正式 controller slot registry，并在 `NodeRuntime` 提交层按 `action/bucket` 绑定 `auth.account_id`。
     - [x] STRAUTH-2B2 [test_tier_required]: 将 controller slot 继续收口到本地配置 signer allowlist / threshold enforcement，并明确 ceremony / external signer 仍待后续专题。
     - [x] STRAUTH-2B3 [test_tier_required]: 将 `UpdateRestrictedStarterClaimAdminRegistry` 绑定到 `ecosystem_pool` treasury controller slot，并在 `NodeRuntime`/runtime 两侧统一要求 controller account 匹配、signer allowlist / threshold policy 通过。
+    - [x] STRAUTH-2B4 [test_tier_required]: 将 `TopUpRestrictedStarterClaimLiveopsPool` 同样绑定到 `ecosystem_pool` treasury controller slot，使 dedicated liveops pool top-up 继续复用高权限 `2-of-3` signer policy，而不把 daily restricted grant CLI 混进 controller payload 细节。
 - [x] STRAUTH-3 (PRD-P2P-TXAUTH-002/003) [test_tier_required + test_tier_full]: 由 `viewer_engineer` + `qa_engineer` 补齐 Web/native 转账签名提交流程、失败提示与更完整回归证据。
   - [x] STRAUTH-3A [test_tier_required]: 为 `oasis7_client_launcher` 的 Web/native 转账窗口补 signed request builder、本地 signer bootstrap 读取，以及 `oasis7_web_launcher` HTML bootstrap 注入。
   - [x] STRAUTH-3B [test_tier_full]: 产出 Web-first 闭环证据，至少覆盖一次 signed transfer 尝试与一次 signer/bootstrap 失败提示路径。
@@ -22,10 +23,11 @@
   - `TransferMainToken` 公开 HTTP submit 不再接受未签名请求。
   - `from_account_id` 已绑定到 `awt:pk:<public_key_hex>`。
   - `oasis7_web_launcher` 代理请求结构已同步到新字段集合。
-  - `ConsensusActionPayloadEnvelope` 已支持 shared main-token auth proof，`NodeRuntime` 提交层已对 transfer/claim/genesis/treasury/restricted-admin-registry 统一做 signed payload gating。
+  - `ConsensusActionPayloadEnvelope` 已支持 shared main-token auth proof，`NodeRuntime` 提交层已对 transfer/claim/genesis/treasury/restricted-admin-registry/liveops-pool-top-up 统一做 signed payload gating。
   - `InitializeMainTokenGenesis / DistributeMainTokenTreasury` 已进入正式 controller slot registry，submit-layer 不再接受任意 controller label。
   - `InitializeMainTokenGenesis / DistributeMainTokenTreasury` 已进入代码级 controller signer allowlist / threshold enforcement，submit-layer 会拒绝 policy missing、allowlist miss 与 threshold 不达标的 proof。
   - `UpdateRestrictedStarterClaimAdminRegistry` 已从模拟内 proposal proposer 模式重构为正式 controller-account 模式：submit-layer 与 world apply 都要求 `controller_account_id` 命中 `ecosystem_pool` treasury controller slot，并通过相同的 signer allowlist / threshold policy。
+  - `TopUpRestrictedStarterClaimLiveopsPool` 已与 restricted admin registry update 一样绑定 `ecosystem_pool` treasury controller slot：submit-layer 与 world apply 都要求 `controller_account_id` 命中同一高权限 slot，并通过相同的 signer allowlist / threshold policy。
   - `oasis7_client_launcher` 的 Web/native 转账窗口已在提交前本地产出 `public_key/signature`，不再发送裸 transfer 请求。
   - `oasis7_web_launcher` 已在服务 HTML 时注入本地 signer bootstrap，使 wasm 端能够按同一协议产签。
   - `STRAUTH-3B` 已完成 Web-first 证据闭环：agent-browser 通过 wasm test hook 驱动 canvas-only 转账窗口，已验证一次页面侧 signed submit -> runtime `action_id=1` / tracked status `confirmed`，以及一次 bootstrap 缺失 -> 本地 `转账签名失败` 且无 transfer POST 的失败提示路径。

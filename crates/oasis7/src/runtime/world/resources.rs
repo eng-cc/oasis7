@@ -13,7 +13,8 @@ use super::super::{
     MainTokenNodePointsBridgeEpochRecord, MainTokenScheduledPolicyUpdate, MainTokenSupplyState,
     MainTokenTreasuryDistributionRecord, MaterialLedgerId, MaterialProfileV1, MaterialStack,
     NodeAssetBalance, NodeRewardMintRecord, ProductProfileV1, ProtocolPowerReserve,
-    RecipeProfileV1, RestrictedStarterClaimGrantState, RewardAssetConfig,
+    RecipeProfileV1, RestrictedStarterClaimGrantState,
+    RestrictedStarterClaimLiveopsPoolTopUpRecord, RewardAssetConfig,
     RewardAssetInvariantReport, RewardAssetInvariantViolation, RewardSignatureGovernancePolicy,
     SystemOrderPoolBudget,
 };
@@ -207,6 +208,15 @@ impl World {
         self.state
             .main_token_treasury_distribution_records
             .get(distribution_id)
+    }
+
+    pub fn restricted_starter_claim_liveops_pool_top_up_record(
+        &self,
+        top_up_id: &str,
+    ) -> Option<&RestrictedStarterClaimLiveopsPoolTopUpRecord> {
+        self.state
+            .restricted_starter_claim_liveops_pool_top_up_records
+            .get(top_up_id)
     }
 
     pub fn set_main_token_treasury_balance(

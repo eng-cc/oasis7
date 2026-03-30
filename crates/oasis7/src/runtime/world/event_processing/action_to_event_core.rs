@@ -2,6 +2,7 @@ use super::*;
 use crate::runtime::main_token::{
     is_main_token_treasury_distribution_bucket, MainTokenTreasuryDistribution,
     RestrictedStarterClaimGrantStatus, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY,
 };
 use std::collections::BTreeSet;
@@ -489,6 +490,18 @@ impl World {
                     distributions.as_slice(),
                 ),
             )),
+            Action::TopUpRestrictedStarterClaimLiveopsPool {
+                controller_account_id,
+                top_up_id,
+                amount,
+            } => Ok(WorldEventBody::Domain(
+                self.evaluate_top_up_restricted_starter_claim_liveops_pool_action(
+                    action_id,
+                    controller_account_id.as_str(),
+                    top_up_id.as_str(),
+                    *amount,
+                ),
+            )),
             Action::IssueRestrictedStarterClaimGrant {
                 issuer_account_id,
                 beneficiary_account_id,
@@ -886,6 +899,135 @@ impl World {
         event
     }
 
+    fn evaluate_top_up_restricted_starter_claim_liveops_pool_action(
+        &self,
+        action_id: ActionId,
+        controller_account_id: &str,
+        top_up_id: &str,
+        amount: u64,
+    ) -> DomainEvent {
+        let Some(registry) = self.governance_main_token_controller_registry() else {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "restricted claim liveops pool top-up rejected: main token controller registry is not configured"
+                            .to_string(),
+                    ],
+                },
+            };
+        };
+        let controller_account_id = controller_account_id.trim();
+        if controller_account_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "restricted claim liveops pool top-up controller_account_id cannot be empty"
+                            .to_string(),
+                    ],
+                },
+            };
+        }
+        let expected_controller_account_id = match Self::ecosystem_treasury_controller_account_id(
+            registry,
+            "restricted claim liveops pool top-up",
+        ) {
+            Ok(account_id) => account_id,
+            Err(err) => {
+                return DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "restricted claim liveops pool top-up rejected: {err:?}"
+                        )],
+                    },
+                };
+            }
+        };
+        if controller_account_id != expected_controller_account_id {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted claim liveops pool top-up rejected: controller_account_id does not match ecosystem treasury controller slot expected={} actual={}",
+                        expected_controller_account_id, controller_account_id
+                    )],
+                },
+            };
+        }
+        let top_up_id = top_up_id.trim();
+        if top_up_id.is_empty() {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "restricted claim liveops pool top_up_id cannot be empty".to_string(),
+                    ],
+                },
+            };
+        }
+        if self
+            .state
+            .restricted_starter_claim_liveops_pool_top_up_records
+            .contains_key(top_up_id)
+        {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted claim liveops pool top-up rejected: top_up_id already exists ({top_up_id})"
+                    )],
+                },
+            };
+        }
+        if amount == 0 {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "restricted claim liveops pool top-up amount must be > 0".to_string(),
+                    ],
+                },
+            };
+        }
+        let source_bucket_balance =
+            self.main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL);
+        if source_bucket_balance < amount {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted claim liveops pool top-up treasury insufficient: bucket={} balance={} amount={amount}",
+                        MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, source_bucket_balance
+                    )],
+                },
+            };
+        }
+
+        let event = DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp {
+            controller_account_id: controller_account_id.to_string(),
+            top_up_id: top_up_id.to_string(),
+            source_treasury_bucket_id: MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string(),
+            target_treasury_bucket_id:
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL.to_string(),
+            amount,
+            topped_up_at_epoch: self.current_governance_epoch(),
+        };
+        let mut preview_state = self.state.clone();
+        if let Err(err) = preview_state.apply_domain_event(&event, self.state.time) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "restricted claim liveops pool top-up rejected: {err:?}"
+                    )],
+                },
+            };
+        }
+        event
+    }
+
     fn evaluate_issue_restricted_starter_claim_grant_action(
         &self,
         action_id: ActionId,
@@ -949,7 +1091,7 @@ impl World {
                 },
             };
         }
-        let source_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL;
+        let source_bucket_id = MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL;
         let source_bucket_balance = self.main_token_treasury_balance(source_bucket_id);
         if source_bucket_balance < amount {
             return DomainEvent::ActionRejected {

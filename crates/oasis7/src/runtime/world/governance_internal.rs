@@ -288,8 +288,24 @@ impl World {
             }
             normalized_slots.insert(bucket_id, controller_account_id);
         }
+        let mut normalized_restricted_admins = BTreeSet::new();
+        for account_id in registry.restricted_starter_claim_admin_account_ids {
+            let account_id = account_id.trim().to_string();
+            if account_id.is_empty() {
+                continue;
+            }
+            if !normalized_policies.contains_key(account_id.as_str()) {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "main token controller registry missing restricted grant admin signer policy account_id={account_id}"
+                    ),
+                });
+            }
+            normalized_restricted_admins.insert(account_id);
+        }
         registry.controller_signer_policies = normalized_policies;
         registry.treasury_bucket_controller_slots = normalized_slots;
+        registry.restricted_starter_claim_admin_account_ids = normalized_restricted_admins;
         Ok(registry)
     }
 
@@ -981,11 +997,15 @@ impl World {
                             .to_string(),
                     });
                 };
-                if current_registry.genesis_controller_account_id != *controller_account_id {
+                let expected_controller_account_id =
+                    Self::restricted_starter_claim_admin_registry_controller_account_id(
+                        &current_registry,
+                    )?;
+                if expected_controller_account_id != *controller_account_id {
                     return Err(WorldError::GovernancePolicyInvalid {
                         reason: format!(
                             "restricted claim admin registry controller mismatch expected={} actual={}",
-                            current_registry.genesis_controller_account_id, controller_account_id
+                            expected_controller_account_id, controller_account_id
                         ),
                     });
                 }

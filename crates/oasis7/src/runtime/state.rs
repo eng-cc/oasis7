@@ -27,7 +27,8 @@ use super::main_token::{
     MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
     MainTokenNodePointsBridgeDistribution, MainTokenNodePointsBridgeEpochRecord,
     MainTokenScheduledPolicyUpdate, MainTokenSupplyState, MainTokenTreasuryDistributionRecord,
-    RestrictedStarterClaimGrantState, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    RestrictedStarterClaimGrantState, RestrictedStarterClaimLiveopsPoolTopUpRecord,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::{
@@ -494,6 +495,9 @@ pub struct WorldState {
     pub main_token_treasury_distribution_records:
         BTreeMap<String, MainTokenTreasuryDistributionRecord>,
     #[serde(default)]
+    pub restricted_starter_claim_liveops_pool_top_up_records:
+        BTreeMap<String, RestrictedStarterClaimLiveopsPoolTopUpRecord>,
+    #[serde(default)]
     pub reward_asset_config: RewardAssetConfig,
     #[serde(default)]
     pub node_asset_balances: BTreeMap<String, NodeAssetBalance>,
@@ -575,6 +579,7 @@ impl Default for WorldState {
             main_token_scheduled_policy_updates: BTreeMap::new(),
             main_token_node_points_bridge_records: BTreeMap::new(),
             main_token_treasury_distribution_records: BTreeMap::new(),
+            restricted_starter_claim_liveops_pool_top_up_records: BTreeMap::new(),
             reward_asset_config: RewardAssetConfig::default(),
             node_asset_balances: BTreeMap::new(),
             protocol_power_reserve: ProtocolPowerReserve::default(),
@@ -918,6 +923,7 @@ impl WorldState {
             | DomainEvent::MainTokenFeeSettled { .. }
             | DomainEvent::MainTokenPolicyUpdateScheduled { .. }
             | DomainEvent::MainTokenTreasuryDistributed { .. }
+            | DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. }
             | DomainEvent::RestrictedStarterClaimGrantIssued { .. }
             | DomainEvent::RestrictedStarterClaimGrantExpired { .. }
             | DomainEvent::RestrictedStarterClaimGrantRevoked { .. }

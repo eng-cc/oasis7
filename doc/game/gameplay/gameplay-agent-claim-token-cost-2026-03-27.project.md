@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 14
+审计轮次: 15
 
 ## 任务拆解
 
@@ -26,6 +26,7 @@
 - [x] TASK-GAMEPLAY-AGC-017 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已新增 `scripts/oasis7-liveops-grant.sh` 作为运营 wrapper，把 `status / issue / revoke` 收口成位置参数短命令，支持 `OASIS7_WORLD_DIR` 缺省、`--print-cmd` 与 `--cli-bin` smoke，但底层仍只转发到 `oasis7_liveops_grant_cli`，不复制第二份规则或开放 admin roster 旁路。
 - [x] TASK-GAMEPLAY-AGC-018 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold：旧 `2-of-3` manifest 继续兼容，`liveops` 这类低权限 slot 可在 manifest 中显式声明 `threshold=1` 形成 `1-of-2` policy，而其余 controller/finality slot 仍默认按 `2-of-3` 审计；相关 drill 脚本也不再把 slot signer count 写死成 `3`。
 - [x] TASK-GAMEPLAY-AGC-019 (`PRD-GAME-011`) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的一次性开通 / manifest 重导入恢复 / 日常 status 判读步骤，明确 governance registry import 是全量 registry 重写而非 slot patch，且重导入后必须重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。
+- [x] TASK-GAMEPLAY-AGC-020 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已将 daily restricted grant 的 source bucket 从 `ecosystem_pool` 拆分为独立 `restricted_starter_claim_liveops_pool`，新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action 与 top-up 审计记录，并让 `oasis7_liveops_grant_cli` / runbook / status 全部转向专用池余额。
 
 ## 依赖
 
@@ -64,6 +65,8 @@
   - `TASK-GAMEPLAY-AGC-017` 已新增 `scripts/oasis7-liveops-grant.sh`，作为 `oasis7_liveops_grant_cli` 之上的运营薄包装：允许 `status [account]`、`issue <account> <amount> <reason> <expires_at_epoch>`、`revoke <account> <reason>` 三种位置参数短命令，并支持从 `OASIS7_WORLD_DIR` / `OASIS7_LIVEOPS_ISSUER_ID` 读默认值；脚本只负责参数整形与转发，不内嵌 grant 业务状态机，也不开放 admin registry 修改旁路。
   - `TASK-GAMEPLAY-AGC-018` 已在 `crates/oasis7/src/bin/oasis7_governance_registry_{import,audit}.rs` 为 `public_manifest.json` 增加可选 `threshold` 字段，并把 `--controller-threshold` / `--expected-threshold` 收口为“manifest 缺省阈值”；当某个 slot 的记录显式声明 `threshold=1` 时，import 会把该 slot 写成 `1-of-N` policy，audit 也会按该 slot 自身阈值而不是全局 `2` 校验。`scripts/governance-registry-{drill,live-drill}.sh` 同步改为从 baseline manifest 读取 slot signer count/threshold，不再写死 `3`。
   - `TASK-GAMEPLAY-AGC-019` 已补充 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md` 的实操步骤：新增 `liveops 1-of-2` bootstrap / post-import recovery 顺序、`status` 三个必看布尔位、slot-only manifest 禁止直接 import 的警告，以及 issue/revoke 的推荐 dry-run -> execute 命令序列。
+  - `TASK-GAMEPLAY-AGC-020` 已在 `crates/oasis7/src/runtime/main_token.rs`、`world/event_processing/action_to_event_core.rs`、`state/apply_domain_event_main_token.rs` 新增独立 `restricted_starter_claim_liveops_pool` treasury bucket、`TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action 与 top-up 审计记录；top-up 继续固定绑定 `ecosystem_pool` treasury controller slot 的 signer allowlist / threshold policy，而 daily `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 已改为只从专用池出账并把后续 restricted refund 退回同一专用池。
+  - `TASK-GAMEPLAY-AGC-020` 已同步更新 `crates/oasis7/src/consensus_action_payload.rs`、`crates/oasis7_node/src/node_runtime_core.rs` 与 `crates/oasis7_node/src/tests_action_payload.rs`，把 top-up action 纳入 shared main-token signed payload gating；`oasis7_liveops_grant_cli status` / `issue` / `revoke` 也已同时显示 `ecosystem_pool` 与 `restricted_starter_claim_liveops_pool` 余额，避免运营继续把 daily 发放误判成直接消耗大池。
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，本轮 producer review 结论为先不因 restricted starter balance 额外改价，后续仅在 lifecycle/liveops 真实数据出现异常时再新开调参专题。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：

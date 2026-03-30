@@ -150,6 +150,7 @@
 - [x] TASK-GAME-056 (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold，使 `liveops` 这类低权限 restricted grant admin slot 可显式使用 `1-of-2` signer policy，而 treasury/controller 主槽位继续默认 `2-of-3`；drill 脚本也同步改为按 baseline manifest 的 slot signer count/threshold 工作。
 - [x] TASK-GAME-057 (PRD-GAME-011) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的实操层 SOP，明确 `liveops 1-of-2` 的首次开通、governance registry 重导入后的恢复顺序、`status` 判读门槛，以及“slot-only manifest 不得直接 import 到 world”的风险提示。
 - [x] TASK-GAME-058 (PRD-GAME-001) [test_tier_required]: 执行 ROUND-010 `game` 模块入口治理，为 `doc/game/README.md` 增加轻量“从这里开始”分流，明确产品目标、执行追踪、玩法总览、试玩口径与高频专题之间的阅读顺序。
+- [x] TASK-GAME-059 (PRD-GAME-011) [test_tier_required + test_tier_full]: 将 restricted grant 的 daily treasury source 从 `ecosystem_pool` 拆分为独立 `restricted_starter_claim_liveops_pool`，新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action，并同步让 liveops CLI / runbook 转向 dedicated pool 余额。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -168,6 +169,7 @@
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
 - 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环；当前新增的是运营入口层，不改变底层规则边界）`
+- 最新完成: `TASK-GAME-059`（`runtime_engineer` 已新增独立 `restricted_starter_claim_liveops_pool` 与 `TopUpRestrictedStarterClaimLiveopsPool` 治理动作，让 `ecosystem_pool` 继续保留 `2-of-3` 高门槛审批，而 daily restricted grant 只消耗专用 liveops 池。）
 - 最新完成: `TASK-GAME-058`（已为 `game` README 增加轻量“从这里开始”分流，明确 `prd.md`、`project.md`、玩法总览、试玩口径专题与高频 claim 规则专题的阅读顺序，不再把根 README 当成第二份 `prd.index.md`。）
 - 最新完成: `TASK-GAME-057`（`liveops_community` 已补齐 restricted grant runbook 的开通/恢复/日常操作 SOP，明确 governance registry import 属于全量 registry 重写、slot-only manifest 不能直接导入 world，且每次重导入后都要重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。）
 - 最新完成: `TASK-GAME-056`（`runtime_engineer` 已将 governance registry 工具链扩成 per-slot threshold，正式支持 `liveops` 按 manifest 声明 `1-of-2`，同时不放宽 treasury/controller 主槽位的默认 `2-of-3`。）

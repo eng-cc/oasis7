@@ -797,6 +797,7 @@ impl WorldState {
             | event @ DomainEvent::MainTokenFeeSettled { .. }
             | event @ DomainEvent::MainTokenPolicyUpdateScheduled { .. }
             | event @ DomainEvent::MainTokenTreasuryDistributed { .. }
+            | event @ DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. }
             | event @ DomainEvent::RestrictedStarterClaimGrantIssued { .. }
             | event @ DomainEvent::RestrictedStarterClaimGrantExpired { .. }
             | event @ DomainEvent::RestrictedStarterClaimGrantRevoked { .. }

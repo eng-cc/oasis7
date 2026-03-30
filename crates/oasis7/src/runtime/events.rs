@@ -383,6 +383,11 @@ pub enum Action {
         bucket_id: String,
         distributions: Vec<MainTokenTreasuryDistribution>,
     },
+    TopUpRestrictedStarterClaimLiveopsPool {
+        controller_account_id: String,
+        top_up_id: String,
+        amount: u64,
+    },
     IssueRestrictedStarterClaimGrant {
         issuer_account_id: String,
         beneficiary_account_id: String,
@@ -684,6 +689,10 @@ impl Action {
             | Action::SettleMainTokenFee { .. }
             | Action::UpdateMainTokenPolicy { .. }
             | Action::DistributeMainTokenTreasury { .. } => None,
+            Action::TopUpRestrictedStarterClaimLiveopsPool {
+                controller_account_id,
+                ..
+            } => Some(controller_account_id.as_str()),
             Action::IssueRestrictedStarterClaimGrant {
                 issuer_account_id, ..
             }

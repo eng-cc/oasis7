@@ -20,6 +20,7 @@
   - SC-9: `liveops_community` 的日常 restricted grant 发放/撤销/状态检查必须支持正式 CLI 入口，直接复用 runtime canonical action 与 world-state 真值，而不是要求运营手工拼接原始 action JSON 或直接编辑 world 文件。
   - SC-10: 在正式 CLI 之上，仓库还必须提供一层面向运营同事的短命令 wrapper，支持 `status / issue / revoke` 的位置参数和 `OASIS7_WORLD_DIR` 默认注入，同时不新增任何绕过 runtime / controller-governed admin registry 的旁路。
   - SC-11: governance registry 的 manifest/import/audit 工具链必须支持按 `slot_id` 声明独立 signer threshold；`liveops` 这类低权限 restricted grant admin slot 可以显式使用 `1-of-2`，而 treasury/controller 主槽位继续默认 `2-of-3`，且不得因为引入 `liveops` 特例而把其他 slot 一并降阈值。
+  - SC-12: daily restricted grant 的出账源必须从 `ecosystem_pool` 切换到独立 `restricted_starter_claim_liveops_pool`；该专用池只能由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 通过正式 top-up action 从大池划拨资金，`liveops_community` 的日常 `issue/revoke/status` 只消费和回读该专用池，不直接动 `ecosystem_pool`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -168,6 +169,7 @@
 | PRD-GAME-011 | `TASK-GAME-054` | `test_tier_required` | 新增 `oasis7_liveops_grant_cli`，封装 restricted grant 的 `issue/revoke/status` 日常操作，验证 CLI 仍复用 canonical runtime action / world-state 真值，且不开放 admin roster 直改旁路 | 运营操作降摩擦、runtime 真值复用、治理边界保持 |
 | PRD-GAME-011 | `TASK-GAME-055` | `test_tier_required` | 新增 `scripts/oasis7-liveops-grant.sh` 作为运营 wrapper，验证位置参数、`OASIS7_WORLD_DIR` 默认注入与 `--print-cmd/--cli-bin` smoke，同时保持底层仍只调用 `oasis7_liveops_grant_cli` | 运营执行门槛进一步降低、字段误填率下降、治理边界不扩散 |
 | PRD-GAME-011 | `TASK-GAME-056` | `test_tier_required` | 将 governance registry manifest/import/audit 扩成 per-slot threshold，验证 `liveops` 可显式声明 `1-of-2` 且通过 audit/import，而既有 controller/finality slot 继续保持默认 `2-of-3` 与单 signer 故障容忍审计 | 低权限运营槽位可正式落地、治理工具链不再全局绑死一个 threshold |
+| PRD-GAME-011 | `TASK-GAME-059` | `test_tier_required` + `test_tier_full` | 新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action、独立 `restricted_starter_claim_liveops_pool` treasury bucket 与 top-up 审计记录，验证 top-up 固定绑定 `ecosystem_pool` controller slot 的 signer allowlist / threshold policy，且 daily restricted grant 只从专用池出账/退款回流 | restricted grant 资金池分层、高权限大池审批与低权限日常发放解耦、运营口径收敛 |
 
 - Decision Log:
 
@@ -189,3 +191,4 @@
 | DEC-AGC-014 | 为运营补一层薄 CLI `oasis7_liveops_grant_cli`，只封装 `issue/revoke/status` 并继续复用底层 runtime canonical action | 继续让运营手工拼 action JSON；或让 CLI 直接编辑 world snapshot/journal；或顺手开放 admin roster 直改命令 | 问题在于日常操作摩擦过大，不在于底层规则错误；薄 CLI 能降低运营使用成本，同时保持 runtime/state/journal 真值与 controller 治理边界，不引入新旁路。 |
 | DEC-AGC-015 | 在正式 CLI 之上补一层仓库脚本 `scripts/oasis7-liveops-grant.sh`，把 world-dir/issuer 缺省、位置参数与常用命令收口，但最终仍只转发到 `oasis7_liveops_grant_cli` | 继续要求运营直接敲长 `cargo run` 命令；或把更多运营逻辑复制进第二套脚本状态机 | 当前痛点已经从“没有 CLI”变成“正式 CLI 仍太长、太像开发命令”；薄 wrapper 可以减少误操作与培训成本，但不能复制第二份业务规则或引入脚本直改 world 的捷径。 |
 | DEC-AGC-016 | 允许 `liveops` 这类 restricted grant admin 低权限 slot 在 manifest 中显式声明 `threshold=1`，并以 `1-of-2` signer policy 进入 governance registry；其余 treasury/controller 主槽位继续默认 `2-of-3` | 要么强迫 `liveops` 也走统一 `2-of-3`，抬高运营摩擦；要么直接把所有 controller slot 的 threshold 一起降到 `1` 或 `1-of-2` | `liveops` 只负责不可转账 restricted grant 的日常发放/撤销，权限面明显低于 treasury/controller 主槽位；把 threshold 下调收口到单独 slot，既能降运营 ceremony 成本，又不把更高风险的主槽位一起放宽。 |
+| DEC-AGC-017 | 将 daily restricted grant 的 source bucket 从 `ecosystem_pool` 拆成独立 `restricted_starter_claim_liveops_pool`，并只开放一条由 `ecosystem_pool` controller-governed top-up action 负责向该池补款 | 继续让日常发放直接动 `ecosystem_pool`；或把一部分 liquid treasury 先转到 `liveops` 账户；或直接泛化成任意 treasury-to-treasury 转账框架 | 运营需要把高风险大池审批和低权限日常发放明确分层；专用池 + 固定 top-up action 既保留 `ecosystem_pool` 的 `2-of-3` 审批门槛，又不把 `liveops` 变成 liquid treasury 分发者，同时避免当前切片过早扩成通用 bucket 间转账框架。 |

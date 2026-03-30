@@ -315,6 +315,14 @@ pub enum DomainEvent {
         total_amount: u64,
         distributions: Vec<MainTokenTreasuryDistribution>,
     },
+    RestrictedStarterClaimLiveopsPoolToppedUp {
+        controller_account_id: String,
+        top_up_id: String,
+        source_treasury_bucket_id: String,
+        target_treasury_bucket_id: String,
+        amount: u64,
+        topped_up_at_epoch: u64,
+    },
     RestrictedStarterClaimGrantIssued {
         issuer_id: String,
         beneficiary_account_id: String,
@@ -818,6 +826,10 @@ impl DomainEvent {
             DomainEvent::MainTokenFeeSettled { .. } => None,
             DomainEvent::MainTokenPolicyUpdateScheduled { .. } => None,
             DomainEvent::MainTokenTreasuryDistributed { .. } => None,
+            DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp {
+                controller_account_id,
+                ..
+            } => Some(controller_account_id.as_str()),
             DomainEvent::RestrictedStarterClaimGrantIssued { issuer_id, .. }
             | DomainEvent::RestrictedStarterClaimGrantRevoked { issuer_id, .. } => {
                 Some(issuer_id.as_str())

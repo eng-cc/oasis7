@@ -1,4 +1,42 @@
 use super::super::*;
+use std::collections::{BTreeMap, BTreeSet};
+
+fn set_main_token_controller_registry_for_tests(world: &mut World, ecosystem_controller: &str) {
+    world
+        .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {
+            genesis_controller_account_id: "msig.genesis.v1".to_string(),
+            treasury_bucket_controller_slots: BTreeMap::from([(
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string(),
+                ecosystem_controller.to_string(),
+            )]),
+            restricted_starter_claim_admin_account_ids: BTreeSet::new(),
+            controller_signer_policies: BTreeMap::from([
+                (
+                    "msig.genesis.v1".to_string(),
+                    GovernanceThresholdSignerPolicy {
+                        threshold: 1,
+                        allowed_public_keys: BTreeSet::from([
+                            "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+                                .to_string(),
+                        ]),
+                    },
+                ),
+                (
+                    ecosystem_controller.to_string(),
+                    GovernanceThresholdSignerPolicy {
+                        threshold: 2,
+                        allowed_public_keys: BTreeSet::from([
+                            "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"
+                                .to_string(),
+                            "10fa4d90abf753ec1aa54aee3ea53bab25f43e7078897e1fb6a3777af2255bcb"
+                                .to_string(),
+                        ]),
+                    },
+                ),
+            ]),
+        })
+        .expect("set controller registry for tests");
+}
 
 #[test]
 fn main_token_queries_return_defaults_when_uninitialized() {
@@ -1101,6 +1139,127 @@ fn main_token_treasury_distribution_rejects_unsupported_bucket_and_duplicate_dis
                 assert!(notes
                     .iter()
                     .any(|note| note.contains("distribution_id already exists")));
+            }
+            other => panic!("expected RuleDenied, got {other:?}"),
+        },
+        other => panic!("expected ActionRejected, got {other:?}"),
+    }
+}
+
+#[test]
+fn restricted_claim_liveops_pool_top_up_moves_balance_and_records_event() {
+    let mut world = World::new();
+    set_main_token_controller_registry_for_tests(&mut world, "msig.ecosystem_governance.v1");
+    world.set_main_token_supply(MainTokenSupplyState {
+        total_supply: 1_000,
+        circulating_supply: 0,
+        total_issued: 1_000,
+        total_burned: 0,
+    });
+    world
+        .set_main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, 900)
+        .expect("seed ecosystem treasury");
+
+    world.submit_action(Action::TopUpRestrictedStarterClaimLiveopsPool {
+        controller_account_id: "msig.ecosystem_governance.v1".to_string(),
+        top_up_id: "liveops-topup-1".to_string(),
+        amount: 300,
+    });
+    world.step().expect("top up restricted claim liveops pool");
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp {
+            controller_account_id,
+            top_up_id,
+            source_treasury_bucket_id,
+            target_treasury_bucket_id,
+            amount,
+            ..
+        }) => {
+            assert_eq!(controller_account_id, "msig.ecosystem_governance.v1");
+            assert_eq!(top_up_id, "liveops-topup-1");
+            assert_eq!(
+                source_treasury_bucket_id,
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+            );
+            assert_eq!(
+                target_treasury_bucket_id,
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+            );
+            assert_eq!(*amount, 300);
+        }
+        other => panic!(
+            "expected RestrictedStarterClaimLiveopsPoolToppedUp, got {other:?}"
+        ),
+    }
+    assert_eq!(
+        world.main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        600
+    );
+    assert_eq!(
+        world.main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+        ),
+        300
+    );
+    let record = world
+        .restricted_starter_claim_liveops_pool_top_up_record("liveops-topup-1")
+        .expect("top-up record");
+    assert_eq!(record.controller_account_id, "msig.ecosystem_governance.v1");
+    assert_eq!(record.amount, 300);
+}
+
+#[test]
+fn restricted_claim_liveops_pool_top_up_rejects_wrong_controller_slot_and_duplicate_top_up_id() {
+    let mut world = World::new();
+    set_main_token_controller_registry_for_tests(&mut world, "msig.ecosystem_governance.v1");
+    world.set_main_token_supply(MainTokenSupplyState {
+        total_supply: 1_000,
+        circulating_supply: 0,
+        total_issued: 1_000,
+        total_burned: 0,
+    });
+    world
+        .set_main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, 900)
+        .expect("seed ecosystem treasury");
+
+    world.submit_action(Action::TopUpRestrictedStarterClaimLiveopsPool {
+        controller_account_id: "msig.wrong_controller.v1".to_string(),
+        top_up_id: "liveops-topup-reject".to_string(),
+        amount: 300,
+    });
+    world.step().expect("reject wrong controller slot");
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
+            RejectReason::RuleDenied { notes } => {
+                assert!(notes
+                    .iter()
+                    .any(|note| note.contains("ecosystem treasury controller slot")));
+            }
+            other => panic!("expected RuleDenied, got {other:?}"),
+        },
+        other => panic!("expected ActionRejected, got {other:?}"),
+    }
+
+    world.submit_action(Action::TopUpRestrictedStarterClaimLiveopsPool {
+        controller_account_id: "msig.ecosystem_governance.v1".to_string(),
+        top_up_id: "liveops-topup-dup".to_string(),
+        amount: 300,
+    });
+    world.step().expect("first top-up should pass");
+
+    world.submit_action(Action::TopUpRestrictedStarterClaimLiveopsPool {
+        controller_account_id: "msig.ecosystem_governance.v1".to_string(),
+        top_up_id: "liveops-topup-dup".to_string(),
+        amount: 50,
+    });
+    world.step().expect("duplicate top_up_id should reject");
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => match reason {
+            RejectReason::RuleDenied { notes } => {
+                assert!(notes
+                    .iter()
+                    .any(|note| note.contains("top_up_id already exists")));
             }
             other => panic!("expected RuleDenied, got {other:?}"),
         },

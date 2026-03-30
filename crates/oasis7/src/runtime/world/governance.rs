@@ -97,19 +97,40 @@ fn governance_threshold_bps(required_signers: u16, total_signers: usize) -> u16 
 }
 
 impl World {
-    pub(super) fn restricted_starter_claim_admin_registry_controller_account_id<'a>(
+    pub(super) fn treasury_bucket_controller_account_id<'a>(
         registry: &'a GovernanceMainTokenControllerRegistry,
+        bucket_id: &str,
+        context_label: &str,
     ) -> Result<&'a str, WorldError> {
         registry
             .treasury_bucket_controller_slots
-            .get(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL)
+            .get(bucket_id)
             .map(String::as_str)
             .ok_or_else(|| WorldError::GovernancePolicyInvalid {
                 reason: format!(
-                    "restricted claim admin registry controller slot is not configured for bucket {}",
-                    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                    "{context_label} controller slot is not configured for bucket {bucket_id}",
                 ),
             })
+    }
+
+    pub(super) fn ecosystem_treasury_controller_account_id<'a>(
+        registry: &'a GovernanceMainTokenControllerRegistry,
+        context_label: &str,
+    ) -> Result<&'a str, WorldError> {
+        Self::treasury_bucket_controller_account_id(
+            registry,
+            MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+            context_label,
+        )
+    }
+
+    pub(super) fn restricted_starter_claim_admin_registry_controller_account_id<'a>(
+        registry: &'a GovernanceMainTokenControllerRegistry,
+    ) -> Result<&'a str, WorldError> {
+        Self::ecosystem_treasury_controller_account_id(
+            registry,
+            "restricted claim admin registry",
+        )
     }
 
     // ---------------------------------------------------------------------

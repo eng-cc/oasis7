@@ -2,6 +2,7 @@ use oasis7::runtime::{
     Action, CausedBy, DomainEvent, RejectReason, RestrictedStarterClaimGrantState,
     RestrictedStarterClaimGrantStatus, World, WorldEvent, WorldEventBody,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
 };
 use serde::Serialize;
 use std::env;
@@ -73,6 +74,7 @@ struct StatusReport {
     world_dir: String,
     current_tick: u64,
     ecosystem_treasury_balance: u64,
+    restricted_claim_liveops_treasury_balance: u64,
     admin_registry_configured: bool,
     admin_account_ids: Vec<String>,
     issuer_account_id: String,
@@ -95,6 +97,7 @@ struct IssueReport {
     issuance_reason: String,
     expires_at_epoch: u64,
     ecosystem_treasury_balance_after: u64,
+    restricted_claim_liveops_treasury_balance_after: u64,
     beneficiary_restricted_balance_after: u64,
     beneficiary_grant: Option<GrantSnapshot>,
     action_events: Vec<ActionEventSummary>,
@@ -111,6 +114,7 @@ struct RevokeReport {
     beneficiary_account_id: String,
     revoke_reason: String,
     ecosystem_treasury_balance_after: u64,
+    restricted_claim_liveops_treasury_balance_after: u64,
     beneficiary_restricted_balance_after: u64,
     beneficiary_grant: Option<GrantSnapshot>,
     action_events: Vec<ActionEventSummary>,
@@ -404,6 +408,9 @@ fn execute_issue(command: &IssueCommand) -> Result<IssueReport, String> {
         expires_at_epoch: command.expires_at_epoch,
         ecosystem_treasury_balance_after: world
             .main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        restricted_claim_liveops_treasury_balance_after: world.main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+        ),
         beneficiary_restricted_balance_after: world
             .main_token_restricted_starter_claim_balance(command.beneficiary_account_id.as_str()),
         beneficiary_grant: world
@@ -443,6 +450,9 @@ fn execute_revoke(command: &RevokeCommand) -> Result<RevokeReport, String> {
         revoke_reason: command.revoke_reason.clone(),
         ecosystem_treasury_balance_after: world
             .main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        restricted_claim_liveops_treasury_balance_after: world.main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+        ),
         beneficiary_restricted_balance_after: world
             .main_token_restricted_starter_claim_balance(command.beneficiary_account_id.as_str()),
         beneficiary_grant: world
@@ -488,6 +498,9 @@ fn execute_status(command: &StatusCommand) -> Result<StatusReport, String> {
         current_tick: world.state().time,
         ecosystem_treasury_balance: world
             .main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        restricted_claim_liveops_treasury_balance: world.main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+        ),
         admin_registry_configured: registry.is_some(),
         admin_account_ids,
         issuer_account_id: command.issuer_account_id.clone(),
@@ -634,6 +647,10 @@ fn render_issue_report(report: &IssueReport) -> String {
             report.ecosystem_treasury_balance_after
         ),
         format!(
+            "restricted_claim_liveops_treasury_balance_after: {}",
+            report.restricted_claim_liveops_treasury_balance_after
+        ),
+        format!(
             "beneficiary_restricted_balance_after: {}",
             report.beneficiary_restricted_balance_after
         ),
@@ -670,6 +687,10 @@ fn render_revoke_report(report: &RevokeReport) -> String {
             report.ecosystem_treasury_balance_after
         ),
         format!(
+            "restricted_claim_liveops_treasury_balance_after: {}",
+            report.restricted_claim_liveops_treasury_balance_after
+        ),
+        format!(
             "beneficiary_restricted_balance_after: {}",
             report.beneficiary_restricted_balance_after
         ),
@@ -694,6 +715,10 @@ fn render_status_report(report: &StatusReport) -> String {
         format!(
             "ecosystem_treasury_balance: {}",
             report.ecosystem_treasury_balance
+        ),
+        format!(
+            "restricted_claim_liveops_treasury_balance: {}",
+            report.restricted_claim_liveops_treasury_balance
         ),
         format!("admin_registry_configured: {}", report.admin_registry_configured),
         format!(
@@ -763,6 +788,7 @@ mod tests {
     use oasis7::runtime::{
         GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
         MainTokenSupplyState, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+        MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     };
     use std::collections::{BTreeMap, BTreeSet};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -830,6 +856,12 @@ mod tests {
         world
             .set_main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, 1_000)
             .expect("set ecosystem treasury");
+        world
+            .set_main_token_treasury_balance(
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+                600,
+            )
+            .expect("set restricted liveops treasury");
         world.save_to_dir(world_dir.as_path()).expect("save world");
         world_dir
     }
@@ -877,6 +909,7 @@ mod tests {
         assert!(report.rejection.is_none(), "{report:?}");
         assert!(report.persisted);
         assert_eq!(report.beneficiary_restricted_balance_after, 300);
+        assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 300);
         assert!(
             report
                 .action_events
@@ -918,6 +951,7 @@ mod tests {
         .expect("revoke should succeed");
         assert!(report.rejection.is_none(), "{report:?}");
         assert!(report.persisted);
+        assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 600);
         assert!(
             report
                 .action_events
@@ -958,6 +992,7 @@ mod tests {
         assert!(report.admin_registry_configured);
         assert!(report.issuer_is_allowlisted_admin);
         assert!(report.issuer_has_signer_policy);
+        assert_eq!(report.restricted_claim_liveops_treasury_balance, 300);
         assert_eq!(report.beneficiary_restricted_balance, Some(300), "{report:?}");
         assert_eq!(
             report

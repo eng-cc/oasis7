@@ -57,6 +57,9 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::MainTokenTreasuryDistributed { .. } => {
                 "domain.main_token.treasury_distributed"
             }
+            DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. } => {
+                "domain.main_token.restricted_claim_liveops_pool_topped_up"
+            }
             DomainEvent::RestrictedStarterClaimGrantIssued { .. } => {
                 "domain.main_token.restricted_claim_grant_issued"
             }
@@ -215,6 +218,9 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::SettleMainTokenFee { .. } => "action.main_token.settle_fee",
         Action::UpdateMainTokenPolicy { .. } => "action.main_token.update_policy",
         Action::DistributeMainTokenTreasury { .. } => "action.main_token.distribute_treasury",
+        Action::TopUpRestrictedStarterClaimLiveopsPool { .. } => {
+            "action.main_token.top_up_restricted_claim_liveops_pool"
+        }
         Action::IssueRestrictedStarterClaimGrant { .. } => {
             "action.main_token.issue_restricted_claim_grant"
         }

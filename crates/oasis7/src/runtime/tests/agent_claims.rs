@@ -81,10 +81,10 @@ fn setup_claim_world_with_treasury(
     });
     world
         .set_main_token_treasury_balance(
-            MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
             treasury_balance,
         )
-        .expect("seed ecosystem treasury");
+        .expect("seed restricted liveops treasury");
     if alice_liquid_balance > 0 {
         world
             .set_main_token_account_balance("alice", alice_liquid_balance, 0)
@@ -773,7 +773,9 @@ fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_bala
         325
     );
     assert_eq!(
-        world.main_token_treasury_balance(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL),
+        world.main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+        ),
         675
     );
     assert_eq!(world.main_token_supply().circulating_supply, 325);
@@ -782,6 +784,7 @@ fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_bala
         WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantIssued {
             issuer_id,
             beneficiary_account_id,
+            source_treasury_bucket_id,
             amount,
             issuance_reason,
             expires_at_epoch,
@@ -789,6 +792,10 @@ fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_bala
         }) => {
             assert_eq!(issuer_id, "liveops");
             assert_eq!(beneficiary_account_id, "alice");
+            assert_eq!(
+                source_treasury_bucket_id,
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+            );
             assert_eq!(*amount, 325);
             assert_eq!(issuance_reason, "qa_seed");
             assert_eq!(*expires_at_epoch, 5);
@@ -857,7 +864,7 @@ fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refu
             );
             assert_eq!(
                 refunded_bond_restricted_sink_bucket_id,
-                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
             );
         }
         other => panic!("expected AgentClaimReleased, got {other:?}"),
@@ -934,7 +941,7 @@ fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refu
             );
             assert_eq!(
                 refunded_bond_restricted_sink_bucket_id,
-                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
             );
         }
         other => panic!("expected AgentClaimReleased, got {other:?}"),

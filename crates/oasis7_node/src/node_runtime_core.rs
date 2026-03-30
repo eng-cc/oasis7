@@ -46,6 +46,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedclaimliveopspoolauth:v1:";
 const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
     "awtrestrictedgrantadminauth:v1:";
 
@@ -119,6 +121,9 @@ enum LocalMainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(LocalClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(LocalInitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(LocalDistributeMainTokenTreasurySigningData<'a>),
+    TopUpRestrictedStarterClaimLiveopsPool(
+        LocalTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>,
+    ),
     UpdateRestrictedStarterClaimAdminRegistry(
         LocalUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
     ),
@@ -150,6 +155,13 @@ struct LocalDistributeMainTokenTreasurySigningData<'a> {
     distribution_id: &'a str,
     bucket_id: &'a str,
     distributions: &'a [JsonValue],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct LocalTopUpRestrictedStarterClaimLiveopsPoolSigningData<'a> {
+    controller_account_id: &'a str,
+    top_up_id: &'a str,
+    amount: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -452,6 +464,7 @@ fn local_main_token_action_auth_required(action: &JsonValue) -> bool {
             | Some("ClaimMainTokenVesting")
             | Some("InitializeMainTokenGenesis")
             | Some("DistributeMainTokenTreasury")
+            | Some("TopUpRestrictedStarterClaimLiveopsPool")
             | Some("UpdateRestrictedStarterClaimAdminRegistry")
     )
 }
@@ -663,6 +676,33 @@ fn build_local_main_token_action_signing_action(
                 },
             ),
         ),
+        "TopUpRestrictedStarterClaimLiveopsPool" => Ok(
+            LocalMainTokenActionSigningPayload::TopUpRestrictedStarterClaimLiveopsPool(
+                LocalTopUpRestrictedStarterClaimLiveopsPoolSigningData {
+                    controller_account_id: data
+                        .get("controller_account_id")
+                        .and_then(JsonValue::as_str)
+                        .ok_or_else(|| {
+                            "restricted claim liveops pool top-up action missing controller_account_id"
+                                .to_string()
+                        })?,
+                    top_up_id: data
+                        .get("top_up_id")
+                        .and_then(JsonValue::as_str)
+                        .ok_or_else(|| {
+                            "restricted claim liveops pool top-up action missing top_up_id"
+                                .to_string()
+                        })?,
+                    amount: data
+                        .get("amount")
+                        .and_then(JsonValue::as_u64)
+                        .ok_or_else(|| {
+                            "restricted claim liveops pool top-up action missing amount"
+                                .to_string()
+                        })?,
+                },
+            ),
+        ),
         "UpdateRestrictedStarterClaimAdminRegistry" => Ok(
             LocalMainTokenActionSigningPayload::UpdateRestrictedStarterClaimAdminRegistry(
                 LocalUpdateRestrictedStarterClaimAdminRegistrySigningData {
@@ -772,6 +812,33 @@ fn validate_local_main_token_action_account_binding(
                 ));
             }
         }
+        "TopUpRestrictedStarterClaimLiveopsPool" => {
+            let controller_account_id = data
+                .get("controller_account_id")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| {
+                    "restricted claim liveops pool top-up action missing controller_account_id"
+                        .to_string()
+                })?
+                .trim();
+            if account_id != controller_account_id {
+                return Err(format!(
+                    "main token auth account_id does not match restricted claim liveops pool top-up controller_account_id: expected={controller_account_id} actual={account_id}"
+                ));
+            }
+            let expected = controller_binding
+                .treasury_bucket_controller_slots
+                .get("ecosystem_pool")
+                .map(String::as_str)
+                .ok_or_else(|| {
+                    "restricted claim liveops pool top-up controller slot is not configured for bucket ecosystem_pool".to_string()
+                })?;
+            if account_id != expected {
+                return Err(format!(
+                    "main token auth account_id does not match restricted claim liveops pool top-up controller slot: expected={expected} actual={account_id}"
+                ));
+            }
+        }
         "UpdateRestrictedStarterClaimAdminRegistry" => {
             let controller_account_id = data
                 .get("controller_account_id")
@@ -860,6 +927,7 @@ fn local_controller_signer_policy_for_action<'a>(
     match local_runtime_action_kind(action) {
         Some("InitializeMainTokenGenesis")
         | Some("DistributeMainTokenTreasury")
+        | Some("TopUpRestrictedStarterClaimLiveopsPool")
         | Some("UpdateRestrictedStarterClaimAdminRegistry") => {
             controller_binding
                 .controller_signer_policies
@@ -902,6 +970,9 @@ fn local_main_token_action_operation(action: &JsonValue) -> Result<&'static str,
         Some("ClaimMainTokenVesting") => Ok("claim_main_token_vesting"),
         Some("InitializeMainTokenGenesis") => Ok("initialize_main_token_genesis"),
         Some("DistributeMainTokenTreasury") => Ok("distribute_main_token_treasury"),
+        Some("TopUpRestrictedStarterClaimLiveopsPool") => {
+            Ok("top_up_restricted_starter_claim_liveops_pool")
+        }
         Some("UpdateRestrictedStarterClaimAdminRegistry") => {
             Ok("update_restricted_starter_claim_admin_registry")
         }
@@ -918,6 +989,9 @@ fn local_main_token_action_signature_prefix(action: &JsonValue) -> Result<&'stat
         Some("ClaimMainTokenVesting") => Ok(MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX),
         Some("InitializeMainTokenGenesis") => Ok(MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX),
         Some("DistributeMainTokenTreasury") => Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX),
+        Some("TopUpRestrictedStarterClaimLiveopsPool") => Ok(
+            MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX,
+        ),
         Some("UpdateRestrictedStarterClaimAdminRegistry") => {
             Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
         }

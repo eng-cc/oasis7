@@ -2,8 +2,10 @@ use super::super::events::MainTokenFeeKind;
 use super::super::main_token::{
     is_main_token_treasury_distribution_bucket, validate_main_token_config_bounds,
     RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus,
-    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE,
-    MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    RestrictedStarterClaimLiveopsPoolTopUpRecord, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE, MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
     MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
 };
@@ -838,6 +840,87 @@ impl WorldState {
                         total_amount: *total_amount,
                         distributions: distributions.clone(),
                         distributed_epoch: now,
+                    },
+                );
+            }
+            DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp {
+                controller_account_id,
+                top_up_id,
+                source_treasury_bucket_id,
+                target_treasury_bucket_id,
+                amount,
+                topped_up_at_epoch,
+            } => {
+                let controller_account_id = controller_account_id.trim();
+                if controller_account_id.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted claim liveops pool top-up controller_account_id cannot be empty"
+                            .to_string(),
+                    });
+                }
+                let top_up_id = top_up_id.trim();
+                if top_up_id.is_empty() {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted claim liveops pool top_up_id cannot be empty"
+                            .to_string(),
+                    });
+                }
+                if self
+                    .restricted_starter_claim_liveops_pool_top_up_records
+                    .contains_key(top_up_id)
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted claim liveops pool top_up_id already exists: {top_up_id}"
+                        ),
+                    });
+                }
+                let source_treasury_bucket_id = source_treasury_bucket_id.trim();
+                if source_treasury_bucket_id != MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted claim liveops pool top-up source bucket must be ecosystem_pool: {}",
+                            source_treasury_bucket_id
+                        ),
+                    });
+                }
+                let target_treasury_bucket_id = target_treasury_bucket_id.trim();
+                if target_treasury_bucket_id
+                    != MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "restricted claim liveops pool top-up target bucket must be restricted starter claim liveops pool: {}",
+                            target_treasury_bucket_id
+                        ),
+                    });
+                }
+                if *amount == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "restricted claim liveops pool top-up amount must be > 0"
+                            .to_string(),
+                    });
+                }
+
+                debit_main_token_treasury_balance(
+                    &mut self.main_token_treasury_balances,
+                    source_treasury_bucket_id,
+                    *amount,
+                )?;
+                add_main_token_treasury_balance(
+                    &mut self.main_token_treasury_balances,
+                    target_treasury_bucket_id,
+                    *amount,
+                )?;
+                self.restricted_starter_claim_liveops_pool_top_up_records.insert(
+                    top_up_id.to_string(),
+                    RestrictedStarterClaimLiveopsPoolTopUpRecord {
+                        controller_account_id: controller_account_id.to_string(),
+                        top_up_id: top_up_id.to_string(),
+                        source_treasury_bucket_id: source_treasury_bucket_id.to_string(),
+                        target_treasury_bucket_id: target_treasury_bucket_id.to_string(),
+                        amount: *amount,
+                        topped_up_at_epoch: *topped_up_at_epoch,
                     },
                 );
             }

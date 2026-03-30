@@ -172,6 +172,7 @@ impl World {
             | Action::SettleMainTokenFee { .. }
             | Action::UpdateMainTokenPolicy { .. }
             | Action::DistributeMainTokenTreasury { .. }
+            | Action::TopUpRestrictedStarterClaimLiveopsPool { .. }
             | Action::IssueRestrictedStarterClaimGrant { .. }
             | Action::RevokeRestrictedStarterClaimGrant { .. }
             | Action::TransferMaterial { .. } => {
