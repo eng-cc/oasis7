@@ -49,6 +49,7 @@
   - SC-18: `devlog` / handoff 中的角色字段由 `.agents/roles/*.md` 白名单约束，新增别名违规数为 0。
   - SC-19: 当任务需要其他伙伴协作时，执行主体必须切换到标准角色视角并加载对应职责卡，不再依赖未定义的 `sub agent` 机制表述。
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
+  - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -76,6 +77,7 @@
   - PRD-ENGINEERING-013: As a 模块负责人, I want code-first discrepancy handling, so that PRD behavior remains aligned with implementation.
   - PRD-ENGINEERING-014: As a 评审者, I want duplicate and upstream/downstream alignment checks, so that the PRD tree stays clear and non-conflicting.
   - PRD-ENGINEERING-015: As a 文档作者/评审者, I want one canonical document topology and role split, so that I can place new docs without guessing and keep detailed design discoverable.
+  - PRD-ENGINEERING-021: As a 协作 owner, I want a file-based self-evolution management layer inside the repo, so that long-term role memory/backlog and stage inputs no longer depend on rereading daily devlogs.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行脚本 -> 发现违规 -> 修复并复测 -> 进入 CI`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -85,6 +87,7 @@
   6. Flow-ENG-006: `生成全量审读清单 -> 逐篇阅读并打勾 -> 核对代码/重复/上下游 -> 回写偏差并复跑门禁`
   7. Flow-ENG-007: `新专题提出 -> 选择模块/专题目录 -> 判断文档职责后创建同名 PRD/Design/Project -> 更新索引 -> 评审者按统一阅读顺序审查`
   8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/devlog`
+  9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -103,29 +106,31 @@
 | 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、commit 例外 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行 | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；禁止以未定义 `sub agent` 表述替代角色协作规则 | 全体贡献者遵守，治理维护者可演进 |
 | devlog 角色标记 | 日期文件、时刻、角色、完成内容、遗留事项 | 同日任务统一写入 `doc/devlog/YYYY-MM-DD.md`，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认单日单文件，按时间排序 | 全体贡献者可写，评审者可按角色回溯 |
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 devlog / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
+| 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件 | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
   - AC-2: engineering project 文档维护任务拆解与状态。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 的口径一致。
   - AC-4: 每次工程规范变更有对应 devlog 记录。
-  - AC-5: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
-  - AC-6: `doc/core`、`doc/engineering`、`doc/game`、`doc/headless-runtime`、`doc/p2p`、`doc/playability_test_result`、`doc/readme`、`doc/scripts`、`doc/site`、`doc/testing`、`doc/world-runtime`、`doc/world-simulator` 模块根目录仅保留 `README.md` / `prd.md` / `project.md` / `prd.index.md` 与模块当前允许的活跃卡片文件。
-  - AC-7: 每次迁移任务需附“原文关键约束点 -> 新文档章节”对照，确保内容不丢失。
-  - AC-8: 并行迁移必须有公开分工表、待迁移快照和每日燃尽更新机制。
-  - AC-9: 每个模块提供文件级 PRD 索引并在主入口可达，覆盖活跃专题 `*.prd.md/*.project.md`。
-  - AC-10: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
-  - AC-11: 模块 `project.md` 每个任务项必须显式标注 `test_tier_required` 或 `test_tier_full`（可为组合层级）。
-  - AC-12: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
-  - AC-13: 需存在全量 PRD 审读清单（按模块拆分，单一清单口径），且每条已读记录包含阅读时刻和三类核对结论（代码/重复/上下游）。
-  - AC-14: `.agents/roles/` 下需存在 7 个组合角色职责卡，覆盖制作/规则、runtime、WASM、Agent、Viewer、QA、LiveOps/社区。
-  - AC-14A: 每张角色职责卡需显式给出推荐技能与典型使用场景，并声明“角色决定 owner、技能决定方法”，避免把技能误当职责边界。
-  - AC-15: 根 `AGENTS.md` 的“分工”章节不再内嵌 12 个长描述，而是引用 7 个组合角色职责卡与使用约定。
-  - AC-16: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
-  - AC-17: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
-  - AC-17A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
-  - AC-18: 根 `AGENTS.md` 的 devlog 规则需明确“按日期单文件、不按角色拆文件、条目级标角色”的约束。
-  - AC-19: 文档治理门禁需阻断 `devlog` / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
-  - AC-20: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
+  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并进入主项目追踪。
+  - AC-6: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
+  - AC-7: `doc/core`、`doc/engineering`、`doc/game`、`doc/headless-runtime`、`doc/p2p`、`doc/playability_test_result`、`doc/readme`、`doc/scripts`、`doc/site`、`doc/testing`、`doc/world-runtime`、`doc/world-simulator` 模块根目录仅保留 `README.md` / `prd.md` / `project.md` / `prd.index.md` 与模块当前允许的活跃卡片文件。
+  - AC-8: 每次迁移任务需附“原文关键约束点 -> 新文档章节”对照，确保内容不丢失。
+  - AC-9: 并行迁移必须有公开分工表、待迁移快照和每日燃尽更新机制。
+  - AC-10: 每个模块提供文件级 PRD 索引并在主入口可达，覆盖活跃专题 `*.prd.md/*.project.md`。
+  - AC-11: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
+  - AC-12: 模块 `project.md` 每个任务项必须显式标注 `test_tier_required` 或 `test_tier_full`（可为组合层级）。
+  - AC-13: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
+  - AC-14: 需存在全量 PRD 审读清单（按模块拆分，单一清单口径），且每条已读记录包含阅读时刻和三类核对结论（代码/重复/上下游）。
+  - AC-15: `.agents/roles/` 下需存在 7 个组合角色职责卡，覆盖制作/规则、runtime、WASM、Agent、Viewer、QA、LiveOps/社区。
+  - AC-15A: 每张角色职责卡需显式给出推荐技能与典型使用场景，并声明“角色决定 owner、技能决定方法”，避免把技能误当职责边界。
+  - AC-16: 根 `AGENTS.md` 的“分工”章节不再内嵌 12 个长描述，而是引用 7 个组合角色职责卡与使用约定。
+  - AC-17: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
+  - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
+  - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
+  - AC-19: 根 `AGENTS.md` 的 devlog 规则需明确“按日期单文件、不按角色拆文件、条目级标角色”的约束。
+  - AC-20: 文档治理门禁需阻断 `devlog` / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
+  - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -148,6 +153,9 @@
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
   - `doc/engineering/prd-review/checklists/active-*.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
   - `testing-manual.md`
@@ -165,6 +173,7 @@
   - 互链缺失：若 PRD 与 project 仅单向引用，会导致追溯断链，门禁需直接阻断。
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
   - 审读进度漂移：若已读清单不随批次更新，会导致“已完成”状态失真，必须在同提交更新清单。
+  - 运行态真值冲突：若 `.pm/` 与正式 `doc/` 对同一阶段/任务给出不同口径，必须以正式文档为准并把 `.pm/` 记录标成待裁决。
 - Non-Functional Requirements:
   - NFR-ENG-1: required 门禁平均执行时长 <= 10 分钟。
   - NFR-ENG-2: 文档治理误报率 <= 5%（按周统计）。
@@ -184,6 +193,7 @@
   - NFR-ENG-16: 单日日志应同时支持时间线回放与角色维度检索，不得因角色拆分导致当日过程碎片化。
   - NFR-ENG-17: 角色名校验应零配置跟随 `.agents/roles/` 目录变化，不依赖重复维护的手写名单。
   - NFR-ENG-18: 协作执行语义应与当前 Codex/CLI 运行模式兼容，允许单一执行主体通过角色视角切换完成多角色闭环，不要求额外的运行时代理能力。
+  - NFR-ENG-19: 文件化项目管理层若落地，7 个标准角色的 role registry / task registry / stage/gate 汇总必须在 1 次 lint/report 执行内完成结构校验与引用可达性检查。
 
 - Security & Privacy: 仅涉及工程流程元信息；涉及凭据的自动化流程必须遵守最小暴露原则并避免日志泄漏。
 ## 5. Risks & Roadmap
@@ -222,6 +232,7 @@
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载 | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033 | `test_tier_required` | devlog 规则与角色标记要求一致性检查 | 单日过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 devlog 角色标签检查 | 角色命名一致性与防漂移能力 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、signal promotion、stage report 与角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
@@ -243,7 +254,8 @@
 | DEC-ENG-015 | 根 `AGENTS.md` 仅保留 7 个组合角色入口，详细职责下沉到 `.agents/roles/*.md` | 在根 `AGENTS.md` 内持续堆叠所有角色长描述 | 入口更短、更稳，且更便于按角色独立演进职责卡。 |
 | DEC-ENG-016 | 为角色协作提供统一 handoff 模板，并放在 `.agents/roles/templates/` | 继续依赖自由格式口头/临时文本交接 | 统一模板能显著降低跨角色遗漏、返工和上下文漂移。 |
 | DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / no-commit 例外 | 继续保留单线程开发表述 | 当前仓库已引入角色职责卡与交接模板，工作流必须与之对齐。 |
-| DEC-ENG-018 | `devlog` 继续按日期单文件维护，但在条目级强制标注角色 | 改为按角色拆分每日日志文件 | 单日集中存档更利于回放时间线，条目级角色标记已足够支持责任追溯。 |
-| DEC-ENG-019 | 角色名通过 `.agents/roles/*.md` 自动生成白名单并由门禁校验 | 允许自由填写角色名或维护独立手写名单 | 自动从单一事实源派生，最不容易漂移。 |
-| DEC-ENG-020 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
+| DEC-ENG-018 | 自我进化项目管理首期采用仓库内文件化运行层 | 直接将外部 PM/SaaS 作为主真值 | 当前仓库已具备 Git/worktree/正式文档治理链，先在 repo 内闭环更符合现有工程约束。 |
+| DEC-ENG-019 | `devlog` 继续按日期单文件维护，但在条目级强制标注角色 | 改为按角色拆分每日日志文件 | 单日集中存档更利于回放时间线，条目级角色标记已足够支持责任追溯。 |
+| DEC-ENG-020 | 角色名通过 `.agents/roles/*.md` 自动生成白名单并由门禁校验 | 允许自由填写角色名或维护独立手写名单 | 自动从单一事实源派生，最不容易漂移。 |
+| DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
