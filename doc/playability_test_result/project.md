@@ -43,6 +43,7 @@
     - `rg -n "cargo test -p oasis7|cargo test -p oasis7_viewer|crates/oasis7_viewer/dist" doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md doc/playability_test_result/game-test.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-PLAYABILITY_TEST_RESULT-013 (PRD-PLAYABILITY_TEST_RESULT-001) [test_tier_required]: 执行 ROUND-010 `playability_test_result` 入口治理，为证据模块 README 增加 evidence-first“从这里开始”，并明确 README 与 `topics/`、`evidence/`、`prd.index.md` 的边界。
 
 ## 依赖
 - doc/playability_test_result/prd.index.md
@@ -52,9 +53,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-21
+- 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-PLAYABILITY_TEST_RESULT-013`（已为 `playability_test_result` README 增加轻量“从这里开始”，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代 `topics/` / `evidence/` / `prd.index.md`。）
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-012`（已将专题卡组前置命令与 `game-test` 当前 viewer dist 路径统一切到 `oasis7` / `oasis7_viewer` 口径。）
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-011`（将前期工业引导专题卡组迁入 `topics/`，统一引用与根目录收口口径）。
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-010`（新增前期工业引导 required-tier QA 卡组与手动回归链路）。
@@ -65,6 +67,7 @@
 - 承接约束: 先固化反馈卡字段与评分口径，再建立高优问题闭环模板，最后再接入发布证据包格式。
 - 专题入口状态: `game-test`/`playability_test_card`/`playability_test_manual` 已收敛到模块目录。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
+- ROUND-010 入口治理状态: 已为 evidence-first 消费者补齐轻量入口，当前模块无需再做更重的根 README 拆分。
 - 说明: 本文档仅维护可玩性结果模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md`。
 
 ## 阶段收口角色交接

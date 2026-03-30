@@ -233,6 +233,7 @@
 - [x] TASK-CORE-043 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 第二片 `p2p` 入口分流收口，验证高体量网络模块 README 的任务导向入口模式。
 - [x] TASK-CORE-044 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `scripts` 入口映射收口，明确工具模块 README 与 task-worktree / landing / harness 高频入口的边界。
 - [x] TASK-CORE-045 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `game` 入口分流收口，为玩法模块 README 增加轻量阅读顺序，并明确产品目标、执行追踪、玩法总览与试玩口径专题的边界。
+- [x] TASK-CORE-046 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `playability_test_result` 入口分流收口，为证据模块 README 增加 evidence-first 阅读顺序，并明确 README 与 `topics/` / `evidence/` / `prd.index.md` 的边界。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -282,6 +283,7 @@
 - 最新完成: `TASK-CORE-043`（已为 `p2p` README 增加任务导向入口，并明确 README、长表索引与主链安全 / hosted world / token-governance signer 高频专题的阅读边界。）
 - 最新完成: `TASK-CORE-044`（已为 `scripts` README 补齐 task-worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / 长表索引 / 高频脚本专题边界。）
 - 最新完成: `TASK-CORE-045`（已为 `game` README 增加轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 规则专题之间的阅读顺序。）
+- 最新完成: `TASK-CORE-046`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序。）
 - 最新完成: `TASK-CORE-030`（已完成 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌对齐，并保留旧实现名仅作 internal compatibility naming 说明）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts` 与 `world-runtime` 仍可读历史专题标题的 `oasis7` 品牌收口，未触碰内部实现兼容名）。
 - 说明: 本文档仅维护 core 设计执行状态；过程记录在 `doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-10.md`、`doc/devlog/2026-03-11.md` 与 `doc/devlog/2026-03-19.md`。

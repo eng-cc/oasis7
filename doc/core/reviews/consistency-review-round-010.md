@@ -24,7 +24,7 @@
 - 审查/治理时间窗: `2026-03-30`
 - owner role: `producer_system_designer`
 - 协作角色: `qa_engineer`（证据/测试模块入口复核）
-- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，`world-runtime`、`p2p`、`scripts` 与 `game` 已完成；后续按“playability/headless-runtime -> QA 复审”继续治理。
+- 当前阶段说明: 已从 ROUND-009 的 `deferred` 项中抽取 6 个模块 README，`world-runtime`、`p2p`、`scripts`、`game` 与 `playability_test_result` 已完成；后续按“headless-runtime -> QA 复审”继续治理。
 
 状态判定：
 - `not_started`: 仅记录轮次意图，尚未冻结范围与问题域。
@@ -88,4 +88,4 @@
 
 ## 复审结果
 - 当前结论: `in_progress`
-- 备注: ROUND-010 已完成 `world-runtime / p2p / scripts / game` 四片收口；剩余 `playability_test_result`、`headless-runtime` 与最终 `qa_engineer` 复审。
+- 备注: ROUND-010 已完成 `world-runtime / p2p / scripts / game / playability_test_result` 五片收口；剩余 `headless-runtime` 与最终 `qa_engineer` 复审。
