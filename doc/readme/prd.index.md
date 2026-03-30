@@ -63,6 +63,7 @@
 | `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md` | `material` | 小红书春招主题帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md` | `material` | 小红书春招轮播图素材包 |
 | `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md` | `material` | 小红书 AI 人格 vs 世界内行动主题帖素材包 |
+| `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md` | `material` | 小红书 AI 人格主题轮播图素材包 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

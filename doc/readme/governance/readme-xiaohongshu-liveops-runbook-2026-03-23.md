@@ -16,6 +16,7 @@
   - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
   - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
   - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
+  - `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在小红书进入“持续发帖与持续看反馈”阶段后的日常运营。

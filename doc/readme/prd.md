@@ -78,6 +78,7 @@
 - PRD-README-028: As a `liveops_community`, I want a reusable Xiaohongshu spring-recruit post pack from the studio lead perspective, so that we can borrow current job-market anxiety to talk about judgment, delivery, and player sense without drifting into either generic job-board content or hollow motivation copy.
 - PRD-README-029: As a `liveops_community`, I want a reusable Xiaohongshu spring-recruit carousel pack derived from the approved long-form post, so that the same topic can publish as a mobile-native swipe format with stronger retention and comment prompts instead of only one long caption block.
 - PRD-README-030: As a `liveops_community`, I want a reusable Xiaohongshu AI-persona-vs-world-actor post pack, so that we can borrow the current `AI人格` discussion heat to explain why `oasis7` wants agents that can act inside the world instead of only sounding like companions, without drifting into companion-product framing or unsafe release claims.
+- PRD-README-031: As a `liveops_community`, I want a reusable Xiaohongshu AI-persona carousel pack derived from the approved seventh post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “会聊天”“会行动”“如何判断” and the final comment hook, instead of only one cover plus long caption.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -98,6 +99,7 @@
   17. Flow-RM-017: `确定第六篇“作为游戏工作室主理人，今年的春招视角”表达 -> 借春招/求职焦虑框架讲团队判断标准 -> 冻结标题/正文/封面/互动问题并避免滑向岗位汇总或空泛鸡汤；若平台标题上限受限，优先保证“游戏工作室主理人 + 春招”识别点`
   18. Flow-RM-018: `将第六篇长文版压成轮播版 -> 拆成封面/判断前提/核心标准/收束提问 6 页 -> 导出逐页 PNG -> 保持标题、关键词和互动问题一致`
   19. Flow-RM-019: `确定第七篇“AI人格很火，但我不想做陪聊搭子”表达 -> 借 AI人格 热词讲清“人格不只是会聊天，而是会在世界里行动、判断、协作和承担后果” -> 冻结标题/正文/互动问题并避免滑向情感陪伴产品讨论或完整可玩承诺`
+  20. Flow-RM-020: `将第七篇长文版压成 4 页轮播版 -> 拆成封面/核心判断/行为例子/评论区站队页 -> 导出逐页 PNG -> 保持标题、边界与互动问题一致`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -213,6 +215,7 @@
 | PRD-README-028 | TASK-README-038/042 | `test_tier_required` | 小红书第六篇素材包明确“作为游戏工作室主理人，今年的春招视角”的最终发布标题、正文、封面文案、互动问题与热点借势边界 | 渠道内容从游戏判断延展到团队判断与 AI 时代用人标准的可讨论性 |
 | PRD-README-029 | TASK-README-039 | `test_tier_required` | 小红书第六篇轮播版素材包明确逐页文案、HTML、逐页 PNG 与评论区收束页 | 第六篇从长文版扩展到 feed-native 轮播版的可发布性 |
 | PRD-README-030 | TASK-README-044 | `test_tier_required` | 小红书第七篇素材包明确“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”边界 | 渠道内容从泛 AI 人格讨论重新收束到 `oasis7` 的 agent 设计判断与世界内行动逻辑 |
+| PRD-README-031 | TASK-README-046 | `test_tier_required` | 小红书第七篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页 | 第七篇从单图封面 + 长文版扩展到更适合小红书 feed 的轮播版发布形态 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -245,3 +248,4 @@
 | DEC-RM-027 | 第六篇采用“春招判断标准”而非“岗位清单/求职资料” | 直接做免笔试汇总、岗位投递清单，或输出泛求职鸡汤 | 春招话题有热度，但账号主线仍是人类开发者视角下的团队判断与项目收口；借热点讲“我会看什么人”更贴现有内容链，也更容易带出高质量讨论。 |
 | DEC-RM-028 | 第六篇轮播版采用“6 页短判断卡”而非把长文硬切成多页 | 直接把长文等分成 4-8 页纯文字截图 | 小红书轮播更吃“每页只讲一个判断”的手机端节奏；重新拆页比机械分段更利于读完率、收藏和评论承接。 |
 | DEC-RM-029 | 第七篇采用“AI人格热词 + 不做陪聊搭子”的立场切入，而不是顺着热点泛聊情感陪伴或做 AI 产品点评 | 直接做“AI人格是什么”的抽象讨论，或把帖子写成陪伴型 AI 产品比较/安利 | `AI人格` 的平台热度足够高，但账号主线仍是游戏与 agent 设计判断；先用强立场把注意力拉住，再迅速收回“放进世界后会不会行动与承担后果”，更符合 `oasis7` 现有内容链。 |
+| DEC-RM-030 | 第七篇轮播版采用“4 页分割判断卡”而非继续只发单图封面或把长文整段截图切成多页 | 维持仅有封面图+长文；或直接把长文逐段截成 4-6 页纯文字卡 | 这一篇最强的传播点在“会聊天 vs 会行动”的对照。把它压成 4 页，每页只停在一个判断，更利于 feed 内读完率和评论区站队。 |

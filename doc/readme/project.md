@@ -469,6 +469,24 @@
     - `rg -n "聊天框分割图|世界内行动看板|xiaohongshu-ai-persona-cover.html|xiaohongshu-ai-persona-cover.png" doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-cover.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-046 (PRD-README-031) [test_tier_required]: 为小红书第七篇补齐 4 页轮播版素材包，固定逐页文案、HTML、逐页 PNG 与评论区收束页，保持“会聊天 vs 会行动”的核心判断不变。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
+    - `site/social/xiaohongshu-ai-persona-carousel.html`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide1.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide2.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
+    - `doc/devlog/2026-03-30.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "AI人格很火|人格不只是|比如这些时候|如果是你|xiaohongshu-ai-persona-carousel.html" doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -484,6 +502,7 @@
 - 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-046`（已为小红书第七篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，保持“会聊天 vs 会行动”的核心判断与评论区站队问题一致。）
 - 最新完成: `TASK-README-045`（已为小红书第七篇补齐“聊天框 vs 世界内行动”分割封面 HTML 与 PNG，强化“会说话”和“会行动”的区别。）
 - 最新完成: `TASK-README-044`（已为小红书第七篇固定“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”的表达边界。）
 - 最新完成: `TASK-README-043`（已在 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 显式拆分 `canonical / runbook / material / execution_log` 四层语义，收口 `readme` 模块入口边界。）

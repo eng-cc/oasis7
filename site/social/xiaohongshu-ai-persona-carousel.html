@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu AI Persona Carousel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Manrope:wght@500;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f8f1e6;
+        --paper-2: #efe5d8;
+        --paper-3: #fff8f0;
+        --ink: #1f1814;
+        --muted: rgba(31, 24, 20, 0.72);
+        --soft: rgba(31, 24, 20, 0.45);
+        --line: rgba(31, 24, 20, 0.08);
+        --teal: #174952;
+        --teal-soft: #d8e7e4;
+        --rust: #c85f3d;
+        --rust-soft: #edd0c2;
+        --sage: #6e8271;
+        --amber: #ddb06a;
+        --shadow: 0 30px 74px rgba(40, 32, 26, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 14% 12%, rgba(200, 95, 61, 0.16), transparent 20%),
+          radial-gradient(circle at 86% 18%, rgba(23, 73, 82, 0.16), transparent 22%),
+          linear-gradient(150deg, #efe5d7 0%, #f8f3ea 44%, #e7eceb 100%);
+        color: var(--ink);
+        font-family: "Manrope", sans-serif;
+      }
+
+      .gallery {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 0 72px;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at 14% 16%, rgba(221, 176, 106, 0.18), transparent 22%),
+          radial-gradient(circle at 84% 14%, rgba(23, 73, 82, 0.12), transparent 22%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 18%),
+          linear-gradient(145deg, #fcf6ef, #f8f1e6 44%, #eef2ef 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .grain,
+      .grid,
+      .frame,
+      .halo {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.14;
+        background-image:
+          radial-gradient(circle at 18% 20%, rgba(0, 0, 0, 0.72) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 80% 28%, rgba(0, 0, 0, 0.48) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 32% 78%, rgba(0, 0, 0, 0.42) 0.7px, transparent 0.8px);
+        background-size: 28px 28px, 34px 34px, 44px 44px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.44), transparent 92%);
+      }
+
+      .frame::before,
+      .frame::after {
+        content: "";
+        position: absolute;
+        inset: 26px;
+        border: 1px solid rgba(31, 24, 20, 0.08);
+        border-radius: 22px;
+      }
+
+      .frame::after {
+        inset: 42px;
+        border-style: dashed;
+        border-color: rgba(31, 24, 20, 0.05);
+        border-radius: 16px;
+      }
+
+      .halo::before {
+        content: "";
+        position: absolute;
+        right: -140px;
+        top: 120px;
+        width: 560px;
+        height: 560px;
+        border-radius: 999px;
+        border: 1px solid rgba(23, 73, 82, 0.12);
+        box-shadow:
+          -92px 92px 0 -140px rgba(200, 95, 61, 0.08),
+          -64px 60px 0 -120px rgba(221, 176, 106, 0.12);
+      }
+
+      .header,
+      .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .header {
+        top: 62px;
+      }
+
+      .footer {
+        bottom: 52px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .kicker,
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .brand,
+      .kicker {
+        color: var(--ink);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .brand::before,
+      .kicker::before,
+      .eyebrow::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--rust);
+        box-shadow: 0 0 0 8px rgba(200, 95, 61, 0.12);
+      }
+
+      .eyebrow {
+        color: var(--teal);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 96px;
+        line-height: 1.04;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+      }
+
+      h2 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 70px;
+        line-height: 1.08;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      h3 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 42px;
+        line-height: 1.12;
+        letter-spacing: -0.04em;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        font-size: 28px;
+        line-height: 1.5;
+      }
+
+      .accent {
+        color: var(--rust);
+      }
+
+      .sage {
+        color: var(--sage);
+      }
+
+      .paper-card,
+      .world-card,
+      .choice-chip,
+      .metric,
+      .note {
+        position: relative;
+        border: 1px solid rgba(31, 24, 20, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .paper-card,
+      .note,
+      .choice-chip {
+        background: rgba(255, 251, 246, 0.86);
+      }
+
+      .world-card {
+        background: linear-gradient(180deg, rgba(20, 60, 67, 0.98), rgba(25, 72, 78, 0.98));
+        color: #fff7ec;
+      }
+
+      .paper-card::before,
+      .world-card::before,
+      .note::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 24px;
+        width: 90px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.42);
+        transform: rotate(-7deg);
+      }
+
+      .hero-grid,
+      .content-grid,
+      .closing {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 152px;
+        bottom: 116px;
+      }
+
+      .hero-grid,
+      .content-grid {
+        display: grid;
+        grid-template-columns: 0.98fr 1.02fr;
+        gap: 28px;
+      }
+
+      .hero-copy p {
+        max-width: 420px;
+        margin-top: 26px;
+      }
+
+      .hero-side {
+        position: relative;
+      }
+
+      .chat-panel {
+        position: absolute;
+        left: 0;
+        top: 34px;
+        width: 46%;
+        height: 520px;
+        padding: 54px 22px 22px;
+        border-radius: 28px;
+        transform: rotate(-2.4deg);
+      }
+
+      .chat-bubble {
+        margin-bottom: 16px;
+        padding: 18px 18px 16px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--muted);
+        font-size: 22px;
+        line-height: 1.42;
+      }
+
+      .chat-bubble.user {
+        margin-left: 42px;
+        background: linear-gradient(180deg, rgba(216, 231, 228, 0.96), rgba(240, 247, 245, 0.94));
+      }
+
+      .world-panel {
+        position: absolute;
+        right: 0;
+        top: 0;
+        width: 56%;
+        height: 650px;
+        padding: 54px 24px 24px;
+        border-radius: 30px;
+        transform: rotate(2deg);
+      }
+
+      .panel-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .paper-card .panel-label,
+      .note .panel-label {
+        color: var(--soft);
+      }
+
+      .world-card .panel-label {
+        color: rgba(255, 247, 236, 0.62);
+      }
+
+      .panel-label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--amber);
+      }
+
+      .world-grid {
+        position: relative;
+        height: 430px;
+        margin-top: 12px;
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 247, 236, 0.08);
+        background:
+          radial-gradient(circle at 72% 22%, rgba(200, 95, 61, 0.18), transparent 16%),
+          radial-gradient(circle at 24% 68%, rgba(221, 176, 106, 0.14), transparent 18%),
+          linear-gradient(to right, rgba(255, 247, 236, 0.06) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 247, 236, 0.06) 1px, transparent 1px);
+        background-size: auto, auto, 74px 74px, 74px 74px;
+      }
+
+      .orbit {
+        position: absolute;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 247, 236, 0.12);
+      }
+
+      .orbit.a {
+        inset: 44px 84px 164px 58px;
+      }
+
+      .orbit.b {
+        inset: 126px 48px 70px 128px;
+      }
+
+      .node {
+        position: absolute;
+        width: 128px;
+        min-height: 98px;
+        padding: 14px 14px 12px;
+        border-radius: 22px;
+        border: 1px solid rgba(255, 247, 236, 0.08);
+        background: rgba(255, 247, 236, 0.08);
+      }
+
+      .node .name {
+        display: block;
+        margin-bottom: 8px;
+        color: #fff6ea;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .node .desc {
+        display: block;
+        color: rgba(255, 247, 236, 0.78);
+        font-size: 16px;
+        line-height: 1.36;
+      }
+
+      .node.n1 { left: 46px; top: 56px; }
+      .node.n2 { right: 44px; top: 96px; }
+      .node.n3 { left: 128px; bottom: 40px; }
+
+      .signal {
+        position: absolute;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(200, 95, 61, 0), rgba(200, 95, 61, 0.88), rgba(221, 176, 106, 0));
+      }
+
+      .signal.s1 { left: 164px; top: 164px; width: 242px; transform: rotate(-18deg); }
+      .signal.s2 { left: 204px; bottom: 142px; width: 206px; transform: rotate(22deg); }
+      .signal.s3 { right: 118px; bottom: 154px; width: 170px; transform: rotate(-58deg); }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .metric {
+        padding: 14px 14px 12px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 247, 236, 0.1);
+        background: rgba(255, 247, 236, 0.08);
+      }
+
+      .metric .k {
+        display: block;
+        margin-bottom: 8px;
+        color: rgba(255, 247, 236, 0.56);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .metric .v {
+        display: block;
+        color: #fff6ea;
+        font-size: 22px;
+        line-height: 1.1;
+        font-weight: 700;
+      }
+
+      .main-card {
+        padding: 56px 34px 34px;
+        border-radius: 34px;
+      }
+
+      .main-card p {
+        margin-top: 22px;
+        max-width: 460px;
+      }
+
+      .sub-stack {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+
+      .note {
+        padding: 50px 24px 22px;
+        border-radius: 26px;
+      }
+
+      .note p {
+        font-size: 24px;
+      }
+
+      .example-grid {
+        display: grid;
+        gap: 18px;
+        align-content: start;
+      }
+
+      .example {
+        padding: 26px 22px 22px;
+        border-radius: 26px;
+      }
+
+      .example h3 {
+        margin-bottom: 12px;
+      }
+
+      .closing {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 22px;
+      }
+
+      .closing-main {
+        max-width: 760px;
+      }
+
+      .closing-main p {
+        margin-top: 22px;
+        max-width: 680px;
+      }
+
+      .choice-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .choice-chip {
+        padding: 24px 20px;
+        border-radius: 24px;
+        text-align: center;
+      }
+
+      .choice-chip strong {
+        display: block;
+        margin-bottom: 10px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 32px;
+        line-height: 1.16;
+      }
+
+      .choice-chip span {
+        display: block;
+        color: var(--muted);
+        font-size: 20px;
+        line-height: 1.4;
+      }
+
+      .question-card {
+        padding: 30px 28px 26px;
+        border-radius: 28px;
+      }
+
+      .question-card p {
+        color: var(--ink);
+        font-size: 34px;
+        line-height: 1.38;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide" data-slide="1">
+        <div class="halo"></div>
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">ai persona</div>
+        </header>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow">studio lead take</div>
+            <h1>
+              AI人格很火<br />
+              但我不想做<br />
+              <span class="accent">陪聊搭子</span>
+            </h1>
+            <p>我更想做的，是会在世界里自己行动、判断、留下后果的角色。</p>
+          </div>
+          <div class="hero-side">
+            <article class="chat-panel paper-card">
+              <div class="panel-label">chat window</div>
+              <div class="chat-bubble user">你在吗？陪我聊一会儿。</div>
+              <div class="chat-bubble">我会接话、会安慰、会记住你刚刚说过什么。</div>
+              <div class="chat-bubble">但如果我离开聊天框，我会怎么选，怎么做？</div>
+            </article>
+            <article class="world-panel world-card">
+              <div class="panel-label">world actor</div>
+              <div class="world-grid">
+                <div class="orbit a"></div>
+                <div class="orbit b"></div>
+                <div class="signal s1"></div>
+                <div class="signal s2"></div>
+                <div class="signal s3"></div>
+                <article class="node n1">
+                  <span class="name">energy first</span>
+                  <span class="desc">资源吃紧时先保供能</span>
+                </article>
+                <article class="node n2">
+                  <span class="name">trade memory</span>
+                  <span class="desc">吃过一次亏，下一轮更谨慎</span>
+                </article>
+                <article class="node n3">
+                  <span class="name">ally failure</span>
+                  <span class="desc">同伴掉链子时补位还是退出</span>
+                </article>
+              </div>
+              <div class="metrics">
+                <div class="metric"><span class="k">judge</span><span class="v">会取舍</span></div>
+                <div class="metric"><span class="k">act</span><span class="v">会行动</span></div>
+                <div class="metric"><span class="k">trace</span><span class="v">会留痕</span></div>
+              </div>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 1 / 4</span>
+          <span>cover split</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="2">
+        <div class="halo"></div>
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">core line</div>
+        </header>
+        <div class="content-grid">
+          <article class="main-card paper-card">
+            <div class="eyebrow">what I actually care about</div>
+            <h2>
+              人格不只是<br />
+              <span class="accent">会聊天</span>
+            </h2>
+            <p>
+              如果它只会在聊天框里把话说得像真人，那还是太薄了。
+              我更在意的是，它进了世界以后会怎么选、怎么做、会留下什么后果。
+            </p>
+          </article>
+          <div class="sub-stack">
+            <article class="note">
+              <div class="panel-label">too thin</div>
+              <h3>只剩话风</h3>
+              <p>像不像真人，只能说明它会表达，不足以说明它像一个角色。</p>
+            </article>
+            <article class="note">
+              <div class="panel-label">thicker layer</div>
+              <h3>进入世界以后</h3>
+              <p>会取舍、会犯错、会记住代价，才更像人格。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 2 / 4</span>
+          <span>judgment card</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="3">
+        <div class="halo"></div>
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">examples</div>
+        </header>
+        <div class="content-grid">
+          <article class="main-card world-card">
+            <div class="eyebrow">when I judge it</div>
+            <h2>
+              比如这些时候<br />
+              <span class="accent">它会怎么选</span>
+            </h2>
+            <p style="color: rgba(255, 247, 236, 0.78);">
+              我不先看它会不会接梗。我先看它面对资源、交易和协作压力时，到底会做什么选择。
+            </p>
+          </article>
+          <div class="example-grid">
+            <article class="note example">
+              <div class="panel-label">case 01</div>
+              <h3>资源紧张</h3>
+              <p>它先保能源，还是先保数据？</p>
+            </article>
+            <article class="note example">
+              <div class="panel-label">case 02</div>
+              <h3>交易吃亏</h3>
+              <p>它下次会不会变得更谨慎？</p>
+            </article>
+            <article class="note example">
+              <div class="panel-label">case 03</div>
+              <h3>同伴掉链子</h3>
+              <p>它会补位、甩锅，还是干脆退出？</p>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <span>slide 3 / 4</span>
+          <span>behavior tests</span>
+        </footer>
+      </section>
+
+      <section class="slide" data-slide="4">
+        <div class="halo"></div>
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <header class="header">
+          <div class="brand">oasis7 notes</div>
+          <div class="kicker">your turn</div>
+        </header>
+        <div class="closing">
+          <div class="closing-main">
+            <div class="eyebrow">so I end up wanting</div>
+            <h1>
+              不是更会聊天的搭子<br />
+              而是会在世界里<br />
+              <span class="accent">自己行动的角色</span>
+            </h1>
+            <p>如果是你，你会更想要哪一种？</p>
+          </div>
+          <div class="choice-row">
+            <article class="choice-chip">
+              <strong>会陪聊</strong>
+              <span>情绪价值强<br />一直在线接话</span>
+            </article>
+            <article class="choice-chip">
+              <strong>会判断</strong>
+              <span>进了世界以后<br />真的会自己选</span>
+            </article>
+            <article class="choice-chip">
+              <strong>两者都要</strong>
+              <span>但行动和后果<br />必须是真的</span>
+            </article>
+          </div>
+          <article class="question-card paper-card">
+            <div class="eyebrow">comment hook</div>
+            <p>你会更想要一个会陪你聊天的 AI，还是一个会在世界里自己行动的角色？</p>
+          </article>
+        </div>
+        <footer class="footer">
+          <span>slide 4 / 4</span>
+          <span>comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slide = params.get("slide");
+      if (slide) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((node) => {
+          node.style.display = node.dataset.slide === slide ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>

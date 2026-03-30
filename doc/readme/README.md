@@ -68,6 +68,7 @@
 - `doc/readme/governance/readme-xiaohongshu-spring-recruit-post-pack-2026-03-29.md`
 - `doc/readme/governance/readme-xiaohongshu-spring-recruit-carousel-pack-2026-03-29.md`
 - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
+- `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 
 ## 根目录收口
