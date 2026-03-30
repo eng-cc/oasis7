@@ -258,6 +258,7 @@
     - `rg -n "大家好，我最近在和一群 agent 一起做游戏|我在和一群 agent 一起做游戏|#独立开发|#开发日记|人类开发者" doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-043 (PRD-README-003) [test_tier_required]: 执行 ROUND-009 `readme` 模块边界收口，在 `README/prd.index` 中显式拆分 `canonical / runbook / material / execution_log` 四层消费语义。
 - [x] TASK-README-032 (PRD-README-022) [test_tier_required]: 为 limited preview 真实贡献奖励补齐 round-based ledger 模板，固定 round meta、逐条贡献记录、producer 审批、distribution ref 与归档字段。
   - 产物文件:
     - `doc/readme/prd.md`
@@ -456,9 +457,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-29
+- 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-043`（已在 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 显式拆分 `canonical / runbook / material / execution_log` 四层语义，收口 `readme` 模块入口边界。）
 - 最新完成: `TASK-README-042`（已按小红书 20 字标题上限，将第六篇最终发布标题收口为“作为游戏工作室主理人，今年的春招视角”。）
 - 最新完成: `TASK-README-041`（已将小红书第六篇封面与轮播图的配色切到更像校园招聘公告栏的海盐蓝 / 奶油黄 / 校园红方案。）
 - 最新完成: `TASK-README-040`（已将小红书第六篇封面与轮播图刷新为更贴春招语境的视觉主题，并提升版面层次与手机端读感。）

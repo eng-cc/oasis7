@@ -19,3 +19,4 @@
 | 2026-03-30 13:24:52 +0800 | `producer_system_designer` | `README.md` + `doc/README.md` + `doc/world-simulator/README.md` + `doc/testing/README.md` + `site/doc/{cn,en}/index.html` | `backfill` | pass | I9-002 | 已将首批高频入口回写到 canonical manual 路径，并保留旧路径兼容层 |
 | 2026-03-30 15:39:58 +0800 | `producer_system_designer` | `README.md` + `doc/README.md` | `split` | pass | I9-001 | 已补“从这里开始 / 按目标进入”矩阵，把预览、验证、开发、追溯四类阅读起点显式化 |
 | 2026-03-30 15:39:58 +0800 | `producer_system_designer` | `site/doc/cn/index.html` + `site/doc/en/index.html` | `backfill` | pass | I9-001/I9-005 | 已新增中英文对齐的按目标分流区块，使公开 docs hub 与 repo 入口保持同一消费层分流 |
+| 2026-03-30 16:03:00 +0800 | `liveops_community` | `doc/readme/README.md` + `doc/readme/prd.index.md` | `split` | pass | I9-003 | 已为 `readme` 模块索引显式拆分 `canonical / runbook / material / execution_log` 四层消费语义，避免规范与素材混排 |

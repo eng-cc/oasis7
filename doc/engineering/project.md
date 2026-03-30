@@ -70,6 +70,7 @@
 - [x] TASK-ENGINEERING-058 (PRD-ENGINEERING-015) [test_tier_required]: 将 ROUND-009 定义为“小分母文档消费入口/手册语义治理轮”，复用既有 round 台账模式并冻结 focused scope、问题池与执行清单。
 - [x] TASK-ENGINEERING-059 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 首批 manual 载体规范化，落地 `viewer-manual.manual.md` 与 `web-ui-agent-browser-closure-manual.manual.md`，并保留 legacy/PRD 兼容入口。
 - [x] TASK-ENGINEERING-060 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 首批入口分流治理，为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径。
+- [x] TASK-ENGINEERING-061 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 `readme` 模块边界治理，为模块索引显式拆分 `canonical / runbook / material / execution_log` 四层消费语义。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -116,6 +117,7 @@
 - 最新完成: `TASK-ENGINEERING-058`（ROUND-009 以小分母方式挂靠到既有文档治理轮模式，并冻结 focused scope / 问题池 / 清单骨架）。
 - 最新完成: `TASK-ENGINEERING-059`（已落地首批 canonical `*.manual.md` 载体，并将高频手册从 legacy `.md` / `*.prd.md` 壳子收口到兼容双入口模式。）
 - 最新完成: `TASK-ENGINEERING-060`（已为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径，首批收口 `I9-001` 的高频入口失焦问题。）
+- 最新完成: `TASK-ENGINEERING-061`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log` 四层消费语义，降低模块索引混用。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
