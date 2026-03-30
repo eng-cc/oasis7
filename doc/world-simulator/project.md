@@ -917,6 +917,7 @@
 - [x] SUBTASK-WORLD_SIMULATOR-20260306-004 (PRD-WORLD_SIMULATOR-021) [test_tier_required]: `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.project.md`（文档建档）
 - [x] SUBTASK-WORLD_SIMULATOR-20260306-005 (PRD-WORLD_SIMULATOR-022) [test_tier_required]: `doc/world-simulator/launcher/game-client-launcher-native-legacy-cleanup-2026-03-06.project.md`（文档建档）
 - [x] SUBTASK-WORLD_SIMULATOR-20260306-006 (PRD-WORLD_SIMULATOR-023) [test_tier_required]: `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.project.md`（文档建档）
+- [x] TASK-WORLD_SIMULATOR-283 (PRD-WORLD_SIMULATOR-001/002/003) [test_tier_required]: 执行 ROUND-009 `world-simulator` 模块入口分流治理，明确 `README.md`、`prd.index.md`、`viewer-manual.manual.md` 与公开静态镜像的阅读边界。
 ## 依赖
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
@@ -985,15 +986,14 @@
 - `crates/oasis7_client_launcher/src/explorer_window.rs`
 - `crates/oasis7_client_launcher/src/explorer_window_view.rs`
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
-- `crates/oasis7/src/runtime/tests/agent_default_modules.rs`
-- `crates/oasis7/src/runtime/tests/power_bootstrap.rs`
+- `crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`
 - `crates/oasis7_viewer/Cargo.toml`
 - `crates/oasis7_viewer/src/main.rs`
-- `scripts/build-game-launcher-bundle.sh`
-- `scripts/capture-viewer-frame.sh`
+- `scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`
 - `testing-manual.md`
 ## 状态
 - 更新日期 / 当前状态 / 下一任务: 2026-03-30 / active / 无
+- 最新完成: `TASK-WORLD_SIMULATOR-283`（已为 `world-simulator/README.md` 增加按目标进入分流，并明确模块 README、长表索引、canonical Viewer 手册与公开静态镜像的职责边界。）
 - 最新完成: `TASK-WORLD_SIMULATOR-282`（已把 `module_source`、`builtin_wasm`、`llm_agent`、`runtime_live`、`viewer`、`launcher` 与 `wasm_build_suite` 中最后一批旧品牌 env 负向输入改成动态构造，源码内不再保留连续 `OASIS7_*` 文本。）
 - 当前优先任务: `fix3` 已恢复 builtin/OpenClaw 的行为等价基线；继续压缩 OpenClaw absolute wait latency，争取把 `latency_class` 从 `B (experimental-only)` 收敛到 `A (default-candidate)` 后再讨论默认启用。
 - 当前阻断说明: `PRD-WORLD_SIMULATOR-040` 已完成 T4 对照采证并解除阻断；`PRD-WORLD_SIMULATOR-038` 在 `openclaw_builtin_parity_20260317_fix3` 中已恢复 `completion_rate=100%`、`timeout_rate=0%` 与 `move_agent=4`，且 `relative_wait_gap` 满足行为等价硬门禁，但 OpenClaw `median_extra_wait_ms=13957`、`p95_extra_wait_ms=14062` 仅达到 `latency_class B`，因此当前允许保持 `experimental` / 受限试点，仍不得默认启用。

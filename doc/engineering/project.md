@@ -72,6 +72,7 @@
 - [x] TASK-ENGINEERING-060 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 首批入口分流治理，为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径。
 - [x] TASK-ENGINEERING-061 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 `readme` 模块边界治理，为模块索引显式拆分 `canonical / runbook / material / execution_log` 四层消费语义。
 - [x] TASK-ENGINEERING-062 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 根级例外目录定位治理，明确 `doc/ui_review_result/` 属于活跃样本池而非正式模块。
+- [x] TASK-ENGINEERING-063 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 `world-simulator` 高体量模块入口治理，为 README 增加任务导向分流并固定 `README / prd.index / manual / static mirror` 的语义边界。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -120,6 +121,7 @@
 - 最新完成: `TASK-ENGINEERING-060`（已为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径，首批收口 `I9-001` 的高频入口失焦问题。）
 - 最新完成: `TASK-ENGINEERING-061`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log` 四层消费语义，降低模块索引混用。）
 - 最新完成: `TASK-ENGINEERING-062`（已明确 `doc/ui_review_result/` 是活跃评审样本池，不再把其视作正式模块级入口。）
+- 最新完成: `TASK-ENGINEERING-063`（已为 `world-simulator` README 增加任务导向分流，并明确仓库权威入口与公开静态镜像的职责边界。）
 - 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
 - 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
 - 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。

@@ -95,8 +95,8 @@
 | --- | --- | --- | --- | --- | --- |
 | A9-001 | 建立 ROUND-009 台账、focused scope 清单、kickoff worklist 与进度日志 | `producer_system_designer` | 2026-03-30 | `test -f doc/core/reviews/consistency-review-round-009.md && test -f doc/core/reviews/round-009-reviewed-files.md && test -f doc/core/reviews/round-009-kickoff-worklist.md && test -f doc/core/reviews/round-009-audit-progress-log.md` | done |
 | A9-002 | 冻结 focused scope、问题池与批次口径 | `producer_system_designer` | 2026-03-30 | `rg -n "ROUND-009|focused scope|I9-|G9-" doc/core/reviews/consistency-review-round-009.md` | done |
-| A9-003 | 完成首轮范围审读并对每个对象给出 keep/migrate/split/defer 建议 | `producer_system_designer` | 待定 | `rg -n "keep|migrate|split|defer" doc/core/reviews/round-009-reviewed-files.md` | in_progress |
-| A9-004 | 对高优先级入口/手册对象执行首批回写与互链修复 | 对应模块 owner | 待定 | `./scripts/doc-governance-check.sh` | pending |
+| A9-003 | 完成首轮范围审读并对每个对象给出 keep/migrate/split/defer 建议 | `producer_system_designer` | 待定 | `rg -n "keep|migrate|split|defer" doc/core/reviews/round-009-reviewed-files.md` | done |
+| A9-004 | 对高优先级入口/手册对象执行首批回写与互链修复 | 对应模块 owner | 待定 | `./scripts/doc-governance-check.sh` | done |
 | A9-005 | ROUND-009 复审与阻断结论 | `qa_engineer` | 待定 | `./scripts/doc-governance-check.sh` + focused scope 抽样复核 | pending |
 
 ## 复审结果
