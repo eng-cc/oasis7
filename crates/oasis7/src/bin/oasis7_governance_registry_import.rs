@@ -187,6 +187,7 @@ fn build_main_token_controller_registry(
     Ok(GovernanceMainTokenControllerRegistry {
         genesis_controller_account_id: DEFAULT_GENESIS_CONTROLLER_ACCOUNT_ID.to_string(),
         treasury_bucket_controller_slots: default_treasury_bucket_controller_slots(),
+        restricted_starter_claim_admin_account_ids: BTreeSet::new(),
         controller_signer_policies,
     })
 }

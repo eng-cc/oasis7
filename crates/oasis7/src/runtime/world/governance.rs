@@ -957,8 +957,28 @@ impl World {
             }
             normalized_slots.insert(bucket_id, controller_account_id);
         }
+        let mut normalized_restricted_grant_admins = BTreeSet::new();
+        for account_id in registry.restricted_starter_claim_admin_account_ids {
+            let account_id = account_id.trim().to_string();
+            if account_id.is_empty() {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason:
+                        "main token controller registry restricted grant admin account_id cannot be empty"
+                            .to_string(),
+                });
+            }
+            if !normalized_policies.contains_key(account_id.as_str()) {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "main token controller registry missing restricted grant admin signer policy account_id={account_id}",
+                    ),
+                });
+            }
+            normalized_restricted_grant_admins.insert(account_id);
+        }
         registry.controller_signer_policies = normalized_policies;
         registry.treasury_bucket_controller_slots = normalized_slots;
+        registry.restricted_starter_claim_admin_account_ids = normalized_restricted_grant_admins;
         Ok(registry)
     }
 

@@ -88,6 +88,9 @@ mod tests {
                     "staking_reward_pool".to_string(),
                     "msig.staking_governance.v1".to_string(),
                 )]),
+                restricted_starter_claim_admin_account_ids: BTreeSet::from([
+                    "msig.staking_governance.v1".to_string(),
+                ]),
                 controller_signer_policies: BTreeMap::from([
                     (
                         "msig.genesis.v1".to_string(),

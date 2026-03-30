@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
 
-审计轮次: 3
+审计轮次: 4
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。
@@ -15,6 +15,7 @@
   - SC-4: 单账号可同时认领的 agent 数在 v1 受 `reputation_tier` 限制为 `1/2/3` 三档，且 `slot-2/slot-3` 的总成本分别至少为 `slot-1` 的 `1.5x/2.0x`。
   - SC-5: 使用 restricted bucket 资助的 bond，在 release / reclaim / slash 后必须按 canonical provenance 退回 restricted bucket，不得洗成 `liquid main token`。
   - SC-6: `activation fee`、`upkeep`、`bond refund/slash` 与 restricted grant 的发放/消费/退款/过期必须全部形成可审计事件，并能进入现有 main token 源汇审计链路。
+  - SC-7: `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 在进入 runtime grant 状态机前必须先通过正式 `admin registry` 门禁；当 registry 缺失、issuer 未登记或未绑定 signer allowlist policy 时，误放过率为 `0`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -24,6 +25,7 @@
   - `viewer_engineer`: 需要在 UI / pure API 中向玩家清楚展示认领成本、受限余额、宽限、冷却和回收风险。
   - `qa_engineer`: 需要验证并发争抢、欠费、闲置、多号囤积、transfer guard 和经济审计没有旁路。
   - `liveops_community`: 需要向 limited preview / allowlist / QA seed 账号发放受限启动余额，并在需要时回收、停用或过期。
+  - restricted grant admin operator: 需要一条正式 runtime 真值来判断 `issuer_id=liveops` 是否真的具备发放/撤销权限，而不是只依赖 runbook 约定。
 - User Scenarios & Frequency:
   - 首次建立组织能力时：每个认真进入中循环的玩家至少 1 次。
   - limited preview / allowlist 发放时：每轮受控外放、QA 种子建号或运营定向补助时发生。
@@ -94,6 +96,7 @@
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 余额不足：报价可见，但确认认领必须拒绝，并明确缺少的是 `activation fee`、`bond`、`upkeep` 还是 `eligible_claim_balance` 总额不足。
+  - restricted grant admin 未登记：当 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids` 缺失、为空、或不包含当前 `issuer_account_id` 时，issue / revoke 必须在 grant / treasury / beneficiary 逻辑之前直接拒绝。
   - restricted bucket 过期：已过 `expires_at_epoch` 的 starter balance 不得进入 quote 可用余额，且必须生成可审计的 `expired` 事件。
   - mixed funding：若 upfront cost 同时由 restricted 与 liquid 支付，系统必须记录 bond provenance；后续 refund/slash 结算必须按该 provenance 拆分。
   - 并发争抢：两个提交同时命中同一 `agent_id` 时，只允许第一个写入 `claim_owner_id`；第二个返回冲突，不得重复扣费。
@@ -116,6 +119,7 @@
   - NFR-AGC-7: v1 的成本曲线必须保持单调不降，不允许出现“第 2 个 agent 比第 1 个更便宜”的参数。
   - NFR-AGC-8: restricted bucket 通过普通转账路径、公开资产导出路径或 slot-2/3 claim 路径的误放过率必须为 `0`。
   - NFR-AGC-9: 所有 claim 相关 token 变动必须能进入现有经济源汇审计，不得生成审计盲区。
+  - NFR-AGC-10: restricted grant admin registry 的 source of truth 必须来自 runtime world-state 正式 registry，而不是文档约定、自由文本 `issuer_id` 或调用方本地分支逻辑。
 - Security & Privacy:
   - claim / release / upkeep 结算不得绕过主链 token 的签名与审计路径。
   - 不在公开 UI 中暴露与 claim 无关的账户私密资产信息；只展示本次认领所需的必要成本和状态。
@@ -152,6 +156,7 @@
 | PRD-GAME-011 | `TASK-GAME-049` | `test_tier_required` + `test_tier_full` | restricted grant 的 `issuance_reason / issuer_id / expires_at_epoch` 状态、issue/expire/revoke 事件、issuer-scoped 发放/回收动作与 token audit linkage 回归 | runtime grant lifecycle、经济源汇审计、资金来源约束 |
 | PRD-GAME-011 | `TASK-GAME-050` | `test_tier_required` | liveops issuer 边界、allowlist/QA seed/campaign 发放口径、过期/撤销 runbook 与 incident fallback 核验 | 运营发放、对外口径、风险收敛 |
 | PRD-GAME-011 | `TASK-GAME-051` | `test_tier_required` + `test_tier_full` | restricted grant lifecycle / audit matrix、expiry/revoke/source-sink 对账与 non-bypass 验证 | QA 守门、反滥用、经济审计 |
+| PRD-GAME-011 | `TASK-GAME-052` | `test_tier_required` + `test_tier_full` | governance main-token controller registry 补齐 restricted grant admin registry / signer allowlist 绑定，并验证 registry 缺失、非 admin、非 allowlisted issuer 与 allowlisted admin 的 runtime action gate | runtime admin 真值、发放/撤销入口门禁、运营安全边界 |
 
 - Decision Log:
 
@@ -168,3 +173,4 @@
 | DEC-AGC-009 | restricted bucket 只允许 `slot-1 claim + slot-1 upkeep` 的窄用途，不扩成通用非流通代币 | 让 restricted bucket 覆盖任意 claim、任意 upkeep 甚至其他 main-token 动作 | 窄用途更利于 limited preview / onboarding 启动，不会意外制造第二套通用资产语义。 |
 | DEC-AGC-010 | 允许 `slot-1` 使用 `restricted + liquid` 混合支付，并记录 provenance | 要么全部 restricted，要么全部 liquid | 混合支付能避免“restricted 不够一点就完全不能用”的体验断点，同时仍可通过 provenance 保证 refund 不洗钱。 |
 | DEC-AGC-011 | 不收窄 `PRD-GAME-011` 对 restricted grant lifecycle / audit 的要求，并保持 starter balance 继续是 `slot-1` 专用、不可转账、可过期可撤销的受限余额 | 把当前实现退化为“只有一个数值 bucket、没有 issuer/expiry/audit 的临时补贴”并据此宣称专题完成 | QA 已证明 bucket 记账与展示闭环正确，但没有正式发放元数据、过期/撤销事件和审计链，就无法证明该补贴受治理、可回收、可复盘。 |
+| DEC-AGC-012 | 在 runtime world-state 里把 restricted grant admin 收口到正式 registry，并要求每个 admin account 同时绑定现有 controller signer allowlist policy；issue/revoke 先过 admin gate，再进入 grant 业务校验 | 继续只依赖 runbook 约定 `issuer_id=liveops`；或另起一套与 controller policy 脱钩的独立 admin 配置 | `issuer_id` 只是业务字段，不足以证明操作者具备正式权限；复用既有 governance controller signer policy 能避免平行治理真值，同时把“非 admin”阻断前置到 runtime action 入口。 |

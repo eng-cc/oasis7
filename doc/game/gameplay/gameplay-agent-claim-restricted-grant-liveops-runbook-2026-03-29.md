@@ -22,6 +22,7 @@
 ## 2. Runtime 真值边界
 - 发放动作只能走 `IssueRestrictedStarterClaimGrant`，撤销动作只能走 `RevokeRestrictedStarterClaimGrant`；不要再用手工余额注入去替代正式发放。
 - runtime 当前固定从 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL` 出账，`spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`。
+- runtime 现在要求 `issuer_id` 先命中 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids`；若 registry 缺失、admin allowlist 为空或 `issuer_id` 未登记，action 会在进入 grant 状态机前直接被拒绝。
 - grant 的必要字段是 `issuer_id`、`beneficiary_account_id`、`amount`、`issuance_reason`、`expires_at_epoch`；其中 `issuer_id`、`issuance_reason` 不能为空，`expires_at_epoch` 必须严格大于当前 epoch。
 - 同一 beneficiary 同时只能存在 1 条可用 grant；已有 active grant、已有原始 restricted 余额、或仍有 locked restricted bond 时，runtime 会拒绝重发。
 - 撤销必须由同一 `issuer_id` 发起；如果发放时 `issuer_id` 写错，后续只能用同一个错误值去 revoke，因此发放前必须双人复核字段。
@@ -84,11 +85,12 @@
 
 1. 确认申请属于 `preview_allowlist`、`qa_seed`、`liveops_campaign` 三类之一。
 2. 确认本次发放统一使用 `issuer_id = liveops`。
-3. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
-4. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
-5. 确认 `expires_at_epoch` 覆盖完整窗口，不会在正常使用中途提前终态。
-6. 确认 source bucket 仍是 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL`，并记录本次占用额度。
-7. 双人复核 `beneficiary_account_id / issuer_id / issuance_reason / amount / expires_at_epoch` 后再提交动作。
+3. 确认 runtime 当前 world-state 已把 `liveops` 放进 restricted grant admin registry；不要只看 runbook 文案就直接提交。
+4. 确认 beneficiary 没有仍在生效的 grant，也没有遗留 raw restricted balance。
+5. 确认本次金额只覆盖批准用途，没有把 unrestricted 补贴混进来。
+6. 确认 `expires_at_epoch` 覆盖完整窗口，不会在正常使用中途提前终态。
+7. 确认 source bucket 仍是 `MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL`，并记录本次占用额度。
+8. 双人复核 `beneficiary_account_id / issuer_id / issuance_reason / amount / expires_at_epoch` 后再提交动作。
 
 ## 7. 发放执行
 最小执行记录必须包含：

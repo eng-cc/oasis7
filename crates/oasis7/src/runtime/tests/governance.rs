@@ -132,6 +132,9 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
                 "staking_reward_pool".to_string(),
                 "msig.staking_governance.v1".to_string(),
             )]),
+            restricted_starter_claim_admin_account_ids: BTreeSet::from([
+                "msig.staking_governance.v1".to_string(),
+            ]),
             controller_signer_policies: BTreeMap::from([
                 (
                     "msig.genesis.v1".to_string(),
@@ -178,6 +181,39 @@ fn governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot() {
             .map(|policy| policy.threshold),
         Some(2)
     );
+    assert_eq!(
+        restored
+            .governance_main_token_controller_registry()
+            .map(|registry| {
+                registry
+                    .restricted_starter_claim_admin_account_ids
+                    .contains("msig.staking_governance.v1")
+            }),
+        Some(true)
+    );
+}
+
+#[test]
+fn governance_controller_registry_rejects_restricted_grant_admin_without_policy() {
+    let mut world = World::new();
+    let err = world
+        .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {
+            genesis_controller_account_id: "msig.genesis.v1".to_string(),
+            treasury_bucket_controller_slots: BTreeMap::new(),
+            restricted_starter_claim_admin_account_ids: BTreeSet::from(["liveops".to_string()]),
+            controller_signer_policies: BTreeMap::from([(
+                "msig.genesis.v1".to_string(),
+                GovernanceThresholdSignerPolicy {
+                    threshold: 1,
+                    allowed_public_keys: BTreeSet::from([
+                        "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+                            .to_string(),
+                    ]),
+                },
+            )]),
+        })
+        .expect_err("missing admin policy should be rejected");
+    assert!(matches!(err, WorldError::GovernancePolicyInvalid { .. }));
 }
 
 #[test]

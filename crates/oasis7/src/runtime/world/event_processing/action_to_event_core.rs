@@ -18,6 +18,35 @@ const MATERIAL_TRANSIT_URGENT_KEYWORDS: &[&str] = &[
 ];
 
 impl World {
+    fn ensure_restricted_starter_claim_admin(&self, issuer_account_id: &str) -> Result<(), String> {
+        let registry = self
+            .governance_main_token_controller_registry()
+            .ok_or_else(|| "restricted grant admin registry is not configured".to_string())?;
+        if registry
+            .restricted_starter_claim_admin_account_ids
+            .is_empty()
+        {
+            return Err("restricted grant admin registry is empty".to_string());
+        }
+        if !registry
+            .restricted_starter_claim_admin_account_ids
+            .contains(issuer_account_id)
+        {
+            return Err(format!(
+                "restricted grant issuer is not allowlisted admin: issuer_account_id={issuer_account_id}"
+            ));
+        }
+        if !registry
+            .controller_signer_policies
+            .contains_key(issuer_account_id)
+        {
+            return Err(format!(
+                "restricted grant admin signer policy is not configured: issuer_account_id={issuer_account_id}"
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn action_to_event_core(
         &self,
         action_id: ActionId,
@@ -875,6 +904,14 @@ impl World {
                 },
             };
         }
+        if let Err(reason) = self.ensure_restricted_starter_claim_admin(issuer_account_id) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![reason],
+                },
+            };
+        }
         let beneficiary_account_id = beneficiary_account_id.trim();
         if beneficiary_account_id.is_empty() {
             return DomainEvent::ActionRejected {
@@ -980,6 +1017,14 @@ impl World {
                 action_id,
                 reason: RejectReason::RuleDenied {
                     notes: vec!["issuer_account_id cannot be empty".to_string()],
+                },
+            };
+        }
+        if let Err(reason) = self.ensure_restricted_starter_claim_admin(issuer_account_id) {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![reason],
                 },
             };
         }

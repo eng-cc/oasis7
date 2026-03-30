@@ -1,5 +1,6 @@
 use super::super::*;
 use super::pos;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn register_agent(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
@@ -90,6 +91,55 @@ fn setup_claim_world_with_treasury(
             .expect("seed alice liquid balance");
     }
     world
+}
+
+fn allowlist_restricted_grant_admins(world: &mut World, admin_account_ids: &[&str]) {
+    let mut controller_signer_policies = BTreeMap::from([
+        (
+            "msig.genesis.v1".to_string(),
+            GovernanceThresholdSignerPolicy {
+                threshold: 1,
+                allowed_public_keys: BTreeSet::from([
+                    "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30".to_string(),
+                ]),
+            },
+        ),
+        (
+            "msig.ecosystem_governance.v1".to_string(),
+            GovernanceThresholdSignerPolicy {
+                threshold: 1,
+                allowed_public_keys: BTreeSet::from([
+                    "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20".to_string(),
+                ]),
+            },
+        ),
+    ]);
+    let mut restricted_starter_claim_admin_account_ids = BTreeSet::new();
+    for (index, account_id) in admin_account_ids.iter().enumerate() {
+        let account_id = account_id.trim();
+        if account_id.is_empty() {
+            continue;
+        }
+        restricted_starter_claim_admin_account_ids.insert(account_id.to_string());
+        controller_signer_policies.insert(
+            account_id.to_string(),
+            GovernanceThresholdSignerPolicy {
+                threshold: 1,
+                allowed_public_keys: BTreeSet::from([format!("{:064x}", index + 3)]),
+            },
+        );
+    }
+    world
+        .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {
+            genesis_controller_account_id: "msig.genesis.v1".to_string(),
+            treasury_bucket_controller_slots: BTreeMap::from([(
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string(),
+                "msig.ecosystem_governance.v1".to_string(),
+            )]),
+            restricted_starter_claim_admin_account_ids,
+            controller_signer_policies,
+        })
+        .expect("set restricted grant admin registry");
 }
 
 fn claim_upfront_amount(claim: &AgentClaimState) -> u64 {
@@ -686,6 +736,7 @@ fn forced_reclaim_preserves_refund_provenance_after_mixed_funding() {
 #[test]
 fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_balance() {
     let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
 
     world.submit_action(Action::IssueRestrictedStarterClaimGrant {
         issuer_account_id: "liveops".to_string(),
@@ -740,6 +791,7 @@ fn restricted_grant_issue_records_metadata_and_moves_treasury_to_restricted_bala
 #[test]
 fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refund_to_treasury() {
     let mut world = setup_claim_world_with_treasury(1_000, 150, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
 
     world.submit_action(Action::IssueRestrictedStarterClaimGrant {
         issuer_account_id: "liveops".to_string(),
@@ -810,6 +862,7 @@ fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refu
 #[test]
 fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refund_to_treasury() {
     let mut world = setup_claim_world_with_treasury(1_000, 150, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
 
     world.submit_action(Action::IssueRestrictedStarterClaimGrant {
         issuer_account_id: "liveops".to_string(),
@@ -880,5 +933,117 @@ fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refu
     assert_eq!(
         world.main_token_restricted_starter_claim_balance("alice"),
         0
+    );
+}
+
+#[test]
+fn restricted_grant_issue_rejects_when_admin_registry_is_missing() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    let journal_len_before = world.journal().events.len();
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 325,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 10,
+    });
+    world.step().expect("reject issue without admin registry");
+
+    let rejection = world.journal().events[journal_len_before..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => Some(reason),
+            _ => None,
+        })
+        .expect("missing admin registry rejection event");
+    match rejection {
+        RejectReason::RuleDenied { notes } => {
+            assert!(notes
+                .iter()
+                .any(|note| note.contains("admin registry is not configured")));
+        }
+        other => panic!("expected rule denied, got {other:?}"),
+    }
+    assert!(world.restricted_starter_claim_grant("alice").is_none());
+}
+
+#[test]
+fn restricted_grant_issue_rejects_non_admin_issuer_before_grant_checks() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
+    let journal_len_before = world.journal().events.len();
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "qa".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 325,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 5,
+    });
+    world.step().expect("reject non-admin issue");
+
+    let rejection = world.journal().events[journal_len_before..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => Some(reason),
+            _ => None,
+        })
+        .expect("non-admin rejection event");
+    match rejection {
+        RejectReason::RuleDenied { notes } => {
+            assert!(notes
+                .iter()
+                .any(|note| note.contains("not allowlisted admin")));
+        }
+        other => panic!("expected rule denied, got {other:?}"),
+    }
+    assert!(world.restricted_starter_claim_grant("alice").is_none());
+}
+
+#[test]
+fn restricted_grant_revoke_rejects_non_admin_before_issuer_match_checks() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
+
+    world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+        issuer_account_id: "liveops".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        amount: 325,
+        issuance_reason: "qa_seed".to_string(),
+        expires_at_epoch: 10,
+    });
+    world.step().expect("issue restricted grant");
+
+    let journal_len_before = world.journal().events.len();
+    world.submit_action(Action::RevokeRestrictedStarterClaimGrant {
+        issuer_account_id: "qa".to_string(),
+        beneficiary_account_id: "alice".to_string(),
+        revoke_reason: "qa_window_closed".to_string(),
+    });
+    world.step().expect("reject non-admin revoke");
+
+    let rejection = world.journal().events[journal_len_before..]
+        .iter()
+        .find_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => Some(reason),
+            _ => None,
+        })
+        .expect("non-admin revoke rejection event");
+    match rejection {
+        RejectReason::RuleDenied { notes } => {
+            assert!(notes
+                .iter()
+                .any(|note| note.contains("not allowlisted admin")));
+            assert!(!notes.iter().any(|note| note.contains("issuer mismatch")));
+        }
+        other => panic!("expected rule denied, got {other:?}"),
+    }
+    assert_eq!(
+        world
+            .restricted_starter_claim_grant("alice")
+            .expect("grant still tracked")
+            .status,
+        RestrictedStarterClaimGrantStatus::Issued
     );
 }

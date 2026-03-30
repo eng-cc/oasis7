@@ -257,6 +257,8 @@ pub struct GovernanceMainTokenControllerRegistry {
     #[serde(default)]
     pub treasury_bucket_controller_slots: BTreeMap<String, String>,
     #[serde(default)]
+    pub restricted_starter_claim_admin_account_ids: BTreeSet<String>,
+    #[serde(default)]
     pub controller_signer_policies: BTreeMap<String, GovernanceThresholdSignerPolicy>,
 }
 
