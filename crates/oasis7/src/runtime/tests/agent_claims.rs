@@ -151,44 +151,6 @@ fn configure_restricted_grant_registry(
         .expect("set restricted grant admin registry");
 }
 
-fn authorize_restricted_admin_registry_update(
-    world: &mut World,
-    operator_agent_id: &str,
-    proposal_key: &str,
-) {
-    world.submit_action(Action::OpenGovernanceProposal {
-        proposer_agent_id: operator_agent_id.to_string(),
-        proposal_key: proposal_key.to_string(),
-        title: "authorize restricted admin registry update".to_string(),
-        description: "authorize restricted claim admin registry update".to_string(),
-        options: vec!["approve".to_string(), "reject".to_string()],
-        voting_window_ticks: 1,
-        quorum_weight: 3,
-        pass_threshold_bps: 5_000,
-    });
-    world.step().expect("open governance proposal");
-
-    world.submit_action(Action::CastGovernanceVote {
-        voter_agent_id: operator_agent_id.to_string(),
-        proposal_key: proposal_key.to_string(),
-        option: "approve".to_string(),
-        weight: 3,
-    });
-    world.step().expect("cast governance vote");
-
-    for _ in 0..2 {
-        let proposal = world
-            .state()
-            .governance_proposals
-            .get(proposal_key)
-            .expect("proposal exists");
-        if proposal.status != GovernanceProposalStatus::Open {
-            break;
-        }
-        world.step().expect("finalize governance proposal");
-    }
-}
-
 fn claim_upfront_amount(claim: &AgentClaimState) -> u64 {
     claim.activation_fee_amount + claim.claim_bond_amount + claim.upkeep_per_epoch
 }
@@ -1096,21 +1058,17 @@ fn restricted_grant_revoke_rejects_non_admin_before_issuer_match_checks() {
 }
 
 #[test]
-fn governance_action_can_enable_restricted_grant_admin_before_issue() {
+fn controller_registry_update_can_enable_restricted_grant_admin_before_issue() {
     let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
     configure_restricted_grant_registry(&mut world, &["liveops"], &[]);
-    authorize_restricted_admin_registry_update(
-        &mut world,
-        "alice",
-        "proposal.registry.enable-liveops",
-    );
 
     world.submit_action(Action::UpdateRestrictedStarterClaimAdminRegistry {
-        operator_agent_id: "alice".to_string(),
-        proposal_key: "proposal.registry.enable-liveops".to_string(),
+        controller_account_id: "liveops".to_string(),
         next_admin_account_ids: vec!["liveops".to_string()],
     });
-    world.step().expect("enable liveops admin via governance action");
+    world
+        .step()
+        .expect("enable liveops admin via controller registry update");
 
     world.submit_action(Action::IssueRestrictedStarterClaimGrant {
         issuer_account_id: "liveops".to_string(),

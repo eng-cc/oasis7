@@ -97,6 +97,10 @@ fn set_main_token_controller_registry_for_tests(
     policy_account_ids: &[&str],
     restricted_admin_account_ids: &[&str],
 ) {
+    let ecosystem_controller_account_id = policy_account_ids
+        .first()
+        .copied()
+        .unwrap_or("msig.ecosystem_governance.v1");
     let mut controller_signer_policies = BTreeMap::from([(
         "msig.genesis.v1".to_string(),
         GovernanceThresholdSignerPolicy {
@@ -119,7 +123,10 @@ fn set_main_token_controller_registry_for_tests(
     world
         .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {
             genesis_controller_account_id: "msig.genesis.v1".to_string(),
-            treasury_bucket_controller_slots: BTreeMap::new(),
+            treasury_bucket_controller_slots: BTreeMap::from([(
+                MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL.to_string(),
+                ecosystem_controller_account_id.to_string(),
+            )]),
             restricted_starter_claim_admin_account_ids: restricted_admin_account_ids
                 .iter()
                 .map(|value| (*value).to_string())
@@ -127,47 +134,6 @@ fn set_main_token_controller_registry_for_tests(
             controller_signer_policies,
         })
         .expect("set controller registry for tests");
-}
-
-fn authorize_registry_update(world: &mut World, operator_agent_id: &str, proposal_key: &str) {
-    world.submit_action(Action::OpenGovernanceProposal {
-        proposer_agent_id: operator_agent_id.to_string(),
-        proposal_key: proposal_key.to_string(),
-        title: "authorize restricted claim admin update".to_string(),
-        description: "authorize restricted claim admin registry update".to_string(),
-        options: vec!["approve".to_string(), "reject".to_string()],
-        voting_window_ticks: 1,
-        quorum_weight: 3,
-        pass_threshold_bps: 5_000,
-    });
-    world.step().expect("open governance proposal");
-
-    world.submit_action(Action::CastGovernanceVote {
-        voter_agent_id: operator_agent_id.to_string(),
-        proposal_key: proposal_key.to_string(),
-        option: "approve".to_string(),
-        weight: 3,
-    });
-    world.step().expect("cast governance vote");
-
-    for _ in 0..2 {
-        let proposal = world
-            .state()
-            .governance_proposals
-            .get(proposal_key)
-            .expect("proposal exists");
-        if proposal.status != GovernanceProposalStatus::Open {
-            break;
-        }
-        world.step().expect("finalize proposal");
-    }
-
-    let proposal = world
-        .state()
-        .governance_proposals
-        .get(proposal_key)
-        .expect("proposal finalized");
-    assert_eq!(proposal.status, GovernanceProposalStatus::Passed);
 }
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -295,18 +261,16 @@ fn governance_controller_registry_rejects_restricted_grant_admin_without_policy(
 }
 
 #[test]
-fn update_restricted_claim_admin_registry_requires_passed_governance_proposal() {
+fn update_restricted_claim_admin_registry_rejects_controller_account_outside_ecosystem_slot() {
     let mut world = World::new();
-    register_agent(&mut world, "a", 0.0, 0.0);
     set_main_token_controller_registry_for_tests(&mut world, &["liveops"], &["liveops"]);
     let journal_len_before = world.journal().events.len();
 
     world.submit_action(Action::UpdateRestrictedStarterClaimAdminRegistry {
-        operator_agent_id: "a".to_string(),
-        proposal_key: "proposal.registry.liveops".to_string(),
+        controller_account_id: "msig.wrong_controller.v1".to_string(),
         next_admin_account_ids: vec!["ops_backup".to_string()],
     });
-    world.step().expect("reject unauthorized registry update");
+    world.step().expect("reject wrong controller slot registry update");
 
     let rejection = world.journal().events[journal_len_before..]
         .iter()
@@ -319,7 +283,7 @@ fn update_restricted_claim_admin_registry_requires_passed_governance_proposal() 
         RejectReason::RuleDenied { notes } => {
             assert!(notes
                 .iter()
-                .any(|note| note.contains("governance proposal not found")));
+                .any(|note| note.contains("ecosystem treasury controller slot")));
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -328,14 +292,11 @@ fn update_restricted_claim_admin_registry_requires_passed_governance_proposal() 
 #[test]
 fn update_restricted_claim_admin_registry_rejects_account_without_signer_policy() {
     let mut world = World::new();
-    register_agent(&mut world, "a", 0.0, 0.0);
     set_main_token_controller_registry_for_tests(&mut world, &["liveops"], &["liveops"]);
-    authorize_registry_update(&mut world, "a", "proposal.registry.rotate");
     let journal_len_before = world.journal().events.len();
 
     world.submit_action(Action::UpdateRestrictedStarterClaimAdminRegistry {
-        operator_agent_id: "a".to_string(),
-        proposal_key: "proposal.registry.rotate".to_string(),
+        controller_account_id: "liveops".to_string(),
         next_admin_account_ids: vec!["ops_backup".to_string()],
     });
     world.step().expect("reject policy-missing registry update");
@@ -360,18 +321,15 @@ fn update_restricted_claim_admin_registry_rejects_account_without_signer_policy(
 #[test]
 fn update_restricted_claim_admin_registry_applies_governance_event() {
     let mut world = World::new();
-    register_agent(&mut world, "a", 0.0, 0.0);
     set_main_token_controller_registry_for_tests(
         &mut world,
         &["liveops", "ops_backup"],
         &["liveops"],
     );
-    authorize_registry_update(&mut world, "a", "proposal.registry.rotate");
 
     world.submit_action(Action::UpdateRestrictedStarterClaimAdminRegistry {
-        operator_agent_id: "a".to_string(),
-        proposal_key: "proposal.registry.rotate".to_string(),
-        next_admin_account_ids: vec!["ops_backup".to_string()],
+        controller_account_id: "liveops".to_string(),
+        next_admin_account_ids: vec!["liveops".to_string(), "ops_backup".to_string()],
     });
     world.step().expect("apply registry update");
 
@@ -384,19 +342,20 @@ fn update_restricted_claim_admin_registry_applies_governance_event() {
             .iter()
             .cloned()
             .collect::<Vec<_>>(),
-        vec!["ops_backup".to_string()]
+        vec!["liveops".to_string(), "ops_backup".to_string()]
     );
     match &world.journal().events.last().expect("event").body {
         WorldEventBody::Governance(GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
-            operator_agent_id,
-            proposal_key,
+            controller_account_id,
             previous_admin_account_ids,
             next_admin_account_ids,
         }) => {
-            assert_eq!(operator_agent_id, "a");
-            assert_eq!(proposal_key, "proposal.registry.rotate");
+            assert_eq!(controller_account_id, "liveops");
             assert_eq!(previous_admin_account_ids, &vec!["liveops".to_string()]);
-            assert_eq!(next_admin_account_ids, &vec!["ops_backup".to_string()]);
+            assert_eq!(
+                next_admin_account_ids,
+                &vec!["liveops".to_string(), "ops_backup".to_string()]
+            );
         }
         other => panic!("expected governance registry update event, got {other:?}"),
     }

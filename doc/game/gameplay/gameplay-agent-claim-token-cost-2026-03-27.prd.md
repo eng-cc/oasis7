@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md`
 
-审计轮次: 4
+审计轮次: 5
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。
@@ -16,7 +16,7 @@
   - SC-5: 使用 restricted bucket 资助的 bond，在 release / reclaim / slash 后必须按 canonical provenance 退回 restricted bucket，不得洗成 `liquid main token`。
   - SC-6: `activation fee`、`upkeep`、`bond refund/slash` 与 restricted grant 的发放/消费/退款/过期必须全部形成可审计事件，并能进入现有 main token 源汇审计链路。
   - SC-7: `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 在进入 runtime grant 状态机前必须先通过正式 `admin registry` 门禁；当 registry 缺失、issuer 未登记或未绑定 signer allowlist policy 时，误放过率为 `0`。
-  - SC-8: restricted grant admin registry 必须支持通过正式 runtime governance action 热更新；仅允许 passed proposal 的 proposer 变更 `restricted_starter_claim_admin_account_ids` 子集，且变更后 registry 仍必须满足 signer allowlist policy 约束。
+  - SC-8: restricted grant admin registry 必须支持通过正式 runtime action 热更新；仅允许当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 变更 `restricted_starter_claim_admin_account_ids` 子集，且变更 action 必须携带通过 signer allowlist / threshold policy 校验的主链签名 proof。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -121,7 +121,7 @@
   - NFR-AGC-8: restricted bucket 通过普通转账路径、公开资产导出路径或 slot-2/3 claim 路径的误放过率必须为 `0`。
   - NFR-AGC-9: 所有 claim 相关 token 变动必须能进入现有经济源汇审计，不得生成审计盲区。
   - NFR-AGC-10: restricted grant admin registry 的 source of truth 必须来自 runtime world-state 正式 registry，而不是文档约定、自由文本 `issuer_id` 或调用方本地分支逻辑。
-  - NFR-AGC-11: restricted grant admin registry runtime update 必须可审计、可重放，并在 registry 尚未 bootstrap 或 proposal 与 proposer 不匹配时拒绝执行，不得退化为离线 import 才能变更的单一路径。
+  - NFR-AGC-11: restricted grant admin registry runtime update 必须可审计、可重放，并在 registry 尚未 bootstrap、`ecosystem_pool` controller slot 未配置、或提交者不匹配当前 controller account 时拒绝执行，不得退化为离线 import 才能变更的单一路径。
 - Security & Privacy:
   - claim / release / upkeep 结算不得绕过主链 token 的签名与审计路径。
   - 不在公开 UI 中暴露与 claim 无关的账户私密资产信息；只展示本次认领所需的必要成本和状态。
@@ -159,7 +159,7 @@
 | PRD-GAME-011 | `TASK-GAME-050` | `test_tier_required` | liveops issuer 边界、allowlist/QA seed/campaign 发放口径、过期/撤销 runbook 与 incident fallback 核验 | 运营发放、对外口径、风险收敛 |
 | PRD-GAME-011 | `TASK-GAME-051` | `test_tier_required` + `test_tier_full` | restricted grant lifecycle / audit matrix、expiry/revoke/source-sink 对账与 non-bypass 验证 | QA 守门、反滥用、经济审计 |
 | PRD-GAME-011 | `TASK-GAME-052` | `test_tier_required` + `test_tier_full` | governance main-token controller registry 补齐 restricted grant admin registry / signer allowlist 绑定，并验证 registry 缺失、非 admin、非 allowlisted issuer 与 allowlisted admin 的 runtime action gate | runtime admin 真值、发放/撤销入口门禁、运营安全边界 |
-| PRD-GAME-011 | `TASK-GAME-053` | `test_tier_required` + `test_tier_full` | 新增 `UpdateRestrictedStarterClaimAdminRegistry` runtime governance action，验证 passed proposal 授权、signer policy 约束、governance event apply 与“先更新 registry 再发 grant”的闭环 | runtime admin registry 热更新、治理审计、运营解锁链路 |
+| PRD-GAME-011 | `TASK-GAME-053` | `test_tier_required` + `test_tier_full` | 新增 `UpdateRestrictedStarterClaimAdminRegistry` controller-governed runtime action，验证 `ecosystem_pool` controller account 绑定、signer policy 约束、governance event apply 与“先更新 registry 再发 grant”的闭环 | runtime admin registry 热更新、主链钱包治理审计、运营解锁链路 |
 
 - Decision Log:
 
@@ -177,4 +177,4 @@
 | DEC-AGC-010 | 允许 `slot-1` 使用 `restricted + liquid` 混合支付，并记录 provenance | 要么全部 restricted，要么全部 liquid | 混合支付能避免“restricted 不够一点就完全不能用”的体验断点，同时仍可通过 provenance 保证 refund 不洗钱。 |
 | DEC-AGC-011 | 不收窄 `PRD-GAME-011` 对 restricted grant lifecycle / audit 的要求，并保持 starter balance 继续是 `slot-1` 专用、不可转账、可过期可撤销的受限余额 | 把当前实现退化为“只有一个数值 bucket、没有 issuer/expiry/audit 的临时补贴”并据此宣称专题完成 | QA 已证明 bucket 记账与展示闭环正确，但没有正式发放元数据、过期/撤销事件和审计链，就无法证明该补贴受治理、可回收、可复盘。 |
 | DEC-AGC-012 | 在 runtime world-state 里把 restricted grant admin 收口到正式 registry，并要求每个 admin account 同时绑定现有 controller signer allowlist policy；issue/revoke 先过 admin gate，再进入 grant 业务校验 | 继续只依赖 runbook 约定 `issuer_id=liveops`；或另起一套与 controller policy 脱钩的独立 admin 配置 | `issuer_id` 只是业务字段，不足以证明操作者具备正式权限；复用既有 governance controller signer policy 能避免平行治理真值，同时把“非 admin”阻断前置到 runtime action 入口。 |
-| DEC-AGC-013 | 不开放整份 controller registry 的任意热编辑，只新增一条受 passed governance proposal 驱动的 `UpdateRestrictedStarterClaimAdminRegistry` 动作，专门更新 restricted grant admin 子集 | 继续只允许离线 import / 启动注入变更 registry；或开放完整 controller registry runtime 任意改写 | restricted grant admin roster 需要运行时治理能力，但本轮只需补 liveops/admin 轮换这条窄链路；收窄到单一字段更新，能复用现有 governance proposal 真值与 registry 校验，同时避免把更高风险的 controller policy / treasury slot 编辑一并放开。 |
+| DEC-AGC-013 | 不开放整份 controller registry 的任意热编辑，只新增一条由 `ecosystem_pool` treasury controller account 签名驱动的 `UpdateRestrictedStarterClaimAdminRegistry` 动作，专门更新 restricted grant admin 子集 | 继续只允许离线 import / 启动注入变更 registry；或把 admin roster 继续绑定到模拟内 passed proposal proposer；或开放完整 controller registry runtime 任意改写 | restricted grant admin roster 属于主链资产治理面，不应继续依赖模拟内 agent/proposal 真值；收窄到单一字段更新，并复用既有 controller slot + signer allowlist / threshold policy，能把 liveops/admin 轮换放回正式钱包治理路径，同时避免把更高风险的 controller policy / treasury slot 编辑一并放开。 |

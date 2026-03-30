@@ -6,7 +6,7 @@ use super::super::{
     GovernanceIdentityPenaltyStatus, GovernanceIdentityProfileState, GovernanceIdentityStatus,
     GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, Manifest,
     ManifestPatch, ManifestUpdate, Proposal, ProposalDecision, ProposalId, ProposalStatus,
-    WorldError, WorldEventBody, WorldTime,
+    WorldError, WorldEventBody, WorldTime, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
 };
 use super::World;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -95,6 +95,21 @@ fn governance_threshold_bps(required_signers: u16, total_signers: usize) -> u16 
 }
 
 impl World {
+    pub(super) fn restricted_starter_claim_admin_registry_controller_account_id<'a>(
+        registry: &'a GovernanceMainTokenControllerRegistry,
+    ) -> Result<&'a str, WorldError> {
+        registry
+            .treasury_bucket_controller_slots
+            .get(MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL)
+            .map(String::as_str)
+            .ok_or_else(|| WorldError::GovernancePolicyInvalid {
+                reason: format!(
+                    "restricted claim admin registry controller slot is not configured for bucket {}",
+                    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL
+                ),
+            })
+    }
+
     // ---------------------------------------------------------------------
     // Manifest and governance
     // ---------------------------------------------------------------------
@@ -1660,15 +1675,10 @@ impl World {
                 profile.updated_at = self.state.time;
             }
             GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
-                operator_agent_id,
-                proposal_key,
+                controller_account_id,
                 previous_admin_account_ids,
                 next_admin_account_ids,
             } => {
-                self.validate_policy_execution_governance_authorization(
-                    operator_agent_id.as_str(),
-                    proposal_key.as_str(),
-                )?;
                 let Some(current_registry) =
                     self.state.governance_main_token_controller_registry.clone()
                 else {
@@ -1678,6 +1688,18 @@ impl World {
                                 .to_string(),
                     });
                 };
+                let expected_controller_account_id =
+                    Self::restricted_starter_claim_admin_registry_controller_account_id(
+                        &current_registry,
+                    )?;
+                if controller_account_id != expected_controller_account_id {
+                    return Err(WorldError::GovernancePolicyInvalid {
+                        reason: format!(
+                            "restricted claim admin registry controller slot mismatch: expected={} actual={}",
+                            expected_controller_account_id, controller_account_id
+                        ),
+                    });
+                }
                 let current_admins = current_registry
                     .restricted_starter_claim_admin_account_ids
                     .iter()

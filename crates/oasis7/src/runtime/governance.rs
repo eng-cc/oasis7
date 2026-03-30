@@ -346,8 +346,7 @@ pub enum GovernanceEvent {
         reason: String,
     },
     RestrictedStarterClaimAdminRegistryUpdated {
-        operator_agent_id: String,
-        proposal_key: String,
+        controller_account_id: String,
         previous_admin_account_ids: Vec<String>,
         next_admin_account_ids: Vec<String>,
     },

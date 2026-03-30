@@ -117,28 +117,9 @@ impl World {
                 }))
             }
             Action::UpdateRestrictedStarterClaimAdminRegistry {
-                operator_agent_id,
-                proposal_key,
+                controller_account_id,
                 next_admin_account_ids,
             } => {
-                if let Err(err) = self.validate_policy_execution_governance_authorization(
-                    operator_agent_id.as_str(),
-                    proposal_key.as_str(),
-                ) {
-                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: match err {
-                            WorldError::AgentNotFound { agent_id } => {
-                                RejectReason::AgentNotFound { agent_id }
-                            }
-                            other => RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "update restricted claim admin registry rejected: {other:?}"
-                                )],
-                            },
-                        },
-                    }));
-                }
                 let Some(current_registry) = self.governance_main_token_controller_registry() else {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
@@ -150,6 +131,34 @@ impl World {
                         },
                     }));
                 };
+                let controller_account_id = controller_account_id.trim();
+                let expected_controller_account_id =
+                    match Self::restricted_starter_claim_admin_registry_controller_account_id(
+                        current_registry,
+                    ) {
+                        Ok(account_id) => account_id,
+                        Err(err) => {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "update restricted claim admin registry rejected: {err:?}"
+                                    )],
+                                },
+                            }))
+                        }
+                    };
+                if controller_account_id != expected_controller_account_id {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "update restricted claim admin registry rejected: controller_account_id does not match ecosystem treasury controller slot expected={} actual={}",
+                                expected_controller_account_id, controller_account_id
+                            )],
+                        },
+                    }));
+                }
                 let next_admin_account_ids = next_admin_account_ids
                     .iter()
                     .map(|value| value.trim())
@@ -173,8 +182,7 @@ impl World {
                 }
                 Ok(WorldEventBody::Governance(
                     GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
-                        operator_agent_id: operator_agent_id.clone(),
-                        proposal_key: proposal_key.trim().to_string(),
+                        controller_account_id: controller_account_id.to_string(),
                         previous_admin_account_ids: current_registry
                             .restricted_starter_claim_admin_account_ids
                             .iter()

@@ -46,6 +46,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedgrantadminauth:v1:";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct LocalConsensusActionPayloadEnvelope {
@@ -117,6 +119,9 @@ enum LocalMainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(LocalClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(LocalInitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(LocalDistributeMainTokenTreasurySigningData<'a>),
+    UpdateRestrictedStarterClaimAdminRegistry(
+        LocalUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
+    ),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -145,6 +150,12 @@ struct LocalDistributeMainTokenTreasurySigningData<'a> {
     distribution_id: &'a str,
     bucket_id: &'a str,
     distributions: &'a [JsonValue],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct LocalUpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
+    controller_account_id: &'a str,
+    next_admin_account_ids: &'a [JsonValue],
 }
 
 impl fmt::Debug for NodeRuntime {
@@ -441,6 +452,7 @@ fn local_main_token_action_auth_required(action: &JsonValue) -> bool {
             | Some("ClaimMainTokenVesting")
             | Some("InitializeMainTokenGenesis")
             | Some("DistributeMainTokenTreasury")
+            | Some("UpdateRestrictedStarterClaimAdminRegistry")
     )
 }
 
@@ -651,6 +663,27 @@ fn build_local_main_token_action_signing_action(
                 },
             ),
         ),
+        "UpdateRestrictedStarterClaimAdminRegistry" => Ok(
+            LocalMainTokenActionSigningPayload::UpdateRestrictedStarterClaimAdminRegistry(
+                LocalUpdateRestrictedStarterClaimAdminRegistrySigningData {
+                    controller_account_id: data
+                        .get("controller_account_id")
+                        .and_then(JsonValue::as_str)
+                        .ok_or_else(|| {
+                            "restricted claim admin registry action missing controller_account_id"
+                                .to_string()
+                        })?,
+                    next_admin_account_ids: data
+                        .get("next_admin_account_ids")
+                        .and_then(JsonValue::as_array)
+                        .map(Vec::as_slice)
+                        .ok_or_else(|| {
+                            "restricted claim admin registry action missing next_admin_account_ids"
+                                .to_string()
+                        })?,
+                },
+            ),
+        ),
         other => Err(format!(
             "main token auth is not supported for action {other}"
         )),
@@ -739,6 +772,33 @@ fn validate_local_main_token_action_account_binding(
                 ));
             }
         }
+        "UpdateRestrictedStarterClaimAdminRegistry" => {
+            let controller_account_id = data
+                .get("controller_account_id")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| {
+                    "restricted claim admin registry action missing controller_account_id"
+                        .to_string()
+                })?
+                .trim();
+            if account_id != controller_account_id {
+                return Err(format!(
+                    "main token auth account_id does not match restricted claim admin registry controller_account_id: expected={controller_account_id} actual={account_id}"
+                ));
+            }
+            let expected = controller_binding
+                .treasury_bucket_controller_slots
+                .get("ecosystem_pool")
+                .map(String::as_str)
+                .ok_or_else(|| {
+                    "restricted claim admin registry controller slot is not configured for bucket ecosystem_pool".to_string()
+                })?;
+            if account_id != expected {
+                return Err(format!(
+                    "main token auth account_id does not match restricted claim admin registry controller slot: expected={expected} actual={account_id}"
+                ));
+            }
+        }
         other => {
             return Err(format!(
                 "main token auth is not supported for action {other}"
@@ -798,7 +858,9 @@ fn local_controller_signer_policy_for_action<'a>(
     controller_binding: &'a NodeMainTokenControllerBindingConfig,
 ) -> Result<Option<&'a NodeMainTokenControllerSignerPolicy>, String> {
     match local_runtime_action_kind(action) {
-        Some("InitializeMainTokenGenesis") | Some("DistributeMainTokenTreasury") => {
+        Some("InitializeMainTokenGenesis")
+        | Some("DistributeMainTokenTreasury")
+        | Some("UpdateRestrictedStarterClaimAdminRegistry") => {
             controller_binding
                 .controller_signer_policies
                 .get(account_id)
@@ -840,6 +902,9 @@ fn local_main_token_action_operation(action: &JsonValue) -> Result<&'static str,
         Some("ClaimMainTokenVesting") => Ok("claim_main_token_vesting"),
         Some("InitializeMainTokenGenesis") => Ok("initialize_main_token_genesis"),
         Some("DistributeMainTokenTreasury") => Ok("distribute_main_token_treasury"),
+        Some("UpdateRestrictedStarterClaimAdminRegistry") => {
+            Ok("update_restricted_starter_claim_admin_registry")
+        }
         Some(other) => Err(format!(
             "main token auth is not supported for action {other}"
         )),
@@ -853,6 +918,9 @@ fn local_main_token_action_signature_prefix(action: &JsonValue) -> Result<&'stat
         Some("ClaimMainTokenVesting") => Ok(MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX),
         Some("InitializeMainTokenGenesis") => Ok(MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX),
         Some("DistributeMainTokenTreasury") => Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX),
+        Some("UpdateRestrictedStarterClaimAdminRegistry") => {
+            Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
+        }
         Some(other) => Err(format!(
             "main token auth is not supported for action {other}"
         )),

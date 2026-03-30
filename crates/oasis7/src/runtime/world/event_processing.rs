@@ -81,56 +81,6 @@ impl World {
         })
     }
 
-    pub(super) fn validate_policy_execution_governance_authorization(
-        &self,
-        operator_agent_id: &str,
-        proposal_key: &str,
-    ) -> Result<(), WorldError> {
-        if !self.state.agents.contains_key(operator_agent_id) {
-            return Err(WorldError::AgentNotFound {
-                agent_id: operator_agent_id.to_string(),
-            });
-        }
-        let proposal_key = proposal_key.trim();
-        if proposal_key.is_empty() {
-            return Err(WorldError::GovernancePolicyInvalid {
-                reason: "proposal_key cannot be empty".to_string(),
-            });
-        }
-        let Some(proposal) = self.state.governance_proposals.get(proposal_key) else {
-            return Err(WorldError::GovernancePolicyInvalid {
-                reason: format!("governance proposal not found: {proposal_key}"),
-            });
-        };
-        if proposal.proposer_agent_id != operator_agent_id {
-            return Err(WorldError::GovernancePolicyInvalid {
-                reason: format!(
-                    "governance proposal proposer mismatch: proposal_key={} expected={} actual={}",
-                    proposal_key, proposal.proposer_agent_id, operator_agent_id
-                ),
-            });
-        }
-        if proposal.status != GovernanceProposalStatus::Passed {
-            return Err(WorldError::GovernancePolicyInvalid {
-                reason: format!(
-                    "governance proposal is not passed: proposal_key={} status={:?}",
-                    proposal_key, proposal.status
-                ),
-            });
-        }
-        if proposal.total_weight_at_finalize < GAMEPLAY_POLICY_UPDATE_MIN_GOVERNANCE_TOTAL_WEIGHT {
-            return Err(WorldError::GovernancePolicyInvalid {
-                reason: format!(
-                    "governance proposal weight below execution threshold: proposal_key={} total_weight={} required={}",
-                    proposal_key,
-                    proposal.total_weight_at_finalize,
-                    GAMEPLAY_POLICY_UPDATE_MIN_GOVERNANCE_TOTAL_WEIGHT
-                ),
-            });
-        }
-        Ok(())
-    }
-
     fn war_mobilization_costs(intensity: u32) -> (i64, i64) {
         let intensity = i64::from(intensity.max(1));
         let electricity = WAR_DECLARE_BASE_ELECTRICITY_COST

@@ -482,8 +482,7 @@ pub enum Action {
         forbidden_location_ids: Vec<String>,
     },
     UpdateRestrictedStarterClaimAdminRegistry {
-        operator_agent_id: String,
-        proposal_key: String,
+        controller_account_id: String,
         #[serde(default)]
         next_admin_account_ids: Vec<String>,
     },
@@ -749,10 +748,10 @@ impl Action {
             }
             | Action::GovernFactoryProfile {
                 operator_agent_id, ..
-            }
-            | Action::UpdateRestrictedStarterClaimAdminRegistry {
-                operator_agent_id, ..
             } => Some(operator_agent_id.as_str()),
+            Action::UpdateRestrictedStarterClaimAdminRegistry {
+                controller_account_id, ..
+            } => Some(controller_account_id.as_str()),
             Action::DeclareWar {
                 initiator_agent_id, ..
             } => Some(initiator_agent_id.as_str()),

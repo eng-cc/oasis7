@@ -9,6 +9,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedgrantadminauth:v1:";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusActionPayloadEnvelope {
@@ -107,6 +109,9 @@ enum MainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(ClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(InitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(DistributeMainTokenTreasurySigningData<'a>),
+    UpdateRestrictedStarterClaimAdminRegistry(
+        UpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
+    ),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -135,6 +140,12 @@ struct DistributeMainTokenTreasurySigningData<'a> {
     distribution_id: &'a str,
     bucket_id: &'a str,
     distributions: &'a [runtime::MainTokenTreasuryDistribution],
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+struct UpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
+    controller_account_id: &'a str,
+    next_admin_account_ids: &'a [String],
 }
 
 impl ConsensusActionPayloadEnvelope {
@@ -173,6 +184,7 @@ pub fn main_token_action_auth_required(action: &runtime::Action) -> bool {
             | runtime::Action::ClaimMainTokenVesting { .. }
             | runtime::Action::InitializeMainTokenGenesis { .. }
             | runtime::Action::DistributeMainTokenTreasury { .. }
+            | runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. }
     )
 }
 
@@ -460,6 +472,17 @@ fn build_main_token_action_signing_action(
                 distributions: distributions.as_slice(),
             },
         )),
+        runtime::Action::UpdateRestrictedStarterClaimAdminRegistry {
+            controller_account_id,
+            next_admin_account_ids,
+        } => Ok(
+            MainTokenActionSigningPayload::UpdateRestrictedStarterClaimAdminRegistry(
+                UpdateRestrictedStarterClaimAdminRegistrySigningData {
+                    controller_account_id: controller_account_id.as_str(),
+                    next_admin_account_ids: next_admin_account_ids.as_slice(),
+                },
+            ),
+        ),
         _ => Err(MainTokenActionAuthError::UnsupportedAction(format!(
             "main token auth is not supported for action {action:?}"
         ))),
@@ -517,6 +540,17 @@ fn validate_main_token_action_account_binding(
         }
         runtime::Action::InitializeMainTokenGenesis { .. }
         | runtime::Action::DistributeMainTokenTreasury { .. } => {}
+        runtime::Action::UpdateRestrictedStarterClaimAdminRegistry {
+            controller_account_id,
+            ..
+        } => {
+            if account_id != controller_account_id.trim() {
+                return Err(MainTokenActionAuthError::AccountMismatch(format!(
+                    "main token auth account_id does not match restricted grant admin registry controller_account_id: expected={} actual={account_id}",
+                    controller_account_id.trim()
+                )));
+            }
+        }
         _ => {
             return Err(MainTokenActionAuthError::UnsupportedAction(format!(
                 "main token auth is not supported for action {action:?}"
@@ -562,6 +596,9 @@ fn main_token_action_operation(
         runtime::Action::ClaimMainTokenVesting { .. } => Ok("claim_main_token_vesting"),
         runtime::Action::InitializeMainTokenGenesis { .. } => Ok("initialize_main_token_genesis"),
         runtime::Action::DistributeMainTokenTreasury { .. } => Ok("distribute_main_token_treasury"),
+        runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
+            Ok("update_restricted_starter_claim_admin_registry")
+        }
         _ => Err(MainTokenActionAuthError::UnsupportedAction(format!(
             "main token auth is not supported for action {action:?}"
         ))),
@@ -583,6 +620,9 @@ fn main_token_action_signature_prefix(
         }
         runtime::Action::DistributeMainTokenTreasury { .. } => {
             Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX)
+        }
+        runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
+            Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
         }
         _ => Err(MainTokenActionAuthError::UnsupportedAction(format!(
             "main token auth is not supported for action {action:?}"

@@ -16,6 +16,8 @@ const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:"
 const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
 const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
 const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
+    "awtrestrictedgrantadminauth:v1:";
 const DEFAULT_GENESIS_CONTROLLER_SLOT: &str = "msig.genesis.v1";
 const DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT: &str = "msig.ecosystem_governance.v1";
 
@@ -116,6 +118,9 @@ enum TestMainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(TestClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(TestInitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(TestDistributeMainTokenTreasurySigningData<'a>),
+    UpdateRestrictedStarterClaimAdminRegistry(
+        TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
+    ),
 }
 
 #[derive(Serialize)]
@@ -146,12 +151,21 @@ struct TestDistributeMainTokenTreasurySigningData<'a> {
     distributions: &'a [JsonValue],
 }
 
+#[derive(Serialize)]
+struct TestUpdateRestrictedStarterClaimAdminRegistrySigningData<'a> {
+    controller_account_id: &'a str,
+    next_admin_account_ids: &'a [JsonValue],
+}
+
 fn test_main_token_action_signature_prefix(action_kind: &str) -> &'static str {
     match action_kind {
         "TransferMainToken" => MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX,
         "ClaimMainTokenVesting" => MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX,
         "InitializeMainTokenGenesis" => MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX,
         "DistributeMainTokenTreasury" => MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX,
+        "UpdateRestrictedStarterClaimAdminRegistry" => {
+            MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX
+        }
         other => panic!("unsupported test action kind {other}"),
     }
 }
@@ -162,6 +176,9 @@ fn test_main_token_action_operation(action_kind: &str) -> &'static str {
         "ClaimMainTokenVesting" => "claim_main_token_vesting",
         "InitializeMainTokenGenesis" => "initialize_main_token_genesis",
         "DistributeMainTokenTreasury" => "distribute_main_token_treasury",
+        "UpdateRestrictedStarterClaimAdminRegistry" => {
+            "update_restricted_starter_claim_admin_registry"
+        }
         other => panic!("unsupported test action kind {other}"),
     }
 }
@@ -244,6 +261,21 @@ fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSign
                         .and_then(JsonValue::as_array)
                         .map(Vec::as_slice)
                         .expect("treasury distributions"),
+                },
+            )
+        }
+        "UpdateRestrictedStarterClaimAdminRegistry" => {
+            TestMainTokenActionSigningPayload::UpdateRestrictedStarterClaimAdminRegistry(
+                TestUpdateRestrictedStarterClaimAdminRegistrySigningData {
+                    controller_account_id: data
+                        .get("controller_account_id")
+                        .and_then(JsonValue::as_str)
+                        .expect("restricted claim admin registry controller_account_id"),
+                    next_admin_account_ids: data
+                        .get("next_admin_account_ids")
+                        .and_then(JsonValue::as_array)
+                        .map(Vec::as_slice)
+                        .expect("restricted claim admin registry next_admin_account_ids"),
                 },
             )
         }
@@ -1232,6 +1264,99 @@ fn submit_consensus_action_payload_rejects_treasury_when_signer_not_allowlisted(
         .submit_consensus_action_payload(1, payload)
         .expect_err("treasury signer outside allowlist must fail");
     assert!(err.to_string().contains("not allowlisted"));
+}
+
+#[test]
+fn submit_consensus_action_payload_rejects_unsigned_restricted_grant_admin_registry_action() {
+    let runtime = NodeRuntime::new(
+        NodeConfig::new(
+            "node-token-restricted-admin",
+            "world-token-restricted-admin",
+            NodeRole::Observer,
+        )
+        .expect("config"),
+    );
+    let payload = encode_unsigned_runtime_payload(json!({
+        "type": "UpdateRestrictedStarterClaimAdminRegistry",
+        "data": {
+            "controller_account_id": DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT,
+            "next_admin_account_ids": ["liveops"]
+        }
+    }));
+    let err = runtime
+        .submit_consensus_action_payload(1, payload)
+        .expect_err("unsigned restricted admin registry payload must fail");
+    assert!(err.to_string().contains("missing_main_token_auth"));
+}
+
+#[test]
+fn submit_consensus_action_payload_accepts_signed_restricted_grant_admin_registry_action() {
+    let runtime = NodeRuntime::new(
+        NodeConfig::new(
+            "node-token-restricted-admin-ok",
+            "world-token-restricted-admin-ok",
+            NodeRole::Observer,
+        )
+        .expect("config")
+        .with_main_token_controller_binding(configured_controller_binding(
+            2,
+            &[0x24, 0x28],
+            2,
+            &[0x25, 0x29],
+        ))
+        .expect("controller binding"),
+    );
+    let payload = encode_threshold_signed_main_token_runtime_payload(
+        json!({
+            "type": "UpdateRestrictedStarterClaimAdminRegistry",
+            "data": {
+                "controller_account_id": DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT,
+                "next_admin_account_ids": ["liveops", "ops_backup"]
+            }
+        }),
+        DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT,
+        2,
+        &[0x25, 0x29],
+    );
+    runtime
+        .submit_consensus_action_payload(1, payload)
+        .expect("signed restricted admin registry payload should pass");
+}
+
+#[test]
+fn submit_consensus_action_payload_rejects_restricted_grant_admin_registry_action_with_wrong_controller_slot(
+) {
+    let runtime = NodeRuntime::new(
+        NodeConfig::new(
+            "node-token-restricted-admin-wrong-slot",
+            "world-token-restricted-admin-wrong-slot",
+            NodeRole::Observer,
+        )
+        .expect("config")
+        .with_main_token_controller_binding(configured_controller_binding(
+            2,
+            &[0x24, 0x28],
+            2,
+            &[0x25, 0x29],
+        ))
+        .expect("controller binding"),
+    );
+    let payload = encode_threshold_signed_main_token_runtime_payload(
+        json!({
+            "type": "UpdateRestrictedStarterClaimAdminRegistry",
+            "data": {
+                "controller_account_id": "msig.foundation_ops.v1",
+                "next_admin_account_ids": ["liveops"]
+            }
+        }),
+        "msig.foundation_ops.v1",
+        2,
+        &[0x25, 0x29],
+    );
+    let err = runtime
+        .submit_consensus_action_payload(1, payload)
+        .expect_err("wrong restricted admin registry controller slot must fail");
+    assert!(err.to_string().contains("restricted claim admin registry controller slot"));
 }
 
 #[test]
