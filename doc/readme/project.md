@@ -499,6 +499,18 @@
     - `rg -n "headline-card|contrast-card|judgment-grid|reason-card|thin-card|thick-card" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-048 (PRD-README-031) [test_tier_required]: 重做第七篇轮播版后两页视觉骨架，把案例页改成“主判断 + 三场景卡”，把收束页改成更完整的站队海报，提升整组轮播的一致性与审美完成度。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `site/social/xiaohongshu-ai-persona-carousel.html`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide3.png`
+    - `site/social/xiaohongshu-ai-persona-carousel-slide4.png`
+    - `doc/devlog/2026-03-30.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "scenario-grid|scenario-main|scenario-card|vote-layout|vote-main|vote-option|vote-question" site/social/xiaohongshu-ai-persona-carousel.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -514,6 +526,7 @@
 - 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-048`（已重做第七篇轮播版后两页视觉骨架，把案例页与收束页收口到同一套编辑部判断卡语言。）
 - 最新完成: `TASK-README-047`（已重做第七篇轮播版前两页视觉骨架，修复元素重叠并收口为更稳的编辑部判断卡布局。）
 - 最新完成: `TASK-README-046`（已为小红书第七篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，保持“会聊天 vs 会行动”的核心判断与评论区站队问题一致。）
 - 最新完成: `TASK-README-045`（已为小红书第七篇补齐“聊天框 vs 世界内行动”分割封面 HTML 与 PNG，强化“会说话”和“会行动”的区别。）

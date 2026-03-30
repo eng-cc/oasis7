@@ -891,6 +891,205 @@
       .thick-card {
         background: linear-gradient(180deg, rgba(216, 231, 228, 0.78), rgba(255, 251, 246, 0.92));
       }
+
+      .scenario-grid {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 156px;
+        bottom: 118px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 26px;
+        align-items: start;
+      }
+
+      .scenario-main,
+      .scenario-card,
+      .vote-main,
+      .vote-option,
+      .vote-question {
+        position: relative;
+        border-radius: 30px;
+        border: 1px solid rgba(31, 24, 20, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .scenario-main,
+      .vote-main {
+        background: linear-gradient(180deg, rgba(20, 60, 67, 0.98), rgba(25, 72, 78, 0.98));
+        color: #fff7ec;
+      }
+
+      .scenario-card,
+      .vote-option,
+      .vote-question {
+        background: rgba(255, 251, 246, 0.9);
+      }
+
+      .scenario-main,
+      .vote-main {
+        padding: 56px 34px 34px;
+      }
+
+      .scenario-main::before,
+      .scenario-card::before,
+      .vote-main::before,
+      .vote-option::before,
+      .vote-question::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 24px;
+        width: 90px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.42);
+        transform: rotate(-7deg);
+      }
+
+      .scenario-main .eyebrow,
+      .vote-main .eyebrow {
+        color: rgba(255, 247, 236, 0.68);
+      }
+
+      .scenario-main h2,
+      .vote-main h1 {
+        color: #fff7ec;
+      }
+
+      .scenario-main p {
+        max-width: 470px;
+        margin-top: 22px;
+        color: rgba(255, 247, 236, 0.78);
+      }
+
+      .scenario-ribbon {
+        margin-top: 28px;
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-radius: 999px;
+        background: rgba(255, 247, 236, 0.08);
+        color: #fff7ec;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .scenario-ribbon::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--amber);
+      }
+
+      .scenario-stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .scenario-card {
+        min-height: 224px;
+        padding: 48px 24px 22px;
+      }
+
+      .scenario-card h3 {
+        font-size: 34px;
+      }
+
+      .scenario-card p {
+        margin-top: 12px;
+        font-size: 22px;
+        line-height: 1.42;
+      }
+
+      .scenario-card.energy {
+        background: linear-gradient(180deg, rgba(216, 231, 228, 0.82), rgba(255, 251, 246, 0.92));
+      }
+
+      .scenario-card.trade {
+        background: linear-gradient(180deg, rgba(237, 208, 194, 0.7), rgba(255, 251, 246, 0.92));
+      }
+
+      .scenario-card.ally {
+        background: linear-gradient(180deg, rgba(221, 176, 106, 0.34), rgba(255, 251, 246, 0.92));
+      }
+
+      .vote-layout {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 156px;
+        bottom: 118px;
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 22px;
+      }
+
+      .vote-main {
+        min-height: 360px;
+      }
+
+      .vote-main p {
+        max-width: 700px;
+        margin-top: 22px;
+        color: rgba(255, 247, 236, 0.78);
+        font-size: 30px;
+      }
+
+      .vote-options {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .vote-option {
+        padding: 46px 22px 24px;
+        text-align: center;
+      }
+
+      .vote-option strong {
+        display: block;
+        margin-bottom: 12px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 34px;
+        line-height: 1.14;
+      }
+
+      .vote-option span {
+        display: block;
+        color: var(--muted);
+        font-size: 21px;
+        line-height: 1.4;
+      }
+
+      .vote-option.chat {
+        background: linear-gradient(180deg, rgba(237, 208, 194, 0.62), rgba(255, 251, 246, 0.92));
+      }
+
+      .vote-option.world {
+        background: linear-gradient(180deg, rgba(216, 231, 228, 0.8), rgba(255, 251, 246, 0.92));
+      }
+
+      .vote-option.both {
+        background: linear-gradient(180deg, rgba(221, 176, 106, 0.28), rgba(255, 251, 246, 0.92));
+      }
+
+      .vote-question {
+        padding: 30px 28px 26px;
+      }
+
+      .vote-question p {
+        color: var(--ink);
+        font-size: 34px;
+        line-height: 1.38;
+        font-weight: 800;
+      }
     </style>
   </head>
   <body>
@@ -1034,29 +1233,30 @@
           <div class="brand">oasis7 notes</div>
           <div class="kicker">examples</div>
         </header>
-        <div class="content-grid">
-          <article class="main-card world-card">
+        <div class="scenario-grid">
+          <article class="scenario-main">
             <div class="eyebrow">when I judge it</div>
             <h2>
               比如这些时候<br />
               <span class="accent">它会怎么选</span>
             </h2>
-            <p style="color: rgba(255, 247, 236, 0.78);">
+            <p>
               我不先看它会不会接梗。我先看它面对资源、交易和协作压力时，到底会做什么选择。
             </p>
+            <div class="scenario-ribbon">behavior reveals personality</div>
           </article>
-          <div class="example-grid">
-            <article class="note example">
+          <div class="scenario-stack">
+            <article class="scenario-card energy">
               <div class="panel-label">case 01</div>
               <h3>资源紧张</h3>
               <p>它先保能源，还是先保数据？</p>
             </article>
-            <article class="note example">
+            <article class="scenario-card trade">
               <div class="panel-label">case 02</div>
               <h3>交易吃亏</h3>
               <p>它下次会不会变得更谨慎？</p>
             </article>
-            <article class="note example">
+            <article class="scenario-card ally">
               <div class="panel-label">case 03</div>
               <h3>同伴掉链子</h3>
               <p>它会补位、甩锅，还是干脆退出？</p>
@@ -1078,8 +1278,8 @@
           <div class="brand">oasis7 notes</div>
           <div class="kicker">your turn</div>
         </header>
-        <div class="closing">
-          <div class="closing-main">
+        <div class="vote-layout">
+          <article class="vote-main">
             <div class="eyebrow">so I end up wanting</div>
             <h1>
               不是更会聊天的搭子<br />
@@ -1087,22 +1287,22 @@
               <span class="accent">自己行动的角色</span>
             </h1>
             <p>如果是你，你会更想要哪一种？</p>
-          </div>
-          <div class="choice-row">
-            <article class="choice-chip">
+          </article>
+          <div class="vote-options">
+            <article class="vote-option chat">
               <strong>会陪聊</strong>
               <span>情绪价值强<br />一直在线接话</span>
             </article>
-            <article class="choice-chip">
+            <article class="vote-option world">
               <strong>会判断</strong>
               <span>进了世界以后<br />真的会自己选</span>
             </article>
-            <article class="choice-chip">
+            <article class="vote-option both">
               <strong>两者都要</strong>
               <span>但行动和后果<br />必须是真的</span>
             </article>
           </div>
-          <article class="question-card paper-card">
+          <article class="vote-question">
             <div class="eyebrow">comment hook</div>
             <p>你会更想要一个会陪你聊天的 AI，还是一个会在世界里自己行动的角色？</p>
           </article>
