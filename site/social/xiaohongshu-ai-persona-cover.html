@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu AI Persona Cover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Manrope:wght@500;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f8f1e6;
+        --paper-2: #efe4d4;
+        --paper-3: #fff8ef;
+        --ink: #1f1814;
+        --muted: rgba(31, 24, 20, 0.72);
+        --soft: rgba(31, 24, 20, 0.46);
+        --line: rgba(31, 24, 20, 0.08);
+        --teal: #1c4d55;
+        --teal-soft: #dce9e7;
+        --rust: #cb6341;
+        --amber: #e1b36a;
+        --sage: #6f8471;
+        --cloud: #f7efe4;
+        --shadow: 0 32px 72px rgba(42, 34, 28, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 10% 12%, rgba(203, 99, 65, 0.18), transparent 22%),
+          radial-gradient(circle at 84% 18%, rgba(28, 77, 85, 0.18), transparent 24%),
+          linear-gradient(140deg, #efe5d7 0%, #f8f2e7 48%, #e7eceb 100%);
+        font-family: "Manrope", sans-serif;
+        color: var(--ink);
+      }
+
+      .cover {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 16% 14%, rgba(225, 179, 106, 0.22), transparent 22%),
+          radial-gradient(circle at 82% 82%, rgba(28, 77, 85, 0.14), transparent 20%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.38), transparent 18%),
+          linear-gradient(135deg, #fcf6ee 0%, #f7efe3 42%, #edf1ef 100%);
+      }
+
+      .grain,
+      .grid,
+      .rings,
+      .beam {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.18;
+        background-image:
+          radial-gradient(circle at 18% 20%, rgba(0, 0, 0, 0.8) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 76% 30%, rgba(0, 0, 0, 0.48) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 34% 84%, rgba(0, 0, 0, 0.42) 0.7px, transparent 0.8px);
+        background-size: 24px 24px, 32px 32px, 38px 38px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 76px 76px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 92%);
+      }
+
+      .rings::before,
+      .rings::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        border: 1px solid rgba(28, 77, 85, 0.12);
+      }
+
+      .rings::before {
+        width: 560px;
+        height: 560px;
+        right: -110px;
+        top: 132px;
+      }
+
+      .rings::after {
+        width: 360px;
+        height: 360px;
+        right: 18px;
+        top: 232px;
+      }
+
+      .beam::before {
+        content: "";
+        position: absolute;
+        left: 482px;
+        top: 152px;
+        width: 120px;
+        height: 980px;
+        border-radius: 999px;
+        transform: rotate(6deg);
+        background: linear-gradient(180deg, rgba(203, 99, 65, 0.08), rgba(203, 99, 65, 0.02));
+        filter: blur(2px);
+      }
+
+      .masthead {
+        position: absolute;
+        top: 72px;
+        left: 78px;
+        right: 78px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+      }
+
+      .brand::before,
+      .tag::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--rust);
+        box-shadow: 0 0 0 8px rgba(203, 99, 65, 0.12);
+      }
+
+      .hero {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        top: 148px;
+        display: grid;
+        grid-template-columns: 0.95fr 1.05fr;
+        gap: 34px;
+        align-items: start;
+      }
+
+      .hero-copy {
+        padding-top: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 28px;
+        color: var(--teal);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 28px;
+        height: 2px;
+        background: currentColor;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 430px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 96px;
+        line-height: 1.03;
+        letter-spacing: -0.06em;
+      }
+
+      h1 .accent {
+        color: var(--rust);
+      }
+
+      .hero-copy p {
+        margin: 28px 0 0;
+        max-width: 390px;
+        color: var(--muted);
+        font-size: 30px;
+        line-height: 1.5;
+      }
+
+      .split-stage {
+        position: relative;
+        height: 840px;
+      }
+
+      .divider {
+        position: absolute;
+        left: 50%;
+        top: 28px;
+        bottom: 76px;
+        width: 1px;
+        background: linear-gradient(180deg, transparent, rgba(31, 24, 20, 0.18) 12%, rgba(31, 24, 20, 0.08) 88%, transparent);
+      }
+
+      .left-note,
+      .right-world {
+        position: absolute;
+        top: 0;
+        width: calc(50% - 18px);
+        border-radius: 30px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        border: 1px solid rgba(31, 24, 20, 0.08);
+      }
+
+      .left-note {
+        left: 0;
+        height: 560px;
+        background: linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(247, 239, 228, 0.94));
+        transform: rotate(-2.4deg);
+      }
+
+      .right-world {
+        right: 0;
+        height: 660px;
+        background: linear-gradient(180deg, rgba(19, 49, 55, 0.98), rgba(27, 68, 74, 0.98));
+        color: #f6efe6;
+        transform: rotate(2deg);
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 22px 24px 0;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .left-note .panel-head {
+        color: var(--soft);
+      }
+
+      .right-world .panel-head {
+        color: rgba(246, 239, 230, 0.64);
+      }
+
+      .panel-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .panel-title::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--amber);
+      }
+
+      .chat-body {
+        padding: 26px 24px 24px;
+      }
+
+      .chat-bubble {
+        position: relative;
+        margin-bottom: 18px;
+        max-width: 86%;
+        padding: 18px 18px 16px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--muted);
+        font-size: 24px;
+        line-height: 1.45;
+      }
+
+      .chat-bubble strong {
+        color: var(--ink);
+      }
+
+      .chat-bubble.user {
+        margin-left: auto;
+        background: linear-gradient(180deg, rgba(220, 233, 231, 0.96), rgba(238, 246, 244, 0.94));
+      }
+
+      .chat-bubble.ai {
+        border: 1px solid rgba(31, 24, 20, 0.06);
+      }
+
+      .prompt-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(203, 99, 65, 0.1);
+        color: var(--rust);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .world-body {
+        position: relative;
+        padding: 24px;
+      }
+
+      .world-grid {
+        position: relative;
+        height: 408px;
+        margin-top: 8px;
+        border-radius: 24px;
+        overflow: hidden;
+        border: 1px solid rgba(246, 239, 230, 0.08);
+        background:
+          radial-gradient(circle at 72% 22%, rgba(203, 99, 65, 0.18), transparent 16%),
+          radial-gradient(circle at 24% 68%, rgba(225, 179, 106, 0.12), transparent 18%),
+          linear-gradient(to right, rgba(246, 239, 230, 0.06) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(246, 239, 230, 0.06) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(246, 239, 230, 0.03), rgba(246, 239, 230, 0.01));
+        background-size: auto, auto, 74px 74px, 74px 74px, auto;
+      }
+
+      .orbit {
+        position: absolute;
+        border-radius: 999px;
+        border: 1px solid rgba(246, 239, 230, 0.12);
+      }
+
+      .orbit.one {
+        inset: 46px 84px 162px 62px;
+      }
+
+      .orbit.two {
+        inset: 128px 46px 74px 128px;
+      }
+
+      .node {
+        position: absolute;
+        width: 122px;
+        min-height: 98px;
+        padding: 14px 14px 12px;
+        border-radius: 22px;
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(246, 239, 230, 0.1);
+        background: rgba(246, 239, 230, 0.08);
+      }
+
+      .node::before {
+        content: "";
+        position: absolute;
+        top: -10px;
+        left: 18px;
+        width: 56px;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(246, 239, 230, 0.1);
+        transform: rotate(-8deg);
+      }
+
+      .node .name {
+        display: block;
+        margin-bottom: 8px;
+        color: #fff5e9;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .node .desc {
+        display: block;
+        color: rgba(246, 239, 230, 0.78);
+        font-size: 16px;
+        line-height: 1.38;
+      }
+
+      .node.a {
+        left: 48px;
+        top: 58px;
+      }
+
+      .node.b {
+        right: 42px;
+        top: 96px;
+      }
+
+      .node.c {
+        left: 126px;
+        bottom: 42px;
+      }
+
+      .signal {
+        position: absolute;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(203, 99, 65, 0), rgba(203, 99, 65, 0.86), rgba(225, 179, 106, 0));
+      }
+
+      .signal.s1 {
+        left: 162px;
+        top: 164px;
+        width: 244px;
+        transform: rotate(-18deg);
+      }
+
+      .signal.s2 {
+        left: 202px;
+        bottom: 142px;
+        width: 208px;
+        transform: rotate(22deg);
+      }
+
+      .signal.s3 {
+        right: 118px;
+        bottom: 154px;
+        width: 170px;
+        transform: rotate(-58deg);
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+
+      .metric {
+        padding: 14px 14px 12px;
+        border-radius: 18px;
+        border: 1px solid rgba(246, 239, 230, 0.1);
+        background: rgba(246, 239, 230, 0.08);
+      }
+
+      .metric .k {
+        display: block;
+        margin-bottom: 8px;
+        color: rgba(246, 239, 230, 0.54);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .metric .v {
+        display: block;
+        color: #fff5e9;
+        font-size: 22px;
+        line-height: 1.1;
+        font-weight: 700;
+      }
+
+      .bottom-notes {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        bottom: 84px;
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 22px;
+      }
+
+      .statement,
+      .legend {
+        position: relative;
+        border-radius: 28px;
+        background: rgba(255, 251, 245, 0.82);
+        border: 1px solid rgba(31, 24, 20, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .statement {
+        padding: 28px 28px 24px;
+      }
+
+      .statement .label,
+      .legend .label {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .statement .label::before,
+      .legend .label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--teal);
+      }
+
+      .statement h2 {
+        margin: 18px 0 0;
+        font-family: "Noto Serif SC", serif;
+        font-size: 48px;
+        line-height: 1.16;
+        letter-spacing: -0.04em;
+      }
+
+      .statement h2 .accent {
+        color: var(--teal);
+      }
+
+      .legend {
+        padding: 24px 24px 22px;
+      }
+
+      .legend ul {
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .legend li {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.44;
+      }
+
+      .legend li::before {
+        content: "";
+        flex: 0 0 10px;
+        height: 10px;
+        margin-top: 9px;
+        border-radius: 999px;
+        background: var(--rust);
+        box-shadow: 0 0 0 6px rgba(203, 99, 65, 0.12);
+      }
+
+      .footer {
+        position: absolute;
+        left: 78px;
+        right: 78px;
+        bottom: 34px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--soft);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover">
+      <div class="rings"></div>
+      <div class="beam"></div>
+      <div class="grain"></div>
+      <div class="grid"></div>
+
+      <header class="masthead">
+        <div class="brand">oasis7 notes</div>
+        <div class="tag">ai persona debate</div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">studio lead take</div>
+          <h1>
+            AI人格很火，<br />
+            <span class="accent">但我不想做</span><br />
+            陪聊搭子
+          </h1>
+          <p>
+            我更想做的，<br />
+            是会在世界里自己行动、判断、留下后果的角色。
+          </p>
+        </div>
+
+        <div class="split-stage">
+          <div class="divider"></div>
+
+          <article class="left-note">
+            <div class="panel-head">
+              <span class="panel-title">chat window</span>
+              <span>voice / vibe</span>
+            </div>
+            <div class="chat-body">
+              <div class="chat-bubble user">
+                <strong>你在吗？</strong><br />
+                陪我聊一会儿。
+              </div>
+              <div class="chat-bubble ai">
+                我会接话、会安慰、会记住你刚刚说过什么。
+                <div class="prompt-tag">sounds human</div>
+              </div>
+              <div class="chat-bubble ai">
+                但如果我离开聊天框，<br />
+                <strong>我会怎么选，怎么做？</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="right-world">
+            <div class="panel-head">
+              <span class="panel-title">world actor</span>
+              <span>choice / consequence</span>
+            </div>
+            <div class="world-body">
+              <div class="world-grid">
+                <div class="orbit one"></div>
+                <div class="orbit two"></div>
+                <div class="signal s1"></div>
+                <div class="signal s2"></div>
+                <div class="signal s3"></div>
+
+                <article class="node a">
+                  <span class="name">energy first</span>
+                  <span class="desc">资源吃紧时先保供能</span>
+                </article>
+                <article class="node b">
+                  <span class="name">trade memory</span>
+                  <span class="desc">吃过一次亏，下一轮更谨慎</span>
+                </article>
+                <article class="node c">
+                  <span class="name">ally failure</span>
+                  <span class="desc">同伴掉链子时补位还是退出</span>
+                </article>
+              </div>
+
+              <div class="metrics">
+                <div class="metric">
+                  <span class="k">judge</span>
+                  <span class="v">会取舍</span>
+                </div>
+                <div class="metric">
+                  <span class="k">act</span>
+                  <span class="v">会行动</span>
+                </div>
+                <div class="metric">
+                  <span class="k">trace</span>
+                  <span class="v">会留痕</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="bottom-notes">
+        <article class="statement">
+          <span class="label">the line I care about</span>
+          <h2>
+            人格不只是<br />
+            <span class="accent">会聊天</span><br />
+            而是会在世界里自己行动
+          </h2>
+        </article>
+
+        <aside class="legend">
+          <span class="label">not this / but this</span>
+          <ul>
+            <li>不是恋爱陪聊 App 视觉</li>
+            <li>不是“像真人”就结束</li>
+            <li>而是选择、协作和后果</li>
+          </ul>
+        </aside>
+      </section>
+
+      <footer class="footer">
+        <span>editorial split cover</span>
+        <span>2026.03.30</span>
+      </footer>
+    </main>
+  </body>
+</html>

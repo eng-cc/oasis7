@@ -458,6 +458,17 @@
     - `rg -n "AI人格很火，但我不想做陪聊搭子|会陪你聊天|会在世界里自己行动|资源紧张的时候|陪聊搭子" doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-045 (PRD-README-030) [test_tier_required]: 为小红书第七篇补齐封面图 HTML 与 PNG，采用“聊天框 vs 世界内行动”分割视觉，强化“会说话”和“会行动”的区别，不改变正文边界与互动问题。
+  - 产物文件:
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
+    - `site/social/xiaohongshu-ai-persona-cover.html`
+    - `site/social/xiaohongshu-ai-persona-cover.png`
+    - `doc/devlog/2026-03-30.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "聊天框分割图|世界内行动看板|xiaohongshu-ai-persona-cover.html|xiaohongshu-ai-persona-cover.png" doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md site/social/xiaohongshu-ai-persona-cover.html`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -473,6 +484,7 @@
 - 更新日期: 2026-03-30
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-045`（已为小红书第七篇补齐“聊天框 vs 世界内行动”分割封面 HTML 与 PNG，强化“会说话”和“会行动”的区别。）
 - 最新完成: `TASK-README-044`（已为小红书第七篇固定“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”的表达边界。）
 - 最新完成: `TASK-README-043`（已在 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 显式拆分 `canonical / runbook / material / execution_log` 四层语义，收口 `readme` 模块入口边界。）
 - 最新完成: `TASK-README-042`（已按小红书 20 字标题上限，将第六篇最终发布标题收口为“作为游戏工作室主理人，今年的春招视角”。）

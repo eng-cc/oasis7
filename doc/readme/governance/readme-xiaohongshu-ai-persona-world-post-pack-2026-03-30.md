@@ -160,6 +160,9 @@ AI人格很火
   - 封面左侧可以是低信息量聊天框，右侧是世界里的行动轨迹或资源面板，让“会说话”和“会行动”的差别一眼可见。
   - 主标题要大，副文案要短，整体更像设计判断卡，而不是产品宣传海报。
   - 画面重点应是“选择会留下后果”，不是“AI 很像真人”。
+- 视觉素材:
+  - HTML: `site/social/xiaohongshu-ai-persona-cover.html`
+  - PNG: `site/social/xiaohongshu-ai-persona-cover.png`
 - 视觉禁区:
   - 不做恋爱陪伴 App 风格的粉色聊天界面。
   - 不做机器人头像 + 心形对话框这种老套视觉。
