@@ -179,6 +179,9 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-053 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 执行 ROUND-010 `world-runtime` 模块入口分流治理，明确 README、`prd.index.md` 与三个高频 runtime/wasm/module 专题的阅读边界。
+- [ ] TASK-WORLD_RUNTIME-054 (PRD-WORLD_RUNTIME-023) [test_tier_required]: 盘点 `World::new()` / `RuntimeWorld::new()` 被生产或默认入口直接消费的路径，将 hardened `ReleaseSecurityPolicy` 绑定前移到入口/构造层，消除对额外 `enable_production_release_policy()` 调用的约定式依赖。
+- [x] TASK-WORLD_RUNTIME-055 (PRD-WORLD_RUNTIME-024) [test_tier_required]: 将 `apply_domain_event_gameplay*` 中 replay/apply 热路径残留的 `expect("... prechecked")` 改为结构化 `WorldError`，并补齐缺失 actor/损坏事件回归，确保恢复与 preflight 失败不会退化为 panic。
+- [ ] TASK-WORLD_RUNTIME-056 (PRD-WORLD_RUNTIME-025) [test_tier_required + test_tier_full]: 按 runtime 热路径治理专项拆分超限 Rust 文件，先收口 `action_to_event_core.rs`、`apply_domain_event_main_token.rs` 与 `state.rs` 邻近热点，再复跑 determinism/replay/persistence 回归，确保“拆文件”不引入语义漂移。
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -194,9 +197,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
-- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；`TASK-WORLD_RUNTIME-044` 已完成 production source compile gate）
-- 下一任务: `TASK-WORLD_RUNTIME-043`
+- 更新日期: 2026-03-31
+- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮新增 runtime 技术债整改 tranche：`TASK-WORLD_RUNTIME-054` 记录 production entry hardened policy 默认绑定，`TASK-WORLD_RUNTIME-055` 已完成 apply/replay 热路径 panic -> `WorldError` 收口，`TASK-WORLD_RUNTIME-056` 继续跟进超限热路径拆分）
+- 下一任务: `TASK-WORLD_RUNTIME-054`、`TASK-WORLD_RUNTIME-056`、`TASK-WORLD_RUNTIME-043`
+- 最新完成: `TASK-WORLD_RUNTIME-055`（已将 `apply_domain_event_gameplay*` 中残留的 `expect("... prechecked")` 改为结构化 `AgentNotFound` / `WorldError`，并补齐缺失 claimer / operator 的损坏事件回归，避免 replay、恢复或 preflight 在状态漂移时 panic。）
 - 最新完成: `TASK-WORLD_RUNTIME-053`（已为 `world-runtime/README.md` 增加“从这里开始”分流，并明确 README / `prd.index.md` / Docker canonical build / storage retention / online module release legality 三类高频入口的职责边界。）
 - 最新完成: `TASK-WORLD_RUNTIME-052`（已完成 `world-runtime` 活跃专题中 builtin 模块命名、storage profile 覆盖 key 与 wasm operator env 当前入口口径的 `oasis7_builtin_wasm` / `OASIS7_CHAIN_STORAGE_PROFILE` / `OASIS7_WASM_*` / `OASIS7_BUILTIN_WASM_*` 收口。）
 - 最新完成: `TASK-WORLD_RUNTIME-051`（已完成 `world-runtime` 其余活跃 module/testing/governance 与 numeric-correctness 专题中旧 `oasis7*` crate/path/command 当前真值口径的 `oasis7*` 收口。）
@@ -215,6 +219,7 @@
   - `TASK-WORLD_RUNTIME-042` 已完成：新增 `docker/wasm-builder/Dockerfile`、`docker/wasm-builder/README.md` 与 Docker-only `scripts/build-wasm-module.sh` wrapper；当前 canonical build 平台固定为 `linux-x86_64`（Docker `linux/amd64`），脚本不再保留 host-native fallback。
   - `TASK-WORLD_RUNTIME-043` 进行中：`tools/wasm_build_suite` 已输出 `build receipt` 与 `source_hash/build_manifest_hash`；`sync_builtin_wasm_identity` 已切换为 receipt 驱动；builtin `m1/m4/m5` manifest/identity 已收敛为单 canonical token `linux-x86_64=<sha256>`；`scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` 已纳入 `receipt_evidence + identity_build_recipe` 对账；runtime module release attestation/apply gate 已显式校验 `builder_image_digest + container_platform + canonicalizer_version` 与 manifest identity 一致性；`ModuleReleaseManifestMappingState`、`scripts/module-release-node-attestation-flow.sh` 与 `scripts/module-release-node-acceptance.sh` 已补齐 release evidence 摘要、canonical proof input、submit API 与 receipt mismatch 阻断证据；`2026-03-29` 已追加一次 GitHub-hosted drift repair，补齐 `m1` canonical hash token 漂移与 `builtin_wasm_identity.rs` 的 stale `m1/m5` hash 常量；当前下一步只剩真实 Docker-capable `darwin-arm64` 节点对真实 `request_id` 产出并提交正式 attestation proof。
   - `TASK-WORLD_RUNTIME-044` 已完成：`ReleaseSecurityPolicy` 新增 `allow_runtime_source_compile`，production policy 默认关闭 runtime 内源码编译；`CompileModuleArtifactFromSource` 在 production 下会直接拒绝并提示改走 external Docker builder + `DeployModuleArtifact`，从而把 Docker daemon 依赖移出 runtime 热路径。
+  - `TASK-WORLD_RUNTIME-055` 已完成：`apply_domain_event_gameplay.rs` 与 `apply_domain_event_gameplay_claims.rs` 中 replay/apply 热路径残留的 `expect("... prechecked")` 已改为结构化 `AgentNotFound` 返回；新增缺失 claimer / 缺失 operator 的损坏事件回归，确保 preflight / replay / 恢复在状态漂移时不会以 panic 代替 `WorldError`。
   - `TASK-WORLD_RUNTIME-039` 已完成：为 `oasis7_viewer_live` / runtime live 增加 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 测试态回声开关，在 `agent_chat` 被接受后可注入一条标准 `WorldEventKind::AgentSpoke` 事件，供 Viewer / QA 在不依赖自然 LLM 回话的情况下稳定采样消息流。
   - `TASK-WORLD_RUNTIME-040` 已完成：在 `DecisionRequest` / `ObservationEnvelope` 中补齐 `mode`、`observation_schema_version`、`action_schema_version`、`environment_class`、`fallback_reason`、`fixture_id`、`replay_id`，并将其接入 `oasis7_openclaw_parity_bench`、`oasis7_openclaw_local_bridge`、`runtime_live llm_sidecar` 与聚合脚本，确保 headless parity 与 runtime live 产物可追溯到统一 replay/summary 元数据。
   - `TASK-WORLD_RUNTIME-041` 已完成：根据最新需求将专题从“host deterministic guard + keyed 平台 hash 对账”修正为“Docker-first canonical builder + single canonical publish hash”，并明确 `compile_module_artifact_from_source` 生产路径需要外移或 gated。

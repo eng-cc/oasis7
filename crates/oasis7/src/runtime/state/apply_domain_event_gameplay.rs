@@ -433,10 +433,7 @@ impl WorldState {
                 contract.tax_amount = *tax_amount;
                 contract.settlement_notes = Some(notes.clone());
 
-                self.agents
-                    .get_mut(operator_agent_id)
-                    .expect("operator existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, operator_agent_id, now)?;
             }
             DomainEvent::EconomicContractExpired {
                 contract_id,

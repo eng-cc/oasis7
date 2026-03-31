@@ -194,10 +194,7 @@ impl WorldState {
                 );
                 self.agent_claim_last_processed_epoch =
                     self.agent_claim_last_processed_epoch.max(*claimed_at_epoch);
-                self.agents
-                    .get_mut(claimer_agent_id)
-                    .expect("claimer existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, claimer_agent_id, now)?;
             }
             DomainEvent::AgentClaimReleaseRequested {
                 claimer_agent_id,
@@ -205,6 +202,7 @@ impl WorldState {
                 requested_at_epoch,
                 ready_at_epoch,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.get_mut(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -235,10 +233,7 @@ impl WorldState {
                 }
                 claim.release_requested_at_epoch = Some(*requested_at_epoch);
                 claim.release_ready_at_epoch = Some(*ready_at_epoch);
-                self.agents
-                    .get_mut(claimer_agent_id)
-                    .expect("claimer existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, claimer_agent_id, now)?;
             }
             DomainEvent::AgentClaimUpkeepSettled {
                 claimer_agent_id,
@@ -250,6 +245,7 @@ impl WorldState {
                 liquid_spent_amount,
                 upkeep_paid_through_epoch,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.get(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -341,10 +337,7 @@ impl WorldState {
                 claim.grace_deadline_epoch = None;
                 self.agent_claim_last_processed_epoch =
                     self.agent_claim_last_processed_epoch.max(*settled_at_epoch);
-                self.agents
-                    .get_mut(claimer_agent_id)
-                    .expect("claimer existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, claimer_agent_id, now)?;
             }
             DomainEvent::AgentClaimEnteredGrace {
                 claimer_agent_id,
@@ -353,6 +346,7 @@ impl WorldState {
                 grace_deadline_epoch,
                 upkeep_arrears_amount,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.get_mut(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -390,6 +384,7 @@ impl WorldState {
                 warning_emitted_at_epoch,
                 forced_reclaim_at_epoch,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.get_mut(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -423,6 +418,7 @@ impl WorldState {
                 refunded_bond_restricted_sink,
                 refunded_bond_restricted_sink_bucket_id,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -517,10 +513,7 @@ impl WorldState {
                 self.agent_claim_last_processed_epoch = self
                     .agent_claim_last_processed_epoch
                     .max(*released_at_epoch);
-                self.agents
-                    .get_mut(claimer_agent_id)
-                    .expect("claimer existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, claimer_agent_id, now)?;
             }
             DomainEvent::AgentClaimReclaimed {
                 claimer_agent_id,
@@ -536,6 +529,7 @@ impl WorldState {
                 refunded_bond_restricted_sink,
                 refunded_bond_restricted_sink_bucket_id,
             } => {
+                ensure_agent_claim_actor_exists(self, claimer_agent_id)?;
                 let claim = self.agent_claims.remove(target_agent_id).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {
                         reason: format!("agent claim not found: target={target_agent_id}"),
@@ -656,10 +650,7 @@ impl WorldState {
                 self.agent_claim_last_processed_epoch = self
                     .agent_claim_last_processed_epoch
                     .max(*reclaimed_at_epoch);
-                self.agents
-                    .get_mut(claimer_agent_id)
-                    .expect("claimer existence prechecked")
-                    .last_active = now;
+                touch_agent_last_active_required(self, claimer_agent_id, now)?;
             }
             _ => unreachable!("apply_domain_event_gameplay_claims received unsupported event"),
         }

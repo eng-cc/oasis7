@@ -32,6 +32,21 @@ pub(super) fn unlock_meta_track_tiers(
     progress.achievements.dedup();
 }
 
+pub(super) fn touch_agent_last_active_required(
+    state: &mut WorldState,
+    agent_id: &str,
+    now: WorldTime,
+) -> Result<(), WorldError> {
+    let cell = state
+        .agents
+        .get_mut(agent_id)
+        .ok_or_else(|| WorldError::AgentNotFound {
+            agent_id: agent_id.to_string(),
+        })?;
+    cell.last_active = now;
+    Ok(())
+}
+
 pub(super) fn apply_node_points_settlement_event(
     state: &mut WorldState,
     report: &EpochSettlementReport,

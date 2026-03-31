@@ -73,6 +73,9 @@
   - PRD-WORLD_RUNTIME-020: As a `wasm_platform_engineer`, I want publishable WASM to be built only inside a pinned Docker builder image, so that host platform differences stop influencing release hashes.
   - PRD-WORLD_RUNTIME-021: As a 模块发布者 / 发布节点运营者, I want build receipt and release evidence to bind `builder_image_digest + source_hash + build_manifest_hash + wasm_hash`, so that binary trust can be socially verified without relying on host-native builds.
   - PRD-WORLD_RUNTIME-022: As a `runtime_engineer` / `qa_engineer`, I want runtime to consume only Docker-canonical binaries and production source compile to leave the runtime hot path, so that build drift is blocked before execution.
+  - PRD-WORLD_RUNTIME-023: As a `runtime_engineer`, I want production-facing runtime entrypoints to default to hardened `ReleaseSecurityPolicy`, so that `no-fallback / no-local-signing / no-runtime-source-compile` is enforced by construction instead of call-site convention.
+  - PRD-WORLD_RUNTIME-024: As a `runtime_engineer` / `qa_engineer`, I want `apply_domain_event*` replay/apply paths to return structured `WorldError` for invariant breaks, so that corrupted journal / migration drift is diagnosable without panic-killing recovery or preflight.
+  - PRD-WORLD_RUNTIME-025: As a `runtime_engineer`, I want oversized runtime hotpath files split below the 1200-line governance ceiling, so that determinism, replay, and rule changes stop depending on multi-kiloline match blocks.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -106,6 +109,9 @@
   - AC-13: `runtime/builtin_wasm_materializer`、`runtime/m{1,4,5}_builtin_wasm_artifact`、`runtime/world/release_manifest` 及对应测试必须只读取 `OASIS7_BUILTIN_WASM_DISTFS_ROOT`、`OASIS7_BUILTIN_WASM_FETCHER`、`OASIS7_BUILTIN_WASM_FETCH_URLS`、`OASIS7_BUILTIN_WASM_COMPILER`、`OASIS7_BUILTIN_WASM_FETCH_TIMEOUT_MS`；builtin wasm 取件、抓取、编译 fallback 与 release manifest 生产策略故障签名必须证明旧品牌前缀已失效。
   - AC-14: `runtime/module_source_compiler` 与 `runtime/simulator` 对应回归必须只读取 `OASIS7_MODULE_SOURCE_COMPILER`、`OASIS7_MODULE_SOURCE_MAX_FILES`、`OASIS7_MODULE_SOURCE_MAX_FILE_BYTES`、`OASIS7_MODULE_SOURCE_MAX_TOTAL_BYTES`、`OASIS7_MODULE_SOURCE_COMPILE_TIMEOUT_MS`；source compile 成功、旧 alias 已移除与 sandbox env 隔离断言必须覆盖当前前缀。
   - AC-15: `doc/world-runtime/project.md` 中当前 `cargo test -p` 命令、crate 路径与产物清单必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试输入中。
+  - AC-16: `World::new()` / `RuntimeWorld::new()` 所服务的生产或默认运行入口不得依赖额外 `enable_production_release_policy()` 调用才能满足 hardened policy；若某入口必须放宽，必须以显式 dev/test 配置进入并留下验证证据。
+  - AC-17: `state.apply_domain_event*`、preflight preview 与恢复链路中不得因“prechecked / must be handled”类假设触发 panic；同类异常必须落为可断言的 `WorldError`，并有损坏事件回归样本覆盖。
+  - AC-18: `action_to_event_*`、`apply_domain_event_*`、`state.rs` 与其他 runtime 热路径 Rust 文件不得超过 1200 行；拆分后需保留现有 determinism / replay / persistence 回归覆盖，不得以降低测试强度换取拆分完成。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -160,6 +166,8 @@
   - 风险-2: ABI/治理策略变更引发兼容性断裂。
   - 风险-3（2026-03-18，P0 未收口）: `TASK-WORLD_RUNTIME-043` 当前只有 GitHub-hosted `linux-x86_64` stable gate，缺少真实 Docker-capable `darwin-arm64` full-tier evidence；若不显式记录，会把“单宿主稳定”误读成“跨宿主完成”。
   - 风险-4（2026-03-18，P0 未收口）: `ReleaseSecurityPolicy` 的生产禁 fallback / 禁本地签名 / 禁 runtime source compile 目前仍主要依赖显式调用 `enable_production_release_policy()`；若主运行入口未绑定，将导致 binary-only 保证停留在约定层而非默认产品路径。
+  - 风险-5（2026-03-31，P0 新增）: `apply_domain_event*` 的 replay / preflight / 恢复链路仍残留 `expect("... prechecked")` 和 `expect("... must be handled")` 风格假设；一旦 journal、迁移样本或状态前置条件漂移，故障会从 `WorldError` 退化为 panic。
+  - 风险-6（2026-03-31，P1 新增）: runtime 热路径存在多处超 1200 行或逼近上限的 Rust 文件，已违反工程治理线并放大规则改动的认知与回归半径；若继续在这些文件上堆叠逻辑，后续 determinism/replay 修复成本会持续上升。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
@@ -175,6 +183,9 @@
 | PRD-WORLD_RUNTIME-020 | TASK-WORLD_RUNTIME-041/042 | `test_tier_required` | Docker builder image、containerized canonical packaging、single canonical token 验证 | wasm publish build entry、容器环境收敛 |
 | PRD-WORLD_RUNTIME-021 | TASK-WORLD_RUNTIME-041/042/043 | `test_tier_required` | build receipt / identity / release evidence 绑定验证 | 工件治理、发布证据与社会层可验证性 |
 | PRD-WORLD_RUNTIME-022 | TASK-WORLD_RUNTIME-041/043/044 | `test_tier_required` + `test_tier_full` | multi-runner Docker compare、source compile 外移或 gated、runtime binary-only policy 验证；production entry 必须补 release policy 绑定证据 | build drift 阻断、执行前合法性与源码包发布边界 |
+| PRD-WORLD_RUNTIME-023 | TASK-WORLD_RUNTIME-054 | `test_tier_required` | 生产入口 policy 绑定审计、默认构造路径巡检、release profile 回归 | runtime 默认安全边界、发布入口一致性 |
+| PRD-WORLD_RUNTIME-024 | TASK-WORLD_RUNTIME-055 | `test_tier_required` | 损坏事件 / 缺失 actor 回归、preflight/replay 错误语义断言 | 恢复链路、事件预演、结构化故障定位 |
+| PRD-WORLD_RUNTIME-025 | TASK-WORLD_RUNTIME-056 | `test_tier_required` + `test_tier_full` | 热路径文件长度治理、拆分后 determinism / replay / persistence 回归 | 规则演进可维护性、运行时热路径复杂度 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

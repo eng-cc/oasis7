@@ -51,6 +51,7 @@ fn test_module_artifact_signing_key() -> SigningKey {
 
 mod agent_claims;
 mod agent_default_modules;
+mod apply_domain_event_guards;
 mod audit;
 mod basic;
 mod body;
