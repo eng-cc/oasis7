@@ -853,6 +853,10 @@ def build_workflow_checklist(
             "write-devlog",
             "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
         )
+        add(
+            "subagent-review",
+            "commit 前必须启动独立 subagent review 当前 diff；review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
+        )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(
                 "promote-signals",

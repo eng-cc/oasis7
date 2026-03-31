@@ -171,8 +171,9 @@
 ### Flow D: 工作流接入
 1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner>`
 2. 脚本聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要
-3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner>`，按 checklist 回写 devlog、signal、memory 与 backlog
-4. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
+3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner>`，按 checklist 回写 devlog、signal、memory 与 backlog，并在 commit 前启动独立 subagent review 当前 diff
+4. owner 先处理或记录 subagent review findings，再提交 commit
+5. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
 
 ## 分阶段实施
 ### Phase 1: 骨架
@@ -198,6 +199,7 @@
 ### Phase 6: 工作流接入
 - 建立 `workflow-report.sh`
 - 将 `.pm` 默认操作序列接入 `AGENTS.md`、角色职责卡与 `new-task-worktree.sh`
+- 在 close checklist 中强制加入 commit 前独立 subagent review 当前 diff 的动作
 - required/full smoke 必须覆盖 workflow 入口与 signal pending 视图
 
 ## 验证策略

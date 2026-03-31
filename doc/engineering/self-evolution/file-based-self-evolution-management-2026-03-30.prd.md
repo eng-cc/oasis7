@@ -18,6 +18,7 @@
   - SC-5: 当前阶段判断、claim envelope、关键 gate lane 状态可以从文件化 stage/gate 层一键汇总，制作人不再依赖手工跨文档拼装阶段评审输入。
   - SC-6: 文件化项目管理层与现有 `PRD / project / devlog` 的职责边界清晰，`devlog` 继续是原始事件流，正式规格继续留在 `doc/`，运行态数据留在 `.pm/`，重复定义率为 0。
   - SC-7: 每个标准角色在“开始任务 / 收口任务 / 阶段评审”三个场景下都有统一 `workflow-report` 入口与固定 checklist，不再依赖人工拼接 `role-report`、`memory-report`、`stage-report` 与 signal inbox 状态。
+  - SC-8: `workflow-report --phase close` 的 checklist 必须明确要求“commit 前启动独立 subagent review 当前 diff，并先处理 findings 再提交”，不得只在人工约定层存在。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -47,7 +48,7 @@
   4. Flow-SE-004: `producer_system_designer 进行阶段评审 -> stage/gate 报表汇总 role backlog、关键 blocker、claim envelope 和 trend inputs -> 输出 continue / hold / reassess`
   5. Flow-SE-005: `历史结论被新结论取代 -> 原 memory 记录转为 superseded -> 新记录写入 active -> superseded_by / source_refs / effective range 形成链路`
   6. Flow-SE-006: `新增标准角色 -> 基于角色模板生成 memory/backlog 容器 -> 注册到 registry -> 既有脚本自动将其纳入 lint / report / stage aggregation`
-  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> -> 读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close -> 回写 devlog + signal/memory/backlog -> producer/owner 在评审时执行 workflow-report --phase review`
+  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> -> 读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close -> 回写 devlog + signal/memory/backlog -> commit 前启动独立 subagent review 当前 diff 并处理 findings -> producer/owner 在评审时执行 workflow-report --phase review`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -68,6 +69,7 @@
   - AC-6: 专题 project 文档给出分阶段实施计划，且至少将 `.pm` 目录脚手架、signal promotion、role backlog、stage report、QA gate 五条实施线拆成独立任务。
   - AC-7: topic 文档、engineering 根入口、索引和 devlog 全部完成互链，进入正式治理链。
   - AC-8: `AGENTS.md`、角色职责卡与 `new-task-worktree` 提示明确要求在任务开始/收口/评审时执行 `workflow-report`，且 required/full smoke 会覆盖该入口。
+  - AC-9: `workflow-report --phase close`、根 `AGENTS.md` 与工程主项目口径一致要求 commit 前启动独立 subagent review，且 required-tier smoke 会断言该 checklist 项存在。
 - Non-Goals:
   - 不引入 OpenProject、Mem0、Graphiti、Supabase 或外部 SaaS 作为首期真值系统。
   - 不要求首期自动修改 `doc/**/prd.md` 或 `doc/**/project.md`；正式规格仍由 owner 审核回写。
@@ -137,7 +139,7 @@
   - v1.1: 打通 `signal inbox -> candidate task` 基础链路，优先覆盖 `qa_engineer` 和 `liveops_community`。
   - v2.0: 完成 7 个标准角色的长期 memory/backlog 收口，并交付 stage/gate 汇总脚本。
   - v2.1: 建立 `devlog -> signal -> memory/task -> doc backflow` 的固定操作规约与 required-tier lint。
-  - v2.2: 建立 `workflow-report` 统一入口，并接入 `AGENTS.md`、角色职责卡、`new-task-worktree.sh` 与 smoke，使 `.pm` 成为默认执行链路。
+  - v2.2: 建立 `workflow-report` 统一入口，并接入 `AGENTS.md`、角色职责卡、`new-task-worktree.sh`、commit 前 subagent review 规则与 smoke，使 `.pm` 成为默认执行链路。
   - v3.0: 在角色扩容、阶段评审和多 worktree 并行场景下稳定运行，形成仓库级自我进化操作层。
 - Technical Risks:
   - 风险-1: `.pm/` 与 `doc/` 双层体系若分工不清，会产生第二真值和重复维护。
@@ -155,7 +157,7 @@
 | PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
 | PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
 | PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证 | 角色扩容、治理脚本兼容性 |
-| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085 | `test_tier_required` + `test_tier_full` | `workflow-report` start/close/review 视图、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
+| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085 | `test_tier_required` + `test_tier_full` | `workflow-report` start/close/review 视图、close checklist 中的 subagent review 要求、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

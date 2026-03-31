@@ -13,6 +13,7 @@ related_prd:
   - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
 acceptance:
   - "workflow-report 已接入 AGENTS.md、角色职责卡、new-task-worktree 与 smoke"
+  - "workflow-report close checklist 与 AGENTS.md 均要求 commit 前独立 subagent review 当前 diff"
   - "required-tier 与 full-tier 的 PM smoke 通过，且 pending signal 不再给出错误引导"
 handoff_to: []
-updated_at: 2026-03-31T11:20:56+08:00
+updated_at: 2026-03-31T14:09:20+08:00
