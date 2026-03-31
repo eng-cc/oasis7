@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  devlog -> signal -> candidate task/memory -> blocked task -> memory lint -> stage report
+  devlog -> signal -> candidate task/memory -> blocked task -> memory lint/report -> stage report
 
 Options:
   --json       Print machine-readable JSON summary
@@ -53,6 +53,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/scripts" "$TMPDIR/doc/devlog"
 cp -R "$ROOT_DIR/.pm" "$TMPDIR/.pm"
+cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
 
 python3 - "$TMPDIR" <<'PY'
@@ -109,6 +110,16 @@ TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task
 MOVE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" \
   --task-id "$TASK_ID" \
   --to-status blocked \
+  --json)"
+
+QA_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memory.sh" \
+  --signal-id "$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["signal_id"])' <<<"$SIGNAL_JSON")" \
+  --role qa_engineer \
+  --topic viewer.startup.blocker \
+  --tag failure_signature \
+  --tag gate \
+  --promotion-reason failure_signature \
+  --effective-at 2026-03-20T10:00:00+08:00 \
   --json)"
 
 PRODUCER_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
@@ -172,6 +183,31 @@ import sys
 root = Path(sys.argv[1])
 task_id = sys.argv[2]
 
+(root / ".pm/roles/producer_system_designer/memory/superseded.yaml").write_text(
+    """version: 1
+role: producer_system_designer
+kind: memory_superseded
+records:
+  - id: MEM-PRODUCER-0000
+    role: producer_system_designer
+    topic: stage.current
+    summary: "current stage remained internal_playable_alpha_mid"
+    source_refs:
+      - doc/devlog/2026-03-30.md
+    tags:
+      - stage
+    effective_at: 2026-03-15T10:00:00+08:00
+    last_reviewed_at: 2026-03-20T10:00:00+08:00
+    status: superseded
+    confidence: confirmed
+    promotion_reason: stage_decision
+    superseded_by: MEM-PRODUCER-0001
+    superseded_at: 2026-03-30T10:00:00+08:00
+    supersede_reason: stage_upgraded
+""",
+    encoding="utf-8",
+)
+
 (root / ".pm/stage/current.yaml").write_text(
     f"""version: 1
 current_stage: internal_playable_alpha_late
@@ -204,9 +240,10 @@ PY
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
+MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$MEMORY_REPORT_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -214,10 +251,12 @@ import sys
 
 signal_payload = json.loads(sys.argv[2])
 move_payload = json.loads(sys.argv[3])
-producer_memory = json.loads(sys.argv[4])
-shared_memory = json.loads(sys.argv[5])
-rejected_memory = json.loads(sys.argv[6])
-stage_report = json.loads(sys.argv[7])
+qa_memory = json.loads(sys.argv[4])
+producer_memory = json.loads(sys.argv[5])
+shared_memory = json.loads(sys.argv[6])
+rejected_memory = json.loads(sys.argv[7])
+memory_report = json.loads(sys.argv[8])
+stage_report = json.loads(sys.argv[9])
 
 print(
     json.dumps(
@@ -225,9 +264,11 @@ print(
             "temp_root": sys.argv[1],
             "signal": signal_payload,
             "move": move_payload,
+            "qa_memory": qa_memory,
             "producer_memory": producer_memory,
             "shared_memory": shared_memory,
             "rejected_memory": rejected_memory,
+            "memory_report": memory_report,
             "stage_report": stage_report,
         },
         ensure_ascii=False,
@@ -262,5 +303,7 @@ print(f"- gate_status: {stage['gate']['status']}")
 print(f"- blocked_tasks: {len(stage['blocking_tasks'])}")
 print(f"- producer_active_memory: {len(stage['memory_inputs']['producer_active'])}")
 print(f"- shared_active_memory: {len(stage['memory_inputs']['shared_active'])}")
+print(f"- needs_review_memory: {payload['memory_report']['counts']['needs_review']}")
+print(f"- superseded_memory: {payload['memory_report']['counts']['superseded']}")
 print(f"- rejected_memory_signal: {payload['rejected_memory']['signal_id']}")
 PY

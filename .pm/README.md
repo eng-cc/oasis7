@@ -36,8 +36,10 @@
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
+- `./scripts/pm/memory-report.sh`：按 role 输出 active / needs_review / superseded 报表，默认以 7 天未 review 记为 `needs_review`。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `devlog -> signal -> task -> memory -> stage report` required-tier 验证链。
+- `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type devlog --source-ref doc/devlog/2026-03-30.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
@@ -56,6 +58,12 @@ QA / liveops 基础用法：
 - `reject_reason` 白名单：`one_off_operation`、`unverified_hypothesis`、`short_lived_execution_detail`、`task_status_update`
 - `--scope shared` 仅允许 `producer_system_designer` 执行；shared 正式 memory 不接受其他角色直写
 
+memory report 基础用法：
+- `./scripts/pm/memory-report.sh`
+- `./scripts/pm/memory-report.sh --role qa_engineer --no-shared`
+- `./scripts/pm/memory-report.sh --stale-after-days 14 --json`
+- 默认 stale 阈值为 7 天，对应长期 memory 每周至少 review 1 次的治理口径。
+
 阶段汇总基础用法：
 - `./scripts/pm/stage-report.sh`
 - `./scripts/pm/stage-report.sh --json`
@@ -63,3 +71,7 @@ QA / liveops 基础用法：
 required-tier 验证入口：
 - `./scripts/pm/required-tier-smoke.sh`
 - `./scripts/pm/required-tier-smoke.sh --json`
+
+full-tier 验证入口：
+- `./scripts/pm/memory-regression-smoke.sh`
+- `./scripts/pm/memory-regression-smoke.sh --json`

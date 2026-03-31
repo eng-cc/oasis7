@@ -94,6 +94,8 @@
   - 输出：旧记录移动到 superseded
 - `scripts/pm/memory-report.sh`
   - 输出：按 role/topic/status 生成 active/stale/superseded 报表
+  - 默认 stale 阈值：`7` 天；支持 `--stale-after-days` 覆盖
+  - 支持 `--role <role>` 与 `--no-shared` 过滤
 - `scripts/pm/memory-lint.sh`
   - 检查字段完整性、active 冲突、source ref 可达性、superseded 链
 

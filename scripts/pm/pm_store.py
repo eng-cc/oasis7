@@ -7,7 +7,7 @@ import pathlib
 import re
 import sys
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
@@ -36,6 +36,7 @@ ROLE_MEMORY_PREFIXES = {
     "viewer_engineer": "VIEWER",
     "wasm_platform_engineer": "WASM",
 }
+DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
 
 
 def now_iso() -> str:
@@ -344,6 +345,26 @@ def resolve_memory_documents(
     )
 
 
+def parse_timestamp(value: object) -> datetime:
+    return datetime.fromisoformat(str(value))
+
+
+def iter_memory_records(
+    root: pathlib.Path,
+    include_active: bool = True,
+    include_superseded: bool = True,
+):
+    for path, scope_type, owner, header, records in collect_memory_documents(root):
+        del header
+        is_active = path.name == "active.yaml"
+        if is_active and not include_active:
+            continue
+        if (not is_active) and not include_superseded:
+            continue
+        for record in records:
+            yield path, scope_type, owner, record
+
+
 def next_memory_id(root: pathlib.Path, record_owner: str) -> str:
     prefix = ROLE_MEMORY_PREFIXES.get(record_owner)
     if prefix is None:
@@ -475,6 +496,105 @@ def run_memory_lint(root: pathlib.Path) -> None:
         for failure in failures:
             print(f"memory-lint: FAIL: {failure}", file=sys.stderr)
         raise SystemExit(1)
+
+
+def build_memory_report(
+    root: pathlib.Path,
+    role_filter: str | None,
+    include_shared: bool,
+    stale_after_days: int,
+) -> dict[str, object]:
+    stale_cutoff = datetime.now().astimezone() - timedelta(days=stale_after_days)
+    active_records: list[dict[str, object]] = []
+    needs_review_records: list[dict[str, object]] = []
+    superseded_records: list[dict[str, object]] = []
+    role_summary: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
+    eligible_roles = sorted(load_roles(root))
+    if include_shared:
+        eligible_roles.append("shared")
+
+    def include_owner(owner: str) -> bool:
+        if role_filter and owner != role_filter:
+            return False
+        if owner == "shared":
+            return include_shared
+        return True
+
+    def ensure_role_summary(owner: str) -> OrderedDict[str, int]:
+        if owner not in role_summary:
+            role_summary[owner] = OrderedDict(
+                [
+                    ("active", 0),
+                    ("needs_review", 0),
+                    ("superseded", 0),
+                ]
+            )
+        return role_summary[owner]
+
+    for owner in eligible_roles:
+        if include_owner(owner):
+            ensure_role_summary(owner)
+
+    def shape_record(owner: str, record: OrderedDict[str, object]) -> dict[str, object]:
+        last_reviewed_at = parse_timestamp(record["last_reviewed_at"])
+        review_state = "needs_review" if record.get("status") == "active" and last_reviewed_at <= stale_cutoff else "fresh"
+        payload: OrderedDict[str, object] = OrderedDict(
+            [
+                ("id", record.get("id")),
+                ("role", owner if owner != "shared" else "shared"),
+                ("topic", record.get("topic")),
+                ("status", record.get("status")),
+                ("summary", record.get("summary")),
+                ("effective_at", record.get("effective_at")),
+                ("last_reviewed_at", record.get("last_reviewed_at")),
+                ("review_state", review_state),
+                ("source_refs", list(record.get("source_refs", []))),
+                ("tags", list(record.get("tags", []))),
+            ]
+        )
+        if record.get("status") == "active":
+            payload["confidence"] = record.get("confidence")
+            payload["promotion_reason"] = record.get("promotion_reason")
+        else:
+            payload["superseded_at"] = record.get("superseded_at")
+            payload["superseded_by"] = record.get("superseded_by")
+            payload["supersede_reason"] = record.get("supersede_reason")
+        return payload
+
+    for _, _, owner, record in iter_memory_records(root):
+        if not include_owner(owner):
+            continue
+        shaped = shape_record(owner, record)
+        summary = ensure_role_summary(owner)
+        if record.get("status") == "active":
+            active_records.append(shaped)
+            summary["active"] += 1
+            if shaped["review_state"] == "needs_review":
+                needs_review_records.append(shaped)
+                summary["needs_review"] += 1
+        else:
+            superseded_records.append(shaped)
+            summary["superseded"] += 1
+
+    active_records.sort(key=lambda item: (str(item["role"]), str(item["topic"]), str(item["effective_at"])), reverse=False)
+    needs_review_records.sort(key=lambda item: str(item["last_reviewed_at"]))
+    superseded_records.sort(key=lambda item: str(item.get("superseded_at") or ""), reverse=True)
+
+    return {
+        "generated_at": now_iso(),
+        "stale_after_days": stale_after_days,
+        "role_filter": role_filter,
+        "include_shared": include_shared,
+        "counts": {
+            "active": len(active_records),
+            "needs_review": len(needs_review_records),
+            "superseded": len(superseded_records),
+        },
+        "roles": role_summary,
+        "active": active_records,
+        "needs_review": needs_review_records,
+        "superseded": superseded_records,
+    }
 
 
 def run_task_backlog_lint(root: pathlib.Path) -> None:
@@ -824,6 +944,70 @@ def cmd_supersede_memory(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_report(args: argparse.Namespace) -> int:
+    if args.role == "shared":
+        raise ValueError("--role=shared is invalid; use --include-shared without --role")
+    if args.stale_after_days < 0:
+        raise ValueError("--stale-after-days must be >= 0")
+    if args.role and args.role not in load_roles(args.root):
+        raise ValueError(f"unknown role: {args.role}")
+
+    report = build_memory_report(
+        args.root,
+        role_filter=args.role,
+        include_shared=args.include_shared,
+        stale_after_days=args.stale_after_days,
+    )
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 memory report",
+        f"- generated_at: {report['generated_at']}",
+        f"- stale_after_days: {report['stale_after_days']}",
+        f"- role_filter: {report['role_filter'] or '(all roles)'}",
+        f"- include_shared: {'yes' if report['include_shared'] else 'no'}",
+        f"- counts: active={report['counts']['active']}, needs_review={report['counts']['needs_review']}, superseded={report['counts']['superseded']}",
+        "- role_summary:",
+    ]
+    if report["roles"]:
+        for role, counts in report["roles"].items():
+            lines.append(
+                f"  - {role}: active={counts['active']}, needs_review={counts['needs_review']}, superseded={counts['superseded']}"
+            )
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- needs_review:")
+    if report["needs_review"]:
+        for item in report["needs_review"]:
+            lines.append(
+                f"  - {item['id']} / {item['role']} / {item['topic']} / last_reviewed_at={item['last_reviewed_at']}"
+            )
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- active:")
+    if report["active"]:
+        for item in report["active"]:
+            lines.append(f"  - {item['id']} / {item['role']} / {item['topic']} / {item['review_state']}")
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- superseded:")
+    if report["superseded"]:
+        for item in report["superseded"]:
+            lines.append(
+                f"  - {item['id']} / {item['role']} / {item['topic']} / superseded_by={item['superseded_by']}"
+            )
+    else:
+        lines.append("  - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_promote_memory(args: argparse.Namespace) -> int:
     root = args.root
     updated_at = args.effective_at or now_iso()
@@ -1109,6 +1293,16 @@ def build_parser() -> argparse.ArgumentParser:
     memory_lint = subparsers.add_parser("memory-lint")
     memory_lint.add_argument("root", type=pathlib.Path)
     memory_lint.set_defaults(func=cmd_memory_lint)
+
+    memory_report = subparsers.add_parser("memory-report")
+    memory_report.add_argument("root", type=pathlib.Path)
+    memory_report.add_argument("--role")
+    memory_report.add_argument("--include-shared", dest="include_shared", action="store_true")
+    memory_report.add_argument("--no-shared", dest="include_shared", action="store_false")
+    memory_report.set_defaults(include_shared=True)
+    memory_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
+    memory_report.add_argument("--json", action="store_true")
+    memory_report.set_defaults(func=cmd_memory_report)
 
     promote_memory = subparsers.add_parser("promote-memory")
     promote_memory.add_argument("root", type=pathlib.Path)

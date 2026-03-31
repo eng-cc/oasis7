@@ -30,13 +30,13 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-03-31
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-083`
+- 当前任务: `TASK-ENGINEERING-083` 已完成；`self-evolution` Phase 2 当前冻结范围（`TASK-ENGINEERING-074~083`）已闭环。
 - 阻塞项:
   - `role-report.sh` 仍仅完成入口占位，尚未具备跨角色记忆与 backlog 汇总能力。
-  - `memory-report.sh` 尚未落地，长期 memory 仍缺少 stale 汇总与跨角色消费入口。
 - 最新完成:
+  - `TASK-ENGINEERING-083`：已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容的 lint/scaffold，以及 `memory-regression-smoke.sh` full-tier 回归；长期 memory 现具备 active / needs_review / superseded 统一查询入口。
   - `TASK-ENGINEERING-082`：已落地 `promote-memory.sh` 与 signal `memory_promotion_state` 决策回写，required-tier smoke 现可覆盖 accepted/rejected memory promotion case。
   - `TASK-ENGINEERING-081`：已为 `producer_system_designer`、`qa_engineer`、`liveops_community` 与 `shared` 落地首批 active/superseded 样例，覆盖 stage current、QA failure signature、community messaging boundary 与 shared claim envelope 场景。
   - `TASK-ENGINEERING-079`：已新增 `required-tier-smoke.sh`，可在临时 PM 根目录内跑通 `devlog -> signal -> blocked task -> stage report` 验证链；同时记录角色扩容仍受 `.agents/roles/*.md` 白名单约束，而 `.pm/registry/tasks.yaml` / `signals.jsonl` 仍是多 worktree 并发下的主要合流点。
@@ -47,5 +47,5 @@
   - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 devlog。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
-  - 执行 `TASK-ENGINEERING-083`，补 `memory-report`、stale review 与长期 memory 扩容验证；
-  - 后续再评估 `role-report` 是否需要单列治理任务。
+  - 后续再评估 `role-report` 是否需要单列治理任务；
+  - 当前 `.pm` 运行层可继续服务后续非 self-evolution 任务，不再阻塞 signal/task/memory/stage 基础链路。

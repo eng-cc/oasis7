@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 cd "$ROOT_DIR"
 
 failures=0
@@ -43,6 +43,7 @@ require_file ".pm/templates/stage-current.yaml"
 require_file ".pm/templates/stage-gate.yaml"
 require_file "scripts/pm/lint.sh"
 require_file "scripts/pm/memory-lint.sh"
+require_file "scripts/pm/memory-report.sh"
 require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
 require_file "scripts/pm/pm_store.py"
@@ -76,6 +77,7 @@ if (( failures > 0 )); then
 fi
 
 ./scripts/pm/memory-lint.sh >/dev/null
+./scripts/pm/memory-report.sh --json >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
 
 echo "pm-lint: OK"
