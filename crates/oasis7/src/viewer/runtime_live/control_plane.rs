@@ -808,26 +808,27 @@ impl ViewerRuntimeLiveServer {
         id
     }
 
-    pub(super) fn enqueue_llm_action_from_sidecar(&mut self) -> Option<AgentDecisionTrace> {
+    pub(super) fn enqueue_llm_action_from_sidecar(
+        &mut self,
+    ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
         let Some(decision) = self
             .llm_sidecar
             .next_llm_decision(&self.world, &self.snapshot_config)
         else {
-            return None;
+            return Ok(None);
         };
         let decision_trace = decision.decision_trace.clone();
         if let Some(trace) = decision_trace.as_ref() {
-            if let Some(message) = trace
-                .llm_error
-                .as_ref()
-                .or_else(|| trace.parse_error.as_ref())
-            {
+            if trace.llm_error.is_some() {
+                return Err(trace.clone());
+            }
+            if let Some(message) = trace.parse_error.as_ref() {
                 self.enqueue_virtual_event(WorldEventKind::ActionRejected {
                     reason: SimulatorRejectReason::RuleDenied {
                         notes: vec![format!("llm_failed: {}", message)],
                     },
                 });
-                return decision_trace;
+                return Ok(decision_trace);
             }
         }
 
@@ -850,7 +851,7 @@ impl ViewerRuntimeLiveServer {
                 }
             }
         }
-        decision_trace
+        Ok(decision_trace)
     }
 }
 

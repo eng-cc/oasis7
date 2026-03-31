@@ -32,7 +32,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstr
 ```
 
 `oasis7_viewer_live` 现已统一为 runtime/world 链路（协议兼容输出 `WorldSnapshot/WorldEvent`），不再提供 simulator fallback 启动分支。
-传 `--llm` 可进入正式 gameplay、prompt/chat 鉴权与控制闭环；`--no-llm` 仅用于观战/调试，`step/play/gameplay_action/prompt/chat` 都会返回 `llm_mode_required` 或 `llm_init_failed`。
+传 `--llm` 可进入正式 gameplay、prompt/chat 鉴权与控制闭环；`--no-llm` 仅用于观战/调试，`gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 则会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。
 
 ### 2）启动 viewer
 ```bash

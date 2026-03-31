@@ -29,6 +29,18 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
                     .to_string(),
             ),
         ),
+        ControlCompletionStatus::Blocked => (
+            "blocked".to_string(),
+            Some(
+                ack.error_message.clone().unwrap_or_else(|| {
+                    "latest live control was blocked before runtime advance".to_string()
+                }),
+            ),
+            Some(
+                "enable --llm and configure a reachable LLM provider before retrying gameplay controls"
+                    .to_string(),
+            ),
+        ),
     };
     let effect = match ack.status {
         ControlCompletionStatus::Advanced => format!(
@@ -37,6 +49,10 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
         ),
         ControlCompletionStatus::TimeoutNoProgress => format!(
             "no visible world delta: logicalTime +{}, eventSeq +{}",
+            ack.delta_logical_time, ack.delta_event_seq
+        ),
+        ControlCompletionStatus::Blocked => format!(
+            "gameplay blocked before requested advance completed: logicalTime +{}, eventSeq +{}",
             ack.delta_logical_time, ack.delta_event_seq
         ),
     };

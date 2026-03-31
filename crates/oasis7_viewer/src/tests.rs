@@ -252,13 +252,16 @@ fn handle_control_buttons_sends_request() {
     app.update();
 
     let request = rx.try_recv().expect("request sent");
-    assert_eq!(
-        request,
+    match request {
         ViewerRequest::Control {
             mode: ViewerControl::Step { count: 2 },
-            request_id: None,
-        }
-    );
+            request_id,
+        } => assert!(
+            request_id.is_some(),
+            "step requests should carry a request_id"
+        ),
+        other => panic!("unexpected request: {other:?}"),
+    }
 }
 
 #[test]
@@ -297,18 +300,24 @@ fn control_buttons_send_expected_requests() {
         seen.push(request);
     }
 
-    assert!(seen.contains(&ViewerRequest::Control {
-        mode: ViewerControl::Play,
-        request_id: None,
-    }));
+    assert!(seen.iter().any(|request| matches!(
+        request,
+        ViewerRequest::Control {
+            mode: ViewerControl::Play,
+            request_id: Some(_),
+        }
+    )));
     assert!(seen.contains(&ViewerRequest::Control {
         mode: ViewerControl::Pause,
         request_id: None,
     }));
-    assert!(seen.contains(&ViewerRequest::Control {
-        mode: ViewerControl::Step { count: 1 },
-        request_id: None,
-    }));
+    assert!(seen.iter().any(|request| matches!(
+        request,
+        ViewerRequest::Control {
+            mode: ViewerControl::Step { count: 1 },
+            request_id: Some(_),
+        }
+    )));
     assert!(seen.contains(&ViewerRequest::Control {
         mode: ViewerControl::Seek { tick: 0 },
         request_id: None,
@@ -596,13 +605,13 @@ fn headless_auto_play_sends_play_once_after_connected() {
 
     app.update();
     let first = rx_request.try_recv().expect("first control request");
-    assert_eq!(
-        first,
+    match first {
         ViewerRequest::Control {
             mode: ViewerControl::Play,
-            request_id: None,
-        }
-    );
+            request_id,
+        } => assert!(request_id.is_some(), "auto-play should carry a request_id"),
+        other => panic!("unexpected request: {other:?}"),
+    }
 
     app.update();
     assert!(rx_request.try_recv().is_err());

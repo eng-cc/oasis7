@@ -260,7 +260,7 @@ impl ViewerRuntimeLiveServer {
             };
             if session.should_advance_play_step(play_step_interval) {
                 let mut server = lock_shared_server(&shared)?;
-                server.advance_runtime(&mut session, &mut writer, 1, None, false)?;
+                server.advance_runtime(&mut session, &mut writer, "play", 1, None, false)?;
             }
         }
     }
@@ -292,7 +292,7 @@ impl ViewerRuntimeLiveServer {
             }
 
             if session.should_advance_play_step(self.config.play_step_interval) {
-                self.advance_runtime(&mut session, &mut writer, 1, None, false)?;
+                self.advance_runtime(&mut session, &mut writer, "play", 1, None, false)?;
             }
         }
     }
@@ -457,27 +457,17 @@ impl ViewerRuntimeLiveServer {
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         if let Err(reason) = self.ensure_gameplay_ready_for_control(&mode) {
-            session.playing = false;
-            session.next_play_step_at = None;
-            self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
-                action: control_mode_label(&mode).to_string(),
-                stage: "blocked".to_string(),
-                effect: "gameplay control rejected before world advance".to_string(),
-                reason: Some(reason.clone()),
-                hint: Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
-                delta_logical_time: 0,
-                delta_event_seq: 0,
-            });
-            if let Some(request_id) = request_id {
-                let ack = ControlCompletionAck {
-                    request_id,
-                    status: ControlCompletionStatus::TimeoutNoProgress,
-                    delta_logical_time: 0,
-                    delta_event_seq: 0,
-                };
-                send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
-            }
-            return Ok(());
+            return self.block_gameplay_control(
+                session,
+                writer,
+                control_mode_label(&mode),
+                "gameplay control rejected before world advance",
+                reason,
+                request_id,
+                0,
+                0,
+                false,
+            );
         }
         match mode {
             ViewerControl::Pause => {
@@ -491,7 +481,7 @@ impl ViewerRuntimeLiveServer {
             ViewerControl::Step { count } => {
                 session.playing = false;
                 session.next_play_step_at = None;
-                self.advance_runtime(session, writer, count.max(1), request_id, true)?;
+                self.advance_runtime(session, writer, "step", count.max(1), request_id, true)?;
             }
             ViewerControl::Seek { tick } => {
                 session.playing = false;
@@ -508,6 +498,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
+        action: &'static str,
         step_count: usize,
         request_id: Option<u64>,
         emit_while_paused: bool,
@@ -516,12 +507,58 @@ impl ViewerRuntimeLiveServer {
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
 
         for _ in 0..step_count.max(1) {
+            if let Err(reason) = self
+                .llm_sidecar
+                .ensure_gameplay_ready(&self.world, &self.snapshot_config)
+            {
+                let (delta_logical_time, delta_event_seq) =
+                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                return self.block_gameplay_control(
+                    session,
+                    writer,
+                    action,
+                    "runtime play loop stopped because active LLM access is no longer available",
+                    reason,
+                    request_id,
+                    delta_logical_time,
+                    delta_event_seq,
+                    true,
+                );
+            }
             let mut decision_trace: Option<AgentDecisionTrace> = None;
             match self.config.decision_mode {
                 ViewerLiveDecisionMode::Script => self.script.enqueue(&mut self.world),
-                ViewerLiveDecisionMode::Llm => {
-                    decision_trace = self.enqueue_llm_action_from_sidecar();
-                }
+                ViewerLiveDecisionMode::Llm => match self.enqueue_llm_action_from_sidecar() {
+                    Ok(trace) => {
+                        decision_trace = trace;
+                    }
+                    Err(trace) => {
+                        if session.subscribed.contains(&ViewerStream::Events) {
+                            send_response(
+                                writer,
+                                &ViewerResponse::DecisionTrace {
+                                    trace: trace.clone(),
+                                },
+                            )?;
+                        }
+                        let (delta_logical_time, delta_event_seq) = self
+                            .control_completion_delta(baseline_logical_time, baseline_event_seq);
+                        let reason = trace.llm_error.clone().unwrap_or_else(|| {
+                            "gameplay requires a configured and reachable LLM provider".to_string()
+                        });
+                        return self.block_gameplay_control(
+                            session,
+                            writer,
+                            action,
+                            "runtime play loop stopped because the LLM decision provider failed",
+                            reason,
+                            request_id,
+                            delta_logical_time,
+                            delta_event_seq,
+                            true,
+                        );
+                    }
+                },
             }
             let journal_start = self.world.journal().events.len();
             self.world.step()?;
@@ -589,7 +626,11 @@ impl ViewerRuntimeLiveServer {
         }
 
         if let Some(request_id) = request_id {
-            let delta_logical_time = self.world.state().time.saturating_sub(baseline_logical_time);
+            let delta_logical_time = self
+                .world
+                .state()
+                .time
+                .saturating_sub(baseline_logical_time);
             let delta_event_seq =
                 latest_runtime_event_seq(&self.world).saturating_sub(baseline_event_seq);
             let status = if delta_logical_time > 0 || delta_event_seq > 0 {
@@ -602,9 +643,11 @@ impl ViewerRuntimeLiveServer {
                 status,
                 delta_logical_time,
                 delta_event_seq,
+                error_code: None,
+                error_message: None,
             };
             self.latest_player_gameplay_feedback = Some(player_gameplay_feedback_from_control_ack(
-                &ViewerControl::Step { count: step_count },
+                &control_mode_for_action(action, step_count),
                 &ack,
             ));
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
@@ -700,6 +743,71 @@ impl ViewerRuntimeLiveServer {
                 (code.to_string(), detail)
             })
     }
+
+    fn control_completion_delta(
+        &self,
+        baseline_logical_time: u64,
+        baseline_event_seq: u64,
+    ) -> (u64, u64) {
+        (
+            self.world
+                .state()
+                .time
+                .saturating_sub(baseline_logical_time),
+            latest_runtime_event_seq(&self.world).saturating_sub(baseline_event_seq),
+        )
+    }
+
+    fn gameplay_control_error(&self, reason: String) -> (String, String) {
+        let code = if self.llm_sidecar.is_llm_mode() {
+            "llm_init_failed"
+        } else {
+            "llm_mode_required"
+        };
+        (code.to_string(), reason)
+    }
+
+    fn block_gameplay_control(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+        action: &str,
+        effect: &str,
+        reason: String,
+        request_id: Option<u64>,
+        delta_logical_time: u64,
+        delta_event_seq: u64,
+        emit_snapshot: bool,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        let (error_code, error_message) = self.gameplay_control_error(reason.clone());
+        session.playing = false;
+        session.next_play_step_at = None;
+        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+            action: action.to_string(),
+            stage: "blocked".to_string(),
+            effect: effect.to_string(),
+            reason: Some(reason),
+            hint: Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+            delta_logical_time,
+            delta_event_seq,
+        });
+        if let Some(request_id) = request_id {
+            let ack = ControlCompletionAck {
+                request_id,
+                status: ControlCompletionStatus::Blocked,
+                delta_logical_time,
+                delta_event_seq,
+                error_code: Some(error_code),
+                error_message: Some(error_message),
+            };
+            send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
+        }
+        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
+            let snapshot = self.compat_snapshot();
+            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+        }
+        Ok(())
+    }
 }
 
 fn control_mode_label(mode: &ViewerControl) -> &'static str {
@@ -708,5 +816,16 @@ fn control_mode_label(mode: &ViewerControl) -> &'static str {
         ViewerControl::Play => "play",
         ViewerControl::Step { .. } => "step",
         ViewerControl::Seek { .. } => "seek",
+    }
+}
+
+fn control_mode_for_action(action: &str, step_count: usize) -> ViewerControl {
+    match action {
+        "play" => ViewerControl::Play,
+        "pause" => ViewerControl::Pause,
+        "seek" => ViewerControl::Seek { tick: 0 },
+        _ => ViewerControl::Step {
+            count: step_count.max(1),
+        },
     }
 }

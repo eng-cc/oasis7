@@ -243,7 +243,8 @@ pub(super) fn setup_web_test_api(world: &mut World) {
                 "queued control request".to_string(),
                 true,
             );
-            let request_id = if matches!(control, ViewerControl::Step { .. }) {
+            let request_id = if matches!(control, ViewerControl::Play | ViewerControl::Step { .. })
+            {
                 Some(feedback.id)
             } else {
                 None
@@ -516,6 +517,22 @@ pub(super) fn publish_web_test_api_state(
                                 feedback.effect =
                                     "completion ack: timeout without observed progress"
                                         .to_string();
+                            }
+                            ControlCompletionStatus::Blocked => {
+                                feedback.stage = CONTROL_STAGE_BLOCKED.to_string();
+                                feedback.reason = ack.error_message.clone().or_else(|| {
+                                    ack.error_code
+                                        .as_ref()
+                                        .map(|code| format!("Cause: completion ack blocked ({code})"))
+                                });
+                                feedback.hint = Some(
+                                    "Next: restore active LLM access, then retry step/play"
+                                        .to_string(),
+                                );
+                                feedback.effect = format!(
+                                    "completion ack: blocked before runtime advance completed (logicalTime +{}, eventSeq +{})",
+                                    ack.delta_logical_time, ack.delta_event_seq
+                                );
                             }
                         }
                         feedback.awaiting_effect = false;

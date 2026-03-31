@@ -9,7 +9,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod auth_actions;
 mod authoritative;
@@ -152,6 +152,54 @@ fn read_runtime_live_response(reader: &mut BufReader<TcpStream>) -> ViewerRespon
     let mut line = String::new();
     reader.read_line(&mut line).expect("read response");
     serde_json::from_str(line.trim_end()).expect("decode response")
+}
+
+fn test_writer_pair() -> (BufWriter<TcpStream>, TcpStream) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    let addr = listener.local_addr().expect("listener local addr");
+    let client = TcpStream::connect(addr).expect("connect test client");
+    let (server, _) = listener.accept().expect("accept test peer");
+    (BufWriter::new(server), client)
+}
+
+fn read_control_completion_ack(
+    peer: &TcpStream,
+    timeout: Duration,
+) -> Option<crate::viewer::ControlCompletionAck> {
+    let stream = peer.try_clone().expect("clone test peer");
+    stream
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .expect("set read timeout");
+    let mut reader = BufReader::new(stream);
+    let start = Instant::now();
+    let mut line = String::new();
+    while start.elapsed() < timeout {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) => continue,
+            Ok(_) => {}
+            Err(err) => {
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) {
+                    continue;
+                }
+                panic!("read response line failed: {err}");
+            }
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(response) = serde_json::from_str::<crate::viewer::ViewerResponse>(trimmed) else {
+            continue;
+        };
+        if let crate::viewer::ViewerResponse::ControlCompletionAck { ack } = response {
+            return Some(ack);
+        }
+    }
+    None
 }
 
 fn wait_for_runtime_live_server(addr: &str) {

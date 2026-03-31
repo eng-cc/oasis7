@@ -131,11 +131,23 @@ pub(super) fn setup_offline_state(mut commands: Commands) {
     commands.insert_resource(ViewerControlProfileState::default());
 }
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static VIEWER_CONTROL_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+fn default_request_id_for_control(control: &ViewerControl, request_id: Option<u64>) -> Option<u64> {
+    request_id.or_else(|| {
+        matches!(control, ViewerControl::Play | ViewerControl::Step { .. })
+            .then(|| VIEWER_CONTROL_REQUEST_ID.fetch_add(1, Ordering::Relaxed))
+    })
+}
+
 fn control_request_for_profile(
     profile: Option<ViewerControlProfile>,
     control: ViewerControl,
     request_id: Option<u64>,
 ) -> Option<ViewerRequest> {
+    let request_id = default_request_id_for_control(&control, request_id);
     match profile {
         Some(ViewerControlProfile::Playback) => Some(ViewerRequest::PlaybackControl {
             mode: oasis7::viewer::PlaybackControl::from(control),
@@ -621,13 +633,16 @@ mod tests {
     fn control_request_defaults_to_compat_pre_hello_profile() {
         let request = control_request_for_profile(None, ViewerControl::Play, None)
             .expect("control request should be produced");
-        assert_eq!(
-            request,
+        match request {
             ViewerRequest::Control {
                 mode: ViewerControl::Play,
-                request_id: None,
-            }
-        );
+                request_id,
+            } => assert!(
+                request_id.is_some(),
+                "play should receive a default request_id"
+            ),
+            other => panic!("unexpected request: {other:?}"),
+        }
     }
 
     #[test]

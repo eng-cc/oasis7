@@ -32,9 +32,9 @@ use self::oasis7_pure_api_client_support::{
     build_signed_prompt_apply_request, build_signed_prompt_rollback_request, command_output,
     derive_public_key_hex, is_terminal_error, keygen_output, latest_snapshot,
     maybe_request_snapshot, next_u64_id, parse_bool_flag, parse_u64_flag, parse_usize_flag,
-    print_json, required_flag, resolve_public_key_hex, subscribe_for_control,
-    terminal_agent_chat, terminal_control_ack, terminal_gameplay_action, terminal_hello,
-    terminal_prompt_control, terminal_recovery, terminal_snapshot,
+    print_json, required_flag, resolve_public_key_hex, subscribe_for_control, terminal_agent_chat,
+    terminal_control_ack, terminal_gameplay_action, terminal_hello, terminal_prompt_control,
+    terminal_recovery, terminal_snapshot,
 };
 
 fn main() {
@@ -112,9 +112,10 @@ fn run() -> Result<(), String> {
         } => {
             let mut conn = ViewerConnection::connect(addr.as_str(), client.as_str(), timeout)?;
             subscribe_for_control(&mut conn, include_events, include_metrics)?;
+            let request_id = next_u64_id();
             conn.send(&ViewerRequest::LiveControl {
                 mode: LiveControl::Play,
-                request_id: None,
+                request_id: Some(request_id),
             })?;
             let responses = conn.collect_for(timeout)?;
             print_json(&command_output(&conn.hello_ack, &responses))?;

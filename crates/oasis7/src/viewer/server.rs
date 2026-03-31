@@ -355,6 +355,8 @@ impl<'a> ViewerSession<'a> {
                                 status,
                                 delta_logical_time,
                                 delta_event_seq,
+                                error_code: None,
+                                error_message: None,
                             },
                         },
                     )?;

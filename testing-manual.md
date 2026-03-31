@@ -351,7 +351,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 ste
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- keygen
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 reconnect-sync --player-id player-1 --with-snapshot
 ```
-  - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；当前产品设定下，只要 LLM 不可用，`step / play / gameplay_action / agent_chat / prompt_control` 都会被阻断为 `llm_mode_required` 或 `llm_init_failed`。
+  - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；当前产品设定下，只要 LLM 不可用，`gameplay_action / agent_chat / prompt_control` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，而 `step / play` 会返回 `ControlCompletionAck { status: Blocked, error_code, error_message }`。
 - 若需要执行 pure API required/full 回归，优先运行 `./scripts/oasis7-pure-api-parity-smoke.sh`。
   - 该回归验证的是 `pure_api` 玩家访问模式在 active LLM access 下的正式可玩性，不等同于 OpenClaw `headless_agent` 回归。
   - required-tier 推荐 bundle 口径：

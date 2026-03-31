@@ -94,12 +94,7 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
-    let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
-    let addr = listener.local_addr().expect("addr");
-    let client = TcpStream::connect(addr).expect("connect");
-    let (server_stream, _) = listener.accept().expect("accept");
-    drop(client);
-    let mut writer = BufWriter::new(server_stream);
+    let (mut writer, client) = test_writer_pair();
     let mut session = RuntimeLiveSession::new();
 
     server
@@ -112,6 +107,15 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
         .expect("control handled");
     writer.flush().expect("flush response");
 
+    let ack =
+        read_control_completion_ack(&client, Duration::from_millis(250)).expect("blocked step ack");
+    assert_eq!(ack.status, ControlCompletionStatus::Blocked);
+    assert_eq!(ack.error_code.as_deref(), Some("llm_mode_required"));
+    assert!(ack
+        .error_message
+        .as_deref()
+        .is_some_and(|message| message.contains("--llm")));
+
     let feedback = server
         .latest_player_gameplay_feedback
         .as_ref()
@@ -121,6 +125,95 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
         .reason
         .as_deref()
         .is_some_and(|reason| reason.contains("--llm")));
+}
+
+#[test]
+fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
+    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let (mut writer, client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+
+    server
+        .apply_control_mode(
+            ViewerControl::Step { count: 1 },
+            Some(7),
+            &mut session,
+            &mut writer,
+        )
+        .expect("control handled");
+    writer.flush().expect("flush response");
+
+    let ack = read_control_completion_ack(&client, Duration::from_millis(250))
+        .expect("blocked init failure ack");
+    assert_eq!(ack.status, ControlCompletionStatus::Blocked);
+    assert_eq!(ack.error_code.as_deref(), Some("llm_init_failed"));
+    assert!(ack
+        .error_message
+        .as_deref()
+        .is_some_and(|message| message.contains("configured and reachable LLM provider")));
+
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("blocked feedback recorded");
+    assert_eq!(feedback.stage, "blocked");
+    assert!(feedback
+        .reason
+        .as_deref()
+        .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") }));
+}
+
+#[test]
+fn runtime_background_play_stops_when_llm_access_is_unavailable() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
+    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let baseline_time = server.world.state().time;
+    let (mut writer, _client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+    session.playing = true;
+
+    server
+        .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+        .expect("play loop handled");
+
+    assert!(
+        !session.playing,
+        "background play should stop without LLM access"
+    );
+    assert_eq!(
+        server.world.state().time,
+        baseline_time,
+        "background play must not advance world time without active LLM access"
+    );
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("blocked feedback recorded");
+    assert_eq!(feedback.action, "play");
+    assert_eq!(feedback.stage, "blocked");
+    assert!(feedback
+        .reason
+        .as_deref()
+        .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") }));
 }
 
 #[test]

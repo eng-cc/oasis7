@@ -529,6 +529,7 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
 pub enum ControlCompletionStatus {
     Advanced,
     TimeoutNoProgress,
+    Blocked,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -537,6 +538,10 @@ pub struct ControlCompletionAck<Time> {
     pub status: ControlCompletionStatus,
     pub delta_logical_time: Time,
     pub delta_event_seq: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -927,6 +932,8 @@ mod tests {
                 status: ControlCompletionStatus::TimeoutNoProgress,
                 delta_logical_time: 0,
                 delta_event_seq: 0,
+                error_code: None,
+                error_message: None,
             },
         };
         let json = serde_json::to_string(&response).expect("serialize response");
