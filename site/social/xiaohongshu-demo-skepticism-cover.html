@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Demo Skepticism Cover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Chivo+Mono:wght@500;700&family=Noto+Sans+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --fog: #ece6dc;
+        --fog-deep: #ddd6cb;
+        --panel: #121212;
+        --panel-soft: #242424;
+        --text: #f6f0e8;
+        --ink: #14110f;
+        --muted: rgba(246, 240, 232, 0.72);
+        --grid: rgba(20, 17, 15, 0.08);
+        --line: rgba(246, 240, 232, 0.16);
+        --acid: #d7ff3f;
+        --rust: #d4572f;
+        --steel: #6d8093;
+        --shadow: 0 38px 90px rgba(12, 12, 12, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 14% 14%, rgba(212, 87, 47, 0.2), transparent 24%),
+          radial-gradient(circle at 84% 20%, rgba(109, 128, 147, 0.22), transparent 26%),
+          linear-gradient(140deg, #d8d4cc 0%, #ece7df 52%, #d5dce1 100%);
+        color: var(--ink);
+        font-family: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+      }
+
+      .cover {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        overflow: hidden;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.38), transparent 28%),
+          radial-gradient(circle at 8% 10%, rgba(215, 255, 63, 0.26), transparent 18%),
+          linear-gradient(160deg, #f1ebe2 0%, #e9e1d5 48%, #dfe4e6 100%);
+      }
+
+      .grid,
+      .noise,
+      .beams,
+      .slashes {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--grid) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 92%);
+      }
+
+      .noise {
+        opacity: 0.14;
+        background-image:
+          radial-gradient(circle at 18% 22%, rgba(0, 0, 0, 0.8) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 76% 28%, rgba(0, 0, 0, 0.45) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 32% 86%, rgba(0, 0, 0, 0.36) 0.8px, transparent 0.9px);
+        background-size: 26px 26px, 34px 34px, 42px 42px;
+      }
+
+      .beams::before,
+      .beams::after {
+        content: "";
+        position: absolute;
+        background: linear-gradient(180deg, rgba(20, 17, 15, 0.08), rgba(20, 17, 15, 0));
+        transform: rotate(-18deg);
+      }
+
+      .beams::before {
+        width: 240px;
+        height: 980px;
+        left: 640px;
+        top: -160px;
+      }
+
+      .beams::after {
+        width: 200px;
+        height: 760px;
+        left: 734px;
+        top: 452px;
+      }
+
+      .slashes::before,
+      .slashes::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        background: rgba(215, 255, 63, 0.8);
+        box-shadow:
+          30px 0 0 rgba(20, 17, 15, 0.16),
+          60px 0 0 rgba(215, 255, 63, 0.55);
+      }
+
+      .slashes::before {
+        width: 18px;
+        height: 120px;
+        right: 94px;
+        top: 118px;
+        transform: rotate(18deg);
+      }
+
+      .slashes::after {
+        width: 18px;
+        height: 120px;
+        left: 78px;
+        bottom: 204px;
+        transform: rotate(18deg);
+      }
+
+      .masthead {
+        position: absolute;
+        top: 72px;
+        left: 78px;
+        right: 78px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "Chivo Mono", monospace;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(20, 17, 15, 0.68);
+      }
+
+      .masthead .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .masthead .chip::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--rust);
+        box-shadow: 0 0 0 8px rgba(212, 87, 47, 0.12);
+      }
+
+      .frame {
+        position: absolute;
+        inset: 128px 72px 72px;
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 28px;
+      }
+
+      .headline-panel {
+        position: relative;
+        padding: 42px 40px 34px;
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(24, 24, 24, 0.98));
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: var(--shadow);
+        min-height: 884px;
+        overflow: hidden;
+      }
+
+      .headline-panel::before {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-family: "Chivo Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--acid);
+        font-weight: 700;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 30px;
+        height: 2px;
+        background: currentColor;
+      }
+
+      h1 {
+        margin: 28px 0 0;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 110px;
+        line-height: 0.96;
+        letter-spacing: -0.08em;
+        font-weight: 900;
+      }
+
+      h1 .accent {
+        color: var(--acid);
+      }
+
+      .subcopy {
+        margin: 28px 0 0;
+        max-width: 470px;
+        font-size: 31px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .impact-row {
+        position: absolute;
+        left: 40px;
+        right: 40px;
+        bottom: 38px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        align-items: end;
+      }
+
+      .impact-callout {
+        padding: 20px 22px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+      }
+
+      .impact-callout .label,
+      .mini-card .label,
+      .footer-strip .label {
+        font-family: "Chivo Mono", monospace;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .impact-callout .label {
+        color: var(--acid);
+      }
+
+      .impact-callout .value {
+        margin-top: 10px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 40px;
+        line-height: 1.18;
+        font-weight: 800;
+      }
+
+      .stamp {
+        padding: 16px 18px;
+        border: 2px solid rgba(215, 255, 63, 0.58);
+        color: var(--acid);
+        font-family: "Chivo Mono", monospace;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        transform: rotate(-4deg);
+      }
+
+      .right-stack {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 20px;
+      }
+
+      .note-card,
+      .mini-card,
+      .footer-strip {
+        position: relative;
+        background: rgba(255, 249, 242, 0.84);
+        border: 1px solid rgba(20, 17, 15, 0.1);
+        box-shadow: 0 24px 48px rgba(20, 17, 15, 0.08);
+        overflow: hidden;
+      }
+
+      .note-card {
+        padding: 24px 24px 28px;
+      }
+
+      .note-card::before,
+      .mini-card::before,
+      .footer-strip::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--acid), var(--rust), var(--steel));
+      }
+
+      .note-card .topline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "Chivo Mono", monospace;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(20, 17, 15, 0.56);
+      }
+
+      .note-card .question {
+        margin-top: 30px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 58px;
+        line-height: 1.02;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+        color: var(--ink);
+      }
+
+      .note-card p {
+        margin: 18px 0 0;
+        font-size: 26px;
+        line-height: 1.5;
+        color: rgba(20, 17, 15, 0.7);
+      }
+
+      .review-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+
+      .mini-card {
+        padding: 24px 22px 26px;
+        min-height: 330px;
+      }
+
+      .mini-card .label {
+        color: rgba(20, 17, 15, 0.56);
+      }
+
+      .mini-card .title {
+        margin-top: 24px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 48px;
+        line-height: 1.02;
+        font-weight: 900;
+        letter-spacing: -0.05em;
+      }
+
+      .mini-card ul {
+        margin: 20px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+      }
+
+      .mini-card li {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        font-size: 23px;
+        line-height: 1.36;
+        color: rgba(20, 17, 15, 0.72);
+      }
+
+      .mini-card li::before {
+        content: "";
+        width: 11px;
+        height: 11px;
+        margin-top: 10px;
+        flex: 0 0 auto;
+        background: var(--rust);
+      }
+
+      .mini-card.project li::before {
+        background: var(--acid);
+      }
+
+      .footer-strip {
+        padding: 26px 24px 28px;
+        align-self: end;
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(28, 28, 28, 0.98));
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .footer-strip .label {
+        color: rgba(215, 255, 63, 0.8);
+      }
+
+      .footer-strip .main {
+        margin-top: 16px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 58px;
+        line-height: 1.02;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+      }
+
+      .footer-strip .sub {
+        margin-top: 14px;
+        font-size: 24px;
+        line-height: 1.45;
+        color: rgba(246, 240, 232, 0.72);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover">
+      <div class="grid"></div>
+      <div class="noise"></div>
+      <div class="beams"></div>
+      <div class="slashes"></div>
+
+      <header class="masthead">
+        <span class="chip">oasis7 / xiaohongshu</span>
+        <span class="chip">build review wall</span>
+      </header>
+
+      <section class="frame">
+        <article class="headline-panel">
+          <span class="eyebrow">demo skepticism</span>
+          <h1>
+            做AI游戏以后
+            <br />
+            我越来越
+            <br />
+            <span class="accent">不信demo了</span>
+          </h1>
+          <p class="subcopy">
+            不是不信 AI。
+            <br />
+            是现在一看到很猛的演示，
+            <br />
+            我会先想它放进项目里到底能不能持续玩下去。
+          </p>
+
+          <div class="impact-row">
+            <div class="impact-callout">
+              <div class="label">first question</div>
+              <div class="value">这玩意儿能撑多久</div>
+            </div>
+            <div class="stamp">review first</div>
+          </div>
+        </article>
+
+        <aside class="right-stack">
+          <section class="note-card">
+            <div class="topline">
+              <span>signal</span>
+              <span>build 08</span>
+            </div>
+            <div class="question">demo只负责高光</div>
+            <p>
+              项目会把最差状态也摊出来。
+              <br />
+              真正麻烦的是稳定、排查、返工和成本。
+            </p>
+          </section>
+
+          <div class="review-grid">
+            <section class="mini-card demo">
+              <div class="label">demo</div>
+              <div class="title">第一眼很猛</div>
+              <ul>
+                <li>30 秒里看起来很聪明</li>
+                <li>状态最好的一分钟</li>
+                <li>高光够亮就能先过关</li>
+              </ul>
+            </section>
+
+            <section class="mini-card project">
+              <div class="label">project</div>
+              <div class="title">真放进项目</div>
+              <ul>
+                <li>换场景还灵不灵</li>
+                <li>多玩几次会不会露馅</li>
+                <li>出问题能不能找回来</li>
+              </ul>
+            </section>
+          </div>
+
+          <section class="footer-strip">
+            <div class="label">seeing the core</div>
+            <div class="main">现在更能看到本质了</div>
+            <div class="sub">
+              不是先看猛不猛。
+              现在先看它会不会很快塌。
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Demo Skepticism Carousel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Chivo+Mono:wght@500;700&family=Noto+Sans+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #efe8df;
+        --paper-2: #faf6ef;
+        --paper-3: #e4e0d8;
+        --ink: #14110f;
+        --ink-soft: rgba(20, 17, 15, 0.7);
+        --grid: rgba(20, 17, 15, 0.08);
+        --line: rgba(255, 255, 255, 0.1);
+        --panel: #121212;
+        --panel-2: #1e1e1e;
+        --text: #f6f0e8;
+        --text-soft: rgba(246, 240, 232, 0.72);
+        --acid: #d7ff3f;
+        --rust: #d4572f;
+        --steel: #6d8093;
+        --steel-soft: #dce3e8;
+        --shadow: 0 30px 72px rgba(18, 18, 18, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 12% 14%, rgba(212, 87, 47, 0.18), transparent 20%),
+          radial-gradient(circle at 82% 22%, rgba(109, 128, 147, 0.18), transparent 24%),
+          linear-gradient(160deg, #ebe4da 0%, #f4eee5 50%, #dfe3e6 100%);
+        color: var(--ink);
+        font-family: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+      }
+
+      .gallery {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 26px 0 80px;
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 24%),
+          radial-gradient(circle at 8% 10%, rgba(215, 255, 63, 0.18), transparent 16%),
+          linear-gradient(165deg, #f0e8dd 0%, #eee6da 46%, #dde2e4 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        box-shadow: none;
+      }
+
+      .grid,
+      .noise,
+      .beam,
+      .slash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--grid) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45), transparent 92%);
+      }
+
+      .noise {
+        opacity: 0.12;
+        background-image:
+          radial-gradient(circle at 16% 20%, rgba(0, 0, 0, 0.8) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 72% 30%, rgba(0, 0, 0, 0.42) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 42% 78%, rgba(0, 0, 0, 0.32) 0.8px, transparent 0.9px);
+        background-size: 26px 26px, 34px 34px, 44px 44px;
+      }
+
+      .beam::before {
+        content: "";
+        position: absolute;
+        width: 230px;
+        height: 960px;
+        left: 676px;
+        top: -140px;
+        background: linear-gradient(180deg, rgba(20, 17, 15, 0.08), rgba(20, 17, 15, 0));
+        transform: rotate(-18deg);
+      }
+
+      .slash::before,
+      .slash::after {
+        content: "";
+        position: absolute;
+        width: 16px;
+        height: 112px;
+        background: var(--acid);
+        border-radius: 999px;
+        transform: rotate(18deg);
+        box-shadow:
+          28px 0 0 rgba(20, 17, 15, 0.14),
+          56px 0 0 rgba(215, 255, 63, 0.55);
+      }
+
+      .slash::before {
+        right: 92px;
+        top: 110px;
+      }
+
+      .slash::after {
+        left: 72px;
+        bottom: 180px;
+      }
+
+      .topbar,
+      .footer {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: "Chivo Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .topbar {
+        top: 58px;
+        color: rgba(20, 17, 15, 0.62);
+      }
+
+      .footer {
+        bottom: 48px;
+      }
+
+      .bar-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .bar-chip::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--rust);
+        box-shadow: 0 0 0 8px rgba(212, 87, 47, 0.1);
+      }
+
+      .progress {
+        display: flex;
+        gap: 10px;
+      }
+
+      .progress span {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(20, 17, 15, 0.12);
+      }
+
+      .progress span.active {
+        width: 44px;
+        border-radius: 999px;
+        background: var(--acid);
+      }
+
+      .canvas {
+        position: absolute;
+        inset: 126px 64px 110px;
+      }
+
+      .dark-card,
+      .light-card,
+      .metric-card,
+      .vote-card {
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+
+      .dark-card {
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(26, 26, 26, 0.98));
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .dark-card::before,
+      .light-card::before,
+      .metric-card::before,
+      .vote-card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--acid), var(--rust), var(--steel));
+      }
+
+      .light-card,
+      .metric-card {
+        background: rgba(255, 250, 242, 0.88);
+        border: 1px solid rgba(20, 17, 15, 0.1);
+        color: var(--ink);
+      }
+
+      .eyebrow,
+      .label {
+        font-family: "Chivo Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .eyebrow {
+        color: var(--acid);
+      }
+
+      .label {
+        color: rgba(20, 17, 15, 0.56);
+      }
+
+      .slide-1 .canvas {
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 28px;
+      }
+
+      .hero-card {
+        padding: 40px 38px 34px;
+      }
+
+      .hero-card h1 {
+        margin: 26px 0 0;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 108px;
+        line-height: 0.95;
+        letter-spacing: -0.08em;
+        font-weight: 900;
+      }
+
+      .hero-card h1 .accent {
+        color: var(--acid);
+      }
+
+      .hero-card p {
+        margin: 28px 0 0;
+        font-size: 29px;
+        line-height: 1.48;
+        color: var(--text-soft);
+      }
+
+      .hero-foot {
+        margin-top: 36px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 16px;
+        align-items: end;
+      }
+
+      .question-box {
+        padding: 18px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .question-box .label {
+        color: rgba(215, 255, 63, 0.78);
+      }
+
+      .question-box .value {
+        margin-top: 10px;
+        font-size: 42px;
+        line-height: 1.12;
+        font-weight: 800;
+      }
+
+      .stamp {
+        padding: 16px 18px;
+        border: 2px solid rgba(215, 255, 63, 0.56);
+        color: var(--acid);
+        transform: rotate(-4deg);
+      }
+
+      .signal-column {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 20px;
+      }
+
+      .signal-note {
+        padding: 24px 24px 28px;
+      }
+
+      .signal-note .big {
+        margin-top: 26px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 56px;
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      .signal-note p {
+        margin: 18px 0 0;
+        font-size: 25px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+      }
+
+      .mini-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .mini-split .metric-card {
+        padding: 22px 20px 24px;
+        min-height: 286px;
+      }
+
+      .metric-card .title {
+        margin-top: 18px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 44px;
+        line-height: 1.04;
+        letter-spacing: -0.04em;
+        font-weight: 900;
+      }
+
+      .metric-card ul {
+        list-style: none;
+        margin: 16px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 12px;
+      }
+
+      .metric-card li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: 22px;
+        line-height: 1.34;
+        color: var(--ink-soft);
+      }
+
+      .metric-card li::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        margin-top: 10px;
+        flex: 0 0 auto;
+        background: var(--rust);
+      }
+
+      .metric-card.project li::before {
+        background: var(--acid);
+      }
+
+      .judgment-card {
+        padding: 24px 24px 28px;
+        align-self: end;
+      }
+
+      .judgment-card .main {
+        margin-top: 16px;
+        font-size: 58px;
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      .judgment-card .sub {
+        margin-top: 14px;
+        font-size: 24px;
+        line-height: 1.46;
+        color: var(--text-soft);
+      }
+
+      .slide-2 .canvas,
+      .slide-3 .canvas,
+      .slide-4 .canvas {
+        display: grid;
+        gap: 22px;
+      }
+
+      .slide-2 .canvas {
+        grid-template-rows: auto 1fr;
+      }
+
+      .statement {
+        padding: 26px 28px 30px;
+      }
+
+      .statement .headline {
+        margin-top: 16px;
+        font-family: "Noto Sans SC", sans-serif;
+        font-size: 74px;
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+      }
+
+      .statement p {
+        margin: 18px 0 0;
+        max-width: 760px;
+        font-size: 28px;
+        line-height: 1.5;
+        color: var(--text-soft);
+      }
+
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+
+      .compare-card {
+        padding: 26px 24px 28px;
+      }
+
+      .compare-card .big {
+        margin-top: 18px;
+        font-size: 62px;
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      .compare-card .divider {
+        margin: 18px 0;
+        height: 2px;
+        background: rgba(20, 17, 15, 0.12);
+      }
+
+      .dark-card.compare-card .divider {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .compare-card p {
+        margin: 0;
+        font-size: 25px;
+        line-height: 1.5;
+      }
+
+      .dark-card.compare-card p {
+        color: var(--text-soft);
+      }
+
+      .slide-3 .canvas {
+        grid-template-rows: auto 1fr;
+      }
+
+      .check-header {
+        padding: 26px 28px 30px;
+      }
+
+      .check-header .headline {
+        margin-top: 14px;
+        font-size: 72px;
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+      }
+
+      .check-header p {
+        margin: 16px 0 0;
+        max-width: 780px;
+        font-size: 27px;
+        line-height: 1.48;
+        color: var(--ink-soft);
+      }
+
+      .checklist {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+      }
+
+      .check-item {
+        padding: 24px 22px 26px;
+      }
+
+      .check-item .num {
+        display: inline-grid;
+        place-items: center;
+        width: 48px;
+        height: 48px;
+        background: var(--acid);
+        color: var(--ink);
+        font-family: "Chivo Mono", monospace;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .check-item .q {
+        margin-top: 18px;
+        font-size: 42px;
+        line-height: 1.06;
+        letter-spacing: -0.04em;
+        font-weight: 900;
+      }
+
+      .check-item .a {
+        margin-top: 14px;
+        font-size: 23px;
+        line-height: 1.46;
+        color: var(--ink-soft);
+      }
+
+      .slide-4 .canvas {
+        grid-template-rows: auto 1fr;
+      }
+
+      .vote-lead {
+        padding: 28px 30px 30px;
+      }
+
+      .vote-lead .headline {
+        margin-top: 16px;
+        max-width: 860px;
+        font-size: 76px;
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+        font-weight: 900;
+      }
+
+      .vote-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+
+      .vote-card {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 18px;
+        align-items: center;
+        padding: 24px 24px 26px;
+        background: rgba(255, 250, 242, 0.9);
+        border: 1px solid rgba(20, 17, 15, 0.1);
+        border-radius: 28px;
+      }
+
+      .vote-card .big {
+        margin-top: 14px;
+        font-size: 48px;
+        line-height: 1.02;
+        letter-spacing: -0.05em;
+        font-weight: 900;
+      }
+
+      .vote-card p {
+        margin: 12px 0 0;
+        font-size: 22px;
+        line-height: 1.46;
+        color: var(--ink-soft);
+      }
+
+      .vote-copy {
+        min-width: 0;
+      }
+
+      .vote-badge {
+        width: 78px;
+        height: 78px;
+        border-radius: 22px;
+        display: grid;
+        place-items: center;
+        border: 2px solid rgba(20, 17, 15, 0.14);
+        font-family: "Chivo Mono", monospace;
+        font-size: 28px;
+        font-weight: 700;
+        color: rgba(20, 17, 15, 0.52);
+        background: rgba(255, 255, 255, 0.54);
+      }
+
+      .vote-card.highlight {
+        background: linear-gradient(180deg, rgba(18, 18, 18, 0.98), rgba(26, 26, 26, 0.98));
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      .vote-card.highlight p {
+        color: var(--text-soft);
+      }
+
+      .vote-card.highlight .vote-badge {
+        color: var(--acid);
+        border-color: rgba(215, 255, 63, 0.48);
+        background: rgba(215, 255, 63, 0.08);
+      }
+
+      .prompt {
+        margin-top: 16px;
+        padding: 22px 24px;
+        border: 1px solid rgba(20, 17, 15, 0.12);
+        border-radius: 24px;
+        font-size: 24px;
+        line-height: 1.46;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .prompt .mini {
+        display: block;
+        margin-bottom: 10px;
+        font-family: "Chivo Mono", monospace;
+        font-size: 15px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: rgba(20, 17, 15, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide slide-1">
+        <div class="grid"></div>
+        <div class="noise"></div>
+        <div class="beam"></div>
+        <div class="slash"></div>
+        <header class="topbar">
+          <span class="bar-chip">oasis7 / xiaohongshu</span>
+          <span>slide 01 / hold</span>
+        </header>
+        <div class="canvas">
+          <article class="dark-card hero-card">
+            <div class="eyebrow">demo skepticism</div>
+            <h1>
+              做AI游戏以后
+              <br />
+              我越来越
+              <br />
+              <span class="accent">不信demo了</span>
+            </h1>
+            <p>
+              不是不信 AI。
+              <br />
+              是我现在一看到很猛的演示，
+              <br />
+              就会先想它到底能撑多久。
+            </p>
+            <div class="hero-foot">
+              <div class="question-box">
+                <div class="label">first question</div>
+                <div class="value">它能撑多久</div>
+              </div>
+              <div class="stamp">review first</div>
+            </div>
+          </article>
+          <aside class="signal-column">
+            <section class="light-card signal-note">
+              <div class="label">signal</div>
+              <div class="big">先被这句停住</div>
+              <p>
+                我不是在唱反调。
+                <br />
+                只是做过以后，
+                <br />
+                真的很难再只看第一眼高光。
+              </p>
+            </section>
+            <div class="mini-split">
+              <section class="metric-card">
+                <div class="label">before</div>
+                <div class="title">先看猛不猛</div>
+                <ul>
+                  <li>角色接话顺不顺</li>
+                  <li>演示跑得丝不丝滑</li>
+                </ul>
+              </section>
+              <section class="metric-card project">
+                <div class="label">now</div>
+                <div class="title">先看能不能玩下去</div>
+                <ul>
+                  <li>放进项目里会不会塌</li>
+                  <li>多玩几次还站不站得住</li>
+                </ul>
+              </section>
+            </div>
+            <section class="dark-card judgment-card">
+              <div class="label">shift</div>
+              <div class="main">能看到本质了</div>
+              <div class="sub">以前会先被演示打动，现在会先看它能不能站住。</div>
+            </section>
+          </aside>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span class="active"></span><span></span><span></span><span></span></div>
+          <span>build review wall</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-2">
+        <div class="grid"></div>
+        <div class="noise"></div>
+        <div class="beam"></div>
+        <header class="topbar">
+          <span class="bar-chip">oasis7 / xiaohongshu</span>
+          <span>slide 02 / split</span>
+        </header>
+        <div class="canvas">
+          <section class="dark-card statement">
+            <div class="eyebrow">core judgment</div>
+            <div class="headline">demo只负责高光</div>
+            <p>
+              30 秒里看起来很聪明，和真放进项目里不露馅，根本不是一回事。
+            </p>
+          </section>
+          <div class="compare-grid">
+            <section class="dark-card compare-card">
+              <div class="eyebrow">demo</div>
+              <div class="big">挑最好的一分钟</div>
+              <div class="divider"></div>
+              <p>
+                能把“那一下”做得很亮。
+                <br />
+                第一眼很猛，就已经赢了一半。
+              </p>
+            </section>
+            <section class="light-card compare-card">
+              <div class="label">project</div>
+              <div class="big">最差状态也要摊出来</div>
+              <div class="divider"></div>
+              <p>
+                换场景、重复玩、出问题、返工、成本，
+                <br />
+                这些都不会因为演示好看就自动消失。
+              </p>
+            </section>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span class="active"></span><span></span><span></span></div>
+          <span>demo / project</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-3">
+        <div class="grid"></div>
+        <div class="noise"></div>
+        <div class="slash"></div>
+        <header class="topbar">
+          <span class="bar-chip">oasis7 / xiaohongshu</span>
+          <span>slide 03 / checklist</span>
+        </header>
+        <div class="canvas">
+          <section class="light-card check-header">
+            <div class="label">my checklist now</div>
+            <div class="headline">我现在会先问什么</div>
+            <p>
+              真往游戏里塞之前，我现在更关心的是这四件事。
+            </p>
+          </section>
+          <div class="checklist">
+            <section class="metric-card check-item">
+              <div class="num">01</div>
+              <div class="q">换个场景还灵不灵</div>
+              <div class="a">不是只在固定 demo 环境里看起来聪明。</div>
+            </section>
+            <section class="metric-card check-item">
+              <div class="num">02</div>
+              <div class="q">多玩几次会不会露馅</div>
+              <div class="a">玩家一重复操作，就开始看出套路没有。</div>
+            </section>
+            <section class="metric-card check-item">
+              <div class="num">03</div>
+              <div class="q">出问题了能不能查</div>
+              <div class="a">真翻车以后，到底能不能把原因找回来。</div>
+            </section>
+            <section class="metric-card check-item">
+              <div class="num">04</div>
+              <div class="q">成本到底扛不扛得住</div>
+              <div class="a">如果每次高光都太贵，那也很难真的进项目。</div>
+            </section>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span class="active"></span><span></span></div>
+          <span>review checklist</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-4">
+        <div class="grid"></div>
+        <div class="noise"></div>
+        <div class="beam"></div>
+        <header class="topbar">
+          <span class="bar-chip">oasis7 / xiaohongshu</span>
+          <span>slide 04 / vote</span>
+        </header>
+        <div class="canvas">
+          <section class="dark-card vote-lead">
+            <div class="eyebrow">judgment shift</div>
+            <div class="headline">
+              现在我更在意的
+              <br />
+              不是第一眼很猛
+              <br />
+              是它能不能持续玩下去
+            </div>
+          </section>
+          <div class="vote-grid">
+            <section class="vote-card">
+              <div class="vote-copy">
+                <div class="label">更容易被这个打动</div>
+                <div class="big">第一眼很猛</div>
+                <p>
+                  演示效果够炸，
+                  <br />
+                  我会先被它惊到。
+                </p>
+              </div>
+              <div class="vote-badge">A</div>
+            </section>
+            <section class="vote-card highlight">
+              <div class="vote-copy">
+                <div class="eyebrow">我现在更偏这个</div>
+                <div class="big">能不能持续玩下去</div>
+                <p>
+                  我会先想，
+                  <br />
+                  它放进项目里到底能不能持续玩下去。
+                </p>
+              </div>
+              <div class="vote-badge">B</div>
+            </section>
+          </div>
+          <div class="prompt">
+            <span class="mini">comment prompt</span>
+            你是哪种？
+            <br />
+            更吃“第一眼很猛”，还是会先看“能不能持续玩下去”？
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span></span><span class="active"></span></div>
+          <span>comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slideParam = Number.parseInt(params.get("slide") || "", 10);
+      if (!Number.isNaN(slideParam) && slideParam >= 1 && slideParam <= 4) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((slide, index) => {
+          slide.style.display = index === slideParam - 1 ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>

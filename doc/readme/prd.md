@@ -79,6 +79,8 @@
 - PRD-README-029: As a `liveops_community`, I want a reusable Xiaohongshu spring-recruit carousel pack derived from the approved long-form post, so that the same topic can publish as a mobile-native swipe format with stronger retention and comment prompts instead of only one long caption block.
 - PRD-README-030: As a `liveops_community`, I want a reusable Xiaohongshu AI-persona-vs-world-actor post pack, so that we can borrow the current `AI人格` discussion heat to explain why `oasis7` wants agents that can act inside the world instead of only sounding like companions, without drifting into companion-product framing or unsafe release claims.
 - PRD-README-031: As a `liveops_community`, I want a reusable Xiaohongshu AI-persona carousel pack derived from the approved seventh post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “会聊天”“会行动”“如何判断” and the final comment hook, instead of only one cover plus long caption.
+- PRD-README-032: As a `liveops_community`, I want a reusable Xiaohongshu anti-demo-hype post pack from the game-maker perspective, so that we can借“AI demo 很猛”这类高频讨论，讲清楚我为什么越来越看重稳定、收口和能不能真的放进项目，而不是只被第一眼高光打动。
+- PRD-README-033: As a `liveops_community`, I want a reusable Xiaohongshu demo-skepticism carousel pack derived from the approved eighth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “先停住”“demo vs project”“我会先问什么” and the final comment hook, instead of only one industrial cover plus long caption.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -134,6 +136,9 @@
 - AC-16: 若小红书内容链路进入第五篇，必须补齐“AI时代，你变"懒"了么”素材包，明确如何从 AI 使用习惯切到游戏模式讨论，并保持人类开发者视角与 `limited playable technical preview` 边界。
 - AC-17: 若小红书内容链路进入第六篇，必须补齐“作为游戏工作室主理人，今年的春招视角”素材包，明确标题、正文、封面、互动问题、关键词与禁滑坡边界，并把春招热点收口到团队判断、完成度、AI 使用方式与玩家感觉；若平台标题长度受限，最终发布标题必须优先保留“游戏工作室主理人”和“春招”识别点。
 - AC-18: 若第六篇需要轮播版，必须补齐独立轮播素材包，明确页数、逐页文案、HTML、逐页 PNG 与评论区收束页分工，并保持与长文版标题、边界和互动问题一致。
+- AC-19: 若小红书内容链路进入第八篇，必须补齐“做AI游戏以后，我越来越不信demo了”素材包，明确标题、正文、短版文案、互动问题、关键词与“不是不信 AI，而是不再轻易被 demo 高光说服”的表达边界，并保持人类开发者第一人称与非上线口径。
+- AC-20: 若第八篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要明显区别于前几篇的暖纸面判断卡，更接近“项目审查板 / build review wall”，并保持“先问它能撑多久”的主判断不被装饰稀释。
+- AC-21: 若第八篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用第八篇的工业审查板 / build review wall 视觉语言，不回退到前几篇的暖纸便签风。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
   - 不在 readme PRD 中替代各模块详细设计。
@@ -216,6 +221,8 @@
 | PRD-README-029 | TASK-README-039 | `test_tier_required` | 小红书第六篇轮播版素材包明确逐页文案、HTML、逐页 PNG 与评论区收束页 | 第六篇从长文版扩展到 feed-native 轮播版的可发布性 |
 | PRD-README-030 | TASK-README-044 | `test_tier_required` | 小红书第七篇素材包明确“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”边界 | 渠道内容从泛 AI 人格讨论重新收束到 `oasis7` 的 agent 设计判断与世界内行动逻辑 |
 | PRD-README-031 | TASK-README-046/047/048/049 | `test_tier_required` | 小红书第七篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并完成前两页重叠修复、后两页案例页/收束页美术收口，以及整组从“编辑部海报感”继续收口到更接近小红书原生图文卡片的发布视觉 | 第七篇从单图封面 + 长文版扩展到更适合小红书 feed 的轮播版发布形态，同时保证整组轮播的视觉质量、手机端读感与平台原生感 |
+| PRD-README-032 | TASK-README-050/051 | `test_tier_required` | 小红书第八篇素材包明确“做AI游戏以后，我越来越不信demo了”的标题、正文、短版文案、互动问题、关键词与封面 HTML/PNG，并保持“demo 高光不等于项目能扛住”的边界 | 渠道内容从“AI人格/陪聊”继续推进到“我怎么判断 AI 游戏里什么能信”，把讨论收口到真实项目判断与长期可玩性 |
+| PRD-README-033 | TASK-README-052 | `test_tier_required` | 小红书第八篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用“项目审查板 / build review wall”视觉语言收口成更适合 feed 滑读的发布形态 | 第八篇从工业感单图封面 + 长文版扩展到更适合小红书停留和评论站队的轮播版，同时保持“先问它能撑多久”的判断主线 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

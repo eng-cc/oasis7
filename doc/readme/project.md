@@ -526,6 +526,52 @@
     - `rg -n "Ma Shan Zheng|note-card|poll-card|comment-card|scenario-top|bubble-card|stack-card" site/social/xiaohongshu-ai-persona-carousel.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-050 (PRD-README-032) [test_tier_required]: 为小红书第八篇“做AI游戏以后，我越来越不信demo了”补齐独立素材包，固定标题、正文、短版文案、互动问题、关键词与“不是不信 AI，而是不再轻易被 demo 高光说服”的表达边界。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
+    - `doc/devlog/2026-03-31.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "做AI游戏以后，我越来越不信demo了|这玩意儿能撑多久|demo只负责高光|会不会很快塌|第一眼很猛" doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+- [x] TASK-README-051 (PRD-README-032) [test_tier_required]: 为小红书第八篇补齐独立封面图 HTML 与 PNG，采用区别于前几篇的“项目审查板 / build review wall”视觉语言，强化“先问它能撑多久”的判断感，不改变正文边界与互动问题。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
+    - `site/social/xiaohongshu-demo-skepticism-cover.html`
+    - `site/social/xiaohongshu-demo-skepticism-cover.png`
+    - `doc/devlog/2026-03-31.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "项目审查板|build review wall|xiaohongshu-demo-skepticism-cover.html|xiaohongshu-demo-skepticism-cover.png|先问它能撑多久" doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md site/social/xiaohongshu-demo-skepticism-cover.html`
+    - `file site/social/xiaohongshu-demo-skepticism-cover.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+- [x] TASK-README-052 (PRD-README-033) [test_tier_required]: 为小红书第八篇补齐 4 页轮播版素材包，固定逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用“项目审查板 / build review wall”的工业判断风格，不回退到前几篇的暖纸便签视觉。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
+    - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md`
+    - `site/social/xiaohongshu-demo-skepticism-carousel.html`
+    - `site/social/xiaohongshu-demo-skepticism-carousel-slide1.png`
+    - `site/social/xiaohongshu-demo-skepticism-carousel-slide2.png`
+    - `site/social/xiaohongshu-demo-skepticism-carousel-slide3.png`
+    - `site/social/xiaohongshu-demo-skepticism-carousel-slide4.png`
+    - `doc/devlog/2026-03-31.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "做AI游戏以后|demo只负责高光|我现在会先问|你更吃哪一种|xiaohongshu-demo-skepticism-carousel.html" doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md site/social/xiaohongshu-demo-skepticism-carousel.html`
+    - `file site/social/xiaohongshu-demo-skepticism-carousel-slide1.png site/social/xiaohongshu-demo-skepticism-carousel-slide2.png site/social/xiaohongshu-demo-skepticism-carousel-slide3.png site/social/xiaohongshu-demo-skepticism-carousel-slide4.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -538,9 +584,12 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-03-31
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-052`（已为小红书第八篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并沿用工业审查板语言完成收束。）
+- 最新完成: `TASK-README-051`（已为小红书第八篇补齐独立封面 HTML 与 PNG，并将视觉语言切到更像项目审查板的 build review wall 风格。）
+- 最新完成: `TASK-README-050`（已为小红书第八篇固定“做AI游戏以后，我越来越不信demo了”的标题、正文、短版文案、互动问题、关键词与 demo 祛魅边界。）
 - 最新完成: `TASK-README-049`（已把第七篇 4 页轮播从编辑部判断卡继续收口到更接近小红书原生图文卡片的视觉语言，并重导全部 PNG。）
 - 最新完成: `TASK-README-048`（已重做第七篇轮播版后两页视觉骨架，把案例页与收束页收口到同一套编辑部判断卡语言。）
 - 最新完成: `TASK-README-047`（已重做第七篇轮播版前两页视觉骨架，修复元素重叠并收口为更稳的编辑部判断卡布局。）
