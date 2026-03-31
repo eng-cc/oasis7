@@ -37,6 +37,7 @@ ROLE_MEMORY_PREFIXES = {
     "wasm_platform_engineer": "WASM",
 }
 DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
+PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
 
 def now_iso() -> str:
@@ -597,6 +598,127 @@ def build_memory_report(
     }
 
 
+def task_sort_key(item: dict[str, object]) -> tuple[object, object, object]:
+    return (
+        PRIORITY_ORDER.get(str(item.get("priority")), 99),
+        str(item.get("updated_at") or ""),
+        str(item.get("task_id") or ""),
+    )
+
+
+def normalize_list_field(value: object) -> list[object]:
+    if isinstance(value, list):
+        return list(value)
+    if value in {None, ""}:
+        return []
+    return [value]
+
+
+def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_days: int) -> dict[str, object]:
+    roles = sorted(load_roles(root))
+    if role_filter and role_filter not in roles:
+        raise ValueError(f"unknown role: {role_filter}")
+
+    included_roles = [role_filter] if role_filter else roles
+    memory_report = build_memory_report(
+        root,
+        role_filter=role_filter,
+        include_shared=False,
+        stale_after_days=stale_after_days,
+    )
+
+    registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    del registry_header
+    registry_by_id: dict[str, OrderedDict[str, object]] = {
+        str(entry["task_id"]): entry for entry in registry_entries if entry.get("task_id")
+    }
+    task_field_cache: dict[str, OrderedDict[str, object]] = {}
+
+    active_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
+    needs_review_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
+    superseded_by_role: dict[str, list[dict[str, object]]] = {role: [] for role in included_roles}
+
+    for item in memory_report["active"]:
+        active_by_role[str(item["role"])].append(item)
+    for item in memory_report["needs_review"]:
+        needs_review_by_role[str(item["role"])].append(item)
+    for item in memory_report["superseded"]:
+        superseded_by_role[str(item["role"])].append(item)
+
+    def load_task_fields(task_path: str | None) -> OrderedDict[str, object]:
+        if not task_path:
+            return OrderedDict()
+        if task_path not in task_field_cache:
+            resolved = root / task_path
+            task_field_cache[task_path] = load_mapping_document(resolved) if resolved.is_file() else OrderedDict()
+        return task_field_cache[task_path]
+
+    def shape_backlog_task(role: str, entry: OrderedDict[str, object]) -> dict[str, object]:
+        del role
+        task_id = str(entry.get("task_id") or "")
+        registry_entry = registry_by_id.get(task_id, OrderedDict())
+        task_path = str(entry.get("task_path") or registry_entry.get("task_path") or "")
+        task_fields = load_task_fields(task_path)
+        return {
+            "task_id": task_id,
+            "title": entry.get("title") or task_fields.get("title"),
+            "priority": entry.get("priority") or registry_entry.get("priority") or task_fields.get("priority"),
+            "status": entry.get("status") or task_fields.get("status") or registry_entry.get("status"),
+            "source_signal": entry.get("source_signal") or task_fields.get("source_signal") or registry_entry.get("source_signal"),
+            "task_path": task_path or None,
+            "updated_at": task_fields.get("updated_at") or registry_entry.get("updated_at"),
+            "related_prd": normalize_list_field(entry.get("related_prd") or task_fields.get("related_prd")),
+            "acceptance": normalize_list_field(entry.get("acceptance") or task_fields.get("acceptance")),
+            "handoff_to": normalize_list_field(entry.get("handoff_to") or task_fields.get("handoff_to")),
+        }
+
+    role_payloads: OrderedDict[str, dict[str, object]] = OrderedDict()
+    backlog_totals: OrderedDict[str, int] = OrderedDict(
+        (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
+    )
+
+    for role in included_roles:
+        backlog_counts: OrderedDict[str, int] = OrderedDict(
+            (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
+        )
+        tasks_by_status: OrderedDict[str, list[dict[str, object]]] = OrderedDict(
+            (status, []) for status in ("candidate", "committed", "blocked", "done", "deferred")
+        )
+
+        for file_status in ("candidate", "committed", "blocked", "done"):
+            path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            _, entries = load_list_document(path, "tasks")
+            for entry in entries:
+                shaped = shape_backlog_task(role, entry)
+                status = str(shaped.get("status") or file_status)
+                if status not in tasks_by_status:
+                    continue
+                backlog_counts[status] += 1
+                backlog_totals[status] += 1
+                tasks_by_status[status].append(shaped)
+
+        for task_items in tasks_by_status.values():
+            task_items.sort(key=task_sort_key)
+
+        role_payloads[role] = {
+            "backlog_counts": backlog_counts,
+            "memory_counts": OrderedDict(memory_report["roles"].get(role, {})),
+            "tasks": tasks_by_status,
+            "active_memory": active_by_role[role],
+            "needs_review_memory": needs_review_by_role[role],
+            "superseded_memory": superseded_by_role[role],
+        }
+
+    return {
+        "generated_at": now_iso(),
+        "stale_after_days": stale_after_days,
+        "role_filter": role_filter,
+        "role_count": len(included_roles),
+        "backlog_totals": backlog_totals,
+        "roles": role_payloads,
+    }
+
+
 def run_task_backlog_lint(root: pathlib.Path) -> None:
     roles = load_roles(root)
     failures: list[str] = []
@@ -1008,6 +1130,52 @@ def cmd_memory_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_role_report(args: argparse.Namespace) -> int:
+    if args.stale_after_days < 0:
+        raise ValueError("--stale-after-days must be >= 0")
+
+    report = build_role_report(args.root, role_filter=args.role, stale_after_days=args.stale_after_days)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 role report",
+        f"- generated_at: {report['generated_at']}",
+        f"- stale_after_days: {report['stale_after_days']}",
+        f"- role_filter: {report['role_filter'] or '(all roles)'}",
+        f"- backlog_totals: {', '.join(f'{k}={v}' for k, v in report['backlog_totals'].items())}",
+    ]
+
+    for role, payload in report["roles"].items():
+        lines.append(f"- role: {role}")
+        lines.append(
+            "  backlog_counts: "
+            + ", ".join(f"{status}={count}" for status, count in payload["backlog_counts"].items())
+        )
+        lines.append(
+            "  memory_counts: "
+            + ", ".join(f"{status}={count}" for status, count in payload["memory_counts"].items())
+        )
+
+        lines.append("  blocked_tasks:")
+        if payload["tasks"]["blocked"]:
+            for item in payload["tasks"]["blocked"]:
+                lines.append(f"    - {item['task_id']} / {item['priority']} / {item['title']}")
+        else:
+            lines.append("    - (none)")
+
+        lines.append("  needs_review_memory:")
+        if payload["needs_review_memory"]:
+            for item in payload["needs_review_memory"]:
+                lines.append(f"    - {item['id']} / {item['topic']} / {item['last_reviewed_at']}")
+        else:
+            lines.append("    - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_promote_memory(args: argparse.Namespace) -> int:
     root = args.root
     updated_at = args.effective_at or now_iso()
@@ -1303,6 +1471,13 @@ def build_parser() -> argparse.ArgumentParser:
     memory_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
     memory_report.add_argument("--json", action="store_true")
     memory_report.set_defaults(func=cmd_memory_report)
+
+    role_report = subparsers.add_parser("role-report")
+    role_report.add_argument("root", type=pathlib.Path)
+    role_report.add_argument("--role")
+    role_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
+    role_report.add_argument("--json", action="store_true")
+    role_report.set_defaults(func=cmd_role_report)
 
     promote_memory = subparsers.add_parser("promote-memory")
     promote_memory.add_argument("root", type=pathlib.Path)

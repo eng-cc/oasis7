@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  devlog -> signal -> candidate task/memory -> blocked task -> memory lint/report -> stage report
+  devlog -> signal -> candidate task/memory -> blocked task -> memory/role/stage report
 
 Options:
   --json       Print machine-readable JSON summary
@@ -241,9 +241,10 @@ PY
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
+ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$MEMORY_REPORT_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -256,7 +257,8 @@ producer_memory = json.loads(sys.argv[5])
 shared_memory = json.loads(sys.argv[6])
 rejected_memory = json.loads(sys.argv[7])
 memory_report = json.loads(sys.argv[8])
-stage_report = json.loads(sys.argv[9])
+role_report = json.loads(sys.argv[9])
+stage_report = json.loads(sys.argv[10])
 
 print(
     json.dumps(
@@ -269,6 +271,7 @@ print(
             "shared_memory": shared_memory,
             "rejected_memory": rejected_memory,
             "memory_report": memory_report,
+            "role_report": role_report,
             "stage_report": stage_report,
         },
         ensure_ascii=False,
@@ -305,5 +308,6 @@ print(f"- producer_active_memory: {len(stage['memory_inputs']['producer_active']
 print(f"- shared_active_memory: {len(stage['memory_inputs']['shared_active'])}")
 print(f"- needs_review_memory: {payload['memory_report']['counts']['needs_review']}")
 print(f"- superseded_memory: {payload['memory_report']['counts']['superseded']}")
+print(f"- qa_blocked_tasks: {payload['role_report']['roles']['qa_engineer']['backlog_counts']['blocked']}")
 print(f"- rejected_memory_signal: {payload['rejected_memory']['signal_id']}")
 PY

@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cat <<'EOF' >&2
-scripts/pm/role-report.sh is reserved by TASK-ENGINEERING-077.
-This Phase 1 scaffold only establishes the entrypoint and path contract.
-EOF
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
-exit 3
+exec python3 "$SCRIPT_DIR/pm_store.py" role-report "$ROOT_DIR" "$@"

@@ -93,6 +93,7 @@
 - [x] TASK-ENGINEERING-081 (PRD-ENGINEERING-021) [test_tier_required]: 为 `producer_system_designer`、`qa_engineer`、`liveops_community` 与 `shared` 落地首批长期 memory 样例。
 - [x] TASK-ENGINEERING-082 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `promote-memory` 契约、signal `memory_promotion_state` 决策回写，以及 `promotion_reason` / `reject_reason` 白名单。
 - [x] TASK-ENGINEERING-083 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `memory-report`，并补 stale review、active 冲突、superseded 链和新角色扩容回归。
+- [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -133,7 +134,7 @@
 ## 状态
 - 更新日期: 2026-03-31
 - 当前状态: active
-- 下一任务: 待新增 self-evolution / `role-report` 治理任务（当前 `TASK-ENGINEERING-074~083` 已全部完成）
+- 下一任务: 待新增 self-evolution 后续治理任务（当前 `TASK-ENGINEERING-074~084` 已全部完成）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -159,6 +160,7 @@
 - 最新完成: `TASK-ENGINEERING-071`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代详细证据目录。）
 - 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
 - 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
+- 最新完成: `TASK-ENGINEERING-084`（已落地 `role-report.sh`、按角色 backlog+memory 汇总视图，以及真实 blocked task/stale memory/role-expansion smoke。）
 - 最新完成: `TASK-ENGINEERING-083`（已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容 lint/scaffold，以及 stale/conflict/superseded-chain/role-expansion full-tier smoke。）
 - 最新完成: `TASK-ENGINEERING-082`（已落地 `promote-memory.sh`、signal `memory_promotion_state` 决策回写、promotion/reject 白名单，以及 accepted/rejected promotion smoke。）
 - 最新完成: `TASK-ENGINEERING-081`（已为 producer/qa/liveops/shared 落地首批长期 memory 样例，覆盖阶段结论、QA failure signature、community messaging boundary 与 shared claim envelope。）

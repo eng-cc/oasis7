@@ -78,6 +78,7 @@ fi
 
 ./scripts/pm/memory-lint.sh >/dev/null
 ./scripts/pm/memory-report.sh --json >/dev/null
+./scripts/pm/role-report.sh --json >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
 
 echo "pm-lint: OK"

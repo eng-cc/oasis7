@@ -74,6 +74,7 @@
   - Git/worktree 感知脚本，用于在当前 worktree 内独立维护 `.pm/` 运行态。
   - 文件读写与 lint 脚本，用于检查 YAML/JSONL/Markdown 结构完整性。
   - signal promotion 脚本，用于把 `devlog`、证据文件或手工录入事件提升为 memory/task。
+  - role report 脚本，用于按角色读取 backlog、active memory、needs_review 和 superseded 视图。
   - stage report 脚本，用于按角色 backlog、gate、signal 汇总阶段输入。
 - Evaluation Strategy:
   - 结构正确性：lint 通过率、字段完整率、角色 registry 覆盖率。
@@ -144,9 +145,9 @@
 | PRD-ENGINEERING-SE-001 | TASK-ENGINEERING-074/078 | `test_tier_required` | stage/gate 文件结构检查、stage 汇总样例验证 | 制作人阶段评审输入、跨角色裁决链 |
 | PRD-ENGINEERING-SE-002 | TASK-ENGINEERING-076/079 | `test_tier_required` | QA signal ingestion / promotion / overdue 报表验证 | QA block 回流、required/full 放行链 |
 | PRD-ENGINEERING-SE-003 | TASK-ENGINEERING-076/079 | `test_tier_required` | liveops signal inbox、candidate task 生成与 follow-up 链检查 | 社区反馈回流、事故收口 |
-| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077 | `test_tier_required` | task registry 模板、状态机、lint 与索引生成验证 | worktree 任务追踪、角色 backlog |
-| PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性与 superseded_by 链检查 | 长期记忆审计与历史裁决回放 |
-| PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint 扩容验证 | 角色扩容、治理脚本兼容性 |
+| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
+| PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
+| PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证 | 角色扩容、治理脚本兼容性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

@@ -184,6 +184,10 @@
 - 建立 `stage-report.sh`
 - 把阶段输入收敛成可审计文件
 
+### Phase 5: 角色视图
+- 建立 `role-report.sh`
+- 让每个 owner 可以直接读取本角色 backlog、blocked tasks、active memory 与 `needs_review` 清单
+
 ## 验证策略
 - 结构验证：
   - `scripts/pm/lint.sh`

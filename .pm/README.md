@@ -37,6 +37,7 @@
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
 - `./scripts/pm/memory-report.sh`：按 role 输出 active / needs_review / superseded 报表，默认以 7 天未 review 记为 `needs_review`。
+- `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `devlog -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
@@ -63,6 +64,12 @@ memory report 基础用法：
 - `./scripts/pm/memory-report.sh --role qa_engineer --no-shared`
 - `./scripts/pm/memory-report.sh --stale-after-days 14 --json`
 - 默认 stale 阈值为 7 天，对应长期 memory 每周至少 review 1 次的治理口径。
+
+role report 基础用法：
+- `./scripts/pm/role-report.sh`
+- `./scripts/pm/role-report.sh --role qa_engineer`
+- `./scripts/pm/role-report.sh --role qa_engineer --json`
+- 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory。
 
 阶段汇总基础用法：
 - `./scripts/pm/stage-report.sh`

@@ -14,6 +14,7 @@ Usage: ./scripts/pm/memory-regression-smoke.sh [--json] [--keep-temp]
 Run isolated full-tier memory regression checks:
   - needs_review / superseded report output
   - report role filtering
+  - role report backlog + memory aggregation
   - active topic conflict rejection
   - superseded chain rejection
   - new role expansion via registry + scaffold
@@ -219,13 +220,23 @@ registry_path.write_text(text.replace("shared_memory:\n", entry + "shared_memory
 PY
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/scaffold.sh" report_smoke_engineer >/dev/null
+TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+  --owner-role qa_engineer \
+  --title "investigate stale viewer blocker" \
+  --priority P1 \
+  --source-ref doc/devlog/2026-03-31.md \
+  --json)"
+TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_id"])' <<<"$TASK_JSON")"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status blocked >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 
 REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 QA_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --role qa_engineer --no-shared --json)"
+ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --json)"
+QA_ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
 
-python3 - "$REPORT_JSON" "$QA_REPORT_JSON" <<'PY'
+python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_ID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -233,6 +244,9 @@ import sys
 
 report = json.loads(sys.argv[1])
 qa_report = json.loads(sys.argv[2])
+role_report = json.loads(sys.argv[3])
+qa_role_report = json.loads(sys.argv[4])
+task_id = sys.argv[5]
 
 if report["counts"] != {"active": 3, "needs_review": 1, "superseded": 1}:
     raise SystemExit(f"unexpected report counts: {report['counts']}")
@@ -244,6 +258,16 @@ if qa_report["counts"] != {"active": 1, "needs_review": 1, "superseded": 1}:
     raise SystemExit(f"unexpected qa_report counts: {qa_report['counts']}")
 if list(qa_report["roles"].keys()) != ["qa_engineer"]:
     raise SystemExit("qa_report should only contain qa_engineer role summary")
+if role_report["roles"]["report_smoke_engineer"]["backlog_counts"] != {"candidate": 0, "committed": 0, "blocked": 0, "done": 0, "deferred": 0}:
+    raise SystemExit("role_report missing zero-count expanded role backlog summary")
+if role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
+    raise SystemExit("role_report missing blocked QA task count")
+if role_report["roles"]["qa_engineer"]["tasks"]["blocked"][0]["task_id"] != task_id:
+    raise SystemExit("role_report missing expected blocked QA task")
+if qa_role_report["role_filter"] != "qa_engineer":
+    raise SystemExit("qa_role_report filter mismatch")
+if qa_role_report["roles"]["qa_engineer"]["memory_counts"] != {"active": 1, "needs_review": 1, "superseded": 1}:
+    raise SystemExit("qa_role_report memory summary mismatch")
 PY
 
 python3 - "$TMPDIR" <<'PY'
@@ -343,7 +367,7 @@ if [[ "$CHAIN_OUTPUT" != *"superseded_by missing target"* ]] || [[ "$CHAIN_OUTPU
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON" "$QA_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_ID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -355,6 +379,9 @@ print(
             "temp_root": sys.argv[1],
             "report": json.loads(sys.argv[2]),
             "qa_report": json.loads(sys.argv[3]),
+            "role_report": json.loads(sys.argv[4]),
+            "qa_role_report": json.loads(sys.argv[5]),
+            "blocked_task_id": sys.argv[6],
             "conflict_failure": "active memory topic conflict",
             "chain_failure": "superseded_by missing target",
             "expanded_role": "report_smoke_engineer",
@@ -383,6 +410,7 @@ print(f"- active_count: {payload['report']['counts']['active']}")
 print(f"- needs_review_count: {payload['report']['counts']['needs_review']}")
 print(f"- superseded_count: {payload['report']['counts']['superseded']}")
 print(f"- expanded_role: {payload['expanded_role']}")
+print(f"- qa_blocked_task_id: {payload['blocked_task_id']}")
 print(f"- conflict_failure: {payload['conflict_failure']}")
 print(f"- chain_failure: {payload['chain_failure']}")
 PY
