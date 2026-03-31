@@ -84,6 +84,14 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     "version: 1\nscope: shared\nkind: memory_superseded\nrecords: []\n",
     encoding="utf-8",
 )
+(root / ".pm/stage/current.yaml").write_text(
+    "version: 1\ncurrent_stage: null\ncandidate_stage: null\nclaim_envelope: null\ndecision_date: null\nupdated_from: []\nblocking_tasks: []\n",
+    encoding="utf-8",
+)
+(root / ".pm/stage/gate.yaml").write_text(
+    "version: 1\ngate_id: null\nstatus: draft\nlane_status: []\nblocking_tasks: []\nupdated_from: []\n",
+    encoding="utf-8",
+)
 PY
 
 cat > "$TMPDIR/doc/devlog/2026-03-30.md" <<'EOF'
@@ -184,12 +192,11 @@ LIVEOPS_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signa
   --summary "community escalation still needs owner follow-up" \
   --json)"
 
-python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+python3 - "$TMPDIR" <<'PY'
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-task_id = sys.argv[2]
 
 (root / ".pm/roles/producer_system_designer/memory/superseded.yaml").write_text(
     """version: 1
@@ -215,47 +222,120 @@ records:
 """,
     encoding="utf-8",
 )
-
-(root / ".pm/stage/current.yaml").write_text(
-    f"""version: 1
-current_stage: internal_playable_alpha_late
-candidate_stage: limited_preview_readiness
-claim_envelope: internal_only
-decision_date: 2026-03-30
-updated_from:
-  - doc/devlog/2026-03-30.md
-blocking_tasks:
-  - {task_id}
-""",
-    encoding="utf-8",
-)
-
-(root / ".pm/stage/gate.yaml").write_text(
-    f"""version: 1
-gate_id: GATE-ALPHA-001
-status: blocked
-lane_status:
-  - qa=blocked
-  - liveops=monitor
-blocking_tasks:
-  - {task_id}
-updated_from:
-  - doc/devlog/2026-03-30.md
-""",
-    encoding="utf-8",
-)
 PY
 
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-lint.sh" >/dev/null 2>&1; then
+  echo "required-tier-smoke: expected stage-lint to fail before canonical stage files are updated" >&2
+  exit 1
+fi
+
+SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
+  --current-stage internal_playable_alpha_late \
+  --candidate-stage limited_preview_readiness \
+  --claim-envelope internal_only \
+  --decision-date 2026-03-30 \
+  --gate-id GATE-ALPHA-001 \
+  --gate-status blocked \
+  --lane-status qa=blocked \
+  --lane-status liveops=monitor \
+  --blocking-task "$TASK_ID" \
+  --source-ref doc/devlog/2026-03-30.md \
+  --json)"
+
+FAILED_SET_STAGE_STDERR="$TMPDIR/set-stage-fail.stderr"
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
+  --clear-blocking-tasks \
+  --source-ref doc/devlog/2026-03-30.md \
+  --json > /dev/null 2>"$FAILED_SET_STAGE_STDERR"; then
+  echo "required-tier-smoke: expected set-stage to fail when clearing a still-blocked task from blocking_tasks" >&2
+  exit 1
+fi
+python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+task_id = sys.argv[2]
+
+for path_str in (".pm/stage/current.yaml", ".pm/stage/gate.yaml"):
+    text = (root / path_str).read_text(encoding="utf-8")
+    if f"blocking_tasks:\n  - {task_id}\n" not in text:
+        raise SystemExit(f"failed set-stage should not persist cleared blocker in {path_str}")
+PY
+
+python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+task_id = sys.argv[2]
+
+for path_str in (".pm/stage/current.yaml", ".pm/stage/gate.yaml"):
+    path = root / path_str
+    text = path.read_text(encoding="utf-8")
+    needle = f"blocking_tasks:\n  - {task_id}\n"
+    if needle not in text:
+        raise SystemExit(f"expected blocking task entry not found in {path}")
+    path.write_text(text.replace(needle, "blocking_tasks: []\n"), encoding="utf-8")
+PY
+
+STAGE_DRIFT_STDERR="$TMPDIR/stage-drift.stderr"
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-lint.sh" > /dev/null 2>"$STAGE_DRIFT_STDERR"; then
+  echo "required-tier-smoke: expected stage-lint to fail when blocked task drifts out of stage/gate blocking_tasks" >&2
+  exit 1
+fi
+if ! grep -q "blocked task missing from stage/gate blocking_tasks: $TASK_ID" "$STAGE_DRIFT_STDERR"; then
+  echo "required-tier-smoke: stage drift failure did not mention missing blocked task $TASK_ID" >&2
+  exit 1
+fi
+
+SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
+  --current-stage internal_playable_alpha_late \
+  --candidate-stage limited_preview_readiness \
+  --claim-envelope internal_only \
+  --decision-date 2026-03-30 \
+  --gate-id GATE-ALPHA-001 \
+  --gate-status blocked \
+  --lane-status qa=blocked \
+  --lane-status liveops=monitor \
+  --blocking-task "$TASK_ID" \
+  --source-ref doc/devlog/2026-03-30.md \
+  --json)"
+
+BROKEN_BACKLOG="$TMPDIR/.pm/roles/qa_engineer/backlog/blocked.yaml"
+cp "$BROKEN_BACKLOG" "$BROKEN_BACKLOG.bak"
+printf 'this is not a valid backlog doc\n' > "$BROKEN_BACKLOG"
+WORKFLOW_FAIL_STDERR="$TMPDIR/workflow-report-fail.stderr"
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json > /dev/null 2>"$WORKFLOW_FAIL_STDERR"; then
+  echo "required-tier-smoke: expected workflow-report to fail when backlog input is malformed" >&2
+  exit 1
+fi
+python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+from pathlib import Path
+import sys
+import yaml
+
+root = Path(sys.argv[1])
+task_id = sys.argv[2]
+task_path = root / f".pm/tasks/{task_id}.yaml"
+payload = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+if payload.get("last_started_at") not in (None, ""):
+    raise SystemExit(f"workflow-report failure should not write last_started_at for {task_id}")
+if payload.get("last_closed_at") not in (None, ""):
+    raise SystemExit(f"workflow-report failure should not write last_closed_at for {task_id}")
+PY
+mv "$BROKEN_BACKLOG.bak" "$BROKEN_BACKLOG"
+
+WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json)"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
-WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --json)"
-WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --json)"
+WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-id "$TASK_ID" --json)"
 WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -268,15 +348,22 @@ producer_memory = json.loads(sys.argv[5])
 shared_memory = json.loads(sys.argv[6])
 rejected_memory = json.loads(sys.argv[7])
 liveops_signal = json.loads(sys.argv[8])
-memory_report = json.loads(sys.argv[9])
-role_report = json.loads(sys.argv[10])
-workflow_start = json.loads(sys.argv[11])
-workflow_close = json.loads(sys.argv[12])
-workflow_review = json.loads(sys.argv[13])
-stage_report = json.loads(sys.argv[14])
+set_stage = json.loads(sys.argv[9])
+memory_report = json.loads(sys.argv[10])
+role_report = json.loads(sys.argv[11])
+workflow_start = json.loads(sys.argv[12])
+workflow_close = json.loads(sys.argv[13])
+workflow_review = json.loads(sys.argv[14])
+stage_report = json.loads(sys.argv[15])
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
+if workflow_start["task_context"]["task_id"] != move_payload["task_id"]:
+    raise SystemExit("workflow start should bind explicit task_id")
+if not workflow_start["task_context"]["last_started_at"]:
+    raise SystemExit("workflow start should record last_started_at")
+if not workflow_close["task_context"]["last_closed_at"]:
+    raise SystemExit("workflow close should record last_closed_at")
 if workflow_review["signal_summary"]["pending_count"] != 1:
     raise SystemExit("producer workflow review should see one cross-role pending signal")
 pending = workflow_review["signal_summary"]["pending_signals"]
@@ -302,6 +389,7 @@ print(
             "shared_memory": shared_memory,
             "rejected_memory": rejected_memory,
             "liveops_signal": liveops_signal,
+            "set_stage": set_stage,
             "memory_report": memory_report,
             "role_report": role_report,
             "workflow_start": workflow_start,

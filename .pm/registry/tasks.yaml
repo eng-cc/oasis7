@@ -5,10 +5,10 @@ tasks:
   - task_id: TASK-PM-0001
     owner_role: producer_system_designer
     task_path: .pm/tasks/TASK-PM-0001.yaml
-    status: committed
+    status: done
     priority: P1
     source_signal: SIG-PM-0001
-    updated_at: 2026-03-31T14:09:20+08:00
+    updated_at: 2026-03-31T22:41:53+08:00
   - task_id: TASK-PM-0002
     owner_role: producer_system_designer
     task_path: .pm/tasks/TASK-PM-0002.yaml

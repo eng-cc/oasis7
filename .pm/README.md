@@ -46,16 +46,19 @@
 - `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
 - `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
 - `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory。
+- `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
+- `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
-- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-id` 会把执行证据写回 task file。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `devlog -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 工作流接入基础用法：
-- 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role>`
-- 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role>`
+- 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>`
+- 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
+- `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-id` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 landing 前的最后一条 PM 自检命令。
 
 QA / liveops 基础用法：
@@ -65,6 +68,7 @@ QA / liveops 基础用法：
 状态迁移基础用法：
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status committed`
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status deferred`
+- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task TASK-PM-0001 --source-ref doc/devlog/2026-03-31.md`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`
@@ -105,12 +109,13 @@ role report 基础用法：
 - 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory。
 
 workflow report 基础用法：
-- `./scripts/pm/workflow-report.sh --phase start --role qa_engineer`
-- `./scripts/pm/workflow-report.sh --phase close --role liveops_community`
+- `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-id TASK-PM-0001`
+- `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-id TASK-PM-0002`
 - `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
-- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals。
+- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-id` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
 
 阶段汇总基础用法：
+- `./scripts/pm/stage-lint.sh`
 - `./scripts/pm/stage-report.sh`
 - `./scripts/pm/stage-report.sh --json`
 

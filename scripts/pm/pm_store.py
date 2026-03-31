@@ -253,6 +253,14 @@ def load_roles(root: pathlib.Path) -> set[str]:
     return roles
 
 
+def load_active_memory_record(root: pathlib.Path, path: pathlib.Path, topic: str) -> OrderedDict[str, object] | None:
+    _, records = load_list_document(path, "records")
+    for record in records:
+        if record.get("status") == "active" and record.get("topic") == topic:
+            return record
+    return None
+
+
 def backlog_file_for_status(status: str) -> str:
     if status in LIVE_BACKLOG_STATUSES:
         return f"{status}.yaml"
@@ -273,6 +281,47 @@ def find_registry_task(root: pathlib.Path, task_id: str) -> tuple[OrderedDict[st
         if entry.get("task_id") == task_id:
             return header, tasks, entry, registry_path
     raise ValueError(f"task not found in registry: {task_id}")
+
+
+def load_task_context(root: pathlib.Path, task_id: str) -> dict[str, object]:
+    _, _, registry_entry, _ = find_registry_task(root, task_id)
+    task_path = root / str(registry_entry["task_path"])
+    task_fields = load_mapping_document(task_path)
+    return {
+        "task_id": task_id,
+        "owner_role": registry_entry.get("owner_role"),
+        "status": task_fields.get("status"),
+        "priority": task_fields.get("priority"),
+        "title": task_fields.get("title"),
+        "worktree_hint": task_fields.get("worktree_hint"),
+        "last_started_at": task_fields.get("last_started_at"),
+        "last_closed_at": task_fields.get("last_closed_at"),
+        "updated_at": task_fields.get("updated_at"),
+    }
+
+
+def record_task_workflow_phase(root: pathlib.Path, task_id: str, role: str, phase: str) -> dict[str, object]:
+    if phase not in {"start", "close"}:
+        raise ValueError(f"unsupported workflow record phase: {phase}")
+
+    registry_header, registry_entries, registry_entry, registry_path = find_registry_task(root, task_id)
+    owner_role = str(registry_entry["owner_role"])
+    if owner_role != role:
+        raise ValueError(f"task owner_role mismatch for workflow report: {task_id} -> {owner_role} != {role}")
+
+    updated_at = now_iso()
+    task_path = root / str(registry_entry["task_path"])
+    task_fields = load_mapping_document(task_path)
+    if phase == "start":
+        task_fields["last_started_at"] = updated_at
+    else:
+        task_fields["last_closed_at"] = updated_at
+    task_fields["updated_at"] = updated_at
+    registry_entry["updated_at"] = updated_at
+
+    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
+    dump_mapping_document(task_path, task_fields)
+    return load_task_context(root, task_id)
 
 
 def collect_signals(root: pathlib.Path) -> tuple[set[str], set[str]]:
@@ -1911,6 +1960,7 @@ def build_reflection_summary(root: pathlib.Path, role_filter: str | None) -> dic
 def build_workflow_checklist(
     role: str,
     phase: str,
+    task_context: dict[str, object] | None,
     role_payload: dict[str, object],
     signal_summary: dict[str, object],
     stage_report: dict[str, object],
@@ -1934,6 +1984,11 @@ def build_workflow_checklist(
         checklist.append(item)
 
     if phase == "start":
+        if task_context is None:
+            add(
+                "bind-task",
+                "若当前工作绑定到明确任务，补传 `--task-id <TASK-ID>` 记录 `last_started_at`，避免 `.pm` workflow 只停留在口头层。",
+            )
         add(
             "read-docs",
             "先读目标模块 PRD / project 和当天 devlog，再开始编辑。",
@@ -1978,6 +2033,11 @@ def build_workflow_checklist(
                 reason=f"gate_status={gate_status}",
             )
     elif phase == "close":
+        if task_context is None:
+            add(
+                "bind-task",
+                "若当前工作绑定到明确任务，补传 `--task-id <TASK-ID>` 记录 `last_closed_at`，否则不能宣称 `.pm` workflow 已完整接入。",
+            )
         add(
             "write-devlog",
             "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
@@ -2066,12 +2126,17 @@ def build_workflow_report(
     role: str,
     phase: str,
     stale_after_days: int,
+    task_id: str | None,
 ) -> dict[str, object]:
     roles = load_roles(root)
     if role not in roles:
         raise ValueError(f"unknown role: {role}")
     if phase not in {"start", "close", "review"}:
         raise ValueError(f"unsupported phase: {phase}")
+
+    task_context: dict[str, object] | None = None
+    if task_id:
+        task_context = load_task_context(root, task_id)
 
     role_report = build_role_report(root, role_filter=role, stale_after_days=stale_after_days)
     role_payload = role_report["roles"][role]
@@ -2083,6 +2148,7 @@ def build_workflow_report(
     checklist = build_workflow_checklist(
         role,
         phase,
+        task_context,
         role_payload,
         signal_summary,
         stage_report,
@@ -2090,10 +2156,14 @@ def build_workflow_report(
         reflection_summary,
     )
 
+    if task_id and phase in {"start", "close"}:
+        task_context = record_task_workflow_phase(root, task_id, role, phase)
+
     return {
         "generated_at": now_iso(),
         "phase": phase,
         "role": role,
+        "task_context": task_context,
         "stale_after_days": stale_after_days,
         "role_report": role_payload,
         "signal_summary": signal_summary,
@@ -2248,6 +2318,26 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             task_source_signals.add(str(source_signal))
             if str(source_signal) not in signal_ids:
                 fail(f"task source_signal missing from inbox: {task_id} -> {source_signal}")
+        for key in ("last_started_at", "last_closed_at"):
+            value = fields.get(key)
+            if value in {None, ""}:
+                continue
+            try:
+                datetime.fromisoformat(str(value))
+            except ValueError:
+                fail(f"task file invalid {key}: {task_id} -> {value}")
+        if fields.get("last_started_at") not in {None, ""} and fields.get("last_closed_at") not in {None, ""}:
+            try:
+                started_at = datetime.fromisoformat(str(fields["last_started_at"]))
+                closed_at = datetime.fromisoformat(str(fields["last_closed_at"]))
+                if closed_at < started_at:
+                    fail(f"task file close precedes start: {task_id}")
+            except ValueError:
+                pass
+        if status in {"blocked", "done", "deferred"} and fields.get("last_started_at") in {None, ""}:
+            fail(f"task file missing last_started_at for started workflow task: {task_id}")
+        if status in {"done", "deferred"} and fields.get("last_closed_at") in {None, ""}:
+            fail(f"task file missing last_closed_at for closed workflow task: {task_id}")
 
     for signal_id in promoted_signal_ids:
         if signal_id not in task_source_signals:
@@ -2317,6 +2407,101 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
         raise SystemExit(1)
 
 
+def run_stage_lint(root: pathlib.Path) -> None:
+    failures: list[str] = []
+
+    def fail(message: str) -> None:
+        failures.append(message)
+
+    stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
+    gate = load_mapping_document(root / ".pm/stage/gate.yaml")
+    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    task_ids = {str(entry.get("task_id")) for entry in registry_entries if entry.get("task_id")}
+
+    def require_keys(doc_name: str, payload: OrderedDict[str, object], required: set[str]) -> None:
+        missing = sorted(required - set(payload.keys()))
+        if missing:
+            fail(f"{doc_name} missing keys: {', '.join(missing)}")
+
+    require_keys(
+        ".pm/stage/current.yaml",
+        stage_current,
+        {"version", "current_stage", "candidate_stage", "claim_envelope", "decision_date", "updated_from", "blocking_tasks"},
+    )
+    require_keys(
+        ".pm/stage/gate.yaml",
+        gate,
+        {"version", "gate_id", "status", "lane_status", "blocking_tasks", "updated_from"},
+    )
+
+    producer_stage_memory = load_active_memory_record(
+        root,
+        root / ".pm/roles/producer_system_designer/memory/active.yaml",
+        "stage.current",
+    )
+    shared_claim_memory = load_active_memory_record(
+        root,
+        root / ".pm/shared/memory/active.yaml",
+        "gate.claim_envelope",
+    )
+
+    current_stage = stage_current.get("current_stage")
+    claim_envelope = stage_current.get("claim_envelope")
+    updated_from = stage_current.get("updated_from")
+    gate_status = gate.get("status")
+    gate_updated_from = gate.get("updated_from")
+
+    if current_stage is None and producer_stage_memory is not None:
+        fail("stage current is null while producer active memory still declares topic stage.current")
+    if claim_envelope is None and shared_claim_memory is not None:
+        fail("claim_envelope is null while shared active memory still declares topic gate.claim_envelope")
+    if current_stage is not None:
+        if claim_envelope is None:
+            fail("current_stage is set but claim_envelope is null")
+        if not isinstance(updated_from, list) or not updated_from:
+            fail("stage current requires non-empty updated_from once current_stage is set")
+        decision_date = stage_current.get("decision_date")
+        if decision_date in {None, ""}:
+            fail("stage current requires decision_date once current_stage is set")
+        else:
+            try:
+                datetime.fromisoformat(str(decision_date))
+            except ValueError:
+                fail(f"stage current has invalid decision_date: {decision_date}")
+
+    if gate_status != "draft":
+        if not isinstance(gate_updated_from, list) or not gate_updated_from:
+            fail("gate requires non-empty updated_from once status leaves draft")
+        if gate.get("gate_id") in {None, ""}:
+            fail("gate requires gate_id once status leaves draft")
+
+    for doc_name, blocking_tasks in (
+        (".pm/stage/current.yaml", stage_current.get("blocking_tasks", [])),
+        (".pm/stage/gate.yaml", gate.get("blocking_tasks", [])),
+    ):
+        if not isinstance(blocking_tasks, list):
+            fail(f"{doc_name} blocking_tasks must be a list")
+            continue
+        for task_id in blocking_tasks:
+            if str(task_id) not in task_ids:
+                fail(f"{doc_name} references missing blocking task: {task_id}")
+
+    tracked_blocking_ids = {
+        str(task_id) for task_id in list(stage_current.get("blocking_tasks", [])) + list(gate.get("blocking_tasks", []))
+    }
+    for entry in registry_entries:
+        if entry.get("status") != "blocked":
+            continue
+        task_id = str(entry.get("task_id"))
+        if task_id not in tracked_blocking_ids:
+            fail(f"blocked task missing from stage/gate blocking_tasks: {task_id}")
+
+    if failures:
+        for failure in failures:
+            print(f"stage-lint: FAIL: {failure}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def cmd_memory_lint(args: argparse.Namespace) -> int:
     run_memory_lint(args.root)
     print("memory-lint: OK")
@@ -2331,6 +2516,109 @@ def cmd_working_memory_lint(args: argparse.Namespace) -> int:
 
 def cmd_task_lint(args: argparse.Namespace) -> int:
     run_task_backlog_lint(args.root)
+    return 0
+
+
+def cmd_stage_lint(args: argparse.Namespace) -> int:
+    run_stage_lint(args.root)
+    print("stage-lint: OK")
+    return 0
+
+
+def cmd_set_stage(args: argparse.Namespace) -> int:
+    if not args.source_ref:
+        raise ValueError("at least one --source-ref is required")
+
+    stage_current_path = args.root / ".pm/stage/current.yaml"
+    gate_path = args.root / ".pm/stage/gate.yaml"
+    stage_current = load_mapping_document(stage_current_path)
+    gate = load_mapping_document(gate_path)
+
+    source_refs = list(dict.fromkeys(args.source_ref))
+    stage_changed = False
+    gate_changed = False
+
+    def assign_stage(key: str, value) -> None:
+        nonlocal stage_changed
+        if stage_current.get(key) != value:
+            stage_current[key] = value
+            stage_changed = True
+
+    def assign_gate(key: str, value) -> None:
+        nonlocal gate_changed
+        if gate.get(key) != value:
+            gate[key] = value
+            gate_changed = True
+
+    if args.current_stage is not None:
+        assign_stage("current_stage", args.current_stage)
+    if args.candidate_stage is not None:
+        assign_stage("candidate_stage", args.candidate_stage)
+    elif args.clear_candidate_stage:
+        assign_stage("candidate_stage", None)
+    if args.claim_envelope is not None:
+        assign_stage("claim_envelope", args.claim_envelope)
+    if args.decision_date is not None:
+        assign_stage("decision_date", args.decision_date)
+    elif stage_changed and stage_current.get("decision_date") in {None, ""}:
+        assign_stage("decision_date", datetime.now().astimezone().date().isoformat())
+
+    if args.gate_id is not None:
+        assign_gate("gate_id", args.gate_id)
+    elif args.clear_gate_id:
+        assign_gate("gate_id", None)
+    if args.gate_status is not None:
+        assign_gate("status", args.gate_status)
+    if args.lane_status:
+        assign_gate("lane_status", list(args.lane_status))
+    elif args.clear_lane_status:
+        assign_gate("lane_status", [])
+    if args.blocking_task:
+        blocking = list(dict.fromkeys(args.blocking_task))
+        assign_stage("blocking_tasks", blocking)
+        assign_gate("blocking_tasks", blocking)
+    elif args.clear_blocking_tasks:
+        assign_stage("blocking_tasks", [])
+        assign_gate("blocking_tasks", [])
+
+    if stage_changed:
+        stage_current["updated_from"] = source_refs
+    if gate_changed:
+        gate["updated_from"] = source_refs
+
+    if not stage_changed and not gate_changed:
+        raise ValueError("set-stage received no effective changes")
+
+    original_stage_text = stage_current_path.read_text(encoding="utf-8")
+    original_gate_text = gate_path.read_text(encoding="utf-8")
+    try:
+        dump_mapping_document(stage_current_path, stage_current)
+        dump_mapping_document(gate_path, gate)
+        run_stage_lint(args.root)
+    except BaseException:
+        stage_current_path.write_text(original_stage_text, encoding="utf-8")
+        gate_path.write_text(original_gate_text, encoding="utf-8")
+        raise
+
+    result = {
+        "current_stage": stage_current.get("current_stage"),
+        "candidate_stage": stage_current.get("candidate_stage"),
+        "claim_envelope": stage_current.get("claim_envelope"),
+        "decision_date": stage_current.get("decision_date"),
+        "gate_id": gate.get("gate_id"),
+        "gate_status": gate.get("status"),
+        "lane_status": list(gate.get("lane_status", [])),
+        "blocking_tasks": list(stage_current.get("blocking_tasks", [])),
+        "updated_from": source_refs,
+    }
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(
+            "set-stage: updated "
+            f"current_stage={result['current_stage']} claim_envelope={result['claim_envelope']} "
+            f"gate_status={result['gate_status']}"
+        )
     return 0
 
 
@@ -2641,6 +2929,7 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         role=args.role,
         phase=args.phase,
         stale_after_days=args.stale_after_days,
+        task_id=args.task_id,
     )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -2656,6 +2945,7 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         f"- generated_at: {report['generated_at']}",
         f"- phase: {report['phase']}",
         f"- role: {report['role']}",
+        f"- task_id: {(report['task_context'] or {}).get('task_id') or '(none)'}",
         f"- stale_after_days: {report['stale_after_days']}",
         f"- current_stage: {report['stage_report']['current_stage']}",
         f"- gate_status: {report['stage_report']['gate']['status']}",
@@ -2670,6 +2960,14 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         f"- blocked_tasks: {len(report['stage_report']['blocking_tasks'])}",
         "- pending_signals:",
     ]
+
+    if report["task_context"] is not None:
+        lines.insert(
+            6,
+            f"- task_status: {report['task_context']['status']} / "
+            f"last_started_at={(report['task_context'].get('last_started_at') or '(none)')} / "
+            f"last_closed_at={(report['task_context'].get('last_closed_at') or '(none)')}",
+        )
 
     if report["signal_summary"]["pending_signals"]:
         for item in report["signal_summary"]["pending_signals"]:
@@ -2986,11 +3284,13 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
         task_id = str(task_id)
         if task_id not in blocking_ids:
             blocking_ids.append(task_id)
+    untracked_blocked_ids: list[str] = []
     for entry in registry_entries:
-        if entry.get("status") == "blocked":
-            task_id = str(entry["task_id"])
-            if task_id not in blocking_ids:
-                blocking_ids.append(task_id)
+        if entry.get("status") != "blocked":
+            continue
+        task_id = str(entry["task_id"])
+        if task_id not in blocking_ids:
+            untracked_blocked_ids.append(task_id)
 
     producer_active_header, producer_active_records = load_list_document(
         root / ".pm/roles/producer_system_designer/memory/active.yaml",
@@ -3031,6 +3331,7 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
         "task_counts": task_counts,
         "role_counts": role_counts,
         "blocking_tasks": [detail_task(task_id) for task_id in blocking_ids],
+        "untracked_blocked_tasks": [detail_task(task_id) for task_id in untracked_blocked_ids],
         "memory_inputs": {
             "producer_active": memory_summary(producer_active_records),
             "shared_active": memory_summary(shared_active_records),
@@ -3075,6 +3376,19 @@ def cmd_stage_report(args: argparse.Namespace) -> int:
         lines.append(
             f"  - {role}: " + ", ".join(f"{status}={count}" for status, count in counts.items())
         )
+
+    lines.append("- untracked_blocked_tasks:")
+    if report["untracked_blocked_tasks"]:
+        for item in report["untracked_blocked_tasks"]:
+            if item.get("missing"):
+                lines.append(f"  - {item['task_id']} (missing)")
+            else:
+                lines.append(
+                    f"  - {item['task_id']} [{item['status']}] {item['owner_role']} / "
+                    f"{item['priority']} / {item['title']}"
+                )
+    else:
+        lines.append("  - (none)")
 
     lines.append("- producer_active_memory:")
     if report["memory_inputs"]["producer_active"]:
@@ -3144,6 +3458,7 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_report.add_argument("root", type=pathlib.Path)
     workflow_report.add_argument("--role", required=True)
     workflow_report.add_argument("--phase", choices=("start", "close", "review"), default="start")
+    workflow_report.add_argument("--task-id")
     workflow_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
     workflow_report.add_argument("--json", action="store_true")
     workflow_report.set_defaults(func=cmd_workflow_report)
@@ -3187,6 +3502,28 @@ def build_parser() -> argparse.ArgumentParser:
     stage_report.add_argument("root", type=pathlib.Path)
     stage_report.add_argument("--json", action="store_true")
     stage_report.set_defaults(func=cmd_stage_report)
+
+    stage_lint = subparsers.add_parser("stage-lint")
+    stage_lint.add_argument("root", type=pathlib.Path)
+    stage_lint.set_defaults(func=cmd_stage_lint)
+
+    set_stage = subparsers.add_parser("set-stage")
+    set_stage.add_argument("root", type=pathlib.Path)
+    set_stage.add_argument("--current-stage")
+    set_stage.add_argument("--candidate-stage")
+    set_stage.add_argument("--clear-candidate-stage", action="store_true")
+    set_stage.add_argument("--claim-envelope")
+    set_stage.add_argument("--decision-date")
+    set_stage.add_argument("--gate-id")
+    set_stage.add_argument("--clear-gate-id", action="store_true")
+    set_stage.add_argument("--gate-status")
+    set_stage.add_argument("--lane-status", action="append", default=[])
+    set_stage.add_argument("--clear-lane-status", action="store_true")
+    set_stage.add_argument("--blocking-task", action="append", default=[])
+    set_stage.add_argument("--clear-blocking-tasks", action="store_true")
+    set_stage.add_argument("--source-ref", action="append", default=[])
+    set_stage.add_argument("--json", action="store_true")
+    set_stage.set_defaults(func=cmd_set_stage)
 
     codex_transcript_report = subparsers.add_parser("codex-transcript-report")
     codex_transcript_report.add_argument("root", type=pathlib.Path)

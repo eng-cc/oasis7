@@ -27,3 +27,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0003.yaml
+  - task_id: TASK-PM-0001
+    title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
+    priority: P1
+    source_signal: SIG-PM-0001
+    related_prd:
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "`.pm/stage/current.yaml` / `.pm/stage/gate.yaml` 已成为阶段当前态唯一真值，`set-stage` / `stage-lint` 可阻断 active stage memory 与 stage 文件漂移"
+      - "`workflow-report --task-id` 会把 `last_started_at` / `last_closed_at` 写回 task file，且 AGENTS/角色职责卡/new-task-worktree/README 已统一切到显式 task 绑定"
+      - "required-tier 与 full-tier 的 PM smoke 通过，覆盖 stage drift 先失败后修复、pending signal 语义、以及 workflow task timestamps"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0001.yaml

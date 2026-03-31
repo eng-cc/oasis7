@@ -1,7 +1,8 @@
 version: 1
-current_stage: null
+current_stage: internal_playable_alpha_late
 candidate_stage: null
-claim_envelope: null
-decision_date: null
-updated_from: []
+claim_envelope: internal_only
+decision_date: 2026-03-30
+updated_from:
+  - doc/devlog/2026-03-30.md
 blocking_tasks: []

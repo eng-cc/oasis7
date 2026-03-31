@@ -44,7 +44,7 @@
 ## Checklist
 - 是否按 `testing-manual.md` 选择正确套件
 - 是否区分 `test_tier_required` 与 `test_tier_full`
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer`
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer --task-id <TASK-ID>`
 - 是否记录失败签名、影响范围、回滚/绕行建议
 - 高价值失败签名是否已通过 `./scripts/pm/promote-signal.sh` / `promote-memory.sh` 回流到 `.pm/`
 - 是否回写 `doc/playability_test_result/*` 或 `doc/testing/*`

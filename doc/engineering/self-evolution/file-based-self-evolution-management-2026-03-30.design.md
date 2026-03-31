@@ -146,6 +146,10 @@
 - 用途：
   - 汇总当前阶段、claim envelope、lane 状态、blocking tasks。
   - 作为制作人阶段评审和对外口径复核的输入层。
+ - 约束：
+   - `.pm/stage/*.yaml` 是阶段“当前态”唯一真值；producer/shared active memory 只保留裁决依据或快照，不再单独定义当前阶段。
+   - producer 修改阶段结论时统一通过 `set-stage.sh` 写回 `current/gate` 两份文件，并同步 `updated_from`、`decision_date` 与 blocker 集。
+   - lint 必须阻断“active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空或缺来源”的漂移状态。
 
 ## 流程设计
 ### Flow A: devlog 提升
@@ -169,9 +173,9 @@
 4. lint 校验链路和 source refs 仍有效
 
 ### Flow D: 工作流接入
-1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner>`
-2. 脚本聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要
-3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner>`，按 checklist 回写 devlog、signal、memory 与 backlog，并在 commit 前启动独立 subagent review 当前 diff
+1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner> --task-id <TASK-ID>`
+2. 脚本先聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要，构建 report/checklist 成功后再把 `last_started_at` 回写到 task file，避免失败时留下假证据
+3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-id <TASK-ID>`，按 checklist 回写 devlog、signal、memory 与 backlog，并在 commit 前启动独立 subagent review 当前 diff
 4. owner 先处理或记录 subagent review findings，再提交 commit
 5. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
 
@@ -198,9 +202,10 @@
 
 ### Phase 6: 工作流接入
 - 建立 `workflow-report.sh`
+- 建立 `set-stage.sh` / `stage-lint`，把阶段当前态与 drift 检查收敛到正式入口
 - 将 `.pm` 默认操作序列接入 `AGENTS.md`、角色职责卡与 `new-task-worktree.sh`
 - 在 close checklist 中强制加入 commit 前独立 subagent review 当前 diff 的动作
-- required/full smoke 必须覆盖 workflow 入口与 signal pending 视图
+- required/full smoke 必须覆盖 `workflow-report --task-id` 留痕、stage drift 阻断与 signal pending 视图
 
 ## 验证策略
 - 结构验证：

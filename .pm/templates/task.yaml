@@ -10,4 +10,6 @@ doc_refs: []
 related_prd: []
 acceptance: []
 handoff_to: []
+last_started_at: null
+last_closed_at: null
 updated_at: 2026-03-30T00:00:00+08:00

@@ -59,6 +59,8 @@ require_file "scripts/pm/required-tier-smoke.sh"
 require_file "scripts/pm/reflection-report.sh"
 require_file "scripts/pm/role-report.sh"
 require_file "scripts/pm/scaffold.sh"
+require_file "scripts/pm/set-stage.sh"
+require_file "scripts/pm/stage-lint.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
 require_file "scripts/pm/working-memory-lint.sh"
@@ -91,6 +93,7 @@ fi
 
 ./scripts/pm/memory-lint.sh >/dev/null
 ./scripts/pm/working-memory-lint.sh >/dev/null
+./scripts/pm/stage-lint.sh >/dev/null
 ./scripts/pm/memory-report.sh --json >/dev/null
 ./scripts/pm/working-memory-report.sh --json >/dev/null
 ./scripts/pm/reflection-report.sh --json >/dev/null
