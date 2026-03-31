@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
     inputs:
       external_summary_bundle_url:
-        description: Optional URL to a Docker-capable external summary bundle archive/directory snapshot for darwin-arm64 full-tier evidence
+        description: Optional URL to a Docker-capable external summary bundle archive/directory snapshot for darwin-arm64 evidence verify. This does not make GitHub-hosted CI itself a darwin-arm64 evidence producer.
         required: false
         type: string
       external_summary_runner_label:
-        description: Runner label expected from the external summary bundle
+        description: Runner label expected from the external summary bundle. Workflow dispatch only verifies/imports this evidence; cross-host closure still requires the external runner to have produced real darwin-arm64 live evidence.
         required: false
         default: darwin-arm64
         type: string
@@ -94,6 +94,8 @@ jobs:
             --out-dir "output/ci/${{ matrix.module_set }}-staged-wasm-summary"
           )
           if [[ -n "$EXTERNAL_WASM_SUMMARY_BUNDLE_URL" ]]; then
+            # This path only verifies/imports external darwin-arm64 evidence.
+            # GitHub-hosted CI remains Linux-hosted and cannot by itself claim WDBP-3.2 closure.
             cmd+=(
               --external-summary-bundle "$EXTERNAL_WASM_SUMMARY_BUNDLE_URL"
               --expected-external-runner "$EXTERNAL_WASM_SUMMARY_RUNNER_LABEL"

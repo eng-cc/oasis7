@@ -41,6 +41,7 @@
 - 验证角色: `qa_engineer`
 - 阻塞项:
   - GitHub-hosted `macos-14` runner 当前无 Docker daemon，release evidence / release gate 仍需补齐真实 Linux + Docker-capable macOS full-tier 证据归档。
+  - 当前 `.github/workflows/wasm-determinism-gate.yml` 只能验证 / 导入 external `darwin-arm64` bundle；即使 workflow_dispatch 成功，也不代表 GitHub-hosted CI 已自行产出 `darwin-arm64` live evidence。
 - 实施备注:
   - `docker/wasm-builder/Dockerfile` 与 `scripts/build-wasm-module.sh` 已落地，当前 canonical build 已收敛为 Docker-only path，不再提供 host-native fallback。
   - `scripts/build-wasm-module.sh`、`scripts/sync-m1-builtin-wasm-artifacts.sh`、`scripts/ci-m1-wasm-summary.sh`、`tools/wasm_build_suite` 与 `docker/wasm-builder/Dockerfile` 现已只读取/写入 `OASIS7_WASM_*` 当前入口，避免 operator 脚本与容器镜像继续扩散旧前缀。
@@ -53,6 +54,7 @@
   - 新增 `scripts/wasm-release-evidence-report.sh` 作为多 runner fixed entry，可统一收集/校验 `m1/m4/m5` summary 并输出 `summary.md/json`；当前 `.github/workflows/wasm-determinism-gate.yml` 已切换到 `--summary-import-dir` 模式，会把下载下来的 runner summaries 统一收口为可归档 evidence artifact。
   - `scripts/ci-verify-m1-wasm-summaries.py` 与 `scripts/wasm-release-evidence-report.sh` 现已把 `required_runners`（stable gate）与 `expected_runners`（full-tier cross-host evidence）拆开；GitHub-hosted workflow 当前以 `linux-x86_64` 作为 required runner，但 summary/report 会显式输出 `received_runners + missing_runners + cross_host_evidence_pending + gate_result=conditional-go`。
   - `WDBP-3.2` 的导入链路现已落地：`scripts/package-wasm-summary-bundle.sh` 可把外部 Docker-capable runner 的 `m1/m4/m5` summary 打成标准 bundle，`scripts/stage-wasm-summary-imports.sh` 可在 verify 前把 GitHub-hosted Linux summary 与外部 bundle 合并到同一 import dir；`workflow_dispatch` 也新增了 `external_summary_bundle_url` / `external_summary_runner_label` 入口。
+  - 口径约束：`workflow_dispatch + external_summary_bundle_url` 代表“CI verify ready / external evidence import ready”，不代表 GitHub-hosted CI 已获得 `darwin-arm64` 产出能力；只有真实 external runner 提供 live summary/proof 后，才可宣称 `WDBP-3.2` / cross-host closure 完成。
   - `WDBP-3.2a` 已继续加固 external bundle 验真：`package/stage/verify/report` 链路现在会强校验 summary/bundle 的 `host_platform` 与 `canonical_platform=linux-x86_64`，并通过 `scripts/wasm-summary-bundle-smoke.sh` 固定覆盖“真实 darwin bundle 可导入、伪装 darwin 的 linux bundle 必须失败”。
   - 仓库内已补 `scripts/dispatch-wasm-determinism-gate.sh` 作为 operator 入口，用于以 `gh workflow run` 触发带外部 bundle URL 的 full-tier evidence run；待真实 `darwin-arm64` bundle 到位后即可直接归档正式 closure artifact。
   - 节点侧 proof 收口已落地：`scripts/module-release-node-attestation-flow.sh` 现可在发布节点本地执行 `summary collect/import -> evidence verify -> canonical proof inputs -> proof payload -> attestation submit`，并刻意剥离 summary/report 中的时间戳与本地路径，避免把非语义字段写入 `proof_cid`。
