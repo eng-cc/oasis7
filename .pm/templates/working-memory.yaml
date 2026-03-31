@@ -1,0 +1,10 @@
+version: 1
+task_id: __TASK_ID__
+role: __ROLE_NAME__
+worktree_hint: __WORKTREE_HINT__
+source_session_id: __SESSION_ID__
+source_thread_name: __THREAD_NAME__
+transcript_source: __TRANSCRIPT_SOURCE__
+last_extracted_ts: __LAST_EXTRACTED_TS__
+captured_until_ts: __CAPTURED_UNTIL_TS__
+entries: []

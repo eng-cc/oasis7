@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+OUTPUT_JSON=0
+KEEP_TEMP=0
+SMOKE_TASK_ID="TASK-PM-9001"
+
+usage() {
+  cat <<'USAGE'
+Usage: ./scripts/pm/codex-working-memory-smoke.sh [--json] [--keep-temp]
+
+Run an isolated smoke for:
+  ~/.codex JSONL -> deterministic preprocessing -> codex exec wrapper -> .pm/working_memory
+
+Options:
+  --json       Print machine-readable JSON summary
+  --keep-temp  Keep the temporary root for inspection
+  -h, --help   Show help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json)
+      OUTPUT_JSON=1
+      shift
+      ;;
+    --keep-temp)
+      KEEP_TEMP=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "codex-working-memory-smoke: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+TMPDIR="$(mktemp -d)"
+cleanup() {
+  if [[ "$KEEP_TEMP" != "1" ]]; then
+    rm -rf "$TMPDIR"
+  fi
+}
+trap cleanup EXIT
+
+mkdir -p "$TMPDIR/scripts" "$TMPDIR/.codex"
+cp -R "$ROOT_DIR/.pm" "$TMPDIR/.pm"
+cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
+cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
+
+python3 - "$TMPDIR" <<'PY'
+from __future__ import annotations
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+
+for path in root.glob(".pm/**/*.yaml"):
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        value = stripped[2:]
+        source_path = value.split("#", 1)[0]
+        candidate = Path(source_path).expanduser()
+        if candidate.is_absolute() or source_path.startswith("__"):
+            continue
+        target = root / source_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            target.write_text(f"placeholder for {source_path}\n", encoding="utf-8")
+
+testing_manual = root / "testing-manual.md"
+if not testing_manual.exists():
+    testing_manual.write_text("placeholder testing manual\n", encoding="utf-8")
+PY
+
+cat > "$TMPDIR/.codex/session_index.jsonl" <<'EOF'
+{"id":"session-test-001","thread_name":"engineering memory extraction","updated_at":"2026-03-31T17:40:00Z"}
+{"id":"session-test-002","thread_name":"engineering memory extraction fallback","updated_at":"2026-03-31T17:45:00Z"}
+EOF
+
+cat > "$TMPDIR/.codex/history.jsonl" <<'EOF'
+{"session_id":"session-test-001","ts":200,"text":"决定 phase 1 先直接读 ~/.codex/history.jsonl，再做 working_memory 提炼。"}
+{"session_id":"session-test-001","ts":100,"text":"先看一下 sk-test-secret-token-1234567890 是否会被脱敏。"}
+{"session_id":"session-test-001","ts":300,"text":"下一步补一个 smoke，验证 codex exec wrapper 能写入 working_memory。"}
+EOF
+
+mkdir -p "$TMPDIR/.codex/sessions/2026/03/31"
+cat > "$TMPDIR/.codex/sessions/2026/03/31/rollout-2026-03-31T17-45-00-session-test-002.jsonl" <<'EOF'
+{"timestamp":"2026-03-31T09:45:00Z","type":"session_meta","payload":{"id":"session-test-002","timestamp":"2026-03-31T09:45:00Z","cwd":"/tmp/example","source":"vscode","title":"engineering memory extraction fallback"}}
+{"timestamp":"2026-03-31T09:45:01Z","type":"event_msg","payload":{"type":"user_message","message":"还是先直接从.codex里读吧"}}
+{"timestamp":"2026-03-31T09:45:02Z","type":"event_msg","payload":{"type":"agent_message","message":"先用本地脚本做确定性预处理，这里只做排序、脱敏。"}}
+{"timestamp":"2026-03-31T09:45:03Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"继续做完，补一个 sessions fallback。"}]}}
+EOF
+
+cat > "$TMPDIR/fake-codex" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+OUT=""
+while [[ \$# -gt 0 ]]; do
+  case "\$1" in
+    -o|--output-last-message)
+      OUT="\$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [[ -z "\$OUT" ]]; then
+  echo "fake-codex: missing output file" >&2
+  exit 2
+fi
+cat >/dev/null
+cat > "\$OUT" <<'JSON'
+{
+  "entries": [
+    {
+      "entry_kind": "decision",
+      "summary": "phase 1 transcript source was fixed to direct ~/.codex reads",
+      "source_refs": [
+        "$TMPDIR/.codex/history.jsonl#session_id=session-test-001&ts=200"
+      ]
+    },
+    {
+      "entry_kind": "next_step",
+      "summary": "add a smoke to validate the codex working_memory wrapper",
+      "source_refs": [
+        "$TMPDIR/.codex/history.jsonl#session_id=session-test-001&ts=300"
+      ]
+    }
+  ]
+}
+JSON
+EOF
+chmod +x "$TMPDIR/fake-codex"
+
+PREPARED_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-transcript-report.sh" \
+  --session-id session-test-001 \
+  --codex-dir "$TMPDIR/.codex" \
+  --json)"
+
+PREPARED_JSON_FALLBACK="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-transcript-report.sh" \
+  --session-id session-test-002 \
+  --codex-dir "$TMPDIR/.codex" \
+  --json)"
+
+RESULT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
+  --task-id "$SMOKE_TASK_ID" \
+  --role producer_system_designer \
+  --session-id session-test-001 \
+  --worktree-hint codex-working-memory-smoke \
+  --codex-dir "$TMPDIR/.codex" \
+  --codex-bin "$TMPDIR/fake-codex" \
+  --json)"
+
+RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
+  --task-id "$SMOKE_TASK_ID" \
+  --role producer_system_designer \
+  --worktree-hint codex-working-memory-smoke \
+  --codex-dir "$TMPDIR/.codex" \
+  --codex-bin "$TMPDIR/fake-codex" \
+  --json)"
+
+SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-to-signal.sh" \
+  --task-id "$SMOKE_TASK_ID" \
+  --entry-id WM-0001 \
+  --severity medium \
+  --json)"
+
+AUTOFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autoflow.sh" \
+  --task-id "$SMOKE_TASK_ID" \
+  --entry-id WM-0002 \
+  --severity medium \
+  --priority P2 \
+  --json)"
+
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-lint.sh" >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
+REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-report.sh" --task-id "$SMOKE_TASK_ID" --json)"
+
+python3 - "$TMPDIR" "$SMOKE_TASK_ID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
+from __future__ import annotations
+import json
+import sys
+from pathlib import Path
+
+tmpdir = Path(sys.argv[1])
+smoke_task_id = sys.argv[2]
+prepared = json.loads(sys.argv[3])
+prepared_fallback = json.loads(sys.argv[4])
+result = json.loads(sys.argv[5])
+result_registry = json.loads(sys.argv[6])
+signal_json = json.loads(sys.argv[7])
+autoflow_json = json.loads(sys.argv[8])
+report = json.loads(sys.argv[9])
+output_json = sys.argv[10] == "1"
+
+assert prepared["messages"][0]["ts"] == 100
+assert prepared["messages"][1]["ts"] == 200
+assert prepared["messages"][0]["text"].count("[REDACTED_TOKEN]") == 1
+assert prepared_fallback["transcript_source"] == "sessions_rollout"
+assert prepared_fallback["message_count"] == 3
+assert prepared_fallback["messages"][0]["text"] == "还是先直接从.codex里读吧"
+assert prepared_fallback["messages"][2]["text"] == "继续做完，补一个 sessions fallback。"
+assert result["import_result"]["added"] == 2
+assert result["import_result"]["codex_session_mapping"]["session_id"] == "session-test-001"
+assert result_registry["prepared"]["message_count"] == 0
+assert str(result_registry["prepared"]["after_ts"]) == "300"
+assert result_registry["import_result"]["added"] == 0
+assert result_registry["import_result"]["skipped"] == 0
+assert result_registry["prepared"]["resolution_source"] == "registry"
+assert len(signal_json["created"]) == 1
+assert signal_json["created"][0]["signal_id"].startswith("SIG-PM-")
+assert len(autoflow_json["signal_result"]["created"]) == 1
+assert len(autoflow_json["task_actions"]) == 1
+assert autoflow_json["task_actions"][0]["decision"] == "created"
+assert report["entry_count"] == 2
+assert report["tasks"][smoke_task_id]["source_session_id"] == "session-test-001"
+assert str(report["tasks"][smoke_task_id]["last_extracted_ts"]) == "300"
+assert str(report["tasks"][smoke_task_id]["captured_until_ts"]) == "300"
+assert report["tasks"][smoke_task_id]["entries"][0]["promoted_to"]
+assert len(report["tasks"][smoke_task_id]["entries"][1]["promoted_to"]) == 2
+
+payload = {
+    "tmpdir": str(tmpdir),
+    "smoke_task_id": smoke_task_id,
+    "prepared": prepared,
+    "prepared_fallback": prepared_fallback,
+    "result": result,
+    "result_registry": result_registry,
+    "signal": signal_json,
+    "autoflow": autoflow_json,
+    "report": report,
+}
+
+if output_json:
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+else:
+    print(
+        "codex-working-memory-smoke: OK "
+        f"(messages={prepared['message_count']} added={result['import_result']['added']} entries={report['entry_count']})"
+    )
+PY

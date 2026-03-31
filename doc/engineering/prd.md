@@ -241,7 +241,7 @@
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033 | `test_tier_required` | devlog 规则与角色标记要求一致性检查 | 单日过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 devlog 角色标签检查 | 角色命名一致性与防漂移能力 |
 | PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、signal promotion、workflow/role/stage report 与角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
-| PRD-ENGINEERING-022 | TASK-ENGINEERING-086 | `test_tier_required` | 外部方案借鉴边界专题三件套、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/reflection 补强 |
+| PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

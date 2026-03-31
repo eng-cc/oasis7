@@ -14,3 +14,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0002.yaml
+  - task_id: TASK-PM-0003
+    title: "TASK-ENGINEERING-091 补充 working_memory 与 .codex 会话分析口径"
+    priority: P2
+    source_signal: SIG-PM-0003
+    related_prd:
+      - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md
+    acceptance:
+      - "working_memory 已定义为 task-scoped 中间层"
+      - "Codex/engineering task phase 1 来源已冻结为 ~/.codex/session_index.jsonl + ~/.codex/history.jsonl"
+      - ".codex/devlog -> working_memory -> reflection signal 路径已写入专题"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0003.yaml

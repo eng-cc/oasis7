@@ -33,6 +33,8 @@ config.toml
 # Local debug artifacts
 .tmp/
 .distfs/
+__pycache__/
+*.py[cod]
 crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules/*.wasm
 crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules/*.wasm
 artifacts/owr4_baseline/

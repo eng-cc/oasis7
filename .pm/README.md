@@ -3,6 +3,7 @@
 `doc/` 保存正式规格、项目追踪、证据和 devlog。`.pm/` 只保存运行态项目管理对象：
 
 - role memory / backlog
+- task-scoped working_memory
 - shared memory
 - signal inbox
 - task registry
@@ -37,6 +38,13 @@
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
 - `./scripts/pm/memory-report.sh`：按 role 输出 active / needs_review / superseded 报表，默认以 7 天未 review 记为 `needs_review`。
+- `./scripts/pm/working-memory-lint.sh`：校验 `.pm/working_memory/*.yaml` 的 task/role/header、entry kind、source refs 与时间字段。
+- `./scripts/pm/working-memory-report.sh`：按 task/role 输出 task-scoped `working_memory` 报表。
+- `./scripts/pm/codex-transcript-report.sh`：优先从 `~/.codex/session_index.jsonl` / `history.jsonl` 读取单个 `session_id`；若 `history.jsonl` 无该会话消息，则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，只做排序与脱敏预处理。
+- `./scripts/pm/codex-working-memory.sh`：先跑 `codex-transcript-report`，再调用 `codex exec --ephemeral` 把脱敏 transcript 提炼成 `working_memory` 条目。
+- `./scripts/pm/working-memory-to-signal.sh`：把选中的 `working_memory` 条目提升成 `source_type=reflection` signal，并回写 `promoted_to`。
+- `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
+- `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
 - `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist。
@@ -73,6 +81,23 @@ memory report 基础用法：
 - `./scripts/pm/memory-report.sh --stale-after-days 14 --json`
 - 默认 stale 阈值为 7 天，对应长期 memory 每周至少 review 1 次的治理口径。
 
+working_memory 基础用法：
+- `./scripts/pm/working-memory-report.sh`
+- `./scripts/pm/working-memory-report.sh --task-id TASK-PM-0003 --json`
+- `./scripts/pm/codex-transcript-report.sh --session-id <session_id> --json`
+- `./scripts/pm/codex-working-memory.sh --task-id TASK-PM-0003 --role producer_system_designer --session-id <session_id> --worktree-hint <hint>`
+- `./scripts/pm/codex-transcript-report.sh --task-id TASK-PM-0003 --json`
+- `./scripts/pm/codex-working-memory.sh --task-id TASK-PM-0003 --role producer_system_designer --full-scan`
+- `./scripts/pm/working-memory-to-signal.sh --task-id TASK-PM-0003 --entry-id WM-0001 --severity medium`
+- `./scripts/pm/working-memory-autoflow.sh --task-id TASK-PM-0003 --severity medium --priority P2`
+- `./scripts/pm/working-memory-autoflow.sh --task-id TASK-PM-0003 --dry-run --json`
+- `./scripts/pm/reflection-report.sh --role producer_system_designer --json`
+- phase 1 的 transcript 预处理只负责排序与脱敏；结构化提炼统一交给 `codex exec --ephemeral`。
+- `codex-working-memory.sh` 首次成功导入后会把 `task_id -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续同一 task 可不再显式传 `--session-id`。
+- 同一 `task_id + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取，避免当前 live session 在提炼过程中把新生成消息再次吸回本轮输入；需要重扫整段 transcript 时显式传 `--full-scan`。
+- `working_memory` header 会记录 `source_session_id`、`source_thread_name`、`transcript_source`、`last_extracted_ts` 与 `captured_until_ts`，用于回放抽取来源与当前水位。
+- `working-memory-autoflow.sh` 只自动做安全动作：reflection signal + candidate task；不会自动升长期 memory，也不会自动改 stage / 正式文档。
+
 role report 基础用法：
 - `./scripts/pm/role-report.sh`
 - `./scripts/pm/role-report.sh --role qa_engineer`
@@ -96,3 +121,5 @@ required-tier 验证入口：
 full-tier 验证入口：
 - `./scripts/pm/memory-regression-smoke.sh`
 - `./scripts/pm/memory-regression-smoke.sh --json`
+- `./scripts/pm/codex-working-memory-smoke.sh`
+- `./scripts/pm/codex-working-memory-smoke.sh --json`

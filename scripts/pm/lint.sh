@@ -26,9 +26,11 @@ require_dir ".pm"
 require_file ".pm/README.md"
 require_file ".pm/registry/roles.yaml"
 require_file ".pm/registry/tasks.yaml"
+require_file ".pm/registry/codex-sessions.yaml"
 require_dir ".pm/inbox"
 require_file ".pm/inbox/signals.jsonl"
 require_dir ".pm/tasks"
+require_dir ".pm/working_memory"
 require_file ".pm/stage/current.yaml"
 require_file ".pm/stage/gate.yaml"
 require_file ".pm/shared/memory/active.yaml"
@@ -38,9 +40,13 @@ require_file ".pm/templates/role-memory-superseded.yaml"
 require_file ".pm/templates/role-backlog.yaml"
 require_file ".pm/templates/role.yaml"
 require_file ".pm/templates/task.yaml"
+require_file ".pm/templates/working-memory.yaml"
 require_file ".pm/templates/signal.json"
 require_file ".pm/templates/stage-current.yaml"
 require_file ".pm/templates/stage-gate.yaml"
+require_file "scripts/pm/codex-transcript-report.sh"
+require_file "scripts/pm/codex-working-memory.sh"
+require_file "scripts/pm/codex-working-memory-smoke.sh"
 require_file "scripts/pm/lint.sh"
 require_file "scripts/pm/memory-lint.sh"
 require_file "scripts/pm/memory-report.sh"
@@ -50,11 +56,17 @@ require_file "scripts/pm/pm_store.py"
 require_file "scripts/pm/promote-memory.sh"
 require_file "scripts/pm/promote-signal.sh"
 require_file "scripts/pm/required-tier-smoke.sh"
+require_file "scripts/pm/reflection-report.sh"
 require_file "scripts/pm/role-report.sh"
 require_file "scripts/pm/scaffold.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
+require_file "scripts/pm/working-memory-lint.sh"
+require_file "scripts/pm/working-memory-report.sh"
+require_file "scripts/pm/working-memory-autoflow.sh"
+require_file "scripts/pm/working-memory-to-signal.sh"
 require_file "scripts/pm/workflow-report.sh"
+require_file "scripts/pm/schemas/codex-working-memory.schema.json"
 
 mapfile -t CANONICAL_ROLES < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sed 's/\.md$//' | sort)
 mapfile -t REGISTRY_ROLES < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yaml | sort)
@@ -78,7 +90,10 @@ if (( failures > 0 )); then
 fi
 
 ./scripts/pm/memory-lint.sh >/dev/null
+./scripts/pm/working-memory-lint.sh >/dev/null
 ./scripts/pm/memory-report.sh --json >/dev/null
+./scripts/pm/working-memory-report.sh --json >/dev/null
+./scripts/pm/reflection-report.sh --json >/dev/null
 ./scripts/pm/role-report.sh --json >/dev/null
 ./scripts/pm/workflow-report.sh --role producer_system_designer --phase review --json >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"

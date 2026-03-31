@@ -8,6 +8,7 @@ import re
 import sys
 from collections import OrderedDict
 from datetime import datetime, timedelta
+
 SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
@@ -37,8 +38,24 @@ ROLE_MEMORY_PREFIXES = {
     "wasm_platform_engineer": "WASM",
 }
 DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
+DEFAULT_WORKING_MEMORY_EXPIRES_DAYS = 2
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+WORKING_MEMORY_ENTRY_KINDS = {
+    "attempt",
+    "hypothesis",
+    "decision",
+    "open_question",
+    "next_step",
+}
+REDACTION_PATTERNS = [
+    (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "[REDACTED_EMAIL]"),
+    (
+        re.compile(r"\b(?:sk|pk|rk|ghp|gho|ghu|ghs|github_pat|AIza|xox[baprs])[-_A-Za-z0-9]{10,}\b"),
+        "[REDACTED_TOKEN]",
+    ),
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._-]{10,}\b"), "Bearer [REDACTED_TOKEN]"),
+]
 
 
 def now_iso() -> str:
@@ -304,6 +321,1045 @@ def find_signal_entry(
 
 def parse_reference_path(value: str) -> str:
     return value.split("#", 1)[0]
+
+
+def resolve_source_ref_path(root: pathlib.Path, source_ref: str) -> pathlib.Path:
+    source_path = parse_reference_path(source_ref)
+    if not source_path:
+        raise ValueError("empty source_ref path")
+    path = pathlib.Path(source_path).expanduser()
+    if path.is_absolute():
+        return path
+    return root / path
+
+
+def redact_text(text: str) -> tuple[str, int]:
+    redacted = text
+    replacements = 0
+    for pattern, replacement in REDACTION_PATTERNS:
+        redacted, count = pattern.subn(replacement, redacted)
+        replacements += count
+    return redacted, replacements
+
+
+def working_memory_dir(root: pathlib.Path) -> pathlib.Path:
+    return root / ".pm/working_memory"
+
+
+def working_memory_path(root: pathlib.Path, task_id: str) -> pathlib.Path:
+    return working_memory_dir(root) / f"{task_id}.yaml"
+
+
+def codex_sessions_registry_path(root: pathlib.Path) -> pathlib.Path:
+    return root / ".pm/registry/codex-sessions.yaml"
+
+
+def load_codex_sessions_registry(
+    root: pathlib.Path,
+) -> tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]]]:
+    path = codex_sessions_registry_path(root)
+    if path.exists():
+        header, entries = load_list_document(path, "sessions")
+        return path, header, entries
+    return path, OrderedDict([("version", 1)]), []
+
+
+def remember_codex_session(
+    root: pathlib.Path,
+    task_id: str,
+    role: str,
+    session_id: str,
+    thread_name: str | None,
+    worktree_hint: str | None,
+    codex_dir: pathlib.Path,
+    updated_at: str,
+) -> dict[str, object]:
+    path, header, entries = load_codex_sessions_registry(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    retained: list[OrderedDict[str, object]] = []
+    for entry in entries:
+        if str(entry.get("task_id") or "") == task_id:
+            continue
+        retained.append(entry)
+
+    retained.append(
+        OrderedDict(
+            [
+                ("task_id", task_id),
+                ("role", role),
+                ("session_id", session_id),
+                ("thread_name", thread_name),
+                ("worktree_hint", worktree_hint),
+                ("codex_dir", str(codex_dir)),
+                ("updated_at", updated_at),
+            ]
+        )
+    )
+    dump_list_document(path, header, "sessions", retained)
+    return {
+        "task_id": task_id,
+        "role": role,
+        "session_id": session_id,
+        "thread_name": thread_name,
+        "worktree_hint": worktree_hint,
+        "codex_dir": str(codex_dir),
+        "updated_at": updated_at,
+        "path": str(path),
+    }
+
+
+def resolve_task_worktree_hint(root: pathlib.Path, task_id: str | None) -> str | None:
+    if not task_id:
+        return None
+    task_file = root / f".pm/tasks/{task_id}.yaml"
+    if not task_file.exists():
+        return None
+    fields = load_mapping_document(task_file)
+    value = fields.get("worktree_hint")
+    if value in {None, ""}:
+        return None
+    return str(value)
+
+
+def resolve_codex_session_id(
+    root: pathlib.Path,
+    codex_dir: pathlib.Path,
+    session_id: str | None,
+    task_id: str | None,
+    worktree_hint: str | None,
+    thread_name_pattern: str | None,
+) -> tuple[str, str, str | None]:
+    if session_id:
+        metadata = load_codex_session_metadata(codex_dir, session_id)
+        return session_id, "explicit", str(metadata.get("thread_name") or "")
+
+    if task_id:
+        _, _, registry_entries = load_codex_sessions_registry(root)
+        for entry in reversed(registry_entries):
+            if str(entry.get("task_id") or "") == task_id:
+                resolved_session_id = str(entry.get("session_id") or "")
+                if not resolved_session_id:
+                    break
+                metadata = load_codex_session_metadata(codex_dir, resolved_session_id)
+                return resolved_session_id, "registry", str(metadata.get("thread_name") or "")
+
+    derived_worktree_hint = worktree_hint or resolve_task_worktree_hint(root, task_id)
+    pattern = thread_name_pattern or derived_worktree_hint
+    if not pattern:
+        raise ValueError("missing session resolution input: provide --session-id, --task-id with saved mapping, --worktree-hint, or --thread-name-pattern")
+
+    index_path = codex_dir / "session_index.jsonl"
+    if not index_path.exists():
+        raise ValueError(f"missing Codex session index: {index_path}")
+
+    normalized_pattern = pattern.casefold()
+    candidates: list[OrderedDict[str, object]] = []
+    for raw_line in index_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        payload = json.loads(line, object_pairs_hook=OrderedDict)
+        thread_name = str(payload.get("thread_name") or "")
+        if normalized_pattern in thread_name.casefold():
+            candidates.append(payload)
+
+    if not candidates:
+        raise ValueError(f"no Codex session matched pattern: {pattern}")
+
+    candidates.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+    selected = candidates[0]
+    return str(selected.get("id")), "pattern", str(selected.get("thread_name") or "")
+
+
+def load_working_memory_document(
+    root: pathlib.Path,
+    task_id: str,
+    role: str | None = None,
+    worktree_hint: str | None = None,
+) -> tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]]]:
+    path = working_memory_path(root, task_id)
+    if path.exists():
+        header, entries = load_list_document(path, "entries")
+        return path, header, entries
+
+    header: OrderedDict[str, object] = OrderedDict(
+        [
+            ("version", 1),
+            ("task_id", task_id),
+            ("role", role),
+            ("worktree_hint", worktree_hint),
+        ]
+    )
+    return path, header, []
+
+
+def iter_working_memory_documents(
+    root: pathlib.Path,
+) -> list[tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]]]]:
+    directory = working_memory_dir(root)
+    if not directory.exists():
+        return []
+    documents: list[tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]]]] = []
+    for path in sorted(directory.glob("*.yaml")):
+        header, entries = load_list_document(path, "entries")
+        documents.append((path, header, entries))
+    return documents
+
+
+def next_working_memory_entry_id(entries: list[OrderedDict[str, object]]) -> str:
+    max_sequence = 0
+    for entry in entries:
+        entry_id = str(entry.get("entry_id") or "")
+        match = re.fullmatch(r"WM-(\d{4})", entry_id)
+        if match:
+            max_sequence = max(max_sequence, int(match.group(1)))
+    return f"WM-{max_sequence + 1:04d}"
+
+
+def build_working_memory_report(
+    root: pathlib.Path,
+    task_id: str | None,
+    role_filter: str | None,
+) -> dict[str, object]:
+    if role_filter and role_filter not in load_roles(root):
+        raise ValueError(f"unknown role: {role_filter}")
+
+    task_payloads: OrderedDict[str, dict[str, object]] = OrderedDict()
+    counts_by_kind: OrderedDict[str, int] = OrderedDict(
+        (kind, 0) for kind in sorted(WORKING_MEMORY_ENTRY_KINDS)
+    )
+    total_entries = 0
+
+    for path, header, entries in iter_working_memory_documents(root):
+        current_task_id = str(header.get("task_id") or path.stem)
+        current_role = str(header.get("role") or "")
+        if task_id and current_task_id != task_id:
+            continue
+        if role_filter and current_role != role_filter:
+            continue
+
+        payload_counts: OrderedDict[str, int] = OrderedDict(
+            (kind, 0) for kind in sorted(WORKING_MEMORY_ENTRY_KINDS)
+        )
+        shaped_entries: list[OrderedDict[str, object]] = []
+        for entry in sorted(entries, key=lambda item: str(item.get("captured_at") or ""), reverse=True):
+            entry_kind = str(entry.get("entry_kind") or "")
+            if entry_kind in payload_counts:
+                payload_counts[entry_kind] += 1
+                counts_by_kind[entry_kind] += 1
+            total_entries += 1
+            shaped_entries.append(
+                OrderedDict(
+                    [
+                        ("entry_id", entry.get("entry_id")),
+                        ("entry_kind", entry.get("entry_kind")),
+                        ("summary", entry.get("summary")),
+                        ("source_refs", list(entry.get("source_refs", []))),
+                        ("captured_at", entry.get("captured_at")),
+                        ("expires_at", entry.get("expires_at")),
+                        ("promoted_to", list(entry.get("promoted_to", []))),
+                    ]
+                )
+            )
+
+        task_payloads[current_task_id] = {
+            "task_id": current_task_id,
+            "role": header.get("role"),
+            "worktree_hint": header.get("worktree_hint"),
+            "source_session_id": header.get("source_session_id"),
+            "source_thread_name": header.get("source_thread_name"),
+            "transcript_source": header.get("transcript_source"),
+            "last_extracted_ts": header.get("last_extracted_ts"),
+            "captured_until_ts": header.get("captured_until_ts"),
+            "entry_count": len(entries),
+            "counts_by_kind": payload_counts,
+            "entries": shaped_entries,
+        }
+
+    return {
+        "generated_at": now_iso(),
+        "task_filter": task_id,
+        "role_filter": role_filter,
+        "task_count": len(task_payloads),
+        "entry_count": total_entries,
+        "counts_by_kind": counts_by_kind,
+        "tasks": task_payloads,
+    }
+
+
+def run_working_memory_lint(root: pathlib.Path) -> None:
+    failures: list[str] = []
+    roles = load_roles(root)
+
+    def fail(message: str) -> None:
+        failures.append(message)
+
+    directory = working_memory_dir(root)
+    if not directory.exists():
+        fail("missing directory: .pm/working_memory")
+    for path, header, entries in iter_working_memory_documents(root):
+        task_id = str(header.get("task_id") or "")
+        role = header.get("role")
+        if not task_id:
+            fail(f"{path.relative_to(root)} missing task_id")
+        elif path.name != f"{task_id}.yaml":
+            fail(f"{path.relative_to(root)} filename/task_id mismatch: {path.name} != {task_id}.yaml")
+
+        if role is None or str(role) not in roles:
+            fail(f"{path.relative_to(root)} unknown role: {role}")
+
+        entry_ids: set[str] = set()
+        for entry in entries:
+            entry_id = str(entry.get("entry_id") or "")
+            if not entry_id:
+                fail(f"{path.relative_to(root)} entry missing entry_id")
+                continue
+            if entry_id in entry_ids:
+                fail(f"{path.relative_to(root)} duplicate entry_id: {entry_id}")
+            entry_ids.add(entry_id)
+
+            entry_kind = str(entry.get("entry_kind") or "")
+            if entry_kind not in WORKING_MEMORY_ENTRY_KINDS:
+                fail(f"{path.relative_to(root)} {entry_id} invalid entry_kind: {entry_kind}")
+
+            summary = str(entry.get("summary") or "").strip()
+            if not summary:
+                fail(f"{path.relative_to(root)} {entry_id} missing summary")
+
+            source_refs = entry.get("source_refs")
+            if not isinstance(source_refs, list) or not source_refs:
+                fail(f"{path.relative_to(root)} {entry_id} source_refs must be a non-empty list")
+            else:
+                for source_ref in source_refs:
+                    try:
+                        resolved = resolve_source_ref_path(root, str(source_ref))
+                    except ValueError as exc:
+                        fail(f"{path.relative_to(root)} {entry_id} invalid source_ref: {exc}")
+                        continue
+                    if not resolved.exists():
+                        fail(f"{path.relative_to(root)} {entry_id} source_ref missing: {resolved}")
+
+            for key in ("captured_at", "expires_at"):
+                try:
+                    datetime.fromisoformat(str(entry.get(key)))
+                except ValueError:
+                    fail(f"{path.relative_to(root)} {entry_id} invalid timestamp: {key}={entry.get(key)}")
+
+            try:
+                captured_at = datetime.fromisoformat(str(entry.get("captured_at")))
+                expires_at = datetime.fromisoformat(str(entry.get("expires_at")))
+                if expires_at < captured_at:
+                    fail(f"{path.relative_to(root)} {entry_id} expires_at before captured_at")
+            except ValueError:
+                pass
+
+            promoted_to = entry.get("promoted_to")
+            if not isinstance(promoted_to, list):
+                fail(f"{path.relative_to(root)} {entry_id} promoted_to must be a list")
+
+    if failures:
+        for failure in failures:
+            print(f"working-memory-lint: FAIL: {failure}", file=sys.stderr)
+        raise SystemExit(1)
+
+
+def load_codex_session_metadata(codex_dir: pathlib.Path, session_id: str) -> OrderedDict[str, object]:
+    index_path = codex_dir / "session_index.jsonl"
+    if index_path.exists():
+        for raw_line in index_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            payload = json.loads(line, object_pairs_hook=OrderedDict)
+            if payload.get("id") == session_id:
+                return payload
+
+    rollout_path = find_codex_session_rollout_path(codex_dir, session_id)
+    if rollout_path is not None:
+        metadata = load_codex_session_metadata_from_rollout(rollout_path, session_id)
+        if metadata is not None:
+            return metadata
+
+    if not index_path.exists():
+        raise ValueError(f"missing Codex session index: {index_path}")
+    raise ValueError(f"session_id not found in session_index.jsonl or sessions rollout files: {session_id}")
+
+
+def find_codex_session_rollout_path(codex_dir: pathlib.Path, session_id: str) -> pathlib.Path | None:
+    sessions_dir = codex_dir / "sessions"
+    if not sessions_dir.exists():
+        return None
+
+    matches = sorted(sessions_dir.rglob(f"*{session_id}*.jsonl"))
+    if matches:
+        return matches[-1]
+    return None
+
+
+def load_codex_session_metadata_from_rollout(
+    rollout_path: pathlib.Path,
+    session_id: str,
+) -> OrderedDict[str, object] | None:
+    for raw_line in rollout_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        payload = json.loads(line, object_pairs_hook=OrderedDict)
+        if payload.get("type") != "session_meta":
+            continue
+        session_payload = payload.get("payload")
+        if not isinstance(session_payload, dict):
+            continue
+        if session_payload.get("id") != session_id:
+            continue
+        return OrderedDict(
+            [
+                ("id", session_payload.get("id")),
+                ("thread_name", session_payload.get("title") or session_payload.get("thread_name")),
+                ("updated_at", payload.get("timestamp") or session_payload.get("timestamp")),
+            ]
+        )
+    return None
+
+
+def extract_text_from_codex_message_content(content: object) -> str:
+    if not isinstance(content, list):
+        return ""
+
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if text:
+            parts.append(str(text))
+    return "\n".join(part for part in parts if part).strip()
+
+
+def load_codex_rollout_messages(
+    codex_dir: pathlib.Path,
+    session_id: str,
+) -> tuple[list[OrderedDict[str, object]], int, str | None]:
+    rollout_path = find_codex_session_rollout_path(codex_dir, session_id)
+    if rollout_path is None:
+        return [], 0, None
+
+    messages: list[OrderedDict[str, object]] = []
+    redaction_count = 0
+    seen: set[tuple[str, str, str]] = set()
+
+    for line_no, raw_line in enumerate(
+        rollout_path.read_text(encoding="utf-8", errors="ignore").splitlines(),
+        start=1,
+    ):
+        line = raw_line.strip()
+        if not line:
+            continue
+        payload = json.loads(line, object_pairs_hook=OrderedDict)
+        record_type = payload.get("type")
+        record_payload = payload.get("payload")
+        if not isinstance(record_payload, dict):
+            continue
+
+        role = ""
+        text = ""
+        if record_type == "event_msg":
+            event_type = str(record_payload.get("type") or "")
+            if event_type == "user_message":
+                role = "user"
+                text = str(record_payload.get("message") or "")
+            elif event_type == "agent_message":
+                role = "assistant"
+                text = str(record_payload.get("message") or "")
+        elif record_type == "response_item" and record_payload.get("type") == "message":
+            role = str(record_payload.get("role") or "")
+            text = extract_text_from_codex_message_content(record_payload.get("content"))
+
+        text = text.strip()
+        timestamp = str(payload.get("timestamp") or "")
+        if not timestamp or not role or not text:
+            continue
+
+        dedupe_key = (timestamp, role, text)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        redacted_text, replacements = redact_text(text)
+        redaction_count += replacements
+        messages.append(
+            OrderedDict(
+                [
+                    ("session_id", session_id),
+                    ("ts", timestamp),
+                    ("role", role),
+                    ("text", redacted_text),
+                    ("source_ref", f"{rollout_path}#L{line_no}"),
+                ]
+            )
+        )
+
+    return messages, redaction_count, str(rollout_path)
+
+
+def codex_message_sort_key(item: OrderedDict[str, object]) -> tuple[int, str]:
+    raw_ts = item.get("ts")
+    if isinstance(raw_ts, int):
+        return (0, f"{raw_ts:020d}")
+
+    ts_text = str(raw_ts or "")
+    if re.fullmatch(r"\d+", ts_text):
+        return (0, f"{int(ts_text):020d}")
+
+    return (1, ts_text)
+
+
+def codex_ts_in_window(ts: object, after_ts: object | None, before_ts: object | None) -> bool:
+    ts_key = codex_message_sort_key(OrderedDict([("ts", ts)]))
+    if after_ts not in {None, ""}:
+        after_key = codex_message_sort_key(OrderedDict([("ts", after_ts)]))
+        if ts_key <= after_key:
+            return False
+    if before_ts not in {None, ""}:
+        before_key = codex_message_sort_key(OrderedDict([("ts", before_ts)]))
+        if ts_key > before_key:
+            return False
+    return True
+
+
+def build_codex_transcript_report(
+    codex_dir: pathlib.Path,
+    session_id: str,
+    after_ts: object | None = None,
+    before_ts: object | None = None,
+) -> dict[str, object]:
+    history_path = codex_dir / "history.jsonl"
+    session = load_codex_session_metadata(codex_dir, session_id)
+    messages: list[OrderedDict[str, object]] = []
+    redaction_count = 0
+    transcript_source = "history_jsonl"
+    found_history_messages = False
+    if history_path.exists():
+        for raw_line in history_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            payload = json.loads(line, object_pairs_hook=OrderedDict)
+            if payload.get("session_id") != session_id:
+                continue
+            found_history_messages = True
+            ts = payload.get("ts")
+            if not codex_ts_in_window(ts, after_ts=after_ts, before_ts=before_ts):
+                continue
+            redacted_text, replacements = redact_text(str(payload.get("text") or ""))
+            redaction_count += replacements
+            messages.append(
+                OrderedDict(
+                    [
+                        ("session_id", session_id),
+                        ("ts", ts),
+                        ("text", redacted_text),
+                        ("source_ref", f"{history_path}#session_id={session_id}&ts={ts}"),
+                    ]
+                )
+            )
+
+    if not messages:
+        rollout_messages, rollout_redaction_count, rollout_path = load_codex_rollout_messages(codex_dir, session_id)
+        messages = [
+            message
+            for message in rollout_messages
+            if codex_ts_in_window(message.get("ts"), after_ts=after_ts, before_ts=before_ts)
+        ]
+        found_rollout_messages = bool(rollout_messages)
+        if messages:
+            redaction_count = rollout_redaction_count
+            transcript_source = "sessions_rollout"
+        elif not found_history_messages and not found_rollout_messages:
+            if not history_path.exists():
+                raise ValueError(
+                    f"missing Codex transcript sources: {history_path} and {codex_dir / 'sessions'}"
+                )
+            raise ValueError(f"no transcript messages found for session_id={session_id}")
+    else:
+        rollout_path = None
+
+    messages.sort(key=codex_message_sort_key)
+    return {
+        "generated_at": now_iso(),
+        "codex_dir": str(codex_dir),
+        "session": OrderedDict(
+            [
+                ("id", session.get("id")),
+                ("thread_name", session.get("thread_name")),
+                ("updated_at", session.get("updated_at")),
+                ("source_ref", f"{codex_dir / 'session_index.jsonl'}#id={session_id}"),
+            ]
+        ),
+        "transcript_source": transcript_source,
+        "rollout_source_ref": f"{rollout_path}#session_id={session_id}" if rollout_path else None,
+        "after_ts": after_ts,
+        "before_ts": before_ts,
+        "message_count": len(messages),
+        "redaction_count": redaction_count,
+        "messages": messages,
+    }
+
+
+def import_working_memory_entries(
+    root: pathlib.Path,
+    task_id: str,
+    role: str,
+    worktree_hint: str | None,
+    entries_payload: list[dict[str, object]],
+    expires_days: int,
+    source_session_id: str | None = None,
+    source_thread_name: str | None = None,
+    transcript_source: str | None = None,
+    last_extracted_ts: object | None = None,
+    captured_until_ts: object | None = None,
+) -> dict[str, object]:
+    if role not in load_roles(root):
+        raise ValueError(f"unknown role: {role}")
+    if expires_days < 0:
+        raise ValueError("--expires-days must be >= 0")
+
+    path, header, existing_entries = load_working_memory_document(root, task_id, role=role, worktree_hint=worktree_hint)
+    directory = working_memory_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    header["role"] = role
+    header["worktree_hint"] = worktree_hint
+    if source_session_id:
+        header["source_session_id"] = source_session_id
+    if source_thread_name:
+        header["source_thread_name"] = source_thread_name
+    if transcript_source:
+        header["transcript_source"] = transcript_source
+    if last_extracted_ts not in {None, ""}:
+        header["last_extracted_ts"] = last_extracted_ts
+    if captured_until_ts not in {None, ""}:
+        header["captured_until_ts"] = captured_until_ts
+
+    existing_keys = {
+        (
+            str(entry.get("entry_kind") or ""),
+            str(entry.get("summary") or "").strip(),
+            tuple(str(item) for item in entry.get("source_refs", [])),
+        )
+        for entry in existing_entries
+    }
+
+    added = 0
+    skipped = 0
+    captured_at = now_iso()
+    expires_at = (datetime.now().astimezone() + timedelta(days=expires_days)).isoformat(timespec="seconds")
+
+    for payload in entries_payload:
+        entry_kind = str(payload.get("entry_kind") or "")
+        if entry_kind not in WORKING_MEMORY_ENTRY_KINDS:
+            raise ValueError(f"invalid working_memory entry_kind: {entry_kind}")
+        summary = str(payload.get("summary") or "").strip()
+        if not summary:
+            raise ValueError("working_memory entry missing summary")
+        source_refs = [str(item) for item in payload.get("source_refs", [])]
+        if not source_refs:
+            raise ValueError("working_memory entry missing source_refs")
+
+        dedupe_key = (entry_kind, summary, tuple(source_refs))
+        if dedupe_key in existing_keys:
+            skipped += 1
+            continue
+        existing_keys.add(dedupe_key)
+
+        existing_entries.append(
+            OrderedDict(
+                [
+                    ("entry_id", next_working_memory_entry_id(existing_entries)),
+                    ("entry_kind", entry_kind),
+                    ("summary", summary),
+                    ("source_refs", source_refs),
+                    ("captured_at", captured_at),
+                    ("expires_at", expires_at),
+                    ("promoted_to", []),
+                ]
+            )
+        )
+        added += 1
+
+    dump_list_document(path, header, "entries", existing_entries)
+    return {
+        "task_id": task_id,
+        "role": role,
+        "worktree_hint": worktree_hint,
+        "path": str(path),
+        "added": added,
+        "skipped": skipped,
+        "entry_count": len(existing_entries),
+    }
+
+
+def next_signal_id(root: pathlib.Path) -> str:
+    max_sequence = 0
+    for payload in load_signal_entries(root):
+        signal_id = str(payload.get("signal_id") or "")
+        match = re.fullmatch(r"SIG-PM-(\d{4})", signal_id)
+        if match:
+            max_sequence = max(max_sequence, int(match.group(1)))
+    return f"SIG-PM-{max_sequence + 1:04d}"
+
+
+def next_task_id(root: pathlib.Path) -> str:
+    header, _ = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    next_sequence = header.get("next_sequence")
+    if next_sequence is None or not str(next_sequence).isdigit():
+        raise ValueError("tasks registry missing numeric next_sequence")
+    return f"TASK-PM-{int(next_sequence):04d}"
+
+
+def create_candidate_task(
+    root: pathlib.Path,
+    owner_role: str,
+    title: str,
+    priority: str,
+    source_signal: str | None,
+    source_refs: list[str],
+    related_prd: list[str],
+    acceptance: list[str],
+    handoff_to: list[str],
+    worktree_hint: str | None,
+) -> dict[str, object]:
+    if owner_role not in load_roles(root):
+        raise ValueError(f"unknown owner role: {owner_role}")
+    if priority not in PRIORITY_ORDER:
+        raise ValueError(f"unsupported priority: {priority}")
+
+    registry_path = root / ".pm/registry/tasks.yaml"
+    registry_header, registry_entries = load_list_document(registry_path, "tasks")
+    next_sequence = registry_header.get("next_sequence")
+    if next_sequence is None or not str(next_sequence).isdigit():
+        raise ValueError("tasks registry missing numeric next_sequence")
+
+    task_id = f"TASK-PM-{int(next_sequence):04d}"
+    task_path_rel = f".pm/tasks/{task_id}.yaml"
+    task_path = root / task_path_rel
+    if task_path.exists():
+        raise ValueError(f"task file already exists: {task_path_rel}")
+
+    updated_at = now_iso()
+    task_fields = OrderedDict(
+        [
+            ("task_id", task_id),
+            ("title", title),
+            ("owner_role", owner_role),
+            ("worktree_hint", worktree_hint),
+            ("status", "candidate"),
+            ("priority", priority),
+            ("source_signal", source_signal),
+            ("source_refs", list(source_refs)),
+            ("doc_refs", []),
+            ("related_prd", list(related_prd)),
+            ("acceptance", list(acceptance)),
+            ("handoff_to", list(handoff_to)),
+            ("updated_at", updated_at),
+        ]
+    )
+    dump_mapping_document(task_path, task_fields)
+
+    registry_entries.append(
+        OrderedDict(
+            [
+                ("task_id", task_id),
+                ("owner_role", owner_role),
+                ("task_path", task_path_rel),
+                ("status", "candidate"),
+                ("priority", priority),
+                ("source_signal", source_signal),
+                ("updated_at", updated_at),
+            ]
+        )
+    )
+    registry_header["next_sequence"] = int(next_sequence) + 1
+    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
+
+    backlog_path = root / f".pm/roles/{owner_role}/backlog/candidate.yaml"
+    backlog_header, backlog_entries = load_list_document(backlog_path, "tasks")
+    backlog_entries.append(
+        OrderedDict(
+            [
+                ("task_id", task_id),
+                ("title", title),
+                ("priority", priority),
+                ("source_signal", source_signal),
+                ("related_prd", list(related_prd)),
+                ("acceptance", list(acceptance)),
+                ("handoff_to", list(handoff_to)),
+                ("status", "candidate"),
+                ("task_path", task_path_rel),
+            ]
+        )
+    )
+    dump_list_document(backlog_path, backlog_header, "tasks", backlog_entries)
+
+    return {
+        "task_id": task_id,
+        "task_path": task_path_rel,
+        "backlog_path": str(backlog_path.relative_to(root)),
+        "owner_role": owner_role,
+        "priority": priority,
+        "status": "candidate",
+        "source_signal": source_signal,
+        "updated_at": updated_at,
+    }
+
+
+def find_task_by_source_ref(root: pathlib.Path, source_ref: str) -> dict[str, object] | None:
+    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    for entry in registry_entries:
+        task_path = root / str(entry.get("task_path") or "")
+        if not task_path.exists():
+            continue
+        fields = load_mapping_document(task_path)
+        if source_ref in [str(item) for item in fields.get("source_refs", [])]:
+            return {
+                "task_id": fields.get("task_id"),
+                "task_path": str(entry.get("task_path")),
+                "owner_role": fields.get("owner_role"),
+                "status": fields.get("status"),
+                "source_signal": fields.get("source_signal"),
+            }
+    return None
+
+
+def promote_working_memory_to_signals(
+    root: pathlib.Path,
+    task_id: str,
+    role: str | None,
+    entry_ids: list[str],
+    severity: str,
+) -> dict[str, object]:
+    if severity not in SEVERITY_ORDER:
+        raise ValueError(f"unsupported severity: {severity}")
+
+    path, header, entries = load_working_memory_document(root, task_id)
+    resolved_role = str(role or header.get("role") or "")
+    if resolved_role not in load_roles(root):
+        raise ValueError(f"unknown role: {resolved_role}")
+
+    if not entry_ids:
+        raise ValueError("at least one --entry-id is required")
+
+    entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
+    signal_entries = load_signal_entries(root)
+    created: list[dict[str, object]] = []
+    reused: list[dict[str, object]] = []
+    relative_source_path = str(path.relative_to(root))
+
+    for entry_id in entry_ids:
+        entry = entries_by_id.get(entry_id)
+        if entry is None:
+            raise ValueError(f"working_memory entry not found: {entry_id}")
+
+        source_ref = f"{relative_source_path}#entry_id={entry_id}"
+        summary = str(entry.get("summary") or "")
+        existing_signal = None
+        for payload in signal_entries:
+            if (
+                payload.get("source_type") == "reflection"
+                and payload.get("source_ref") == source_ref
+                and payload.get("summary") == summary
+                and payload.get("role_hint") == resolved_role
+            ):
+                existing_signal = payload
+                break
+
+        if existing_signal is not None:
+            signal_id = str(existing_signal["signal_id"])
+            if signal_id not in entry["promoted_to"]:
+                entry["promoted_to"].append(signal_id)
+            reused.append(
+                {
+                    "entry_id": entry_id,
+                    "signal_id": signal_id,
+                    "source_ref": source_ref,
+                    "summary": summary,
+                }
+            )
+            continue
+
+        signal_id = next_signal_id(root)
+        payload = OrderedDict(
+            [
+                ("signal_id", signal_id),
+                ("source_type", "reflection"),
+                ("source_ref", source_ref),
+                ("role_hint", resolved_role),
+                ("severity", severity),
+                ("summary", summary),
+                ("promotion_state", "triaged"),
+                ("memory_promotion_state", "pending"),
+            ]
+        )
+        signal_entries.append(payload)
+        if signal_id not in entry["promoted_to"]:
+            entry["promoted_to"].append(signal_id)
+        created.append(
+            {
+                "entry_id": entry_id,
+                "signal_id": signal_id,
+                "source_ref": source_ref,
+                "summary": summary,
+            }
+        )
+
+    dump_signal_entries(root, signal_entries)
+    dump_list_document(path, header, "entries", entries)
+    return {
+        "task_id": task_id,
+        "role": resolved_role,
+        "severity": severity,
+        "working_memory_path": relative_source_path,
+        "created": created,
+        "reused": reused,
+    }
+
+
+def autoflow_working_memory(
+    root: pathlib.Path,
+    task_id: str,
+    role: str | None,
+    entry_ids: list[str] | None,
+    severity: str,
+    priority: str,
+    dry_run: bool,
+) -> dict[str, object]:
+    if severity not in SEVERITY_ORDER:
+        raise ValueError(f"unsupported severity: {severity}")
+    if priority not in PRIORITY_ORDER:
+        raise ValueError(f"unsupported priority: {priority}")
+
+    path, header, entries = load_working_memory_document(root, task_id)
+    resolved_role = str(role or header.get("role") or "")
+    if resolved_role not in load_roles(root):
+        raise ValueError(f"unknown role: {resolved_role}")
+
+    selected_ids = set(entry_ids or [])
+    selected_entries: list[OrderedDict[str, object]] = []
+    for entry in entries:
+        entry_id = str(entry.get("entry_id") or "")
+        if selected_ids and entry_id not in selected_ids:
+            continue
+        selected_entries.append(entry)
+
+    if entry_ids and len(selected_entries) != len(selected_ids):
+        missing = sorted(selected_ids - {str(entry.get("entry_id") or "") for entry in selected_entries})
+        raise ValueError(f"working_memory entries not found: {', '.join(missing)}")
+
+    signal_candidates = [
+        str(entry.get("entry_id"))
+        for entry in selected_entries
+        if str(entry.get("entry_kind") or "") in {"decision", "hypothesis", "open_question", "next_step"}
+    ]
+
+    signal_result = promote_working_memory_to_signals(
+        root,
+        task_id=task_id,
+        role=resolved_role,
+        entry_ids=signal_candidates,
+        severity=severity,
+    ) if signal_candidates else {
+        "task_id": task_id,
+        "role": resolved_role,
+        "severity": severity,
+        "working_memory_path": str(path.relative_to(root)),
+        "created": [],
+        "reused": [],
+    }
+
+    signals_by_entry_id: dict[str, str] = {}
+    for item in [*signal_result["created"], *signal_result["reused"]]:
+        signals_by_entry_id[str(item["entry_id"])] = str(item["signal_id"])
+
+    task_actions: list[dict[str, object]] = []
+    if not dry_run:
+        _, header, entries = load_working_memory_document(root, task_id)
+    for entry in entries:
+        entry_id = str(entry.get("entry_id") or "")
+        if selected_ids and entry_id not in selected_ids:
+            continue
+        entry_kind = str(entry.get("entry_kind") or "")
+        if entry_kind not in {"open_question", "next_step"}:
+            continue
+
+        source_ref = f"{path.relative_to(root)}#entry_id={entry_id}"
+        existing_task = find_task_by_source_ref(root, source_ref)
+        if existing_task is not None:
+            if not dry_run and str(existing_task["task_id"]) not in entry.get("promoted_to", []):
+                entry["promoted_to"].append(str(existing_task["task_id"]))
+            task_actions.append(
+                {
+                    "entry_id": entry_id,
+                    "decision": "reused",
+                    "task": existing_task,
+                }
+            )
+            continue
+
+        if dry_run:
+            task_actions.append(
+                {
+                    "entry_id": entry_id,
+                    "decision": "would_create",
+                    "task": {
+                        "owner_role": resolved_role,
+                        "priority": priority,
+                        "title": str(entry.get("summary") or ""),
+                        "source_signal": signals_by_entry_id.get(entry_id),
+                        "source_ref": source_ref,
+                    },
+                }
+            )
+            continue
+
+        created_task = create_candidate_task(
+            root,
+            owner_role=resolved_role,
+            title=str(entry.get("summary") or ""),
+            priority=priority,
+            source_signal=signals_by_entry_id.get(entry_id),
+            source_refs=[source_ref],
+            related_prd=[],
+            acceptance=[],
+            handoff_to=[],
+            worktree_hint=str(header.get("worktree_hint") or "") or None,
+        )
+        signal_id = signals_by_entry_id.get(entry_id)
+        if signal_id:
+            signal_entries, signal_entry = find_signal_entry(root, signal_id)
+            signal_entry["promotion_state"] = "promoted_candidate_task"
+            dump_signal_entries(root, signal_entries)
+        if str(created_task["task_id"]) not in entry.get("promoted_to", []):
+            entry["promoted_to"].append(str(created_task["task_id"]))
+        task_actions.append(
+            {
+                "entry_id": entry_id,
+                "decision": "created",
+                "task": created_task,
+            }
+        )
+
+    if not dry_run:
+        dump_list_document(path, header, "entries", entries)
+
+    return {
+        "task_id": task_id,
+        "role": resolved_role,
+        "severity": severity,
+        "priority": priority,
+        "dry_run": dry_run,
+        "signal_result": signal_result,
+        "task_actions": task_actions,
+    }
 
 
 def collect_memory_documents(root: pathlib.Path) -> list[tuple[pathlib.Path, str, str, OrderedDict[str, object], list[OrderedDict[str, object]]]]:
@@ -783,18 +1839,91 @@ def build_signal_summary(root: pathlib.Path, role_filter: str | None) -> dict[st
     }
 
 
+def build_reflection_summary(root: pathlib.Path, role_filter: str | None) -> dict[str, object]:
+    roles = load_roles(root)
+    if role_filter and role_filter not in roles:
+        raise ValueError(f"unknown role: {role_filter}")
+
+    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    tasks_by_signal: dict[str, list[dict[str, object]]] = {}
+    for entry in registry_entries:
+        source_signal = str(entry.get("source_signal") or "")
+        if not source_signal:
+            continue
+        task_path = root / str(entry.get("task_path") or "")
+        fields = load_mapping_document(task_path) if task_path.exists() else OrderedDict()
+        task_payload = {
+            "task_id": fields.get("task_id") or entry.get("task_id"),
+            "title": fields.get("title"),
+            "owner_role": fields.get("owner_role") or entry.get("owner_role"),
+            "status": fields.get("status") or entry.get("status"),
+            "priority": fields.get("priority") or entry.get("priority"),
+            "task_path": entry.get("task_path"),
+        }
+        tasks_by_signal.setdefault(source_signal, []).append(task_payload)
+
+    counts = OrderedDict(
+        [
+            ("triaged", 0),
+            ("promoted_candidate_task", 0),
+            ("discarded", 0),
+            ("deferred", 0),
+        ]
+    )
+    items: list[dict[str, object]] = []
+    for payload in load_signal_entries(root):
+        if payload.get("source_type") != "reflection":
+            continue
+        if role_filter and payload.get("role_hint") != role_filter:
+            continue
+        promotion_state = str(payload.get("promotion_state") or "triaged")
+        if promotion_state in counts:
+            counts[promotion_state] += 1
+        linked_tasks = list(tasks_by_signal.get(str(payload.get("signal_id") or ""), []))
+        items.append(
+            {
+                "signal_id": payload.get("signal_id"),
+                "role_hint": payload.get("role_hint"),
+                "severity": payload.get("severity"),
+                "promotion_state": promotion_state,
+                "memory_promotion_state": payload.get("memory_promotion_state"),
+                "source_ref": payload.get("source_ref"),
+                "summary": payload.get("summary"),
+                "linked_tasks": linked_tasks,
+            }
+        )
+
+    items.sort(
+        key=lambda item: (
+            SEVERITY_ORDER.get(str(item.get("severity")), 99),
+            str(item.get("signal_id") or ""),
+        )
+    )
+
+    return {
+        "role_filter": role_filter,
+        "count": len(items),
+        "counts": counts,
+        "items": items,
+    }
+
+
 def build_workflow_checklist(
     role: str,
     phase: str,
     role_payload: dict[str, object],
     signal_summary: dict[str, object],
     stage_report: dict[str, object],
+    working_memory_summary: dict[str, object],
+    reflection_summary: dict[str, object],
 ) -> list[OrderedDict[str, object]]:
     checklist: list[OrderedDict[str, object]] = []
     backlog_counts = role_payload["backlog_counts"]
     memory_counts = role_payload["memory_counts"]
     gate_status = str(stage_report["gate"]["status"] or "")
     pending_signals = int(signal_summary["pending_count"])
+    working_memory_entries = int(working_memory_summary["entry_count"])
+    pending_reflections = int(reflection_summary["counts"]["triaged"])
 
     def add(item_id: str, summary: str, command: str | None = None, reason: str | None = None) -> None:
         item = OrderedDict([("id", item_id), ("summary", summary)])
@@ -853,6 +1982,25 @@ def build_workflow_checklist(
             "write-devlog",
             "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
         )
+        if working_memory_entries > 0:
+            add(
+                "review-working-memory",
+                "先处理 task-scoped working_memory：提炼成 reflection signal、转 task/memory，或显式保留待过期，不要让过程认知悬空。",
+                command="./scripts/pm/working-memory-report.sh --task-id <TASK-ID>",
+                reason=f"working_memory_entries={working_memory_entries}",
+            )
+            add(
+                "autoflow-working-memory",
+                "可先用安全默认自动化把 working_memory 提成 reflection signal 和 candidate task，再进入 owner review。",
+                command="./scripts/pm/working-memory-autoflow.sh --task-id <TASK-ID> --severity medium --priority P2",
+            )
+        if pending_reflections > 0:
+            add(
+                "review-reflection",
+                "处理仍停留在 triaged 的 reflection signal，决定是否转 task/memory/deferred。",
+                command=f"./scripts/pm/reflection-report.sh --role {role}",
+                reason=f"triaged_reflections={pending_reflections}",
+            )
         add(
             "subagent-review",
             "commit 前必须启动独立 subagent review 当前 diff；review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
@@ -930,7 +2078,17 @@ def build_workflow_report(
     stage_report = build_stage_report(root)
     signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
     signal_summary = build_signal_summary(root, role_filter=signal_role_filter)
-    checklist = build_workflow_checklist(role, phase, role_payload, signal_summary, stage_report)
+    working_memory_summary = build_working_memory_report(root, task_id=None, role_filter=role)
+    reflection_summary = build_reflection_summary(root, role_filter=signal_role_filter)
+    checklist = build_workflow_checklist(
+        role,
+        phase,
+        role_payload,
+        signal_summary,
+        stage_report,
+        working_memory_summary,
+        reflection_summary,
+    )
 
     return {
         "generated_at": now_iso(),
@@ -940,6 +2098,8 @@ def build_workflow_report(
         "role_report": role_payload,
         "signal_summary": signal_summary,
         "stage_report": stage_report,
+        "working_memory_summary": working_memory_summary,
+        "reflection_summary": reflection_summary,
         "checklist": checklist,
     }
 
@@ -1163,6 +2323,12 @@ def cmd_memory_lint(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_working_memory_lint(args: argparse.Namespace) -> int:
+    run_working_memory_lint(args.root)
+    print("working-memory-lint: OK")
+    return 0
+
+
 def cmd_task_lint(args: argparse.Namespace) -> int:
     run_task_backlog_lint(args.root)
     return 0
@@ -1355,6 +2521,71 @@ def cmd_memory_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_working_memory_report(args: argparse.Namespace) -> int:
+    report = build_working_memory_report(args.root, task_id=args.task_id, role_filter=args.role)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 working memory report",
+        f"- generated_at: {report['generated_at']}",
+        f"- task_filter: {report['task_filter'] or '(all tasks)'}",
+        f"- role_filter: {report['role_filter'] or '(all roles)'}",
+        f"- task_count: {report['task_count']}",
+        f"- entry_count: {report['entry_count']}",
+        "- counts_by_kind: " + ", ".join(f"{kind}={count}" for kind, count in report["counts_by_kind"].items()),
+        "- tasks:",
+    ]
+    if report["tasks"]:
+        for task_id, payload in report["tasks"].items():
+            lines.append(
+                f"  - {task_id} / {payload['role']} / {payload.get('worktree_hint') or '(no worktree_hint)'} / "
+                f"entries={payload['entry_count']}"
+            )
+            for entry in payload["entries"][:5]:
+                lines.append(
+                    f"    - {entry['entry_id']} / {entry['entry_kind']} / {entry['captured_at']} / {entry['summary']}"
+                )
+    else:
+        lines.append("  - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
+def cmd_reflection_report(args: argparse.Namespace) -> int:
+    report = build_reflection_summary(args.root, role_filter=args.role)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 reflection report",
+        f"- role_filter: {report['role_filter'] or '(all roles)'}",
+        f"- count: {report['count']}",
+        "- counts: " + ", ".join(f"{key}={value}" for key, value in report["counts"].items()),
+        "- items:",
+    ]
+    if report["items"]:
+        for item in report["items"]:
+            linked_tasks = item["linked_tasks"]
+            linked_summary = (
+                ", ".join(str(task["task_id"]) for task in linked_tasks)
+                if linked_tasks
+                else "(none)"
+            )
+            lines.append(
+                f"  - {item['signal_id']} / {item['promotion_state']} / "
+                f"{item['memory_promotion_state']} / linked_tasks={linked_summary} / {item['summary']}"
+            )
+    else:
+        lines.append("  - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_role_report(args: argparse.Namespace) -> int:
     if args.stale_after_days < 0:
         raise ValueError("--stale-after-days must be >= 0")
@@ -1430,9 +2661,12 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         f"- gate_status: {report['stage_report']['gate']['status']}",
         "- backlog_counts: " + ", ".join(f"{status}={count}" for status, count in backlog_counts.items()),
         "- memory_counts: " + ", ".join(f"{status}={count}" for status, count in memory_counts.items()),
+        f"- working_memory_entries: {report['working_memory_summary']['entry_count']}",
         "- signal_counts: " + ", ".join(f"{status}={count}" for status, count in signal_counts.items()),
         "- memory_signal_counts: "
         + ", ".join(f"{status}={count}" for status, count in memory_signal_counts.items()),
+        "- reflection_counts: "
+        + ", ".join(f"{status}={count}" for status, count in report["reflection_summary"]["counts"].items()),
         f"- blocked_tasks: {len(report['stage_report']['blocking_tasks'])}",
         "- pending_signals:",
     ]
@@ -1457,6 +2691,132 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
             lines.append(f"     cmd: {item['command']}")
 
     print("\n".join(lines))
+    return 0
+
+
+def cmd_codex_transcript_report(args: argparse.Namespace) -> int:
+    codex_dir = pathlib.Path(args.codex_dir).expanduser()
+    session_id, resolution_source, resolved_thread_name = resolve_codex_session_id(
+        args.root,
+        codex_dir=codex_dir,
+        session_id=args.session_id,
+        task_id=args.task_id,
+        worktree_hint=args.worktree_hint,
+        thread_name_pattern=args.thread_name_pattern,
+    )
+    report = build_codex_transcript_report(
+        codex_dir=codex_dir,
+        session_id=session_id,
+        after_ts=args.after_ts,
+        before_ts=args.before_ts,
+    )
+    report["resolution_source"] = resolution_source
+    if resolved_thread_name and not report["session"].get("thread_name"):
+        report["session"]["thread_name"] = resolved_thread_name
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    lines = [
+        "oasis7 codex transcript report",
+        f"- generated_at: {report['generated_at']}",
+        f"- codex_dir: {report['codex_dir']}",
+        f"- resolution_source: {report.get('resolution_source')}",
+        f"- session_id: {report['session']['id']}",
+        f"- thread_name: {report['session'].get('thread_name') or '(none)'}",
+        f"- updated_at: {report['session'].get('updated_at')}",
+        f"- message_count: {report['message_count']}",
+        f"- redaction_count: {report['redaction_count']}",
+        "- messages:",
+    ]
+    if report["messages"]:
+        for item in report["messages"][:10]:
+            lines.append(f"  - ts={item['ts']} / {item['text']}")
+    else:
+        lines.append("  - (none)")
+
+    print("\n".join(lines))
+    return 0
+
+
+def cmd_import_working_memory(args: argparse.Namespace) -> int:
+    payload = json.loads(pathlib.Path(args.input_json).read_text(encoding="utf-8"))
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("input json must contain an entries list")
+
+    result = import_working_memory_entries(
+        args.root,
+        task_id=args.task_id,
+        role=args.role,
+        worktree_hint=args.worktree_hint,
+        entries_payload=entries,
+        expires_days=args.expires_days,
+        source_session_id=args.session_id,
+        source_thread_name=args.thread_name,
+        transcript_source=args.transcript_source,
+        last_extracted_ts=args.captured_until_ts,
+        captured_until_ts=args.captured_until_ts,
+    )
+    if args.session_id:
+        codex_mapping = remember_codex_session(
+            args.root,
+            task_id=args.task_id,
+            role=args.role,
+            session_id=args.session_id,
+            thread_name=args.thread_name,
+            worktree_hint=args.worktree_hint,
+            codex_dir=pathlib.Path(args.codex_dir).expanduser(),
+            updated_at=args.mapping_updated_at or now_iso(),
+        )
+        result["codex_session_mapping"] = codex_mapping
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            f"import-working-memory: wrote {result['added']} entries to {result['path']} "
+            f"(skipped {result['skipped']})"
+        )
+    return 0
+
+
+def cmd_promote_working_memory_signal(args: argparse.Namespace) -> int:
+    result = promote_working_memory_to_signals(
+        args.root,
+        task_id=args.task_id,
+        role=args.role,
+        entry_ids=list(args.entry_id),
+        severity=args.severity,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "promote-working-memory-signal: "
+            f"created={len(result['created'])} reused={len(result['reused'])} "
+            f"path={result['working_memory_path']}"
+        )
+    return 0
+
+
+def cmd_working_memory_autoflow(args: argparse.Namespace) -> int:
+    result = autoflow_working_memory(
+        args.root,
+        task_id=args.task_id,
+        role=args.role,
+        entry_ids=list(args.entry_id),
+        severity=args.severity,
+        priority=args.priority,
+        dry_run=args.dry_run,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "working-memory-autoflow: "
+            f"signals(created={len(result['signal_result']['created'])}, reused={len(result['signal_result']['reused'])}) "
+            f"tasks={len(result['task_actions'])} dry_run={'yes' if result['dry_run'] else 'no'}"
+        )
     return 0
 
 
@@ -1746,6 +3106,10 @@ def build_parser() -> argparse.ArgumentParser:
     memory_lint.add_argument("root", type=pathlib.Path)
     memory_lint.set_defaults(func=cmd_memory_lint)
 
+    working_memory_lint = subparsers.add_parser("working-memory-lint")
+    working_memory_lint.add_argument("root", type=pathlib.Path)
+    working_memory_lint.set_defaults(func=cmd_working_memory_lint)
+
     memory_report = subparsers.add_parser("memory-report")
     memory_report.add_argument("root", type=pathlib.Path)
     memory_report.add_argument("--role")
@@ -1755,6 +3119,19 @@ def build_parser() -> argparse.ArgumentParser:
     memory_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
     memory_report.add_argument("--json", action="store_true")
     memory_report.set_defaults(func=cmd_memory_report)
+
+    working_memory_report = subparsers.add_parser("working-memory-report")
+    working_memory_report.add_argument("root", type=pathlib.Path)
+    working_memory_report.add_argument("--task-id")
+    working_memory_report.add_argument("--role")
+    working_memory_report.add_argument("--json", action="store_true")
+    working_memory_report.set_defaults(func=cmd_working_memory_report)
+
+    reflection_report = subparsers.add_parser("reflection-report")
+    reflection_report.add_argument("root", type=pathlib.Path)
+    reflection_report.add_argument("--role")
+    reflection_report.add_argument("--json", action="store_true")
+    reflection_report.set_defaults(func=cmd_reflection_report)
 
     role_report = subparsers.add_parser("role-report")
     role_report.add_argument("root", type=pathlib.Path)
@@ -1810,6 +3187,54 @@ def build_parser() -> argparse.ArgumentParser:
     stage_report.add_argument("root", type=pathlib.Path)
     stage_report.add_argument("--json", action="store_true")
     stage_report.set_defaults(func=cmd_stage_report)
+
+    codex_transcript_report = subparsers.add_parser("codex-transcript-report")
+    codex_transcript_report.add_argument("root", type=pathlib.Path)
+    codex_transcript_report.add_argument("--session-id")
+    codex_transcript_report.add_argument("--task-id")
+    codex_transcript_report.add_argument("--worktree-hint")
+    codex_transcript_report.add_argument("--thread-name-pattern")
+    codex_transcript_report.add_argument("--codex-dir", default="~/.codex")
+    codex_transcript_report.add_argument("--after-ts")
+    codex_transcript_report.add_argument("--before-ts")
+    codex_transcript_report.add_argument("--json", action="store_true")
+    codex_transcript_report.set_defaults(func=cmd_codex_transcript_report)
+
+    import_working_memory = subparsers.add_parser("import-working-memory")
+    import_working_memory.add_argument("root", type=pathlib.Path)
+    import_working_memory.add_argument("--task-id", required=True)
+    import_working_memory.add_argument("--role", required=True)
+    import_working_memory.add_argument("--worktree-hint")
+    import_working_memory.add_argument("--input-json", required=True)
+    import_working_memory.add_argument("--expires-days", type=int, default=DEFAULT_WORKING_MEMORY_EXPIRES_DAYS)
+    import_working_memory.add_argument("--session-id")
+    import_working_memory.add_argument("--thread-name")
+    import_working_memory.add_argument("--codex-dir", default="~/.codex")
+    import_working_memory.add_argument("--mapping-updated-at")
+    import_working_memory.add_argument("--transcript-source")
+    import_working_memory.add_argument("--captured-until-ts")
+    import_working_memory.add_argument("--json", action="store_true")
+    import_working_memory.set_defaults(func=cmd_import_working_memory)
+
+    promote_working_memory_signal = subparsers.add_parser("promote-working-memory-signal")
+    promote_working_memory_signal.add_argument("root", type=pathlib.Path)
+    promote_working_memory_signal.add_argument("--task-id", required=True)
+    promote_working_memory_signal.add_argument("--role")
+    promote_working_memory_signal.add_argument("--entry-id", action="append", default=[])
+    promote_working_memory_signal.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
+    promote_working_memory_signal.add_argument("--json", action="store_true")
+    promote_working_memory_signal.set_defaults(func=cmd_promote_working_memory_signal)
+
+    working_memory_autoflow = subparsers.add_parser("working-memory-autoflow")
+    working_memory_autoflow.add_argument("root", type=pathlib.Path)
+    working_memory_autoflow.add_argument("--task-id", required=True)
+    working_memory_autoflow.add_argument("--role")
+    working_memory_autoflow.add_argument("--entry-id", action="append", default=[])
+    working_memory_autoflow.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
+    working_memory_autoflow.add_argument("--priority", choices=tuple(PRIORITY_ORDER.keys()), default="P2")
+    working_memory_autoflow.add_argument("--dry-run", action="store_true")
+    working_memory_autoflow.add_argument("--json", action="store_true")
+    working_memory_autoflow.set_defaults(func=cmd_working_memory_autoflow)
 
     return parser
 

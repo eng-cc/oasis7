@@ -96,6 +96,7 @@
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
 - [ ] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，落地 `workflow-report` 统一入口，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
 - [x] TASK-ENGINEERING-086 (PRD-ENGINEERING-022) [test_tier_required]: 建立“记忆启发式自我进化补强”专题 `prd/design/project`，冻结 `memoryOSS` / 《Hindsight》 的 adopted/rejected/deferred 边界，并同步回写 engineering 根入口、主项目、索引与 devlog。
+- [x] TASK-ENGINEERING-091 (PRD-ENGINEERING-022) [test_tier_required]: 补充“会话记录分析 -> task-scoped working_memory”专题口径，冻结 Codex/engineering task 的 phase 1 来源为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时为当前 live session 抽取补齐 `last_extracted_ts/captured_until_ts` 水位与默认增量抽取口径，并回写记忆启发式补强专题、engineering 主项目与 devlog。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -167,6 +168,7 @@
 - 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
 - 最新完成: `TASK-ENGINEERING-084`（已落地 `role-report.sh`、按角色 backlog+memory 汇总视图，以及真实 blocked task/stale memory/role-expansion smoke。）
 - 最新完成: `TASK-ENGINEERING-086`（已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的借鉴边界，并将 recall/reflection 的后续补强正式挂入 engineering 入口。）
+- 最新完成: `TASK-ENGINEERING-091`（已将“会话记录 -> task-scoped working_memory -> reflection signal”补入记忆启发式补强专题，明确 Codex/engineering task phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若缺失则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时通过 `last_extracted_ts/captured_until_ts` 水位把当前 live session 固定为“首轮快照、后续增量”，避免提炼过程自污染，且过程记忆只作为中间层，不直接进入长期 memory。）
 - 最新完成: `TASK-ENGINEERING-083`（已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容 lint/scaffold，以及 stale/conflict/superseded-chain/role-expansion full-tier smoke。）
 - 最新完成: `TASK-ENGINEERING-082`（已落地 `promote-memory.sh`、signal `memory_promotion_state` 决策回写、promotion/reject 白名单，以及 accepted/rejected promotion smoke。）
 - 最新完成: `TASK-ENGINEERING-081`（已为 producer/qa/liveops/shared 落地首批长期 memory 样例，覆盖阶段结论、QA failure signature、community messaging boundary 与 shared claim envelope。）
