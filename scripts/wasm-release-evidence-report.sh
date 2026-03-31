@@ -31,6 +31,9 @@ Options:
                              (default: current runner only)
   --expected-runners <csv>   Runner labels expected for full cross-host evidence
                              (default: same as required runners)
+  --expected-canonical-platform <platform>
+                             Canonical container platform expected in every summary
+                             (default: linux-x86_64)
   --summary-import-dir <path>
                              Import pre-collected summary jsons before verify.
                              Accepts either <path>/<module-set>/*.json or, when only one
@@ -131,6 +134,7 @@ module_sets_csv="m1,m4,m5"
 runner_label=""
 required_runners_csv=""
 expected_runners_csv=""
+expected_canonical_platform="linux-x86_64"
 summary_import_dir=""
 skip_collect=0
 dry_run=0
@@ -155,6 +159,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --expected-runners)
       expected_runners_csv=${2:-}
+      shift 2
+      ;;
+    --expected-canonical-platform)
+      expected_canonical_platform=${2:-}
       shift 2
       ;;
     --summary-import-dir)
@@ -193,6 +201,10 @@ fi
 ensure_csv_non_empty "--module-sets" "$module_sets_csv"
 ensure_csv_non_empty "--required-runners" "$required_runners_csv"
 ensure_csv_non_empty "--expected-runners" "$expected_runners_csv"
+if [[ -z "$expected_canonical_platform" ]]; then
+  echo "error: --expected-canonical-platform must not be empty" >&2
+  exit 2
+fi
 
 timestamp=$(date '+%Y%m%d-%H%M%S')
 run_dir="$out_dir/$timestamp"
@@ -235,6 +247,7 @@ for module_set in "${module_sets[@]}"; do
     --summary-dir "$module_summary_dir"
     --required-runners "$required_runners_csv"
     --expected-runners "$expected_runners_csv"
+    --expected-canonical-platform "$expected_canonical_platform"
   )
 
   collect_status="skipped"

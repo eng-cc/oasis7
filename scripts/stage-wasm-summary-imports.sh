@@ -18,6 +18,10 @@ Options:
   --out-dir <path>                  Output directory with merged summaries (required)
   --external-summary-bundle <path>  Optional external bundle path/URL (.tar/.tar.gz/.tgz/.zip or dir)
   --expected-external-runner <id>   Expected external runner label (default: darwin-arm64)
+  --expected-external-host <id>     Expected host platform recorded by the external bundle (default: same as runner)
+  --expected-canonical-platform <id>
+                                    Expected canonical container platform for imported summaries
+                                    (default: linux-x86_64)
   -h, --help                        Show help
 USAGE
 }
@@ -27,6 +31,8 @@ local_summary_dir=""
 out_dir=""
 external_summary_bundle=""
 expected_external_runner="darwin-arm64"
+expected_external_host=""
+expected_canonical_platform="linux-x86_64"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,6 +56,14 @@ while [[ $# -gt 0 ]]; do
       expected_external_runner=${2:-}
       shift 2
       ;;
+    --expected-external-host)
+      expected_external_host=${2:-}
+      shift 2
+      ;;
+    --expected-canonical-platform)
+      expected_canonical_platform=${2:-}
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -61,6 +75,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$expected_external_host" ]]; then
+  expected_external_host="$expected_external_runner"
+fi
 
 if [[ -z "$module_set" || -z "$local_summary_dir" || -z "$out_dir" ]]; then
   echo "error: --module-set, --local-summary-dir and --out-dir are required" >&2
@@ -157,7 +175,7 @@ raise SystemExit("error: bundle_manifest.json not found after extraction")
 PY
 )"
 
-python3 - "$bundle_root" "$module_set" "$expected_external_runner" "$out_dir" <<'PY'
+python3 - "$bundle_root" "$module_set" "$expected_external_runner" "$expected_external_host" "$expected_canonical_platform" "$out_dir" <<'PY'
 import json
 import pathlib
 import shutil
@@ -166,7 +184,9 @@ import sys
 bundle_root = pathlib.Path(sys.argv[1])
 module_set = sys.argv[2]
 expected_runner = sys.argv[3]
-out_dir = pathlib.Path(sys.argv[4])
+expected_host = sys.argv[4]
+expected_canonical_platform = sys.argv[5]
+out_dir = pathlib.Path(sys.argv[6])
 
 manifest_path = bundle_root / "bundle_manifest.json"
 manifest = json.loads(manifest_path.read_text())
@@ -179,6 +199,22 @@ if not runner_label:
 if expected_runner and runner_label != expected_runner:
     raise SystemExit(
         f"error: external bundle runner mismatch expected={expected_runner} actual={runner_label}"
+    )
+bundle_host_platform = manifest.get("host_platform")
+if not isinstance(bundle_host_platform, str) or not bundle_host_platform:
+    raise SystemExit(f"error: bundle manifest missing host_platform: {manifest_path}")
+if expected_host and bundle_host_platform != expected_host:
+    raise SystemExit(
+        f"error: external bundle host_platform mismatch expected={expected_host} actual={bundle_host_platform}"
+    )
+bundle_canonical_platforms = manifest.get("canonical_platforms")
+if not isinstance(bundle_canonical_platforms, list) or not bundle_canonical_platforms:
+    raise SystemExit(f"error: bundle manifest missing canonical_platforms: {manifest_path}")
+if expected_canonical_platform and bundle_canonical_platforms != [expected_canonical_platform]:
+    raise SystemExit(
+        "error: external bundle canonical_platforms mismatch expected={} actual={}".format(
+            [expected_canonical_platform], bundle_canonical_platforms
+        )
     )
 
 summary_files = manifest.get("summary_files")
@@ -202,6 +238,35 @@ if payload.get("module_set") != module_set:
 if payload.get("runner") != runner_label:
     raise SystemExit(
         f"error: external summary runner mismatch expected={runner_label} actual={payload.get('runner')}"
+    )
+summary_host_platform = payload.get("host_platform")
+if not isinstance(summary_host_platform, str) or not summary_host_platform:
+    raise SystemExit(
+        f"error: external summary missing host_platform: {summary_path}"
+    )
+if expected_host and summary_host_platform != expected_host:
+    raise SystemExit(
+        f"error: external summary host_platform mismatch expected={expected_host} actual={summary_host_platform}"
+    )
+summary_canonical_platform = payload.get("canonical_platform")
+if not isinstance(summary_canonical_platform, str) or not summary_canonical_platform:
+    raise SystemExit(
+        f"error: external summary missing canonical_platform: {summary_path}"
+    )
+if expected_canonical_platform and summary_canonical_platform != expected_canonical_platform:
+    raise SystemExit(
+        f"error: external summary canonical_platform mismatch expected={expected_canonical_platform} actual={summary_canonical_platform}"
+    )
+build_recipe = payload.get("identity_build_recipe")
+if not isinstance(build_recipe, dict):
+    raise SystemExit(
+        f"error: external summary missing identity_build_recipe: {summary_path}"
+    )
+if build_recipe.get("container_platform") != summary_canonical_platform:
+    raise SystemExit(
+        "error: external summary identity_build_recipe container_platform mismatch summary={} recipe={}".format(
+            summary_canonical_platform, build_recipe.get("container_platform")
+        )
     )
 
 target_path = out_dir / f"{runner_label}.json"

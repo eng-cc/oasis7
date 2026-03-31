@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
         default="linux-x86_64,darwin-arm64",
         help="Comma-separated runner labels expected for full cross-host evidence.",
     )
+    parser.add_argument(
+        "--expected-canonical-platform",
+        default="linux-x86_64",
+        help="Canonical container platform expected in every summary (default: linux-x86_64).",
+    )
     return parser.parse_args()
 
 
@@ -180,6 +185,9 @@ def main() -> None:
         fail(
             "--required-runners must be a subset of --expected-runners"
         )
+    expected_canonical_platform = args.expected_canonical_platform.strip()
+    if not expected_canonical_platform:
+        fail("--expected-canonical-platform must not be empty")
 
     summary_paths = sorted(summary_dir.glob("*.json"))
     if not summary_paths:
@@ -189,6 +197,12 @@ def main() -> None:
     for path in summary_paths:
         payload = load_summary(path)
         verify_summary_shape(path, payload, module_set)
+        if payload["canonical_platform"] != expected_canonical_platform:
+            fail(
+                "summary {} canonical_platform mismatch: expected={} actual={}".format(
+                    path, expected_canonical_platform, payload["canonical_platform"]
+                )
+            )
         runner = payload["runner"]
         if runner in summaries_by_runner:
             fail(f"duplicate runner summary detected for {runner}")

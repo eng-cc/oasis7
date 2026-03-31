@@ -153,14 +153,39 @@ for module_set in module_sets:
     if not summary_path.is_file():
         raise SystemExit(f"error: summary missing from bundle: {summary_path}")
     payload = json.loads(summary_path.read_text())
+    if payload.get("schema_version") != 1:
+        raise SystemExit(
+            f"error: summary {summary_path} schema_version must be 1, got {payload.get('schema_version')}"
+        )
+    if payload.get("module_set") != module_set:
+        raise SystemExit(
+            f"error: summary {summary_path} module_set mismatch expected={module_set} actual={payload.get('module_set')}"
+        )
     if payload.get("runner") != runner_label:
         raise SystemExit(
             f"error: summary {summary_path} runner mismatch expected={runner_label} actual={payload.get('runner')}"
         )
-    host_platform = host_platform or payload.get("host_platform")
+    summary_host_platform = payload.get("host_platform")
+    if not isinstance(summary_host_platform, str) or not summary_host_platform:
+        raise SystemExit(f"error: summary {summary_path} missing host_platform")
+    if host_platform is None:
+        host_platform = summary_host_platform
+    elif host_platform != summary_host_platform:
+        raise SystemExit(
+            f"error: bundle host_platform mismatch expected={host_platform} actual={summary_host_platform} for {summary_path}"
+        )
     canonical_platform = payload.get("canonical_platform")
-    if canonical_platform:
-        canonical_platforms.add(canonical_platform)
+    if not isinstance(canonical_platform, str) or not canonical_platform:
+        raise SystemExit(f"error: summary {summary_path} missing canonical_platform")
+    build_recipe = payload.get("identity_build_recipe")
+    if not isinstance(build_recipe, dict):
+        raise SystemExit(f"error: summary {summary_path} missing identity_build_recipe")
+    recipe_platform = build_recipe.get("container_platform")
+    if canonical_platform != recipe_platform:
+        raise SystemExit(
+            f"error: summary {summary_path} canonical_platform mismatch summary={canonical_platform} recipe={recipe_platform}"
+        )
+    canonical_platforms.add(canonical_platform)
     summary_files[module_set] = str(summary_path.relative_to(out_dir))
 
 manifest = {

@@ -13,6 +13,7 @@
 - [ ] WDBP-3 (PRD-WORLD_RUNTIME-021/022) [test_tier_required + test_tier_full]: 将 identity / release evidence / CI summary / release gate 全面切换为 Docker canonical hash，对 macOS/Linux 只比较容器输出，不再比较 host-native 输出。
   - [x] WDBP-3.1 (PRD-WORLD_RUNTIME-021) [test_tier_required]: 固化 stable gate / full-tier cross-host evidence 的双层结论模型，并让 `wasm-release-evidence-report` 输出 `expected_runners/received_runners/cross_host_evidence_pending`。
   - [ ] WDBP-3.2 (PRD-WORLD_RUNTIME-021/022) [test_tier_full]: 补齐真实 Docker-capable `darwin-arm64` summary 导入链路，使 release evidence 至少包含 `linux-x86_64 + darwin-arm64` 两类 runner 输入。
+    - [x] WDBP-3.2a (PRD-WORLD_RUNTIME-021/022) [test_tier_required]: 加固 external summary bundle 导入验真，拒绝 `host_platform` 或 `canonical_platform` 与 `darwin-arm64 + linux-x86_64 canonical builder` 目标态不一致的伪装证据。
   - [x] WDBP-3.3 (PRD-WORLD_RUNTIME-022) [test_tier_required]: 在 production runtime / node 主入口绑定 hardened `ReleaseSecurityPolicy`，并把 effective policy 写入 status / acceptance evidence。
 - [x] WDBP-4 (PRD-WORLD_RUNTIME-022) [test_tier_required]: 把 `compile_module_artifact_from_source` 的生产路径外移到 external Docker builder 或 production 默认禁用，runtime 只消费 binary + build receipt。
 
@@ -52,6 +53,7 @@
   - 新增 `scripts/wasm-release-evidence-report.sh` 作为多 runner fixed entry，可统一收集/校验 `m1/m4/m5` summary 并输出 `summary.md/json`；当前 `.github/workflows/wasm-determinism-gate.yml` 已切换到 `--summary-import-dir` 模式，会把下载下来的 runner summaries 统一收口为可归档 evidence artifact。
   - `scripts/ci-verify-m1-wasm-summaries.py` 与 `scripts/wasm-release-evidence-report.sh` 现已把 `required_runners`（stable gate）与 `expected_runners`（full-tier cross-host evidence）拆开；GitHub-hosted workflow 当前以 `linux-x86_64` 作为 required runner，但 summary/report 会显式输出 `received_runners + missing_runners + cross_host_evidence_pending + gate_result=conditional-go`。
   - `WDBP-3.2` 的导入链路现已落地：`scripts/package-wasm-summary-bundle.sh` 可把外部 Docker-capable runner 的 `m1/m4/m5` summary 打成标准 bundle，`scripts/stage-wasm-summary-imports.sh` 可在 verify 前把 GitHub-hosted Linux summary 与外部 bundle 合并到同一 import dir；`workflow_dispatch` 也新增了 `external_summary_bundle_url` / `external_summary_runner_label` 入口。
+  - `WDBP-3.2a` 已继续加固 external bundle 验真：`package/stage/verify/report` 链路现在会强校验 summary/bundle 的 `host_platform` 与 `canonical_platform=linux-x86_64`，并通过 `scripts/wasm-summary-bundle-smoke.sh` 固定覆盖“真实 darwin bundle 可导入、伪装 darwin 的 linux bundle 必须失败”。
   - 仓库内已补 `scripts/dispatch-wasm-determinism-gate.sh` 作为 operator 入口，用于以 `gh workflow run` 触发带外部 bundle URL 的 full-tier evidence run；待真实 `darwin-arm64` bundle 到位后即可直接归档正式 closure artifact。
   - 节点侧 proof 收口已落地：`scripts/module-release-node-attestation-flow.sh` 现可在发布节点本地执行 `summary collect/import -> evidence verify -> canonical proof inputs -> proof payload -> attestation submit`，并刻意剥离 summary/report 中的时间戳与本地路径，避免把非语义字段写入 `proof_cid`。
   - `scripts/module-release-node-acceptance.sh` 现已新增 `required_attestation_flow` smoke，基于合成 `linux-x86_64 + darwin-arm64` summary 验证节点侧固定入口可以稳定生成 `proof_payload.json + submit_request.json`。
