@@ -63,18 +63,18 @@
    8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
-10. 任务完成后必须标准化合入本地 `main`
-   1. 合入前先确认任务 `worktree` 与 `main` 所在 `worktree` 都是干净状态
-   2. 优先通过 `./scripts/land-task-worktree.sh` 执行标准化 landing，而不是手写 `git rebase` / `git merge`
-   3. landing 成功后，必须立即回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
-   4. 若失败，先在任务 `worktree` 解决冲突/补验证，再重试
-
-11. commit 前必须开一个独立 subagent review 当前改动
+10. commit 前必须开一个独立 subagent review 当前改动
    1. subagent 只负责 review diff、指出风险/回归/缺测，不替代 owner role 做开发决策
    2. owner 必须先处理或记录 review 结论，再允许提交 commit
    3. 若用户明确要求“先不要提交”，也要先完成 review，再保留本地改动
 
-12. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
+11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
+
+12. 任务完成后必须标准化合入本地 `main`
+   1. 合入前先确认任务 `worktree` 与 `main` 所在 `worktree` 都是干净状态
+   2. 优先通过 `./scripts/land-task-worktree.sh` 执行标准化 landing，而不是手写 `git rebase` / `git merge`
+   3. landing 成功后，必须立即回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
+   4. 若失败，先在任务 `worktree` 解决冲突/补验证，再重试
 
 13. 当前 `project.md` 还有后续任务时，不要中断；完成一个任务后继续下一个
 
