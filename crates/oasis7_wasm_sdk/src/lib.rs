@@ -60,6 +60,7 @@ pub fn dispatch_call<M: WasmModuleLifecycle>(input_ptr: i32, input_len: i32) -> 
 pub mod wire {
     use alloc::string::String;
     use alloc::vec::Vec;
+    use core::fmt;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Clone, Deserialize)]
@@ -129,6 +130,28 @@ pub mod wire {
         Suspend,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct WireCodecError {
+        detail: String,
+    }
+
+    impl WireCodecError {
+        fn new(detail: impl Into<String>) -> Self {
+            Self {
+                detail: detail.into(),
+            }
+        }
+    }
+
+    impl fmt::Display for WireCodecError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&self.detail)
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for WireCodecError {}
+
     pub fn empty_output() -> ModuleOutput {
         ModuleOutput {
             new_state: None,
@@ -140,16 +163,23 @@ pub mod wire {
     }
 
     pub fn encode_output(output: ModuleOutput) -> Vec<u8> {
-        serde_cbor::to_vec(&output).unwrap_or_default()
+        serde_cbor::to_vec(&output).expect("module output serialization should not fail")
     }
 
-    pub fn decode_input(input_bytes: &[u8]) -> Option<ModuleCallInput> {
-        serde_cbor::from_slice(input_bytes).ok()
+    pub fn decode_input(input_bytes: &[u8]) -> Result<ModuleCallInput, WireCodecError> {
+        serde_cbor::from_slice(input_bytes)
+            .map_err(|err| WireCodecError::new(format!("module input decode failed: {err}")))
     }
 
-    pub fn decode_action<T: for<'de> Deserialize<'de>>(input: &ModuleCallInput) -> Option<T> {
-        let bytes = input.action.as_deref()?;
-        serde_cbor::from_slice(bytes).ok()
+    pub fn decode_action<T: for<'de> Deserialize<'de>>(
+        input: &ModuleCallInput,
+    ) -> Result<T, WireCodecError> {
+        let bytes = input
+            .action
+            .as_deref()
+            .ok_or_else(|| WireCodecError::new("module action bytes missing"))?;
+        serde_cbor::from_slice(bytes)
+            .map_err(|err| WireCodecError::new(format!("module action decode failed: {err}")))
     }
 }
 

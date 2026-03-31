@@ -138,8 +138,30 @@ impl fmt::Debug for WasmExecutor {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WasmExecutorInitError {
+    EngineInit(String),
+    DiskCacheInit(String),
+}
+
+impl fmt::Display for WasmExecutorInitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EngineInit(detail) => write!(f, "failed to initialize wasmtime engine: {detail}"),
+            Self::DiskCacheInit(detail) => {
+                write!(
+                    f,
+                    "failed to initialize wasmtime compiled disk cache: {detail}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for WasmExecutorInitError {}
+
 impl WasmExecutor {
-    pub fn new(config: WasmExecutorConfig) -> Self {
+    pub fn new(config: WasmExecutorConfig) -> Result<Self, WasmExecutorInitError> {
         #[cfg(feature = "wasmtime")]
         {
             let mut engine_config = wasmtime::Config::new();
@@ -151,7 +173,7 @@ impl WasmExecutor {
             engine_config.cranelift_nan_canonicalization(true);
             engine_config.debug_info(false);
             let engine = wasmtime::Engine::new(&engine_config)
-                .expect("failed to initialize wasmtime engine");
+                .map_err(|err| WasmExecutorInitError::EngineInit(err.to_string()))?;
             let compiled_cache = Arc::new(Mutex::new(CompiledModuleCache::new(
                 config.max_cache_entries,
             )));
@@ -163,18 +185,18 @@ impl WasmExecutor {
                     DiskCompiledModuleCache::new(root, fingerprint)
                 })
                 .transpose()
-                .expect("failed to initialize wasmtime compiled disk cache");
-            Self {
+                .map_err(|err| WasmExecutorInitError::DiskCacheInit(err.to_string()))?;
+            Ok(Self {
                 config,
                 engine,
                 compiled_cache,
                 compiled_disk_cache: compiled_disk_cache.map(Arc::new),
-            }
+            })
         }
 
         #[cfg(not(feature = "wasmtime"))]
         {
-            Self { config }
+            Ok(Self { config })
         }
     }
 
@@ -780,6 +802,10 @@ mod tests {
         }
     }
 
+    fn test_executor(config: WasmExecutorConfig) -> WasmExecutor {
+        WasmExecutor::new(config).expect("initialize wasm executor")
+    }
+
     #[test]
     fn fixed_sandbox_succeed_returns_cloned_output() {
         let output = ModuleOutput {
@@ -817,9 +843,26 @@ mod tests {
         assert_eq!(second, failure);
     }
 
+    #[cfg(feature = "wasmtime")]
+    #[test]
+    fn wasm_executor_returns_disk_cache_init_error() {
+        let cache_root = std::env::temp_dir().join("oasis7-wasm-init-error-file");
+        fs::write(&cache_root, b"not-a-directory").expect("create temp cache file");
+
+        let err = WasmExecutor::new(WasmExecutorConfig {
+            compiled_cache_dir: Some(cache_root.clone()),
+            ..WasmExecutorConfig::default()
+        })
+        .expect_err("file path should fail cache dir initialization");
+
+        assert!(matches!(err, WasmExecutorInitError::DiskCacheInit(_)));
+
+        let _ = fs::remove_file(cache_root);
+    }
+
     #[test]
     fn wasm_executor_rejects_output_limit_overflow() {
-        let executor = WasmExecutor::new(WasmExecutorConfig::default());
+        let executor = test_executor(WasmExecutorConfig::default());
         let request = make_request(ModuleLimits {
             max_mem_bytes: executor.config().max_mem_bytes,
             max_gas: executor.config().max_fuel,
@@ -850,7 +893,7 @@ mod tests {
 
     #[test]
     fn wasm_executor_rejects_fuel_limit_as_timeout() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_fuel: 10,
             ..WasmExecutorConfig::default()
         });
@@ -869,7 +912,7 @@ mod tests {
 
     #[test]
     fn wasm_executor_uses_executor_max_fuel_when_request_limit_is_zero() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_fuel: 123,
             ..WasmExecutorConfig::default()
         });
@@ -887,7 +930,7 @@ mod tests {
 
     #[test]
     fn wasm_executor_rejects_memory_limit_overflow_as_trap() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_mem_bytes: 64,
             ..WasmExecutorConfig::default()
         });
@@ -906,7 +949,7 @@ mod tests {
 
     #[test]
     fn wasm_executor_rejects_requested_output_limit_over_executor_max() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_output_bytes: 16,
             ..WasmExecutorConfig::default()
         });
@@ -926,7 +969,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_maps_interrupt_trap_to_interrupted() {
-        let executor = WasmExecutor::new(WasmExecutorConfig::default());
+        let executor = test_executor(WasmExecutorConfig::default());
         let request = make_request(ModuleLimits {
             max_mem_bytes: executor.config().max_mem_bytes,
             max_gas: executor.config().max_fuel,
@@ -943,7 +986,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_maps_out_of_fuel_trap_to_out_of_fuel() {
-        let executor = WasmExecutor::new(WasmExecutorConfig::default());
+        let executor = test_executor(WasmExecutorConfig::default());
         let request = make_request(ModuleLimits {
             max_mem_bytes: executor.config().max_mem_bytes,
             max_gas: executor.config().max_fuel,
@@ -960,7 +1003,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_store_limits_enforce_requested_memory_cap() {
-        let executor = WasmExecutor::new(WasmExecutorConfig::default());
+        let executor = test_executor(WasmExecutorConfig::default());
         let request = make_request(ModuleLimits {
             max_mem_bytes: 64,
             max_gas: executor.config().max_fuel,
@@ -992,7 +1035,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_epoch_watchdog_preempts_infinite_loop() {
-        let mut executor = WasmExecutor::new(WasmExecutorConfig {
+        let mut executor = test_executor(WasmExecutorConfig {
             max_call_ms: 20,
             max_fuel: u64::MAX,
             ..WasmExecutorConfig::default()
@@ -1039,7 +1082,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_compiled_cache_evicts_old_entries() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_cache_entries: 1,
             ..WasmExecutorConfig::default()
         });
@@ -1056,7 +1099,7 @@ mod tests {
     #[cfg(feature = "wasmtime")]
     #[test]
     fn wasm_executor_compiled_cache_zero_capacity_stays_empty() {
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_cache_entries: 0,
             ..WasmExecutorConfig::default()
         });
@@ -1084,7 +1127,7 @@ mod tests {
     #[test]
     fn wasm_executor_disk_cache_hits_when_memory_cache_disabled() {
         let cache_dir = unique_temp_cache_dir("hit");
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_cache_entries: 0,
             compiled_cache_dir: Some(cache_dir.clone()),
             ..WasmExecutorConfig::default()
@@ -1106,7 +1149,7 @@ mod tests {
     #[test]
     fn wasm_executor_disk_cache_recovers_from_corruption() {
         let cache_dir = unique_temp_cache_dir("corrupt");
-        let executor = WasmExecutor::new(WasmExecutorConfig {
+        let executor = test_executor(WasmExecutorConfig {
             max_cache_entries: 0,
             compiled_cache_dir: Some(cache_dir.clone()),
             ..WasmExecutorConfig::default()

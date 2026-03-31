@@ -361,7 +361,7 @@ fn write_bytes_to_memory(bytes: &[u8]) -> (i32, i32) {
 
 fn reduce_impl(input_ptr: i32, input_len: i32) -> (i32, i32) {
     let input = read_input_bytes(input_ptr, input_len);
-    let Some(mut decoded) = decode_input(&input) else {
+    let Ok(mut decoded) = decode_input(&input) else {
         return write_bytes_to_memory(&encode_output(empty_output()));
     };
     decoded.ctx.module_id = MODULE_ID.to_string();

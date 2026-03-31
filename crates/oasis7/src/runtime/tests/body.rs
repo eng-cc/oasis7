@@ -249,7 +249,8 @@ fn body_action_updates_view_and_costs_resources() {
         payload: serde_json::to_value(view.clone()).unwrap(),
     });
 
-    let mut sandbox = WasmExecutor::new(WasmExecutorConfig::default());
+    let mut sandbox =
+        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let agent = world.state().agents.get("agent-1").unwrap();
@@ -286,7 +287,8 @@ fn body_action_rejects_when_insufficient_resources() {
         payload: serde_json::to_value(view).unwrap(),
     });
 
-    let mut sandbox = WasmExecutor::new(WasmExecutorConfig::default());
+    let mut sandbox =
+        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let last = world.journal().events.last().unwrap();

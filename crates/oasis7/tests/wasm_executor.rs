@@ -112,7 +112,8 @@ fn wasm_executor_runs_module_and_emits_event() {
         pos: pos(0.0, 0.0),
     });
 
-    let mut sandbox = WasmExecutor::new(WasmExecutorConfig::default());
+    let mut sandbox =
+        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let has_emit = world
@@ -140,7 +141,8 @@ fn wasm_executor_replay_preserves_module_emits() {
         pos: pos(0.0, 0.0),
     });
 
-    let mut sandbox = WasmExecutor::new(WasmExecutorConfig::default());
+    let mut sandbox =
+        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
     world.step_with_modules(&mut sandbox).unwrap();
 
     let snapshot = world.snapshot();

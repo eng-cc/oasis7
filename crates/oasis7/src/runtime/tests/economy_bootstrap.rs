@@ -11,7 +11,7 @@ fn has_active(world: &World, module_id: &str) -> bool {
 }
 
 fn sandbox() -> WasmExecutor {
-    WasmExecutor::new(WasmExecutorConfig::default())
+    WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor")
 }
 
 fn apply_module_changes(world: &mut World, actor: &str, changes: ModuleChangeSet) {

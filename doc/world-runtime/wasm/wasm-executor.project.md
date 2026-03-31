@@ -34,6 +34,9 @@
 - [x] E10 模块状态回放/快照一致性测试
 - [x] E11 升级 Wasmtime 依赖版本（18 -> 41）并刷新锁文件
 - [x] E11 执行 `--features wasmtime` 编译与执行器回归测试
+- [x] E12 执行器初始化错误结构化返回，移除 `panic` 路径
+- [x] E12 `oasis7_wasm_sdk::wire` 改为显式暴露 CBOR 解码失败，builtin 模块调用点改为显式 fallback
+- [x] E12 补充磁盘缓存初始化失败与执行器调用点回归
 
 ## 依赖
 - doc/world-runtime/wasm/wasm-executor.prd.md
@@ -41,4 +44,4 @@
 - 模块加载缓存与存储实现（`doc/world-runtime/module/module-storage.prd.md`）
 
 ## 状态
-- 当前阶段：E11（Wasmtime 41 升级完成并通过回归）
+- 当前阶段：E12（初始化失败结构化错误与 SDK wire 显式错误闭环完成）

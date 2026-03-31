@@ -181,7 +181,8 @@ fn module_call_pure_policy_hook_can_deny_effect() {
 #[cfg(not(feature = "wasmtime"))]
 #[test]
 fn wasm_executor_skeleton_reports_unavailable() {
-    let mut sandbox = WasmExecutor::new(WasmExecutorConfig::default());
+    let mut sandbox =
+        WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor");
     let request = ModuleCallRequest {
         module_id: "m.test".to_string(),
         wasm_hash: "hash".to_string(),

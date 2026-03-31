@@ -7,11 +7,11 @@ use crate::simulator::ResourceKind;
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 
 fn default_module_sandbox() -> WasmExecutor {
-    WasmExecutor::new(WasmExecutorConfig::default())
+    WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor")
 }
 
 fn scenario_module_sandbox() -> WasmExecutor {
-    WasmExecutor::new(WasmExecutorConfig::default())
+    WasmExecutor::new(WasmExecutorConfig::default()).expect("initialize wasm executor")
 }
 
 fn setup_world_with_default_modules() -> (World, WasmExecutor) {

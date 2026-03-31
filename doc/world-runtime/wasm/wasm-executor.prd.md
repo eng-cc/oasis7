@@ -95,6 +95,11 @@
 - 保持现有 `ModuleSandbox` 的 Wasmtime API 调用路径不变（`Config/Engine/Store/Linker/TypedFunc`），验证升级后可直接兼容。
 - 升级后通过 `--features wasmtime` 执行 `cargo check` 与 `wasm_executor` 相关测试，确保执行器闭环可用。
 
+### 实现要点（E12）
+- `WasmExecutor` 初始化失败必须返回结构化错误，不允许以 `panic` 终止宿主。
+- `oasis7_wasm_sdk::wire` 的 CBOR 编解码失败必须向调用者显式暴露，由 builtin 模块明确选择 fallback，而不是由 SDK 静默吞错。
+- Node/runtime 入口在构造执行器失败时需保留可观测错误文本，测试需覆盖磁盘缓存初始化失败路径。
+
 ## 5. Risks & Roadmap
 - **E1**：选择 WASM 引擎并完成配置结构体与沙箱实现骨架。
 - **E2**：接入燃料/超时/内存限制，输出校验与错误码映射。
@@ -107,6 +112,7 @@
 - **E9**：模块调用入口按 ModuleKind 选择并补充测试。
 - **E10**：模块状态输入/更新接入并补齐回放一致性测试。
 - **E11**：升级 Wasmtime 版本（18 -> 41）并完成兼容性回归验证。
+- **E12**：清理执行器初始化 `panic` 与 SDK wire 静默吞错路径，补足失败路径结构化错误回归。
 
 ### Technical Risks
 - 引擎版本升级导致行为变化（需锁定版本/回放验证）。

@@ -29,8 +29,7 @@ use super::external_effect::{
 use super::{
     ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS,
-    EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST,
-    EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
+    EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,8 +84,9 @@ impl NodeRuntimeExecutionDriver {
         execution_world.set_release_security_policy(release_security_policy_for_storage_profile(
             storage_profile.profile,
         ));
-        let execution_sandbox: Box<dyn ModuleSandbox + Send> =
-            Box::new(WasmExecutor::new(WasmExecutorConfig::default()));
+        let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
+            WasmExecutor::new(WasmExecutorConfig::default()).map_err(|err| err.to_string())?,
+        );
         let mut driver = Self::new_with_sandbox(
             state_path,
             world_dir,
@@ -452,9 +452,7 @@ pub(crate) fn persist_execution_world(
     })
 }
 
-pub(crate) fn simulator_world_dir_from_execution_world_dir(
-    world_dir: &Path,
-) -> std::path::PathBuf {
+pub(crate) fn simulator_world_dir_from_execution_world_dir(world_dir: &Path) -> std::path::PathBuf {
     match world_dir.file_name().and_then(|name| name.to_str()) {
         Some(name) if !name.is_empty() => {
             world_dir.with_file_name(format!("{name}-simulator-mirror"))
