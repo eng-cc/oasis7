@@ -378,6 +378,7 @@ cat <<INFO
 
 Next:
   cd $TARGET_PATH
+  ./scripts/pm/workflow-report.sh --phase start --role <owner_role>
 INFO
 
 if [[ "$INIT_DOCS" == "1" ]]; then

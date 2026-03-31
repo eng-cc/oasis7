@@ -38,6 +38,7 @@ ROLE_MEMORY_PREFIXES = {
 }
 DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
 def now_iso() -> str:
@@ -719,6 +720,226 @@ def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_d
     }
 
 
+def build_signal_summary(root: pathlib.Path, role_filter: str | None) -> dict[str, object]:
+    roles = load_roles(root)
+    if role_filter and role_filter not in roles:
+        raise ValueError(f"unknown role: {role_filter}")
+
+    promotion_counts: OrderedDict[str, int] = OrderedDict(
+        (state, 0) for state in ("new", "triaged", "promoted_candidate_task", "discarded", "deferred")
+    )
+    memory_promotion_counts: OrderedDict[str, int] = OrderedDict(
+        (state, 0) for state in ("pending", "promoted", "rejected", "deferred")
+    )
+    pending_signals: list[dict[str, object]] = []
+
+    for payload in load_signal_entries(root):
+        if role_filter and payload.get("role_hint") != role_filter:
+            continue
+
+        promotion_state = str(payload.get("promotion_state") or "new")
+        if promotion_state in promotion_counts:
+            promotion_counts[promotion_state] += 1
+
+        memory_state = str(payload.get("memory_promotion_state") or "pending")
+        if memory_state in memory_promotion_counts:
+            memory_promotion_counts[memory_state] += 1
+
+        # A signal stays pending until the operator has explicitly closed the
+        # memory decision path. Rejected/deferred/promoted memory decisions
+        # should no longer show up as pending workflow work.
+        is_pending = memory_state == "pending" and promotion_state in {
+            "new",
+            "triaged",
+            "promoted_candidate_task",
+        }
+        if is_pending:
+            pending_signals.append(
+                {
+                    "signal_id": payload.get("signal_id"),
+                    "role_hint": payload.get("role_hint"),
+                    "severity": payload.get("severity"),
+                    "source_type": payload.get("source_type"),
+                    "source_ref": payload.get("source_ref"),
+                    "summary": payload.get("summary"),
+                    "promotion_state": promotion_state,
+                    "memory_promotion_state": memory_state,
+                }
+            )
+
+    pending_signals.sort(
+        key=lambda item: (
+            SEVERITY_ORDER.get(str(item.get("severity")), 99),
+            str(item.get("signal_id") or ""),
+        )
+    )
+
+    return {
+        "role_filter": role_filter,
+        "counts": promotion_counts,
+        "memory_counts": memory_promotion_counts,
+        "pending_count": len(pending_signals),
+        "pending_signals": pending_signals,
+    }
+
+
+def build_workflow_checklist(
+    role: str,
+    phase: str,
+    role_payload: dict[str, object],
+    signal_summary: dict[str, object],
+    stage_report: dict[str, object],
+) -> list[OrderedDict[str, object]]:
+    checklist: list[OrderedDict[str, object]] = []
+    backlog_counts = role_payload["backlog_counts"]
+    memory_counts = role_payload["memory_counts"]
+    gate_status = str(stage_report["gate"]["status"] or "")
+    pending_signals = int(signal_summary["pending_count"])
+
+    def add(item_id: str, summary: str, command: str | None = None, reason: str | None = None) -> None:
+        item = OrderedDict([("id", item_id), ("summary", summary)])
+        if command:
+            item["command"] = command
+        if reason:
+            item["reason"] = reason
+        checklist.append(item)
+
+    if phase == "start":
+        add(
+            "read-docs",
+            "先读目标模块 PRD / project 和当天 devlog，再开始编辑。",
+        )
+        add(
+            "role-report",
+            f"读取 {role} 的 backlog 与 memory 现状，避免重复处理已知问题。",
+            command=f"./scripts/pm/role-report.sh --role {role}",
+        )
+        if pending_signals > 0:
+            add(
+                "triage-signals",
+                "先处理该角色尚未闭环的 signal，避免 devlog 结论继续停留在 inbox。",
+                reason=f"pending_signals={pending_signals}",
+            )
+        if int(backlog_counts["blocked"]) > 0:
+            add(
+                "inspect-blockers",
+                "先看 blocked backlog，优先判断是否需要解除阻断或升级阶段风险。",
+                command=f"./scripts/pm/role-report.sh --role {role}",
+                reason=f"blocked_tasks={backlog_counts['blocked']}",
+            )
+        if int(backlog_counts["candidate"]) > 0:
+            add(
+                "review-candidates",
+                "清理 candidate 池，决定哪些要升为 committed，哪些继续 deferred。",
+                command=f"./scripts/pm/role-report.sh --role {role}",
+                reason=f"candidate_tasks={backlog_counts['candidate']}",
+            )
+        if int(memory_counts["needs_review"]) > 0:
+            add(
+                "review-memory",
+                "先 review stale memory，再写入新的长期结论，避免并行存在旧口径。",
+                command=f"./scripts/pm/memory-report.sh --role {role} --no-shared",
+                reason=f"needs_review_memory={memory_counts['needs_review']}",
+            )
+        if role == "producer_system_designer":
+            add(
+                "review-stage",
+                "制作人开始推进前先看阶段和 gate 汇总，确认 blocker 与 claim envelope 是否已变化。",
+                command="./scripts/pm/stage-report.sh",
+                reason=f"gate_status={gate_status}",
+            )
+    elif phase == "close":
+        add(
+            "write-devlog",
+            "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
+        )
+        if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
+            add(
+                "promote-signals",
+                "把新增的高价值 QA / liveops / incident 结论提升到 signal inbox，而不是只留在 devlog。",
+                command=f"./scripts/pm/promote-signal.sh ... --role-hint {role}",
+            )
+        add(
+            "sync-backlog",
+            "把本轮任务状态迁移回 backlog / task registry，避免 `.pm` 与实际执行脱节。",
+            command="./scripts/pm/move-task.sh --task-id <TASK-ID> --to-status <candidate|committed|blocked|done|deferred>",
+        )
+        add(
+            "sync-memory",
+            "稳定结论进入 active memory，被新结论取代的记录显式 supersede，不允许直接覆盖旧口径。",
+            command=f"./scripts/pm/promote-memory.sh --signal-id <SIG-ID> --role {role} --topic <topic> --promotion-reason <reason>",
+        )
+        if role == "producer_system_designer":
+            add(
+                "sync-stage",
+                "若阶段判断、gate lane 或对外 claim envelope 有变化，同步更新 `.pm/stage/*.yaml` 并重跑阶段汇总。",
+                command="./scripts/pm/stage-report.sh",
+            )
+        add(
+            "pm-verify",
+            "收口前复跑 PM 结构门禁，确认 report / lint 仍能读通本轮改动。",
+            command="./scripts/pm/lint.sh",
+        )
+    else:
+        add(
+            "review-stage",
+            "以 stage report 作为阶段评审输入，再结合角色视图确认 blocker、backlog 和长期结论。",
+            command="./scripts/pm/stage-report.sh",
+            reason=f"gate_status={gate_status}",
+        )
+        add(
+            "review-role",
+            f"读取 {role} 的 role report，确认 backlog / memory / blocked task 是否需要裁决。",
+            command=f"./scripts/pm/role-report.sh --role {role}",
+        )
+        if pending_signals > 0:
+            add(
+                "review-signals",
+                "阶段评审前先处理未闭环 signal，避免新风险没有进入正式候选池。",
+                reason=f"pending_signals={pending_signals}",
+            )
+        if int(memory_counts["needs_review"]) > 0:
+            add(
+                "review-stale-memory",
+                "处理 stale memory，避免阶段裁决继续引用过期结论。",
+                command=f"./scripts/pm/memory-report.sh --role {role} --no-shared",
+                reason=f"needs_review_memory={memory_counts['needs_review']}",
+            )
+
+    return checklist
+
+
+def build_workflow_report(
+    root: pathlib.Path,
+    role: str,
+    phase: str,
+    stale_after_days: int,
+) -> dict[str, object]:
+    roles = load_roles(root)
+    if role not in roles:
+        raise ValueError(f"unknown role: {role}")
+    if phase not in {"start", "close", "review"}:
+        raise ValueError(f"unsupported phase: {phase}")
+
+    role_report = build_role_report(root, role_filter=role, stale_after_days=stale_after_days)
+    role_payload = role_report["roles"][role]
+    stage_report = build_stage_report(root)
+    signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
+    signal_summary = build_signal_summary(root, role_filter=signal_role_filter)
+    checklist = build_workflow_checklist(role, phase, role_payload, signal_summary, stage_report)
+
+    return {
+        "generated_at": now_iso(),
+        "phase": phase,
+        "role": role,
+        "stale_after_days": stale_after_days,
+        "role_report": role_payload,
+        "signal_summary": signal_summary,
+        "stage_report": stage_report,
+        "checklist": checklist,
+    }
+
+
 def run_task_backlog_lint(root: pathlib.Path) -> None:
     roles = load_roles(root)
     failures: list[str] = []
@@ -1176,6 +1397,65 @@ def cmd_role_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_workflow_report(args: argparse.Namespace) -> int:
+    if args.stale_after_days < 0:
+        raise ValueError("--stale-after-days must be >= 0")
+
+    report = build_workflow_report(
+        args.root,
+        role=args.role,
+        phase=args.phase,
+        stale_after_days=args.stale_after_days,
+    )
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+
+    backlog_counts = report["role_report"]["backlog_counts"]
+    memory_counts = report["role_report"]["memory_counts"]
+    signal_counts = report["signal_summary"]["counts"]
+    memory_signal_counts = report["signal_summary"]["memory_counts"]
+
+    lines = [
+        "oasis7 workflow report",
+        f"- generated_at: {report['generated_at']}",
+        f"- phase: {report['phase']}",
+        f"- role: {report['role']}",
+        f"- stale_after_days: {report['stale_after_days']}",
+        f"- current_stage: {report['stage_report']['current_stage']}",
+        f"- gate_status: {report['stage_report']['gate']['status']}",
+        "- backlog_counts: " + ", ".join(f"{status}={count}" for status, count in backlog_counts.items()),
+        "- memory_counts: " + ", ".join(f"{status}={count}" for status, count in memory_counts.items()),
+        "- signal_counts: " + ", ".join(f"{status}={count}" for status, count in signal_counts.items()),
+        "- memory_signal_counts: "
+        + ", ".join(f"{status}={count}" for status, count in memory_signal_counts.items()),
+        f"- blocked_tasks: {len(report['stage_report']['blocking_tasks'])}",
+        "- pending_signals:",
+    ]
+
+    if report["signal_summary"]["pending_signals"]:
+        for item in report["signal_summary"]["pending_signals"]:
+            lines.append(
+                f"  - {item['signal_id']} / {item.get('role_hint') or '(unknown role)'} / "
+                f"{item['severity']} / {item['promotion_state']} / "
+                f"{item['memory_promotion_state']} / {item['summary']}"
+            )
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- checklist:")
+    for index, item in enumerate(report["checklist"], start=1):
+        line = f"  {index}. {item['summary']}"
+        if item.get("reason"):
+            line += f" [{item['reason']}]"
+        lines.append(line)
+        if item.get("command"):
+            lines.append(f"     cmd: {item['command']}")
+
+    print("\n".join(lines))
+    return 0
+
+
 def cmd_promote_memory(args: argparse.Namespace) -> int:
     root = args.root
     updated_at = args.effective_at or now_iso()
@@ -1478,6 +1758,14 @@ def build_parser() -> argparse.ArgumentParser:
     role_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
     role_report.add_argument("--json", action="store_true")
     role_report.set_defaults(func=cmd_role_report)
+
+    workflow_report = subparsers.add_parser("workflow-report")
+    workflow_report.add_argument("root", type=pathlib.Path)
+    workflow_report.add_argument("--role", required=True)
+    workflow_report.add_argument("--phase", choices=("start", "close", "review"), default="start")
+    workflow_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
+    workflow_report.add_argument("--json", action="store_true")
+    workflow_report.set_defaults(func=cmd_workflow_report)
 
     promote_memory = subparsers.add_parser("promote-memory")
     promote_memory.add_argument("root", type=pathlib.Path)

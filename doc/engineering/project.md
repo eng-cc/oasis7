@@ -94,6 +94,7 @@
 - [x] TASK-ENGINEERING-082 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `promote-memory` 契约、signal `memory_promotion_state` 决策回写，以及 `promotion_reason` / `reject_reason` 白名单。
 - [x] TASK-ENGINEERING-083 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `memory-report`，并补 stale review、active 冲突、superseded 链和新角色扩容回归。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
+- [ ] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，落地 `workflow-report` 统一入口，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示与 smoke。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -134,7 +135,7 @@
 ## 状态
 - 更新日期: 2026-03-31
 - 当前状态: active
-- 下一任务: 待新增 self-evolution 后续治理任务（当前 `TASK-ENGINEERING-074~084` 已全部完成）
+- 下一任务: `TASK-ENGINEERING-085` 进行中，收口 `.pm` workflow integration；当前等待 owner 审看本地改动后决定提交。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。

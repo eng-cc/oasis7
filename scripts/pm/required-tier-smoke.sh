@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  devlog -> signal -> candidate task/memory -> blocked task -> memory/role/stage report
+  devlog -> signal -> candidate task/memory -> blocked task -> workflow/role/stage report
 
 Options:
   --json       Print machine-readable JSON summary
@@ -176,6 +176,14 @@ REJECTED_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memo
   --reject-reason one_off_operation \
   --json)"
 
+LIVEOPS_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
+  --source-type incident \
+  --source-ref doc/devlog/2026-03-30.md \
+  --role-hint liveops_community \
+  --severity high \
+  --summary "community escalation still needs owner follow-up" \
+  --json)"
+
 python3 - "$TMPDIR" "$TASK_ID" <<'PY'
 from pathlib import Path
 import sys
@@ -242,9 +250,11 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
+WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --json)"
+WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -256,9 +266,26 @@ qa_memory = json.loads(sys.argv[4])
 producer_memory = json.loads(sys.argv[5])
 shared_memory = json.loads(sys.argv[6])
 rejected_memory = json.loads(sys.argv[7])
-memory_report = json.loads(sys.argv[8])
-role_report = json.loads(sys.argv[9])
-stage_report = json.loads(sys.argv[10])
+liveops_signal = json.loads(sys.argv[8])
+memory_report = json.loads(sys.argv[9])
+role_report = json.loads(sys.argv[10])
+workflow_start = json.loads(sys.argv[11])
+workflow_review = json.loads(sys.argv[12])
+stage_report = json.loads(sys.argv[13])
+
+if workflow_start["signal_summary"]["pending_count"] != 0:
+    raise SystemExit("qa workflow start should not treat rejected signal as pending")
+if workflow_review["signal_summary"]["pending_count"] != 1:
+    raise SystemExit("producer workflow review should see one cross-role pending signal")
+pending = workflow_review["signal_summary"]["pending_signals"]
+if len(pending) != 1 or pending[0]["signal_id"] != liveops_signal["signal_id"]:
+    raise SystemExit("producer workflow review missing expected liveops pending signal")
+if pending[0]["role_hint"] != "liveops_community":
+    raise SystemExit("producer workflow review pending signal role mismatch")
+if any(item.get("id") == "review-signals" and "command" in item for item in workflow_review["checklist"]):
+    raise SystemExit("workflow review checklist should not suggest promote-signal for pending signal handling")
+if any(item.get("id") == "triage-signals" and "command" in item for item in workflow_start["checklist"]):
+    raise SystemExit("workflow start checklist should not suggest promote-signal for pending signal handling")
 
 print(
     json.dumps(
@@ -270,8 +297,11 @@ print(
             "producer_memory": producer_memory,
             "shared_memory": shared_memory,
             "rejected_memory": rejected_memory,
+            "liveops_signal": liveops_signal,
             "memory_report": memory_report,
             "role_report": role_report,
+            "workflow_start": workflow_start,
+            "workflow_review": workflow_review,
             "stage_report": stage_report,
         },
         ensure_ascii=False,
@@ -309,5 +339,8 @@ print(f"- shared_active_memory: {len(stage['memory_inputs']['shared_active'])}")
 print(f"- needs_review_memory: {payload['memory_report']['counts']['needs_review']}")
 print(f"- superseded_memory: {payload['memory_report']['counts']['superseded']}")
 print(f"- qa_blocked_tasks: {payload['role_report']['roles']['qa_engineer']['backlog_counts']['blocked']}")
+print(f"- qa_pending_signals: {payload['workflow_start']['signal_summary']['pending_count']}")
+print(f"- producer_pending_signals: {payload['workflow_review']['signal_summary']['pending_count']}")
+print(f"- producer_review_actions: {len(payload['workflow_review']['checklist'])}")
 print(f"- rejected_memory_signal: {payload['rejected_memory']['signal_id']}")
 PY

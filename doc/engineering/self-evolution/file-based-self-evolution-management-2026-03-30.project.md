@@ -14,6 +14,7 @@
 - [x] TASK-ENGINEERING-079 (PRD-ENGINEERING-SE-002/003/006) [test_tier_required] + [test_tier_full]: 建立 `devlog -> signal -> memory/task -> stage report` required-tier 验证链路，并评估角色扩容与多 worktree 并发回归。
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-SE-005/006) [test_tier_required]: 建立长期 memory 自建专题 `prd/design/project`，将 role memory schema、promotion 与 superseded 规则从总专题中单独冻结。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required] + [test_tier_full]: 落地 `role-report` 入口，汇总 role backlog + role memory，并补按角色查询与扩容回归。
+- [ ] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，落地 `workflow-report` 统一入口，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示与 smoke。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -33,9 +34,9 @@
 ## 状态
 - 更新日期: 2026-03-31
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-084` 已完成；当前 `self-evolution` 运行层基础入口（`TASK-ENGINEERING-074~084`）已闭环。
+- 当前任务: `TASK-ENGINEERING-085` 进行中，目标是把 `.pm` 从“基础入口已齐”提升为“现有工作流默认使用”；`TASK-ENGINEERING-074~084` 已完成。
 - 阻塞项:
-  - 暂无新增阻塞；如需继续推进 overdue SLA / multi-role review 视图，需要单列新治理任务。
+  - 暂无实现阻塞；当前等待 owner 复核 `workflow-report`、`AGENTS.md` 接入口径与 smoke 结果后再提交。
 - 最新完成:
   - `TASK-ENGINEERING-084`：已落地 `role-report.sh` 与 `pm_store.py role-report`，可按角色汇总 backlog 状态、blocked tasks 与 active/needs_review/superseded memory；required/full smoke 均已覆盖真实 backlog + stale memory + 扩容场景。
   - `TASK-ENGINEERING-083`：已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容的 lint/scaffold，以及 `memory-regression-smoke.sh` full-tier 回归；长期 memory 现具备 active / needs_review / superseded 统一查询入口。
@@ -49,5 +50,5 @@
   - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 devlog。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
-  - 当前 `.pm` 运行层可继续服务后续非 self-evolution 任务，不再阻塞 signal/task/memory/stage/role-report 基础链路；
-  - 后续若要推进 overdue SLA、跨角色 review board 或 shared dashboard，再单列新治理任务。
+  - 完成 `TASK-ENGINEERING-085` 的 review、提交与 landing，把 `workflow-report` 正式并入本地 `main`；
+  - 之后若要推进 overdue SLA、跨角色 review board 或 shared dashboard，再单列新治理任务。

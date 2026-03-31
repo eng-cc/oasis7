@@ -64,6 +64,7 @@
   - `lint.sh`
   - `stage-report.sh`
   - `role-report.sh`
+  - `workflow-report.sh`
 
 ## 对象设计
 ### 1. Role Registry
@@ -167,6 +168,12 @@
 3. 写入 `superseded_by`
 4. lint 校验链路和 source refs 仍有效
 
+### Flow D: 工作流接入
+1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner>`
+2. 脚本聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要
+3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner>`，按 checklist 回写 devlog、signal、memory 与 backlog
+4. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
+
 ## 分阶段实施
 ### Phase 1: 骨架
 - 建 `.pm/` 目录与 registry/template
@@ -188,13 +195,18 @@
 - 建立 `role-report.sh`
 - 让每个 owner 可以直接读取本角色 backlog、blocked tasks、active memory 与 `needs_review` 清单
 
+### Phase 6: 工作流接入
+- 建立 `workflow-report.sh`
+- 将 `.pm` 默认操作序列接入 `AGENTS.md`、角色职责卡与 `new-task-worktree.sh`
+- required/full smoke 必须覆盖 workflow 入口与 signal pending 视图
+
 ## 验证策略
 - 结构验证：
   - `scripts/pm/lint.sh`
   - `git diff --check`
   - `./scripts/doc-governance-check.sh`
 - 功能验证：
-  - 手工构造 signal -> promote -> task/memory -> stage report 样例链路
+  - 手工构造 signal -> promote -> task/memory -> workflow/role/stage report 样例链路
   - 验证新角色注册无需修改历史 schema
 - 回归验证：
   - 确认 `.pm/` 不与 `doc/` 形成重复真值

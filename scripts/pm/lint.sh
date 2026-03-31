@@ -54,6 +54,7 @@ require_file "scripts/pm/role-report.sh"
 require_file "scripts/pm/scaffold.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
+require_file "scripts/pm/workflow-report.sh"
 
 mapfile -t CANONICAL_ROLES < <(find .agents/roles -mindepth 1 -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sed 's/\.md$//' | sort)
 mapfile -t REGISTRY_ROLES < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yaml | sort)
@@ -79,6 +80,7 @@ fi
 ./scripts/pm/memory-lint.sh >/dev/null
 ./scripts/pm/memory-report.sh --json >/dev/null
 ./scripts/pm/role-report.sh --json >/dev/null
+./scripts/pm/workflow-report.sh --role producer_system_designer --phase review --json >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
 
 echo "pm-lint: OK"

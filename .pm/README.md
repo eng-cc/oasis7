@@ -39,8 +39,16 @@
 - `./scripts/pm/memory-report.sh`：按 role 输出 active / needs_review / superseded 报表，默认以 7 天未 review 记为 `needs_review`。
 - `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `devlog -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
+
+工作流接入基础用法：
+- 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role>`
+- 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role>`
+- 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
+- `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
+- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 landing 前的最后一条 PM 自检命令。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type devlog --source-ref doc/devlog/2026-03-30.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
@@ -70,6 +78,12 @@ role report 基础用法：
 - `./scripts/pm/role-report.sh --role qa_engineer`
 - `./scripts/pm/role-report.sh --role qa_engineer --json`
 - 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory。
+
+workflow report 基础用法：
+- `./scripts/pm/workflow-report.sh --phase start --role qa_engineer`
+- `./scripts/pm/workflow-report.sh --phase close --role liveops_community`
+- `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
+- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals。
 
 阶段汇总基础用法：
 - `./scripts/pm/stage-report.sh`

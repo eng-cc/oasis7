@@ -14,7 +14,7 @@ Usage: ./scripts/pm/memory-regression-smoke.sh [--json] [--keep-temp]
 Run isolated full-tier memory regression checks:
   - needs_review / superseded report output
   - report role filtering
-  - role report backlog + memory aggregation
+  - role/workflow report backlog + memory aggregation
   - active topic conflict rejection
   - superseded chain rejection
   - new role expansion via registry + scaffold
@@ -235,8 +235,9 @@ REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --j
 QA_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --role qa_engineer --no-shared --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --json)"
 QA_ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
+EXPANDED_WORKFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role report_smoke_engineer --phase start --json)"
 
-python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_ID" <<'PY'
+python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$EXPANDED_WORKFLOW_JSON" "$TASK_ID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -246,7 +247,8 @@ report = json.loads(sys.argv[1])
 qa_report = json.loads(sys.argv[2])
 role_report = json.loads(sys.argv[3])
 qa_role_report = json.loads(sys.argv[4])
-task_id = sys.argv[5]
+expanded_workflow = json.loads(sys.argv[5])
+task_id = sys.argv[6]
 
 if report["counts"] != {"active": 3, "needs_review": 1, "superseded": 1}:
     raise SystemExit(f"unexpected report counts: {report['counts']}")
@@ -260,6 +262,10 @@ if list(qa_report["roles"].keys()) != ["qa_engineer"]:
     raise SystemExit("qa_report should only contain qa_engineer role summary")
 if role_report["roles"]["report_smoke_engineer"]["backlog_counts"] != {"candidate": 0, "committed": 0, "blocked": 0, "done": 0, "deferred": 0}:
     raise SystemExit("role_report missing zero-count expanded role backlog summary")
+if expanded_workflow["role_report"]["backlog_counts"] != {"candidate": 0, "committed": 0, "blocked": 0, "done": 0, "deferred": 0}:
+    raise SystemExit("workflow_report missing zero-count expanded role backlog summary")
+if expanded_workflow["signal_summary"]["pending_count"] != 0:
+    raise SystemExit("workflow_report pending signal count mismatch for expanded role")
 if role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
     raise SystemExit("role_report missing blocked QA task count")
 if role_report["roles"]["qa_engineer"]["tasks"]["blocked"][0]["task_id"] != task_id:

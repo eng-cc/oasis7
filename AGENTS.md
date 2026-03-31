@@ -23,6 +23,7 @@
       1. 低风险、短任务：`./.agents/roles/templates/handoff-brief.md`
       2. 跨模块、高风险：`./.agents/roles/templates/handoff-detailed.md`
    3. 接收方开始前必须确认目标、输入、输出、完成定义和验证方式
+   4. 仓库已启用 `.pm/` 运行层时，进入实施前先执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role>`，读取该角色 backlog / memory / pending signals / stage 摘要，再开始编辑
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -58,6 +59,9 @@
    4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## HH:MM:SS CST / role_name`
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写日志或正式文档
    6. `devlog`、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
+   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role>`，按 checklist 回写 signal / memory / backlog，不允许只写 devlog 不同步 `.pm/`
+   8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
+   9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
 10. 任务完成后必须标准化合入本地 `main`
    1. 合入前先确认任务 `worktree` 与 `main` 所在 `worktree` 都是干净状态

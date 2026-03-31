@@ -48,6 +48,8 @@
 ## Checklist
 - 是否先更新对应模块 `prd.md`
 - 是否补齐 `project.md` 任务与 PRD-ID 映射
+- 是否在开始推进和阶段评审前执行 `./scripts/pm/workflow-report.sh --phase start|review --role producer_system_designer`
 - 是否声明 world-first / emergence-first / persistent / auditable / extensible 的影响
 - 是否定义玩家能做/不能做的边界
 - 是否给出 `test_tier_required` / `test_tier_full` 验证期望
+- 若阶段判断 / gate / claim envelope 变化，是否同步回写 `.pm/stage/*.yaml` 与相关正式文档

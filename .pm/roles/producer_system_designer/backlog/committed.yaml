@@ -1,4 +1,16 @@
 version: 1
 role: producer_system_designer
 status: committed
-tasks: []
+tasks:
+  - task_id: TASK-PM-0001
+    title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
+    priority: P1
+    source_signal: SIG-PM-0001
+    related_prd:
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "workflow-report 已接入 AGENTS.md、角色职责卡、new-task-worktree 与 smoke"
+      - "required-tier 与 full-tier 的 PM smoke 通过，且 pending signal 不再给出错误引导"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/TASK-PM-0001.yaml
