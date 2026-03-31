@@ -95,6 +95,7 @@
 - [x] TASK-ENGINEERING-083 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `memory-report`，并补 stale review、active 冲突、superseded 链和新角色扩容回归。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
 - [ ] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，落地 `workflow-report` 统一入口，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示与 smoke。
+- [x] TASK-ENGINEERING-086 (PRD-ENGINEERING-022) [test_tier_required]: 建立“记忆启发式自我进化补强”专题 `prd/design/project`，冻结 `memoryOSS` / 《Hindsight》 的 adopted/rejected/deferred 边界，并同步回写 engineering 根入口、主项目、索引与 devlog。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -125,6 +126,9 @@
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
@@ -162,6 +166,7 @@
 - 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
 - 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
 - 最新完成: `TASK-ENGINEERING-084`（已落地 `role-report.sh`、按角色 backlog+memory 汇总视图，以及真实 blocked task/stale memory/role-expansion smoke。）
+- 最新完成: `TASK-ENGINEERING-086`（已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的借鉴边界，并将 recall/reflection 的后续补强正式挂入 engineering 入口。）
 - 最新完成: `TASK-ENGINEERING-083`（已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容 lint/scaffold，以及 stale/conflict/superseded-chain/role-expansion full-tier smoke。）
 - 最新完成: `TASK-ENGINEERING-082`（已落地 `promote-memory.sh`、signal `memory_promotion_state` 决策回写、promotion/reject 白名单，以及 accepted/rejected promotion smoke。）
 - 最新完成: `TASK-ENGINEERING-081`（已为 producer/qa/liveops/shared 落地首批长期 memory 样例，覆盖阶段结论、QA failure signature、community messaging boundary 与 shared claim envelope。）

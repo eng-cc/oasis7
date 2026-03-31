@@ -50,6 +50,7 @@
   - SC-19: 当任务需要其他伙伴协作时，执行主体必须切换到标准角色视角并加载对应职责卡，不再依赖未定义的 `sub agent` 机制表述。
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
+  - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -78,6 +79,7 @@
   - PRD-ENGINEERING-014: As a 评审者, I want duplicate and upstream/downstream alignment checks, so that the PRD tree stays clear and non-conflicting.
   - PRD-ENGINEERING-015: As a 文档作者/评审者, I want one canonical document topology and role split, so that I can place new docs without guessing and keep detailed design discoverable.
   - PRD-ENGINEERING-021: As a 协作 owner, I want a file-based self-evolution management layer inside the repo, so that long-term role memory/backlog and stage inputs no longer depend on rereading daily devlogs.
+  - PRD-ENGINEERING-022: As a `producer_system_designer`, I want external memory and reflection patterns benchmarked against our file-native governance model, so that future self-evolution upgrades borrow structure without replacing repo-native truth.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行脚本 -> 发现违规 -> 修复并复测 -> 进入 CI`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -88,6 +90,7 @@
   7. Flow-ENG-007: `新专题提出 -> 选择模块/专题目录 -> 判断文档职责后创建同名 PRD/Design/Project -> 更新索引 -> 评审者按统一阅读顺序审查`
   8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/devlog`
   9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
+  10. Flow-ENG-010: `评估外部 memory/reflective-agent 方案 -> 冻结 adopted/rejected/deferred 边界 -> 将可借鉴对象映射到 .pm/doc 现有结构 -> 再拆实现任务`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -131,6 +134,7 @@
   - AC-19: 根 `AGENTS.md` 的 devlog 规则需明确“按日期单文件、不按角色拆文件、条目级标角色”的约束。
   - AC-20: 文档治理门禁需阻断 `devlog` / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
+  - AC-22: 外部 memory/reflective-agent 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted/rejected/deferred 边界，再进入实现任务拆解。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -156,6 +160,9 @@
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
+  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
+  - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
   - `testing-manual.md`
@@ -233,6 +240,7 @@
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033 | `test_tier_required` | devlog 规则与角色标记要求一致性检查 | 单日过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 devlog 角色标签检查 | 角色命名一致性与防漂移能力 |
 | PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、signal promotion、stage report 与角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链 |
+| PRD-ENGINEERING-022 | TASK-ENGINEERING-086 | `test_tier_required` | 外部方案借鉴边界专题三件套、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/reflection 补强 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

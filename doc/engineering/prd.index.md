@@ -2,7 +2,7 @@
 
 审计轮次: 6
 
-更新时间：2026-03-30
+更新时间：2026-03-31
 
 ## 入口
 - 模块 PRD：`doc/engineering/prd.md`
@@ -17,6 +17,7 @@
 | `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md` | `doc/engineering/oversized-rust-file-splitting-2026-02-23.design.md` | `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md` |
 | `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md` | `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md` |
 | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md` | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md` | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md` |
+| `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md` |
 | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md` | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md` | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md` |
 | `doc/engineering/governance/engineering-governance-trend-tracking-2026-03-11.prd.md` | `doc/engineering/governance/engineering-governance-trend-tracking-2026-03-11.design.md` | `doc/engineering/governance/engineering-governance-trend-tracking-2026-03-11.project.md` |
 | `doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.prd.md` | `doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.design.md` | `doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.project.md` |

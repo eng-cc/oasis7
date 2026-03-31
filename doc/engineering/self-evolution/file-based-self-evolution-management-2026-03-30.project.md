@@ -28,6 +28,9 @@
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
+- `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
 - 仓库根目录 `.pm/`
 - `scripts/pm/*.sh`
 
@@ -38,6 +41,7 @@
 - 阻塞项:
   - 暂无实现阻塞；当前等待 owner 复核 `workflow-report`、`AGENTS.md` 接入口径与 smoke 结果后再提交。
 - 最新完成:
+  - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并把后续 recall/reflection 增量任务挂回 `self-evolution` 总专题依赖链。
   - `TASK-ENGINEERING-084`：已落地 `role-report.sh` 与 `pm_store.py role-report`，可按角色汇总 backlog 状态、blocked tasks 与 active/needs_review/superseded memory；required/full smoke 均已覆盖真实 backlog + stale memory + 扩容场景。
   - `TASK-ENGINEERING-083`：已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容的 lint/scaffold，以及 `memory-regression-smoke.sh` full-tier 回归；长期 memory 现具备 active / needs_review / superseded 统一查询入口。
   - `TASK-ENGINEERING-082`：已落地 `promote-memory.sh` 与 signal `memory_promotion_state` 决策回写，required-tier smoke 现可覆盖 accepted/rejected memory promotion case。
