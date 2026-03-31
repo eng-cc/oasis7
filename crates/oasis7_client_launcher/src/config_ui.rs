@@ -30,6 +30,7 @@ impl Default for StartupGuideState {
 
 pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
     match issue {
+        ConfigIssue::LlmRequired => &["llm_enabled"],
         ConfigIssue::ScenarioRequired => &["scenario"],
         ConfigIssue::LiveBindInvalid => &["live_bind"],
         ConfigIssue::WebBindInvalid => &["web_bind"],

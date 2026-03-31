@@ -243,6 +243,21 @@ impl RuntimeLlmSidecar {
         !env_requests_openclaw_provider()
     }
 
+    pub(in crate::viewer::runtime_live) fn ensure_gameplay_ready(
+        &mut self,
+        world: &RuntimeWorld,
+        config: &WorldConfig,
+    ) -> Result<(), String> {
+        if !self.is_llm_mode() {
+            return Err("gameplay requires runtime live server running with --llm".to_string());
+        }
+        self.sync_shadow_kernel(world, config)?;
+        self.ensure_runner_initialized().map_err(|message| {
+            format!("gameplay requires a configured and reachable LLM provider: {message}")
+        })?;
+        Ok(())
+    }
+
     pub(in crate::viewer::runtime_live) fn consume_player_auth_nonce(
         &mut self,
         player_id: &str,

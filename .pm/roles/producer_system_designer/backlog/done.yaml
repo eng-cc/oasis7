@@ -40,3 +40,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0001.yaml
+  - task_id: TASK-PM-0004
+    title: "收口 pure_api 必须启用 LLM 的正式游玩口径"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md
+    acceptance:
+      - "formal pure_api gameplay 已统一要求 active LLM access"
+      - "runtime / launcher / client launcher / current manuals 已不再把 no-LLM 写成正式可玩入口"
+      - "targeted runtime/launcher tests、脚本语法检查与 doc-governance-check 已通过"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0004.yaml

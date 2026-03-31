@@ -42,10 +42,11 @@ Options:
   -h, --help               Show this help
 
 Examples:
-  ./scripts/run-producer-playtest.sh --no-llm
-  ./scripts/run-producer-playtest.sh --profile dev --no-llm
-  ./scripts/run-producer-playtest.sh --no-llm --open-headed
-  ./scripts/run-producer-playtest.sh --bundle-dir output/release/game-launcher-local --no-llm
+  ./scripts/run-producer-playtest.sh
+  ./scripts/run-producer-playtest.sh --profile dev
+  ./scripts/run-producer-playtest.sh --open-headed
+  ./scripts/run-producer-playtest.sh --bundle-dir output/release/game-launcher-local
+  ./scripts/run-producer-playtest.sh --no-llm   # negative-path only; launcher boot is expected to fail
 USAGE
 }
 

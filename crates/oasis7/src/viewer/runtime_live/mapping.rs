@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn runtime_live_snapshot_includes_runtime_snapshot_payload() {
-        let server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
+        let mut server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
             WorldScenario::Minimal,
         ))
         .expect("runtime server");

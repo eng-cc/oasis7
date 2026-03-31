@@ -21,8 +21,8 @@ Purpose:
   Run an isolated Viewer Web / launcher stack for the current git worktree.
 
 Options for `up`:
-  --with-llm               Enable LLM mode
-  --no-llm                 Disable LLM mode
+  --with-llm               Enable LLM mode (default; required for gameplay)
+  --no-llm                 Negative-path only; launcher boot will fail fast without LLM
   --bundle-mode            Build/reuse a worktree-local bundle and boot from it
   --source-mode            Boot directly from source (default)
   --smoke-timeout <secs>   After boot, run a minimal agent-browser smoke within <secs>
@@ -143,7 +143,7 @@ run_smoke() {
 
 case "$action" in
   up)
-    ENABLE_LLM="0"
+    ENABLE_LLM="1"
     BOOT_MODE="source"
     SMOKE_TIMEOUT=0
     while [[ $# -gt 0 ]]; do
@@ -180,6 +180,11 @@ case "$action" in
       esac
     done
     [[ "$SMOKE_TIMEOUT" =~ ^[0-9]+$ ]] || { echo "error: --smoke-timeout must be a non-negative integer" >&2; exit 2; }
+    if [[ "$ENABLE_LLM" != "1" ]]; then
+      echo "error: worktree harness now boots through ./scripts/run-game-test.sh and oasis7_game_launcher, both of which require active LLM access" >&2
+      echo "hint: use direct oasis7_viewer_live --no-llm only for observer/debug diagnostics outside the launcher stack" >&2
+      exit 2
+    fi
 
     if wh_pid_alive "$(wh_state_get "$STATE_FILE" harness_pid 2>/dev/null || true)"; then
       echo "info: harness already running for $WORKTREE_ID"
@@ -241,11 +246,7 @@ PY
       --meta-file "$META_FILE"
       --json-ready
     )
-    if [[ "$ENABLE_LLM" == "1" ]]; then
-      run_args+=(--with-llm)
-    else
-      run_args+=(--no-llm)
-    fi
+    run_args+=(--with-llm)
 
     nohup ./scripts/run-game-test.sh "${run_args[@]}" >"$STARTUP_LOG" 2>&1 < /dev/null &
     HARNESS_PID=$!

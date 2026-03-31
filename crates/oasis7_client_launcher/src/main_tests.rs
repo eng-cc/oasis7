@@ -855,6 +855,16 @@ fn collect_required_config_issues_reports_openclaw_specific_fields() {
 }
 
 #[test]
+fn collect_required_config_issues_rejects_no_llm_playability_config() {
+    let config = LaunchConfig {
+        llm_enabled: false,
+        ..LaunchConfig::default()
+    };
+    let issues = collect_required_config_issues(&config);
+    assert!(issues.contains(&ConfigIssue::LlmRequired));
+}
+
+#[test]
 fn collect_required_config_issues_rejects_non_loopback_openclaw_base_url() {
     let config = LaunchConfig {
         agent_provider_mode: "openclaw_local_http".to_string(),

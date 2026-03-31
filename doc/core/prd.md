@@ -44,7 +44,7 @@
   - SC-5: 当前阶段优先级（P0/P1/P2）在 core PRD 中有唯一口径，并能映射到对应模块任务与角色 owner。
   - SC-6: 发布前必须先完成玩法微循环、runtime 验收、testing 证据、playability 反馈四条 P0 闭环，缺任一项不得给出 go 结论。
   - SC-7: headless-runtime、自动化稳定性、文档一致性收口具备明确 P1 责任划分与交付标准。
-  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope 与 mode/lane 分层约束。
+  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope、mode/lane 分层约束，以及 `pure_api` formal gameplay 的 LLM-required 边界。
   - SC-9: core 活跃专题标题、Viewer 活跃手册与实际窗口/Web 标题对齐 `oasis7` 品牌；内部旧品牌兼容命名仅以实现说明形式保留，不得继续冒充公开标题。
   - SC-10: `engineering`、`scripts`、`world-runtime` 的历史专题标题在不改动内部实现标识的前提下完成 `oasis7` 品牌收口，减少 active/historical 入口里的旧品牌混用。
 
@@ -88,7 +88,7 @@
 | 跨角色交付矩阵 | 发起角色、接收角色、handoff 输入、产出物、回写位置、验证方式 | 发起方提交 handoff / 接收方确认 done / owner 回写 PRD、project、devlog | `requested -> accepted -> delivered -> verified` | 先按“最先落地代码/文档的 owner”排序，再按发布风险高低排序 | 仅标准角色名可出现在交付矩阵与 devlog |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
-| 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `standard_3d / software_safe / pure_api` 三项；lane 只作附加维度 | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |
+| 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims`、`gameplay_prerequisites` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `standard_3d / software_safe / pure_api` 三项；lane 只作附加维度；`pure_api` formal gameplay 默认要求 active LLM access | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |
 - Acceptance Criteria:
   - AC-1: core PRD 包含模块职责矩阵。
   - AC-2: core PRD 包含至少 4 条关键端到端链路描述。
@@ -101,7 +101,7 @@
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
   - AC-10: `PRD-CORE-004` 可映射到 `doc/core/project.md` 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
-  - AC-12: `PRD-CORE-009` 必须把 `standard_3d / software_safe / pure_api` 与 `execution lane` 的边界写成唯一 taxonomy，并要求证据与 claim 显式绑定 mode。
+  - AC-12: `PRD-CORE-009` 必须把 `standard_3d / software_safe / pure_api` 与 `execution lane` 的边界写成唯一 taxonomy，并要求证据与 claim 显式绑定 mode；其中 `pure_api` formal gameplay 必须显式声明 active LLM prerequisite。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
 - Non-Goals:
@@ -241,7 +241,7 @@
 | PRD-CORE-006 | TASK-CORE-022 | `test_tier_required` | 正式版本候选 go/no-go 记录、风险附注与角色交接抽样核验 | 版本候选正式裁决一致性 |
 | PRD-CORE-007 | TASK-CORE-023 | `test_tier_required` | `doc/README.md` 含根 README / site 阅读入口 | 全局导航准确性 |
 | PRD-CORE-008 | TASK-CORE-023 | `test_tier_required` | 更新时间与新阅读顺序存在 | 公开口径同步性 |
-| PRD-CORE-009 | TASK-CORE-028 | `test_tier_required` | 三模式总契约专题存在、core 主入口/索引互链、文档治理检查通过 | 项目级模式 taxonomy 与 claim 边界一致性 |
+| PRD-CORE-009 | TASK-CORE-028/049 | `test_tier_required` | 三模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `pure_api` LLM-required 口径对齐 | 项目级模式 taxonomy、claim 边界与 formal gameplay 前置条件一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

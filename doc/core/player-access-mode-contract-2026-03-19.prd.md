@@ -6,14 +6,14 @@
 审计轮次: 6
 
 ## 1. Executive Summary
-- Problem Statement: 当前仓内已经形成 `3D`、`software_safe` 与 `pure API` 三条实际可用路径，但模式定义仍分散在 `world-simulator`、`game`、testing 与 evidence 文档中，容易把“玩家入口模式”“弱图形兜底模式”“无 UI 长玩模式”与 `OpenClaw` 的执行 lane 混为一谈，导致发布承诺、QA 结论与对外口径漂移。
+- Problem Statement: 当前仓内已经形成 `3D`、`software_safe` 与 `pure API` 三条实际可用路径，但模式定义仍分散在 `world-simulator`、`game`、testing 与 evidence 文档中，容易把“玩家入口模式”“弱图形兜底模式”“无 UI 长玩模式”与 `OpenClaw` 的执行 lane 混为一谈；同时 `pure_api` 是否要求 active LLM access 的口径在代码、脚本与文档之间也已漂移。
 - Proposed Solution: 在 `core` 建立一份跨模块三模式总契约，统一三种玩家访问模式的命名、默认用途、fallback 规则、证据门禁、允许宣称项与禁止宣称项，并明确 `player_parity / headless_agent / debug_viewer` 属于执行 lane，而不是玩家入口模式。
 - Success Criteria:
   - SC-1: `standard_3d`、`software_safe`、`pure_api` 三种模式在 `core` 中具备唯一命名、默认用途、放行边界与禁宣称项。
   - SC-2: 发布、QA、playability 与 testing 相关文档在引用三模式时不再混用 `execution lane` 语义。
   - SC-3: 任何视觉质量或截图语义结论都必须显式绑定 `standard_3d`，不得借 `software_safe` 或 `pure_api` 代签。
   - SC-4: 任何“无 GPU 可玩”结论都必须显式绑定 `software_safe`，不得误写成标准 3D 兼容。
-  - SC-5: 任何“无 UI 持续游玩 / canonical 玩家语义 / no-LLM parity”结论都必须显式绑定 `pure_api`，不得外推到视觉等价或 LLM 专属动作。
+  - SC-5: 任何“无 UI 持续游玩 / canonical 玩家语义 / formal pure_api gameplay”结论都必须显式绑定 `pure_api`，并声明 active LLM access 为正式游玩前置；不得外推到视觉等价、no-LLM playability 或 LLM 专属动作豁免。
   - SC-6: `OpenClaw` 的 `player_parity / headless_agent / debug_viewer` 与三模式的关系在同一入口中可追溯，且不会再被操作者误解为第四、第五套玩家入口。
 
 ## 2. User Experience & Functionality
@@ -36,7 +36,7 @@
   1. Flow-PCM-001（模式判定）:
      `读取用户目标 -> 判断是视觉验收 / 弱图形可玩 / 无 UI 长玩 -> 绑定到 standard_3d / software_safe / pure_api 中唯一一项`
   2. Flow-PCM-002（fallback 判定）:
-     `Web 启动 -> 若硬件 3D 可用则走 standard_3d -> 若图形环境受限且允许 fallback 则走 software_safe -> 若用户无需浏览器则直接走 pure_api`
+     `Web 启动 -> 若硬件 3D 可用则走 standard_3d -> 若图形环境受限且允许 fallback 则走 software_safe -> 若用户无需浏览器则走 pure_api；若缺少可用 LLM provider 则 formal gameplay 阻断`
   3. Flow-PCM-003（证据归档）:
      `执行测试或人工试玩 -> 证据包记录 mode_id / claim_scope / blocked_by -> 输出仅属于该模式的结论`
   4. Flow-PCM-004（执行 lane 对齐）:
@@ -56,7 +56,7 @@
   - AC-1: `standard_3d`、`software_safe`、`pure_api` 在同一文档中具备唯一命名、默认用途、fallback 规则与禁宣称项。
   - AC-2: `standard_3d` 明确是视觉质量、截图语义、高保真交互与产品主画面验收口径；未通过硬件 WebGL / headed 证据时不得给出视觉放行。
   - AC-3: `software_safe` 明确是无 GPU / 弱图形环境下的最小玩法闭环与调试兜底口径；不得被用来宣称标准 3D 兼容或视觉等价。
-  - AC-4: `pure_api` 明确是无 UI 正式玩家入口与 no-LLM canonical 玩家语义口径；不得被用来宣称截图语义、视觉质量或 LLM 专属动作等价。
+  - AC-4: `pure_api` 明确是无 UI 正式玩家入口，但 formal gameplay 仍要求 active LLM access；不得被用来宣称截图语义、视觉质量、no-LLM playability 或 LLM 专属动作豁免。
   - AC-5: `player_parity / headless_agent / debug_viewer` 在本契约中被定义为执行 lane，而不是玩家访问模式。
   - AC-6: 任一 release/playability/testing 结论若跨模式借证据，必须显式降级 claim 或补齐缺失证据。
   - AC-7: `testing-manual.md`、`world-simulator`、`game` 与 `OpenClaw` 相关专题均能从本契约追溯到对应下游文档。
@@ -80,7 +80,7 @@
 - Architecture Overview:
   - 本专题位于 `core`，负责冻结项目级玩家访问模式 taxonomy。
   - `world-simulator` 继续拥有 `standard_3d` 与 `software_safe` 的实现与具体验收。
-  - `game` 继续拥有 `pure_api` 的 canonical 玩家语义、正式动作面与 parity 验收。
+  - `game` 继续拥有 `pure_api` 的 canonical 玩家语义、正式动作面、LLM-required gameplay gate 与 parity 验收。
   - `OpenClaw` 专题继续拥有 `player_parity / headless_agent / debug_viewer` 的 execution lane contract，但必须服从本专题的 mode/lane 分层。
 - Integration Points:
   - `testing-manual.md`
@@ -94,7 +94,7 @@
   - `render_mode=auto` 自动降到 `software_safe`: 结果必须记录 `degraded_to=software_safe` 与 `software_safe_reason`，且视觉结论仍视为未验证。
   - `software_safe` 在 OpenClaw real-play 下只看到 `debug_viewer` observer-only 提示：此时可证明弱图形观战链路可用，但不能证明 Agent 主执行依赖 Viewer。
   - `pure_api` 缺少 canonical `stage/goal/progress/blocker/next_step`: 结论必须降级为 `observer_only`，不得继续宣称正式入口。
-  - `pure_api` 在 no-LLM 下返回 `llm_mode_required`: 不构成 no-LLM parity 阻断，但不得被描述为“LLM 功能也等价”。
+  - `pure_api` 在 no-LLM 或 provider init 失败下命中 `llm_mode_required` / `llm_init_failed`: 必须记为 gameplay blocked，而不是 playable parity；`--no-llm` 只允许保留 observer/debug 结论。
   - 同一评审结论同时使用 `standard_3d` 截图与 `pure_api` 长玩证据：必须拆成两个 claim，或在总述中明确“视觉放行”和“无 UI 持续游玩放行”是两条不同结论。
   - 操作者把 `headless_agent` 写成第三种玩家模式：视为 taxonomy 错误，必须回写修正后才能放行。
 - Non-Functional Requirements:

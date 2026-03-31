@@ -12,6 +12,7 @@
 
 - 将“纯 API 客户端”从调试/探针通道提升为正式玩家入口，而不是只能验证协议是否活着。
 - 按 `PRD-CORE-009`，本专题承接的正式玩家入口名为 `pure_api`，不与 OpenClaw `headless_agent` execution lane 混用。
+- 明确 `pure_api` 的 formal gameplay 与 headed Web/UI 一样要求 active LLM access；无 LLM 时只能保留 observer/debug，不再构成正式可玩或 parity 结论。
 - 保证纯 API 客户端与 Web/UI 客户端共用同一套世界状态、可执行动作、阶段目标和持续游玩能力。
 - 允许展示形式不同，但不允许信息粒度降级或能力缺失，确保玩家可仅通过 API 长期游玩。
 
@@ -55,14 +56,15 @@
 
 ## 1. Executive Summary
 
-- Problem Statement: 当前无 UI / 协议链路只证明世界能推进、事件能到、控制能发，但无法保证纯 API 客户端获得与 UI 客户端等价的玩法语义、动作能力和持续游玩路径。
-- Proposed Solution: 新增纯 API 等价专题，把阶段目标、进度、阻塞、下一步建议和可执行动作下沉到协议级统一快照中，并以纯 API 长玩验证替代当前仅有的探针式 smoke。
+- Problem Statement: 当前无 UI / 协议链路虽已具备正式动作面，但 `pure_api` 是否要求 active LLM access 的口径曾在代码、脚本与文档间分裂，导致“能连协议”“无 LLM 也能正式玩”“active LLM 下的 parity”三者被混写。
+- Proposed Solution: 新增纯 API 等价专题，把阶段目标、进度、阻塞、下一步建议和可执行动作下沉到协议级统一快照中，并把 active LLM access 固定为 formal gameplay 前置；无 LLM 路径只保留 observer/debug 结论。
 - Success Criteria:
   - SC-1: 纯 API 客户端在 `FirstSessionLoop -> PostOnboarding -> MidLoop entry` 路径上，必须能获得与 UI 客户端同源的阶段目标、进度、阻塞和下一步建议。
   - SC-2: 纯 API 客户端必须支持玩家持续游玩所需的核心动作集合，覆盖观察、选择、推进、聊天/命令、恢复与阶段承接，不允许只能 `step + snapshot`。
   - SC-3: 关键玩法语义 100% 由协议层提供 canonical 字段，不允许 UI 独占“主目标 / blocker / next_step / available_actions”。
   - SC-4: `test_tier_required` 至少具备 1 条纯 API 长玩回归，验证玩家可不依赖浏览器从首局推进到首个持续能力里程碑。
   - SC-5: 纯 API 与 Web/UI 的等价矩阵必须可审计，字段缺失、动作缺失或阶段断层任一出现都判定为阻断。
+  - SC-6: 当 LLM 不可用时，`step / play / gameplay_action / agent_chat / prompt_control` 必须返回明确 `llm_mode_required` 或 `llm_init_failed`，并把当前会话标记为 gameplay blocked，而不是继续保留 `parity_verified`。
 
 ## 2. User Experience & Functionality
 
@@ -106,6 +108,7 @@
   - AC-7: 必须有独立 parity matrix 对账 UI 与 API 的字段、动作和阶段承接；任何一项缺失都不能给出“等价”结论。
   - AC-8: 必须新增 `test_tier_required` 的纯 API 长玩验证；仅有协议 smoke 不构成验收通过。
   - AC-9: 若协议返回原始事件但缺少玩家可消费语义，结论必须记为 `observer_only` 而不是 `playable parity`。
+  - AC-10: 若 active LLM access 缺失或初始化失败，纯 API 会话必须显式返回 gameplay blocked 理由；`--no-llm` 不得再被写成正式可玩或 parity 放行路径。
 - Non-Goals:
   - 不要求纯 API 客户端复制 3D/2D 视图、镜头控制、视觉特效和 UI 布局。
   - 不要求所有调试字段都暴露给正式玩家客户端；只要求正式玩法所需信息完整。
@@ -143,6 +146,7 @@
   - 某字段在 UI 可见但 API 不可见: 视为信息粒度缺口，必须补协议字段或取消 UI 独占表达。
   - 重连后阶段丢失: 客户端必须至少恢复 `stage_id / goal_id / blocker / next_step / recent_feedback`，否则判定不可持续游玩。
   - 动作需要鉴权但客户端未 bootstrap: 协议必须返回明确的 `auth required` 和可恢复路径，而不是静默失败。
+  - active LLM access 缺失或 provider init 失败: formal gameplay 必须降级为 `blocked`，并返回 `llm_mode_required` / `llm_init_failed` 与配置提示；此路径只能归档为 observer/debug。
   - 世界状态变化过快: 快照与事件必须提供版本/时间基线，避免 API 客户端根据旧快照做错误决策。
   - UI / API 计算结果不一致: 必须以 canonical 协议语义为准，不允许两边各算一套。
 - Non-Functional Requirements:
@@ -152,6 +156,7 @@
   - NFR-API-4: parity matrix 覆盖率 100%，字段/动作/阶段三类均需对账。
   - NFR-API-5: 正式玩家 API 模式不得因“无 UI”被自动降级为仅观察模式，除非明确声明 `observer_only`。
   - NFR-API-6: 相关变更 1 个工作日内同步回写 `game` 根 PRD / project / 索引 / testing 入口。
+  - NFR-API-7: 100% formal pure API playability / parity 结论都必须基于 active LLM access 路径；no-LLM 仅可输出 blocked 或 observer/debug 结论。
 - Security & Privacy:
   - 正式玩家写操作必须继续走现有鉴权边界，不因纯 API 客户端引入越权写入。
   - 协议级玩家语义不得泄露不应暴露给当前玩家的对手私有信息。
@@ -174,7 +179,7 @@
 
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-GAME-008 | `TASK-GAME-023` + `TASK-GAMEPLAY-API-001/002/003/004` | `test_tier_required` + `test_tier_full` | 文档治理检查、协议字段对账、纯 API required-tier 长玩、UI/API parity matrix、full-tier 长稳抽样 | 新手阶段承接、PostOnboarding、纯 API 客户端、Viewer 协议边界 |
+| PRD-GAME-008 | `TASK-GAME-023/060` + `TASK-GAMEPLAY-API-001/002/003/004/005` | `test_tier_required` + `test_tier_full` | 文档治理检查、协议字段对账、active-LLM 纯 API required-tier 长玩、UI/API parity matrix、full-tier 长稳抽样与 no-LLM 阻断签名核验 | 新手阶段承接、PostOnboarding、纯 API 客户端、Viewer 协议边界与 formal gameplay 前置条件 |
 
 - Decision Log:
 

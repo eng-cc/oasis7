@@ -31,9 +31,12 @@ fn runtime_agent_chat_script_mode_requires_llm_mode() {
 
 #[test]
 fn runtime_gameplay_action_requires_auth() {
-    let mut server =
-        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
-            .expect("runtime server");
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
     let agent_id = server
         .world
         .state()
@@ -52,6 +55,72 @@ fn runtime_gameplay_action_requires_auth() {
         })
         .expect_err("missing auth should fail");
     assert_eq!(err.code, "auth_proof_required");
+}
+
+#[test]
+fn runtime_gameplay_action_script_mode_requires_llm_mode() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(87);
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id,
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        87,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_gameplay_action(request)
+        .expect_err("script mode should reject gameplay actions");
+    assert_eq!(err.code, "llm_mode_required");
+}
+
+#[test]
+fn runtime_step_control_reports_blocked_without_llm_mode() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("listener");
+    let addr = listener.local_addr().expect("addr");
+    let client = TcpStream::connect(addr).expect("connect");
+    let (server_stream, _) = listener.accept().expect("accept");
+    drop(client);
+    let mut writer = BufWriter::new(server_stream);
+    let mut session = RuntimeLiveSession::new();
+
+    server
+        .apply_control_mode(
+            ViewerControl::Step { count: 1 },
+            Some(1),
+            &mut session,
+            &mut writer,
+        )
+        .expect("control handled");
+    writer.flush().expect("flush response");
+
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("blocked feedback recorded");
+    assert_eq!(feedback.stage, "blocked");
+    assert!(feedback
+        .reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains("--llm")));
 }
 
 #[test]
@@ -213,9 +282,12 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
 
 #[test]
 fn runtime_gameplay_action_can_reach_first_capability_milestone_without_ui() {
-    let mut server =
-        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
-            .expect("runtime server");
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
     let agent_id = server
         .world
         .state()

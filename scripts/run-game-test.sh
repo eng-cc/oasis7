@@ -52,8 +52,8 @@ Options:
   --run-id <id>            Override logical run id used for output dir / chain node id defaults
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
   --json-ready             Emit one-line JSON ready payload after the stack becomes ready
-  --with-llm               Enable LLM mode (default: enabled)
-  --no-llm                 Disable LLM mode (fallback to built-in script)
+  --with-llm               Enable LLM mode (default: enabled; required for gameplay)
+  --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   -h, --help               Show this help
 USAGE
 }
@@ -188,6 +188,12 @@ if [[ -n "$BUNDLE_DIR" ]]; then
       exit 1
     fi
   fi
+fi
+
+if [[ "$ENABLE_LLM" != "1" ]]; then
+  echo "error: ./scripts/run-game-test.sh now wraps oasis7_game_launcher, which requires active LLM access" >&2
+  echo "hint: use env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm ... only for direct observer/debug diagnostics" >&2
+  exit 1
 fi
 
 if [[ -n "$CHAIN_STATUS_BIND_ADDR" ]]; then
@@ -403,9 +409,7 @@ if [[ "$CHAIN_ENABLED" == "1" ]]; then
 else
   WORLD_ARGS+=(--chain-disable)
 fi
-if [[ "$ENABLE_LLM" == "1" ]]; then
-  WORLD_ARGS+=(--with-llm)
-fi
+WORLD_ARGS+=(--with-llm)
 
 if [[ -n "$BUNDLE_DIR" ]]; then
   LAUNCH_MODE="bundle"

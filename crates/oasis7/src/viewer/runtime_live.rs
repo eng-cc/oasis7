@@ -70,6 +70,8 @@ const AUTHORITATIVE_BATCH_FINALITY_WINDOW_TICKS: u64 = 2;
 const MAX_AUTHORITATIVE_BATCH_HISTORY: usize = 256;
 const MAX_AUTHORITATIVE_CHALLENGE_HISTORY: usize = 512;
 const MAX_AUTHORITATIVE_STABLE_CHECKPOINTS: usize = 64;
+const LLM_GAMEPLAY_REQUIRED_HINT: &str =
+    "enable --llm and configure a reachable LLM provider before retrying gameplay controls";
 
 #[derive(Debug, Clone)]
 pub struct ViewerRuntimeLiveServerConfig {
@@ -454,6 +456,29 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if let Err(reason) = self.ensure_gameplay_ready_for_control(&mode) {
+            session.playing = false;
+            session.next_play_step_at = None;
+            self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+                action: control_mode_label(&mode).to_string(),
+                stage: "blocked".to_string(),
+                effect: "gameplay control rejected before world advance".to_string(),
+                reason: Some(reason.clone()),
+                hint: Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+                delta_logical_time: 0,
+                delta_event_seq: 0,
+            });
+            if let Some(request_id) = request_id {
+                let ack = ControlCompletionAck {
+                    request_id,
+                    status: ControlCompletionStatus::TimeoutNoProgress,
+                    delta_logical_time: 0,
+                    delta_event_seq: 0,
+                };
+                send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
+            }
+            return Ok(());
+        }
         match mode {
             ViewerControl::Pause => {
                 session.playing = false;
@@ -588,11 +613,15 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    fn compat_snapshot(&self) -> WorldSnapshot {
+    fn compat_snapshot(&mut self) -> WorldSnapshot {
         let runtime_snapshot = self.world.snapshot();
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
         let next_action_id = runtime_snapshot.next_action_id.max(1);
+        let gameplay_gate = self
+            .llm_sidecar
+            .ensure_gameplay_ready(&self.world, &self.snapshot_config)
+            .err();
         let primary_agent_claim = self
             .world
             .state()
@@ -616,6 +645,8 @@ impl ViewerRuntimeLiveServer {
             player_gameplay: Some(build_player_gameplay_snapshot(
                 self.world.state(),
                 self.latest_player_gameplay_feedback.as_ref(),
+                gameplay_gate.is_none(),
+                gameplay_gate.as_deref(),
                 self.llm_sidecar.is_llm_mode() && self.llm_sidecar.supports_agent_chat(),
                 primary_agent_claim,
             )),
@@ -625,5 +656,57 @@ impl ViewerRuntimeLiveServer {
             pending_actions: Vec::new(),
             journal_len: runtime_journal_len,
         }
+    }
+
+    fn ensure_gameplay_ready_for_control(&mut self, mode: &ViewerControl) -> Result<(), String> {
+        match mode {
+            ViewerControl::Pause => Ok(()),
+            ViewerControl::Play | ViewerControl::Step { .. } => self
+                .llm_sidecar
+                .ensure_gameplay_ready(&self.world, &self.snapshot_config),
+            ViewerControl::Seek { .. } => Ok(()),
+        }
+    }
+
+    fn ensure_gameplay_ready_for_action(
+        &mut self,
+        action: &str,
+        action_id: Option<&str>,
+        target_agent_id: Option<&str>,
+    ) -> Result<(), (String, String)> {
+        self.llm_sidecar
+            .ensure_gameplay_ready(&self.world, &self.snapshot_config)
+            .map_err(|message| {
+                self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+                    action: action.to_string(),
+                    stage: "blocked".to_string(),
+                    effect: "gameplay action rejected before runtime submission".to_string(),
+                    reason: Some(message.clone()),
+                    hint: Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+                    delta_logical_time: 0,
+                    delta_event_seq: 0,
+                });
+                let code = if self.llm_sidecar.is_llm_mode() {
+                    "llm_init_failed"
+                } else {
+                    "llm_mode_required"
+                };
+                let detail = match (action_id, target_agent_id) {
+                    (Some(action_id), Some(target_agent_id)) => format!(
+                        "{message} (action_id={action_id}, target_agent_id={target_agent_id})"
+                    ),
+                    _ => message,
+                };
+                (code.to_string(), detail)
+            })
+    }
+}
+
+fn control_mode_label(mode: &ViewerControl) -> &'static str {
+    match mode {
+        ViewerControl::Pause => "pause",
+        ViewerControl::Play => "play",
+        ViewerControl::Step { .. } => "step",
+        ViewerControl::Seek { .. } => "seek",
     }
 }

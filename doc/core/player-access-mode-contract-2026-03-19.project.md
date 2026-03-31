@@ -10,6 +10,7 @@
 - [x] T2 (`PRD-CORE-009`) [test_tier_required]: 同步 `doc/core/prd.md`、`doc/core/project.md`、`doc/core/prd.index.md` 与 `doc/core/README.md`，把本专题挂入 core 主入口。
 - [x] T3 (`PRD-CORE-009`) [test_tier_required]: 回写 `doc/devlog/2026-03-19.md`，记录 owner、完成内容、验证方式与后续使用约束。
 - [x] T4 (`PRD-CORE-009`) [test_tier_required]: 对齐 `testing-manual`、`doc/world-simulator/**`、`doc/game/**` 与 `doc/testing/**` 的下游术语，要求结论先绑定玩家访问模式，再附加 execution lane。
+- [x] T5 (`PRD-CORE-009`) [test_tier_required]: 将 `pure_api` 的正式游玩口径重定为“必须启用且可连通 LLM”，同步回写 launcher/runtime 行为、README/testing/manual/game/world-simulator 当前入口，并把 `--no-llm` 降级为 observer/debug only。
 
 ## 依赖
 - `doc/core/prd.md`
@@ -24,12 +25,15 @@
 ## 验证
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_gameplay_action_script_mode_requires_llm_mode -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_step_control_reports_blocked_without_llm_mode -- --nocapture`
 
 ## 状态
-- 更新日期: 2026-03-19
+- 更新日期: 2026-03-31
 - 当前状态: completed
 - 下一任务: 无
-- 最新完成: `T1/T2/T3/T4`（已完成三模式总契约建模、core 主入口挂载、下游术语回写与 devlog 收口）。
+- 最新完成: `T1/T2/T3/T4/T5`（已完成三模式总契约建模、core 主入口挂载、下游术语回写，以及 `pure_api` 的 LLM-required 正式游玩口径收口）。
 - 备注:
   - 本专题只冻结 taxonomy 与 claim contract，不替代下游专题实现。
   - 后续若新增同层玩家访问模式，必须先更新本专题再更新模块文档。
+  - `--no-llm` 仍可作为观战/调试旁路保留，但不能再被写成正式可玩、parity 或发布放行入口。

@@ -139,7 +139,7 @@ impl Default for CliOptions {
             viewer_host: DEFAULT_VIEWER_HOST.to_string(),
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
-            with_llm: false,
+            with_llm: true,
             agent_provider_mode: BUILTIN_LLM_PROVIDER_MODE.to_string(),
             openclaw_base_url: DEFAULT_OPENCLAW_BASE_URL.to_string(),
             openclaw_auth_token: String::new(),
@@ -199,6 +199,12 @@ fn main() {
 fn run_launcher(options: &CliOptions) -> Result<(), String> {
     install_signal_handler()?;
     TERMINATION_REQUESTED.store(false, Ordering::SeqCst);
+    if !options.with_llm {
+        return Err(
+            "oasis7 gameplay requires --with-llm; no-LLM launch is no longer a playable entry path"
+                .to_string(),
+        );
+    }
 
     let oasis7_viewer_live_bin = resolve_oasis7_viewer_live_binary()?;
     let oasis7_chain_runtime_bin = if options.chain_enabled {
@@ -1166,7 +1172,7 @@ Options:\n\
   --chain-pos-max-past-slot-lag <n>\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
-  --with-llm                   enable llm mode\n\
+  --with-llm                   enable llm mode (default; required for gameplay)\n\
   --agent-provider-mode <mode> agent provider: builtin_llm|openclaw_local_http\n\
   --openclaw-base-url <url>    OpenClaw local provider base URL (default: {DEFAULT_OPENCLAW_BASE_URL})\n\
   --openclaw-auth-token <tok>  OpenClaw bearer token\n\

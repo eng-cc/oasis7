@@ -209,6 +209,10 @@ pub(super) fn launcher_checkbox_field_mut<'a>(
 pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<ConfigIssue> {
     let mut issues = Vec::new();
 
+    if !config.llm_enabled {
+        issues.push(ConfigIssue::LlmRequired);
+    }
+
     if validate_agent_provider_mode(config.agent_provider_mode.as_str()).is_err() {
         issues.push(ConfigIssue::AgentProviderModeInvalid);
     }
@@ -418,6 +422,8 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
             args.push("--openclaw-agent-profile".to_string());
             args.push(agent_profile.to_string());
         }
+    } else {
+        args.push("--no-llm".to_string());
     }
     if !config.auto_open_browser {
         args.push("--no-open-browser".to_string());

@@ -67,6 +67,7 @@
   - PRD-GAME-010: As a 制作人与 limited preview owner, I want one controlled external execution loop, so that the new claim envelope is validated with real feedback instead of internal assumptions.
   - PRD-GAME-011: As a 中循环玩家与玩法 owner, I want agent claims to keep a non-zero main-token-denominated cost and require upkeep, while allowing a restricted starter claim balance for `slot-1`, so that agent control reflects sustained commitment without forcing limited preview users to hold transferable assets.
 - 模式分层说明：按 `PRD-CORE-009`，`PRD-GAME-008` 所承接的是玩家访问模式 `pure_api`，而不是 OpenClaw `headless_agent` 一类 execution lane。
+- 正式游玩前置：按最新 `PRD-CORE-009` 口径，`PRD-GAME-008` 的 `pure_api` 正式游玩与 headed Web/UI 一样，要求 active LLM access；`--no-llm` 仅保留 observer/debug，不再计入正式可玩性与 parity 放行。
 - Critical User Flows:
   1. Flow-GAME-001: `玩法需求提出 -> 规则层建模 -> 映射实现边界 -> 进入开发`
   2. Flow-GAME-002: `执行核心循环回归 -> 记录可玩性问题 -> 分级 -> 回填修复任务`
@@ -122,7 +123,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 日常回归（D） | 有 gameplay/viewer 改动的工作日 | `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required scenario_specs_match_ids -- --nocapture`；`env -u RUSTC_WRAPPER cargo test -p oasis7_viewer player_mission_tests:: -- --nocapture` | 两条命令全绿；新增问题中 `P0=0`。 | 当日测试日志 + 问题清单更新。 | 阻断当日合入，转入 `TASK-GAME-003` 闭环。 |
 | 候选版本回归（RC） | 每个候选版本至少 1 轮 | `./scripts/ci-tests.sh required`；`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::gameplay_protocol:: -- --nocapture` | required 套件通过；新手/经济/战争协议回归无回退；`P0/P1=0` 或具备豁免。 | RC 回归报告 + 命令与结论。 | 标记 `blocked`，禁止进入发布评审。 |
-| Web 闭环门禁（D-1） | 发布前 1 天 | `./scripts/run-game-test-ab.sh --headed --no-llm`（S6）；按 `doc/playability_test_result/game-test.prd.md` 填写卡片 | A/B 流程 `PASS`；`console error = 0`；有效控制命中率 `>= 80%`；无未豁免 `P0/P1`。 | `output/playwright/playability/<run_id>/` + `doc/playability_test_result/card_*.md`。 | 阻断发布，进入修复并复跑 S6。 |
+| Web 闭环门禁（D-1） | 发布前 1 天 | `./scripts/run-game-test-ab.sh --headed --with-llm`（S6）；按 `doc/playability_test_result/game-test.prd.md` 填写卡片 | A/B 流程 `PASS`；`console error = 0`；有效控制命中率 `>= 80%`；无未豁免 `P0/P1`。 | `output/playwright/playability/<run_id>/` + `doc/playability_test_result/card_*.md`。 | 阻断发布，进入修复并复跑 S6。 |
 | 发布评审（D0） | 发布会 | 汇总 D/RC/D-1 证据包并执行 go/no-go 评审 | 证据链完整、结论一致、风险闭环清晰。 | 发布结论（`go`/`no-go`）、豁免单、回滚预案。 | 结论为 `no-go` 时冻结版本并触发应急回归。 |
 - 发布证据包最小字段:
   - 命令清单（含执行时间、执行人、结果摘要）。
@@ -219,7 +220,7 @@
 | PRD-GAME-005 | TASK-GAME-008 + TASK-GAME-DCG-001/002/003/004/005/006/007/008/009/010 | `test_tier_required` + `test_tier_full` | Tick 证书、治理时序、身份惩罚闭环验证 | 长期在线一致性与治理安全 |
 | PRD-GAME-006 | TASK-GAME-012/013/014/015/016/017 | `test_tier_required` + `test_tier_full` | 权威分层裁决回归、回放与回滚演练、反作弊/反女巫对抗用例、经济源汇审计、SRE runbook 演练 | 长期在线 P0 稳定性与运维可信度 |
 | PRD-GAME-007 | TASK-GAME-021 + TASK-GAMEPLAY-POD-001/002/003/004 | `test_tier_required` | 文档治理检查、Viewer / Web required-tier 回归、playability 卡片复核 | 新手阶段承接、`#46` 回归、目标链表达稳定性 |
-| PRD-GAME-008 | TASK-GAME-023 + TASK-GAMEPLAY-API-001/002/003/004 | `test_tier_required` + `test_tier_full` | 文档治理检查、协议字段对账、纯 API 长玩回归、UI/API parity matrix、full-tier 长稳抽样 | 纯 API 正式入口、阶段承接、持续游玩等价性 |
+| PRD-GAME-008 | TASK-GAME-023/060 + TASK-GAMEPLAY-API-001/002/003/004/005 | `test_tier_required` + `test_tier_full` | 文档治理检查、协议字段对账、active-LLM 纯 API 长玩回归、UI/API parity matrix、full-tier 长稳抽样与无 LLM 阻断签名核验 | 纯 API 正式入口、阶段承接、持续游玩等价性与 formal gameplay 前置条件 |
 | PRD-GAME-009 | TASK-GAME-028/029/030/031/032/033 | `test_tier_required` + `test_tier_full` | 文档治理检查、统一 release gate、趋势基线对账、longrun/recovery 证据、runbook 口径检查 | 当前阶段判断、封闭 Beta 准入、对外口径一致性 |
 | PRD-GAME-010 | TASK-GAME-035/036/037/038 | `test_tier_required` | 文档治理检查、limited preview callout 与回流模板核验、QA 守门结论、producer 复盘记录 | 受控预览执行、claim drift、继续/暂停决策 |
 | PRD-GAME-011 | TASK-GAME-039/040/041/042/043/044/045/046/047/048/049/050/051 | `test_tier_required` + `test_tier_full` | 文档治理检查、claim/upkeep/reclaim 状态机回归、restricted bucket 与 provenance 回归、grant lifecycle 与 issuer runbook、Viewer/API parity、经济审计与 abuse suite | agent 占有边界、token sink、受限启动余额、回收与可观测性 |

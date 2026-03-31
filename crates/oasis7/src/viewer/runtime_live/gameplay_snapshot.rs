@@ -54,13 +54,48 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+    gameplay_enabled: bool,
+    gameplay_disabled_reason: Option<&str>,
     supports_agent_chat: bool,
     agent_claim: Option<PlayerAgentClaimSnapshot>,
 ) -> PlayerGameplaySnapshot {
     let first_agent_id = state.agents.keys().next().cloned();
-    let mut available_actions =
-        base_available_actions(first_agent_id.as_deref(), supports_agent_chat);
-    extend_available_actions(state, first_agent_id.as_deref(), &mut available_actions);
+    let mut available_actions = base_available_actions(
+        first_agent_id.as_deref(),
+        gameplay_enabled,
+        gameplay_disabled_reason,
+        supports_agent_chat,
+    );
+    if gameplay_enabled {
+        extend_available_actions(state, first_agent_id.as_deref(), &mut available_actions);
+    }
+    if !gameplay_enabled {
+        let disabled_reason = gameplay_disabled_reason
+            .unwrap_or("gameplay requires runtime live server running with --llm");
+        return PlayerGameplaySnapshot {
+            stage_id: PlayerGameplayStageId::FirstSessionLoop,
+            stage_status: PlayerGameplayStageStatus::Blocked,
+            goal_id: "first_session_loop.configure_llm_access".to_string(),
+            goal_kind: PlayerGameplayGoalKind::CreateFirstWorldFeedback,
+            goal_title: "Configure LLM access before entering the world".to_string(),
+            objective:
+                "This world requires an active LLM provider before gameplay controls are allowed."
+                    .to_string(),
+            progress_detail:
+                "Gameplay is blocked until runtime live is running with an initialized LLM provider."
+                    .to_string(),
+            progress_percent: 0,
+            blocker_kind: Some("llm_required".to_string()),
+            blocker_detail: Some(disabled_reason.to_string()),
+            next_step_hint:
+                "Enable --llm and configure a reachable provider before retrying play, step, or gameplay actions."
+                    .to_string(),
+            branch_hint: None,
+            available_actions,
+            recent_feedback: recent_feedback.cloned(),
+            agent_claim,
+        };
+    }
     let latest_blocker = state.factories.iter().find_map(|(factory_id, factory)| {
         let kind = factory.production.current_blocker_kind.as_ref()?;
         let detail = factory
@@ -247,8 +282,15 @@ pub(super) fn build_player_gameplay_snapshot(
 
 fn base_available_actions(
     first_agent_id: Option<&str>,
+    gameplay_enabled: bool,
+    gameplay_disabled_reason: Option<&str>,
     supports_agent_chat: bool,
 ) -> Vec<PlayerGameplayAction> {
+    let disabled_reason = (!gameplay_enabled).then(|| {
+        gameplay_disabled_reason
+            .unwrap_or("gameplay requires runtime live server running with --llm")
+            .to_string()
+    });
     let mut actions = vec![
         PlayerGameplayAction {
             action_id: "request_snapshot".to_string(),
@@ -262,14 +304,14 @@ fn base_available_actions(
             label: "Advance 1 step".to_string(),
             protocol_action: "live_control.step".to_string(),
             target_agent_id: None,
-            disabled_reason: None,
+            disabled_reason: disabled_reason.clone(),
         },
         PlayerGameplayAction {
             action_id: "resume_play".to_string(),
             label: "Resume live play".to_string(),
             protocol_action: "live_control.play".to_string(),
             target_agent_id: None,
-            disabled_reason: None,
+            disabled_reason,
         },
     ];
     if supports_agent_chat {

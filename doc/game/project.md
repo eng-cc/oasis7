@@ -151,6 +151,7 @@
 - [x] TASK-GAME-057 (PRD-GAME-011) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的实操层 SOP，明确 `liveops 1-of-2` 的首次开通、governance registry 重导入后的恢复顺序、`status` 判读门槛，以及“slot-only manifest 不得直接 import 到 world”的风险提示。
 - [x] TASK-GAME-058 (PRD-GAME-001) [test_tier_required]: 执行 ROUND-010 `game` 模块入口治理，为 `doc/game/README.md` 增加轻量“从这里开始”分流，明确产品目标、执行追踪、玩法总览、试玩口径与高频专题之间的阅读顺序。
 - [x] TASK-GAME-059 (PRD-GAME-011) [test_tier_required + test_tier_full]: 将 restricted grant 的 daily treasury source 从 `ecosystem_pool` 拆分为独立 `restricted_starter_claim_liveops_pool`，新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action，并同步让 liveops CLI / runbook 转向 dedicated pool 余额。
+- [x] TASK-GAME-060 (PRD-GAME-008) [test_tier_required]: 按最新产品设定收口 `pure_api` 正式游玩前置，把 `game` 根 PRD / project 与 active 专题改写为“active LLM access required；无 LLM 仅 observer/debug”，并同步替换当前门禁命令中的 `--no-llm` 示例。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -178,6 +179,7 @@
 - 最新完成: `TASK-GAME-050`（`liveops_community` 已新增 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`，冻结 `issuer_id=liveops`、`preview_allowlist/qa_seed/liveops_campaign` 三类 `issuance_reason`、按 reason 区分的 expiry 策略、推荐 revoke 条件与 incident fallback。）
 - 最新完成: `TASK-GAME-049`（`runtime_engineer` 已落地 restricted grant metadata、issue/expire/revoke 生命周期、issuer-scope 发放/回收动作与 treasury source-sink 审计链；claim 在 grant 终态后的 restricted refund 也会定向退回 treasury。）
 - 最新完成: `TASK-GAME-048`（`producer_system_designer` 已明确维持 restricted starter balance 的窄用途边界，不缩 PRD 范围；当前专题继续保持 `block`，并新增 `TASK-GAME-049/050/051` 去补齐 grant lifecycle 与审计链。）
+- 最新完成: `TASK-GAME-060`（已把 `pure_api` 正式游玩从 no-LLM 口径回收为 active-LLM required，并同步 game 根入口与 active 专题的当前门禁命令、说明与 parity 定义。）
 - 最新完成: `TASK-GAME-047`（`qa_engineer` 已完成 restricted starter balance QA matrix；已实现的 claim/upkeep/refund/transfer guard/viewer parity 全部 `pass`，但 restricted grant lifecycle/audit 仍 `block`。）
 - 最新完成: `TASK-GAME-046`（`viewer_engineer` 已把 claim canonical 快照、viewer 文案、transfer API 与 explorer 输出统一补齐 restricted/liquid/eligible 字段、funding mix 与 slot blocker。）
 - 最新完成: `TASK-GAME-045`（`runtime_engineer` 已把 `restricted starter claim balance` 接入 slot-1 upfront/upkeep、bond provenance、release/reclaim refund split、transfer-only guard 与 replay 兼容字段。）
@@ -196,7 +198,8 @@
 - 最新完成: `TASK-GAME-026`（已完成其余活跃 `gameplay` 专题中当前源码锚点与 `cargo -p` 命令的 `oasis7` / `oasis7_viewer` / `oasis7_proto` 收口，未改动历史证据与 release gate 记录。）
 - 最新完成: `TASK-GAME-025`（已将 gameplay 专题中仍作为当前真值使用的实现锚点与 `cargo -p` 命令统一切换到 `oasis7` / `oasis7_viewer` / `crates/oasis7*` 口径）。
 - 最新完成: `TASK-GAME-024`（已将根 PRD / project 的当前真值命令与 pure API 客户端源码路径统一切换到 `oasis7` 口径）。
-- 最新完成: `TASK-GAMEPLAY-API-004`（pure API required/full 验收收口，结论升级为 `parity_verified`）。
+- 最新完成: `TASK-GAMEPLAY-API-005`（已把 pure API 等价专题改写为 active-LLM required，并把 no-LLM 路径明确降级为 observer/debug only。）
+- 最新完成: `TASK-GAMEPLAY-API-004`（pure API required/full 验收收口，结论升级为 `parity_verified`；该结论现仅适用于 active LLM access 路径。）
 - 最新完成: `TASK-GAMEPLAY-API-003`（`oasis7_pure_api_client` 纯 API 正式玩家动作面交付）。
 - 最新完成: `TASK-GAMEPLAY-API-002`（live 协议 `WorldSnapshot.player_gameplay` canonical 玩家语义下沉）。
 - 最新完成: `TASK-GAME-023`（纯 API 客户端等价专题 PRD / design / project 与根入口挂载）。

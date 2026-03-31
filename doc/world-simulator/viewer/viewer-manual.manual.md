@@ -23,16 +23,16 @@
 
 ### 1）启动 live server（推荐）
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
-`oasis7_viewer_live` 默认使用内置脚本决策；如需 LLM 决策可显式传 `--llm`（需先配置 LLM key）。
+`oasis7_viewer_live` 当前默认走 LLM 模式，且正式 gameplay 要求已配置且可连通的 LLM provider。
 
 ```bash
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 ```
 
 `oasis7_viewer_live` 现已统一为 runtime/world 链路（协议兼容输出 `WorldSnapshot/WorldEvent`），不再提供 simulator fallback 启动分支。
-传 `--llm` 可启用 prompt/chat 鉴权与控制闭环；`--no-llm` 下 prompt/chat 会返回 `llm_mode_required`。
+传 `--llm` 可进入正式 gameplay、prompt/chat 鉴权与控制闭环；`--no-llm` 仅用于观战/调试，`step/play/gameplay_action/prompt/chat` 都会返回 `llm_mode_required` 或 `llm_init_failed`。
 
 ### 2）启动 viewer
 ```bash
@@ -64,7 +64,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ## 发行模式（P2P 推荐）
 
 `oasis7_viewer_live` 当前为纯 Viewer live 服务，不再承载 `--release-config`、`--runtime-world` 与 `--node-*` 控制面参数。
-P2P 发行建议使用 `oasis7_chain_runtime`（可由 `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher` 托管）锁定链参数，Viewer 仅保留 `--bind`、`--web-bind`、`--llm/--no-llm`。
+P2P 发行建议使用 `oasis7_chain_runtime`（可由 `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher` 托管）锁定链参数，Viewer 仅保留 `--bind`、`--web-bind`、`--llm/--no-llm`；其中 `--no-llm` 只用于 observer/debug。
 
 ## 常用交互
 - 鼠标拖拽：旋转/平移观察视角。

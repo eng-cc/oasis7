@@ -789,6 +789,7 @@ fn hex_upper(nibble: u8) -> char {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigIssue {
+    LlmRequired,
     ScenarioRequired,
     LiveBindInvalid,
     WebBindInvalid,
@@ -822,6 +823,12 @@ enum ConfigIssue {
 impl ConfigIssue {
     fn text(self, language: UiLanguage) -> &'static str {
         match (self, language) {
+            (Self::LlmRequired, UiLanguage::ZhCn) => {
+                "当前产品设定要求启用 LLM；关闭后不能进入正式游玩链路"
+            }
+            (Self::LlmRequired, UiLanguage::EnUs) => {
+                "LLM must stay enabled; no-LLM is no longer a playable entry path"
+            }
             (Self::ScenarioRequired, UiLanguage::ZhCn) => "场景（scenario）是必填项",
             (Self::ScenarioRequired, UiLanguage::EnUs) => "Scenario is required",
             (Self::LiveBindInvalid, UiLanguage::ZhCn) => "实时服务绑定必须是 <host:port>",

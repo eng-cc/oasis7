@@ -156,6 +156,17 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: GameplayActionRequest,
     ) -> Result<GameplayActionAck, GameplayActionError> {
+        self.ensure_gameplay_ready_for_action(
+            "gameplay_action",
+            Some(request.action_id.as_str()),
+            Some(request.target_agent_id.as_str()),
+        )
+        .map_err(|(code, message)| GameplayActionError {
+            code,
+            message,
+            action_id: Some(request.action_id.clone()),
+            target_agent_id: Some(request.target_agent_id.clone()),
+        })?;
         let verified = self.verify_gameplay_action_auth(&request)?;
         self.session_policy
             .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())

@@ -32,7 +32,7 @@ impl Default for CliOptions {
             scenario: WorldScenario::LlmBootstrap,
             bind_addr: DEFAULT_BIND.to_string(),
             web_bind_addr: Some(DEFAULT_WEB_BIND.to_string()),
-            llm_mode: false,
+            llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
         }
     }
@@ -82,7 +82,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         } else {
             ViewerLiveDecisionMode::Script
         });
-    let mut server = ViewerRuntimeLiveServer::new(config)
+    let server = ViewerRuntimeLiveServer::new(config)
         .map_err(|err| format!("failed to create runtime viewer server: {err:?}"))?;
     server
         .run()
@@ -215,8 +215,8 @@ Options:\n\
   --bind <host:port>        viewer live server bind (default: {DEFAULT_BIND})\n\
   --web-bind <host:port>    websocket bridge bind (default: {DEFAULT_WEB_BIND})\n\
   --no-web-bind             disable websocket bridge\n\
-  --llm                     enable llm mode\n\
-  --no-llm                  disable llm mode (default)\n\
+  --llm                     enable llm mode (default; required for gameplay)\n\
+  --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   -h, --help                show help\n\n\
 Removed:\n\
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(options.scenario, WorldScenario::LlmBootstrap);
         assert_eq!(options.bind_addr, DEFAULT_BIND);
         assert_eq!(options.web_bind_addr.as_deref(), Some(DEFAULT_WEB_BIND));
-        assert!(!options.llm_mode);
+        assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     }
 

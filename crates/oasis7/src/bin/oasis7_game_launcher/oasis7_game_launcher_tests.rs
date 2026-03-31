@@ -51,7 +51,7 @@ fn parse_options_defaults() {
     assert_eq!(options.scenario, DEFAULT_SCENARIO);
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
-    assert!(!options.with_llm);
+    assert!(options.with_llm);
     assert_eq!(options.agent_provider_mode, BUILTIN_LLM_PROVIDER_MODE);
     assert_eq!(
         options.openclaw_agent_profile,

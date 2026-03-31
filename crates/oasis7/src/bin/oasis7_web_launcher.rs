@@ -124,7 +124,7 @@ impl Default for LauncherConfig {
             viewer_static_dir: resolve_static_dir_path(DEFAULT_VIEWER_STATIC_DIR)
                 .to_string_lossy()
                 .to_string(),
-            llm_enabled: false,
+            llm_enabled: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
@@ -476,7 +476,7 @@ Options:\n\
   --viewer-host <host>            default viewer host bind\n\
   --viewer-port <port>            default viewer port\n\
   --viewer-static-dir <path>      default viewer static directory\n\
-  --with-llm / --no-llm           default LLM toggle\n\
+  --with-llm / --no-llm           default LLM toggle (gameplay requires enabled)\n\
   --chain-enable / --chain-disable\n\
   --chain-status-bind <host:port>\n\
   --chain-node-id <id>\n\

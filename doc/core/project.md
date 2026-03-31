@@ -236,6 +236,7 @@
 - [x] TASK-CORE-046 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `playability_test_result` 入口分流收口，为证据模块 README 增加 evidence-first 阅读顺序，并明确 README 与 `topics/` / `evidence/` / `prd.index.md` 的边界。
 - [x] TASK-CORE-047 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口分流收口，为命名迁移模块 README 增加轻量阅读顺序，并明确 README 与 `nonviewer/` / `checklists/` / `templates/` / `prd.index.md` 的边界。
 - [x] TASK-CORE-048 (PRD-CORE-003/008) [test_tier_required]: 完成 ROUND-010 `qa_engineer` 复审与关轮，冻结 focused scope 的 `aligned/deferred` 终态并回写阻断结论。
+- [x] TASK-CORE-049 (PRD-CORE-009) [test_tier_required]: 按最新产品设定把 `pure_api` 的正式游玩口径收口为“必须启用且可连通 LLM”，同步更新 core 契约、README/testing/manual、game/world-simulator 当前入口与相关启动脚本帮助文本。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -250,11 +251,12 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-03-31
 - 当前状态: completed
 - 下一任务: 无
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
+- 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
 - 最新完成: `TASK-CORE-005`（已完成 ROUND-001~ROUND-008 一致性审查链路收口、任务归档与 QA handoff）。
 - 最新完成: `TASK-CORE-016`（已完成下一轮跨模块优先级清单与第一优先级选择）。
 - 最新完成: `TASK-CORE-017`（已完成发布候选 readiness 统一入口定义）。

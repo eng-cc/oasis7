@@ -884,6 +884,9 @@ pub(super) fn validate_game_config_with_launcher_bin(
     if parse_port(config.viewer_port.as_str(), "viewer port").is_err() {
         issues.push("viewer port must be integer in 1..=65535".to_string());
     }
+    if !config.llm_enabled {
+        issues.push("llm must stay enabled because no-LLM is no longer a playable entry path".to_string());
+    }
 
     let viewer_static_dir = config.viewer_static_dir.trim();
     if viewer_static_dir.is_empty() {
@@ -1032,6 +1035,8 @@ pub(super) fn build_launcher_args_with_launcher_bin(
 
     if config.llm_enabled {
         args.push("--with-llm".to_string());
+    } else {
+        args.push("--no-llm".to_string());
     }
     if !config.auto_open_browser {
         args.push("--no-open-browser".to_string());

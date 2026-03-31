@@ -8,7 +8,7 @@ fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
     std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
     std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
-    let server = ViewerRuntimeLiveServer::new(
+    let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
@@ -55,6 +55,7 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
 
+    let mut server = server;
     let snapshot = server.compat_snapshot();
     let gameplay = snapshot
         .player_gameplay
@@ -64,20 +65,25 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
         gameplay.stage_id,
         crate::simulator::PlayerGameplayStageId::FirstSessionLoop
     );
+    assert_eq!(gameplay.goal_id, "first_session_loop.configure_llm_access");
     assert_eq!(
-        gameplay.goal_id,
-        "first_session_loop.create_first_world_feedback"
+        gameplay.stage_status,
+        crate::simulator::PlayerGameplayStageStatus::Blocked
     );
+    assert_eq!(gameplay.blocker_kind.as_deref(), Some("llm_required"));
     assert_eq!(
         gameplay.available_actions[0].protocol_action,
         "request_snapshot"
     );
-    if super::player_gameplay::supports_runtime_gameplay_actions() {
-        assert!(gameplay
-            .available_actions
-            .iter()
-            .any(|action| action.action_id == "build_factory_smelter_mk1"));
-    }
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(|action| action.action_id == "advance_step"
+            && action.disabled_reason.as_deref().is_some()));
+    assert!(!gameplay
+        .available_actions
+        .iter()
+        .any(|action| action.action_id == "build_factory_smelter_mk1"));
     assert!(!gameplay
         .available_actions
         .iter()

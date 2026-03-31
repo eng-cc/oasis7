@@ -43,7 +43,7 @@ fn parse_options_defaults() {
         ""
     );
     assert_eq!(options.initial_config.chain_pos_max_past_slot_lag, "256");
-    assert!(!options.initial_config.llm_enabled);
+    assert!(options.initial_config.llm_enabled);
     assert!(options.initial_config.chain_enabled);
     assert!(!options.initial_config.auto_open_browser);
     assert!(options
@@ -226,8 +226,7 @@ fn build_launcher_args_includes_chain_disable_when_off() {
     assert!(args.contains(&"--deployment-mode".to_string()));
     assert!(args.contains(&"hosted_public_join".to_string()));
     assert!(args.contains(&"--chain-disable".to_string()));
-    assert!(!args.contains(&"--no-llm".to_string()));
-    assert!(!args.contains(&"--with-llm".to_string()));
+    assert!(args.contains(&"--with-llm".to_string()));
     assert!(args.contains(&"--no-open-browser".to_string()));
 }
 
@@ -403,6 +402,20 @@ fn validate_game_config_accepts_minimal_valid_setup() {
     };
     let issues = validate_game_config(&config);
     assert!(issues.is_empty());
+    let _ = fs::remove_dir_all(static_dir);
+}
+
+#[test]
+fn validate_game_config_rejects_no_llm_playability_config() {
+    let static_dir = make_temp_dir("oasis7_web_launcher_no_llm");
+    let config = LauncherConfig {
+        viewer_static_dir: static_dir.to_string_lossy().to_string(),
+        llm_enabled: false,
+        chain_enabled: false,
+        ..LauncherConfig::default()
+    };
+    let issues = validate_game_config(&config);
+    assert!(issues.iter().any(|item| item.contains("llm must stay enabled")));
     let _ = fs::remove_dir_all(static_dir);
 }
 

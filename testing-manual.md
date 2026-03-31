@@ -122,7 +122,7 @@
 
 ### L4 UI 闭环层（Web 为默认）
 - 目标：验证真实用户路径可用性（加载、交互、状态可见、无 console error）。
-- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up --no-llm` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。制作人试玩 / 发布前人工验收仍优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断，制作人入口则会自动重建。
+- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。制作人试玩 / 发布前人工验收仍优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断，制作人入口则会自动重建。launcher stack 已不再接受 no-LLM 启动；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
 - source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
 
@@ -320,6 +320,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
 - 模式总口径（`PRD-CORE-009`）：
   - `standard_3d` / `software_safe` / `pure_api` 是玩家访问模式，分别对应标准 3D 视觉入口、弱图形安全入口和纯接口正式入口。
+  - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
   - `player_parity` / `headless_agent` / `debug_viewer` 是 execution lane，只描述 OpenClaw / agent 的执行或观战方式，不构成额外玩家访问模式。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 或 `debug_viewer` 直接当成“第四种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=software_safe` 且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
@@ -330,7 +331,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `renderMode=software_safe`：允许继续做最小闭环验证（连接、选择目标、`step`、新反馈）。
   - `renderMode!=software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
 - `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。制作人试玩与发布前人工验收若要进入真实产品路径，优先直接执行 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`，脚本退出时会自动关闭该浏览器会话）；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
-- agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up --no-llm`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
+- agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。
 - 防误用约束：
@@ -350,36 +351,36 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 ste
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- keygen
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 reconnect-sync --player-id player-1 --with-snapshot
 ```
-  - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；无 LLM 模式下这两类请求仍会按当前产品约束返回 `llm_mode_required`。
+  - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；当前产品设定下，只要 LLM 不可用，`step / play / gameplay_action / agent_chat / prompt_control` 都会被阻断为 `llm_mode_required` 或 `llm_init_failed`。
 - 若需要执行 pure API required/full 回归，优先运行 `./scripts/oasis7-pure-api-parity-smoke.sh`。
-  - 该回归验证的是 `pure_api` 玩家访问模式的正式可玩性，不等同于 OpenClaw `headless_agent` 回归。
+  - 该回归验证的是 `pure_api` 玩家访问模式在 active LLM access 下的正式可玩性，不等同于 OpenClaw `headless_agent` 回归。
   - required-tier 推荐 bundle 口径：
 ```bash
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
-./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --no-llm
+./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ```
   - full-tier 抽样：
 ```bash
-./scripts/oasis7-pure-api-parity-smoke.sh --tier full --bundle-dir output/release/game-launcher-local --no-llm
+./scripts/oasis7-pure-api-parity-smoke.sh --tier full --bundle-dir output/release/game-launcher-local --with-llm
 ```
   - 结果说明：
     当前脚本已覆盖 `player_gameplay`、正式 `gameplay_action` 推进、`reconnect-sync --with-snapshot` 恢复，以及 `FirstSessionLoop -> PostOnboarding -> choose_midloop_path` 的 required/full 收口路径。
-    `parity_verified` 正式判定继续以 `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md` 为准；2026-03-19 最新结论已升级为 `parity_verified`。
+    `parity_verified` 正式判定继续以 `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md` 为准；当前产品设定已把该结论收口为“仅适用于 active LLM access 路径”，若重跑 no-LLM 仅能记为 blocked/observer-debug。
 - 快速入口：
 ```bash
-./scripts/run-producer-playtest.sh --no-llm
-./scripts/run-producer-playtest.sh --no-llm --open-headed
-./scripts/worktree-harness.sh up --no-llm
+./scripts/run-producer-playtest.sh
+./scripts/run-producer-playtest.sh --open-headed
+./scripts/worktree-harness.sh up
 ./scripts/worktree-harness.sh status --json
 ./scripts/worktree-harness.sh down
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
-./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --no-llm
-./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --no-llm
-./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --no-llm
-./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --no-llm
+./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
+./scripts/viewer-post-onboarding-headless-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-software-safe-chat-regression.sh --bundle-dir output/release/game-launcher-local
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
-./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --no-llm
+./scripts/oasis7-pure-api-parity-smoke.sh --tier required --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-release-qa-loop.sh
 ./scripts/viewer-release-full-coverage.sh --quick
 ./scripts/viewer-release-art-baseline.sh
