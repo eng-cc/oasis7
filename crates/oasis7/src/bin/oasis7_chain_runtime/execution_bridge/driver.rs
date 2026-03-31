@@ -5,7 +5,9 @@ use crate::release_security_policy_for_storage_profile;
 use oasis7::consensus_action_payload::{
     decode_consensus_action_payload, ConsensusActionPayloadBody,
 };
-use oasis7::runtime::{blake3_hex, BlobStore, LocalCasStore, World as RuntimeWorld};
+use oasis7::runtime::{
+    blake3_hex, BlobStore, LocalCasStore, ReleaseSecurityPolicy, World as RuntimeWorld,
+};
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
     compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionCommitResult,
@@ -425,7 +427,7 @@ pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(RuntimeWorld::new());
+        return Ok(RuntimeWorld::new_production_hardened());
     }
     RuntimeWorld::load_from_dir(world_dir).map_err(|err| {
         format!(
@@ -434,6 +436,7 @@ pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
             err
         )
     })
+    .map(|world| world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened()))
 }
 
 pub(crate) fn persist_execution_world(

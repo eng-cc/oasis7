@@ -147,7 +147,7 @@ pub(super) fn bootstrap_runtime_world(
     let (model, _) = build_world_model(&config, &init)
         .map_err(|err| format!("runtime live bootstrap build_world_model failed: {err:?}"))?;
 
-    let mut world = RuntimeWorld::new();
+    let mut world = RuntimeWorld::new_production_hardened();
     world.set_resource_balance(ResourceKind::Electricity, 400);
     for (material, amount) in [
         ("structural_frame", 40),
@@ -334,4 +334,16 @@ pub(super) fn is_expected_disconnect_error(err: &io::Error) -> bool {
             | io::ErrorKind::UnexpectedEof
             | io::ErrorKind::NotConnected
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_runtime_world_defaults_to_production_release_policy() {
+        let (world, _) =
+            bootstrap_runtime_world(WorldScenario::Minimal).expect("bootstrap runtime live world");
+        assert!(world.release_security_policy().is_production_hardened());
+    }
 }

@@ -73,7 +73,7 @@ use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND};
 mod execution_bridge {
     use std::path::Path;
 
-    use oasis7::runtime::World as RuntimeWorld;
+    use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
     use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
     use oasis7_proto::storage_profile::StorageProfileConfig;
 
@@ -119,7 +119,7 @@ mod execution_bridge {
         let snapshot_path = world_dir.join("snapshot.json");
         let journal_path = world_dir.join("journal.json");
         if !snapshot_path.exists() || !journal_path.exists() {
-            return Ok(RuntimeWorld::new());
+            return Ok(RuntimeWorld::new_production_hardened());
         }
         RuntimeWorld::load_from_dir(world_dir).map_err(|err| {
             format!(
@@ -127,6 +127,9 @@ mod execution_bridge {
                 world_dir.display(),
                 err
             )
+        })
+        .map(|world| {
+            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
         })
     }
 }

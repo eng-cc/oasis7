@@ -164,10 +164,10 @@
 - Technical Risks:
   - 风险-1: 运行时复杂度提升导致验证成本增加。
   - 风险-2: ABI/治理策略变更引发兼容性断裂。
-  - 风险-3（2026-03-18，P0 未收口）: `TASK-WORLD_RUNTIME-043` 当前只有 GitHub-hosted `linux-x86_64` stable gate，缺少真实 Docker-capable `darwin-arm64` full-tier evidence；若不显式记录，会把“单宿主稳定”误读成“跨宿主完成”。
-  - 风险-4（2026-03-18，P0 未收口）: `ReleaseSecurityPolicy` 的生产禁 fallback / 禁本地签名 / 禁 runtime source compile 目前仍主要依赖显式调用 `enable_production_release_policy()`；若主运行入口未绑定，将导致 binary-only 保证停留在约定层而非默认产品路径。
-  - 风险-5（2026-03-31，P0 新增）: `apply_domain_event*` 的 replay / preflight / 恢复链路仍残留 `expect("... prechecked")` 和 `expect("... must be handled")` 风格假设；一旦 journal、迁移样本或状态前置条件漂移，故障会从 `WorldError` 退化为 panic。
-  - 风险-6（2026-03-31，P1 新增）: runtime 热路径存在多处超 1200 行或逼近上限的 Rust 文件，已违反工程治理线并放大规则改动的认知与回归半径；若继续在这些文件上堆叠逻辑，后续 determinism/replay 修复成本会持续上升。
+  - 风险-3（2026-03-18 记录，2026-03-31 复核，P0 未收口）: `TASK-WORLD_RUNTIME-043` 当前只有 GitHub-hosted `linux-x86_64` stable gate；本地 `runtime_engineer` 复核环境为 `Linux x86_64 + Docker(linux/x86_64)`，只能验证导入/打包/proof 工具链，仍无法产出真实 Docker-capable `darwin-arm64` full-tier evidence，因此跨宿主 closure 继续保持外部 live 证据阻塞态。
+  - 风险-4（2026-03-18 记录，2026-03-31 已收口）: `ReleaseSecurityPolicy` 的生产禁 fallback / 禁本地签名 / 禁 runtime source compile 不再依赖额外 `enable_production_release_policy()` 约定；production-facing `chain runtime execution world` 装载、`reward runtime worker`、`viewer runtime_live` bootstrap 与 `governance_registry_import` 新建/加载路径均已默认绑定 hardened policy。
+  - 风险-5（2026-03-31 已收口）: `apply_domain_event_gameplay*` 中 replay / preflight / 恢复链路残留的 panic-style `expect(...)` 已改为结构化 `WorldError`，损坏事件与缺失 actor 回归已补齐，不再把状态漂移故障降级为 panic。
+  - 风险-6（2026-03-31 已收口）: runtime 热路径超限文件已按语义边界拆分，`action_to_event_core.rs` 与 `apply_domain_event_main_token.rs` 均已回到治理线内，并通过编译/定向回归验证“拆文件不改语义”。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

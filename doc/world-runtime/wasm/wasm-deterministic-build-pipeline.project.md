@@ -31,7 +31,7 @@
 - `crates/oasis7/src/runtime/world/release_manifest.rs`
 
 ## 状态
-- 更新日期: 2026-03-18
+- 更新日期: 2026-03-31
 - 当前阶段: WDBP-3 跨宿主 evidence 收口中（WDBP-3.1 / WDBP-3.3 已完成，WDBP-4 已完成）
 - WDBP-3 剩余设计切片:
   - `WDBP-3.2`: 需要一条真实 Docker-capable `darwin-arm64` summary/evidence 输入，并通过节点侧固定入口生成正式 proof payload / attestation；当前剩余的是 live 证据本身，不是导入、打包或提交工具。
@@ -60,3 +60,5 @@
   - `compile_module_artifact_from_source` 现已完成 production gate：`ReleaseSecurityPolicy` 新增 `allow_runtime_source_compile`，production 默认关闭该路径并要求改走 external Docker builder + deploy binary；dev/test 保留该 action 以支撑现有回归。
   - `oasis7_chain_runtime` 现已把 `release_default` storage profile 绑定到 hardened `ReleaseSecurityPolicy`，并通过 `/v1/chain/status` 输出 effective policy；`NodeRuntimeExecutionDriver::new_with_storage_profile` 会在装载 execution world 时同步应用该 policy。
   - `scripts/module-release-node-acceptance.sh` 现已新增 `required_release_policy` 步骤，并在 `.tmp/module_release_node_acceptance/20260318-134705/summary.json` 留下 production policy binding/status 证据。
+  - `2026-03-31` 已补完 `WDBP-3.3` 的 runtime 侧余量审计：`viewer runtime_live` bootstrap、`governance_registry_import` 新建/加载 world、`reward_runtime_worker` 以及 `execution_bridge::load_execution_world` 的缺档案/旧样本装载路径现也统一切到 hardened `ReleaseSecurityPolicy`，避免 binary-only 语义只停留在 chain runtime 主入口。
+  - `2026-03-31` 在当前 `Linux x86_64 + Docker(linux/x86_64)` 工位复核后确认，仓库内已不存在缺失的 `darwin-arm64` 导入/打包/attestation tooling；`WDBP-3.2` 剩余阻塞仅是真实 Docker-capable `darwin-arm64` live summary / proof 输入本身。

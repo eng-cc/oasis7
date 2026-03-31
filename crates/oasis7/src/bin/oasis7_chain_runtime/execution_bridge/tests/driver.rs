@@ -35,6 +35,21 @@ fn execution_world_persistence_roundtrip() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[test]
+fn load_execution_world_defaults_to_hardened_release_policy() {
+    let dir = temp_dir("execution-world-release-policy");
+    let missing_world = load_execution_world(dir.as_path()).expect("load missing world");
+    assert!(missing_world.release_security_policy().is_production_hardened());
+
+    let legacy_world_dir = dir.join("legacy");
+    let legacy_world = RuntimeWorld::new();
+    persist_execution_world(legacy_world_dir.as_path(), &legacy_world).expect("persist world");
+    let loaded_world = load_execution_world(legacy_world_dir.as_path()).expect("load world");
+    assert!(loaded_world.release_security_policy().is_production_hardened());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
 fn tick_manifest(wasm_hash: &str) -> ModuleManifest {
     ModuleManifest {
         module_id: "m.test.tick".to_string(),

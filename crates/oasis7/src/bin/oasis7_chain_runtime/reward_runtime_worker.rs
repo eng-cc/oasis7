@@ -236,7 +236,7 @@ fn reward_runtime_loop(
             }
         };
 
-    let mut reward_world = RuntimeWorld::new();
+    let mut reward_world = RuntimeWorld::new_production_hardened();
     reward_world.set_reward_asset_config(config.reward_asset_config.clone());
     reward_world.set_reward_signature_governance_policy(RewardSignatureGovernancePolicy {
         require_mintsig_v2: true,

@@ -5,8 +5,9 @@ use std::process;
 
 use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
-    GovernanceThresholdSignerPolicy, World, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
-    MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
+    GovernanceThresholdSignerPolicy, ReleaseSecurityPolicy, World,
+    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
+    MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
 };
 use serde::{Deserialize, Serialize};
 
@@ -128,9 +129,12 @@ fn load_or_create_world(world_dir: &Path) -> Result<World, String> {
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(World::new());
+        return Ok(World::new_production_hardened());
     }
     World::load_from_dir(world_dir)
+        .map(|world| {
+            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+        })
         .map_err(|err| format!("load world {} failed: {err:?}", world_dir.display()))
 }
 
@@ -640,5 +644,24 @@ mod tests {
         })
         .expect_err("manifest threshold mismatch must fail");
         assert!(err.contains("manifest slot threshold mismatch"), "{err}");
+    }
+
+    #[test]
+    fn load_or_create_world_hardens_release_policy_for_new_and_existing_worlds() {
+        let root = temp_dir("release-policy");
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let world_dir = root.join("world");
+
+        let created = super::load_or_create_world(world_dir.as_path()).expect("create world");
+        assert!(created.release_security_policy().is_production_hardened());
+
+        let legacy_dir = root.join("legacy-world");
+        let legacy = World::new();
+        legacy
+            .save_to_dir(legacy_dir.as_path())
+            .expect("save legacy world");
+
+        let loaded = super::load_or_create_world(legacy_dir.as_path()).expect("load world");
+        assert!(loaded.release_security_policy().is_production_hardened());
     }
 }

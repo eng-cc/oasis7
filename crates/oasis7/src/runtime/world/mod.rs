@@ -296,6 +296,14 @@ impl World {
         Self::new_with_state(WorldState::default())
     }
 
+    pub fn new_with_release_security_policy(policy: ReleaseSecurityPolicy) -> Self {
+        Self::new().with_release_security_policy(policy)
+    }
+
+    pub fn new_production_hardened() -> Self {
+        Self::new_with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+    }
+
     pub fn new_with_state(mut state: WorldState) -> Self {
         state.migrate_compat_material_ledgers();
         state
@@ -367,6 +375,11 @@ impl World {
             builtin_release_manifest: BuiltinReleaseManifestState::default(),
             release_security_policy: ReleaseSecurityPolicy::default(),
         }
+    }
+
+    pub fn with_release_security_policy(mut self, policy: ReleaseSecurityPolicy) -> Self {
+        self.release_security_policy = policy;
+        self
     }
 
     // ---------------------------------------------------------------------
