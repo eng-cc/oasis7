@@ -1,0 +1,26 @@
+task_id: TASK-PM-0014
+title: "Freeze Xiaohongshu ninth post pack for GUI death stance"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-gui-death-post-pack
+execution_log_path: .pm/tasks/TASK-PM-0014.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
+  - doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "Ninth Xiaohongshu post pack freezes title, body, interaction prompt, keywords, and boundary notes for the GUI stance topic."
+  - "readme module tracking and channel entry docs are updated to trace the new post pack without unsafe release claims."
+handoff_to: []
+updated_at: 2026-04-01T22:53:43+08:00
+last_started_at: 2026-04-01T22:42:39+08:00
+last_closed_at: 2026-04-01T22:53:43+08:00

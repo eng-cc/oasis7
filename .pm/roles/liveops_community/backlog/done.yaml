@@ -14,3 +14,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0012.yaml
+  - task_id: TASK-PM-0014
+    title: "Freeze Xiaohongshu ninth post pack for GUI death stance"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Ninth Xiaohongshu post pack freezes title, body, interaction prompt, keywords, and boundary notes for the GUI stance topic."
+      - "readme module tracking and channel entry docs are updated to trace the new post pack without unsafe release claims."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0014.yaml

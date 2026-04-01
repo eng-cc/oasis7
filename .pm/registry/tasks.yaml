@@ -1,6 +1,6 @@
 version: 1
 task_id_prefix: TASK-PM
-next_sequence: 14
+next_sequence: 15
 tasks:
   - task_id: TASK-PM-0001
     owner_role: producer_system_designer
@@ -93,3 +93,10 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-01T22:29:41+08:00
+  - task_id: TASK-PM-0014
+    owner_role: liveops_community
+    task_path: .pm/tasks/TASK-PM-0014.yaml
+    status: done
+    priority: P2
+    source_signal: null
+    updated_at: 2026-04-01T22:53:43+08:00

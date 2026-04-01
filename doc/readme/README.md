@@ -37,6 +37,7 @@
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
+  - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
   - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
   - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md`
   - `doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md`
@@ -73,6 +74,7 @@
 - `doc/readme/governance/readme-xiaohongshu-ai-persona-carousel-pack-2026-03-30.md`
 - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
 - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md`
+- `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 
 ## 根目录收口
