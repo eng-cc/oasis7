@@ -1,8 +1,8 @@
 use oasis7_wasm_sdk::{
     export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        decode_action, decode_input, empty_output, encode_output, ModuleCallInput, ModuleEmit,
+        ModuleOutput,
     },
     LifecycleStage, WasmModuleLifecycle,
 };
@@ -148,7 +148,7 @@ fn emit_recipe_plan(plan: RecipeExecutionPlanData) -> Vec<u8> {
 }
 
 fn build_recipe_output(input: &ModuleCallInput) -> Vec<u8> {
-    let Some(request) = decode_action::<RecipeExecutionRequestData>(input) else {
+    let Ok(request) = decode_action::<RecipeExecutionRequestData>(input) else {
         return encode_output(empty_output());
     };
 

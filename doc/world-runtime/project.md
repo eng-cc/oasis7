@@ -182,6 +182,31 @@
 - [x] TASK-WORLD_RUNTIME-054 (PRD-WORLD_RUNTIME-023) [test_tier_required]: 盘点 `World::new()` / `RuntimeWorld::new()` 被生产或默认入口直接消费的路径，将 hardened `ReleaseSecurityPolicy` 绑定前移到入口/构造层，消除对额外 `enable_production_release_policy()` 调用的约定式依赖。
 - [x] TASK-WORLD_RUNTIME-055 (PRD-WORLD_RUNTIME-024) [test_tier_required]: 将 `apply_domain_event_gameplay*` 中 replay/apply 热路径残留的 `expect("... prechecked")` 改为结构化 `WorldError`，并补齐缺失 actor/损坏事件回归，确保恢复与 preflight 失败不会退化为 panic。
 - [x] TASK-WORLD_RUNTIME-056 (PRD-WORLD_RUNTIME-025) [test_tier_required + test_tier_full]: 按 runtime 热路径治理专项拆分超限 Rust 文件，先收口 `action_to_event_core.rs`、`apply_domain_event_main_token.rs` 与 `state.rs` 邻近热点，再复跑 determinism/replay/persistence 回归，确保“拆文件”不引入语义漂移。
+- [x] TASK-WORLD_RUNTIME-057 (PRD-WORLD_RUNTIME-021/022/025) [test_tier_required]: 修复 GitHub CI 中的 runtime/WASM 回归漂移，收口 `main_token.rs` 行数超限、`m4` builtin 模板 `decode_action` API 漂移，以及 GitHub-hosted `m1/m4/m5` builtin wasm canonical hash/identity 清单陈旧问题。
+  - 产物文件:
+    - `crates/oasis7/src/runtime/tests/main_token.rs`
+    - `crates/oasis7/src/runtime/tests/main_token_core_tests.rs`
+    - `crates/oasis7/src/runtime/tests/main_token_governance_tests.rs`
+    - `crates/oasis7_builtin_wasm_modules/_templates/m4_factory_module_template.rs`
+    - `crates/oasis7_builtin_wasm_modules/_templates/m4_recipe_module_template.rs`
+    - `crates/oasis7_builtin_wasm_modules/_templates/m4_product_module_template.rs`
+    - `crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.sha256`
+    - `crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`
+    - `crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256`
+    - `crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.identity.json`
+    - `crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256`
+    - `crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.identity.json`
+    - `crates/oasis7/src/runtime/tests/builtin_wasm_identity.rs`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/check-rust-file-size.sh`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 main_token_ --tests`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 builtin_identity_manifest --tests`
+    - `env -u RUSTC_WRAPPER cargo check --manifest-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml`
+    - `env -u RUSTC_WRAPPER cargo check --manifest-path crates/oasis7_builtin_wasm_modules/m4_recipe_smelter_iron_ingot/Cargo.toml`
+    - `env -u RUSTC_WRAPPER cargo check --manifest-path crates/oasis7_builtin_wasm_modules/m4_product_material_iron_ingot/Cargo.toml`
+    - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m1 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`
+    - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m4 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.identity.json`
+    - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m5 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.identity.json`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -197,9 +222,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-31
-- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~056` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence 外部阻塞。）
+- 更新日期: 2026-04-01
+- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~057` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `TASK-WORLD_RUNTIME-057`（已把 `main_token.rs` 拆成语义化 include 子文件，修复 `m4` builtin 模板对 `decode_action::<...>` 的 `Result` 处理，并在 Docker 代理恢复后按本地 canonical builder 复跑并回写 `m1/m4/m5` builtin wasm canonical hash/identity 与 `builtin_wasm_identity.rs` 常量，收口最新 required CI 失败项。）
 - 最新完成: `TASK-WORLD_RUNTIME-056`（已将 `action_to_event_core.rs` 中 main-token 热路径拆到 `action_to_event_core_main_token.rs`，并把 `apply_domain_event_main_token.rs` 进一步拆成 `*_genesis.rs`、`*_economy.rs`、`*_restricted_claims.rs`；超限文件已回到治理线内，并保持编译与定向回归通过。）
 - 最新完成: `TASK-WORLD_RUNTIME-054`（已新增 `World::new_production_hardened()` / `with_release_security_policy()`，并把 `chain runtime execution world` 装载、`reward runtime worker`、`viewer runtime_live` bootstrap、`governance_registry_import` 的新建/加载路径切到 hardened `ReleaseSecurityPolicy` 默认绑定。）
 - 最新完成: `TASK-WORLD_RUNTIME-055`（已将 `apply_domain_event_gameplay*` 中残留的 `expect("... prechecked")` 改为结构化 `AgentNotFound` / `WorldError`，并补齐缺失 claimer / operator 的损坏事件回归，避免 replay、恢复或 preflight 在状态漂移时 panic。）
@@ -220,6 +246,7 @@
 - 实施备注:
   - `TASK-WORLD_RUNTIME-042` 已完成：新增 `docker/wasm-builder/Dockerfile`、`docker/wasm-builder/README.md` 与 Docker-only `scripts/build-wasm-module.sh` wrapper；当前 canonical build 平台固定为 `linux-x86_64`（Docker `linux/amd64`），脚本不再保留 host-native fallback。
   - `TASK-WORLD_RUNTIME-043` 进行中：`tools/wasm_build_suite` 已输出 `build receipt` 与 `source_hash/build_manifest_hash`；`sync_builtin_wasm_identity` 已切换为 receipt 驱动；builtin `m1/m4/m5` manifest/identity 已收敛为单 canonical token `linux-x86_64=<sha256>`；`scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` 已纳入 `receipt_evidence + identity_build_recipe` 对账；runtime module release attestation/apply gate 已显式校验 `builder_image_digest + container_platform + canonicalizer_version` 与 manifest identity 一致性；`ModuleReleaseManifestMappingState`、`scripts/module-release-node-attestation-flow.sh` 与 `scripts/module-release-node-acceptance.sh` 已补齐 release evidence 摘要、canonical proof input、submit API 与 receipt mismatch 阻断证据；`2026-03-29` 已追加一次 GitHub-hosted drift repair，补齐 `m1` canonical hash token 漂移与 `builtin_wasm_identity.rs` 的 stale `m1/m5` hash 常量；`2026-03-31` 在当前 `Linux x86_64 + Docker(linux/x86_64)` runtime 工位复核后确认：导入/打包/proof 流程已闭环，但本地仍无法生成真实 `darwin-arm64` runner summary，因此剩余阻塞只是真实 Docker-capable `darwin-arm64` 节点对真实 `request_id` 产出并提交正式 attestation proof。
+  - `TASK-WORLD_RUNTIME-057` 已完成：补齐 GitHub-hosted drift repair 的第二轮收口，`main_token.rs` 已拆为语义化 include 子文件以避开 `check-rust-file-size.sh` 阻断；`m4` builtin 模板已切到 `decode_action::<...>` 的 `Result` 口径；在临时恢复 Docker daemon 代理后，已本地复跑并确认 `m1/m5` `--check` 通过，且把实际暴露出来的 `m4` 全量 canonical hash/source_hash/identity 漂移一并同步到 tracked manifests 与 `builtin_wasm_identity.rs`。
   - `TASK-WORLD_RUNTIME-054` 已完成：runtime world 新增 `new_with_release_security_policy` / `new_production_hardened` / `with_release_security_policy` 构造辅助；`execution_bridge::load_execution_world` 缺档案 fallback 与已落盘 world 装载都会强制写回 hardened policy，`reward_runtime_worker`、`viewer runtime_live` bootstrap 与 `governance_registry_import` 也已切到 production hardened 默认路径。
   - `TASK-WORLD_RUNTIME-056` 已完成：`crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs` 已从 `1286` 行降到 `679` 行，`crates/oasis7/src/runtime/state/apply_domain_event_main_token.rs` 已从 `1205` 行降到 `181` 行；拆分出的 helper 文件按 main-token / genesis / economy / restricted-claims 边界组织，后续热路径维护半径显著收窄。
   - `TASK-WORLD_RUNTIME-044` 已完成：`ReleaseSecurityPolicy` 新增 `allow_runtime_source_compile`，production policy 默认关闭 runtime 内源码编译；`CompileModuleArtifactFromSource` 在 production 下会直接拒绝并提示改走 external Docker builder + `DeployModuleArtifact`，从而把 Docker daemon 依赖移出 runtime 热路径。

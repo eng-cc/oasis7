@@ -1,4 +1,19 @@
 version: 1
 role: runtime_engineer
 status: done
-tasks: []
+tasks:
+  - task_id: TASK-PM-0006
+    title: "Fix GitHub CI rust-size gate, m4 template drift, and builtin wasm manifest drift"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/world-runtime/prd.md
+    acceptance:
+      - "scripts/check-rust-file-size.sh passes without new oversized Rust files"
+      - "m4 builtin template cargo checks pass after decode_action Result API handling is updated"
+      - "builtin wasm manifest/hash drift for GitHub-hosted m1/m5 and locally revalidated m4 canonical outputs is reconciled in tracked manifests and identity tests"
+      - "required CI-equivalent local validation passes for touched paths"
+    handoff_to:
+      - wasm_platform_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0006.yaml

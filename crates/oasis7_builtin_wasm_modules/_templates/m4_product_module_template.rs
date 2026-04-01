@@ -1,8 +1,8 @@
 use oasis7_wasm_sdk::{
     export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        decode_action, decode_input, empty_output, encode_output, ModuleCallInput, ModuleEmit,
+        ModuleOutput,
     },
     LifecycleStage, WasmModuleLifecycle,
 };
@@ -27,7 +27,7 @@ struct ProductValidationData {
 }
 
 fn build_product_output(input: &ModuleCallInput) -> Vec<u8> {
-    let stack = decode_action::<MaterialStackData>(input).unwrap_or_else(|| MaterialStackData {
+    let stack = decode_action::<MaterialStackData>(input).unwrap_or_else(|_| MaterialStackData {
         kind: PRODUCT_ID.to_string(),
         amount: 0,
     });

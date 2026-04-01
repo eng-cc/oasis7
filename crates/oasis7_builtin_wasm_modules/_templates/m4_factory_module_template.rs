@@ -1,8 +1,8 @@
 use oasis7_wasm_sdk::{
     export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        decode_action, decode_input, empty_output, encode_output, ModuleCallInput, ModuleEmit,
+        ModuleOutput,
     },
     LifecycleStage, WasmModuleLifecycle,
 };
@@ -121,7 +121,7 @@ fn emit_factory_decision(decision: FactoryBuildDecisionData) -> Vec<u8> {
 }
 
 fn build_factory_output(input: &ModuleCallInput) -> Vec<u8> {
-    let Some(request) = decode_action::<FactoryBuildRequestData>(input) else {
+    let Ok(request) = decode_action::<FactoryBuildRequestData>(input) else {
         return encode_output(empty_output());
     };
 
