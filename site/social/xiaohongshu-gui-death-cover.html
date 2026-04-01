@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu GUI Death Cover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f5f2eb;
+        --paper-deep: #ece7de;
+        --ink: #111111;
+        --muted: rgba(17, 17, 17, 0.5);
+        --line: rgba(17, 17, 17, 0.16);
+        --accent: #d94c2f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(180deg, #f7f4ee 0%, #ebe5da 100%);
+        color: var(--ink);
+        font-family: "Noto Serif SC", serif;
+      }
+
+      .cover {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 16% 14%, rgba(217, 76, 47, 0.07), transparent 22%),
+          linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+      }
+
+      .noise,
+      .guides {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .noise {
+        opacity: 0.1;
+        background-image:
+          radial-gradient(circle at 22% 24%, rgba(0, 0, 0, 0.55) 0.7px, transparent 0.8px),
+          radial-gradient(circle at 78% 78%, rgba(0, 0, 0, 0.3) 0.7px, transparent 0.8px);
+        background-size: 30px 30px, 42px 42px;
+      }
+
+      .guides::before,
+      .guides::after {
+        content: "";
+        position: absolute;
+        background: var(--line);
+      }
+
+      .guides::before {
+        width: 1px;
+        top: 120px;
+        bottom: 120px;
+        left: 146px;
+      }
+
+      .guides::after {
+        height: 1px;
+        left: 146px;
+        right: 88px;
+        bottom: 218px;
+      }
+
+      .frame-mark {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        border-left: 2px solid var(--ink);
+        border-top: 2px solid var(--ink);
+        top: 96px;
+        left: 122px;
+      }
+
+      .frame-mark.bottom {
+        top: auto;
+        left: auto;
+        right: 64px;
+        bottom: 194px;
+        border-left: 0;
+        border-top: 0;
+        border-right: 2px solid var(--ink);
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .meta {
+        position: absolute;
+        top: 102px;
+        right: 88px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .hero {
+        position: absolute;
+        left: 172px;
+        right: 110px;
+        top: 210px;
+      }
+
+      .eyebrow {
+        margin: 0 0 46px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 136px;
+        line-height: 1.02;
+        letter-spacing: -0.08em;
+        font-weight: 900;
+      }
+
+      .hero .indent {
+        display: block;
+        margin-left: 148px;
+      }
+
+      .divider {
+        width: 148px;
+        height: 6px;
+        margin: 70px 0 42px;
+        background: var(--ink);
+      }
+
+      .subcopy {
+        max-width: 560px;
+        margin: 0;
+        font-size: 34px;
+        line-height: 1.6;
+        color: rgba(17, 17, 17, 0.78);
+      }
+
+      .footer {
+        position: absolute;
+        left: 172px;
+        right: 110px;
+        bottom: 122px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 24px;
+      }
+
+      .footer-note {
+        max-width: 420px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        line-height: 1.8;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .signal {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .signal::before {
+        content: "";
+        width: 46px;
+        height: 1px;
+        background: var(--ink);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover">
+      <div class="noise"></div>
+      <div class="guides"></div>
+      <div class="frame-mark"></div>
+      <div class="frame-mark bottom"></div>
+
+      <div class="meta">OASIS7 / XHS 09</div>
+
+      <section class="hero">
+        <p class="eyebrow">Not Less Play / More Judgment</p>
+        <h1>
+          GUI已死？
+          <span class="indent">这次我是</span>
+          <span class="indent">认同的</span>
+        </h1>
+        <div class="divider"></div>
+        <p class="subcopy">
+          不是屏幕没了。<br />
+          是它不再是主交互层。
+        </p>
+      </section>
+
+      <footer class="footer">
+        <div class="footer-note">
+          Operation fades.<br />
+          Judgment stays.
+        </div>
+        <div class="signal">low gui cover</div>
+      </footer>
+    </main>
+  </body>
+</html>

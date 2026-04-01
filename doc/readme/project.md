@@ -586,6 +586,19 @@
     - `rg -n "GUI已死？这次我是认同的|GUI 不再适合当第一交互层|操作权|判断权|观察层|校正层|反馈层" doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-054 (PRD-README-034) [test_tier_required]: 为小红书第九篇补齐极简封面图 HTML 与 PNG，采用低 GUI 感的大留白判断海报方向，强化“GUI 退到二线”而不是“界面彻底消失”的视觉收束。
+  - 产物文件:
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
+    - `site/social/xiaohongshu-gui-death-cover.html`
+    - `site/social/xiaohongshu-gui-death-cover.png`
+    - `.pm/tasks/TASK-PM-0017.yaml`
+    - `.pm/tasks/TASK-PM-0017.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "xiaohongshu-gui-death-cover.html|xiaohongshu-gui-death-cover.png|极简 editorial|低 GUI 感" doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md site/social/xiaohongshu-gui-death-cover.html`
+    - `file site/social/xiaohongshu-gui-death-cover.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -601,6 +614,7 @@
 - 更新日期: 2026-04-01
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-054`（已为小红书第九篇补齐极简封面 HTML 与 PNG，并把视觉语言收口到低 GUI 感的大留白判断海报。）
 - 最新完成: `TASK-README-053`（已为小红书第九篇固定“GUI已死？这次我是认同的”的标题、正文、互动问题、关键词与“GUI 退到二线 / 判断权高于操作权”的表达边界。）
 - 最新完成: `TASK-README-052`（已为小红书第八篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并沿用工业审查板语言完成收束。）
 - 最新完成: `TASK-README-051`（已为小红书第八篇补齐独立封面 HTML 与 PNG，并将视觉语言切到更像项目审查板的 build review wall 风格。）

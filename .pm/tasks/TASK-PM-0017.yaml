@@ -1,0 +1,26 @@
+task_id: TASK-PM-0017
+title: "Add minimal cover art for Xiaohongshu GUI death post"
+owner_role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-gui-death-cover
+execution_log_path: .pm/tasks/TASK-PM-0017.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
+  - doc/readme/project.md
+  - doc/readme/prd.md
+doc_refs:
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md
+  - site/social/xiaohongshu-gui-death-cover.html
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "The ninth Xiaohongshu post pack points to a minimal cover HTML and PNG for the GUI stance topic."
+  - "The cover renders as a low-GUI, minimalist composition and passes doc governance plus basic asset existence checks."
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-01T23:06:36+08:00
+last_started_at: 2026-04-01T22:57:49+08:00
+last_closed_at: 2026-04-01T23:06:36+08:00

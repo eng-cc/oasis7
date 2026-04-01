@@ -15,3 +15,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0011.yaml
+  - task_id: TASK-PM-0017
+    title: "Add minimal cover art for Xiaohongshu GUI death post"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "The ninth Xiaohongshu post pack points to a minimal cover HTML and PNG for the GUI stance topic."
+      - "The cover renders as a low-GUI, minimalist composition and passes doc governance plus basic asset existence checks."
+    handoff_to:
+      - liveops_community
+    status: done
+    task_path: .pm/tasks/TASK-PM-0017.yaml
