@@ -227,7 +227,18 @@ TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --source-ref doc/devlog/2026-03-31.md \
   --json)"
 TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_id"])' <<<"$TASK_JSON")"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status committed >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status blocked >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
+  --current-stage internal_playable_alpha_late \
+  --claim-envelope internal_only \
+  --decision-date 2026-03-31 \
+  --gate-id GATE-SMOKE-001 \
+  --gate-status blocked \
+  --lane-status qa=blocked \
+  --blocking-task "$TASK_ID" \
+  --source-ref doc/devlog/2026-03-31.md >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 

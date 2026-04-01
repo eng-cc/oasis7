@@ -1,0 +1,21 @@
+task_id: TASK-PM-0008
+title: "修复 .pm full-tier memory-regression-smoke 回归"
+owner_role: producer_system_designer
+worktree_hint: engineering-pm-lint-followup
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/pm/memory-regression-smoke.sh
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+acceptance:
+  - "memory-regression-smoke passes in task worktree"
+  - "pm lint and doc-governance remain green after the fix"
+handoff_to: []
+updated_at: 2026-04-01T20:10:32+08:00
+last_started_at: 2026-04-01T20:06:11+08:00
+last_closed_at: 2026-04-01T20:10:32+08:00

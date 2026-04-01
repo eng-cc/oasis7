@@ -1,6 +1,6 @@
 version: 1
 task_id_prefix: TASK-PM
-next_sequence: 8
+next_sequence: 9
 tasks:
   - task_id: TASK-PM-0001
     owner_role: producer_system_designer
@@ -51,3 +51,10 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-01T20:01:57+08:00
+  - task_id: TASK-PM-0008
+    owner_role: producer_system_designer
+    task_path: .pm/tasks/TASK-PM-0008.yaml
+    status: done
+    priority: P2
+    source_signal: null
+    updated_at: 2026-04-01T20:10:32+08:00
