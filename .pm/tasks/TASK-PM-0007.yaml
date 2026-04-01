@@ -2,6 +2,7 @@ task_id: TASK-PM-0007
 title: "统一 subagent review 默认流程口径"
 owner_role: producer_system_designer
 worktree_hint: engineering-remove-subagent-exception-boundary
+execution_log_path: .pm/tasks/TASK-PM-0007.execution.md
 status: done
 priority: P2
 source_signal: null

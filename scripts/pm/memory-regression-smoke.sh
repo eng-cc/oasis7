@@ -56,10 +56,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMPDIR/scripts" "$TMPDIR/doc/devlog"
+mkdir -p "$TMPDIR/scripts"
 cp -R "$ROOT_DIR/.pm" "$TMPDIR/.pm"
 cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
+mkdir -p "$TMPDIR/.pm/evidence" "$TMPDIR/.pm/shared/memory" "$TMPDIR/.pm/stage"
 
 python3 - "$TMPDIR" <<'PY'
 from pathlib import Path
@@ -90,15 +91,7 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     encoding="utf-8",
 )
 
-(root / "doc/devlog/2026-03-31.md").write_text(
-    """# 2026-03-31
-
-## 10:00:00 CST / qa_engineer
-- 完成内容: memory regression smoke fixture.
-- 遗留事项: none.
-""",
-    encoding="utf-8",
-)
+(root / ".pm/evidence/bootstrap.md").write_text("# bootstrap evidence\n", encoding="utf-8")
 
 (root / ".pm/roles/qa_engineer/memory/active.yaml").write_text(
     """version: 1
@@ -110,7 +103,7 @@ records:
     topic: viewer.startup.blocker
     summary: "viewer startup blocker still needs fresh review"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - failure_signature
       - gate
@@ -132,7 +125,7 @@ records:
     topic: viewer.startup.blocker
     summary: "older viewer startup blocker signature"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-10T09:00:00+08:00
@@ -156,7 +149,7 @@ records:
     topic: stage.current
     summary: "current stage remains internal_playable_alpha_late"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - stage
     effective_at: 2026-03-31T10:00:00+08:00
@@ -177,7 +170,7 @@ records:
     topic: gate.claim_envelope
     summary: "claim envelope remains internal_only"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - claim_envelope
     effective_at: 2026-03-31T10:00:00+08:00
@@ -224,9 +217,22 @@ TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --owner-role qa_engineer \
   --title "investigate stale viewer blocker" \
   --priority P1 \
-  --source-ref doc/devlog/2026-03-31.md \
+  --source-ref .pm/evidence/bootstrap.md \
   --json)"
 TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_id"])' <<<"$TASK_JSON")"
+TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$TASK_JSON")"
+cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
+# $TASK_ID Execution Log
+
+- task_id: $TASK_ID
+- title: investigate stale viewer blocker
+- owner_role: qa_engineer
+- worktree_hint: null
+
+## 2026-03-31 10:00:00 CST / qa_engineer
+- 完成内容: memory regression smoke fixture.
+- 遗留事项: stale blocker still needs review.
+EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status blocked >/dev/null
@@ -238,7 +244,7 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --gate-status blocked \
   --lane-status qa=blocked \
   --blocking-task "$TASK_ID" \
-  --source-ref doc/devlog/2026-03-31.md >/dev/null
+  --source-ref "$TASK_LOG_PATH" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 
@@ -298,7 +304,7 @@ text += """  - id: MEM-QA-0003
     topic: viewer.startup.blocker
     summary: "duplicate blocker topic"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-31T11:00:00+08:00
@@ -335,7 +341,7 @@ records:
     topic: viewer.startup.blocker
     summary: "viewer startup blocker still needs fresh review"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - failure_signature
       - gate
@@ -358,7 +364,7 @@ records:
     topic: viewer.startup.blocker
     summary: "older viewer startup blocker signature"
     source_refs:
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/TASK-PM-0001.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-10T09:00:00+08:00

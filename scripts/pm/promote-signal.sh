@@ -13,7 +13,7 @@ Append one signal to .pm/inbox/signals.jsonl. When --create-task is supplied, al
 create a candidate task through ./scripts/pm/new-task.sh.
 
 Required:
-  --source-type <type>        e.g. devlog, incident, qa_block, community_feedback
+  --source-type <type>        e.g. task_execution_log, incident, qa_block, community_feedback
   --source-ref <path>         Primary source reference
   --role-hint <role>          Canonical role owner hint
   --severity <level>          low | medium | high | critical

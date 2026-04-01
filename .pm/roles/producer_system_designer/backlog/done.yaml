@@ -95,3 +95,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0008.yaml
+  - task_id: TASK-PM-0009
+    title: "将执行日志改为按任务归档"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+      - doc/engineering/prd.md
+    acceptance:
+      - "执行日志 canonical 位置改为 task-local 文件"
+      - "workflow-report/lint/smoke 使用 task-local log 口径"
+      - "AGENTS.md 与 engineering/self-evolution 文档不再要求集中式按日 devlog"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0009.yaml

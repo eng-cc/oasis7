@@ -2,6 +2,7 @@ task_id: TASK-PM-0006
 title: "Fix GitHub CI rust-size gate, m4 template drift, and builtin wasm manifest drift"
 owner_role: runtime_engineer
 worktree_hint: world-runtime-ci-fix-2026-04-01
+execution_log_path: .pm/tasks/TASK-PM-0006.execution.md
 status: done
 priority: P1
 source_signal: null

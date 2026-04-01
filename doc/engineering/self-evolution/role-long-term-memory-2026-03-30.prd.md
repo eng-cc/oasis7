@@ -8,12 +8,12 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 即使 `.pm/` 文件化项目管理层落地，若“长期 memory”只被笼统定义为 role memory 文件，而没有单独冻结对象模型、promote 规则、`superseded` 生命周期和查询边界，它很容易退化成另一份 `devlog`、另一份 task list，或另一份无法稳定被脚本消费的自由文本笔记。
+- Problem Statement: 即使 `.pm/` 文件化项目管理层落地，若“长期 memory”只被笼统定义为 role memory 文件，而没有单独冻结对象模型、promote 规则、`superseded` 生命周期和查询边界，它很容易退化成另一份 task execution log、另一份 task list，或另一份无法稳定被脚本消费的自由文本笔记。
 - Proposed Solution: 在 `engineering/self-evolution` 下新增“角色长期记忆自建方案”专题，单独冻结长期 memory 的目标、对象层次、状态机、promotion/supersede 规则、字段 schema、脚本契约和验证口径。该专题明确长期 memory 是“结构化的、可审计的、以 source-backed 结论为核心的项目语义层”，不承担正式 PRD 真值，也不承担任务执行真值。
 - Success Criteria:
   - SC-1: 首批 7 个标准角色全部具备结构一致的长期 memory 容器，且每条 active 记录 100% 带 `id`、`role`、`topic`、`summary`、`source_refs`、`effective_at`、`last_reviewed_at`、`status`。
   - SC-2: 被新结论取代的记录 100% 走 `superseded` 生命周期，带 `superseded_by` 和 `superseded_at`，不得原地覆盖丢失历史。
-  - SC-3: `devlog -> signal -> memory` 的提升规则明确，长期 memory 只接受裁决、失败签名、稳定模式、阶段判断、跨天约束等高价值语义，不接收一次性流水操作。
+  - SC-3: `task execution log -> signal -> memory` 的提升规则明确，长期 memory 只接受裁决、失败签名、稳定模式、阶段判断、跨天约束等高价值语义，不接收一次性流水操作。
   - SC-3A: 7 个标准角色 100% 具备各自的 `topic` allowlist 草案、允许使用的 `promotion_reason` 范围与反例，避免长期 memory 退化成“按人自由发挥”的笔记池。
   - SC-4: 角色 memory 的查询视图可被脚本在 1 次扫描内按 `role/topic/status` 枚举，并可生成 active/superseded 报表。
   - SC-4A: `workflow-report --phase close` 100% 暴露统一“记忆抽取三问” checklist：是否跨任务复用、是否能避免其他 owner 重复踩坑、是否影响 PRD/实现/测试/对外口径；任一回答为 yes 时必须至少生成 signal、working_memory 或 memory 候选。
@@ -41,7 +41,7 @@
   - PRD-ENGINEERING-MEM-004: As a governance maintainer, I want a strict promotion contract from signal to memory, so that low-value logs do not pollute long-term memory.
   - PRD-ENGINEERING-MEM-005: As a future role owner, I want the memory schema to be role-agnostic and append-only enough for expansion, so that new roles can join without schema migration.
 - Critical User Flows:
-  1. Flow-MEM-001: `角色在 devlog / evidence / runbook 中形成高价值结论 -> 生成 signal -> 通过 promote-memory 脚本写入 active memory -> role report 可见`
+  1. Flow-MEM-001: `角色在 task execution log / evidence / runbook 中形成高价值结论 -> 生成 signal -> 通过 promote-memory 脚本写入 active memory -> role report 可见`
   2. Flow-MEM-002: `已有 memory 被新事实取代 -> 旧记录写入 superseded_at / superseded_by -> 新记录进入 active -> stage/backlog 引用更新到新记录`
   3. Flow-MEM-003: `QA 发现重复 failure signature -> 复用现有 memory 或创建新 memory -> backlog 条目引用该 memory 而不是重新描述一遍`
   4. Flow-MEM-004: `producer 准备阶段评审 -> 读取 shared/producer active memory -> 汇总当前 claim envelope、阻断边界与最新有效阶段结论`
@@ -53,8 +53,8 @@
 | Active Memory Record | `id`、`role`、`topic`、`summary`、`source_refs[]`、`tags[]`、`effective_at`、`last_reviewed_at`、`status=active`、`confidence`、`promotion_reason` | `promote-memory` 新建 active 记录 | `draft -> active` | 默认按 `role/topic/effective_at desc`；同 topic 最近有效记录优先 | role owner 可创建；跨角色关键结论需 producer 或治理维护者联审 |
 | Superseded Memory Record | `id`、`superseded_by`、`superseded_at`、`supersede_reason`、原 active 字段快照 | `supersede-memory` 把 active 移入 superseded | `active -> superseded` | 按 `superseded_at desc`，保留原 `effective_at` | role owner 可 supersede；不得删除历史记录 |
 | Memory Promotion Rule | `signal_id`、`role`、`decision`、`promotion_reason`、`rejection_reason` | `promote-memory` 判定 signal 是否足够稳定 | `triaged -> promoted/rejected/deferred` | `stage decision`、`failure signature`、`policy boundary` 高于一般 note | owner role 主责；治理维护者可审计 |
-| Role Memory Policy | `role`、`topic_prefix_allowlist[]`、`allowed_promotion_reasons[]`、`disallowed_examples[]` | 通过模板 / design 冻结各角色什么能进长期 memory、什么只能停留在 `working_memory` / `devlog` | `draft -> active -> superseded` | `topic` 先匹配角色 allowlist，再允许 promote；`*` 只允许同域尾缀通配 | `producer_system_designer` 与治理维护者冻结 shared/base policy；各 role owner 维护本角色增量 |
-| Close-Phase Memory Extraction Checklist | `role`、`questions[]`、`promote_targets[]` | `workflow-report --phase close` 输出统一三问；任一为 yes 时 owner 必须生成 signal、working_memory 或 memory 候选，而不是只写 devlog | `open -> reviewed -> promoted/discarded` | 先判断复用价值，再判断影响范围；高影响结论优先进入 signal/memory | 全角色执行；owner 决定最终提升路径 |
+| Role Memory Policy | `role`、`topic_prefix_allowlist[]`、`allowed_promotion_reasons[]`、`disallowed_examples[]` | 通过模板 / design 冻结各角色什么能进长期 memory、什么只能停留在 `working_memory` / task execution log | `draft -> active -> superseded` | `topic` 先匹配角色 allowlist，再允许 promote；`*` 只允许同域尾缀通配 | `producer_system_designer` 与治理维护者冻结 shared/base policy；各 role owner 维护本角色增量 |
+| Close-Phase Memory Extraction Checklist | `role`、`questions[]`、`promote_targets[]` | `workflow-report --phase close` 输出统一三问；任一为 yes 时 owner 必须生成 signal、working_memory 或 memory 候选，而不是只写 execution log | `open -> reviewed -> promoted/discarded` | 先判断复用价值，再判断影响范围；高影响结论优先进入 signal/memory | 全角色执行；owner 决定最终提升路径 |
 | Memory Query View | `role`、`topic`、`status`、`effective_range` | `role-report` / `memory-report` 生成 active/superseded 报表 | `fresh -> stale/needs_review` | stale 优先按 `last_reviewed_at asc` 报警 | 所有人可读；owner 负责 review |
 | Shared Memory | `scope=shared`、`topics`、`source_refs`、`effective_at` | 为跨角色稳定结论建档 | `draft -> active -> superseded` | `shared` topic 在 stage report 中高优先级 | 仅 producer 与治理维护者可写 shared 正式记录 |
 - Role Topic Policy Draft:
@@ -73,14 +73,14 @@
   - `shared` 只接收跨角色稳定结论，例如 `gate.claim_envelope`、`release.policy.*`、`cross_role.workflow.*`
   - 单角色内部经验、单任务实现细节和未裁决草稿不得写入 `shared`
 - Acceptance Criteria:
-  - AC-1: 专题明确长期 memory 与 `devlog`、signal、backlog、stage/gate、正式 PRD/project 的边界。
+  - AC-1: 专题明确长期 memory 与 task execution log、signal、backlog、stage/gate、正式 PRD/project 的边界。
   - AC-2: 长期 memory schema 明确 active/superseded 两套结构及其必填字段。
   - AC-3: `promote-memory` 与 `supersede-memory` 的输入、输出、失败条件和角色权限明确。
   - AC-4: 至少覆盖 `producer_system_designer`、`qa_engineer`、`liveops_community` 三类高价值 memory 场景，并给出 role-agnostic 扩容规则。
   - AC-5: project 文档给出记忆容器、模板、脚本、report 和验证任务拆解。
   - AC-6: 专题文档与 `self-evolution` 总专题、engineering 根入口、索引和 devlog 全部完成互链。
   - AC-7: 长期 memory 专题必须提供 7 个标准角色的 `topic` allowlist 草案、允许的 `promotion_reason` 范围与反例，不允许只靠口头理解决定“什么能进 memory”。
-  - AC-8: `workflow-report --phase close` 与角色职责卡必须显式要求执行统一记忆抽取三问；任一回答为 yes 时，不得只写 `devlog` 就结束。
+  - AC-8: `workflow-report --phase close` 与角色职责卡必须显式要求执行统一记忆抽取三问；任一回答为 yes 时，不得只写 execution log 就结束。
 - Non-Goals:
   - 不在首期实现 embedding、向量检索、图数据库或复杂语义搜索 UI。
   - 不把长期 memory 作为正式 PRD/project 的自动覆盖源。
@@ -107,7 +107,7 @@
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
-  - `doc/devlog/YYYY-MM-DD.md`
+  - `.pm/tasks/TASK-PM-*.execution.md`
   - `.pm/inbox/signals.jsonl`
   - `.pm/templates/role-memory-policy.yaml`
   - `.pm/roles/*/backlog/*.yaml`
@@ -122,7 +122,7 @@
   - shared memory 越权：非 producer/治理维护者试图写 shared 正式 memory 时阻断。
   - stale memory：active memory 长时间未 review 时，report 标记 `needs_review`，但不自动删除。
   - `topic` 漫灌：若某 role 持续写入 allowlist 外的 topic，应先更新角色 memory policy，而不是直接把长期 memory 当自由文本池。
-  - close-phase 漏抽：若 owner 未执行记忆抽取三问，就把可复用结论只留在 `devlog`，应视为 workflow 缺口而不是“没有记忆价值”。
+  - close-phase 漏抽：若 owner 未执行记忆抽取三问，就把可复用结论只留在 task execution log，应视为 workflow 缺口而不是“没有记忆价值”。
   - 角色退役：退役角色的 active memory 转为只读历史，不自动并入其他角色。
 - Non-Functional Requirements:
   - NFR-MEM-1: `memory-lint` 单次执行时间 <= 10 秒。
@@ -132,7 +132,7 @@
   - NFR-MEM-5: 新角色接入时无需调整历史 memory 数据格式。
   - NFR-MEM-6: active memory 到 stage/backlog 的引用可达性覆盖率 100%。
   - NFR-MEM-7: 7 个标准角色的 topic allowlist 草案覆盖率 100%，不得长期只有少数角色具备“什么能进 memory”的明确口径。
-  - NFR-MEM-8: `workflow-report --phase close` 中记忆抽取三问的暴露率 100%，不得出现 close checklist 只剩“写 devlog + subagent review”的收口口径。
+  - NFR-MEM-8: `workflow-report --phase close` 中记忆抽取三问的暴露率 100%，不得出现 close checklist 只剩“写 execution log + subagent review”的收口口径。
 - Security & Privacy:
   - memory 只允许记录工程治理语义，不允许复制敏感原文、token、cookie、密钥。
   - 若 incident/runbook 含敏感信息，只记录脱敏摘要和来源引用。
@@ -163,7 +163,7 @@
 | --- | --- | --- | --- |
 | DEC-MEM-001 | 长期 memory 自建在仓库内文件层 | 直接引入外部 memory 产品为真值 | 当前仓库以 Git/worktree 为核心协作环境，本地文件更符合审计与隔离模型。 |
 | DEC-MEM-002 | active/superseded 双层模型 | 只保留当前最新记录 | 历史结论与阶段判断需要可回放，不能靠覆盖更新。 |
-| DEC-MEM-003 | memory 只接收高价值语义结论 | 把全部 devlog 内容都提升为 memory | 否则 memory 很快退化成流水日志。 |
+| DEC-MEM-003 | memory 只接收高价值语义结论 | 把全部 execution log 内容都提升为 memory | 否则 memory 很快退化成流水日志。 |
 | DEC-MEM-004 | memory 与 backlog 分层 | 用一套对象同时表达记忆和任务 | 长期结论与执行状态的变更频率、字段和权限都不同。 |
 | DEC-MEM-005 | 按角色冻结 `topic` allowlist 与允许的 `promotion_reason` 范围 | 继续只靠 owner 临场判断决定什么能进 memory | 当前空 memory 的根因之一是角色缺少稳定语义边界；先冻结 allowlist 才能降低“写什么都不对”的犹豫成本。 |
 | DEC-MEM-006 | close phase 强制执行统一记忆抽取三问 | 继续把“是否沉淀 memory”留给 owner 自行想起 | 如果 close checklist 不显式暴露该动作，长期 memory 只会在少数自觉角色中出现，无法成为默认工作流。 |

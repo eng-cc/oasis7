@@ -1,8 +1,9 @@
 # oasis7 文件化项目管理运行层
 
-`doc/` 保存正式规格、项目追踪、证据和 devlog。`.pm/` 只保存运行态项目管理对象：
+`doc/` 保存正式规格、项目追踪、证据与历史归档；`.pm/` 保存运行态项目管理对象与 task-local execution log：
 
 - role memory / backlog
+- task execution log
 - task-scoped working_memory
 - shared memory
 - signal inbox
@@ -12,7 +13,7 @@
 
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
-- `devlog` 继续保存原始事件流；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 提升。
+- `.pm/tasks/TASK-PM-*.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 提升。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
 首批标准角色：
@@ -32,8 +33,9 @@
 
 当前已落地的 Phase 2 基础链路：
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
-- `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/TASK-PM-*.yaml`，并同步更新 task registry 与 owner 的 `backlog/candidate.yaml`。
+- `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/TASK-PM-*.yaml` 与对应 `.pm/tasks/TASK-PM-*.execution.md`，并同步更新 task registry 与 owner 的 `backlog/candidate.yaml`。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
+- `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
@@ -49,26 +51,27 @@
 - `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
-- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-id` 会把执行证据写回 task file。
-- `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `devlog -> signal -> task -> memory -> stage report` required-tier 验证链。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-id` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
+- `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 工作流接入基础用法：
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>`
 - 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
+- 开工前后都直接读写 `.pm/tasks/<TASK-ID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-id` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 landing 前的最后一条 PM 自检命令。
 
 QA / liveops 基础用法：
-- `./scripts/pm/promote-signal.sh --source-type devlog --source-ref doc/devlog/2026-03-30.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
-- `./scripts/pm/promote-signal.sh --source-type incident --source-ref doc/devlog/2026-03-30.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/TASK-PM-0001.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
+- `./scripts/pm/promote-signal.sh --source-type incident --source-ref .pm/tasks/TASK-PM-0001.execution.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 
 状态迁移基础用法：
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status committed`
 - `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status deferred`
-- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task TASK-PM-0001 --source-ref doc/devlog/2026-03-31.md`
+- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task TASK-PM-0001 --source-ref .pm/tasks/TASK-PM-0001.execution.md`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`

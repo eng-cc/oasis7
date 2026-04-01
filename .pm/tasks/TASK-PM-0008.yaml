@@ -2,6 +2,7 @@ task_id: TASK-PM-0008
 title: "修复 .pm full-tier memory-regression-smoke 回归"
 owner_role: producer_system_designer
 worktree_hint: engineering-pm-lint-followup
+execution_log_path: .pm/tasks/TASK-PM-0008.execution.md
 status: done
 priority: P2
 source_signal: null

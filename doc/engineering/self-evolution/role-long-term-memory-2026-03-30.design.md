@@ -7,7 +7,7 @@
 
 ## 目标
 - 为 `self-evolution` 运行层中的长期 memory 单独冻结文件结构、schema、状态机和脚本契约。
-- 保证长期 memory 既不同于 `devlog`，也不同于 backlog/task registry。
+- 保证长期 memory 既不同于 task execution log，也不同于 backlog/task registry。
 
 ## 目标完成态
 - 每个角色具备：
@@ -155,7 +155,7 @@ roles:
   - 写 `signal`
   - 写 `working_memory`
   - 提升到长期 `memory`
-- 若三问均为 no，则保留在 `devlog` 或 task-scoped `working_memory`，不进入长期 memory
+- 若三问均为 no，则保留在 task execution log 或 task-scoped `working_memory`，不进入长期 memory
 - `shared` 只接收跨角色稳定结论，例如 `gate.claim_envelope`、`release.policy.*`、`cross_role.workflow.*`
 
 ## 脚本设计
@@ -176,7 +176,7 @@ roles:
 - `.pm/templates/role-memory-policy.yaml`
   - 记录 base `promotion_reason` 白名单、close-phase 三问和 7 个标准角色的 `topic_prefix_allowlist` 草案
 - `scripts/pm/workflow-report.sh`
-  - close phase checklist 中必须包含记忆抽取三问，避免 owner 只写 `devlog` 不做结构化沉淀
+  - close phase checklist 中必须包含记忆抽取三问，避免 owner 只写 execution log 不做结构化沉淀
 
 ## 查询与消费
 - role report：

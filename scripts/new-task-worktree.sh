@@ -24,7 +24,7 @@ Options:
   --path <path>           Override target worktree path
   --worktrees-root <dir>  Override default worktrees root
   --allow-dirty-source    Allow creating from a dirty source worktree
-  --init-docs             Inspect module PRD/project and today's devlog in the new worktree
+  --init-docs             Inspect module PRD/project in the new worktree
   --with-harness          Asynchronously prewarm ./scripts/worktree-harness.sh up --no-llm in the new worktree
   --json                  Print machine-readable JSON summary only
   -h, --help              Show this help
@@ -263,18 +263,13 @@ git -C "$TARGET_PATH" config oasis7.task-worktrees-root "$WORKTREES_ROOT"
 
 DOC_PRD_PATH=""
 DOC_PROJECT_PATH=""
-TODAY_DEVLOG_PATH=""
 DOC_PRD_EXISTS=0
 DOC_PROJECT_EXISTS=0
-TODAY_DEVLOG_EXISTS=0
 if [[ "$INIT_DOCS" == "1" ]]; then
-  TODAY_DEVLOG_DATE="$(date +%F)"
   DOC_PRD_PATH="$TARGET_PATH/doc/$MODULE_SLUG/prd.md"
   DOC_PROJECT_PATH="$TARGET_PATH/doc/$MODULE_SLUG/project.md"
-  TODAY_DEVLOG_PATH="$TARGET_PATH/doc/devlog/$TODAY_DEVLOG_DATE.md"
   [[ -f "$DOC_PRD_PATH" ]] && DOC_PRD_EXISTS=1
   [[ -f "$DOC_PROJECT_PATH" ]] && DOC_PROJECT_EXISTS=1
-  [[ -f "$TODAY_DEVLOG_PATH" ]] && TODAY_DEVLOG_EXISTS=1
 fi
 
 HARNESS_STATE_FILE=""
@@ -299,7 +294,7 @@ if [[ "$WITH_HARNESS" == "1" ]]; then
   [[ -n "$HARNESS_STATUS" ]] || HARNESS_STATUS="booting"
 fi
 
-SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$TODAY_DEVLOG_PATH" "$TODAY_DEVLOG_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" <<'PY'
+SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" <<'PY'
 from __future__ import annotations
 
 import json
@@ -322,14 +317,13 @@ if sys.argv[12] == "1":
     payload["doc_checks"] = {
         "prd": {"path": sys.argv[13], "exists": sys.argv[14] == "1"},
         "project": {"path": sys.argv[15], "exists": sys.argv[16] == "1"},
-        "today_devlog": {"path": sys.argv[17], "exists": sys.argv[18] == "1"},
     }
-if sys.argv[19] == "1":
+if sys.argv[17] == "1":
     payload["harness"] = {
-        "bootstrap_log": sys.argv[20],
-        "state_file": sys.argv[21],
-        "status": sys.argv[22],
-        "viewer_url": sys.argv[23],
+        "bootstrap_log": sys.argv[18],
+        "state_file": sys.argv[19],
+        "status": sys.argv[20],
+        "viewer_url": sys.argv[21],
     }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -359,7 +353,6 @@ if [[ "$INIT_DOCS" == "1" ]]; then
 Docs bootstrap:
 - module PRD: $([[ "$DOC_PRD_EXISTS" == "1" ]] && printf 'present' || printf 'missing') ($DOC_PRD_PATH)
 - module project: $([[ "$DOC_PROJECT_EXISTS" == "1" ]] && printf 'present' || printf 'missing') ($DOC_PROJECT_PATH)
-- today devlog: $([[ "$TODAY_DEVLOG_EXISTS" == "1" ]] && printf 'present' || printf 'missing') ($TODAY_DEVLOG_PATH)
 INFO
 fi
 
@@ -379,6 +372,7 @@ cat <<INFO
 Next:
   cd $TARGET_PATH
   ./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>
+  sed -n '1,200p' .pm/tasks/<TASK-ID>.execution.md
 INFO
 
 if [[ "$INIT_DOCS" == "1" ]]; then

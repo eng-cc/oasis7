@@ -2,6 +2,7 @@ task_id: TASK-PM-0004
 title: "收口 pure_api 必须启用 LLM 的正式游玩口径"
 owner_role: producer_system_designer
 worktree_hint: oasis7-core-llm-required-access
+execution_log_path: .pm/tasks/TASK-PM-0004.execution.md
 status: done
 priority: P1
 source_signal: null

@@ -46,7 +46,7 @@
   3. Flow-MIR-003: 运行或评审过程中出现“重复模式/新的判断” -> 先以 `source_type=reflection` 或等价 signal 进入 inbox -> owner 审核后提升为 `task`、`memory` 或 `rejected/deferred`。
   4. Flow-MIR-004: `belief` 类 active memory 与新事实冲突 -> 旧记录进入 `superseded`，新记录根据证据改写为 `fact`、`summary` 或新的 `belief` -> stage/backlog 引用更新到新记录。
   5. Flow-MIR-005: 新角色或新工作流需要记忆扩容 -> 复用 role-agnostic schema 与 recall profile -> lint/report 在不迁移历史数据的前提下自动纳入。
-  6. Flow-MIR-006: Codex/engineering task 从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 读取会话 raw evidence，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，再结合 `devlog` / 手工 evidence 进入系统 -> 提取 `attempt/hypothesis/decision/open_question/next_step` 到 `working_memory` -> 当内容稳定时再提升为 reflection signal、task 或长期 memory -> 任务关闭时清理或归档剩余 working memory。
+  6. Flow-MIR-006: Codex/engineering task 从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 读取会话 raw evidence，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，再结合 task execution log / 手工 evidence 进入系统 -> 提取 `attempt/hypothesis/decision/open_question/next_step` 到 `working_memory` -> 当内容稳定时再提升为 reflection signal、task 或长期 memory -> 任务关闭时清理或归档剩余 working memory。
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -91,7 +91,7 @@
   - `memoryOSS` 提供的借鉴点仅限本地优先、显式 mode/namespace、预算化召回与 fail-open 工程习惯；不引入其产品形态作为正式依赖。
   - 《Hindsight》提供的借鉴点仅限 `fact/experience/summary/belief` 记忆分层，以及 `retain/recall/reflect` 闭环；不把论文实验结果直接等同于 oasis7 工程治理结论。
   - 原始会话与过程日志属于 `raw evidence`，先进入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 raw evidence 默认优先直读 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，只有被提炼过的结论才进入 `signal`、`task` 或长期 `memory`。
-  - 反思链路统一为 `.codex/devlog/evidence -> working_memory -> signal(reflection) -> owner review -> memory/task/rejected`，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_id>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
+  - 反思链路统一为 `.codex/task execution log/evidence -> working_memory -> signal(reflection) -> owner review -> memory/task/rejected`，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_id>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
@@ -115,7 +115,7 @@
   - `https://arxiv.org/abs/2512.12818`
 - Edge Cases & Error Handling:
   - 误把未验证猜测写成 `fact`：lint 或 review 必须阻断，并要求降级为 `belief` 或 rejected。
-  - `~/.codex/session_index.jsonl` / `history.jsonl` 缺失或不可用：允许回退到 `~/.codex/sessions/**/rollout-*.jsonl`；若仍不可用，则只依据 `devlog` / 手工 evidence 写 working memory，不阻断任务执行。
+  - `~/.codex/session_index.jsonl` / `history.jsonl` 缺失或不可用：允许回退到 `~/.codex/sessions/**/rollout-*.jsonl`；若仍不可用，则只依据 task execution log / 手工 evidence 写 working memory，不阻断任务执行。
   - `~/.codex/logs_1.sqlite` 无解析器或环境无 `sqlite3`：phase 1 继续使用 JSONL 来源，不阻断任务执行。
   - `working_memory` 长时间未清理：任务关闭时必须转 `promoted/discarded/expired`，不得无限期留在 active。
   - transcript 含敏感信息：只允许抽取脱敏摘要与 source ref，不得原样复制进 `working_memory`/memory。

@@ -2,6 +2,7 @@ task_id: TASK-PM-0005
 title: "统一 commit 前 subagent review 默认流程口径"
 owner_role: producer_system_designer
 worktree_hint: engineering-subagent-review-user-authorization-template
+execution_log_path: .pm/tasks/TASK-PM-0005.execution.md
 status: done
 priority: P2
 source_signal: null

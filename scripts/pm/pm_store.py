@@ -56,6 +56,7 @@ WORKING_MEMORY_ENTRY_KINDS = {
     "open_question",
     "next_step",
 }
+TASK_EXECUTION_LOG_ENTRY_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}) CST / ([a-z_][a-z0-9_]*)$")
 REDACTION_PATTERNS = [
     (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "[REDACTED_EMAIL]"),
     (
@@ -302,10 +303,50 @@ def load_task_context(root: pathlib.Path, task_id: str) -> dict[str, object]:
         "priority": task_fields.get("priority"),
         "title": task_fields.get("title"),
         "worktree_hint": task_fields.get("worktree_hint"),
+        "execution_log_path": task_fields.get("execution_log_path"),
         "last_started_at": task_fields.get("last_started_at"),
         "last_closed_at": task_fields.get("last_closed_at"),
         "updated_at": task_fields.get("updated_at"),
     }
+
+
+def task_execution_log_relative_path(task_id: str) -> str:
+    return f".pm/tasks/{task_id}.execution.md"
+
+
+def init_task_execution_log(
+    root: pathlib.Path,
+    task_id: str,
+    title: str,
+    owner_role: str,
+    worktree_hint: str | None,
+    *,
+    path_rel: str | None = None,
+) -> None:
+    relative_path = path_rel or task_execution_log_relative_path(task_id)
+    path = root / relative_path
+    if path.exists():
+        return
+    path.write_text(
+        "\n".join(
+            [
+                f"# {task_id} Execution Log",
+                "",
+                f"- task_id: {task_id}",
+                f"- title: {title}",
+                f"- owner_role: {owner_role}",
+                f"- worktree_hint: {worktree_hint or 'null'}",
+                "",
+                "<!-- Append entries using:",
+                "## YYYY-MM-DD HH:MM:SS CST / role_name",
+                "- 完成内容: ...",
+                "- 遗留事项: ...",
+                "-->",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
 
 def record_task_workflow_phase(root: pathlib.Path, task_id: str, role: str, phase: str) -> dict[str, object]:
@@ -1099,6 +1140,7 @@ def create_candidate_task(
 
     task_id = f"TASK-PM-{int(next_sequence):04d}"
     task_path_rel = f".pm/tasks/{task_id}.yaml"
+    execution_log_path_rel = task_execution_log_relative_path(task_id)
     task_path = root / task_path_rel
     if task_path.exists():
         raise ValueError(f"task file already exists: {task_path_rel}")
@@ -1110,6 +1152,7 @@ def create_candidate_task(
             ("title", title),
             ("owner_role", owner_role),
             ("worktree_hint", worktree_hint),
+            ("execution_log_path", execution_log_path_rel),
             ("status", "candidate"),
             ("priority", priority),
             ("source_signal", source_signal),
@@ -1122,6 +1165,7 @@ def create_candidate_task(
         ]
     )
     dump_mapping_document(task_path, task_fields)
+    init_task_execution_log(root, task_id, title, owner_role, worktree_hint, path_rel=execution_log_path_rel)
 
     registry_entries.append(
         OrderedDict(
@@ -1161,6 +1205,7 @@ def create_candidate_task(
     return {
         "task_id": task_id,
         "task_path": task_path_rel,
+        "execution_log_path": execution_log_path_rel,
         "backlog_path": str(backlog_path.relative_to(root)),
         "owner_role": owner_role,
         "priority": priority,
@@ -1982,6 +2027,7 @@ def build_workflow_checklist(
     pending_signals = int(signal_summary["pending_count"])
     working_memory_entries = int(working_memory_summary["entry_count"])
     pending_reflections = int(reflection_summary["counts"]["triaged"])
+    task_execution_log = None if task_context is None else str(task_context.get("execution_log_path") or "") or None
 
     def add(item_id: str, summary: str, command: str | None = None, reason: str | None = None) -> None:
         item = OrderedDict([("id", item_id), ("summary", summary)])
@@ -1999,8 +2045,14 @@ def build_workflow_checklist(
             )
         add(
             "read-docs",
-            "先读目标模块 PRD / project 和当天 devlog，再开始编辑。",
+            "先读目标模块 PRD / project，再开始编辑。",
         )
+        if task_execution_log:
+            add(
+                "read-execution-log",
+                "读取当前 task execution log，避免同任务上下文断档。",
+                command=f"sed -n '1,200p' {task_execution_log}",
+            )
         add(
             "role-report",
             f"读取 {role} 的 backlog 与 memory 现状，避免重复处理已知问题。",
@@ -2009,7 +2061,7 @@ def build_workflow_checklist(
         if pending_signals > 0:
             add(
                 "triage-signals",
-                "先处理该角色尚未闭环的 signal，避免 devlog 结论继续停留在 inbox。",
+                "先处理该角色尚未闭环的 signal，避免任务结论继续停留在 inbox。",
                 reason=f"pending_signals={pending_signals}",
             )
         if int(backlog_counts["blocked"]) > 0:
@@ -2047,12 +2099,12 @@ def build_workflow_checklist(
                 "若当前工作绑定到明确任务，补传 `--task-id <TASK-ID>` 记录 `last_closed_at`，否则不能宣称 `.pm` workflow 已完整接入。",
             )
         add(
-            "write-devlog",
-            "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
+            "write-execution-log",
+            "先回写当前 task execution log，再做 signal / memory / backlog 的结构化收口。",
         )
         add(
             "extract-memory",
-            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 devlog。",
+            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 execution log。",
         )
         if working_memory_entries > 0:
             add(
@@ -2080,7 +2132,7 @@ def build_workflow_checklist(
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(
                 "promote-signals",
-                "把新增的高价值 QA / liveops / incident 结论提升到 signal inbox，而不是只留在 devlog。",
+                "把新增的高价值 QA / liveops / incident 结论提升到 signal inbox，而不是只留在 task execution log。",
                 command=f"./scripts/pm/promote-signal.sh ... --role-hint {role}",
             )
         add(
@@ -2350,6 +2402,62 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             fail(f"task file missing last_started_at for started workflow task: {task_id}")
         if status in {"done", "deferred"} and fields.get("last_closed_at") in {None, ""}:
             fail(f"task file missing last_closed_at for closed workflow task: {task_id}")
+        execution_log_path = str(fields.get("execution_log_path") or "")
+        expected_execution_log_path = task_execution_log_relative_path(task_id)
+        if execution_log_path != expected_execution_log_path:
+            fail(
+                f"task file execution_log_path mismatch: {task_id} -> "
+                f"{execution_log_path or '(missing)'} != {expected_execution_log_path}"
+            )
+            continue
+        execution_log_file = root / execution_log_path
+        if not execution_log_file.is_file():
+            fail(f"task execution log missing: {task_id} -> {execution_log_path}")
+            continue
+        require_entry = status in {"blocked", "done", "deferred"} or fields.get("last_started_at") not in {None, ""}
+        entry_count = 0
+        active_entry_line: int | None = None
+        entry_has_done = False
+        entry_has_pending = False
+        for line_no, raw_line in enumerate(execution_log_file.read_text(encoding="utf-8").splitlines(), start=1):
+            if raw_line.startswith("## "):
+                if active_entry_line is not None:
+                    if not entry_has_done:
+                        fail(
+                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_id}"
+                        )
+                    if not entry_has_pending:
+                        fail(
+                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_id}"
+                        )
+                match = TASK_EXECUTION_LOG_ENTRY_RE.fullmatch(raw_line)
+                if not match:
+                    fail(f"{execution_log_path}:{line_no}: invalid execution log heading for {task_id}")
+                    active_entry_line = None
+                    entry_has_done = False
+                    entry_has_pending = False
+                    continue
+                role_name = match.group(3)
+                if role_name not in roles:
+                    fail(f"{execution_log_path}:{line_no}: unknown role in execution log for {task_id}: {role_name}")
+                entry_count += 1
+                active_entry_line = line_no
+                entry_has_done = False
+                entry_has_pending = False
+                continue
+            if active_entry_line is None:
+                continue
+            if raw_line.startswith("- 完成内容:"):
+                entry_has_done = True
+            elif raw_line.startswith("- 遗留事项:"):
+                entry_has_pending = True
+        if active_entry_line is not None:
+            if not entry_has_done:
+                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_id}")
+            if not entry_has_pending:
+                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_id}")
+        if require_entry and entry_count == 0:
+            fail(f"task execution log requires at least one entry: {task_id}")
 
     for signal_id in promoted_signal_ids:
         if signal_id not in task_source_signals:
@@ -2528,6 +2636,12 @@ def cmd_working_memory_lint(args: argparse.Namespace) -> int:
 
 def cmd_task_lint(args: argparse.Namespace) -> int:
     run_task_backlog_lint(args.root)
+    return 0
+
+
+def cmd_task_execution_log_lint(args: argparse.Namespace) -> int:
+    run_task_backlog_lint(args.root)
+    print("task-execution-log-lint: OK")
     return 0
 
 
@@ -2980,6 +3094,7 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
             f"last_started_at={(report['task_context'].get('last_started_at') or '(none)')} / "
             f"last_closed_at={(report['task_context'].get('last_closed_at') or '(none)')}",
         )
+        lines.insert(7, f"- execution_log_path: {report['task_context'].get('execution_log_path') or '(none)'}")
 
     if report["signal_summary"]["pending_signals"]:
         for item in report["signal_summary"]["pending_signals"]:
@@ -3427,6 +3542,10 @@ def build_parser() -> argparse.ArgumentParser:
     task_lint = subparsers.add_parser("task-lint")
     task_lint.add_argument("root", type=pathlib.Path)
     task_lint.set_defaults(func=cmd_task_lint)
+
+    task_execution_log_lint = subparsers.add_parser("task-execution-log-lint")
+    task_execution_log_lint.add_argument("root", type=pathlib.Path)
+    task_execution_log_lint.set_defaults(func=cmd_task_execution_log_lint)
 
     memory_lint = subparsers.add_parser("memory-lint")
     memory_lint.add_argument("root", type=pathlib.Path)

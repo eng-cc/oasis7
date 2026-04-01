@@ -30,7 +30,7 @@
 ### 3.2 工程治理执行链路
 - 规范定义：`doc/engineering/*.prd.md`、`*.design.md`
 - 项目追踪：`doc/engineering/project.md`、专题 `*.project.md`
-- 过程记录：`doc/devlog/YYYY-MM-DD.md`
+- 过程记录：`.pm/tasks/TASK-PM-*.execution.md`
 - 静态校验：`scripts/doc-governance-check.sh`
 - ROUND 台账：`doc/core/reviews/consistency-review-round-*.md`
 

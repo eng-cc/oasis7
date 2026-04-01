@@ -165,8 +165,12 @@ sequence = int(match.group(1))
 task_id = f"TASK-PM-{sequence:04d}"
 task_path_rel = f".pm/tasks/{task_id}.yaml"
 task_path = root / task_path_rel
+execution_log_path_rel = f".pm/tasks/{task_id}.execution.md"
+execution_log_path = root / execution_log_path_rel
 if task_path.exists():
     raise SystemExit(f"new-task: task file already exists: {task_path_rel}")
+if execution_log_path.exists():
+    raise SystemExit(f"new-task: execution log already exists: {execution_log_path_rel}")
 
 backlog_path_rel = f".pm/roles/{owner_role}/backlog/candidate.yaml"
 backlog_path = root / backlog_path_rel
@@ -194,6 +198,7 @@ task_text = "".join(
         f"title: {scalar(title)}\n",
         f"owner_role: {owner_role}\n",
         f"worktree_hint: {scalar(worktree_hint)}\n",
+        f"execution_log_path: {execution_log_path_rel}\n",
         "status: candidate\n",
         f"priority: {priority}\n",
         f"source_signal: {scalar(source_signal)}\n",
@@ -206,6 +211,23 @@ task_text = "".join(
     ]
 )
 task_path.write_text(task_text, encoding="utf-8")
+execution_log_path.write_text(
+    "".join(
+        [
+            f"# {task_id} Execution Log\n\n",
+            f"- task_id: {task_id}\n",
+            f"- title: {title}\n",
+            f"- owner_role: {owner_role}\n",
+            f"- worktree_hint: {worktree_hint or 'null'}\n\n",
+            "<!-- Append entries using:\n",
+            "## YYYY-MM-DD HH:MM:SS CST / role_name\n",
+            "- 完成内容: ...\n",
+            "- 遗留事项: ...\n",
+            "-->\n",
+        ]
+    ),
+    encoding="utf-8",
+)
 
 registry_entry = "".join(
     [
@@ -264,6 +286,7 @@ print(
         {
             "task_id": task_id,
             "task_path": task_path_rel,
+            "execution_log_path": execution_log_path_rel,
             "backlog_path": backlog_path_rel,
             "owner_role": owner_role,
             "priority": priority,

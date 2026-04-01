@@ -5,13 +5,13 @@
 
 
 ## 开发工作流
-1. 新需求先读目标模块 `doc/<module>/prd.md`、`doc/<module>/project.md`，必要时补读 `doc/devlog/YYYY-MM-DD.md`
-   1. `prd.md` 只写目标态规格（Why/What/Done），`project.md` 只写执行计划（How/When/Who），`devlog` 只写当天过程
+1. 新需求先读目标模块 `doc/<module>/prd.md`、`doc/<module>/project.md`，必要时补读当前任务的 `.pm/tasks/TASK-PM-XXXX.execution.md`
+   1. `prd.md` 只写目标态规格（Why/What/Done），`project.md` 只写执行计划（How/When/Who），task execution log 只写该任务过程；历史 `doc/devlog/YYYY-MM-DD.md` 仅作归档参考
    2. PRD 写作与审查门禁以 `.agents/skills/prd/SKILL.md` 与 `.agents/skills/prd/check.md` 为准
 
 2. 每个新需求默认新开独立 `git worktree`
    1. 一个 `worktree` 只承载一个需求或一个明确任务切片，避免并行任务互相污染
-   2. 该需求的代码、文档、测试、`devlog`、验证产物都必须在对应 `worktree` 内闭环；文档改动、脚本改动、测试改动、仅改话术也都算“新需求”
+   2. 该需求的代码、文档、测试、task execution log、验证产物都必须在对应 `worktree` 内闭环；文档改动、脚本改动、测试改动、仅改话术也都算“新需求”
    3. 进入实施前必须先确认当前 `worktree` 是否已绑定其他未完成任务，或是否存在与当前需求无关的未提交改动；任一成立，都必须先新开 `worktree`
    4. 只有用户明确说出“复用当前 `worktree`”“就在这里改”“不要切新 `worktree`”这类指令时，才允许不新开；“先写一版”“先不要提交”“顺手改一下”都不算复用授权
    5. 不能因为“文件很小”“只是文案修改”“已经开始改了几行”就继续复用当前 `worktree`；如果开工后才发现切错了，必须立即说明并切到新 `worktree`
@@ -42,7 +42,7 @@
    2. `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` 管对应实现闭环
    3. `qa_engineer` 管验证、失败签名、阻断结论与回归建议
    4. `liveops_community` 管运营反馈、社区信号、线上事故摘要和对外口径回流
-   5. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / devlog
+   5. 跨角色交付时，发起方写 handoff，接收方确认 done，最终 owner 回写 PRD / project / task execution log
 
 7. 改完后必须回写文档
    1. 保证代码 / 测试 / 文档可追溯到 PRD-ID
@@ -54,13 +54,13 @@
    2. 文档组织、allowlist、互链、引用可达性等继续遵守工程治理门禁
 
 9. 每个任务完成后都要写日志并跑对应测试
-   1. `devlog` 继续按日期存档：每天只维护一个 `doc/devlog/YYYY-MM-DD.md`
-   2. 不按角色拆分 `devlog` 文件；角色信息写在单条日志项里
-   3. 日志至少包含：时刻、角色、完成内容、遗留事项
-   4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## HH:MM:SS CST / role_name`
-   5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写日志或正式文档
-   6. `devlog`、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
-   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`，把 `last_closed_at` 写入当前任务，再按 checklist 回写 signal / memory / backlog，不允许只写 devlog 不同步 `.pm/`
+   1. 执行日志 canonical 路径为 `.pm/tasks/<TASK-ID>.execution.md`；不再新增集中式 `doc/devlog/YYYY-MM-DD.md`
+   2. 一个任务只维护一个 execution log 文件；多角色协作时继续在条目级标注角色，不按角色拆文件
+   3. 日志至少包含：日期、时刻、角色、完成内容、遗留事项
+   4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## YYYY-MM-DD HH:MM:SS CST / role_name`
+   5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
+   6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
+   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`，把 `last_closed_at` 写入当前任务，再按 checklist 回写 signal / memory / backlog，不允许只写 execution log 不同步 `.pm/`
    8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 

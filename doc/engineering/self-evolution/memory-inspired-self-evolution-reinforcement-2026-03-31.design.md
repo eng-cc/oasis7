@@ -107,7 +107,7 @@
 
 ## 流程设计
 ### Retain
-- 原始证据来自 `devlog`、runbook、QA failure、community feedback、正式评审结论，或 Codex 本地会话存档。
+- 原始证据来自 task execution log、runbook、QA failure、community feedback、正式评审结论，或 Codex 本地会话存档。
 - 对 Codex/engineering task，phase 1 会话 transcript 优先从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取；若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，再与任务过程记录一起提炼为 `working_memory`，不直接写 memory。
 - 如果产出的是“反思”，先进入 `signal(source_type=reflection)`，不直接写 memory。
 - owner 决定把反思提升为：
@@ -143,7 +143,7 @@
   - 必须定义 `memory_kind`；
   - 若为 `belief`，必须定义 `review_due_at`；
   - 若推翻旧结论，必须通过 `supersede-memory` 保留历史链。
-- phase 1 的 canonical chain 为 `~/.codex/session_index.jsonl + ~/.codex/history.jsonl (+ sessions rollout fallback) + devlog/evidence -> working_memory -> reflection signal`；后续若增加 wrapper artifact，只能替换输入层，不能绕过 `working_memory`。
+- phase 1 的 canonical chain 为 `~/.codex/session_index.jsonl + ~/.codex/history.jsonl (+ sessions rollout fallback) + task execution log/evidence -> working_memory -> reflection signal`；后续若增加 wrapper artifact，只能替换输入层，不能绕过 `working_memory`。
 
 ## 脚本与文件映射
 - 现有文件继续作为真值：

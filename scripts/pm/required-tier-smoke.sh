@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  devlog -> signal -> candidate task/memory -> blocked task -> workflow/role/stage report
+  seed evidence -> task execution log -> signal -> task/memory -> blocked task -> workflow/role/stage report
 
 Options:
   --json       Print machine-readable JSON summary
@@ -51,10 +51,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMPDIR/scripts" "$TMPDIR/doc/devlog"
+mkdir -p "$TMPDIR/scripts"
 cp -R "$ROOT_DIR/.pm" "$TMPDIR/.pm"
 cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
+mkdir -p "$TMPDIR/.pm/evidence" "$TMPDIR/.pm/shared/memory" "$TMPDIR/.pm/stage"
 
 python3 - "$TMPDIR" <<'PY'
 from pathlib import Path
@@ -94,17 +95,15 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
 )
 PY
 
-cat > "$TMPDIR/doc/devlog/2026-03-30.md" <<'EOF'
-# 2026-03-30
+cat > "$TMPDIR/.pm/evidence/bootstrap.md" <<'EOF'
+# bootstrap evidence
 
-## 22:30:00 CST / qa_engineer
-- 完成内容: viewer smoke blocked on startup bridge init.
-- 遗留事项: needs escalation into candidate task and stage gate.
+- issue: viewer smoke blocked on startup bridge init
 EOF
 
 SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
-  --source-type devlog \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-type bootstrap_evidence \
+  --source-ref .pm/evidence/bootstrap.md \
   --role-hint qa_engineer \
   --severity high \
   --summary "viewer smoke blocked on startup bridge init" \
@@ -114,6 +113,19 @@ SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --json)"
 
 TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_id"])' <<<"$SIGNAL_JSON")"
+TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["execution_log_path"])' <<<"$SIGNAL_JSON")"
+cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
+# $TASK_ID Execution Log
+
+- task_id: $TASK_ID
+- title: viewer smoke blocked on startup bridge init
+- owner_role: qa_engineer
+- worktree_hint: null
+
+## 2026-03-30 22:30:00 CST / qa_engineer
+- 完成内容: viewer smoke blocked on startup bridge init.
+- 遗留事项: needs escalation into candidate task and stage gate.
+EOF
 
 MOVE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" \
   --task-id "$TASK_ID" \
@@ -131,8 +143,8 @@ QA_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memory.sh"
   --json)"
 
 PRODUCER_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
-  --source-type devlog \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-type task_execution_log \
+  --source-ref "$TASK_LOG_PATH" \
   --role-hint producer_system_designer \
   --severity medium \
   --summary "current stage remains internal_playable_alpha_late" \
@@ -150,8 +162,8 @@ PRODUCER_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memo
   --json)"
 
 SHARED_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
-  --source-type devlog \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-type task_execution_log \
+  --source-ref "$TASK_LOG_PATH" \
   --role-hint producer_system_designer \
   --severity medium \
   --summary "claim envelope remains internal_only" \
@@ -169,8 +181,8 @@ SHARED_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memory
   --json)"
 
 NOISE_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
-  --source-type devlog \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-type task_execution_log \
+  --source-ref "$TASK_LOG_PATH" \
   --role-hint qa_engineer \
   --severity low \
   --summary "reran smoke once after cache clear" \
@@ -186,20 +198,14 @@ REJECTED_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memo
 
 LIVEOPS_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --source-type incident \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-ref "$TASK_LOG_PATH" \
   --role-hint liveops_community \
   --severity high \
   --summary "community escalation still needs owner follow-up" \
   --json)"
 
-python3 - "$TMPDIR" <<'PY'
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1])
-
-(root / ".pm/roles/producer_system_designer/memory/superseded.yaml").write_text(
-    """version: 1
+cat > "$TMPDIR/.pm/roles/producer_system_designer/memory/superseded.yaml" <<EOF
+version: 1
 role: producer_system_designer
 kind: memory_superseded
 records:
@@ -208,7 +214,7 @@ records:
     topic: stage.current
     summary: "current stage remained internal_playable_alpha_mid"
     source_refs:
-      - doc/devlog/2026-03-30.md
+      - $TASK_LOG_PATH
     tags:
       - stage
     effective_at: 2026-03-15T10:00:00+08:00
@@ -219,10 +225,7 @@ records:
     superseded_by: MEM-PRODUCER-0001
     superseded_at: 2026-03-30T10:00:00+08:00
     supersede_reason: stage_upgraded
-""",
-    encoding="utf-8",
-)
-PY
+EOF
 
 if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-lint.sh" >/dev/null 2>&1; then
   echo "required-tier-smoke: expected stage-lint to fail before canonical stage files are updated" >&2
@@ -239,13 +242,13 @@ SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --lane-status qa=blocked \
   --lane-status liveops=monitor \
   --blocking-task "$TASK_ID" \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-ref "$TASK_LOG_PATH" \
   --json)"
 
 FAILED_SET_STAGE_STDERR="$TMPDIR/set-stage-fail.stderr"
 if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --clear-blocking-tasks \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-ref "$TASK_LOG_PATH" \
   --json > /dev/null 2>"$FAILED_SET_STAGE_STDERR"; then
   echo "required-tier-smoke: expected set-stage to fail when clearing a still-blocked task from blocking_tasks" >&2
   exit 1
@@ -299,7 +302,7 @@ SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --lane-status qa=blocked \
   --lane-status liveops=monitor \
   --blocking-task "$TASK_ID" \
-  --source-ref doc/devlog/2026-03-30.md \
+  --source-ref "$TASK_LOG_PATH" \
   --json)"
 
 BROKEN_BACKLOG="$TMPDIR/.pm/roles/qa_engineer/backlog/blocked.yaml"

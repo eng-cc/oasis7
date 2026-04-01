@@ -2,6 +2,7 @@ task_id: TASK-PM-0001
 title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
 owner_role: producer_system_designer
 worktree_hint: engineering-pm-stage-workflow-closure
+execution_log_path: .pm/tasks/TASK-PM-0001.execution.md
 status: done
 priority: P1
 source_signal: SIG-PM-0001

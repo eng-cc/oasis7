@@ -2,6 +2,7 @@ task_id: TASK-PM-0003
 title: "TASK-ENGINEERING-091 补充 working_memory 与 .codex 会话分析口径"
 owner_role: producer_system_designer
 worktree_hint: engineering-working-memory-conversation-analysis
+execution_log_path: .pm/tasks/TASK-PM-0003.execution.md
 status: done
 priority: P2
 source_signal: SIG-PM-0003

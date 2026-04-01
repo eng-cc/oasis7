@@ -13,13 +13,13 @@
 - 当前仓库已有：
   - `doc/**/prd.md` 与专题 `*.prd.md`：负责 Why/What/Done。
   - `doc/**/project.md` 与专题 `*.project.md`：负责 How/When/Who。
-  - `doc/devlog/YYYY-MM-DD.md`：负责单日过程记录。
+  - `.pm/tasks/TASK-PM-*.execution.md`：负责 task-local 过程记录。
   - `.agents/roles/*.md`：负责 7 个标准角色职责边界。
   - `AGENTS.md` 与 worktree 脚本：负责 owner role、handoff 和隔离执行。
 - 当前缺口：
   - 没有角色长期 memory namespace。
   - 没有 role backlog/source signal/stage gate 的统一运行态结构。
-  - QA/liveops 信号仍主要依赖人工阅读 `devlog` 或正式文档后再整理。
+  - QA/liveops 信号仍主要依赖人工阅读日志或正式文档后再整理。
   - 阶段评审输入分散在多个文档与证据文件中，无法一键汇总。
 
 ## 目标完成态
@@ -44,6 +44,7 @@
     liveops_community/
   tasks/
     TASK-PM-0001.yaml
+    TASK-PM-0001.execution.md
   inbox/
     signals.jsonl
   stage/
@@ -152,8 +153,8 @@
    - lint 必须阻断“active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空或缺来源”的漂移状态。
 
 ## 流程设计
-### Flow A: devlog 提升
-1. 角色完成当天任务并写 `doc/devlog/YYYY-MM-DD.md`
+### Flow A: task execution log 提升
+1. 角色完成任务并写 `.pm/tasks/TASK-PM-XXXX.execution.md`
 2. `promote-signal.sh` 把高价值条目写入 `.pm/inbox/signals.jsonl`
 3. owner 决定：
    - 提升为 role memory
@@ -175,7 +176,7 @@
 ### Flow D: 工作流接入
 1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner> --task-id <TASK-ID>`
 2. 脚本先聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要，构建 report/checklist 成功后再把 `last_started_at` 回写到 task file，避免失败时留下假证据
-3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-id <TASK-ID>`，按 checklist 回写 devlog、signal、memory 与 backlog，并在 commit 前启动独立 subagent review 当前 diff
+3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-id <TASK-ID>`，按 checklist 回写 task execution log、signal、memory 与 backlog，并在 commit 前启动独立 subagent review 当前 diff
 4. 该 review 属于仓库默认 close 流程，不需要仅因执行这一步再单独向用户申请
 5. owner 先处理或记录 subagent review findings，再提交 commit
 6. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending

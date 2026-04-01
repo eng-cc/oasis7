@@ -40,6 +40,7 @@ require_file ".pm/templates/role-memory-superseded.yaml"
 require_file ".pm/templates/role-backlog.yaml"
 require_file ".pm/templates/role.yaml"
 require_file ".pm/templates/task.yaml"
+require_file ".pm/templates/task-execution-log.md"
 require_file ".pm/templates/working-memory.yaml"
 require_file ".pm/templates/signal.json"
 require_file ".pm/templates/stage-current.yaml"
@@ -63,6 +64,7 @@ require_file "scripts/pm/set-stage.sh"
 require_file "scripts/pm/stage-lint.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
+require_file "scripts/pm/task-execution-log-lint.sh"
 require_file "scripts/pm/working-memory-lint.sh"
 require_file "scripts/pm/working-memory-report.sh"
 require_file "scripts/pm/working-memory-autoflow.sh"
@@ -100,5 +102,6 @@ fi
 ./scripts/pm/role-report.sh --json >/dev/null
 ./scripts/pm/workflow-report.sh --role producer_system_designer --phase review --json >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR"
+./scripts/pm/task-execution-log-lint.sh >/dev/null
 
 echo "pm-lint: OK"

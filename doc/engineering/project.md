@@ -101,6 +101,7 @@
 - [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪入口，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 devlog，确保默认流程互链完整。
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-021) [test_tier_required]: 将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 专题中的 commit 前 subagent review 规则统一收口为仓库默认流程口径。
 - [x] TASK-ENGINEERING-095 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 修复 `memory-regression-smoke` 的 blocked-task fixture，使其按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造测试数据，恢复 full-tier smoke 通过。
+- [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换为 `.pm/tasks/TASK-PM-*.execution.md`，并同步接入 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -144,10 +145,11 @@
 ## 状态
 - 更新日期: 2026-04-01
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-095` 已先修复 `.pm` full-tier smoke 的 blocked-task fixture 漂移。
+- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-096` 已完成 task-local execution log 迁移，`TASK-ENGINEERING-095` 已先修复 `.pm` full-tier smoke 的 blocked-task fixture 漂移。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-096`（已将执行日志 canonical 路径切到 `.pm/tasks/TASK-PM-*.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。）
 - 最新完成: `TASK-ENGINEERING-095`（已将 `memory-regression-smoke` 的 blocked-task fixture 改为按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造，恢复 full-tier smoke 通过。）
 - 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 subagent review 规则统一收口为仓库默认流程。）
 - 最新完成: `TASK-ENGINEERING-049`（根 `AGENTS.md` 顶部协作执行语义收敛为角色视角切换）。
@@ -210,4 +212,4 @@
 - 最新完成: `TASK-ENGINEERING-003`（工程门禁趋势统计与首份 baseline）。
 - 最新完成: `TASK-ENGINEERING-004`（engineering 季度治理审查流程与模板）。
 - 最新完成: `TASK-ENGINEERING-009`（活跃老格式文档分批迁移 umbrella 收口）。
-- 说明: 本文档仅维护 engineering 设计执行状态；过程记录在 `doc/devlog/2026-03-03.md`、`doc/devlog/2026-03-04.md`、`doc/devlog/2026-03-09.md`、`doc/devlog/2026-03-12.md` 与 `doc/devlog/2026-03-30.md`。
+- 说明: 本文档仅维护 engineering 设计执行状态；当前过程记录统一在 `.pm/tasks/TASK-PM-*.execution.md`，历史 `doc/devlog/*.md` 保留为归档。

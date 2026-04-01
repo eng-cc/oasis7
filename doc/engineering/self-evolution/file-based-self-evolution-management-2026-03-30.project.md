@@ -18,6 +18,7 @@
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的默认流程口径，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 - [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪互链，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
+- [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-SE-004/007) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换到 `.pm/tasks/TASK-PM-*.execution.md`，并同步回写 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -26,7 +27,7 @@
 - `doc/engineering/README.md`
 - `AGENTS.md`
 - `.agents/roles/*.md`
-- `doc/devlog/YYYY-MM-DD.md`
+- `.pm/tasks/TASK-PM-*.execution.md`
 - `testing-manual.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
@@ -40,10 +41,11 @@
 ## 状态
 - 更新日期: 2026-04-01
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-094` 已完成；commit 前 subagent review 的正式口径现已统一为单一默认流程，`TASK-ENGINEERING-074~085/092/093/094` 均已完成。
+- 当前任务: `TASK-ENGINEERING-096` 已完成；task-local execution log 已成为 `.pm` 默认执行日志口径，`TASK-ENGINEERING-074~085/092/093/094/096` 均已完成。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
+  - `TASK-ENGINEERING-096`：已将执行日志 canonical 路径切到 `.pm/tasks/TASK-PM-*.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。
   - `TASK-ENGINEERING-094`：已将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
   - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。
   - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并把后续 recall/reflection 增量任务挂回 `self-evolution` 总专题依赖链。

@@ -2,6 +2,7 @@ task_id: TASK-PM-0002
 title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
 owner_role: producer_system_designer
 worktree_hint: engineering-memory-self-evolution-prd
+execution_log_path: .pm/tasks/TASK-PM-0002.execution.md
 status: done
 priority: P2
 source_signal: SIG-PM-0002

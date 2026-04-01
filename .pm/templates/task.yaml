@@ -2,6 +2,7 @@ task_id: TASK-PM-0001
 title: REPLACE_ME
 owner_role: producer_system_designer
 worktree_hint: null
+execution_log_path: .pm/tasks/TASK-PM-0001.execution.md
 status: candidate
 priority: P2
 source_signal: null
