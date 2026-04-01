@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - 对应需求文档: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 
-审计轮次: 6
+审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-ENGINEERING-074 (PRD-ENGINEERING-SE-001/004/006) [test_tier_required]: 建立 `self-evolution` 专题 `prd/design/project`，并同步回写 engineering 根入口、主项目、索引与 devlog。
@@ -15,6 +15,7 @@
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-SE-005/006) [test_tier_required]: 建立长期 memory 自建专题 `prd/design/project`，将 role memory schema、promotion 与 superseded 规则从总专题中单独冻结。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required] + [test_tier_full]: 落地 `role-report` 入口，汇总 role backlog + role memory，并补按角色查询与扩容回归。
 - [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
+- [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的授权口径，明确仓库默认流程、运行环境授权边界与用户显式禁令的优先级，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -35,9 +36,9 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-03-31
+- 更新日期: 2026-04-01
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-085` 已完成；`.pm` workflow integration 现已补齐阶段当前态唯一真值与显式 task 留痕，`TASK-ENGINEERING-074~085` 均已完成。
+- 当前任务: `TASK-ENGINEERING-092` 已完成；commit 前 subagent review 的默认流程与运行环境授权边界现已统一收口，`TASK-ENGINEERING-074~085/092` 均已完成。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:

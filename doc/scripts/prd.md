@@ -1,6 +1,6 @@
 # scripts PRD
 
-审计轮次: 6
+审计轮次: 7
 
 ## 目标
 - 建立 scripts 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -43,6 +43,7 @@
   - SC-11: 标准化 task worktree bootstrap 入口必须支持“创建后立刻检查模块 PRD / project / 当日 devlog”和“可选预热该 worktree 的隔离 harness”，让新需求能直接进入文档与验证闭环。
   - SC-12: 仓库必须提供标准化 task worktree landing 入口，让已完成需求能够在干净状态下统一 rebase 到本地 `main`、fast-forward 合入本地 `main`，并输出回收 task worktree/branch 的下一步。
   - SC-13: 每个 task `worktree` 在 landing 成功后都必须回收，不允许长期保留“已完成但未清理”的 task worktree/branch。
+  - SC-14: worktree 治理口径必须明确“文档改动、脚本改动、测试改动、仅改话术”都算新需求；只有用户显式授权复用当前 worktree 时才允许例外，且发现切错 worktree 后必须立即切走。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -70,6 +71,7 @@
   4. Flow-SCR-004: `new-task-worktree.sh <module> <task> -> 校验源 worktree 状态 -> 创建 task/<module>-<task> 分支与独立 worktree -> 输出进入新 worktree 的下一步命令`
   5. Flow-SCR-005: `new-task-worktree.sh <module> <task> --init-docs --with-harness -> 检查 doc/<module>/{prd,project}.md 与当日 devlog -> 在新 worktree 中后台预热 worktree-harness.sh up --no-llm -> 输出文档检查与 harness 摘要`
   6. Flow-SCR-006: `land-task-worktree.sh [task/<module>-<task>] -> 检查 source/本地 main worktree 干净状态 -> 在任务 worktree 上 rebase 本地 main -> 在本地 main worktree 上 fast-forward 合入 -> 输出 cleanup 命令 -> 删除已完成 task worktree/branch`
+  7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -102,6 +104,8 @@
   - AC-18: `scripts/land-task-worktree.sh --help` 必须明确列出 `--target`、`--json`、`--dry-run`；`--json` 至少输出 `source_branch`、`source_worktree`、`target_branch`、`target_worktree`、`source_head_before`、`source_head_after`、`target_head_after` 与 landing 结果。
   - AC-19: 当 source/target 任一 worktree 脏、source 分支未被任何 worktree 检出、target 分支未被任何 worktree 检出，或 fast-forward 条件不成立时，脚本必须阻断并给出修复建议。
   - AC-20: landing 成功后，正式流程文档与脚本输出必须明确该 task `worktree` / branch 需要被删除；cleanup 命令不得再被表述为“可选建议”。
+  - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
+  - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
 - Non-Goals:
   - 不在 scripts PRD 中替代业务功能设计。
   - 不承诺所有历史脚本长期向后兼容。
@@ -133,6 +137,8 @@
   - fallback 误用：未满足触发条件时拒绝 fallback。
   - worktree 并行：同一分支或同一用户同时开多个 worktree 时，端口、bundle、日志、browser session 与 chain node id 必须按 worktree 隔离，避免互相踩踏。
   - worktree bootstrap：源 worktree 脏、目标路径已存在、目标分支已在其他 worktree 检出或 `<module>/<task>` 为空时，必须阻断并打印修复建议。
+  - worktree 例外授权：用户若仅说“先写一版”“先不要提交”“顺手改一下”，仍必须先新开 worktree；只有显式授权复用当前 worktree 才可例外。
+  - 错误 worktree：若任务开始后才发现 worktree 用错，必须立即说明并切走；不允许把“已经开始改了几行”当作继续复用的理由。
   - bootstrap followups：`--json` 模式下即便开启 `--with-harness`，也不得把 harness 子命令的人类输出混入 JSON；模块文档不存在时只报告缺失，不替用户静默创建空文档。
   - task landing：若 `main` 已前进且 task branch 尚未 rebase，必须先在 source worktree 上完成 rebase；若 rebase/fast-forward 失败，脚本只中断并保留现场，不擅自 `reset` 或删除 branch/worktree。
   - task cleanup：已完成任务的 task `worktree` 若长期不删，会让后续搜索、branch 占用检查与本地磁盘占用持续失真；因此 cleanup 必须成为 landing 成功后的必做步骤。
@@ -148,6 +154,7 @@
   - NFR-SCR-9: task worktree bootstrap 入口在开启 followup 选项后，仍需保证 stdout 契约稳定；JSON 模式下所有附加说明必须写入结构化字段或 stderr。
   - NFR-SCR-10: task worktree landing 入口必须默认使用非交互、可审计的线性历史策略；JSON 模式下 stdout 只能输出单个结构化对象。
   - NFR-SCR-11: 已完成 task 的 cleanup 语义必须清晰一致，不允许不同文档同时出现“建议删除”和“必须删除”两套口径。
+  - NFR-SCR-12: worktree 例外授权与错误 worktree 处置口径在 `AGENTS.md`、模块 PRD 与专题文档之间必须保持一致，不允许根规则更严、模块专题更松。
 - Security & Privacy: 脚本不得在默认输出中泄漏密钥；涉及网络调用时需要显式参数与最小权限。
 
 ## 5. Risks & Roadmap
@@ -172,8 +179,8 @@
 | PRD-SCRIPTS-002 | TASK-SCRIPTS-002/003/005 | `test_tier_required` + `test_tier_full` | 参数契约与失败语义回归 | CI 稳定性与故障定位效率 |
 | PRD-SCRIPTS-003 | TASK-SCRIPTS-003/004/005/010 | `test_tier_required` | fallback 使用条件抽样检查 | 排障闭环和风险控制 |
 | PRD-SCRIPTS-004 | TASK-SCRIPTS-014 | `test_tier_required` | `bash -n` + `--help` + 双实例并行 smoke + `state.json` / ready payload 检查 + 文档治理检查 | 多 worktree 并行执行稳定性与 agent 可驱动性 |
-| PRD-SCRIPTS-005 | TASK-SCRIPTS-015 | `test_tier_required` | `bash -n` + `--help` + 真实 create/remove smoke + JSON 字段检查 + 文档治理检查 | 多任务并行的 worktree/branch 命名一致性与启动成本 |
-| PRD-SCRIPTS-006 | TASK-SCRIPTS-016 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + JSON 字段检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
+| PRD-SCRIPTS-005 | TASK-SCRIPTS-015/020 | `test_tier_required` | `bash -n` + `--help` + 真实 create/remove smoke + worktree 例外授权文案一致性检查 + 文档治理检查 | 多任务并行的 worktree/branch 命名一致性与启动成本 |
+| PRD-SCRIPTS-006 | TASK-SCRIPTS-016/020 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + 错误 worktree 处置文案一致性检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
 | PRD-SCRIPTS-007 | TASK-SCRIPTS-017 | `test_tier_required` | `bash -n` + `--help` + 临时 source/target worktree landing smoke + JSON 字段检查 + 文档治理检查 | 多 task worktree 向 `main` 回流的一致性与可审计性 |
 | PRD-SCRIPTS-008 | TASK-SCRIPTS-018 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
 - Decision Log:

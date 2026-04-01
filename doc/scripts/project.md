@@ -1,6 +1,6 @@
 # scripts PRD Project
 
-审计轮次: 6
+审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-SCRIPTS-001 (PRD-SCRIPTS-001) [test_tier_required]: 完成 scripts PRD 改写，建立脚本治理主入口。
@@ -172,6 +172,19 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-019 (PRD-SCRIPTS-001/008) [test_tier_required]: 执行 ROUND-010 `scripts` 模块入口映射治理，明确 README、`prd.index.md` 与高频 task-worktree / landing / harness 入口的阅读边界。
+- [x] TASK-SCRIPTS-020 (PRD-SCRIPTS-005/006) [test_tier_required]: 收紧 worktree 例外授权话术，统一 `AGENTS.md`、scripts 模块 PRD 与 `task-worktree-bootstrap` 专题中的“何时必须新开 worktree / 哪些话术不算复用授权 / 切错 worktree 后如何处置”口径。
+  - 产物文件:
+    - `AGENTS.md`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
+    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.design.md`
+    - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.project.md`
+    - `doc/devlog/2026-04-01.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n '先写一版|先不要提交|顺手改一下|复用当前 `worktree`|切错 worktree' AGENTS.md doc/scripts/prd.md doc/scripts/project.md doc/scripts/governance/task-worktree-bootstrap-2026-03-27.*`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -182,9 +195,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-04-01
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-020`（已统一收紧 worktree 例外授权口径，明确文档/脚本/测试/话术改动也算新需求，且发现切错 worktree 后必须立即切走。）
 - 最新完成: `TASK-SCRIPTS-019`（已为 `scripts/README.md` 补齐 task worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
 - 最新完成: `TASK-SCRIPTS-018`（收紧 task worktree 生命周期口径，要求 landing 成功后必须删除已完成 task worktree / branch。）
 - 最新完成: `TASK-SCRIPTS-017`（新增标准化 task worktree landing 入口，统一任务分支 rebase 到本地 `main` 并 fast-forward 合入本地 `main` 的闭环。）

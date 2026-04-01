@@ -11,11 +11,12 @@
 
 2. 每个新需求默认新开独立 `git worktree`
    1. 一个 `worktree` 只承载一个需求或一个明确任务切片，避免并行任务互相污染
-   2. 该需求的代码、文档、测试、`devlog`、验证产物都必须在对应 `worktree` 内闭环
-   3. 进入实施前先确认当前 `worktree` 是否已绑定其他未完成任务；若已绑定，必须新开 `worktree`
-   4. 只有用户明确要求复用当前 `worktree` 时，才允许不新开
-   5. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
-   6. 涉及本地 Viewer Web / launcher / `agent-browser` / smoke 的任务，默认使用该需求自己的 `worktree` 与隔离 harness
+   2. 该需求的代码、文档、测试、`devlog`、验证产物都必须在对应 `worktree` 内闭环；文档改动、脚本改动、测试改动、仅改话术也都算“新需求”
+   3. 进入实施前必须先确认当前 `worktree` 是否已绑定其他未完成任务，或是否存在与当前需求无关的未提交改动；任一成立，都必须先新开 `worktree`
+   4. 只有用户明确说出“复用当前 `worktree`”“就在这里改”“不要切新 `worktree`”这类指令时，才允许不新开；“先写一版”“先不要提交”“顺手改一下”都不算复用授权
+   5. 不能因为“文件很小”“只是文案修改”“已经开始改了几行”就继续复用当前 `worktree`；如果开工后才发现切错了，必须立即说明并切到新 `worktree`
+   6. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
+   7. 涉及本地 Viewer Web / launcher / `agent-browser` / smoke 的任务，默认使用该需求自己的 `worktree` 与隔离 harness
 
 3. 新需求先确定 `owner role`
    1. 在 `.agents/roles/*.md` 中确认牵头角色；跨角色任务按“最先落地代码/文档的 owner”牵头
@@ -66,7 +67,8 @@
 10. commit 前必须开一个独立 subagent review 当前改动
    1. subagent 只负责 review diff、指出风险/回归/缺测，不替代 owner role 做开发决策
    2. owner 必须先处理或记录 review 结论，再允许提交 commit
-   3. 若用户明确要求“先不要提交”，也要先完成 review，再保留本地改动
+   3. 这一步属于仓库默认工作流，不需要因为“只是执行 commit 前 review”再单独向用户申请一次；但若当前运行环境要求显式授权派生 agent，或用户明确禁止派生 agent / subagent，则以上层约束为准
+   4. 若用户明确要求“先不要提交”，也要先完成 review，再保留本地改动
 
 11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
 
