@@ -9,6 +9,7 @@
 - [x] T0 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 完成“暂停 3D 可视化、用户交互分支转暂存态”PRD / Design / Project 建模。
 - [x] T1 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 回写 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.index.md`，把 3D workstream 标成暂停态。
 - [x] T2 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 冻结允许修改范围与恢复门禁，明确当前正式交互主路径为非 3D / `software_safe` 优先。
+- [x] T3 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 对齐 Viewer operator 脚本与手册，把 native fallback 默认值、帮助文案与纯 3D visual QA 提示同步收口到“2D/`software_safe` 优先，3D hold-only”。
 
 ## 依赖
 - `doc/world-simulator/prd.md`

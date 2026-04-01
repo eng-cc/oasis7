@@ -43,7 +43,7 @@
 - Web 页面空白：等待 `trunk` 首轮编译完成，确认访问端口与 `run-viewer-web.sh` 参数一致。
 - `agent-browser` 启动失败：先检查 `agent-browser --version` 与本地浏览器依赖是否可用。
 - Console 有 wasm 报错：先看 `output/playwright/viewer/state.json` 的 `lastError`；若命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` / `SwiftShader`，按图形链路失败处理。
-- 看不到细节：切换 3D，放大并移动视角；必要时使用 `F` 聚焦目标。
+- 看不到细节：先用 `F` 或自动聚焦查看局部，并优先保持 2D / Web 主链路；只有在 hold-only 3D 排查时才显式切到 3D。
 - 自动聚焦无效：确认 target 存在，或先使用 `first_fragment` 排除 ID 输入问题。
 - 连接失败：检查 `oasis7_viewer_live` 是否运行、端口与 viewer 地址是否一致。
 

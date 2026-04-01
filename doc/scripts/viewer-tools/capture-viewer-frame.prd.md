@@ -42,9 +42,10 @@
   - `--scenario` / `--addr` / `--display` / `--width` / `--height` / `--viewer-wait` / `--llm` / `--keep-tmp`
   - `--auto-focus-target`：启动 viewer 后自动聚焦目标（如 `first_fragment`、`location:frag-1`、`agent:agent-0`）
   - `--auto-focus-radius`：自动聚焦半径覆盖值
-  - `--auto-focus-keep-2d`：自动聚焦时保持 2D（默认切换 3D）
+  - `--auto-focus-keep-2d`：自动聚焦时保持 2D（当前默认行为）
+  - `--auto-focus-force-3d`：仅在 hold-only 3D 排查时强制切换 3D
   - `--auto-select-target`：启动后自动选中目标（如 `first_agent`、`agent:agent-0`）
-  - `--automation-steps`：启动后自动执行步骤（如 `mode=3d;focus=agent:agent-0;zoom=0.8;select=agent:agent-0`）
+  - `--automation-steps`：启动后自动执行步骤（如 `mode=2d;focus=agent:agent-0;zoom=0.8;select=agent:agent-0`）
   - `--capture-max-wait`：覆盖 macOS 内置截图最大等待秒数（默认自动推导）
   - `--no-prewarm`：跳过预热编译（默认会预热 `oasis7_viewer_live` 与 `oasis7_viewer`）
 - viewer 内置截图环境变量：
@@ -73,6 +74,8 @@
 ## 风险
 - **路径分叉风险**：团队误把 fallback 当默认流程。
   - 缓解：在 AGENTS/手册中统一声明“Web 默认、native fallback”。
+- **暂停策略漂移**：operator 脚本若继续默认切 3D，会与 `PRD-WORLD_SIMULATOR-041` 冲突。
+  - 缓解：native fallback 默认保持 2D，只有显式传参时才进入 hold-only 3D 检查。
 - **依赖差异**：Linux 与 macOS 命令能力不同，需要分别校验命令可用性。
 - **截图时机**：若触发过早可能抓到“连接中”界面，需配合 `--viewer-wait` 与内置延迟参数。
 - **渲染链路**：viewer 内置截图依赖 Bevy 渲染完成回调，若渲染异常可能导致截图未落盘。

@@ -10,6 +10,10 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/viewer-release-qa-loop.sh [options]
 
+Status:
+  hold-only 3D visual QA helper. Under PRD-WORLD_SIMULATOR-041 it is no longer the
+  default active release gate; use Web/non-3D and software_safe closure first.
+
 Options:
   --scenario <name>          oasis7_game_launcher scenario (default: llm_bootstrap)
   --live-bind <host:port>    live tcp bind (default: 127.0.0.1:5023)

@@ -10,6 +10,7 @@
 ## 目标
 - 提供一份可直接操作的 Viewer 使用手册，覆盖启动、交互、自动聚焦、自动步骤与 Web 闭环。
 - 统一人工调试与脚本闭环的命令入口，减少重复沟通成本。
+- 当前项目阶段默认优先非 3D / `software_safe` / Web 主链路；3D 观察只作为 hold-only 补充路径。
 
 ## 适用范围
 - 可视化客户端：`crates/oasis7_viewer`
@@ -84,7 +85,7 @@ P2P 发行建议使用 `oasis7_chain_runtime`（可由 `oasis7_game_launcher` / 
 ### 启动时自动聚焦（环境变量）
 - `OASIS7_VIEWER_AUTO_FOCUS=1`
 - `OASIS7_VIEWER_AUTO_FOCUS_TARGET=<target>`
-- `OASIS7_VIEWER_AUTO_FOCUS_FORCE_3D=1|0`（默认 `1`）
+- `OASIS7_VIEWER_AUTO_FOCUS_FORCE_3D=1|0`（Viewer 环境变量默认 `1`；`capture-viewer-frame.sh` 默认会显式写成 `0`，仅在 hold-only 3D 检查时改回 `1`）
 - `OASIS7_VIEWER_AUTO_FOCUS_RADIUS=<number>`（可选）
 
 支持目标：
@@ -104,7 +105,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023
 
 ## 自动步骤（Auto Select / Automation Steps）
 - `--auto-select-target`：启动后自动选中目标（例如 `first_agent`、`agent:agent-0`）。
-- `--automation-steps`：执行一组自动步骤（例如 `mode=3d;focus=agent:agent-0;zoom=0.8;select=agent:agent-0`）。
+- `--automation-steps`：执行一组自动步骤（例如 `mode=2d;focus=agent:agent-0;zoom=0.8;select=agent:agent-0`）。
 - 常用于截图回归，减少手工定位误差。
 - 常用步骤键：
   - `wait=<seconds>`
@@ -134,7 +135,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023
   --scenario llm_bootstrap \
   --addr 127.0.0.1:5131 \
   --auto-select-target first_agent \
-  --automation-steps "mode=3d;focus=first_agent;zoom=0.8"
+  --automation-steps "mode=2d;focus=first_agent;zoom=0.8"
 ```
 
 示例（round-1 语义补齐）：
@@ -491,7 +492,8 @@ agent-browser close
 - `--capture-max-wait <sec>`：覆盖内置截图最大等待时间。
 - `--no-prewarm`：跳过预热编译。
 - `--keep-tmp`：保留 `.tmp/` 产物便于排查。
-- `--auto-focus-keep-2d`：自动聚焦时保持 2D，不强制切 3D。
+- 默认会保持 2D，不再把切 3D 作为 native fallback 的默认动作。
+- `--auto-focus-force-3d`：仅在 hold-only 3D 检查时强制切到 3D。
 
 ## 右侧综合面板与 Chat 面板显隐
 - 综合右侧面板支持按模块单独显示/隐藏：控制、总览、覆盖层、诊断、事件联动、时间轴、状态明细。
@@ -555,7 +557,7 @@ agent-browser close
 - Web 页面空白：等待 `trunk` 首轮编译完成，确认访问端口与 `run-viewer-web.sh` 参数一致。
 - `agent-browser` 启动失败：先检查 `agent-browser --version` 与本地浏览器依赖是否可用。
 - Console 有 wasm 报错：先看 `output/playwright/viewer/state.json` 的 `lastError`；若命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` / `SwiftShader`，按图形链路失败处理。
-- 看不到细节：切换 3D，放大并移动视角；必要时使用 `F` 聚焦目标。
+- 看不到细节：先用 `F` 或 `--auto-focus-target` 聚焦，并优先保持 2D / Web 主链路；只有在 hold-only 3D 排查时才显式切到 3D。
 - 自动聚焦无效：确认 target 存在，或先使用 `first_fragment` 排除 ID 输入问题。
 - 连接失败：检查 `oasis7_viewer_live` 是否运行、端口与 viewer 地址是否一致。
 

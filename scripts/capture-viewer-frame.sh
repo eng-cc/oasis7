@@ -19,10 +19,11 @@ Options:
   --auto-focus-target <target>
                           viewer auto-focus target (e.g. first_fragment, location:frag-1)
   --auto-focus-radius <n> viewer auto-focus radius override
-  --auto-focus-keep-2d    keep 2D mode during auto-focus (default: switch to 3D)
+  --auto-focus-keep-2d    keep 2D mode during auto-focus (default behavior)
+  --auto-focus-force-3d   force switch to 3D during auto-focus (hold-only 3D inspection)
   --auto-select-target <target>
                           viewer auto-select target (e.g. first_agent, agent:agent-0)
-  --automation-steps <s>  viewer automation steps (e.g. mode=3d;select=agent:agent-0)
+  --automation-steps <s>  viewer automation steps (e.g. mode=2d;select=agent:agent-0)
   --llm                   enable --llm on oasis7_viewer_live
   --no-prewarm            skip prewarm cargo build step
   --keep-tmp              do not clear .tmp at start
@@ -31,6 +32,8 @@ Options:
 Behavior:
   - Linux: uses Xvfb + xwininfo + ffmpeg
   - macOS: uses Bevy internal screenshot (no system screen-recording permission)
+  - native fallback keeps 2D during auto-focus by default; switch to 3D only when
+    explicitly inspecting paused/hold visual work
   - default prewarm: builds `oasis7_viewer_live` + `oasis7_viewer` first to reduce
     run-time compile wait and screenshot timeout risk
 
@@ -420,7 +423,7 @@ height="800"
 viewer_wait="8"
 auto_focus_target=""
 auto_focus_radius=""
-auto_focus_force_3d="1"
+auto_focus_force_3d="0"
 auto_focus_enabled="0"
 auto_select_target=""
 automation_steps=""
@@ -471,6 +474,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --auto-focus-keep-2d)
       auto_focus_force_3d="0"
+      auto_focus_enabled="1"
+      shift
+      ;;
+    --auto-focus-force-3d)
+      auto_focus_force_3d="1"
       auto_focus_enabled="1"
       shift
       ;;

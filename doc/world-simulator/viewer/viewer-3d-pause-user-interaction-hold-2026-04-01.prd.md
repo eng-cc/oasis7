@@ -51,6 +51,7 @@
   - AC-4: 文档中明确列出“允许的最小维护范围”和“禁止继续推进的新 3D 需求”边界。
   - AC-5: 恢复 3D workstream 需要显式恢复门禁，不允许通过默认 backlog 或临时需求隐式恢复。
   - AC-6: 当前正式交互主路径被明确收口到非 3D / `software_safe` / launcher / runtime interaction。
+  - AC-7: 活跃 operator 脚本与手册不得继续把“默认切 3D”写成当前真值；`capture-viewer-frame` 等 native fallback 工具默认应保持 2D，纯 3D visual QA 工具需显式标记为 hold-only。
 - Non-Goals:
   - 不删除现有 3D 代码、脚本或历史文档。
   - 不把 `standard_3d` 从玩家访问模式 taxonomy 中移除。
@@ -77,6 +78,9 @@
   - `doc/world-simulator/project.md`
   - `doc/world-simulator/prd.index.md`
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
+  - `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
+  - `scripts/capture-viewer-frame.sh`
   - `doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - Edge Cases & Error Handling:
   - 若 3D 相关文件因编译、依赖、治理或主链路耦合问题必须修改，只允许做“最小不腐烂维护”，不得借机继续追加 3D feature。
@@ -103,7 +107,7 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_SIMULATOR-041 | TASK-WORLD_SIMULATOR-285 | `test_tier_required` | `./scripts/doc-governance-check.sh` + `rg -n "暂停|暂存|恢复门禁|software_safe 优先" doc/world-simulator/prd.md doc/world-simulator/project.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.{prd,design,project}.md` + `git diff --check` | Viewer 工作流治理、3D 暂停边界、未来恢复可审计性 |
+| PRD-WORLD_SIMULATOR-041 | TASK-WORLD_SIMULATOR-285/286 | `test_tier_required` | `./scripts/doc-governance-check.sh` + `bash -n scripts/capture-viewer-frame.sh scripts/viewer-release-qa-loop.sh scripts/viewer-texture-inspector.sh scripts/viewer-theme-pack-preview.sh` + `rg -n "hold-only|暂停|暂存|恢复门禁|auto-focus-force-3d|默认保持 2D" doc/world-simulator/prd.md doc/world-simulator/project.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.{prd,design,project}.md doc/world-simulator/viewer/viewer-manual*.md doc/scripts/viewer-tools/capture-viewer-frame.prd.md scripts/capture-viewer-frame.sh scripts/viewer-release-qa-loop.sh scripts/viewer-texture-inspector.sh scripts/viewer-theme-pack-preview.sh` + `git diff --check` | Viewer 工作流治理、3D 暂停边界、operator 脚本默认值与未来恢复可审计性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

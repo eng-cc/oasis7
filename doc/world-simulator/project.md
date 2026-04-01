@@ -921,6 +921,7 @@
 - [x] TASK-WORLD_SIMULATOR-283 (PRD-WORLD_SIMULATOR-001/002/003) [test_tier_required]: 执行 ROUND-009 `world-simulator` 模块入口分流治理，明确 `README.md`、`prd.index.md`、`viewer-manual.manual.md` 与公开静态镜像的阅读边界。
 - [x] TASK-WORLD_SIMULATOR-284 (PRD-WORLD_SIMULATOR-017/018/034) [test_tier_required]: 按最新产品设定把 Viewer/live/launcher 当前入口统一收口到“formal gameplay requires active LLM”，同步调整 `oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、client launcher、Viewer 手册与相关脚本帮助文本，并保留 `--no-llm` 为 observer/debug only。
 - [x] TASK-WORLD_SIMULATOR-285 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 完成“暂停 3D 可视化专题、将用户交互分支转为暂存态”PRD / Design / Project 建模，回写模块主 PRD / project / index，并冻结 3D workstream 的恢复门禁与允许修改范围。
+- [x] TASK-WORLD_SIMULATOR-286 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 对齐 Viewer operator 脚本与手册，把 `capture-viewer-frame` 的默认 auto-focus 行为、Viewer 手册排障路径与纯 3D visual QA 工具帮助文案同步收口到“2D/`software_safe` 优先，3D hold-only”。
 ## 依赖
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
@@ -991,10 +992,9 @@
 - `crates/oasis7_client_launcher/src/explorer_window_view.rs`
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
 - `crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`
-- `crates/oasis7_viewer/Cargo.toml`
-- `crates/oasis7_viewer/src/main.rs`
+- `crates/oasis7_viewer/{Cargo.toml,src/main.rs}`
 - `scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`
 - `testing-manual.md`
 ## 状态
-- 更新日期 / 当前状态 / 下一任务 / 最新完成: 2026-04-01 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-285`（已冻结 3D 可视化 workstream，把当前用户交互分支定义为暂存态，并将当前主路径收口到非 3D / `software_safe` 优先。）；`TASK-WORLD_SIMULATOR-284`（已将 Viewer/live/launcher 当前入口统一收口到 active-LLM required formal gameplay，并把 `--no-llm` 明确降级为 observer/debug only。）
-- 当前优先任务 / 当前阻断说明 / 并行待办: `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。`PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。并行待办保留为真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直到显式恢复 gate 通过。
+- 更新日期 / 当前状态 / 下一任务 / 最新完成: 2026-04-01 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-286`（已把 Viewer operator 脚本与手册默认值收口到 2D/`software_safe` 优先，并将纯 3D visual QA 工具标记为 hold-only。）；`TASK-WORLD_SIMULATOR-285`（已冻结 3D 可视化 workstream，把当前用户交互分支定义为暂存态，并将当前主路径收口到非 3D / `software_safe` 优先。）
+- 当前优先任务 / 当前阻断说明 / 并行待办: `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。`PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。并行待办保留为真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。

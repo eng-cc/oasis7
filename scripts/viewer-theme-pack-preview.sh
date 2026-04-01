@@ -15,6 +15,9 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/viewer-theme-pack-preview.sh [options]
 
+Status:
+  hold-only 3D theme preview helper while PRD-WORLD_SIMULATOR-041 keeps 3D work paused.
+
 Options:
   --scenario <name>        oasis7_viewer_live scenario (default: llm_bootstrap)
   --theme-pack <name>      theme pack: industrial_v3,industrial_v2,industrial_v1 (default: industrial_v3)

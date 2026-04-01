@@ -18,6 +18,7 @@ Usage: ./scripts/viewer-texture-inspector.sh [options]
 Purpose:
   Preview texture sets on a stable viewer composition and capture screenshots.
   Texture sources can be selected from theme preset entity slots.
+  Status: hold-only 3D lookdev tool while PRD-WORLD_SIMULATOR-041 keeps 3D work paused.
 
 Options:
   --preset-file <path>     preset env file (default: industrial_v3_default.env)
