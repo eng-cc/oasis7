@@ -1,0 +1,19 @@
+task_id: TASK-PM-0016
+title: "Triage remaining Moltbook follower and DM notifications"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-moltbook-notification-followup
+execution_log_path: .pm/tasks/TASK-PM-0016.execution.md
+status: candidate
+priority: P3
+source_signal: SIG-PM-0005
+source_refs:
+  - ".pm/tasks/TASK-PM-0015.execution.md"
+doc_refs:
+  - "doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md"
+related_prd:
+  - "doc/readme/prd.md"
+acceptance:
+  - "Remaining non-comment notifications are classified with action/no-action rationale."
+  - "Execution log records any replies, ignores, or escalation decisions for follower and DM notifications."
+handoff_to: []
+updated_at: 2026-04-01T22:45:59+08:00

@@ -26,3 +26,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0014.yaml
+  - task_id: TASK-PM-0015
+    title: "Triage Moltbook comments and reply if needed"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Unread Moltbook notifications are classified and high-value comments are either replied to or explicitly left for no-reply with reason."
+      - "Execution log and daily devlog capture comment triage, replies sent, and remaining follow-up."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0015.yaml
