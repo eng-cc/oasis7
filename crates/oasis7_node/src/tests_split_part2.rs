@@ -812,6 +812,72 @@ fn runtime_gossip_tracks_peer_committed_heads() {
 }
 
 #[test]
+fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabled() {
+    let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
+    let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+    let addr_a = socket_a.local_addr().expect("addr a");
+    let addr_b = socket_b.local_addr().expect("addr b");
+    drop(socket_a);
+    drop(socket_b);
+
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+
+    let config_a = NodeConfig::new("node-a", "world-sync-fallback-network", NodeRole::Sequencer)
+        .expect("config a")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick a")
+        .with_pos_validators(validators.clone())
+        .expect("validators a")
+        .with_auto_attest_all_validators(true)
+        .with_gossip_optional(addr_a, vec![addr_b]);
+    let config_b = NodeConfig::new("node-b", "world-sync-fallback-network", NodeRole::Observer)
+        .expect("config b")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick b")
+        .with_pos_validators(validators)
+        .expect("validators b")
+        .with_auto_attest_all_validators(true)
+        .with_gossip_optional(addr_b, vec![addr_a]);
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)))
+        .with_replication_network_consensus_enabled(false);
+    let mut runtime_b = NodeRuntime::new(config_b)
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)))
+        .with_replication_network_consensus_enabled(false);
+    runtime_a.start().expect("start a");
+    runtime_b.start().expect("start b");
+
+    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+        let snapshot_a = runtime_a.snapshot();
+        let snapshot_b = runtime_b.snapshot();
+        snapshot_a.consensus.network_committed_height >= 1
+            && snapshot_b.consensus.network_committed_height >= 1
+            && snapshot_a.consensus.known_peer_heads >= 1
+            && snapshot_b.consensus.known_peer_heads >= 1
+    });
+    assert!(
+        synced,
+        "runtime gossip did not observe peer heads when replication-network consensus was disabled"
+    );
+
+    runtime_a.stop().expect("stop a");
+    runtime_b.stop().expect("stop b");
+}
+
+#[test]
 fn runtime_network_consensus_syncs_peer_heads_without_udp_gossip() {
     let validators = vec![
         PosValidator {

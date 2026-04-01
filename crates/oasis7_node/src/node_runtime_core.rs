@@ -178,6 +178,10 @@ impl fmt::Debug for NodeRuntime {
                 "has_replication_network",
                 &self.replication_network.is_some(),
             )
+            .field(
+                "replication_network_consensus_enabled",
+                &self.replication_network_consensus_enabled,
+            )
             .field("has_feedback_store", &self.feedback_store.is_some())
             .field("has_execution_hook", &self.execution_hook.is_some())
             .field("running", &self.running.load(Ordering::SeqCst))
@@ -198,6 +202,7 @@ impl NodeRuntime {
         Self {
             config,
             replication_network: None,
+            replication_network_consensus_enabled: true,
             feedback_store,
             pending_feedback_announces: Arc::new(Mutex::new(Vec::new())),
             execution_hook: None,
@@ -213,6 +218,11 @@ impl NodeRuntime {
 
     pub fn with_replication_network(mut self, network: NodeReplicationNetworkHandle) -> Self {
         self.replication_network = Some(network);
+        self
+    }
+
+    pub fn with_replication_network_consensus_enabled(mut self, enabled: bool) -> Self {
+        self.replication_network_consensus_enabled = enabled;
         self
     }
 
@@ -989,9 +999,9 @@ fn local_main_token_action_signature_prefix(action: &JsonValue) -> Result<&'stat
         Some("ClaimMainTokenVesting") => Ok(MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX),
         Some("InitializeMainTokenGenesis") => Ok(MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX),
         Some("DistributeMainTokenTreasury") => Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX),
-        Some("TopUpRestrictedStarterClaimLiveopsPool") => Ok(
-            MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX,
-        ),
+        Some("TopUpRestrictedStarterClaimLiveopsPool") => {
+            Ok(MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX)
+        }
         Some("UpdateRestrictedStarterClaimAdminRegistry") => {
             Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
         }

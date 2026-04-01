@@ -207,6 +207,21 @@
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m1 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m4 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.identity.json`
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m5 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.identity.json`
+- [x] TASK-WORLD_RUNTIME-058 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 修复 `oasis7_chain_runtime` 默认 loopback replication network 劫持多机 PoS 共识广播的问题，保留 replication/feedback fallback，但让已配置 UDP gossip 的三节点部署继续通过 gossip 同步 peer heads；显式共享 replication network 的 network-consensus 路径保持不变。
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/TASK-PM-0013.yaml`
+    - `.pm/tasks/TASK-PM-0013.execution.md`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7_node/src/lib.rs`
+    - `crates/oasis7_node/src/node_runtime_core.rs`
+    - `crates/oasis7_node/src/tests_split_part2.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_gossip_tracks_peer_committed_heads -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabled -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_consensus_syncs_peer_heads_without_udp_gossip -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_node -p oasis7`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -223,8 +238,9 @@
 
 ## 状态
 - 更新日期: 2026-04-01
-- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~057` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
+- 当前状态: in_progress（OpenClaw/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `TASK-WORLD_RUNTIME-058`（已为 `NodeRuntime` 增加 replication-network consensus 策略位，并将 `oasis7_chain_runtime` 默认注入的 loopback fallback network 切到“只承载 replication/feedback、不承载 consensus 广播”；新增回归证明“有 replication network 句柄但关闭 network-consensus 时，UDP gossip 仍能同步 `known_peer_heads`”，同时保留显式共享 network-consensus 回归通过。）
 - 最新完成: `TASK-WORLD_RUNTIME-057`（已把 `main_token.rs` 拆成语义化 include 子文件，修复 `m4` builtin 模板对 `decode_action::<...>` 的 `Result` 处理，并在 Docker 代理恢复后按本地 canonical builder 复跑并回写 `m1/m4/m5` builtin wasm canonical hash/identity 与 `builtin_wasm_identity.rs` 常量，收口最新 required CI 失败项。）
 - 最新完成: `TASK-WORLD_RUNTIME-056`（已将 `action_to_event_core.rs` 中 main-token 热路径拆到 `action_to_event_core_main_token.rs`，并把 `apply_domain_event_main_token.rs` 进一步拆成 `*_genesis.rs`、`*_economy.rs`、`*_restricted_claims.rs`；超限文件已回到治理线内，并保持编译与定向回归通过。）
 - 最新完成: `TASK-WORLD_RUNTIME-054`（已新增 `World::new_production_hardened()` / `with_release_security_policy()`，并把 `chain runtime execution world` 装载、`reward runtime worker`、`viewer runtime_live` bootstrap、`governance_registry_import` 的新建/加载路径切到 hardened `ReleaseSecurityPolicy` 默认绑定。）

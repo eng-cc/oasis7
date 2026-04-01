@@ -271,6 +271,7 @@ enum GapSyncHeightOutcome {
 pub struct NodeRuntime {
     config: NodeConfig,
     replication_network: Option<NodeReplicationNetworkHandle>,
+    replication_network_consensus_enabled: bool,
     feedback_store: Option<Arc<FeedbackStore>>,
     pending_feedback_announces: Arc<Mutex<Vec<FeedbackAnnounce>>>,
     execution_hook: Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeExecutionHook>>>>,
@@ -413,12 +414,16 @@ impl NodeRuntime {
             None
         };
         let mut consensus_network = if let Some(network) = &self.replication_network {
-            match ConsensusNetworkEndpoint::new(network, &self.config.world_id, true) {
-                Ok(endpoint) => Some(endpoint),
-                Err(err) => {
-                    self.running.store(false, Ordering::SeqCst);
-                    return Err(err);
+            if self.replication_network_consensus_enabled {
+                match ConsensusNetworkEndpoint::new(network, &self.config.world_id, true) {
+                    Ok(endpoint) => Some(endpoint),
+                    Err(err) => {
+                        self.running.store(false, Ordering::SeqCst);
+                        return Err(err);
+                    }
                 }
+            } else {
+                None
             }
         } else {
             None

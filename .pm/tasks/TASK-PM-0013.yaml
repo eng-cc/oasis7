@@ -1,0 +1,23 @@
+task_id: TASK-PM-0013
+title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
+owner_role: runtime_engineer
+worktree_hint: world-runtime-triad-consensus-network-fallback-fix
+execution_log_path: .pm/tasks/TASK-PM-0013.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+related_prd:
+  - doc/world-runtime/prd.md
+acceptance:
+  - "oasis7_chain_runtime 注入的默认 loopback replication network 不再默认承载 consensus 广播，已配置 UDP gossip 的多机节点可继续交换 peer heads"
+  - "显式共享 replication network 的 network-consensus 路径保持可用，并有回归测试证明未退化"
+handoff_to: []
+updated_at: 2026-04-01T22:29:41+08:00
+last_started_at: 2026-04-01T22:22:03+08:00
+last_closed_at: 2026-04-01T22:29:41+08:00

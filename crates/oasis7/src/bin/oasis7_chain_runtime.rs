@@ -50,6 +50,8 @@ mod reward_runtime_worker;
 mod storage_metrics;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
 mod transfer_submit_api;
+#[cfg(test)]
+use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND};
 use balances_api::build_chain_balances_payload;
 #[cfg(test)]
 use balances_api::build_chain_balances_payload_from_world;
@@ -67,8 +69,6 @@ use reward_runtime_worker::{
     init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
-#[cfg(test)]
-use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND};
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -121,16 +121,17 @@ mod execution_bridge {
         if !snapshot_path.exists() || !journal_path.exists() {
             return Ok(RuntimeWorld::new_production_hardened());
         }
-        RuntimeWorld::load_from_dir(world_dir).map_err(|err| {
-            format!(
-                "load execution world from {} failed: {:?}",
-                world_dir.display(),
-                err
-            )
-        })
-        .map(|world| {
-            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
-        })
+        RuntimeWorld::load_from_dir(world_dir)
+            .map_err(|err| {
+                format!(
+                    "load execution world from {} failed: {:?}",
+                    world_dir.display(),
+                    err
+                )
+            })
+            .map(|world| {
+                world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+            })
     }
 }
 
@@ -930,7 +931,9 @@ fn attach_default_replication_network(runtime: NodeRuntime) -> Result<NodeRuntim
     let mut network_config = build_default_replication_network_config()?;
     network_config.allow_local_handler_fallback_when_no_peers = true;
     let network = Arc::new(Libp2pReplicationNetwork::new(network_config));
-    Ok(runtime.with_replication_network(NodeReplicationNetworkHandle::new(network)))
+    Ok(runtime
+        .with_replication_network(NodeReplicationNetworkHandle::new(network))
+        .with_replication_network_consensus_enabled(false))
 }
 
 fn build_default_replication_network_config() -> Result<Libp2pReplicationNetworkConfig, String> {

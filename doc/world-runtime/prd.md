@@ -112,6 +112,7 @@
   - AC-16: `World::new()` / `RuntimeWorld::new()` 所服务的生产或默认运行入口不得依赖额外 `enable_production_release_policy()` 调用才能满足 hardened policy；若某入口必须放宽，必须以显式 dev/test 配置进入并留下验证证据。
   - AC-17: `state.apply_domain_event*`、preflight preview 与恢复链路中不得因“prechecked / must be handled”类假设触发 panic；同类异常必须落为可断言的 `WorldError`，并有损坏事件回归样本覆盖。
   - AC-18: `action_to_event_*`、`apply_domain_event_*`、`state.rs` 与其他 runtime 热路径 Rust 文件不得超过 1200 行；拆分后需保留现有 determinism / replay / persistence 回归覆盖，不得以降低测试强度换取拆分完成。
+  - AC-19: `oasis7_chain_runtime` 默认注入的 loopback replication fallback 仅可为 replication / feedback 提供本地兜底，不得在已配置 UDP gossip 的多机部署中抢占 PoS consensus 广播；显式共享 replication network 的 network-consensus 路径必须继续可用。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -142,6 +143,7 @@
   - 存储异常：GC/保存中断时必须保留 latest recoverable head，禁止“先删后写”导致不可恢复状态。
   - 构建漂移：若同一 Docker builder 在不同宿主上产出不同 canonical hash，或 receipt/identity 不一致，必须在进入 runtime 执行前被 gate 阻断。
   - 生产入口未启用 release security policy：必须在发布验证中被标记为 `no-go`，因为此时 builtin manifest fallback / 本地签名 / runtime source compile 仍可能留在热路径。
+  - 默认 loopback replication fallback 抢占 consensus 广播：若节点已配置 UDP gossip peers，则该 fallback 不得阻止 proposal / attestation / commit 继续经 gossip 交换，否则多机 PoS 会表现为各自推进高度但 `known_peer_heads=0`。
   - GitHub-hosted macOS runner 无 Docker daemon：允许将 CI 临时收敛为 Linux-only stable gate，但必须把跨宿主 canonical evidence 标记为未完成，并要求外部 Docker-capable macOS summary/import 继续补证。
   - 执行器初始化失败：WASM executor / SDK wire 初始化或解码失败必须向宿主或调用者返回结构化错误，不得在平台层静默吞错。
 - Non-Functional Requirements:
