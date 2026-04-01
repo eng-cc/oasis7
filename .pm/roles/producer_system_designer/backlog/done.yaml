@@ -50,6 +50,7 @@ tasks:
     acceptance:
       - "formal pure_api gameplay 已统一要求 active LLM access"
       - "runtime / launcher / client launcher / current manuals 已不再把 no-LLM 写成正式可玩入口"
+      - "runtime live blocked ack 语义与 viewer / pure_api_client request-id 链路已对齐"
       - "targeted runtime/launcher tests、脚本语法检查与 doc-governance-check 已通过"
     handoff_to: []
     status: done

@@ -17,19 +17,21 @@ records:
     status: active
     confidence: confirmed
     promotion_reason: stage_decision
-  - id: MEM-PRODUCER-0009
+  - id: MEM-PRODUCER-0010
     role: producer_system_designer
-    topic: player_access.pure_api_requires_llm
-    summary: "formal pure_api gameplay requires active LLM access; no-LLM is observer/debug only"
+    topic: player_access.formal_gameplay_requires_llm
+    summary: "formal gameplay controls require active LLM access; no-LLM remains observer/debug only, and step/play must surface blocked ack semantics to clients"
     source_refs:
       - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - testing-manual.md
       - doc/devlog/2026-03-31.md
     tags:
       - player_access
       - llm_required
       - policy_boundary
-    effective_at: 2026-03-31T22:07:13+08:00
-    last_reviewed_at: 2026-03-31T22:07:13+08:00
+      - control_ack
+    effective_at: 2026-04-01T09:07:10+08:00
+    last_reviewed_at: 2026-04-01T09:07:10+08:00
     status: active
     confidence: confirmed
     promotion_reason: policy_boundary

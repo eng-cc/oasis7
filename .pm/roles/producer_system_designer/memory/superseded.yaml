@@ -2,6 +2,25 @@ version: 1
 role: producer_system_designer
 kind: memory_superseded
 records:
+  - id: MEM-PRODUCER-0009
+    role: producer_system_designer
+    topic: player_access.pure_api_requires_llm
+    summary: "formal pure_api gameplay requires active LLM access; no-LLM is observer/debug only"
+    source_refs:
+      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/devlog/2026-03-31.md
+    tags:
+      - player_access
+      - llm_required
+      - policy_boundary
+    effective_at: 2026-03-31T22:07:13+08:00
+    last_reviewed_at: 2026-04-01T09:07:10+08:00
+    status: superseded
+    confidence: confirmed
+    promotion_reason: policy_boundary
+    superseded_by: MEM-PRODUCER-0010
+    superseded_at: 2026-04-01T09:07:10+08:00
+    supersede_reason: scope_expanded_to_formal_gameplay_controls
   - id: MEM-PRODUCER-0001
     role: producer_system_designer
     topic: stage.current
