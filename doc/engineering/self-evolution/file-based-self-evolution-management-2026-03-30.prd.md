@@ -21,8 +21,8 @@
   - SC-7: 每个标准角色在“开始任务 / 收口任务 / 阶段评审”三个场景下都有统一 `workflow-report` 入口与固定 checklist，不再依赖人工拼接 `role-report`、`memory-report`、`stage-report` 与 signal inbox 状态。
   - SC-7A: `workflow-report --phase start|close --task-id <TASK-ID>` 会在对应 task file 内回写 `last_started_at` / `last_closed_at`，让 `.pm` 工作流执行具备可审计证据，而不是只留在口头约定。
   - SC-8: `workflow-report --phase close` 的 checklist 必须明确要求“commit 前启动独立 subagent review 当前 diff，并先处理 findings 再提交”，不得只在人工约定层存在。
-  - SC-8A: `workflow-report --phase close` 与根 `AGENTS.md` 必须一致说明：commit 前 subagent review 属于仓库默认流程，不需要仅因执行该流程再单独向用户申请；但若当前运行环境要求显式授权派生 agent，或用户明确禁止派生 agent / subagent，则必须以上层约束为准。
-  - SC-8B: 根 `AGENTS.md` 必须补充一条可直接复用的用户授权模板，供运行环境要求显式授权派生 agent 时直接使用；模板只能表达“允许按默认工作流派生 subagent review”，不得被误写成覆盖上层运行环境或平台策略的绝对授权。
+  - SC-8A: `workflow-report --phase close` 与根 `AGENTS.md` 必须一致说明：commit 前 subagent review 属于仓库默认流程，不需要仅因执行该流程再单独向用户申请。
+  - SC-8B: 根 `AGENTS.md`、engineering 主 PRD 与本专题正式追踪必须只保留这一条默认流程口径。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -74,8 +74,8 @@
   - AC-7: topic 文档、engineering 根入口、索引和 devlog 全部完成互链，进入正式治理链。
   - AC-8: `AGENTS.md`、角色职责卡与 `new-task-worktree` 提示明确要求在任务开始/收口/评审时执行 `workflow-report`；其中 `start/close` 默认带 `--task-id <TASK-ID>`，且 required/full smoke 会覆盖该入口。
   - AC-9: `workflow-report --phase close`、根 `AGENTS.md` 与工程主项目口径一致要求 commit 前启动独立 subagent review，且 required-tier smoke 会断言该 checklist 项存在。
-  - AC-9A: 上述正式口径必须同时写清“仓库默认流程”“运行环境授权边界优先”“用户显式禁令优先”三层关系，不允许再把仓库规则误写成覆盖上层调度约束的绝对授权。
-  - AC-9B: 根 `AGENTS.md` 必须附带一条可直接复用的用户授权模板，且模板正文与说明需要同时强调“这是显式授权模板，不是越过运行环境限制的授权替代品”。
+  - AC-9A: 上述正式口径必须统一为“默认流程 + findings 先处理后提交”的单一路径，不允许在同一套正式文档中再保留例外边界分支。
+  - AC-9B: 根 `AGENTS.md` 与专题文档不得再引入额外分支文案，必须维持单一默认流程描述。
   - AC-10: `set-stage` 必须成为 producer 修改 `.pm/stage/*.yaml` 的 canonical 入口；若 active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空、缺 `updated_from` 或缺关联 blocker，则 lint 必须失败。
 - Non-Goals:
   - 不引入 OpenProject、Mem0、Graphiti、Supabase 或外部 SaaS 作为首期真值系统。
@@ -166,7 +166,7 @@
 | PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
 | PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
 | PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证 | 角色扩容、治理脚本兼容性 |
-| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093 | `test_tier_required` + `test_tier_full` | `workflow-report --task-id` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程/授权边界/用户授权模板文案一致性、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
+| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094 | `test_tier_required` + `test_tier_full` | `workflow-report --task-id` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

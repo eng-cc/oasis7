@@ -98,7 +98,8 @@
 - [x] TASK-ENGINEERING-086 (PRD-ENGINEERING-022) [test_tier_required]: 建立“记忆启发式自我进化补强”专题 `prd/design/project`，冻结 `memoryOSS` / 《Hindsight》 的 adopted/rejected/deferred 边界，并同步回写 engineering 根入口、主项目、索引与 devlog。
 - [x] TASK-ENGINEERING-091 (PRD-ENGINEERING-022) [test_tier_required]: 补充“会话记录分析 -> task-scoped working_memory”专题口径，冻结 Codex/engineering task 的 phase 1 来源为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时为当前 live session 抽取补齐 `last_extracted_ts/captured_until_ts` 水位与默认增量抽取口径，并回写记忆启发式补强专题、engineering 主项目与 devlog。
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-021) [test_tier_required]: 起草 7 个标准角色 `topic` allowlist、扩展 `promotion_reason` 白名单与 close-phase 记忆抽取 checklist，并同步接入长期 memory 专题、角色职责卡、`workflow-report` 与 `.pm/templates/role-memory-policy.yaml` 草案。
-- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 为 commit 前 subagent review 补充可直接复用的用户授权模板，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 devlog，明确模板只用于满足显式授权前提，不覆盖上层运行环境约束。
+- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪入口，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 devlog，确保默认流程互链完整。
+- [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-021) [test_tier_required]: 将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 专题中的 commit 前 subagent review 规则统一收口为仓库默认流程口径。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -142,11 +143,11 @@
 ## 状态
 - 更新日期: 2026-04-01
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-093` 已先把 subagent review 的用户授权模板补齐到当前 worktree。
+- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-094` 已先把 subagent review 规则收口为单一默认流程口径。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
-- 最新完成: `TASK-ENGINEERING-093`（已为 commit 前 subagent review 补充可复用的用户授权模板，并将“模板只用于显式授权、不覆盖上层运行环境约束”的边界同步回写到 engineering / self-evolution 正式追踪。）
+- 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 subagent review 规则统一收口为仓库默认流程。）
 - 最新完成: `TASK-ENGINEERING-049`（根 `AGENTS.md` 顶部协作执行语义收敛为角色视角切换）。
 - 最新完成: `TASK-ENGINEERING-050`（engineering 模块仍可读治理专题标题统一切到 `oasis7` 品牌）。
 - 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。

@@ -56,16 +56,29 @@ tasks:
     status: done
     task_path: .pm/tasks/TASK-PM-0004.yaml
   - task_id: TASK-PM-0005
-    title: "补充 commit 前 subagent review 的用户授权模板"
+    title: "统一 commit 前 subagent review 默认流程口径"
     priority: P2
     source_signal: null
     related_prd:
       - doc/engineering/prd.md
       - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
     acceptance:
-      - "仓库规则中已有可直接复用的用户授权模板，明确其只在运行环境允许派生 agent 时生效"
-      - "AGENTS.md、engineering 追踪文档与 devlog 已同步留痕本轮模板补充"
+      - "仓库规则中的 commit 前 subagent review 已统一为单一默认流程"
+      - "AGENTS.md、engineering 追踪文档与 devlog 已同步留痕本轮规则收口"
       - "doc-governance-check 与 git diff --check 通过"
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0005.yaml
+  - task_id: TASK-PM-0007
+    title: "统一 subagent review 默认流程口径"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "formal docs describe a single default subagent review flow"
+      - "AGENTS.md and engineering tracking stay consistent after the update"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0007.yaml
