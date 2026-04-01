@@ -1,6 +1,6 @@
 # world-simulator PRD
 
-审计轮次: 6
+审计轮次: 7
 
 ## 目标
 - 建立 world-simulator 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -56,6 +56,7 @@
   - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-040）
   - `doc/world-simulator/llm/openclaw-agent-dual-mode-contract-2026-03-16.md`（PRD-WORLD_SIMULATOR-040 supporting spec）
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-039）
+  - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`（PRD-WORLD_SIMULATOR-041）
   - `doc/world-simulator/prd/acceptance/openclaw-agent-parity-scenario-matrix-2026-03-12.md`（PRD-WORLD_SIMULATOR-038）
   - `doc/world-simulator/prd/acceptance/openclaw-agent-parity-score-card-2026-03-12.md`（PRD-WORLD_SIMULATOR-038）
   - `doc/world-simulator/prd/acceptance/openclaw-agent-parity-benchmark-protocol-2026-03-12.md`（PRD-WORLD_SIMULATOR-038）
@@ -92,6 +93,7 @@
 - M22 (2026-03-12): 完成 `Decision Provider` 标准层与 `OpenClaw` 外部适配可行性建模，冻结“provider advisory / runtime authoritative”边界。
 - M23 (2026-03-12): 完成 `OpenClaw(Local HTTP)` 用户机接入方案建模，明确本地发现、握手、配置、决策与回退路径。
 - M24 (2026-03-12): 完成 `OpenClaw` 与内置 agent 体验等价（parity）验收方案建模，把 parity 升级为上线门禁。
+- M25 (2026-04-01): 完成 Viewer 3D 可视化暂停治理，冻结当前用户交互分支为暂存态，并将当前交互主路径收口到非 3D / `software_safe` 优先。
 
 ## 风险
 - 模块边界演进快，文档同步可能滞后。
@@ -263,7 +265,8 @@
   - PRD-WORLD_SIMULATOR-038: As a 玩家 / 制作人, I want `OpenClaw`-driven agents to feel equivalent to built-in agents in scoped gameplay scenarios, so that switching provider does not noticeably degrade the game experience.
   - PRD-WORLD_SIMULATOR-039: As a 玩家 / QA / 制作人, I want a Web Viewer software-safe mode that does not depend on hardware GPU capability, so that I can still complete the minimal gameplay and validation loop in software-rendered or restricted browser environments.
   - PRD-WORLD_SIMULATOR-040: As a 玩家 / 制作人 / QA, I want OpenClaw agents to support both player-parity and headless execution modes, so that we can separate player-feel validation from GUI-dependent automation and keep gameplay regression runnable without graphics dependencies.
-- 模式分层说明：按 `PRD-CORE-009`，`PRD-WORLD_SIMULATOR-039` 对应玩家访问模式 `software_safe`，而 `PRD-WORLD_SIMULATOR-040` 定义 `player_parity / headless_agent / debug_viewer` execution lane；两者不得混写为同层模式。
+  - PRD-WORLD_SIMULATOR-041: As a 制作人 / viewer_engineer / qa_engineer, I want all 3D visualization work paused and the current user-interaction branch held as a staged reference, so that near-term capacity stays on non-3D interaction, `software_safe`, and gameplay closure while future resumption remains auditable.
+- 模式分层说明：按 `PRD-CORE-009`，`PRD-WORLD_SIMULATOR-039` 对应玩家访问模式 `software_safe`，`PRD-WORLD_SIMULATOR-040` 定义 `player_parity / headless_agent / debug_viewer` execution lane；`PRD-WORLD_SIMULATOR-041` 只定义当前研发优先级与冻结策略，不新增玩家访问模式。当前 `standard_3d` taxonomy 继续保留，但进入暂停研发态，不再接受新的 3D feature 承诺。
 - Critical User Flows:
   1. Flow-WS-001（Web-first 闭环）:
      `选择场景 -> 启动 Viewer Web -> 执行关键交互 -> 采集日志/截图/指标 -> 产出 test_tier_required 结论`
@@ -329,6 +332,8 @@
      `执行 required 测试 -> 命中已知 10 项失败 -> 精确白名单加 #[ignore] 并标注原因 -> required 测试恢复可执行 -> 根因修复后逐项解除 ignore`
   32. Flow-WS-032（launcher execution world 输出路径收敛）:
      `启动 oasis7_game_launcher/oasis7_web_launcher -> 构造 oasis7_chain_runtime 参数时显式附带 --execution-world-dir -> runtime 持久化 explorer-index.json 到 output/chain-runtime/<node_id>/reward-runtime-execution-world`
+  33. Flow-WS-033（Viewer 3D 工作流冻结）:
+     `收到新的 Viewer 需求 -> 判断是否属于 3D scene/camera/render/material/light/post-process 可视化专题 -> 若是则标记 paused 并归档到当前用户交互分支暂存态 -> 若否则继续落到 software_safe / launcher / runtime interaction 主链路 -> 仅在恢复门禁通过后才允许重新激活 3D workstream`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -362,6 +367,7 @@
 | Viewer live runtime 接管 | runtime `DomainEvent`、兼容 `WorldSnapshot/WorldEvent` | 启动 `oasis7_viewer_live` 后按 Play/Step 推进 runtime，并推送兼容快照/事件 | `runtime_mode`（固定） | 事件序列保持单调；至少映射注册/移动/转移/拒绝四类事件 | 本地开发链路，默认不开放远程写接口 |
 | Viewer live runtime LLM/chat/prompt 接管 | `--llm`、`PromptControl`、`AgentChat`、auth proof、nonce | 运行时允许 prompt 预览/应用/回滚与 agent chat，驱动 LLM 决策并桥接可映射动作 | `runtime_script/runtime_llm` + `profile[vN]->profile[vN+1]` | 版本单调递增；nonce 必须递增；不可映射动作输出可诊断拒绝 | 仅本地受控链路可写，鉴权签名与绑定校验必经 |
 | Viewer live runtime action 覆盖与分支收敛 | `simulator_action_to_runtime`、`ActionRejected::RuleDenied`、`oasis7_viewer_live` runtime-only CLI | 补齐 runtime 可执行映射并对不可映射动作保持结构化拒绝；启动链路移除 simulator 分支 | `runtime_bridge_partial -> runtime_bridge_hardened` | 映射成功动作优先执行；不可映射动作拒绝语义稳定可回归 | 不新增远程写入口，仅本地受控链路 |
+| Viewer 3D 暂停治理 | `workstream_id`、`pause_status`、`branch_state`、`allowed_change_scope`、`resume_gate` | 新的 3D 需求进入暂停池；当前用户交互分支只保留暂存参考；仅允许保证主链路不腐烂的低风险维护 | `active -> paused -> hold -> resume_review -> resumed` | 先按是否属于 3D 可视化专题分类，再按是否影响 `software_safe` / launcher / runtime 主链路决定是否允许修改 | `producer_system_designer` 冻结；`viewer_engineer` 仅可在允许范围内维护 |
 - Acceptance Criteria:
   - AC-1: world-simulator PRD 覆盖场景、Viewer、LLM、启动器四条主线。
   - AC-2: world-simulator project 文档维护任务拆解与状态。
@@ -475,6 +481,7 @@
   - AC-110: `crates/oasis7_viewer/src/{viewer_env.rs,perf_probe.rs}`、`crates/oasis7_client_launcher/src/self_guided.rs` 与其他源码内嵌负向测试中围绕旧品牌 alias 的 helper / fixture 命名必须改为 `removed_old_brand` 等中性语义，且旧品牌字面量仅保留为“输入已失效 alias”断言；变更后至少 `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher --bin oasis7_client_launcher -- --nocapture`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 必须通过。
   - AC-111: `tools/wasm_build_suite/src/lib.rs`、`crates/oasis7/src/{viewer/runtime_live/tests.rs,runtime/module_source_compiler.rs,runtime/builtin_wasm_materializer.rs,simulator/llm_agent/tests_split_part1.rs,bin/oasis7_openclaw_local_bridge.rs}` 等源码内嵌负向测试中围绕旧品牌 alias 的 helper / fixture 命名必须改为 `removed_old_brand` 等中性语义，且旧品牌字面量仅保留为“输入已失效 alias”断言；变更后至少 `cargo test --manifest-path tools/wasm_build_suite/Cargo.toml`、`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_live::tests -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 builtin_wasm_materializer -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 llm_agent -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_openclaw_local_bridge -- --nocapture`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 必须通过。
   - AC-112: `.agents/roles/{wasm_platform_engineer,viewer_engineer}.md`、`doc/core/project.md`、`doc/world-runtime/{prd.md,project.md}` 中作为当前 owner 说明、活跃 artifact/path/command 或模块主入口现行约束使用的 `oasis7*` / `OASIS7_*` 路径与 env 口径必须更新为 `oasis7*` / `OASIS7_*`；历史任务正文可保留原始记录，但主状态与活跃入口不得继续把旧品牌写成当前真值。变更后 `./scripts/doc-governance-check.sh`、`git diff --check`，以及 `rg -n 'oasis7_|OASIS7_' .agents/roles/wasm_platform_engineer.md .agents/roles/viewer_engineer.md doc/core/project.md doc/world-runtime/prd.md doc/world-runtime/project.md` 仅允许命中历史任务正文，不得命中当前 owner/path/env 说明。
+  - AC-113: 自 2026-04-01 起，`world-simulator` 不再接受新的 3D scene/camera/render/material/light/post-process 可视化需求进入 active delivery；相关需求必须标记为 paused，当前用户交互分支仅作为暂存参考保留，直到 `producer_system_designer` 明确完成恢复门禁复核后才允许重新进入实施。
 - Non-Goals:
   - 不在本 PRD 中详细列出每个 UI 像素级规范。
   - 不替代 world-runtime/p2p 的底层协议设计。
@@ -513,6 +520,7 @@
   - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`
   - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd.md`
   - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md`
+  - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
   - `crates/oasis7_launcher_ui/src/lib.rs`
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7_client_launcher/src/app_process.rs`
@@ -647,6 +655,7 @@
 | PRD-WORLD_SIMULATOR-039 | TASK-WORLD_SIMULATOR-139/140/141/142/143/158 | `test_tier_required` | `./scripts/doc-governance-check.sh` + Web agent-browser 闭环（software renderer 环境下验证 `render_mode=software_safe` 可加载、选中目标、推进 tick、看到新反馈） + 定向 viewer/runtime 协议回归 + stale viewer dist freshness 回归 | Web Viewer 无 GPU 硬件依赖兜底、弱图形环境最小玩法闭环、source-tree stale dist 门禁与 `#39` 收口路径 |
 | PRD-WORLD_SIMULATOR-038 | TASK-WORLD_SIMULATOR-114/115/116/118/123/125/126/128/129/154 | `test_tier_required` / `test_tier_full` | `./scripts/doc-governance-check.sh` + fixture benchmark + 真实 builtin/OpenClaw `P0` 对照采证 + QA/producer 评分结论 | OpenClaw 与 builtin 体验等价门禁、`experimental` / 默认启用准入与后续扩面策略 |
 | PRD-WORLD_SIMULATOR-040 | TASK-WORLD_SIMULATOR-148/149/150/151/152/153 | `test_tier_required` / `test_tier_full` | `./scripts/doc-governance-check.sh` + 双模式 contract review + `headless_agent`/`player_parity` 真实 smoke + QA/producer 对照采证 | OpenClaw 双轨模式、无 GUI 回归主链路、Viewer 旁路调试边界与默认模式策略 |
+| PRD-WORLD_SIMULATOR-041 | TASK-WORLD_SIMULATOR-285 | `test_tier_required` | `./scripts/doc-governance-check.sh` + `rg -n "暂停|暂存|恢复门禁|software_safe 优先" doc/world-simulator/prd.md doc/world-simulator/project.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.project.md` + `git diff --check` | Viewer 3D workstream 冻结、用户交互分支暂存治理、后续恢复门禁的可审计性 |
 
 - Decision Log:
 
@@ -675,3 +684,4 @@
 | DEC-WS-021 | 在 `oasis7_web_launcher` 增加 `/api/gui-agent/*` 统一机器接口并复用既有控制面能力 | 要求 GUI Agent 直接拼接分散 `/api/*` 旧路由 | 单入口 + 统一响应结构可显著降低自动化复杂度，并保持与人工功能的一致映射；对应 `TASK-WORLD_SIMULATOR-091/092`。 |
 | DEC-WS-022 | 对 runtime required 已知 10 项失败测试执行函数级 `#[ignore]` 临时下线，并保留恢复追踪 | 模块级屏蔽整组测试或删除失败测试 | 函数级白名单可最小化影响面，保证 required 链路恢复执行的同时保留测试资产与回收路径；对应 `TASK-WORLD_SIMULATOR-093/094`。 |
 | DEC-WS-023 | 将默认 node id 命中 stale execution world 视为 launcher 级可恢复错误，并优先提供 fresh node id 恢复 | 保持底层日志直出，由用户手工改 node id 或删目录 | 默认试玩/QA 路径会高频复用默认 node id；若不提升为产品级恢复问题，链模式体验难以稳定复跑。 |
+| DEC-WS-024 | 暂停所有新的 3D 可视化推进，并把当前用户交互分支冻结为暂存参考 | 继续并行推进 3D 视觉专题，或直接删除当前用户交互分支实验资产 | 当前阶段最稀缺的是把 formal gameplay、`software_safe` 与非 3D 交互主链路压实；直接删除会丢失未来恢复上下文，继续并行推进则会稀释交付资源。 |

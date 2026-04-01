@@ -1,8 +1,8 @@
 # world-simulator PRD 文件级索引
 
-审计轮次: 6
+审计轮次: 7
 
-更新时间：2026-03-16
+更新时间：2026-04-01
 
 ## 入口
 - 模块 PRD：`doc/world-simulator/prd.md`
@@ -101,6 +101,7 @@
 | `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.prd.md` | `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.design.md` | `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.project.md` |
 | `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.design.md` | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-3d-commercial-polish.prd.md` | `doc/world-simulator/viewer/viewer-3d-commercial-polish.design.md` | `doc/world-simulator/viewer/viewer-3d-commercial-polish.project.md` |
+| `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md` | `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.design.md` | `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.project.md` |
 | `doc/world-simulator/viewer/viewer-3d-polish-performance.prd.md` | `doc/world-simulator/viewer/viewer-3d-polish-performance.design.md` | `doc/world-simulator/viewer/viewer-3d-polish-performance.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-module-rendering.prd.md` | `doc/world-simulator/viewer/viewer-agent-module-rendering.design.md` | `doc/world-simulator/viewer/viewer-agent-module-rendering.project.md` |
 | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.design.md` | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` |
