@@ -1,4 +1,16 @@
 version: 1
 role: liveops_community
 status: done
-tasks: []
+tasks:
+  - task_id: TASK-PM-0012
+    title: "Publish Moltbook trust repair cost follow-up post"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Post is published in m/general with approved boundary and no immediate self-comment."
+      - "Execution log and daily devlog capture post_id, timing, and follow-up windows."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0012.yaml
