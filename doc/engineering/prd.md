@@ -53,6 +53,7 @@
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
   - SC-23: 每次 commit 前都必须启动一个独立 subagent review 当前 diff，并在提交前处理或显式记录 review findings。
   - SC-24: commit 前 subagent review 在仓库流程层面属于默认执行步骤，不需要因为“只是执行这条既有流程”再单独向用户申请一次；但若当前运行环境要求显式授权派生 agent，或用户明确禁止派生 agent / subagent，则必须以上层约束为准。
+  - SC-24A: 根 `AGENTS.md` 必须提供一条可直接复用的用户授权模板，用于在运行环境要求显式授权派生 agent 时，由用户一次性授权“默认工作流内的 subagent review”；模板不得被描述成覆盖上层运行环境或平台策略的绝对授权。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -133,6 +134,7 @@
   - AC-17: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
   - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
   - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
+  - AC-18B: 根 `AGENTS.md` 的 commit 前 subagent review 规则需附带可直接复用的用户授权模板，并显式声明该模板只用于满足“用户明确授权”前提，不覆盖上层运行环境或平台策略的限制。
   - AC-19: 根 `AGENTS.md` 的 devlog 规则需明确“按日期单文件、不按角色拆文件、条目级标角色”的约束。
   - AC-20: 文档治理门禁需阻断 `devlog` / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -241,7 +243,7 @@
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且只允许把 subagent 用作 commit 前 review | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033 | `test_tier_required` | devlog 规则与角色标记要求一致性检查 | 单日过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 devlog 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、`set-stage`/stage drift 校验、`workflow-report --task-id` 留痕、signal promotion、workflow/role/stage report、subagent review 授权边界文案一致性与角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、`set-stage`/stage drift 校验、`workflow-report --task-id` 留痕、signal promotion、workflow/role/stage report、subagent review 授权边界与用户授权模板文案一致性、角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 
 - Decision Log:

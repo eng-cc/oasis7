@@ -16,6 +16,7 @@
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required] + [test_tier_full]: 落地 `role-report` 入口，汇总 role backlog + role memory，并补按角色查询与扩容回归。
 - [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的授权口径，明确仓库默认流程、运行环境授权边界与用户显式禁令的优先级，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
+- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 为 commit 前 subagent review 增补可直接复用的用户授权模板，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog，明确模板仅用于满足显式授权前提，不覆盖上层运行环境约束。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -38,10 +39,11 @@
 ## 状态
 - 更新日期: 2026-04-01
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-092` 已完成；commit 前 subagent review 的默认流程与运行环境授权边界现已统一收口，`TASK-ENGINEERING-074~085/092` 均已完成。
+- 当前任务: `TASK-ENGINEERING-093` 已完成；commit 前 subagent review 的默认流程、运行环境授权边界与用户授权模板现已统一收口，`TASK-ENGINEERING-074~085/092/093` 均已完成。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
+  - `TASK-ENGINEERING-093`：已为 commit 前 subagent review 补充可直接复用的用户授权模板，并把“模板仅用于显式授权、不覆盖运行环境约束”的说明同步回写到根 `AGENTS.md` 与 engineering 主 PRD。
   - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。
   - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并把后续 recall/reflection 增量任务挂回 `self-evolution` 总专题依赖链。
   - `TASK-ENGINEERING-084`：已落地 `role-report.sh` 与 `pm_store.py role-report`，可按角色汇总 backlog 状态、blocked tasks 与 active/needs_review/superseded memory；required/full smoke 均已覆盖真实 backlog + stale memory + 扩容场景。
