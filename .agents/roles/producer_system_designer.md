@@ -48,7 +48,8 @@
 ## Checklist
 - 是否先更新对应模块 `prd.md`
 - 是否补齐 `project.md` 任务与 PRD-ID 映射
-- 是否在开始推进时执行 `./scripts/pm/workflow-report.sh --phase start --role producer_system_designer --task-id <TASK-ID>`，在阶段评审前执行 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
+- 是否在开始/收口/阶段评审时执行 `./scripts/pm/workflow-report.sh --phase start|close|review --role producer_system_designer --task-id <TASK-ID>`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否声明 world-first / emergence-first / persistent / auditable / extensible 的影响
 - 是否定义玩家能做/不能做的边界
 - 是否给出 `test_tier_required` / `test_tier_full` 验证期望

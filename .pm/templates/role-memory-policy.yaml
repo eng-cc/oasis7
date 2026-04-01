@@ -1,0 +1,148 @@
+version: 1
+status: draft
+close_phase_memory_questions:
+  - "这条结论下个任务还会复用吗？"
+  - "这条结论如果不沉淀，其他 owner 很可能重复踩坑吗？"
+  - "这条结论会影响 PRD、实现、测试、阶段判断或对外口径吗？"
+promotion_reason_allowlist:
+  - stage_decision
+  - failure_signature
+  - policy_boundary
+  - stable_pattern
+  - engineering_constraint
+  - runtime_contract
+  - abi_contract
+  - agent_behavior
+  - ux_constraint
+  - repro_pattern
+  - community_pattern
+  - incident_pattern
+  - test_strategy
+reject_reason_allowlist:
+  - one_off_operation
+  - unverified_hypothesis
+  - short_lived_execution_detail
+  - task_status_update
+shared:
+  topic_prefix_allowlist:
+    - gate.claim_envelope
+    - release.policy.*
+    - cross_role.workflow.*
+  allowed_promotion_reasons:
+    - stage_decision
+    - policy_boundary
+    - engineering_constraint
+  disallowed_examples:
+    - 单角色内部经验
+    - 单任务实现细节
+    - 未裁决草稿
+roles:
+  producer_system_designer:
+    topic_prefix_allowlist:
+      - stage.*
+      - claim_envelope.*
+      - player_access.*
+      - economy.*
+      - world_rule.*
+      - governance.*
+    allowed_promotion_reasons:
+      - stage_decision
+      - policy_boundary
+      - engineering_constraint
+    disallowed_examples:
+      - 一次性版本讨论
+      - 未冻结的玩法脑暴
+      - 当天执行流水
+  runtime_engineer:
+    topic_prefix_allowlist:
+      - runtime.contract.*
+      - runtime.replay.*
+      - runtime.recovery.*
+      - runtime.state_machine.*
+      - runtime.failure_signature.*
+    allowed_promotion_reasons:
+      - runtime_contract
+      - engineering_constraint
+      - failure_signature
+      - repro_pattern
+    disallowed_examples:
+      - 本次改了哪个函数
+      - 单次命令结果
+      - 临时 debug 过程
+  wasm_platform_engineer:
+    topic_prefix_allowlist:
+      - wasm.abi.*
+      - wasm.permission.*
+      - wasm.manifest.*
+      - wasm.hash_contract.*
+      - wasm.lifecycle.*
+    allowed_promotion_reasons:
+      - abi_contract
+      - engineering_constraint
+      - failure_signature
+    disallowed_examples:
+      - 一次性编译修复
+      - 临时兼容 hack
+      - 未确认的 ABI 猜想
+  agent_engineer:
+    topic_prefix_allowlist:
+      - agent.recall.*
+      - agent.goal_policy.*
+      - agent.execution_policy.*
+      - agent.failure_pattern.*
+      - agent.context_pollution.*
+    allowed_promotion_reasons:
+      - agent_behavior
+      - engineering_constraint
+      - failure_signature
+      - repro_pattern
+    disallowed_examples:
+      - 单轮 prompt 试验文本
+      - 未验证的策略偏好
+      - 偶发模型情绪判断
+  viewer_engineer:
+    topic_prefix_allowlist:
+      - viewer.ack_semantics.*
+      - viewer.observability.*
+      - viewer.error_surface.*
+      - viewer.usability_pattern.*
+      - viewer.web_test_contract.*
+    allowed_promotion_reasons:
+      - ux_constraint
+      - engineering_constraint
+      - failure_signature
+      - repro_pattern
+    disallowed_examples:
+      - 单次样式偏好
+      - 临时布局挪动
+      - 个人审美判断
+  qa_engineer:
+    topic_prefix_allowlist:
+      - qa.failure_signature.*
+      - qa.repro_path.*
+      - qa.gate_rule.*
+      - qa.regression_scope.*
+      - qa.test_strategy.*
+    allowed_promotion_reasons:
+      - failure_signature
+      - repro_pattern
+      - test_strategy
+    disallowed_examples:
+      - 一次性执行流水
+      - 未稳定复现的瞬时失败
+      - 口头测试印象
+  liveops_community:
+    topic_prefix_allowlist:
+      - community.messaging_boundary.*
+      - community.feedback_pattern.*
+      - community.incident_pattern.*
+      - community.escalation_rule.*
+      - community.channel_runbook.*
+    allowed_promotion_reasons:
+      - community_pattern
+      - incident_pattern
+      - policy_boundary
+    disallowed_examples:
+      - 单条评论原文
+      - 未聚类的零散抱怨
+      - 一次性活动排期记录

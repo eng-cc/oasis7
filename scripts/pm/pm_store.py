@@ -15,11 +15,19 @@ LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
 ALLOWED_SIGNAL_STATES = {"new", "triaged", "promoted_candidate_task", "discarded", "deferred"}
 ALLOWED_MEMORY_PROMOTION_STATES = {"pending", "promoted", "rejected", "deferred"}
 ALLOWED_PROMOTION_REASONS = {
+    "abi_contract",
+    "agent_behavior",
+    "community_pattern",
     "engineering_constraint",
     "failure_signature",
+    "incident_pattern",
     "policy_boundary",
+    "repro_pattern",
     "stable_pattern",
     "stage_decision",
+    "runtime_contract",
+    "test_strategy",
+    "ux_constraint",
 }
 ALLOWED_MEMORY_REJECTION_REASONS = {
     "one_off_operation",
@@ -2041,6 +2049,10 @@ def build_workflow_checklist(
         add(
             "write-devlog",
             "先回写当天 devlog，再做 signal / memory / backlog 的结构化收口。",
+        )
+        add(
+            "extract-memory",
+            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 devlog。",
         )
         if working_memory_entries > 0:
             add(

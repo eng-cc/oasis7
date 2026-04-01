@@ -45,6 +45,8 @@
 
 ## Checklist
 - 是否更新 `doc/game/*` 或 `doc/world-simulator/*` 的相关 PRD
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role agent_engineer --task-id <TASK-ID>`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否说明记忆、目标、执行、反馈四段链路
 - 是否补齐稳定性 / 漂移 / 成本回归
 - 是否定义失败策略与降级路径

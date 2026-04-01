@@ -45,6 +45,8 @@
 
 ## Checklist
 - 是否更新 `doc/world-runtime/prd.md` 与 `doc/world-runtime/project.md`
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role runtime_engineer --task-id <TASK-ID>`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否检查单文件 Rust 长度上限
 - 是否执行 `env -u RUSTC_WRAPPER cargo check`
 - 是否补 replay / recovery / long-run regression 验证

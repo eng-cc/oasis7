@@ -45,6 +45,8 @@
 
 ## Checklist
 - 是否更新 `doc/world-simulator/prd.md` 或子专题文档
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role viewer_engineer --task-id <TASK-ID>`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否优先走 agent-browser / Web-first 验证
 - 是否提供结构化错误和状态反馈
 - 是否保证关键 UI 行为可自动化测试
