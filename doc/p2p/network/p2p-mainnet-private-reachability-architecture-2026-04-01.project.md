@@ -8,7 +8,8 @@
 - [x] P2PARCH-0 (PRD-P2P-024-A/B/C/D/E) [test_tier_required]: 新建“主链级非全公网 P2P 覆盖网络架构”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
 - [x] P2PARCH-1 (PRD-P2P-024-A/B) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 node identity、signed peer record、bootnode/DHT/rendezvous 发现链路，并让业务层不再直接依赖静态 UDP peer truth。
   已落地 stable libp2p identity、signed peer record schema + DHT contract、默认 bootstrap/DHT/rendezvous discovery taxonomy，以及 query-driven peer acquisition（DHT discovery query + bootstrap cached peer list/record fallback + rendezvous register/discover 自动化）；rendezvous-discovered peer 继续经由 world/network/signature 校验后才进入候选集。
-- [ ] P2PARCH-2 (PRD-P2P-024-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 transport abstraction，统一 direct / hole-punched / relay path，并把 QUIC/TCP/Noise/mux 语义冻结到 substrate。
+- [x] P2PARCH-2 (PRD-P2P-024-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 transport abstraction，统一 direct / hole-punched / relay path，并把 QUIC/TCP/Noise/mux 语义冻结到 substrate。
+  已落地 transport substrate 收口：peer record 现在显式区分 `direct_addrs / hole_punch_addrs / relay_addrs`，runtime 会按 `direct QUIC -> direct TCP -> hole-punched QUIC/TCP -> relay-reserved` 排序与 failover；swarm 同时承载 direct transport 与 relay client transport，并记录 relay reservation / DCUtR 事件用于后续 reachability lifecycle。
 - [ ] P2PARCH-3 (PRD-P2P-024-C/D) [test_tier_required + test_tier_full]: `runtime_engineer` 落 `public / hybrid / private / relay_only / validator_hidden` deployment mode 与 `validator core / sentry / relay / full-storage / observer-light` 角色策略。
 - [ ] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
@@ -27,6 +28,8 @@
   - `P2PARCH-1` 已补齐 rendezvous 自动化：runtime 会在连接 bootstrap / rendezvous 节点后自动注册当前 namespace，并带 cookie 周期 discover 同 namespace registrations；发现结果仍需经 peer record 校验后才会入候选与拨号集合。
   - `P2PARCH-2` 已落首个 transport substrate 切片：runtime 现在会把 signed peer record 中的 `direct_addrs/relay_addrs` 显式提升成带 kind/security/mux 语义的 transport path 集合，并按 `direct -> relay` 顺序选路；当首选 path 失效时，会自动尝试下一条已知 path。
   - `P2PARCH-2` 已补 QUIC/TCP fallback 切片：swarm 现在同时承载 QUIC 与 TCP/Noise/Yamux，transport path 会按 `direct QUIC -> direct TCP -> relay` 排序；active path、failover 与 discovery 升级判断也会保留这一语义。
+  - `P2PARCH-2` 已补 hole-punched / relay-reserved substrate：peer record 新增 `hole_punch_addrs`，listener materialization 会把 `/p2p-circuit` 地址单独沉淀进 `relay_addrs`；transport path 排序固定为 `direct QUIC -> direct TCP -> hole-punched QUIC/TCP -> relay-reserved`，active path 也会保留已知 path kind。
+  - `P2PARCH-2` 已补 relay client transport 与 DCUtR 事件接线：swarm 现在可直接承载 `/p2p-circuit` relay transport，并在 reservation accepted 时刷新 peer record / provider 广告；hole-punch success/failure 事件已进入 runtime 观测面，后续只剩 reachability lifecycle 自动化与 mixed-topology 套件闭环。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -63,6 +66,9 @@
   - path failover：当首选 path 在连接建立前失败或已建立连接关闭时，runtime 会自动切到下一条已知 path
   - QUIC/TCP fallback：`build_swarm` 现在用 `OrTransport` 组合 QUIC 与 TCP/Noise/Yamux，并把 endpoint / peer record 都分类成统一的 `transport path` 语义
   - direct transport ranking 细化：当前优先级已固定为 `direct QUIC -> direct TCP -> relay`，discovery 发现更优 direct QUIC path 时可主动替换已有 direct TCP path
+  - hole-punched / relay-reserved path 收口：peer record 与 active endpoint 现在都会显式保留 `HolePunched` / `RelayReserved` kind，并把 relay session 归一到 `RelayTunnel + Noise + Yamux` 语义
+  - relay reservation substrate：listener relayed 地址会与 direct 地址分开发布，swarm 内部已承载 relay client transport，`/p2p-circuit` path 可直接拨号与监听
+  - reachability event surface：runtime 现在会记录 relay reservation accepted / relay circuit / DCUtR success/failure 事件，并在 relay reservation 建立后触发 peer record / provider 刷新
 - 完成定义:
   - direct -> punched -> relay 对业务透明
   - relay failure 可自动切换备用路径
@@ -134,5 +140,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 继续补齐 `P2PARCH-2` 余量，把 hole-punched / relay reservation 语义也接进同一 transport substrate，再进入 `P2PARCH-3` 的 deployment role policy 收口；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
+- 下一步: 进入 `P2PARCH-3` 的 deployment mode / role policy 收口，并把 AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化与 mixed-topology evidence 继续压到后续 `P2PARCH-6` 套件；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
 - 最近更新: 2026-04-02

@@ -972,6 +972,7 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
         node_role: options.node_role.as_str().to_string(),
         reachability_class: PeerReachabilityClass::Private,
         direct_addrs: Vec::new(),
+        hole_punch_addrs: Vec::new(),
         relay_addrs: Vec::new(),
         discovery_sources: vec![
             PeerDiscoverySource::StaticBootstrap,

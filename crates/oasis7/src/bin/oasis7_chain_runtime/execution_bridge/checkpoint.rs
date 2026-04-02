@@ -65,7 +65,9 @@ impl ExecutionCheckpointManifest {
             pinned_refs: self.pinned_refs.as_slice(),
             created_at_ms: self.created_at_ms,
         };
-        Ok(oasis7::runtime::blake3_hex(super::to_cbor(payload)?.as_slice()))
+        Ok(oasis7::runtime::blake3_hex(
+            super::to_cbor(payload)?.as_slice(),
+        ))
     }
 
     pub(super) fn validate(&self) -> Result<(), String> {
@@ -131,9 +133,7 @@ pub(super) fn execution_checkpoint_manifest_path(
         .join("manifest.json")
 }
 
-pub(super) fn execution_checkpoint_latest_path(
-    execution_records_dir: &Path,
-) -> std::path::PathBuf {
+pub(super) fn execution_checkpoint_latest_path(execution_records_dir: &Path) -> std::path::PathBuf {
     execution_checkpoint_root_dir(execution_records_dir).join("latest.json")
 }
 
@@ -510,9 +510,7 @@ pub(super) fn sync_execution_bridge_pin_set(
     Ok(pin_set)
 }
 
-fn list_execution_bridge_pre_v2_heights(
-    execution_records_dir: &Path,
-) -> Result<Vec<u64>, String> {
+fn list_execution_bridge_pre_v2_heights(execution_records_dir: &Path) -> Result<Vec<u64>, String> {
     let mut pre_v2_heights = Vec::new();
     for height in list_execution_bridge_record_heights(execution_records_dir)? {
         let record = load_execution_bridge_record(

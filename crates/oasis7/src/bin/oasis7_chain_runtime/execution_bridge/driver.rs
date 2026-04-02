@@ -429,14 +429,17 @@ pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
     if !snapshot_path.exists() || !journal_path.exists() {
         return Ok(RuntimeWorld::new_production_hardened());
     }
-    RuntimeWorld::load_from_dir(world_dir).map_err(|err| {
-        format!(
-            "load execution world from {} failed: {:?}",
-            world_dir.display(),
-            err
-        )
-    })
-    .map(|world| world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened()))
+    RuntimeWorld::load_from_dir(world_dir)
+        .map_err(|err| {
+            format!(
+                "load execution world from {} failed: {:?}",
+                world_dir.display(),
+                err
+            )
+        })
+        .map(|world| {
+            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+        })
 }
 
 pub(crate) fn persist_execution_world(

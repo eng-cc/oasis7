@@ -104,8 +104,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.status_bind = parse_required_value(&mut iter, "--status-bind")?;
             }
             "--storage-profile" => {
-                options.storage_profile =
-                    parse_required_value(&mut iter, "--storage-profile")?.parse::<StorageProfile>()?;
+                options.storage_profile = parse_required_value(&mut iter, "--storage-profile")?
+                    .parse::<StorageProfile>()?;
             }
             "--node-role" => {
                 let raw = parse_required_value(&mut iter, "--node-role")?;
@@ -128,8 +128,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     .ok()
                     .filter(|value| *value > 0)
                     .ok_or_else(|| {
-                        "--pos-slot-duration-ms requires a positive integer".to_string()
-                    })?;
+                    "--pos-slot-duration-ms requires a positive integer".to_string()
+                })?;
             }
             "--pos-ticks-per-slot" => {
                 let raw = parse_required_value(&mut iter, "--pos-ticks-per-slot")?;
@@ -166,7 +166,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--node-validator" => {
                 let raw = parse_required_value(&mut iter, "--node-validator")?;
-                options.node_validators.push(parse_validator_spec(raw.as_str())?);
+                options
+                    .node_validators
+                    .push(parse_validator_spec(raw.as_str())?);
             }
             "--node-auto-attest-all" => options.node_auto_attest_all_validators = true,
             "--node-no-auto-attest-all" => options.node_auto_attest_all_validators = false,

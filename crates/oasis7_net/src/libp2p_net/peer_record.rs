@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use futures::channel::oneshot;
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, Quorum, RecordKey};
+use libp2p::multiaddr::Protocol;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
 
@@ -132,16 +133,28 @@ fn materialize_peer_record(
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
 ) -> PeerRecord {
     let mut record = template.clone();
+    let listening_addrs = listening_addrs.lock().expect("lock listening addrs");
     if record.direct_addrs.is_empty() {
         record.direct_addrs = listening_addrs
-            .lock()
-            .expect("lock listening addrs")
             .iter()
+            .filter(|addr| !is_relayed_addr(addr))
+            .map(ToString::to_string)
+            .collect();
+    }
+    if record.relay_addrs.is_empty() {
+        record.relay_addrs = listening_addrs
+            .iter()
+            .filter(|addr| is_relayed_addr(addr))
             .map(ToString::to_string)
             .collect();
     }
     record.published_at_ms = super::now_ms();
     record
+}
+
+fn is_relayed_addr(addr: &Multiaddr) -> bool {
+    addr.iter()
+        .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
 }
 
 pub(super) fn put_record_query(

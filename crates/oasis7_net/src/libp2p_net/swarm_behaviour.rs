@@ -1,11 +1,13 @@
 use futures::future::Either;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::OrTransport;
+use libp2p::dcutr;
 use libp2p::gossipsub::{self, MessageAuthenticity};
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, store::MemoryStore};
 use libp2p::multiaddr::Protocol;
 use libp2p::noise;
+use libp2p::relay;
 use libp2p::rendezvous::{client as rendezvous_client, server as rendezvous_server};
 use libp2p::request_response::{self, ProtocolSupport};
 use libp2p::swarm::{NetworkBehaviour, Swarm};
@@ -20,6 +22,8 @@ pub(super) struct Behaviour {
     pub(super) gossipsub: gossipsub::Behaviour,
     pub(super) request_response: request_response::cbor::Behaviour<NetworkRequest, NetworkResponse>,
     pub(super) kademlia: kad::Behaviour<MemoryStore>,
+    pub(super) relay_client: relay::client::Behaviour,
+    pub(super) dcutr: dcutr::Behaviour,
     pub(super) rendezvous_client: rendezvous_client::Behaviour,
     pub(super) rendezvous_server: rendezvous_server::Behaviour,
 }
@@ -29,6 +33,8 @@ pub(super) enum BehaviourEvent {
     Gossipsub(gossipsub::Event),
     RequestResponse(request_response::Event<NetworkRequest, NetworkResponse>),
     Kademlia(kad::Event),
+    RelayClient(relay::client::Event),
+    Dcutr(dcutr::Event),
     RendezvousClient(rendezvous_client::Event),
     RendezvousServer(rendezvous_server::Event),
 }
@@ -48,6 +54,18 @@ impl From<request_response::Event<NetworkRequest, NetworkResponse>> for Behaviou
 impl From<kad::Event> for BehaviourEvent {
     fn from(event: kad::Event) -> Self {
         BehaviourEvent::Kademlia(event)
+    }
+}
+
+impl From<relay::client::Event> for BehaviourEvent {
+    fn from(event: relay::client::Event) -> Self {
+        BehaviourEvent::RelayClient(event)
+    }
+}
+
+impl From<dcutr::Event> for BehaviourEvent {
+    fn from(event: dcutr::Event) -> Self {
+        BehaviourEvent::Dcutr(event)
     }
 }
 
@@ -83,11 +101,14 @@ pub(super) fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
 
     let store = MemoryStore::new(peer_id);
     let kademlia = kad::Behaviour::new(peer_id, store);
+    let (relay_transport, relay_client) = relay::client::new(peer_id);
 
     let behaviour = Behaviour {
         gossipsub,
         request_response,
         kademlia,
+        relay_client,
+        dcutr: dcutr::Behaviour::new(peer_id),
         rendezvous_client: rendezvous_client::Behaviour::new(keypair.clone()),
         rendezvous_server: rendezvous_server::Behaviour::new(Default::default()),
     };
@@ -99,11 +120,19 @@ pub(super) fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
         .authenticate(noise::Config::new(keypair).expect("noise config"))
         .multiplex(libp2p::yamux::Config::default())
         .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)));
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
+    let direct_transport = OrTransport::new(quic_transport, tcp_transport).map(
+        |either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
             Either::Right((peer_id, muxer)) => (peer_id, muxer),
-        })
+        },
+    );
+    let relay_transport = relay_transport
+        .upgrade(libp2p::core::upgrade::Version::V1Lazy)
+        .authenticate(noise::Config::new(keypair).expect("relay noise config"))
+        .multiplex(libp2p::yamux::Config::default())
+        .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)));
+    let transport = OrTransport::new(direct_transport, relay_transport)
+        .map(|either_output, _| either_output.into_inner())
         .boxed();
 
     Swarm::new(transport, behaviour, peer_id, swarm_config)

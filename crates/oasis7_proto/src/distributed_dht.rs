@@ -67,6 +67,8 @@ pub struct PeerRecord {
     #[serde(default)]
     pub direct_addrs: Vec<String>,
     #[serde(default)]
+    pub hole_punch_addrs: Vec<String>,
+    #[serde(default)]
     pub relay_addrs: Vec<String>,
     #[serde(default)]
     pub discovery_sources: Vec<PeerDiscoverySource>,
@@ -108,7 +110,8 @@ pub trait DistributedDht<E> {
 
     fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), E>;
 
-    fn get_peer_record(&self, world_id: &str, peer_id: &str) -> Result<Option<SignedPeerRecord>, E>;
+    fn get_peer_record(&self, world_id: &str, peer_id: &str)
+        -> Result<Option<SignedPeerRecord>, E>;
 }
 
 #[cfg(test)]
@@ -172,6 +175,7 @@ mod tests {
                 node_role: "sequencer".to_string(),
                 reachability_class: PeerReachabilityClass::Private,
                 direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
+                hole_punch_addrs: Vec::new(),
                 relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
                 discovery_sources: vec![
                     PeerDiscoverySource::StaticBootstrap,
@@ -185,7 +189,8 @@ mod tests {
         };
 
         let encoded = serde_json::to_string(&record).expect("serialize");
-        let decoded: SignedPeerRecord = serde_json::from_str(encoded.as_str()).expect("deserialize");
+        let decoded: SignedPeerRecord =
+            serde_json::from_str(encoded.as_str()).expect("deserialize");
         assert_eq!(decoded, record);
     }
 }

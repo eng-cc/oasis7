@@ -1,9 +1,9 @@
-use super::*;
 use super::super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_latest_path,
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
 };
 use super::super::external_effect::build_execution_replay_plan;
+use super::*;
 use oasis7::runtime::LocalCasStore;
 
 #[test]
@@ -16,8 +16,8 @@ fn execution_replay_plan_without_checkpoint_replays_full_log() {
     persist_test_execution_record(records_dir.as_path(), 3, "exec-h3");
 
     let store = LocalCasStore::new(dir.join("store"));
-    let plan = build_execution_replay_plan(records_dir.as_path(), &store, 3)
-        .expect("build replay plan");
+    let plan =
+        build_execution_replay_plan(records_dir.as_path(), &store, 3).expect("build replay plan");
     assert_eq!(plan.target_height, 3);
     assert_eq!(plan.start_height, 1);
     assert!(plan.checkpoint.is_none());
@@ -106,8 +106,8 @@ fn execution_replay_plan_prefers_nearest_checkpoint_not_ahead_of_target() {
         .expect("persist checkpoint 5");
 
     let store = LocalCasStore::new(dir.join("store"));
-    let plan = build_execution_replay_plan(records_dir.as_path(), &store, 6)
-        .expect("build replay plan");
+    let plan =
+        build_execution_replay_plan(records_dir.as_path(), &store, 6).expect("build replay plan");
     assert_eq!(plan.start_height, 6);
     assert_eq!(plan.records.len(), 1);
     assert_eq!(plan.records[0].record.height, 6);
@@ -122,7 +122,10 @@ fn execution_replay_plan_prefers_nearest_checkpoint_not_ahead_of_target() {
     assert_eq!(earlier_plan.records.len(), 1);
     assert_eq!(earlier_plan.records[0].record.height, 4);
     assert_eq!(
-        earlier_plan.checkpoint.as_ref().map(|manifest| manifest.height),
+        earlier_plan
+            .checkpoint
+            .as_ref()
+            .map(|manifest| manifest.height),
         Some(3)
     );
 

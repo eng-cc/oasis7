@@ -2,14 +2,12 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::*;
 use super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_latest_path,
     execution_checkpoint_manifest_path, load_execution_bridge_record,
     load_execution_checkpoint_manifest, load_latest_execution_checkpoint_manifest,
     persist_execution_bridge_record, persist_execution_bridge_record_only,
-    persist_execution_checkpoint_manifest,
-    run_execution_bridge_retention_maintenance,
+    persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
 use super::driver::{
     bridge_committed_heights, load_execution_bridge_state, persist_execution_bridge_state,
@@ -18,10 +16,9 @@ use super::external_effect::{
     execution_committed_actions_hash, execution_module_anchor_hash,
     persist_execution_external_effect_materialization,
 };
+use super::*;
 use ed25519_dalek::{Signer, SigningKey};
-use oasis7::runtime::{
-    BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld,
-};
+use oasis7::runtime::{BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld};
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
@@ -317,9 +314,8 @@ fn execution_bridge_retention_maintenance_skips_aggressive_sweep_for_legacy_reco
     )
     .expect("persist legacy latest pointer");
 
-    let freed_bytes =
-        run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 1)
-            .expect("run retention maintenance");
+    let freed_bytes = run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 1)
+        .expect("run retention maintenance");
     assert_eq!(freed_bytes, 0);
     let record = load_execution_bridge_record(
         execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
@@ -434,8 +430,7 @@ fn persist_test_execution_record(
         None,
         height as i64 * 1_000,
     );
-    persist_execution_bridge_record(records_dir, &record)
-        .expect("persist test execution record");
+    persist_execution_bridge_record(records_dir, &record).expect("persist test execution record");
     record
 }
 
@@ -510,8 +505,7 @@ fn persist_test_external_effect(
         pre_step_execution_state_root: format!("pre-step-state-{height}"),
         world_manifest_hash: format!("manifest-hash-{height}"),
         active_modules_hash: execution_module_anchor_hash(&[]).expect("empty module hash"),
-        committed_actions_hash: execution_committed_actions_hash(&[])
-            .expect("empty actions hash"),
+        committed_actions_hash: execution_committed_actions_hash(&[]).expect("empty actions hash"),
         active_modules: Vec::new(),
         committed_actions: Vec::new(),
         unresolved_inputs: Vec::new(),

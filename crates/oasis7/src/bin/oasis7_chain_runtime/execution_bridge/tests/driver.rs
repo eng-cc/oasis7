@@ -1,4 +1,3 @@
-use super::*;
 use super::super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
     load_execution_bridge_record,
@@ -8,18 +7,18 @@ use super::super::driver::{
     simulator_world_dir_from_execution_world_dir, NodeRuntimeExecutionDriver,
 };
 use super::super::external_effect::load_execution_external_effect_materialization;
-use oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope;
+use super::*;
 use oasis7::consensus_action_payload::encode_consensus_action_payload;
+use oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope;
 use oasis7::runtime::{
-    Action as RuntimeAction, DomainEvent, LocalCasStore, ModuleKind, ModuleLimits,
-    ModuleManifest, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
-    ReleaseSecurityPolicy, WorldEventBody,
+    Action as RuntimeAction, DomainEvent, LocalCasStore, ModuleKind, ModuleLimits, ModuleManifest,
+    ModuleRole, ModuleSubscription, ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionHook};
+use oasis7_proto::storage_profile::StorageProfile;
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleCallFailure;
-use oasis7_proto::storage_profile::StorageProfile;
 use oasis7_wasm_executor::FixedSandbox;
 
 #[test]
@@ -39,13 +38,17 @@ fn execution_world_persistence_roundtrip() {
 fn load_execution_world_defaults_to_hardened_release_policy() {
     let dir = temp_dir("execution-world-release-policy");
     let missing_world = load_execution_world(dir.as_path()).expect("load missing world");
-    assert!(missing_world.release_security_policy().is_production_hardened());
+    assert!(missing_world
+        .release_security_policy()
+        .is_production_hardened());
 
     let legacy_world_dir = dir.join("legacy");
     let legacy_world = RuntimeWorld::new();
     persist_execution_world(legacy_world_dir.as_path(), &legacy_world).expect("persist world");
     let loaded_world = load_execution_world(legacy_world_dir.as_path()).expect("load world");
-    assert!(loaded_world.release_security_policy().is_production_hardened());
+    assert!(loaded_world
+        .release_security_policy()
+        .is_production_hardened());
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -89,7 +92,11 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
     };
     let manifest = tick_manifest(&wasm_hash);
     let mut world = RuntimeWorld::new();
-    let signer_public_key_hex = hex::encode(test_module_artifact_signing_key().verifying_key().to_bytes());
+    let signer_public_key_hex = hex::encode(
+        test_module_artifact_signing_key()
+            .verifying_key()
+            .to_bytes(),
+    );
     world
         .bind_node_identity(
             TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
@@ -102,11 +109,7 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
     });
     world.step().expect("register");
     world
-        .set_agent_resource_balance(
-            "agent-0",
-            oasis7::simulator::ResourceKind::Electricity,
-            128,
-        )
+        .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Electricity, 128)
         .expect("seed electricity");
     world
         .set_agent_resource_balance("agent-0", oasis7::simulator::ResourceKind::Data, 64)
@@ -137,9 +140,15 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
         .module_instances
         .get(&instance_id)
         .expect("installed module instance");
-    assert!(instance.active, "installed module instance should be active");
     assert!(
-        world.snapshot().module_tick_schedule.contains_key(&instance_id),
+        instance.active,
+        "installed module instance should be active"
+    );
+    assert!(
+        world
+            .snapshot()
+            .module_tick_schedule
+            .contains_key(&instance_id),
         "installed tick module should be scheduled"
     );
 
@@ -196,9 +205,13 @@ fn node_runtime_execution_driver_persists_chain_records() {
     let world_dir = dir.join("world");
     let records_dir = dir.join("records");
     let storage_root = dir.join("store");
-    let mut driver =
-        NodeRuntimeExecutionDriver::new(state_path.clone(), world_dir.clone(), records_dir.clone(), storage_root)
-            .expect("driver");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("driver");
     let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
 
     let first = driver
@@ -270,9 +283,13 @@ fn node_runtime_execution_driver_tolerates_non_contiguous_commit_heights() {
     let world_dir = dir.join("world");
     let records_dir = dir.join("records");
     let storage_root = dir.join("store");
-    let mut driver =
-        NodeRuntimeExecutionDriver::new(state_path.clone(), world_dir, records_dir.clone(), storage_root)
-            .expect("driver");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir,
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("driver");
     let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
 
     driver
@@ -370,7 +387,10 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
             committed_at_unix_ms: 33_000,
         })
         .expect("replay latest commit after restart");
-    assert_eq!(replayed_latest.execution_height, latest_result.execution_height);
+    assert_eq!(
+        replayed_latest.execution_height,
+        latest_result.execution_height
+    );
     assert_eq!(
         replayed_latest.execution_block_hash,
         latest_result.execution_block_hash
@@ -474,9 +494,10 @@ fn production_release_policy_release_default_applies_hardened_policy() {
         driver.execution_world.release_security_policy(),
         &ReleaseSecurityPolicy::production_hardened()
     );
-    assert!(
-        driver.execution_world.release_security_policy().is_production_hardened()
-    );
+    assert!(driver
+        .execution_world
+        .release_security_policy()
+        .is_production_hardened());
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -497,16 +518,15 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
     )
     .expect("driver");
 
-    let payload = encode_consensus_action_payload(
-        &ConsensusActionPayloadEnvelope::from_simulator_action(
+    let payload =
+        encode_consensus_action_payload(&ConsensusActionPayloadEnvelope::from_simulator_action(
             SimulatorAction::HarvestRadiation {
                 agent_id: "agent-0".to_string(),
                 max_amount: 1,
             },
             ActionSubmitter::System,
-        ),
-    )
-    .expect("encode simulator payload");
+        ))
+        .expect("encode simulator payload");
     let committed_action = oasis7_node::NodeConsensusAction::from_payload(1, "node-a", payload)
         .expect("consensus action");
     let action_root =
@@ -539,18 +559,14 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         record.latest_state_ref.as_deref(),
         record.snapshot_ref.as_deref()
     );
-    assert!(
-        record
-            .snapshot_ref
-            .as_deref()
-            .is_some_and(|snapshot_ref| !snapshot_ref.is_empty())
-    );
-    assert!(
-        record
-            .journal_ref
-            .as_deref()
-            .is_some_and(|journal_ref| !journal_ref.is_empty())
-    );
+    assert!(record
+        .snapshot_ref
+        .as_deref()
+        .is_some_and(|snapshot_ref| !snapshot_ref.is_empty()));
+    assert!(record
+        .journal_ref
+        .as_deref()
+        .is_some_and(|journal_ref| !journal_ref.is_empty()));
     let external_effect_ref = record
         .external_effect_ref
         .as_deref()

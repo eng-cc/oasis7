@@ -1,4 +1,3 @@
-use super::*;
 use super::super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
     list_execution_checkpoint_heights, load_execution_bridge_record,
@@ -8,10 +7,11 @@ use super::super::checkpoint::{
 };
 use super::super::driver::bridge_committed_heights;
 use super::super::external_effect::build_execution_replay_plan;
+use super::*;
 use std::collections::BTreeSet;
 
-use oasis7::runtime::{LocalCasStore, World as RuntimeWorld};
 use oasis7::runtime::BlobStore;
+use oasis7::runtime::{LocalCasStore, World as RuntimeWorld};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 
@@ -161,9 +161,8 @@ fn execution_bridge_retention_maintenance_clears_archive_refs_and_prunes_orphans
         records.push(record);
     }
 
-    let freed_bytes =
-        run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 2)
-            .expect("run retention maintenance");
+    let freed_bytes = run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 2)
+        .expect("run retention maintenance");
     assert!(freed_bytes > 0, "expected orphan sweep to free bytes");
 
     let record_1 = load_execution_bridge_record(
@@ -200,13 +199,28 @@ fn execution_bridge_retention_maintenance_clears_archive_refs_and_prunes_orphans
     assert!(record_6.journal_ref.is_some());
 
     assert!(!store
-        .has(records[0].snapshot_ref.as_deref().expect("record1 snapshot ref"))
+        .has(
+            records[0]
+                .snapshot_ref
+                .as_deref()
+                .expect("record1 snapshot ref")
+        )
         .expect("check archive snapshot"));
     assert!(store
-        .has(records[3].snapshot_ref.as_deref().expect("record4 snapshot ref"))
+        .has(
+            records[3]
+                .snapshot_ref
+                .as_deref()
+                .expect("record4 snapshot ref")
+        )
         .expect("check checkpoint snapshot"));
     assert!(store
-        .has(records[4].journal_ref.as_deref().expect("record5 journal ref"))
+        .has(
+            records[4]
+                .journal_ref
+                .as_deref()
+                .expect("record5 journal ref")
+        )
         .expect("check hot journal"));
 
     let _ = fs::remove_dir_all(dir);
@@ -267,7 +281,12 @@ fn bridge_committed_heights_sweeps_archive_refs_outside_default_hot_window() {
     assert!(record_hot.journal_ref.is_some());
 
     assert!(!store
-        .has(records[0].snapshot_ref.as_deref().expect("record1 snapshot ref"))
+        .has(
+            records[0]
+                .snapshot_ref
+                .as_deref()
+                .expect("record1 snapshot ref")
+        )
         .expect("check archive snapshot"));
     let checkpoint_index = checkpoint_height.saturating_sub(1) as usize;
     assert!(store
@@ -308,7 +327,8 @@ fn execution_bridge_pin_set_keeps_latest_head_and_hot_window_refs() {
     let mut all_refs = Vec::new();
     let mut records = Vec::new();
     for height in 1..=4 {
-        let record = persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+        let record =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
         all_refs.extend(record.snapshot_ref.iter().cloned());
         all_refs.extend(record.journal_ref.iter().cloned());
         all_refs.extend(record.latest_state_ref.iter().cloned());
@@ -372,7 +392,8 @@ fn execution_bridge_pin_set_keeps_checkpoint_refs_outside_hot_window() {
     fs::create_dir_all(records_dir.as_path()).expect("create records dir");
 
     for height in 1..=3 {
-        let _ = persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+        let _ =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
     }
 
     let checkpoint_latest_state_ref = store

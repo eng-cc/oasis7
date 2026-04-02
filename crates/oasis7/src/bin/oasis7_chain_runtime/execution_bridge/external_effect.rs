@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use oasis7::runtime::{blake3_hex, BlobStore, LocalCasStore, ModuleRegistry, World as RuntimeWorld};
+use oasis7::runtime::{
+    blake3_hex, BlobStore, LocalCasStore, ModuleRegistry, World as RuntimeWorld,
+};
 use oasis7_node::NodeExecutionCommitContext;
 
 use super::checkpoint::{
@@ -13,8 +15,8 @@ use super::checkpoint::{
 };
 use super::{
     ExecutionBridgeRecord, ExecutionCheckpointManifest, ExecutionCommittedActionAnchor,
-    ExecutionExternalEffectMaterialization, ExecutionModuleResolutionAnchor,
-    ExecutionReplayPlan, ExecutionReplayRecordInput, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
+    ExecutionExternalEffectMaterialization, ExecutionModuleResolutionAnchor, ExecutionReplayPlan,
+    ExecutionReplayRecordInput, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
     EXECUTION_EXTERNAL_EFFECT_CONTRACT_CLOSED_WORLD_V1, EXECUTION_EXTERNAL_EFFECT_SCHEMA_V1,
 };
 
@@ -233,8 +235,10 @@ fn load_execution_replay_record_input(
 ) -> Result<ExecutionReplayRecordInput, String> {
     let external_effect = match record.external_effect_ref.as_deref() {
         Some(external_effect_ref) => {
-            let external_effect =
-                load_execution_external_effect_materialization(execution_store, external_effect_ref)?;
+            let external_effect = load_execution_external_effect_materialization(
+                execution_store,
+                external_effect_ref,
+            )?;
             if external_effect.world_id != record.world_id {
                 return Err(format!(
                     "execution replay input world_id mismatch height={} expected={} actual={}",

@@ -1,4 +1,6 @@
-use super::peer_record::{sign_peer_record, verify_signed_peer_record};
+use super::peer_record::{
+    build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
+};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
     select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
@@ -120,6 +122,7 @@ fn sign_and_verify_peer_record_round_trip() {
         node_role: "sequencer".to_string(),
         reachability_class: crate::dht::PeerReachabilityClass::Private,
         direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
+        hole_punch_addrs: Vec::new(),
         relay_addrs: Vec::new(),
         discovery_sources: vec![
             crate::dht::PeerDiscoverySource::StaticBootstrap,
@@ -134,6 +137,46 @@ fn sign_and_verify_peer_record_round_trip() {
 }
 
 #[test]
+fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
+    let keypair = Keypair::generate_ed25519();
+    let listening_addrs = Arc::new(Mutex::new(vec![
+        "/ip4/127.0.0.1/udp/4103/quic-v1"
+            .parse()
+            .expect("direct listen addr"),
+        format!(
+            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+            PeerId::random()
+        )
+        .parse()
+        .expect("relay listen addr"),
+    ]));
+    let signed = build_configured_peer_record(
+        &keypair,
+        &PeerRecord {
+            peer_id: String::new(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 0,
+            ttl_ms: 60_000,
+        },
+        &listening_addrs,
+    )
+    .expect("build peer record");
+    assert_eq!(signed.record.direct_addrs.len(), 1);
+    assert_eq!(signed.record.hole_punch_addrs, Vec::<String>::new());
+    assert_eq!(signed.record.relay_addrs.len(), 1);
+    assert!(signed.record.direct_addrs[0].contains("/quic-v1"));
+    assert!(signed.record.relay_addrs[0].contains("/p2p-circuit"));
+}
+
+#[test]
 fn dht_get_peer_record_decodes_and_verifies_record() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
@@ -145,6 +188,7 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
             node_role: "storage".to_string(),
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
+            hole_punch_addrs: Vec::new(),
             relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
@@ -214,7 +258,7 @@ fn try_send_command_reports_queue_disconnect() {
 }
 
 #[test]
-fn peer_record_transport_paths_rank_quic_direct_before_tcp_and_relay() {
+fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
         &PeerRecord {
@@ -229,6 +273,7 @@ fn peer_record_transport_paths_rank_quic_direct_before_tcp_and_relay() {
                 "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
             ],
+            hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
@@ -239,7 +284,7 @@ fn peer_record_transport_paths_rank_quic_direct_before_tcp_and_relay() {
     .expect("sign peer record");
 
     let paths = peer_record_transport_paths(&signed).expect("transport paths");
-    assert_eq!(paths.len(), 3);
+    assert_eq!(paths.len(), 4);
     assert_eq!(paths[0].kind, TransportPathKind::Direct);
     assert_eq!(paths[0].flavor, TransportSessionFlavor::Quic);
     assert_eq!(paths[0].security, TransportSecurity::QuicTls);
@@ -248,12 +293,15 @@ fn peer_record_transport_paths_rank_quic_direct_before_tcp_and_relay() {
     assert_eq!(paths[1].flavor, TransportSessionFlavor::TcpNoiseYamux);
     assert_eq!(paths[1].security, TransportSecurity::Noise);
     assert_eq!(paths[1].muxer, TransportMuxer::Yamux);
-    assert_eq!(paths[2].kind, TransportPathKind::Relay);
+    assert_eq!(paths[2].kind, TransportPathKind::HolePunched);
+    assert_eq!(paths[2].flavor, TransportSessionFlavor::Quic);
+    assert_eq!(paths[3].kind, TransportPathKind::RelayReserved);
+    assert_eq!(paths[3].flavor, TransportSessionFlavor::RelayTunnel);
     assert!(paths[0].addr.to_string().contains("/p2p/"));
 }
 
 #[test]
-fn preferred_transport_path_skips_failed_quic_and_falls_back_to_tcp_before_relay() {
+fn preferred_transport_path_skips_direct_and_falls_back_to_hole_punch_before_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
         &PeerRecord {
@@ -267,6 +315,7 @@ fn preferred_transport_path_skips_failed_quic_and_falls_back_to_tcp_before_relay
                 "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
             ],
+            hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
@@ -277,11 +326,11 @@ fn preferred_transport_path_skips_failed_quic_and_falls_back_to_tcp_before_relay
     .expect("sign peer record");
 
     let paths = peer_record_transport_paths(&signed).expect("transport paths");
-    let failed: HashSet<String> = [paths[0].label()].into_iter().collect();
+    let failed: HashSet<String> = [paths[0].label(), paths[1].label()].into_iter().collect();
     let selected =
         select_preferred_transport_path(paths.as_slice(), &failed).expect("fallback path");
-    assert_eq!(selected.kind, TransportPathKind::Direct);
-    assert_eq!(selected.flavor, TransportSessionFlavor::TcpNoiseYamux);
+    assert_eq!(selected.kind, TransportPathKind::HolePunched);
+    assert_eq!(selected.flavor, TransportSessionFlavor::Quic);
 }
 
 #[test]
@@ -300,6 +349,7 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
                 "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
             ],
+            hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
@@ -311,13 +361,13 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
     let initial_paths = peer_record_transport_paths(&signed).expect("transport paths");
 
     let mut known = HashMap::new();
-    let mut failed: HashSet<String> = [initial_paths[2].label()].into_iter().collect();
+    let mut failed: HashSet<String> = [initial_paths[3].label()].into_iter().collect();
     sync_known_transport_paths(&mut known, &mut failed, peer_id, initial_paths.clone());
     sync_known_transport_paths(
         &mut known,
         &mut failed,
         peer_id,
-        initial_paths[..2].to_vec(),
+        initial_paths[..3].to_vec(),
     );
     assert!(failed.is_empty());
 }
@@ -348,8 +398,45 @@ fn active_transport_path_from_endpoint_infers_quic_and_relay_semantics() {
         .parse()
         .expect("relay endpoint"),
     );
-    assert_eq!(relay_path.kind, TransportPathKind::Relay);
-    assert_eq!(relay_path.flavor, TransportSessionFlavor::TcpNoiseYamux);
+    assert_eq!(relay_path.kind, TransportPathKind::RelayReserved);
+    assert_eq!(relay_path.flavor, TransportSessionFlavor::RelayTunnel);
     assert_eq!(relay_path.security, TransportSecurity::Noise);
     assert_eq!(relay_path.muxer, TransportMuxer::Yamux);
+}
+
+#[test]
+fn active_transport_path_from_endpoint_keeps_hole_punch_kind_when_known() {
+    let peer_id = PeerId::random();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: peer_id.to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &Keypair::generate_ed25519(),
+    )
+    .expect("sign peer record");
+    let mut known = HashMap::new();
+    known.insert(
+        peer_id,
+        peer_record_transport_paths(&signed).expect("transport paths"),
+    );
+    let hole_punched_path = active_transport_path_from_endpoint(
+        &known,
+        peer_id,
+        &"/ip4/127.0.0.1/udp/5103/quic-v1"
+            .parse()
+            .expect("hole-punch endpoint"),
+    );
+    assert_eq!(hole_punched_path.kind, TransportPathKind::HolePunched);
+    assert_eq!(hole_punched_path.flavor, TransportSessionFlavor::Quic);
 }

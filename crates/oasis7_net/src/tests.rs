@@ -233,6 +233,7 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
             node_role: "storage".to_string(),
             reachability_class: PeerReachabilityClass::Private,
             direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
             relay_addrs: Vec::new(),
             discovery_sources: vec![
                 PeerDiscoverySource::StaticBootstrap,
@@ -325,6 +326,7 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
             node_role: "storage".to_string(),
             reachability_class: PeerReachabilityClass::Private,
             direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
             relay_addrs: Vec::new(),
             discovery_sources: vec![
                 PeerDiscoverySource::StaticBootstrap,

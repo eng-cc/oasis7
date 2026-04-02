@@ -205,7 +205,10 @@ fn default_replication_network_config_uses_loopback_ephemeral_listen() {
     let peer_record = config.peer_record.expect("peer record");
     assert_eq!(peer_record.node_id, DEFAULT_NODE_ID);
     assert_eq!(peer_record.node_role, "sequencer");
-    assert_eq!(peer_record.reachability_class, PeerReachabilityClass::Private);
+    assert_eq!(
+        peer_record.reachability_class,
+        PeerReachabilityClass::Private
+    );
     assert_eq!(
         peer_record.discovery_sources,
         vec![

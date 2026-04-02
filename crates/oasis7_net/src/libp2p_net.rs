@@ -16,6 +16,7 @@ use futures::{FutureExt, StreamExt};
 use libp2p::gossipsub::{self, IdentTopic, TopicHash};
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, Quorum, RecordKey};
+use libp2p::relay;
 use libp2p::rendezvous;
 use libp2p::request_response::{self};
 use libp2p::swarm::SwarmEvent;
@@ -818,6 +819,78 @@ impl Libp2pNetwork {
                                         }
                                         _ => {}
                                     }
+                                }
+                                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
+                                    match event {
+                                        relay::client::Event::ReservationReqAccepted { relay_peer_id, renewal, .. } => {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p relay reservation accepted relay={relay_peer_id} renewal={renewal}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                            if let Some(template) = peer_record_template.as_ref() {
+                                                let _ = publish_configured_peer_record(
+                                                    &mut swarm,
+                                                    &mut pending_dht,
+                                                    &keypair_clone,
+                                                    template,
+                                                    &event_listening_addrs,
+                                                    None,
+                                                );
+                                                peer_record_last_published_at_ms = Some(now_ms());
+                                                publish_discovery_provider(
+                                                    &mut swarm,
+                                                    &mut provider_keys,
+                                                    template.world_id.as_str(),
+                                                );
+                                            }
+                                        }
+                                        relay::client::Event::OutboundCircuitEstablished { relay_peer_id, .. } => {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p relay outbound circuit established relay={relay_peer_id}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        relay::client::Event::InboundCircuitEstablished { src_peer_id, .. } => {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p relay inbound circuit established src={src_peer_id}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                    }
+                                }
+                                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(event)) => {
+                                    let outcome = match event.result {
+                                        Ok(connection_id) => {
+                                            format!(
+                                                "libp2p dcutr hole-punch upgraded peer={} connection_id={connection_id}",
+                                                event.remote_peer_id
+                                            )
+                                        }
+                                        Err(err) => {
+                                            format!(
+                                                "libp2p dcutr hole-punch failed peer={}: {err}",
+                                                event.remote_peer_id
+                                            )
+                                        }
+                                    };
+                                    push_bounded_clone(
+                                        &event_errors,
+                                        outcome,
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(event)) => {
                                     match event {

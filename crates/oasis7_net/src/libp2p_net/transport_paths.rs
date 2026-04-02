@@ -14,14 +14,16 @@ use super::swarm_behaviour::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum TransportPathKind {
     Direct,
-    Relay,
+    HolePunched,
+    RelayReserved,
 }
 
 impl TransportPathKind {
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Direct => "direct",
-            Self::Relay => "relay",
+            Self::HolePunched => "hole_punched",
+            Self::RelayReserved => "relay_reserved",
         }
     }
 }
@@ -30,6 +32,7 @@ impl TransportPathKind {
 pub(super) enum TransportSessionFlavor {
     Quic,
     TcpNoiseYamux,
+    RelayTunnel,
 }
 
 impl TransportSessionFlavor {
@@ -37,6 +40,7 @@ impl TransportSessionFlavor {
         match self {
             Self::Quic => "quic",
             Self::TcpNoiseYamux => "tcp+noise+yamux",
+            Self::RelayTunnel => "relay+tunnel+noise+yamux",
         }
     }
 }
@@ -103,8 +107,15 @@ pub(super) fn peer_record_transport_paths(
         &mut paths,
         &mut seen,
         peer_id,
+        record.record.hole_punch_addrs.iter(),
+        TransportPathKind::HolePunched,
+    );
+    extend_paths(
+        &mut paths,
+        &mut seen,
+        peer_id,
         record.record.relay_addrs.iter(),
-        TransportPathKind::Relay,
+        TransportPathKind::RelayReserved,
     );
     paths.sort_unstable_by_key(TransportPath::preference_rank);
 
@@ -166,9 +177,18 @@ pub(super) fn active_transport_path_from_endpoint(
         peer_id,
         addr: normalized,
         kind: infer_transport_path_kind(&normalized_without_peer_id),
-        flavor: infer_transport_session_flavor(&normalized_without_peer_id),
-        security: infer_transport_security(&normalized_without_peer_id),
-        muxer: infer_transport_muxer(&normalized_without_peer_id),
+        flavor: infer_transport_session_flavor(
+            infer_transport_path_kind(&normalized_without_peer_id),
+            &normalized_without_peer_id,
+        ),
+        security: infer_transport_security(
+            infer_transport_path_kind(&normalized_without_peer_id),
+            &normalized_without_peer_id,
+        ),
+        muxer: infer_transport_muxer(
+            infer_transport_path_kind(&normalized_without_peer_id),
+            &normalized_without_peer_id,
+        ),
     }
 }
 
@@ -267,9 +287,9 @@ fn extend_paths<'a>(
             peer_id,
             addr,
             kind,
-            flavor: infer_transport_session_flavor(&addr_without_peer_id),
-            security: infer_transport_security(&addr_without_peer_id),
-            muxer: infer_transport_muxer(&addr_without_peer_id),
+            flavor: infer_transport_session_flavor(kind, &addr_without_peer_id),
+            security: infer_transport_security(kind, &addr_without_peer_id),
+            muxer: infer_transport_muxer(kind, &addr_without_peer_id),
         });
     }
 }
@@ -279,13 +299,19 @@ fn infer_transport_path_kind(addr: &Multiaddr) -> TransportPathKind {
         .iter()
         .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
     {
-        TransportPathKind::Relay
+        TransportPathKind::RelayReserved
     } else {
         TransportPathKind::Direct
     }
 }
 
-fn infer_transport_session_flavor(addr: &Multiaddr) -> TransportSessionFlavor {
+fn infer_transport_session_flavor(
+    kind: TransportPathKind,
+    addr: &Multiaddr,
+) -> TransportSessionFlavor {
+    if matches!(kind, TransportPathKind::RelayReserved) {
+        return TransportSessionFlavor::RelayTunnel;
+    }
     if addr
         .iter()
         .any(|protocol| matches!(protocol, Protocol::QuicV1))
@@ -296,16 +322,20 @@ fn infer_transport_session_flavor(addr: &Multiaddr) -> TransportSessionFlavor {
     }
 }
 
-fn infer_transport_security(addr: &Multiaddr) -> TransportSecurity {
-    match infer_transport_session_flavor(addr) {
+fn infer_transport_security(kind: TransportPathKind, addr: &Multiaddr) -> TransportSecurity {
+    match infer_transport_session_flavor(kind, addr) {
         TransportSessionFlavor::Quic => TransportSecurity::QuicTls,
-        TransportSessionFlavor::TcpNoiseYamux => TransportSecurity::Noise,
+        TransportSessionFlavor::TcpNoiseYamux | TransportSessionFlavor::RelayTunnel => {
+            TransportSecurity::Noise
+        }
     }
 }
 
-fn infer_transport_muxer(addr: &Multiaddr) -> TransportMuxer {
-    match infer_transport_session_flavor(addr) {
+fn infer_transport_muxer(kind: TransportPathKind, addr: &Multiaddr) -> TransportMuxer {
+    match infer_transport_session_flavor(kind, addr) {
         TransportSessionFlavor::Quic => TransportMuxer::Quic,
-        TransportSessionFlavor::TcpNoiseYamux => TransportMuxer::Yamux,
+        TransportSessionFlavor::TcpNoiseYamux | TransportSessionFlavor::RelayTunnel => {
+            TransportMuxer::Yamux
+        }
     }
 }
