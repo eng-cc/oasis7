@@ -371,8 +371,8 @@ cat <<INFO
 
 Next:
   cd $TARGET_PATH
-  ./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>
-  sed -n '1,200p' .pm/tasks/<TASK-ID>.execution.md
+  ./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>
+  sed -n '1,200p' .pm/tasks/<TASK-UID>.execution.md
 INFO
 
 if [[ "$INIT_DOCS" == "1" ]]; then

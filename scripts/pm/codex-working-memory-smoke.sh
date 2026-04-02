@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 OUTPUT_JSON=0
 KEEP_TEMP=0
-SMOKE_TASK_ID="TASK-PM-9001"
+SMOKE_TASK_UID="task_a878d035986f54a79dc65a383a87de1c"
 
 usage() {
   cat <<'USAGE'
@@ -180,7 +180,7 @@ PREPARED_JSON_FALLBACK="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-tran
   --json)"
 
 RESULT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
-  --task-id "$SMOKE_TASK_ID" \
+  --task-uid "$SMOKE_TASK_UID" \
   --role producer_system_designer \
   --session-id session-test-001 \
   --worktree-hint codex-working-memory-smoke \
@@ -189,7 +189,7 @@ RESULT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.
   --json)"
 
 RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
-  --task-id "$SMOKE_TASK_ID" \
+  --task-uid "$SMOKE_TASK_UID" \
   --role producer_system_designer \
   --worktree-hint codex-working-memory-smoke \
   --codex-dir "$TMPDIR/.codex" \
@@ -197,31 +197,31 @@ RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-workin
   --json)"
 
 DRY_RUN_SIGNAL_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
-DRY_RUN_WM_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_ID.yaml" | awk '{print $1}')"
+DRY_RUN_WM_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml" | awk '{print $1}')"
 DRY_RUN_TASK_REGISTRY_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
 DRY_RUN_BACKLOG_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
 DRY_RUN_TASK_LIST_BEFORE="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
 DRY_RUN_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autoflow.sh" \
-  --task-id "$SMOKE_TASK_ID" \
+  --task-uid "$SMOKE_TASK_UID" \
   --entry-id WM-0002 \
   --severity medium \
   --priority P2 \
   --dry-run \
   --json)"
 DRY_RUN_SIGNAL_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
-DRY_RUN_WM_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_ID.yaml" | awk '{print $1}')"
+DRY_RUN_WM_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_UID.yaml" | awk '{print $1}')"
 DRY_RUN_TASK_REGISTRY_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
 DRY_RUN_BACKLOG_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
 DRY_RUN_TASK_LIST_AFTER="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
 
 SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-to-signal.sh" \
-  --task-id "$SMOKE_TASK_ID" \
+  --task-uid "$SMOKE_TASK_UID" \
   --entry-id WM-0001 \
   --severity medium \
   --json)"
 
 AUTOFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autoflow.sh" \
-  --task-id "$SMOKE_TASK_ID" \
+  --task-uid "$SMOKE_TASK_UID" \
   --entry-id WM-0002 \
   --severity medium \
   --priority P2 \
@@ -239,10 +239,10 @@ for item in payload.get("task_actions", []):
     if item.get("decision") != "created":
         continue
     task = item.get("task") or {}
-    task_id = task.get("task_id")
-    if not task_id:
+    task_uid = task.get("task_uid")
+    if not task_uid:
         continue
-    path = root / f".pm/tasks/{task_id}.execution.md"
+    path = root / f".pm/tasks/{task_uid}.execution.md"
     lines = path.read_text(encoding="utf-8").splitlines()
     filtered = [
         line for line in lines
@@ -263,16 +263,16 @@ PY
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
-REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-report.sh" --task-id "$SMOKE_TASK_ID" --json)"
+REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-report.sh" --task-uid "$SMOKE_TASK_UID" --json)"
 
-python3 - "$TMPDIR" "$SMOKE_TASK_ID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$DRY_RUN_JSON" "$DRY_RUN_SIGNAL_SHA_BEFORE" "$DRY_RUN_SIGNAL_SHA_AFTER" "$DRY_RUN_WM_SHA_BEFORE" "$DRY_RUN_WM_SHA_AFTER" "$DRY_RUN_TASK_REGISTRY_SHA_BEFORE" "$DRY_RUN_TASK_REGISTRY_SHA_AFTER" "$DRY_RUN_BACKLOG_SHA_BEFORE" "$DRY_RUN_BACKLOG_SHA_AFTER" "$DRY_RUN_TASK_LIST_BEFORE" "$DRY_RUN_TASK_LIST_AFTER" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
+python3 - "$TMPDIR" "$SMOKE_TASK_UID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$DRY_RUN_JSON" "$DRY_RUN_SIGNAL_SHA_BEFORE" "$DRY_RUN_SIGNAL_SHA_AFTER" "$DRY_RUN_WM_SHA_BEFORE" "$DRY_RUN_WM_SHA_AFTER" "$DRY_RUN_TASK_REGISTRY_SHA_BEFORE" "$DRY_RUN_TASK_REGISTRY_SHA_AFTER" "$DRY_RUN_BACKLOG_SHA_BEFORE" "$DRY_RUN_BACKLOG_SHA_AFTER" "$DRY_RUN_TASK_LIST_BEFORE" "$DRY_RUN_TASK_LIST_AFTER" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
 from __future__ import annotations
 import json
 import sys
 from pathlib import Path
 
 tmpdir = Path(sys.argv[1])
-smoke_task_id = sys.argv[2]
+smoke_task_uid = sys.argv[2]
 prepared = json.loads(sys.argv[3])
 prepared_fallback = json.loads(sys.argv[4])
 result = json.loads(sys.argv[5])
@@ -325,15 +325,15 @@ assert autoflow_json["signal_result"]["applied"] is True
 assert len(autoflow_json["task_actions"]) == 1
 assert autoflow_json["task_actions"][0]["decision"] == "created"
 assert report["entry_count"] == 2
-assert report["tasks"][smoke_task_id]["source_session_id"] == "session-test-001"
-assert str(report["tasks"][smoke_task_id]["last_extracted_ts"]) == "300"
-assert str(report["tasks"][smoke_task_id]["captured_until_ts"]) == "300"
-assert report["tasks"][smoke_task_id]["entries"][0]["promoted_to"]
-assert len(report["tasks"][smoke_task_id]["entries"][1]["promoted_to"]) == 2
+assert report["tasks"][smoke_task_uid]["source_session_id"] == "session-test-001"
+assert str(report["tasks"][smoke_task_uid]["last_extracted_ts"]) == "300"
+assert str(report["tasks"][smoke_task_uid]["captured_until_ts"]) == "300"
+assert report["tasks"][smoke_task_uid]["entries"][0]["promoted_to"]
+assert len(report["tasks"][smoke_task_uid]["entries"][1]["promoted_to"]) == 2
 
 payload = {
     "tmpdir": str(tmpdir),
-    "smoke_task_id": smoke_task_id,
+    "smoke_task_uid": smoke_task_uid,
     "prepared": prepared,
     "prepared_fallback": prepared_fallback,
     "result": result,

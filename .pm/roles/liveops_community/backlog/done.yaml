@@ -2,7 +2,7 @@ version: 1
 role: liveops_community
 status: done
 tasks:
-  - task_id: TASK-PM-0012
+  - task_uid: task_f563442dbff056d193e8cca2937cf775
     title: "Publish Moltbook trust repair cost follow-up post"
     priority: P2
     source_signal: null
@@ -13,20 +13,8 @@ tasks:
       - "Execution log and daily devlog capture post_id, timing, and follow-up windows."
     handoff_to: []
     status: done
-    task_path: .pm/tasks/TASK-PM-0012.yaml
-  - task_id: TASK-PM-0014
-    title: "Freeze Xiaohongshu ninth post pack for GUI death stance"
-    priority: P2
-    source_signal: null
-    related_prd:
-      - doc/readme/prd.md
-    acceptance:
-      - "Ninth Xiaohongshu post pack freezes title, body, interaction prompt, keywords, and boundary notes for the GUI stance topic."
-      - "readme module tracking and channel entry docs are updated to trace the new post pack without unsafe release claims."
-    handoff_to: []
-    status: done
-    task_path: .pm/tasks/TASK-PM-0014.yaml
-  - task_id: TASK-PM-0015
+    task_path: .pm/tasks/task_f563442dbff056d193e8cca2937cf775.yaml
+  - task_uid: task_75698c9e19ba5e6cb29b8c7bc3a5b7ff
     title: "Triage Moltbook comments and reply if needed"
     priority: P2
     source_signal: null
@@ -37,4 +25,16 @@ tasks:
       - "Execution log and daily devlog capture comment triage, replies sent, and remaining follow-up."
     handoff_to: []
     status: done
-    task_path: .pm/tasks/TASK-PM-0015.yaml
+    task_path: .pm/tasks/task_75698c9e19ba5e6cb29b8c7bc3a5b7ff.yaml
+  - task_uid: task_49617bcff6985802b74d61cb4c12d59f
+    title: "Freeze Xiaohongshu ninth post pack for GUI death stance"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Ninth Xiaohongshu post pack freezes title, body, interaction prompt, keywords, and boundary notes for the GUI stance topic."
+      - "readme module tracking and channel entry docs are updated to trace the new post pack without unsafe release claims."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_49617bcff6985802b74d61cb4c12d59f.yaml

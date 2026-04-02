@@ -1,5 +1,5 @@
 version: 1
-task_id: __TASK_ID__
+task_uid: __TASK_UID__
 role: __ROLE_NAME__
 worktree_hint: __WORKTREE_HINT__
 source_session_id: __SESSION_ID__

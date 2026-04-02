@@ -13,7 +13,8 @@
 
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
-- `.pm/tasks/TASK-PM-*.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 提升。
+- `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
+- task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
 首批标准角色：
@@ -33,7 +34,7 @@
 
 当前已落地的 Phase 2 基础链路：
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
-- `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/TASK-PM-*.yaml` 与对应 `.pm/tasks/TASK-PM-*.execution.md`，并同步更新 task registry 与 owner 的 `backlog/candidate.yaml`。
+- `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/task_<32hex>.yaml` 与对应 `.pm/tasks/task_<32hex>.execution.md`，并重建 task registry 与 owner 的 `backlog/candidate.yaml` 视图。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
 - `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
@@ -51,27 +52,28 @@
 - `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
-- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-id` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
+- `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 工作流接入基础用法：
-- 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>`
-- 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`
+- 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
+- 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
-- 开工前后都直接读写 `.pm/tasks/<TASK-ID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
+- 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
-- `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-id` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
+- `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 landing 前的最后一条 PM 自检命令。
 
 QA / liveops 基础用法：
-- `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/TASK-PM-0001.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
-- `./scripts/pm/promote-signal.sh --source-type incident --source-ref .pm/tasks/TASK-PM-0001.execution.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
+- `./scripts/pm/promote-signal.sh --source-type incident --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 
 状态迁移基础用法：
-- `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status committed`
-- `./scripts/pm/move-task.sh --task-id TASK-PM-0001 --to-status deferred`
-- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task TASK-PM-0001 --source-ref .pm/tasks/TASK-PM-0001.execution.md`
+- `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status committed`
+- `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status deferred`
+- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task task_<32hex> --source-ref .pm/tasks/task_<32hex>.execution.md`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`
@@ -90,22 +92,22 @@ memory report 基础用法：
 
 working_memory 基础用法：
 - `./scripts/pm/working-memory-report.sh`
-- `./scripts/pm/working-memory-report.sh --task-id TASK-PM-0003 --json`
+- `./scripts/pm/working-memory-report.sh --task-uid task_<32hex> --json`
 - `./scripts/pm/codex-transcript-report.sh --session-id <session_id> --json`
-- `./scripts/pm/codex-working-memory.sh --task-id TASK-PM-0003 --role producer_system_designer --session-id <session_id> --worktree-hint <hint>`
-- `./scripts/pm/codex-transcript-report.sh --task-id TASK-PM-0003 --json`
-- `./scripts/pm/codex-working-memory.sh --task-id TASK-PM-0003 --role producer_system_designer --full-scan`
-- `./scripts/pm/working-memory-to-signal.sh --task-id TASK-PM-0003 --entry-id WM-0001 --severity medium`
-- `./scripts/pm/working-memory-autoflow.sh --task-id TASK-PM-0003 --severity medium --priority P2`
-- `./scripts/pm/working-memory-autoflow.sh --task-id TASK-PM-0003 --dry-run --json`
+- `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --session-id <session_id> --worktree-hint <hint>`
+- `./scripts/pm/codex-transcript-report.sh --task-uid task_<32hex> --json`
+- `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --full-scan`
+- `./scripts/pm/working-memory-to-signal.sh --task-uid task_<32hex> --entry-id WM-0001 --severity medium`
+- `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --severity medium --priority P2`
+- `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --dry-run --json`
 - `./scripts/pm/reflection-report.sh --role producer_system_designer --json`
 - phase 1 的 transcript 预处理只负责排序与脱敏；结构化提炼统一交给 `codex exec --ephemeral`。
-- `codex-working-memory.sh` 首次成功导入后会把 `task_id -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续同一 task 可不再显式传 `--session-id`。
-- 同一 `task_id + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取，避免当前 live session 在提炼过程中把新生成消息再次吸回本轮输入；需要重扫整段 transcript 时显式传 `--full-scan`。
+- `codex-working-memory.sh` 首次成功导入后会把 `task_uid -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续同一 task 可不再显式传 `--session-id`。
+- 同一 `task_uid + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取，避免当前 live session 在提炼过程中把新生成消息再次吸回本轮输入；需要重扫整段 transcript 时显式传 `--full-scan`。
 - `working_memory` header 会记录 `source_session_id`、`source_thread_name`、`transcript_source`、`last_extracted_ts` 与 `captured_until_ts`，用于回放抽取来源与当前水位。
 - `working-memory-autoflow.sh` 只自动做安全动作：reflection signal + candidate task；不会自动升长期 memory，也不会自动改 stage / 正式文档。
 - `working-memory-autoflow.sh --dry-run` 是严格只读的 plan 模式：它只返回“会创建/复用哪些 reflection signal 与 candidate task”，不会改 `.pm/inbox/signals.jsonl`、`.pm/working_memory/*.yaml`、task registry 或 task files。
-- dry-run 结果里只有已存在对象才会带真实 `signal_id` / `task_id`；若对象尚未创建，apply 之前不会预留 ID，也不会留下任何半完成状态。
+- dry-run 结果里只有已存在对象才会带真实 `signal_id` / `task_uid`；若对象尚未创建，apply 之前不会预留 ID，也不会留下任何半完成状态。
 
 role report 基础用法：
 - `./scripts/pm/role-report.sh`
@@ -114,10 +116,10 @@ role report 基础用法：
 - 输出会同时带该角色 backlog 计数、任务列表，以及 active / needs_review / superseded memory。
 
 workflow report 基础用法：
-- `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-id TASK-PM-0001`
-- `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-id TASK-PM-0002`
+- `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-uid task_<32hex>`
+- `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
-- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-id` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
+- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-uid` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
 
 阶段汇总基础用法：
 - `./scripts/pm/stage-lint.sh`

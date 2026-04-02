@@ -1,12 +1,13 @@
-# TASK-PM-0001 Execution Log
+# task_0123456789abcdef0123456789abcdef Execution Log
 
-- task_id: TASK-PM-0001
+- task_uid: task_0123456789abcdef0123456789abcdef
 - title: REPLACE_ME
 - owner_role: producer_system_designer
 - worktree_hint: null
 
 <!-- Append entries using:
-## YYYY-MM-DD HH:MM:SS CST / role_name
-- 完成内容: ...
-- 遗留事项: ...
+Example:
+  ## YYYY-MM-DD HH:MM:SS CST / role_name
+  - 完成内容: ...
+  - 遗留事项: ...
 -->

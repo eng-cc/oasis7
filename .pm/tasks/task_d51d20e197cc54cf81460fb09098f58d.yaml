@@ -1,0 +1,25 @@
+task_uid: task_d51d20e197cc54cf81460fb09098f58d
+title: "对齐 3D 暂停后的 Viewer operator 脚本默认值与提示"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-pause-3d-script-alignment
+execution_log_path: .pm/tasks/task_d51d20e197cc54cf81460fb09098f58d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+  - scripts/capture-viewer-frame.sh
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-manual.manual.md
+related_prd:
+  - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+acceptance:
+  - "capture-viewer-frame 不再把切 3D 作为默认 auto-focus 行为"
+  - "Viewer 手册与兼容入口不再把 3D 描述为当前默认排障路径"
+  - "纯 3D visual QA 工具脚本对外提示为 hold/paused only，避免误当 active delivery 工具"
+handoff_to: []
+last_started_at: 2026-04-01T22:14:21+08:00
+last_closed_at: 2026-04-01T22:14:30+08:00
+updated_at: 2026-04-01T22:14:30+08:00

@@ -78,7 +78,7 @@
 
 ### 4. Working Memory
 ```yaml
-- task_id: TASK-PM-0003
+- task_uid: task_6d7c3d84f6ae5fca8966b69460033552
   role: producer_system_designer
   worktree_hint: engineering-working-memory-conversation-analysis
   entries:
@@ -99,7 +99,7 @@
   - `~/.codex/history.jsonl`
   - `~/.codex/sessions/**/rollout-*.jsonl`（当 `history.jsonl` 无该会话消息时回退）
 - `~/.codex/logs_1.sqlite` 仅作为后续可选解析层；在没有稳定 sqlite 解析器前，不作为实施前置条件。
-- wrapper 导出的 `output/.../<task_id>.jsonl` 视为后续可替换输入，不是 phase 1 的 canonical source。
+- wrapper 导出的 `output/.../<task_uid>.jsonl` 视为后续可替换输入，不是 phase 1 的 canonical source。
 - `source_refs` 需要至少能回指：
   - 原始文件路径；
   - `session_id`；
@@ -135,7 +135,7 @@
   - `next_step`
 - 对同一 live Codex session，抽取必须支持“首轮快照 + 后续按水位增量”：
   - 首轮可全量扫描已存在 transcript；
-  - 成功导入后，将 `source_session_id`、`transcript_source`、`last_extracted_ts`、`captured_until_ts` 回写到 `.pm/working_memory/<task_id>.yaml` header；
+  - 成功导入后，将 `source_session_id`、`transcript_source`、`last_extracted_ts`、`captured_until_ts` 回写到 `.pm/working_memory/<task_uid>.yaml` header；
   - 后续默认只读取 `after_ts=last_extracted_ts` 之后的新消息，避免“提炼 working_memory 的过程本身”污染同一轮输入；
   - 只有显式 `--full-scan` 才允许回扫整段 transcript。
 - 对重复 failure / repeated incident / recurring stage drift，允许创建 `reflection` signal。
@@ -156,10 +156,10 @@
   - `~/.codex/sessions/**/rollout-*.jsonl`（fallback）
   - `~/.codex/logs_1.sqlite`（optional）
 - 推荐新增/扩展：
-  - `.pm/working_memory/<task_id>.yaml`
+  - `.pm/working_memory/<task_uid>.yaml`
   - `.pm/registry/recall_profiles.yaml`
   - `scripts/pm/memory-report.sh --kind ... --profile-id ...`
-  - `scripts/pm/working-memory-report.sh --task-id ...`
+  - `scripts/pm/working-memory-report.sh --task-uid ...`
   - `scripts/pm/workflow-report.sh --phase ... --role ...` 默认按 profile 输出预算化视图
   - `scripts/pm/codex-transcript-report.sh --session-id ... [--after-ts ...] [--before-ts ...]` 或等价实现，用于把 `~/.codex` JSONL 规范化成 `working_memory` 输入
 

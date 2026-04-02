@@ -1,0 +1,28 @@
+task_uid: task_0e8cdcdddb7553a2a007ff14fefd79b5
+title: "Fix GitHub CI rust-size gate, m4 template drift, and builtin wasm manifest drift"
+owner_role: runtime_engineer
+worktree_hint: world-runtime-ci-fix-2026-04-01
+execution_log_path: .pm/tasks/task_0e8cdcdddb7553a2a007ff14fefd79b5.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - .github/workflows/rust.yml
+  - .github/workflows/wasm-determinism-gate.yml
+  - scripts/check-rust-file-size.sh
+  - scripts/sync-m1-builtin-wasm-artifacts.sh
+doc_refs:
+  - doc/world-runtime/project.md
+  - doc/world-runtime/prd.md
+related_prd:
+  - doc/world-runtime/prd.md
+acceptance:
+  - "scripts/check-rust-file-size.sh passes without new oversized Rust files"
+  - "m4 builtin template cargo checks pass after decode_action Result API handling is updated"
+  - "builtin wasm manifest/hash drift for GitHub-hosted m1/m5 and locally revalidated m4 canonical outputs is reconciled in tracked manifests and identity tests"
+  - "required CI-equivalent local validation passes for touched paths"
+handoff_to:
+  - wasm_platform_engineer
+last_started_at: 2026-04-01T11:34:36+08:00
+last_closed_at: 2026-04-01T12:01:04+08:00
+updated_at: 2026-04-01T16:17:37+08:00

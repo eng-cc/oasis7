@@ -283,8 +283,8 @@ if [[ "$OUTPUT_JSON" == "1" ]]; then
 fi
 
 if [[ "$CREATE_TASK" == "1" ]]; then
-  TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_id"])' <<<"$RESULT_JSON")"
-  echo "promote-signal: wrote $SIGNAL_ID and created $TASK_ID"
+  TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_uid"])' <<<"$RESULT_JSON")"
+  echo "promote-signal: wrote $SIGNAL_ID and created $TASK_UID"
 else
   echo "promote-signal: wrote $SIGNAL_ID"
 fi

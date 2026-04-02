@@ -113,12 +113,12 @@ SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --acceptance "blocked task exists in qa backlog" \
   --json)"
 
-TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_id"])' <<<"$SIGNAL_JSON")"
+TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_uid"])' <<<"$SIGNAL_JSON")"
 TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["execution_log_path"])' <<<"$SIGNAL_JSON")"
 cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
-# $TASK_ID Execution Log
+# $TASK_UID Execution Log
 
-- task_id: $TASK_ID
+- task_uid: $TASK_UID
 - title: viewer smoke blocked on startup bridge init
 - owner_role: qa_engineer
 - worktree_hint: null
@@ -129,7 +129,7 @@ cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 EOF
 
 MOVE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" \
-  --task-id "$TASK_ID" \
+  --task-uid "$TASK_UID" \
   --to-status blocked \
   --json)"
 
@@ -242,7 +242,7 @@ SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --gate-status blocked \
   --lane-status qa=blocked \
   --lane-status liveops=monitor \
-  --blocking-task "$TASK_ID" \
+  --blocking-task "$TASK_UID" \
   --source-ref "$TASK_LOG_PATH" \
   --json)"
 
@@ -254,30 +254,30 @@ if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   echo "required-tier-smoke: expected set-stage to fail when clearing a still-blocked task from blocking_tasks" >&2
   exit 1
 fi
-python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+python3 - "$TMPDIR" "$TASK_UID" <<'PY'
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-task_id = sys.argv[2]
+task_uid = sys.argv[2]
 
 for path_str in (".pm/stage/current.yaml", ".pm/stage/gate.yaml"):
     text = (root / path_str).read_text(encoding="utf-8")
-    if f"blocking_tasks:\n  - {task_id}\n" not in text:
+    if f"blocking_tasks:\n  - {task_uid}\n" not in text:
         raise SystemExit(f"failed set-stage should not persist cleared blocker in {path_str}")
 PY
 
-python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+python3 - "$TMPDIR" "$TASK_UID" <<'PY'
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-task_id = sys.argv[2]
+task_uid = sys.argv[2]
 
 for path_str in (".pm/stage/current.yaml", ".pm/stage/gate.yaml"):
     path = root / path_str
     text = path.read_text(encoding="utf-8")
-    needle = f"blocking_tasks:\n  - {task_id}\n"
+    needle = f"blocking_tasks:\n  - {task_uid}\n"
     if needle not in text:
         raise SystemExit(f"expected blocking task entry not found in {path}")
     path.write_text(text.replace(needle, "blocking_tasks: []\n"), encoding="utf-8")
@@ -288,8 +288,8 @@ if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-lint.sh" > /dev/null 2>"$ST
   echo "required-tier-smoke: expected stage-lint to fail when blocked task drifts out of stage/gate blocking_tasks" >&2
   exit 1
 fi
-if ! grep -q "blocked task missing from stage/gate blocking_tasks: $TASK_ID" "$STAGE_DRIFT_STDERR"; then
-  echo "required-tier-smoke: stage drift failure did not mention missing blocked task $TASK_ID" >&2
+if ! grep -q "blocked task missing from stage/gate blocking_tasks: $TASK_UID" "$STAGE_DRIFT_STDERR"; then
+  echo "required-tier-smoke: stage drift failure did not mention missing blocked task $TASK_UID" >&2
   exit 1
 fi
 
@@ -302,7 +302,7 @@ SET_STAGE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --gate-status blocked \
   --lane-status qa=blocked \
   --lane-status liveops=monitor \
-  --blocking-task "$TASK_ID" \
+  --blocking-task "$TASK_UID" \
   --source-ref "$TASK_LOG_PATH" \
   --json)"
 
@@ -310,36 +310,36 @@ BROKEN_BACKLOG="$TMPDIR/.pm/roles/qa_engineer/backlog/blocked.yaml"
 cp "$BROKEN_BACKLOG" "$BROKEN_BACKLOG.bak"
 printf 'this is not a valid backlog doc\n' > "$BROKEN_BACKLOG"
 WORKFLOW_FAIL_STDERR="$TMPDIR/workflow-report-fail.stderr"
-if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json > /dev/null 2>"$WORKFLOW_FAIL_STDERR"; then
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json > /dev/null 2>"$WORKFLOW_FAIL_STDERR"; then
   echo "required-tier-smoke: expected workflow-report to fail when backlog input is malformed" >&2
   exit 1
 fi
-python3 - "$TMPDIR" "$TASK_ID" <<'PY'
+python3 - "$TMPDIR" "$TASK_UID" <<'PY'
 from pathlib import Path
 import sys
 import yaml
 
 root = Path(sys.argv[1])
-task_id = sys.argv[2]
-task_path = root / f".pm/tasks/{task_id}.yaml"
+task_uid = sys.argv[2]
+task_path = root / f".pm/tasks/{task_uid}.yaml"
 payload = yaml.safe_load(task_path.read_text(encoding="utf-8"))
 if payload.get("last_started_at") not in (None, ""):
-    raise SystemExit(f"workflow-report failure should not write last_started_at for {task_id}")
+    raise SystemExit(f"workflow-report failure should not write last_started_at for {task_uid}")
 if payload.get("last_closed_at") not in (None, ""):
-    raise SystemExit(f"workflow-report failure should not write last_closed_at for {task_id}")
+    raise SystemExit(f"workflow-report failure should not write last_closed_at for {task_uid}")
 PY
 mv "$BROKEN_BACKLOG.bak" "$BROKEN_BACKLOG"
 
-WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json)"
+WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json)"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
-WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-id "$TASK_ID" --json)"
+WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-uid "$TASK_UID" --json)"
 mkdir -p "$TMPDIR/.pm/working_memory"
-cat > "$TMPDIR/.pm/working_memory/$TASK_ID.yaml" <<EOF
+cat > "$TMPDIR/.pm/working_memory/$TASK_UID.yaml" <<EOF
 version: 1
-task_id: $TASK_ID
+task_uid: $TASK_UID
 role: qa_engineer
 worktree_hint: null
 entries:
@@ -352,7 +352,7 @@ entries:
     expires_at: 2026-04-01T22:40:00+08:00
     promoted_to: []
 EOF
-WORKFLOW_CLOSE_WITH_WM_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-id "$TASK_ID" --json)"
+WORKFLOW_CLOSE_WITH_WM_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-uid "$TASK_UID" --json)"
 WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
@@ -380,14 +380,14 @@ stage_report = json.loads(sys.argv[16])
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
-if workflow_start["task_context"]["task_id"] != move_payload["task_id"]:
-    raise SystemExit("workflow start should bind explicit task_id")
+if workflow_start["task_context"]["task_uid"] != move_payload["task_uid"]:
+    raise SystemExit("workflow start should bind explicit task_uid")
 if not workflow_start["task_context"]["last_started_at"]:
     raise SystemExit("workflow start should record last_started_at")
 if not workflow_close["task_context"]["last_closed_at"]:
     raise SystemExit("workflow close should record last_closed_at")
 if workflow_close["working_memory_summary"]["entry_count"] != 0:
-    raise SystemExit("workflow close should use task-scoped working_memory counts for explicit task_id")
+    raise SystemExit("workflow close should use task-scoped working_memory counts for explicit task_uid")
 if workflow_review["signal_summary"]["pending_count"] != 1:
     raise SystemExit("producer workflow review should see one cross-role pending signal")
 pending = workflow_review["signal_summary"]["pending_signals"]
@@ -457,12 +457,12 @@ payload = json.loads(sys.argv[1])
 temp_root = sys.argv[2]
 stage = payload["stage_report"]
 signal_id = payload["signal"]["signal_id"]
-task_id = payload["move"]["task_id"]
+task_uid = payload["move"]["task_uid"]
 
 print("required-tier smoke: OK")
 print(f"- temp_root: {temp_root}")
 print(f"- signal_id: {signal_id}")
-print(f"- task_id: {task_id}")
+print(f"- task_uid: {task_uid}")
 print(f"- current_stage: {stage['current_stage']}")
 print(f"- gate_status: {stage['gate']['status']}")
 print(f"- blocked_tasks: {len(stage['blocking_tasks'])}")

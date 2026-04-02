@@ -45,7 +45,7 @@
 
 ## Checklist
 - 是否更新 `doc/world-runtime/wasm/*` 与主 `prd/project`
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role wasm_platform_engineer --task-id <TASK-ID>`
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role wasm_platform_engineer --task-uid <TASK-UID>`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否补 ABI / manifest / hash 一致性检查
 - 是否覆盖升级、禁用、权限不足、执行失败等边界

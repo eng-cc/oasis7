@@ -44,7 +44,7 @@
 ## Checklist
 - 是否按 `testing-manual.md` 选择正确套件
 - 是否区分 `test_tier_required` 与 `test_tier_full`
-- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer --task-id <TASK-ID>`
+- 是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer --task-uid <TASK-UID>`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只写 `devlog`
 - 是否记录失败签名、影响范围、回滚/绕行建议
 - 高价值失败签名是否已通过 `./scripts/pm/promote-signal.sh` / `promote-memory.sh` 回流到 `.pm/`

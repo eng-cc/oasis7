@@ -1,0 +1,26 @@
+task_uid: task_7c7b48865c6059e4b8810e7994af1484
+title: "Implement P2PARCH-2 transport substrate"
+owner_role: runtime_engineer
+worktree_hint: oasis7-p2p-p2parch-2-transport-substrate
+execution_log_path: .pm/tasks/task_7c7b48865c6059e4b8810e7994af1484.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+doc_refs:
+  - doc/p2p/project.md
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+  - doc/p2p/prd.md
+acceptance:
+  - "P2PARCH-2 defines a transport path substrate that distinguishes direct and relay paths without leaking path-specific logic into business callers."
+  - "Runtime chooses preferred transport paths with an explicit direct-before-relay ranking and can fail over when the preferred path disappears."
+  - "Implementation, tests, project docs and execution log remain traceable to PRD-P2P-024 / P2PARCH-2."
+handoff_to:
+  - qa_engineer
+last_started_at: 2026-04-02T14:23:09+08:00
+last_closed_at: 2026-04-02T14:40:44+08:00
+updated_at: 2026-04-02T14:40:44+08:00

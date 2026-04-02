@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 SCHEMA_PATH="$SCRIPT_DIR/schemas/codex-working-memory.schema.json"
 
-TASK_ID=""
+TASK_UID=""
 ROLE=""
 SESSION_ID=""
 WORKTREE_HINT=""
@@ -20,13 +20,13 @@ FULL_SCAN=0
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pm/codex-working-memory.sh --task-id TASK-PM-0001 --role producer_system_designer [--session-id <session_id> | --thread-name-pattern <pattern> | --worktree-hint <hint>] [options]
+Usage: ./scripts/pm/codex-working-memory.sh --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --role producer_system_designer [--session-id <session_id> | --thread-name-pattern <pattern> | --worktree-hint <hint>] [options]
 
 Deterministically preprocess one Codex session transcript (sort + redact), then call `codex exec`
-to extract task-scoped working_memory entries, and finally write them to `.pm/working_memory/<task_id>.yaml`.
+to extract task-scoped working_memory entries, and finally write them to `.pm/working_memory/<task_uid>.yaml`.
 
 Options:
-  --task-id <id>          Required task id
+  --task-uid <id>         Required task uid
   --role <role>           Required role
   --session-id <id>       Optional Codex session id; if omitted, try registry or pattern resolution
   --worktree-hint <hint>  Optional worktree hint written into working_memory header
@@ -45,8 +45,8 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --task-id)
-      TASK_ID="$2"
+    --task-uid)
+      TASK_UID="$2"
       shift 2
       ;;
     --role)
@@ -105,8 +105,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$TASK_ID" || -z "$ROLE" ]]; then
-  echo "codex-working-memory: --task-id and --role are required" >&2
+if [[ -z "$TASK_UID" || -z "$ROLE" ]]; then
+  echo "codex-working-memory: --task-uid and --role are required" >&2
   usage >&2
   exit 2
 fi
@@ -123,20 +123,20 @@ IMPORT_RESULT_JSON="$TMPDIR/import-result.json"
 PROMPT_FILE="$TMPDIR/prompt.txt"
 EXISTING_REPORT_JSON="$TMPDIR/existing-working-memory-report.json"
 
-python3 "$SCRIPT_DIR/pm_store.py" working-memory-report "$ROOT_DIR" --task-id "$TASK_ID" --json > "$EXISTING_REPORT_JSON"
+python3 "$SCRIPT_DIR/pm_store.py" working-memory-report "$ROOT_DIR" --task-uid "$TASK_UID" --json > "$EXISTING_REPORT_JSON"
 
-PREVIOUS_SESSION_ID="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); task=data.get("tasks", {}).get(sys.argv[2], {}); print(task.get("source_session_id") or "")' "$EXISTING_REPORT_JSON" "$TASK_ID")"
-LAST_EXTRACTED_TS="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); task=data.get("tasks", {}).get(sys.argv[2], {}); print(task.get("last_extracted_ts") or "")' "$EXISTING_REPORT_JSON" "$TASK_ID")"
+PREVIOUS_SESSION_ID="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); task=data.get("tasks", {}).get(sys.argv[2], {}); print(task.get("source_session_id") or "")' "$EXISTING_REPORT_JSON" "$TASK_UID")"
+LAST_EXTRACTED_TS="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); task=data.get("tasks", {}).get(sys.argv[2], {}); print(task.get("last_extracted_ts") or "")' "$EXISTING_REPORT_JSON" "$TASK_UID")"
 
 CURRENT_WATERMARK_SESSION_ID="$SESSION_ID"
 if [[ -z "$CURRENT_WATERMARK_SESSION_ID" && -n "$PREVIOUS_SESSION_ID" ]]; then
   CURRENT_WATERMARK_SESSION_ID="$PREVIOUS_SESSION_ID"
 fi
 
-TRANSCRIPT_ARGS=(
+  TRANSCRIPT_ARGS=(
   codex-transcript-report
   "$ROOT_DIR"
-  --task-id "$TASK_ID"
+  --task-uid "$TASK_UID"
   --codex-dir "$CODEX_DIR"
   --json
 )
@@ -199,7 +199,7 @@ fi
 IMPORT_ARGS=(
   import-working-memory
   "$ROOT_DIR"
-  --task-id "$TASK_ID"
+  --task-uid "$TASK_UID"
   --role "$ROLE"
   --input-json "$LLM_OUTPUT_JSON"
   --expires-days "$EXPIRES_DAYS"

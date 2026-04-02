@@ -1,6 +1,6 @@
 version: 1
 sessions:
-  - task_id: TASK-PM-0003
+  - task_uid: task_6d7c3d84f6ae5fca8966b69460033552
     role: producer_system_designer
     session_id: 019d4257-3fbc-79a2-8a6c-4b03d871a43a
     thread_name: "评估自我进化借鉴价值'} }]} }]}"

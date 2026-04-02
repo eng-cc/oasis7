@@ -1,0 +1,24 @@
+task_uid: task_ad34b36f56795347b73cd5aa2c7db71c
+title: "暂停 3D 可视化专题并将用户交互分支转为暂存态"
+owner_role: producer_system_designer
+worktree_hint: world-simulator-pause-3d-visualization
+execution_log_path: .pm/tasks/task_ad34b36f56795347b73cd5aa2c7db71c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "world-simulator 模块主 PRD 明确 3D 可视化相关工作进入暂停态，当前交互主路径改为非 3D / software_safe 优先"
+  - "world-simulator 项目管理文档新增本次设计调整任务，并标注 3D 专题为暂停、不再继续推进新需求"
+  - "Viewer 专题文档记录用户交互分支进入暂存态，仅保留恢复条件与回滚边界"
+handoff_to: []
+last_started_at: 2026-04-01T21:20:45+08:00
+last_closed_at: 2026-04-01T21:35:07+08:00
+updated_at: 2026-04-01T21:35:32+08:00

@@ -6,10 +6,12 @@ import json
 import pathlib
 import re
 import sys
+import uuid
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
 SAFE_SCALAR_RE = re.compile(r"[A-Za-z0-9_.:/+-]+")
+TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
 TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
 LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
 ALLOWED_SIGNAL_STATES = {"new", "triaged", "promoted_candidate_task", "discarded", "deferred"}
@@ -74,6 +76,25 @@ def now_iso() -> str:
 def die(message: str) -> None:
     print(message, file=sys.stderr)
     raise SystemExit(1)
+
+
+def replace_text_tokens(text: str, replacements: dict[str, str]) -> str:
+    updated = text
+    for old, new in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
+        updated = updated.replace(old, new)
+    return updated
+
+
+def rewrite_object_strings(value, replacements: dict[str, str]):
+    if isinstance(value, str):
+        return replace_text_tokens(value, replacements)
+    if isinstance(value, list):
+        return [rewrite_object_strings(item, replacements) for item in value]
+    if isinstance(value, OrderedDict):
+        return OrderedDict((key, rewrite_object_strings(item, replacements)) for key, item in value.items())
+    if isinstance(value, dict):
+        return {key: rewrite_object_strings(item, replacements) for key, item in value.items()}
+    return value
 
 
 def parse_scalar(value: str):
@@ -283,22 +304,133 @@ def validate_status(status: str) -> None:
         raise ValueError(f"unsupported task status: {status}")
 
 
-def find_registry_task(root: pathlib.Path, task_id: str) -> tuple[OrderedDict[str, object], list[OrderedDict[str, object]], OrderedDict[str, object], pathlib.Path]:
+def task_relative_path(task_uid: str) -> str:
+    return f".pm/tasks/{task_uid}.yaml"
+
+
+def task_execution_log_relative_path(task_uid: str) -> str:
+    return f".pm/tasks/{task_uid}.execution.md"
+
+
+def generate_task_uid(seed: str | None = None) -> str:
+    token = uuid.uuid5(uuid.NAMESPACE_URL, seed).hex if seed else uuid.uuid4().hex
+    return f"task_{token}"
+
+
+def task_file_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    return root / task_relative_path(task_uid)
+
+
+def find_task_file(root: pathlib.Path, task_uid: str) -> tuple[pathlib.Path, OrderedDict[str, object]]:
+    path = task_file_path(root, task_uid)
+    if not path.is_file():
+        raise ValueError(f"task not found: {task_uid}")
+    fields = load_mapping_document(path)
+    if str(fields.get("task_uid") or "") != task_uid:
+        raise ValueError(f"task file task_uid mismatch: {path.relative_to(root)}")
+    return path, fields
+
+
+def iter_task_files(
+    root: pathlib.Path,
+) -> list[tuple[pathlib.Path, OrderedDict[str, object]]]:
+    directory = root / ".pm/tasks"
+    if not directory.exists():
+        return []
+    records: list[tuple[pathlib.Path, OrderedDict[str, object]]] = []
+    for path in sorted(directory.glob("*.yaml")):
+        records.append((path, load_mapping_document(path)))
+    return records
+
+
+def task_order_key(fields: OrderedDict[str, object]) -> tuple[object, object, object]:
+    return (
+        PRIORITY_ORDER.get(str(fields.get("priority")), 99),
+        str(fields.get("updated_at") or ""),
+        str(fields.get("task_uid") or ""),
+    )
+
+
+def rebuild_task_views(root: pathlib.Path) -> None:
+    task_records = []
+    for path, fields in iter_task_files(root):
+        task_uid = str(fields.get("task_uid") or "")
+        if not task_uid:
+            continue
+        task_records.append((path, fields))
+
+    task_records.sort(key=lambda item: task_order_key(item[1]))
+
+    registry_header = OrderedDict(
+        [
+            ("version", 2),
+            ("identity_key", "task_uid"),
+            ("generated_from", ".pm/tasks/*.yaml"),
+        ]
+    )
+    registry_entries: list[OrderedDict[str, object]] = []
+    for path, fields in task_records:
+        registry_entries.append(
+            OrderedDict(
+                [
+                    ("task_uid", fields.get("task_uid")),
+                    ("owner_role", fields.get("owner_role")),
+                    ("task_path", str(path.relative_to(root))),
+                    ("status", fields.get("status")),
+                    ("priority", fields.get("priority")),
+                    ("source_signal", fields.get("source_signal")),
+                    ("updated_at", fields.get("updated_at")),
+                ]
+            )
+        )
+    dump_list_document(root / ".pm/registry/tasks.yaml", registry_header, "tasks", registry_entries)
+
+    for role in sorted(load_roles(root)):
+        for file_status in ("candidate", "committed", "blocked", "done"):
+            backlog_path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            if backlog_path.exists():
+                header, _ = load_list_document(backlog_path, "tasks")
+            else:
+                header = OrderedDict([("version", 1), ("role", role), ("status", file_status)])
+            items: list[OrderedDict[str, object]] = []
+            for path, fields in task_records:
+                if str(fields.get("owner_role") or "") != role:
+                    continue
+                status = str(fields.get("status") or "")
+                if backlog_file_for_status(status) != f"{file_status}.yaml":
+                    continue
+                items.append(
+                    OrderedDict(
+                        [
+                            ("task_uid", fields.get("task_uid")),
+                            ("title", fields.get("title")),
+                            ("priority", fields.get("priority")),
+                            ("source_signal", fields.get("source_signal")),
+                            ("related_prd", list(fields.get("related_prd", []))),
+                            ("acceptance", list(fields.get("acceptance", []))),
+                            ("handoff_to", list(fields.get("handoff_to", []))),
+                            ("status", status),
+                            ("task_path", str(path.relative_to(root))),
+                        ]
+                    )
+                )
+            dump_list_document(backlog_path, header, "tasks", items)
+
+
+def find_registry_task(root: pathlib.Path, task_uid: str) -> tuple[OrderedDict[str, object], list[OrderedDict[str, object]], OrderedDict[str, object], pathlib.Path]:
     registry_path = root / ".pm/registry/tasks.yaml"
     header, tasks = load_list_document(registry_path, "tasks")
     for entry in tasks:
-        if entry.get("task_id") == task_id:
+        if entry.get("task_uid") == task_uid:
             return header, tasks, entry, registry_path
-    raise ValueError(f"task not found in registry: {task_id}")
+    raise ValueError(f"task not found in registry: {task_uid}")
 
 
-def load_task_context(root: pathlib.Path, task_id: str) -> dict[str, object]:
-    _, _, registry_entry, _ = find_registry_task(root, task_id)
-    task_path = root / str(registry_entry["task_path"])
-    task_fields = load_mapping_document(task_path)
+def load_task_context(root: pathlib.Path, task_uid: str) -> dict[str, object]:
+    _, task_fields = find_task_file(root, task_uid)
     return {
-        "task_id": task_id,
-        "owner_role": registry_entry.get("owner_role"),
+        "task_uid": task_uid,
+        "owner_role": task_fields.get("owner_role"),
         "status": task_fields.get("status"),
         "priority": task_fields.get("priority"),
         "title": task_fields.get("title"),
@@ -310,37 +442,34 @@ def load_task_context(root: pathlib.Path, task_id: str) -> dict[str, object]:
     }
 
 
-def task_execution_log_relative_path(task_id: str) -> str:
-    return f".pm/tasks/{task_id}.execution.md"
-
-
 def init_task_execution_log(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     title: str,
     owner_role: str,
     worktree_hint: str | None,
     *,
     path_rel: str | None = None,
 ) -> None:
-    relative_path = path_rel or task_execution_log_relative_path(task_id)
+    relative_path = path_rel or task_execution_log_relative_path(task_uid)
     path = root / relative_path
     if path.exists():
         return
     path.write_text(
         "\n".join(
             [
-                f"# {task_id} Execution Log",
+                f"# {task_uid} Execution Log",
                 "",
-                f"- task_id: {task_id}",
+                f"- task_uid: {task_uid}",
                 f"- title: {title}",
                 f"- owner_role: {owner_role}",
                 f"- worktree_hint: {worktree_hint or 'null'}",
                 "",
                 "<!-- Append entries using:",
-                "## YYYY-MM-DD HH:MM:SS CST / role_name",
-                "- 完成内容: ...",
-                "- 遗留事项: ...",
+                "Example:",
+                "  ## YYYY-MM-DD HH:MM:SS CST / role_name",
+                "  - 完成内容: ...",
+                "  - 遗留事项: ...",
                 "-->",
                 "",
             ]
@@ -349,28 +478,25 @@ def init_task_execution_log(
     )
 
 
-def record_task_workflow_phase(root: pathlib.Path, task_id: str, role: str, phase: str) -> dict[str, object]:
+def record_task_workflow_phase(root: pathlib.Path, task_uid: str, role: str, phase: str) -> dict[str, object]:
     if phase not in {"start", "close"}:
         raise ValueError(f"unsupported workflow record phase: {phase}")
 
-    registry_header, registry_entries, registry_entry, registry_path = find_registry_task(root, task_id)
-    owner_role = str(registry_entry["owner_role"])
+    task_path, task_fields = find_task_file(root, task_uid)
+    owner_role = str(task_fields.get("owner_role") or "")
     if owner_role != role:
-        raise ValueError(f"task owner_role mismatch for workflow report: {task_id} -> {owner_role} != {role}")
+        raise ValueError(f"task owner_role mismatch for workflow report: {task_uid} -> {owner_role} != {role}")
 
     updated_at = now_iso()
-    task_path = root / str(registry_entry["task_path"])
-    task_fields = load_mapping_document(task_path)
     if phase == "start":
         task_fields["last_started_at"] = updated_at
     else:
         task_fields["last_closed_at"] = updated_at
     task_fields["updated_at"] = updated_at
-    registry_entry["updated_at"] = updated_at
 
-    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
     dump_mapping_document(task_path, task_fields)
-    return load_task_context(root, task_id)
+    rebuild_task_views(root)
+    return load_task_context(root, task_uid)
 
 
 def collect_signals(root: pathlib.Path) -> tuple[set[str], set[str]]:
@@ -444,8 +570,12 @@ def working_memory_dir(root: pathlib.Path) -> pathlib.Path:
     return root / ".pm/working_memory"
 
 
-def working_memory_path(root: pathlib.Path, task_id: str) -> pathlib.Path:
-    return working_memory_dir(root) / f"{task_id}.yaml"
+def working_memory_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    return working_memory_dir(root) / f"{task_uid}.yaml"
+
+
+def working_memory_relative_path(task_uid: str) -> str:
+    return f".pm/working_memory/{task_uid}.yaml"
 
 
 def codex_sessions_registry_path(root: pathlib.Path) -> pathlib.Path:
@@ -464,7 +594,7 @@ def load_codex_sessions_registry(
 
 def remember_codex_session(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str,
     session_id: str,
     thread_name: str | None,
@@ -477,14 +607,14 @@ def remember_codex_session(
 
     retained: list[OrderedDict[str, object]] = []
     for entry in entries:
-        if str(entry.get("task_id") or "") == task_id:
+        if str(entry.get("task_uid") or "") == task_uid:
             continue
         retained.append(entry)
 
     retained.append(
         OrderedDict(
             [
-                ("task_id", task_id),
+                ("task_uid", task_uid),
                 ("role", role),
                 ("session_id", session_id),
                 ("thread_name", thread_name),
@@ -496,7 +626,7 @@ def remember_codex_session(
     )
     dump_list_document(path, header, "sessions", retained)
     return {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "role": role,
         "session_id": session_id,
         "thread_name": thread_name,
@@ -507,10 +637,10 @@ def remember_codex_session(
     }
 
 
-def resolve_task_worktree_hint(root: pathlib.Path, task_id: str | None) -> str | None:
-    if not task_id:
+def resolve_task_worktree_hint(root: pathlib.Path, task_uid: str | None) -> str | None:
+    if not task_uid:
         return None
-    task_file = root / f".pm/tasks/{task_id}.yaml"
+    task_file = task_file_path(root, task_uid)
     if not task_file.exists():
         return None
     fields = load_mapping_document(task_file)
@@ -524,7 +654,7 @@ def resolve_codex_session_id(
     root: pathlib.Path,
     codex_dir: pathlib.Path,
     session_id: str | None,
-    task_id: str | None,
+    task_uid: str | None,
     worktree_hint: str | None,
     thread_name_pattern: str | None,
 ) -> tuple[str, str, str | None]:
@@ -532,20 +662,20 @@ def resolve_codex_session_id(
         metadata = load_codex_session_metadata(codex_dir, session_id)
         return session_id, "explicit", str(metadata.get("thread_name") or "")
 
-    if task_id:
+    if task_uid:
         _, _, registry_entries = load_codex_sessions_registry(root)
         for entry in reversed(registry_entries):
-            if str(entry.get("task_id") or "") == task_id:
+            if str(entry.get("task_uid") or "") == task_uid:
                 resolved_session_id = str(entry.get("session_id") or "")
                 if not resolved_session_id:
                     break
                 metadata = load_codex_session_metadata(codex_dir, resolved_session_id)
                 return resolved_session_id, "registry", str(metadata.get("thread_name") or "")
 
-    derived_worktree_hint = worktree_hint or resolve_task_worktree_hint(root, task_id)
+    derived_worktree_hint = worktree_hint or resolve_task_worktree_hint(root, task_uid)
     pattern = thread_name_pattern or derived_worktree_hint
     if not pattern:
-        raise ValueError("missing session resolution input: provide --session-id, --task-id with saved mapping, --worktree-hint, or --thread-name-pattern")
+        raise ValueError("missing session resolution input: provide --session-id, --task-uid with saved mapping, --worktree-hint, or --thread-name-pattern")
 
     index_path = codex_dir / "session_index.jsonl"
     if not index_path.exists():
@@ -572,11 +702,11 @@ def resolve_codex_session_id(
 
 def load_working_memory_document(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str | None = None,
     worktree_hint: str | None = None,
 ) -> tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]]]:
-    path = working_memory_path(root, task_id)
+    path = working_memory_path(root, task_uid)
     if path.exists():
         header, entries = load_list_document(path, "entries")
         return path, header, entries
@@ -584,7 +714,7 @@ def load_working_memory_document(
     header: OrderedDict[str, object] = OrderedDict(
         [
             ("version", 1),
-            ("task_id", task_id),
+            ("task_uid", task_uid),
             ("role", role),
             ("worktree_hint", worktree_hint),
         ]
@@ -617,7 +747,7 @@ def next_working_memory_entry_id(entries: list[OrderedDict[str, object]]) -> str
 
 def build_working_memory_report(
     root: pathlib.Path,
-    task_id: str | None,
+    task_uid: str | None,
     role_filter: str | None,
 ) -> dict[str, object]:
     if role_filter and role_filter not in load_roles(root):
@@ -630,9 +760,9 @@ def build_working_memory_report(
     total_entries = 0
 
     for path, header, entries in iter_working_memory_documents(root):
-        current_task_id = str(header.get("task_id") or path.stem)
+        current_task_uid = str(header.get("task_uid") or path.stem)
         current_role = str(header.get("role") or "")
-        if task_id and current_task_id != task_id:
+        if task_uid and current_task_uid != task_uid:
             continue
         if role_filter and current_role != role_filter:
             continue
@@ -661,8 +791,8 @@ def build_working_memory_report(
                 )
             )
 
-        task_payloads[current_task_id] = {
-            "task_id": current_task_id,
+        task_payloads[current_task_uid] = {
+            "task_uid": current_task_uid,
             "role": header.get("role"),
             "worktree_hint": header.get("worktree_hint"),
             "source_session_id": header.get("source_session_id"),
@@ -677,7 +807,7 @@ def build_working_memory_report(
 
     return {
         "generated_at": now_iso(),
-        "task_filter": task_id,
+        "task_filter": task_uid,
         "role_filter": role_filter,
         "task_count": len(task_payloads),
         "entry_count": total_entries,
@@ -697,12 +827,12 @@ def run_working_memory_lint(root: pathlib.Path) -> None:
     if not directory.exists():
         fail("missing directory: .pm/working_memory")
     for path, header, entries in iter_working_memory_documents(root):
-        task_id = str(header.get("task_id") or "")
+        task_uid = str(header.get("task_uid") or "")
         role = header.get("role")
-        if not task_id:
-            fail(f"{path.relative_to(root)} missing task_id")
-        elif path.name != f"{task_id}.yaml":
-            fail(f"{path.relative_to(root)} filename/task_id mismatch: {path.name} != {task_id}.yaml")
+        if not task_uid:
+            fail(f"{path.relative_to(root)} missing task_uid")
+        elif path.name != f"{task_uid}.yaml":
+            fail(f"{path.relative_to(root)} filename/task_uid mismatch: {path.name} != {task_uid}.yaml")
 
         if role is None or str(role) not in roles:
             fail(f"{path.relative_to(root)} unknown role: {role}")
@@ -1007,7 +1137,7 @@ def build_codex_transcript_report(
 
 def import_working_memory_entries(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str,
     worktree_hint: str | None,
     entries_payload: list[dict[str, object]],
@@ -1023,7 +1153,7 @@ def import_working_memory_entries(
     if expires_days < 0:
         raise ValueError("--expires-days must be >= 0")
 
-    path, header, existing_entries = load_working_memory_document(root, task_id, role=role, worktree_hint=worktree_hint)
+    path, header, existing_entries = load_working_memory_document(root, task_uid, role=role, worktree_hint=worktree_hint)
     directory = working_memory_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
     header["role"] = role
@@ -1087,7 +1217,7 @@ def import_working_memory_entries(
 
     dump_list_document(path, header, "entries", existing_entries)
     return {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "role": role,
         "worktree_hint": worktree_hint,
         "path": str(path),
@@ -1099,10 +1229,10 @@ def import_working_memory_entries(
 
 def resolve_working_memory_context(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str | None,
 ) -> tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]], str]:
-    path, header, entries = load_working_memory_document(root, task_id)
+    path, header, entries = load_working_memory_document(root, task_uid)
     resolved_role = str(role or header.get("role") or "")
     if resolved_role not in load_roles(root):
         raise ValueError(f"unknown role: {resolved_role}")
@@ -1111,7 +1241,7 @@ def resolve_working_memory_context(
 
 def plan_working_memory_signal_promotions(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str | None,
     entry_ids: list[str],
     severity: str,
@@ -1121,7 +1251,7 @@ def plan_working_memory_signal_promotions(
     if not entry_ids:
         raise ValueError("at least one --entry-id is required")
 
-    path, header, entries, resolved_role = resolve_working_memory_context(root, task_id, role)
+    path, header, entries, resolved_role = resolve_working_memory_context(root, task_uid, role)
     entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
     signal_entries = load_signal_entries(root)
     relative_source_path = str(path.relative_to(root))
@@ -1158,7 +1288,7 @@ def plan_working_memory_signal_promotions(
         plans.append(plan)
 
     return {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "role": resolved_role,
         "severity": severity,
         "working_memory_path": relative_source_path,
@@ -1191,7 +1321,7 @@ def summarize_working_memory_signal_plan(
             created.append(shaped)
 
     return {
-        "task_id": plan["task_id"],
+        "task_uid": plan["task_uid"],
         "role": plan["role"],
         "severity": plan["severity"],
         "working_memory_path": plan["working_memory_path"],
@@ -1250,12 +1380,11 @@ def next_signal_id(root: pathlib.Path) -> str:
     return f"SIG-PM-{max_sequence + 1:04d}"
 
 
-def next_task_id(root: pathlib.Path) -> str:
-    header, _ = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
-    next_sequence = header.get("next_sequence")
-    if next_sequence is None or not str(next_sequence).isdigit():
-        raise ValueError("tasks registry missing numeric next_sequence")
-    return f"TASK-PM-{int(next_sequence):04d}"
+def next_task_uid(root: pathlib.Path) -> str:
+    while True:
+        task_uid = generate_task_uid()
+        if not task_file_path(root, task_uid).exists():
+            return task_uid
 
 
 def create_candidate_task(
@@ -1265,33 +1394,32 @@ def create_candidate_task(
     priority: str,
     source_signal: str | None,
     source_refs: list[str],
+    doc_refs: list[str],
     related_prd: list[str],
     acceptance: list[str],
     handoff_to: list[str],
     worktree_hint: str | None,
 ) -> dict[str, object]:
-    if owner_role not in load_roles(root):
+    roles = load_roles(root)
+    if owner_role not in roles:
         raise ValueError(f"unknown owner role: {owner_role}")
+    for role in handoff_to:
+        if role not in roles:
+            raise ValueError(f"unknown handoff role: {role}")
     if priority not in PRIORITY_ORDER:
         raise ValueError(f"unsupported priority: {priority}")
 
-    registry_path = root / ".pm/registry/tasks.yaml"
-    registry_header, registry_entries = load_list_document(registry_path, "tasks")
-    next_sequence = registry_header.get("next_sequence")
-    if next_sequence is None or not str(next_sequence).isdigit():
-        raise ValueError("tasks registry missing numeric next_sequence")
-
-    task_id = f"TASK-PM-{int(next_sequence):04d}"
-    task_path_rel = f".pm/tasks/{task_id}.yaml"
-    execution_log_path_rel = task_execution_log_relative_path(task_id)
-    task_path = root / task_path_rel
+    task_uid = next_task_uid(root)
+    task_path_rel = task_relative_path(task_uid)
+    execution_log_path_rel = task_execution_log_relative_path(task_uid)
+    task_path = task_file_path(root, task_uid)
     if task_path.exists():
         raise ValueError(f"task file already exists: {task_path_rel}")
 
     updated_at = now_iso()
     task_fields = OrderedDict(
         [
-            ("task_id", task_id),
+            ("task_uid", task_uid),
             ("title", title),
             ("owner_role", owner_role),
             ("worktree_hint", worktree_hint),
@@ -1300,7 +1428,7 @@ def create_candidate_task(
             ("priority", priority),
             ("source_signal", source_signal),
             ("source_refs", list(source_refs)),
-            ("doc_refs", []),
+            ("doc_refs", list(doc_refs)),
             ("related_prd", list(related_prd)),
             ("acceptance", list(acceptance)),
             ("handoff_to", list(handoff_to)),
@@ -1308,48 +1436,14 @@ def create_candidate_task(
         ]
     )
     dump_mapping_document(task_path, task_fields)
-    init_task_execution_log(root, task_id, title, owner_role, worktree_hint, path_rel=execution_log_path_rel)
-
-    registry_entries.append(
-        OrderedDict(
-            [
-                ("task_id", task_id),
-                ("owner_role", owner_role),
-                ("task_path", task_path_rel),
-                ("status", "candidate"),
-                ("priority", priority),
-                ("source_signal", source_signal),
-                ("updated_at", updated_at),
-            ]
-        )
-    )
-    registry_header["next_sequence"] = int(next_sequence) + 1
-    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
-
-    backlog_path = root / f".pm/roles/{owner_role}/backlog/candidate.yaml"
-    backlog_header, backlog_entries = load_list_document(backlog_path, "tasks")
-    backlog_entries.append(
-        OrderedDict(
-            [
-                ("task_id", task_id),
-                ("title", title),
-                ("priority", priority),
-                ("source_signal", source_signal),
-                ("related_prd", list(related_prd)),
-                ("acceptance", list(acceptance)),
-                ("handoff_to", list(handoff_to)),
-                ("status", "candidate"),
-                ("task_path", task_path_rel),
-            ]
-        )
-    )
-    dump_list_document(backlog_path, backlog_header, "tasks", backlog_entries)
+    init_task_execution_log(root, task_uid, title, owner_role, worktree_hint, path_rel=execution_log_path_rel)
+    rebuild_task_views(root)
 
     return {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "task_path": task_path_rel,
         "execution_log_path": execution_log_path_rel,
-        "backlog_path": str(backlog_path.relative_to(root)),
+        "backlog_path": f".pm/roles/{owner_role}/backlog/candidate.yaml",
         "owner_role": owner_role,
         "priority": priority,
         "status": "candidate",
@@ -1359,16 +1453,11 @@ def create_candidate_task(
 
 
 def find_task_by_source_ref(root: pathlib.Path, source_ref: str) -> dict[str, object] | None:
-    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
-    for entry in registry_entries:
-        task_path = root / str(entry.get("task_path") or "")
-        if not task_path.exists():
-            continue
-        fields = load_mapping_document(task_path)
+    for task_path, fields in iter_task_files(root):
         if source_ref in [str(item) for item in fields.get("source_refs", [])]:
             return {
-                "task_id": fields.get("task_id"),
-                "task_path": str(entry.get("task_path")),
+                "task_uid": fields.get("task_uid"),
+                "task_path": str(task_path.relative_to(root)),
                 "owner_role": fields.get("owner_role"),
                 "status": fields.get("status"),
                 "source_signal": fields.get("source_signal"),
@@ -1376,20 +1465,199 @@ def find_task_by_source_ref(root: pathlib.Path, source_ref: str) -> dict[str, ob
     return None
 
 
+def ordered_task_fields(fields: OrderedDict[str, object], task_uid: str) -> OrderedDict[str, object]:
+    rewritten = rewrite_object_strings(fields, {})
+    ordered = OrderedDict()
+    ordered["task_uid"] = task_uid
+    ordered["title"] = rewritten.get("title")
+    ordered["owner_role"] = rewritten.get("owner_role")
+    ordered["worktree_hint"] = rewritten.get("worktree_hint")
+    ordered["execution_log_path"] = task_execution_log_relative_path(task_uid)
+    ordered["status"] = rewritten.get("status")
+    ordered["priority"] = rewritten.get("priority")
+    ordered["source_signal"] = rewritten.get("source_signal")
+    ordered["source_refs"] = list(rewritten.get("source_refs", []))
+    ordered["doc_refs"] = list(rewritten.get("doc_refs", []))
+    ordered["related_prd"] = list(rewritten.get("related_prd", []))
+    ordered["acceptance"] = list(rewritten.get("acceptance", []))
+    ordered["handoff_to"] = list(rewritten.get("handoff_to", []))
+    if "last_started_at" in rewritten:
+        ordered["last_started_at"] = rewritten.get("last_started_at")
+    if "last_closed_at" in rewritten:
+        ordered["last_closed_at"] = rewritten.get("last_closed_at")
+    ordered["updated_at"] = rewritten.get("updated_at")
+    for key, value in rewritten.items():
+        if key in ordered or key == "task_id":
+            continue
+        ordered[key] = value
+    return ordered
+
+
+def ordered_working_memory_header(header: OrderedDict[str, object], task_uid: str) -> OrderedDict[str, object]:
+    rewritten = rewrite_object_strings(header, {})
+    ordered = OrderedDict()
+    ordered["version"] = rewritten.get("version", 1)
+    ordered["task_uid"] = task_uid
+    ordered["role"] = rewritten.get("role")
+    ordered["worktree_hint"] = rewritten.get("worktree_hint")
+    for key in (
+        "source_session_id",
+        "source_thread_name",
+        "transcript_source",
+        "last_extracted_ts",
+        "captured_until_ts",
+    ):
+        if key in rewritten:
+            ordered[key] = rewritten.get(key)
+    for key, value in rewritten.items():
+        if key in ordered or key == "task_id":
+            continue
+        ordered[key] = value
+    return ordered
+
+
+def migrate_task_identity(root: pathlib.Path) -> dict[str, object]:
+    # Legacy `task_id` compatibility is migration-only; runtime commands use `task_uid` exclusively.
+    task_records = [(path, load_mapping_document(path)) for path in sorted((root / ".pm/tasks").glob("*.yaml"))]
+    if not task_records:
+        rebuild_task_views(root)
+        return {"migrated": 0, "task_count": 0, "mapping": OrderedDict()}
+
+    id_mapping: OrderedDict[str, str] = OrderedDict()
+    seen_task_uids: set[str] = set()
+    for path, fields in task_records:
+        task_uid = str(fields.get("task_uid") or "")
+        task_id = str(fields.get("task_id") or "")
+        if task_uid:
+            if not TASK_UID_RE.fullmatch(task_uid):
+                raise ValueError(f"invalid task_uid in task file: {path.relative_to(root)} -> {task_uid}")
+            seen_task_uids.add(task_uid)
+            continue
+        if not task_id:
+            raise ValueError(f"task file missing task_uid/task_id: {path.relative_to(root)}")
+        migrated_uid = generate_task_uid(f"legacy:{task_id}")
+        if migrated_uid in seen_task_uids:
+            raise ValueError(f"duplicate migrated task_uid: {task_id} -> {migrated_uid}")
+        id_mapping[task_id] = migrated_uid
+        seen_task_uids.add(migrated_uid)
+
+    if not id_mapping:
+        rebuild_task_views(root)
+        return {"migrated": 0, "task_count": len(task_records), "mapping": OrderedDict()}
+
+    replacements: OrderedDict[str, str] = OrderedDict()
+    for task_id, task_uid in id_mapping.items():
+        replacements[f".pm/tasks/{task_id}.execution.md"] = task_execution_log_relative_path(task_uid)
+        replacements[f".pm/tasks/{task_id}.yaml"] = task_relative_path(task_uid)
+        replacements[f".pm/working_memory/{task_id}.yaml"] = working_memory_relative_path(task_uid)
+        replacements[task_id] = task_uid
+
+    stale_paths: list[pathlib.Path] = []
+
+    for original_path, original_fields in task_records:
+        current_task_uid = str(original_fields.get("task_uid") or "") or id_mapping[str(original_fields.get("task_id"))]
+        rewritten_fields = rewrite_object_strings(original_fields, replacements)
+        ordered_fields = ordered_task_fields(rewritten_fields, current_task_uid)
+        new_path = task_file_path(root, current_task_uid)
+        dump_mapping_document(new_path, ordered_fields)
+        if new_path != original_path:
+            stale_paths.append(original_path)
+
+        old_log_rel = str(
+            original_fields.get("execution_log_path")
+            or task_execution_log_relative_path(str(original_fields.get("task_id") or current_task_uid))
+        )
+        old_log_path = root / old_log_rel
+        new_log_path = root / task_execution_log_relative_path(current_task_uid)
+        if old_log_path.exists():
+            lines = replace_text_tokens(old_log_path.read_text(encoding="utf-8"), replacements).splitlines()
+            if lines:
+                lines[0] = f"# {current_task_uid} Execution Log"
+            else:
+                lines = [f"# {current_task_uid} Execution Log", ""]
+            metadata_updated = False
+            for index, line in enumerate(lines):
+                if line.startswith("- task_id:") or line.startswith("- task_uid:"):
+                    lines[index] = f"- task_uid: {current_task_uid}"
+                    metadata_updated = True
+                    break
+            if not metadata_updated:
+                lines.insert(2 if len(lines) > 1 else 1, f"- task_uid: {current_task_uid}")
+            new_log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            if new_log_path != old_log_path:
+                stale_paths.append(old_log_path)
+
+    working_memory_root = working_memory_dir(root)
+    if working_memory_root.exists():
+        for path in sorted(working_memory_root.glob("*.yaml")):
+            header, entries = load_list_document(path, "entries")
+            legacy_task_id = str(header.get("task_id") or "")
+            task_uid = str(header.get("task_uid") or "") or id_mapping.get(legacy_task_id, "")
+            if not task_uid:
+                raise ValueError(f"working_memory missing task identity: {path.relative_to(root)}")
+            rewritten_header = ordered_working_memory_header(rewrite_object_strings(header, replacements), task_uid)
+            rewritten_entries = [rewrite_object_strings(entry, replacements) for entry in entries]
+            new_path = working_memory_path(root, task_uid)
+            dump_list_document(new_path, rewritten_header, "entries", rewritten_entries)
+            if new_path != path:
+                stale_paths.append(path)
+
+    for path, _, _, header, records in collect_memory_documents(root):
+        rewritten_header = rewrite_object_strings(header, replacements)
+        rewritten_records = [rewrite_object_strings(record, replacements) for record in records]
+        dump_list_document(path, rewritten_header, "records", rewritten_records)
+
+    codex_sessions_path, codex_sessions_header, codex_sessions_entries = load_codex_sessions_registry(root)
+    rewritten_sessions: list[OrderedDict[str, object]] = []
+    for entry in codex_sessions_entries:
+        legacy_task_id = str(entry.get("task_id") or "")
+        task_uid = str(entry.get("task_uid") or "") or id_mapping.get(legacy_task_id, "")
+        if not task_uid:
+            raise ValueError(f"codex session entry missing task identity: {entry}")
+        rewritten_entry = OrderedDict()
+        rewritten_entry["task_uid"] = task_uid
+        for key, value in rewrite_object_strings(entry, replacements).items():
+            if key == "task_id":
+                continue
+            if key == "task_uid":
+                continue
+            rewritten_entry[key] = value
+        rewritten_sessions.append(rewritten_entry)
+    dump_list_document(codex_sessions_path, codex_sessions_header, "sessions", rewritten_sessions)
+
+    for stage_path in (root / ".pm/stage/current.yaml", root / ".pm/stage/gate.yaml"):
+        stage_payload = rewrite_object_strings(load_mapping_document(stage_path), replacements)
+        dump_mapping_document(stage_path, stage_payload)
+
+    rewritten_signals = [rewrite_object_strings(payload, replacements) for payload in load_signal_entries(root)]
+    dump_signal_entries(root, rewritten_signals)
+
+    for stale_path in sorted(set(stale_paths), reverse=True):
+        if stale_path.exists():
+            stale_path.unlink()
+
+    rebuild_task_views(root)
+    return {
+        "migrated": len(id_mapping),
+        "task_count": len(task_records),
+        "mapping": id_mapping,
+    }
+
+
 def promote_working_memory_to_signals(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str | None,
     entry_ids: list[str],
     severity: str,
 ) -> dict[str, object]:
-    plan = plan_working_memory_signal_promotions(root, task_id, role, entry_ids, severity)
+    plan = plan_working_memory_signal_promotions(root, task_uid, role, entry_ids, severity)
     return apply_working_memory_signal_plan(plan, root)
 
 
 def autoflow_working_memory(
     root: pathlib.Path,
-    task_id: str,
+    task_uid: str,
     role: str | None,
     entry_ids: list[str] | None,
     severity: str,
@@ -1401,7 +1669,7 @@ def autoflow_working_memory(
     if priority not in PRIORITY_ORDER:
         raise ValueError(f"unsupported priority: {priority}")
 
-    path, header, entries, resolved_role = resolve_working_memory_context(root, task_id, role)
+    path, header, entries, resolved_role = resolve_working_memory_context(root, task_uid, role)
 
     selected_ids = set(entry_ids or [])
     selected_entries: list[OrderedDict[str, object]] = []
@@ -1423,14 +1691,14 @@ def autoflow_working_memory(
 
     signal_plan = plan_working_memory_signal_promotions(
         root,
-        task_id=task_id,
+        task_uid=task_uid,
         role=resolved_role,
         entry_ids=signal_candidates,
         severity=severity,
     ) if signal_candidates else None
 
     signal_result = summarize_working_memory_signal_plan(signal_plan, applied=False) if signal_plan is not None else {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "role": resolved_role,
         "severity": severity,
         "working_memory_path": str(path.relative_to(root)),
@@ -1447,7 +1715,7 @@ def autoflow_working_memory(
 
     if not dry_run and signal_plan is not None:
         signal_result = apply_working_memory_signal_plan(signal_plan, root)
-        path, header, entries = load_working_memory_document(root, task_id)
+        path, header, entries = load_working_memory_document(root, task_uid)
         signals_by_entry_id = {}
         for item in [*signal_result["created"], *signal_result["reused"]]:
             signal_id = item.get("signal_id")
@@ -1466,8 +1734,8 @@ def autoflow_working_memory(
         source_ref = f"{path.relative_to(root)}#entry_id={entry_id}"
         existing_task = find_task_by_source_ref(root, source_ref)
         if existing_task is not None:
-            if not dry_run and str(existing_task["task_id"]) not in entry.get("promoted_to", []):
-                entry["promoted_to"].append(str(existing_task["task_id"]))
+            if not dry_run and str(existing_task["task_uid"]) not in entry.get("promoted_to", []):
+                entry["promoted_to"].append(str(existing_task["task_uid"]))
             task_actions.append(
                 {
                     "entry_id": entry_id,
@@ -1500,6 +1768,7 @@ def autoflow_working_memory(
             priority=priority,
             source_signal=signals_by_entry_id.get(entry_id),
             source_refs=[source_ref],
+            doc_refs=[],
             related_prd=[],
             acceptance=[],
             handoff_to=[],
@@ -1510,8 +1779,8 @@ def autoflow_working_memory(
             signal_entries, signal_entry = find_signal_entry(root, signal_id)
             signal_entry["promotion_state"] = "promoted_candidate_task"
             dump_signal_entries(root, signal_entries)
-        if str(created_task["task_id"]) not in entry.get("promoted_to", []):
-            entry["promoted_to"].append(str(created_task["task_id"]))
+        if str(created_task["task_uid"]) not in entry.get("promoted_to", []):
+            entry["promoted_to"].append(str(created_task["task_uid"]))
         task_actions.append(
             {
                 "entry_id": entry_id,
@@ -1524,7 +1793,7 @@ def autoflow_working_memory(
         dump_list_document(path, header, "entries", entries)
 
     return {
-        "task_id": task_id,
+        "task_uid": task_uid,
         "role": resolved_role,
         "severity": severity,
         "priority": priority,
@@ -1831,7 +2100,7 @@ def task_sort_key(item: dict[str, object]) -> tuple[object, object, object]:
     return (
         PRIORITY_ORDER.get(str(item.get("priority")), 99),
         str(item.get("updated_at") or ""),
-        str(item.get("task_id") or ""),
+        str(item.get("task_uid") or ""),
     )
 
 
@@ -1859,7 +2128,7 @@ def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_d
     registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
     del registry_header
     registry_by_id: dict[str, OrderedDict[str, object]] = {
-        str(entry["task_id"]): entry for entry in registry_entries if entry.get("task_id")
+        str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
     }
     task_field_cache: dict[str, OrderedDict[str, object]] = {}
 
@@ -1884,12 +2153,12 @@ def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_d
 
     def shape_backlog_task(role: str, entry: OrderedDict[str, object]) -> dict[str, object]:
         del role
-        task_id = str(entry.get("task_id") or "")
-        registry_entry = registry_by_id.get(task_id, OrderedDict())
+        task_uid = str(entry.get("task_uid") or "")
+        registry_entry = registry_by_id.get(task_uid, OrderedDict())
         task_path = str(entry.get("task_path") or registry_entry.get("task_path") or "")
         task_fields = load_task_fields(task_path)
         return {
-            "task_id": task_id,
+            "task_uid": task_uid,
             "title": entry.get("title") or task_fields.get("title"),
             "priority": entry.get("priority") or registry_entry.get("priority") or task_fields.get("priority"),
             "status": entry.get("status") or task_fields.get("status") or registry_entry.get("status"),
@@ -2025,7 +2294,7 @@ def build_reflection_summary(root: pathlib.Path, role_filter: str | None) -> dic
         task_path = root / str(entry.get("task_path") or "")
         fields = load_mapping_document(task_path) if task_path.exists() else OrderedDict()
         task_payload = {
-            "task_id": fields.get("task_id") or entry.get("task_id"),
+            "task_uid": fields.get("task_uid") or entry.get("task_uid"),
             "title": fields.get("title"),
             "owner_role": fields.get("owner_role") or entry.get("owner_role"),
             "status": fields.get("status") or entry.get("status"),
@@ -2111,7 +2380,7 @@ def build_workflow_checklist(
         if task_context is None:
             add(
                 "bind-task",
-                "若当前工作绑定到明确任务，补传 `--task-id <TASK-ID>` 记录 `last_started_at`，避免 `.pm` workflow 只停留在口头层。",
+                "若当前工作绑定到明确任务，补传 `--task-uid <TASK-UID>` 记录 `last_started_at`，避免 `.pm` workflow 只停留在口头层。",
             )
         add(
             "read-docs",
@@ -2166,7 +2435,7 @@ def build_workflow_checklist(
         if task_context is None:
             add(
                 "bind-task",
-                "若当前工作绑定到明确任务，补传 `--task-id <TASK-ID>` 记录 `last_closed_at`，否则不能宣称 `.pm` workflow 已完整接入。",
+                "若当前工作绑定到明确任务，补传 `--task-uid <TASK-UID>` 记录 `last_closed_at`，否则不能宣称 `.pm` workflow 已完整接入。",
             )
         add(
             "write-execution-log",
@@ -2180,19 +2449,19 @@ def build_workflow_checklist(
             add(
                 "bootstrap-working-memory",
                 "当前 task 还没有 working_memory；若本轮主要过程发生在 Codex 会话里，先抽取一次 task-scoped working_memory，再决定是否需要 reflection signal / candidate task。",
-                command=f"./scripts/pm/codex-working-memory.sh --task-id {task_context['task_id']} --role {role}",
+                command=f"./scripts/pm/codex-working-memory.sh --task-uid {task_context['task_uid']} --role {role}",
             )
         elif working_memory_entries > 0:
             add(
                 "review-working-memory",
                 "先处理 task-scoped working_memory：提炼成 reflection signal、转 task/memory，或显式保留待过期，不要让过程认知悬空。",
-                command="./scripts/pm/working-memory-report.sh --task-id <TASK-ID>",
+                command="./scripts/pm/working-memory-report.sh --task-uid <TASK-UID>",
                 reason=f"working_memory_entries={working_memory_entries}",
             )
             add(
                 "autoflow-working-memory",
                 "可先用安全默认自动化把 working_memory 提成 reflection signal 和 candidate task，再进入 owner review。",
-                command="./scripts/pm/working-memory-autoflow.sh --task-id <TASK-ID> --severity medium --priority P2",
+                command="./scripts/pm/working-memory-autoflow.sh --task-uid <TASK-UID> --severity medium --priority P2",
             )
         if pending_reflections > 0:
             add(
@@ -2214,7 +2483,7 @@ def build_workflow_checklist(
         add(
             "sync-backlog",
             "把本轮任务状态迁移回 backlog / task registry，避免 `.pm` 与实际执行脱节。",
-            command="./scripts/pm/move-task.sh --task-id <TASK-ID> --to-status <candidate|committed|blocked|done|deferred>",
+            command="./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status <candidate|committed|blocked|done|deferred>",
         )
         add(
             "sync-memory",
@@ -2266,7 +2535,7 @@ def build_workflow_report(
     role: str,
     phase: str,
     stale_after_days: int,
-    task_id: str | None,
+    task_uid: str | None,
 ) -> dict[str, object]:
     roles = load_roles(root)
     if role not in roles:
@@ -2275,18 +2544,18 @@ def build_workflow_report(
         raise ValueError(f"unsupported phase: {phase}")
 
     task_context: dict[str, object] | None = None
-    if task_id:
-        task_context = load_task_context(root, task_id)
+    if task_uid:
+        task_context = load_task_context(root, task_uid)
 
     role_report = build_role_report(root, role_filter=role, stale_after_days=stale_after_days)
     role_payload = role_report["roles"][role]
     stage_report = build_stage_report(root)
     signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
     signal_summary = build_signal_summary(root, role_filter=signal_role_filter)
-    if task_id:
-        working_memory_summary = build_working_memory_report(root, task_id=task_id, role_filter=None)
+    if task_uid:
+        working_memory_summary = build_working_memory_report(root, task_uid=task_uid, role_filter=None)
     else:
-        working_memory_summary = build_working_memory_report(root, task_id=None, role_filter=role)
+        working_memory_summary = build_working_memory_report(root, task_uid=None, role_filter=role)
     reflection_summary = build_reflection_summary(root, role_filter=signal_role_filter)
     checklist = build_workflow_checklist(
         role,
@@ -2299,8 +2568,8 @@ def build_workflow_report(
         reflection_summary,
     )
 
-    if task_id and phase in {"start", "close"}:
-        task_context = record_task_workflow_phase(root, task_id, role, phase)
+    if task_uid and phase in {"start", "close"}:
+        task_context = record_task_workflow_phase(root, task_uid, role, phase)
 
     return {
         "generated_at": now_iso(),
@@ -2396,71 +2665,70 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
                 )
 
     registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
-    next_sequence = registry_header.get("next_sequence")
-    if next_sequence is not None and (not str(next_sequence).isdigit()):
-        fail("tasks registry missing numeric next_sequence")
+    if str(registry_header.get("identity_key") or "") != "task_uid":
+        fail("tasks registry identity_key mismatch: expected task_uid")
 
     registry_by_id: dict[str, OrderedDict[str, object]] = {}
     for entry in registry_entries:
-        task_id = str(entry.get("task_id") or "")
-        if not task_id:
-            fail("registry task missing task_id")
+        task_uid = str(entry.get("task_uid") or "")
+        if not task_uid:
+            fail("registry task missing task_uid")
             continue
-        if task_id in registry_by_id:
-            fail(f"duplicate registry task_id: {task_id}")
+        if task_uid in registry_by_id:
+            fail(f"duplicate registry task_uid: {task_uid}")
             continue
-        registry_by_id[task_id] = entry
+        registry_by_id[task_uid] = entry
         owner_role = entry.get("owner_role")
         status = entry.get("status")
         if owner_role not in roles:
-            fail(f"registry task owner_role not registered: {task_id} -> {owner_role}")
+            fail(f"registry task owner_role not registered: {task_uid} -> {owner_role}")
         if status not in TASK_STATUSES:
-            fail(f"registry task status invalid: {task_id} -> {status}")
+            fail(f"registry task status invalid: {task_uid} -> {status}")
         task_path = entry.get("task_path")
         if not task_path or not (root / str(task_path)).is_file():
-            fail(f"registry task path missing: {task_id} -> {task_path}")
+            fail(f"registry task path missing: {task_uid} -> {task_path}")
         source_signal = entry.get("source_signal")
         if source_signal and str(source_signal) not in signal_ids:
-            fail(f"registry task source_signal missing from inbox: {task_id} -> {source_signal}")
+            fail(f"registry task source_signal missing from inbox: {task_uid} -> {source_signal}")
 
     task_source_signals: set[str] = set()
-    task_files = sorted(path for path in (root / ".pm/tasks").glob("TASK-PM-*.yaml") if path.is_file())
+    task_files = sorted(path for path in (root / ".pm/tasks").glob("*.yaml") if path.is_file())
     if len(task_files) != len(registry_entries):
         fail(f"task file count mismatch: files={len(task_files)} registry={len(registry_entries)}")
 
     task_fields_by_id: dict[str, OrderedDict[str, object]] = {}
     for path in task_files:
         fields = load_mapping_document(path)
-        task_id = fields.get("task_id")
-        if not task_id:
-            fail(f"task file missing task_id: {path.relative_to(root)}")
+        task_uid = fields.get("task_uid")
+        if not task_uid:
+            fail(f"task file missing task_uid: {path.relative_to(root)}")
             continue
-        task_id = str(task_id)
-        task_fields_by_id[task_id] = fields
+        task_uid = str(task_uid)
+        task_fields_by_id[task_uid] = fields
         owner_role = fields.get("owner_role")
         status = fields.get("status")
         if owner_role not in roles:
-            fail(f"task file owner_role not registered: {task_id} -> {owner_role}")
+            fail(f"task file owner_role not registered: {task_uid} -> {owner_role}")
         if status not in TASK_STATUSES:
-            fail(f"task file status invalid: {task_id} -> {status}")
-        registry_entry = registry_by_id.get(task_id)
+            fail(f"task file status invalid: {task_uid} -> {status}")
+        registry_entry = registry_by_id.get(task_uid)
         if registry_entry is None:
-            fail(f"task file missing from registry: {task_id}")
+            fail(f"task file missing from registry: {task_uid}")
         else:
             if registry_entry.get("owner_role") != owner_role:
-                fail(f"registry owner_role mismatch: {task_id}")
+                fail(f"registry owner_role mismatch: {task_uid}")
             if registry_entry.get("status") != status:
-                fail(f"registry status mismatch: {task_id}")
+                fail(f"registry status mismatch: {task_uid}")
             if registry_entry.get("priority") != fields.get("priority"):
-                fail(f"registry priority mismatch: {task_id}")
+                fail(f"registry priority mismatch: {task_uid}")
             expected_path = f".pm/tasks/{path.name}"
             if registry_entry.get("task_path") != expected_path:
-                fail(f"registry task_path mismatch: {task_id} -> {registry_entry.get('task_path')} != {expected_path}")
+                fail(f"registry task_path mismatch: {task_uid} -> {registry_entry.get('task_path')} != {expected_path}")
         source_signal = fields.get("source_signal")
         if source_signal:
             task_source_signals.add(str(source_signal))
             if str(source_signal) not in signal_ids:
-                fail(f"task source_signal missing from inbox: {task_id} -> {source_signal}")
+                fail(f"task source_signal missing from inbox: {task_uid} -> {source_signal}")
         for key in ("last_started_at", "last_closed_at"):
             value = fields.get(key)
             if value in {None, ""}:
@@ -2468,30 +2736,30 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             try:
                 datetime.fromisoformat(str(value))
             except ValueError:
-                fail(f"task file invalid {key}: {task_id} -> {value}")
+                fail(f"task file invalid {key}: {task_uid} -> {value}")
         if fields.get("last_started_at") not in {None, ""} and fields.get("last_closed_at") not in {None, ""}:
             try:
                 started_at = datetime.fromisoformat(str(fields["last_started_at"]))
                 closed_at = datetime.fromisoformat(str(fields["last_closed_at"]))
                 if closed_at < started_at:
-                    fail(f"task file close precedes start: {task_id}")
+                    fail(f"task file close precedes start: {task_uid}")
             except ValueError:
                 pass
         if status in {"blocked", "done", "deferred"} and fields.get("last_started_at") in {None, ""}:
-            fail(f"task file missing last_started_at for started workflow task: {task_id}")
+            fail(f"task file missing last_started_at for started workflow task: {task_uid}")
         if status in {"done", "deferred"} and fields.get("last_closed_at") in {None, ""}:
-            fail(f"task file missing last_closed_at for closed workflow task: {task_id}")
+            fail(f"task file missing last_closed_at for closed workflow task: {task_uid}")
         execution_log_path = str(fields.get("execution_log_path") or "")
-        expected_execution_log_path = task_execution_log_relative_path(task_id)
+        expected_execution_log_path = task_execution_log_relative_path(task_uid)
         if execution_log_path != expected_execution_log_path:
             fail(
-                f"task file execution_log_path mismatch: {task_id} -> "
+                f"task file execution_log_path mismatch: {task_uid} -> "
                 f"{execution_log_path or '(missing)'} != {expected_execution_log_path}"
             )
             continue
         execution_log_file = root / execution_log_path
         if not execution_log_file.is_file():
-            fail(f"task execution log missing: {task_id} -> {execution_log_path}")
+            fail(f"task execution log missing: {task_uid} -> {execution_log_path}")
             continue
         require_entry = status in {"blocked", "done", "deferred"} or fields.get("last_started_at") not in {None, ""}
         entry_count = 0
@@ -2503,22 +2771,22 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
                 if active_entry_line is not None:
                     if not entry_has_done:
                         fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_id}"
+                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}"
                         )
                     if not entry_has_pending:
                         fail(
-                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_id}"
+                            f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}"
                         )
                 match = TASK_EXECUTION_LOG_ENTRY_RE.fullmatch(raw_line)
                 if not match:
-                    fail(f"{execution_log_path}:{line_no}: invalid execution log heading for {task_id}")
+                    fail(f"{execution_log_path}:{line_no}: invalid execution log heading for {task_uid}")
                     active_entry_line = None
                     entry_has_done = False
                     entry_has_pending = False
                     continue
                 role_name = match.group(3)
                 if role_name not in roles:
-                    fail(f"{execution_log_path}:{line_no}: unknown role in execution log for {task_id}: {role_name}")
+                    fail(f"{execution_log_path}:{line_no}: unknown role in execution log for {task_uid}: {role_name}")
                 entry_count += 1
                 active_entry_line = line_no
                 entry_has_done = False
@@ -2532,11 +2800,11 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
                 entry_has_pending = True
         if active_entry_line is not None:
             if not entry_has_done:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_id}")
+                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 完成内容 for {task_uid}")
             if not entry_has_pending:
-                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_id}")
+                fail(f"{execution_log_path}:{active_entry_line}: execution log entry missing 遗留事项 for {task_uid}")
         if require_entry and entry_count == 0:
-            fail(f"task execution log requires at least one entry: {task_id}")
+            fail(f"task execution log requires at least one entry: {task_uid}")
 
     for signal_id in promoted_signal_ids:
         if signal_id not in task_source_signals:
@@ -2552,53 +2820,48 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             if header.get("status") != file_status:
                 fail(f"{path.relative_to(root)} status header mismatch: {header.get('status')} != {file_status}")
             for entry in entries:
-                task_id = entry.get("task_id")
-                if not task_id:
-                    fail(f"{path.relative_to(root)} entry missing task_id")
+                task_uid = entry.get("task_uid")
+                if not task_uid:
+                    fail(f"{path.relative_to(root)} entry missing task_uid")
                     continue
-                task_id = str(task_id)
+                task_uid = str(task_uid)
                 entry_status = entry.get("status")
                 if file_status != "done" and entry_status != file_status:
-                    fail(f"{path.relative_to(root)} {task_id} entry status mismatch: {entry_status} != {file_status}")
+                    fail(f"{path.relative_to(root)} {task_uid} entry status mismatch: {entry_status} != {file_status}")
                 if file_status == "done" and entry_status not in {"done", "deferred"}:
-                    fail(f"{path.relative_to(root)} {task_id} invalid done-lane status: {entry_status}")
-                backlog_membership.setdefault(task_id, []).append((role, file_status, entry))
+                    fail(f"{path.relative_to(root)} {task_uid} invalid done-lane status: {entry_status}")
+                backlog_membership.setdefault(task_uid, []).append((role, file_status, entry))
 
-    for task_id, registry_entry in registry_by_id.items():
-        memberships = backlog_membership.get(task_id, [])
+    for task_uid, registry_entry in registry_by_id.items():
+        memberships = backlog_membership.get(task_uid, [])
         if len(memberships) != 1:
-            fail(f"task backlog membership mismatch: {task_id} has {len(memberships)} entries")
+            fail(f"task backlog membership mismatch: {task_uid} has {len(memberships)} entries")
             continue
         role, file_status, entry = memberships[0]
         if role != registry_entry.get("owner_role"):
-            fail(f"task backlog owner mismatch: {task_id} -> {role} != {registry_entry.get('owner_role')}")
+            fail(f"task backlog owner mismatch: {task_uid} -> {role} != {registry_entry.get('owner_role')}")
         expected_file_status = backlog_file_for_status(str(registry_entry.get("status")))
         if file_status != expected_file_status[:-5]:
-            fail(f"task backlog lane mismatch: {task_id} -> {file_status} != {expected_file_status[:-5]}")
-        task_fields = task_fields_by_id.get(task_id)
+            fail(f"task backlog lane mismatch: {task_uid} -> {file_status} != {expected_file_status[:-5]}")
+        task_fields = task_fields_by_id.get(task_uid)
         if task_fields is None:
             continue
         for key in ("title", "priority", "source_signal", "status"):
             if entry.get(key) != task_fields.get(key):
-                fail(f"task backlog field mismatch: {task_id} -> {key}")
+                fail(f"task backlog field mismatch: {task_uid} -> {key}")
 
-    for task_id, memberships in backlog_membership.items():
-        if task_id not in registry_by_id:
-            fail(f"backlog task missing from registry: {task_id}")
+    for task_uid, memberships in backlog_membership.items():
+        if task_uid not in registry_by_id:
+            fail(f"backlog task missing from registry: {task_uid}")
             continue
-        task_fields = task_fields_by_id.get(task_id)
+        task_fields = task_fields_by_id.get(task_uid)
         if task_fields is None:
             continue
         for role, file_status, entry in memberships:
             if entry.get("status") != task_fields.get("status"):
-                fail(f"backlog/task status mismatch: {task_id}")
+                fail(f"backlog/task status mismatch: {task_uid}")
             if file_status != backlog_file_for_status(str(task_fields.get('status')))[:-5]:
-                fail(f"backlog/task lane mismatch: {task_id}")
-
-    if next_sequence is not None and registry_by_id:
-        max_sequence = max(int(task_id.rsplit("-", 1)[1]) for task_id in registry_by_id)
-        if int(next_sequence) <= max_sequence:
-            fail(f"next_sequence not ahead of existing tasks: next_sequence={next_sequence} max_task={max_sequence}")
+                fail(f"backlog/task lane mismatch: {task_uid}")
 
     if failures:
         for failure in failures:
@@ -2615,7 +2878,7 @@ def run_stage_lint(root: pathlib.Path) -> None:
     stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
     gate = load_mapping_document(root / ".pm/stage/gate.yaml")
     _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
-    task_ids = {str(entry.get("task_id")) for entry in registry_entries if entry.get("task_id")}
+    task_uids = {str(entry.get("task_uid")) for entry in registry_entries if entry.get("task_uid")}
 
     def require_keys(doc_name: str, payload: OrderedDict[str, object], required: set[str]) -> None:
         missing = sorted(required - set(payload.keys()))
@@ -2681,19 +2944,19 @@ def run_stage_lint(root: pathlib.Path) -> None:
         if not isinstance(blocking_tasks, list):
             fail(f"{doc_name} blocking_tasks must be a list")
             continue
-        for task_id in blocking_tasks:
-            if str(task_id) not in task_ids:
-                fail(f"{doc_name} references missing blocking task: {task_id}")
+        for task_uid in blocking_tasks:
+            if str(task_uid) not in task_uids:
+                fail(f"{doc_name} references missing blocking task: {task_uid}")
 
     tracked_blocking_ids = {
-        str(task_id) for task_id in list(stage_current.get("blocking_tasks", [])) + list(gate.get("blocking_tasks", []))
+        str(task_uid) for task_uid in list(stage_current.get("blocking_tasks", [])) + list(gate.get("blocking_tasks", []))
     }
     for entry in registry_entries:
         if entry.get("status") != "blocked":
             continue
-        task_id = str(entry.get("task_id"))
-        if task_id not in tracked_blocking_ids:
-            fail(f"blocked task missing from stage/gate blocking_tasks: {task_id}")
+        task_uid = str(entry.get("task_uid"))
+        if task_uid not in tracked_blocking_ids:
+            fail(f"blocked task missing from stage/gate blocking_tasks: {task_uid}")
 
     if failures:
         for failure in failures:
@@ -2827,63 +3090,56 @@ def cmd_set_stage(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_new_task(args: argparse.Namespace) -> int:
+    result = create_candidate_task(
+        args.root,
+        owner_role=args.owner_role,
+        title=args.title,
+        priority=args.priority,
+        source_signal=args.source_signal,
+        source_refs=list(args.source_ref),
+        doc_refs=list(args.doc_ref),
+        related_prd=list(args.related_prd),
+        acceptance=list(args.acceptance),
+        handoff_to=list(args.handoff_to),
+        worktree_hint=args.worktree_hint,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(f"new-task: created {result['task_uid']} ({result['task_path']})")
+    return 0
+
+
+def cmd_migrate_task_identity(args: argparse.Namespace) -> int:
+    result = migrate_task_identity(args.root)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(
+            "migrate-task-identity: "
+            f"migrated={result['migrated']} task_count={result['task_count']}"
+        )
+    return 0
+
+
 def cmd_move_task(args: argparse.Namespace) -> int:
     validate_status(args.to_status)
     root = args.root
     updated_at = now_iso()
 
-    registry_header, registry_entries, registry_entry, registry_path = find_registry_task(root, args.task_id)
-    owner_role = str(registry_entry["owner_role"])
-    current_status = str(registry_entry["status"])
+    task_path, task_fields = find_task_file(root, args.task_uid)
+    owner_role = str(task_fields.get("owner_role") or "")
+    current_status = str(task_fields.get("status") or "")
     target_status = args.to_status
-
-    task_path = root / str(registry_entry["task_path"])
-    task_fields = load_mapping_document(task_path)
-
-    source_paths = [
-        root / f".pm/roles/{owner_role}/backlog/candidate.yaml",
-        root / f".pm/roles/{owner_role}/backlog/committed.yaml",
-        root / f".pm/roles/{owner_role}/backlog/blocked.yaml",
-        root / f".pm/roles/{owner_role}/backlog/done.yaml",
-    ]
-
-    found_memberships: list[tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]], OrderedDict[str, object]]] = []
-    for backlog_path in source_paths:
-        header, entries = load_list_document(backlog_path, "tasks")
-        for entry in entries:
-            if entry.get("task_id") == args.task_id:
-                found_memberships.append((backlog_path, header, entries, entry))
-
-    if len(found_memberships) != 1:
-        raise ValueError(f"task backlog membership mismatch before move: {args.task_id} has {len(found_memberships)} entries")
-
-    source_path, source_header, source_entries, source_entry = found_memberships[0]
-    destination_path = root / f".pm/roles/{owner_role}/backlog/{backlog_file_for_status(target_status)}"
-    destination_header, destination_entries = load_list_document(destination_path, "tasks")
-
-    source_entries.remove(source_entry)
-    moved_entry = OrderedDict(source_entry)
-    moved_entry["status"] = target_status
-
-    if source_path == destination_path:
-        destination_entries = source_entries
-        destination_entries.append(moved_entry)
-    else:
-        destination_entries.append(moved_entry)
-
-    registry_entry["status"] = target_status
-    registry_entry["updated_at"] = updated_at
     task_fields["status"] = target_status
     task_fields["updated_at"] = updated_at
 
-    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
     dump_mapping_document(task_path, task_fields)
-    dump_list_document(source_path, source_header, "tasks", source_entries)
-    if destination_path != source_path:
-        dump_list_document(destination_path, destination_header, "tasks", destination_entries)
+    rebuild_task_views(root)
 
     result = {
-        "task_id": args.task_id,
+        "task_uid": args.task_uid,
         "owner_role": owner_role,
         "from_status": current_status,
         "to_status": target_status,
@@ -2892,7 +3148,7 @@ def cmd_move_task(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False))
     else:
-        print(f"move-task: moved {args.task_id} {current_status} -> {target_status}")
+        print(f"move-task: moved {args.task_uid} {current_status} -> {target_status}")
     return 0
 
 
@@ -3015,7 +3271,7 @@ def cmd_memory_report(args: argparse.Namespace) -> int:
 
 
 def cmd_working_memory_report(args: argparse.Namespace) -> int:
-    report = build_working_memory_report(args.root, task_id=args.task_id, role_filter=args.role)
+    report = build_working_memory_report(args.root, task_uid=args.task_uid, role_filter=args.role)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
@@ -3031,9 +3287,9 @@ def cmd_working_memory_report(args: argparse.Namespace) -> int:
         "- tasks:",
     ]
     if report["tasks"]:
-        for task_id, payload in report["tasks"].items():
+        for task_uid, payload in report["tasks"].items():
             lines.append(
-                f"  - {task_id} / {payload['role']} / {payload.get('worktree_hint') or '(no worktree_hint)'} / "
+                f"  - {task_uid} / {payload['role']} / {payload.get('worktree_hint') or '(no worktree_hint)'} / "
                 f"entries={payload['entry_count']}"
             )
             for entry in payload["entries"][:5]:
@@ -3064,7 +3320,7 @@ def cmd_reflection_report(args: argparse.Namespace) -> int:
         for item in report["items"]:
             linked_tasks = item["linked_tasks"]
             linked_summary = (
-                ", ".join(str(task["task_id"]) for task in linked_tasks)
+                ", ".join(str(task["task_uid"]) for task in linked_tasks)
                 if linked_tasks
                 else "(none)"
             )
@@ -3110,7 +3366,7 @@ def cmd_role_report(args: argparse.Namespace) -> int:
         lines.append("  blocked_tasks:")
         if payload["tasks"]["blocked"]:
             for item in payload["tasks"]["blocked"]:
-                lines.append(f"    - {item['task_id']} / {item['priority']} / {item['title']}")
+                lines.append(f"    - {item['task_uid']} / {item['priority']} / {item['title']}")
         else:
             lines.append("    - (none)")
 
@@ -3134,7 +3390,7 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         role=args.role,
         phase=args.phase,
         stale_after_days=args.stale_after_days,
-        task_id=args.task_id,
+        task_uid=args.task_uid,
     )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -3150,7 +3406,7 @@ def cmd_workflow_report(args: argparse.Namespace) -> int:
         f"- generated_at: {report['generated_at']}",
         f"- phase: {report['phase']}",
         f"- role: {report['role']}",
-        f"- task_id: {(report['task_context'] or {}).get('task_id') or '(none)'}",
+        f"- task_uid: {(report['task_context'] or {}).get('task_uid') or '(none)'}",
         f"- stale_after_days: {report['stale_after_days']}",
         f"- current_stage: {report['stage_report']['current_stage']}",
         f"- gate_status: {report['stage_report']['gate']['status']}",
@@ -3204,7 +3460,7 @@ def cmd_codex_transcript_report(args: argparse.Namespace) -> int:
         args.root,
         codex_dir=codex_dir,
         session_id=args.session_id,
-        task_id=args.task_id,
+        task_uid=args.task_uid,
         worktree_hint=args.worktree_hint,
         thread_name_pattern=args.thread_name_pattern,
     )
@@ -3251,7 +3507,7 @@ def cmd_import_working_memory(args: argparse.Namespace) -> int:
 
     result = import_working_memory_entries(
         args.root,
-        task_id=args.task_id,
+        task_uid=args.task_uid,
         role=args.role,
         worktree_hint=args.worktree_hint,
         entries_payload=entries,
@@ -3265,7 +3521,7 @@ def cmd_import_working_memory(args: argparse.Namespace) -> int:
     if args.session_id:
         codex_mapping = remember_codex_session(
             args.root,
-            task_id=args.task_id,
+            task_uid=args.task_uid,
             role=args.role,
             session_id=args.session_id,
             thread_name=args.thread_name,
@@ -3287,7 +3543,7 @@ def cmd_import_working_memory(args: argparse.Namespace) -> int:
 def cmd_promote_working_memory_signal(args: argparse.Namespace) -> int:
     result = promote_working_memory_to_signals(
         args.root,
-        task_id=args.task_id,
+        task_uid=args.task_uid,
         role=args.role,
         entry_ids=list(args.entry_id),
         severity=args.severity,
@@ -3306,7 +3562,7 @@ def cmd_promote_working_memory_signal(args: argparse.Namespace) -> int:
 def cmd_working_memory_autoflow(args: argparse.Namespace) -> int:
     result = autoflow_working_memory(
         args.root,
-        task_id=args.task_id,
+        task_uid=args.task_uid,
         role=args.role,
         entry_ids=list(args.entry_id),
         severity=args.severity,
@@ -3440,7 +3696,7 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
     registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
     del registry_header
     tasks_by_id: dict[str, OrderedDict[str, object]] = {
-        str(entry["task_id"]): entry for entry in registry_entries if entry.get("task_id")
+        str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
     }
 
     role_counts: OrderedDict[str, OrderedDict[str, int]] = OrderedDict()
@@ -3468,14 +3724,14 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
     stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
     gate = load_mapping_document(root / ".pm/stage/gate.yaml")
 
-    def detail_task(task_id: str) -> dict[str, object]:
-        entry = tasks_by_id.get(task_id)
+    def detail_task(task_uid: str) -> dict[str, object]:
+        entry = tasks_by_id.get(task_uid)
         if entry is None:
-            return {"task_id": task_id, "missing": True}
+            return {"task_uid": task_uid, "missing": True}
         task_path = root / str(entry["task_path"])
         task_fields = load_mapping_document(task_path) if task_path.is_file() else OrderedDict()
         return {
-            "task_id": task_id,
+            "task_uid": task_uid,
             "missing": False,
             "owner_role": entry.get("owner_role"),
             "status": entry.get("status"),
@@ -3485,19 +3741,19 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
         }
 
     blocking_ids: list[str] = []
-    for task_id in stage_current.get("blocking_tasks", []):
-        blocking_ids.append(str(task_id))
-    for task_id in gate.get("blocking_tasks", []):
-        task_id = str(task_id)
-        if task_id not in blocking_ids:
-            blocking_ids.append(task_id)
+    for task_uid in stage_current.get("blocking_tasks", []):
+        blocking_ids.append(str(task_uid))
+    for task_uid in gate.get("blocking_tasks", []):
+        task_uid = str(task_uid)
+        if task_uid not in blocking_ids:
+            blocking_ids.append(task_uid)
     untracked_blocked_ids: list[str] = []
     for entry in registry_entries:
         if entry.get("status") != "blocked":
             continue
-        task_id = str(entry["task_id"])
-        if task_id not in blocking_ids:
-            untracked_blocked_ids.append(task_id)
+        task_uid = str(entry["task_uid"])
+        if task_uid not in blocking_ids:
+            untracked_blocked_ids.append(task_uid)
 
     producer_active_header, producer_active_records = load_list_document(
         root / ".pm/roles/producer_system_designer/memory/active.yaml",
@@ -3537,8 +3793,8 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
         },
         "task_counts": task_counts,
         "role_counts": role_counts,
-        "blocking_tasks": [detail_task(task_id) for task_id in blocking_ids],
-        "untracked_blocked_tasks": [detail_task(task_id) for task_id in untracked_blocked_ids],
+        "blocking_tasks": [detail_task(task_uid) for task_uid in blocking_ids],
+        "untracked_blocked_tasks": [detail_task(task_uid) for task_uid in untracked_blocked_ids],
         "memory_inputs": {
             "producer_active": memory_summary(producer_active_records),
             "shared_active": memory_summary(shared_active_records),
@@ -3569,10 +3825,10 @@ def cmd_stage_report(args: argparse.Namespace) -> int:
     if report["blocking_tasks"]:
         for item in report["blocking_tasks"]:
             if item.get("missing"):
-                lines.append(f"  - {item['task_id']} (missing)")
+                lines.append(f"  - {item['task_uid']} (missing)")
             else:
                 lines.append(
-                    f"  - {item['task_id']} [{item['status']}] {item['owner_role']} / "
+                    f"  - {item['task_uid']} [{item['status']}] {item['owner_role']} / "
                     f"{item['priority']} / {item['title']}"
                 )
     else:
@@ -3588,10 +3844,10 @@ def cmd_stage_report(args: argparse.Namespace) -> int:
     if report["untracked_blocked_tasks"]:
         for item in report["untracked_blocked_tasks"]:
             if item.get("missing"):
-                lines.append(f"  - {item['task_id']} (missing)")
+                lines.append(f"  - {item['task_uid']} (missing)")
             else:
                 lines.append(
-                    f"  - {item['task_id']} [{item['status']}] {item['owner_role']} / "
+                    f"  - {item['task_uid']} [{item['status']}] {item['owner_role']} / "
                     f"{item['priority']} / {item['title']}"
                 )
     else:
@@ -3613,6 +3869,10 @@ def cmd_stage_report(args: argparse.Namespace) -> int:
 
     print("\n".join(lines))
     return 0
+
+
+def add_task_uid_argument(parser: argparse.ArgumentParser, *, required: bool = False) -> None:
+    parser.add_argument("--task-uid", dest="task_uid", required=required)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -3645,9 +3905,24 @@ def build_parser() -> argparse.ArgumentParser:
     memory_report.add_argument("--json", action="store_true")
     memory_report.set_defaults(func=cmd_memory_report)
 
+    new_task = subparsers.add_parser("new-task")
+    new_task.add_argument("root", type=pathlib.Path)
+    new_task.add_argument("--owner-role", required=True)
+    new_task.add_argument("--title", required=True)
+    new_task.add_argument("--priority", choices=tuple(PRIORITY_ORDER.keys()), default="P2")
+    new_task.add_argument("--source-signal")
+    new_task.add_argument("--source-ref", action="append", default=[], required=True)
+    new_task.add_argument("--doc-ref", action="append", default=[])
+    new_task.add_argument("--related-prd", action="append", default=[])
+    new_task.add_argument("--acceptance", action="append", default=[])
+    new_task.add_argument("--handoff-to", action="append", default=[])
+    new_task.add_argument("--worktree-hint")
+    new_task.add_argument("--json", action="store_true")
+    new_task.set_defaults(func=cmd_new_task)
+
     working_memory_report = subparsers.add_parser("working-memory-report")
     working_memory_report.add_argument("root", type=pathlib.Path)
-    working_memory_report.add_argument("--task-id")
+    add_task_uid_argument(working_memory_report)
     working_memory_report.add_argument("--role")
     working_memory_report.add_argument("--json", action="store_true")
     working_memory_report.set_defaults(func=cmd_working_memory_report)
@@ -3669,7 +3944,7 @@ def build_parser() -> argparse.ArgumentParser:
     workflow_report.add_argument("root", type=pathlib.Path)
     workflow_report.add_argument("--role", required=True)
     workflow_report.add_argument("--phase", choices=("start", "close", "review"), default="start")
-    workflow_report.add_argument("--task-id")
+    add_task_uid_argument(workflow_report)
     workflow_report.add_argument("--stale-after-days", type=int, default=DEFAULT_MEMORY_REVIEW_STALE_DAYS)
     workflow_report.add_argument("--json", action="store_true")
     workflow_report.set_defaults(func=cmd_workflow_report)
@@ -3694,7 +3969,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     move_task = subparsers.add_parser("move-task")
     move_task.add_argument("root", type=pathlib.Path)
-    move_task.add_argument("--task-id", required=True)
+    add_task_uid_argument(move_task, required=True)
     move_task.add_argument("--to-status", required=True, choices=sorted(TASK_STATUSES))
     move_task.add_argument("--json", action="store_true")
     move_task.set_defaults(func=cmd_move_task)
@@ -3739,7 +4014,7 @@ def build_parser() -> argparse.ArgumentParser:
     codex_transcript_report = subparsers.add_parser("codex-transcript-report")
     codex_transcript_report.add_argument("root", type=pathlib.Path)
     codex_transcript_report.add_argument("--session-id")
-    codex_transcript_report.add_argument("--task-id")
+    add_task_uid_argument(codex_transcript_report)
     codex_transcript_report.add_argument("--worktree-hint")
     codex_transcript_report.add_argument("--thread-name-pattern")
     codex_transcript_report.add_argument("--codex-dir", default="~/.codex")
@@ -3750,7 +4025,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     import_working_memory = subparsers.add_parser("import-working-memory")
     import_working_memory.add_argument("root", type=pathlib.Path)
-    import_working_memory.add_argument("--task-id", required=True)
+    add_task_uid_argument(import_working_memory, required=True)
     import_working_memory.add_argument("--role", required=True)
     import_working_memory.add_argument("--worktree-hint")
     import_working_memory.add_argument("--input-json", required=True)
@@ -3766,7 +4041,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     promote_working_memory_signal = subparsers.add_parser("promote-working-memory-signal")
     promote_working_memory_signal.add_argument("root", type=pathlib.Path)
-    promote_working_memory_signal.add_argument("--task-id", required=True)
+    add_task_uid_argument(promote_working_memory_signal, required=True)
     promote_working_memory_signal.add_argument("--role")
     promote_working_memory_signal.add_argument("--entry-id", action="append", default=[])
     promote_working_memory_signal.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
@@ -3775,7 +4050,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     working_memory_autoflow = subparsers.add_parser("working-memory-autoflow")
     working_memory_autoflow.add_argument("root", type=pathlib.Path)
-    working_memory_autoflow.add_argument("--task-id", required=True)
+    add_task_uid_argument(working_memory_autoflow, required=True)
     working_memory_autoflow.add_argument("--role")
     working_memory_autoflow.add_argument("--entry-id", action="append", default=[])
     working_memory_autoflow.add_argument("--severity", choices=("low", "medium", "high", "critical"), default="medium")
@@ -3783,6 +4058,11 @@ def build_parser() -> argparse.ArgumentParser:
     working_memory_autoflow.add_argument("--dry-run", action="store_true")
     working_memory_autoflow.add_argument("--json", action="store_true")
     working_memory_autoflow.set_defaults(func=cmd_working_memory_autoflow)
+
+    migrate_task_identity_parser = subparsers.add_parser("migrate-task-identity")
+    migrate_task_identity_parser.add_argument("root", type=pathlib.Path)
+    migrate_task_identity_parser.add_argument("--json", action="store_true")
+    migrate_task_identity_parser.set_defaults(func=cmd_migrate_task_identity)
 
     return parser
 

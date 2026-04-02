@@ -2,7 +2,7 @@ version: 1
 role: runtime_engineer
 status: done
 tasks:
-  - task_id: TASK-PM-0006
+  - task_uid: task_0e8cdcdddb7553a2a007ff14fefd79b5
     title: "Fix GitHub CI rust-size gate, m4 template drift, and builtin wasm manifest drift"
     priority: P1
     source_signal: null
@@ -16,8 +16,8 @@ tasks:
     handoff_to:
       - wasm_platform_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0006.yaml
-  - task_id: TASK-PM-0013
+    task_path: .pm/tasks/task_0e8cdcdddb7553a2a007ff14fefd79b5.yaml
+  - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2
     source_signal: null
@@ -28,8 +28,8 @@ tasks:
       - "显式共享 replication network 的 network-consensus 路径保持可用，并有回归测试证明未退化"
     handoff_to: []
     status: done
-    task_path: .pm/tasks/TASK-PM-0013.yaml
-  - task_id: TASK-PM-0020
+    task_path: .pm/tasks/task_5013d728670c5d9aa3f634ca6e665fab.yaml
+  - task_uid: task_f8cc5a3ee1cb5adda34ca0c635a8e58f
     title: "Implement P2PARCH-1 identity and discovery substrate"
     priority: P2
     source_signal: null
@@ -43,8 +43,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0020.yaml
-  - task_id: TASK-PM-0021
+    task_path: .pm/tasks/task_f8cc5a3ee1cb5adda34ca0c635a8e58f.yaml
+  - task_uid: task_b597b2e6087958258e5092da6832af8a
     title: "Implement P2PARCH-1 query-driven discovery acquisition"
     priority: P2
     source_signal: null
@@ -58,8 +58,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0021.yaml
-  - task_id: TASK-PM-0022
+    task_path: .pm/tasks/task_b597b2e6087958258e5092da6832af8a.yaml
+  - task_uid: task_82a99edc47a75a4a9f00c1520f46ce37
     title: "Implement P2PARCH-1 rendezvous automation"
     priority: P2
     source_signal: null
@@ -73,8 +73,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0022.yaml
-  - task_id: TASK-PM-0023
+    task_path: .pm/tasks/task_82a99edc47a75a4a9f00c1520f46ce37.yaml
+  - task_uid: task_7c7b48865c6059e4b8810e7994af1484
     title: "Implement P2PARCH-2 transport substrate"
     priority: P2
     source_signal: null
@@ -88,8 +88,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0023.yaml
-  - task_id: TASK-PM-0025
+    task_path: .pm/tasks/task_7c7b48865c6059e4b8810e7994af1484.yaml
+  - task_uid: task_f4868e8163fa5e06aef9b09085d25774
     title: "Implement P2PARCH-2 QUIC TCP fallback"
     priority: P2
     source_signal: null
@@ -103,8 +103,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0025.yaml
-  - task_id: TASK-PM-0026
+    task_path: .pm/tasks/task_f4868e8163fa5e06aef9b09085d25774.yaml
+  - task_uid: task_75c6ec398fc05a7b98bc1ca9e84c1079
     title: "Implement P2PARCH-2 hole-punch and relay reservation substrate"
     priority: P2
     source_signal: null
@@ -118,8 +118,8 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0026.yaml
-  - task_id: TASK-PM-0028
+    task_path: .pm/tasks/task_75c6ec398fc05a7b98bc1ca9e84c1079.yaml
+  - task_uid: task_75d36b05242254608f5f627882a08cc6
     title: "Implement P2PARCH-3 deployment mode and role policy substrate"
     priority: P2
     source_signal: null
@@ -133,4 +133,4 @@ tasks:
     handoff_to:
       - qa_engineer
     status: done
-    task_path: .pm/tasks/TASK-PM-0028.yaml
+    task_path: .pm/tasks/task_75d36b05242254608f5f627882a08cc6.yaml

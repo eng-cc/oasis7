@@ -17,7 +17,7 @@
   - SC-4: 反思产物 100% 先进入 `signal`/候选对象，再由 owner 决定提升为 memory、task 或 rejected，不允许自动覆盖正式 PRD / project。
   - SC-5: 专题对 `memoryOSS` / `Hindsight` 的 adopted / rejected / deferred 项均给出明确理由，并与现有 `self-evolution` / `role-long-term-memory` 边界保持零冲突。
   - SC-6: 会话记录只能作为 `raw evidence` 输入；对 Codex/engineering task，phase 1 来源固定为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`（`~/.codex/logs_1.sqlite` 仅作可选后续解析层），100% 先提炼到 `working_memory` 或 `signal`，不得整段会话直接写入长期 memory。
-  - SC-7: `working_memory` 100% 带 `task_id`、`role`、`worktree_hint`、`entry_kind`、`source_refs`、`captured_at`、`expires_at` 字段，并在任务关闭后显式清理、转 task、转 signal 或丢弃。
+  - SC-7: `working_memory` 100% 带 `task_uid`、`role`、`worktree_hint`、`entry_kind`、`source_refs`、`captured_at`、`expires_at` 字段，并在任务关闭后显式清理、转 task、转 signal 或丢弃。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -52,7 +52,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 记忆分类层 | `memory_kind=fact|experience|summary|belief`、`confidence`、`review_due_at`、`recall_priority` | `promote-memory` 新增记录时必须选择 kind；`belief` 必须附 `confidence` 与 review 截止 | `draft -> active -> needs_review -> superseded/retired` | `fact` 高于 `summary`，`experience` 高于 `belief`；同类内按 `recall_priority`、`effective_at desc` 排序 | role owner 可写本角色；`shared` 仍仅 producer/治理维护者可写 |
 | Recall Profile | `profile_id`、`role`、`phase`、`kind_allowlist[]`、`max_items`、`budget_chars`、`freshness_days`、`topic_filters[]` | `workflow-report` / `memory-report` 根据 profile 输出预算化视图；超预算时截断并给出原因 | `draft -> active -> superseded` | 先按 `kind` 权重、再按 `recall_priority`、再按 freshness 排序；超出 `budget_chars` 的条目不注入 | 所有人可读；owner role 与 producer 决定各自 profile |
-| Working Memory | `task_id`、`role`、`worktree_hint`、`entry_id`、`entry_kind=attempt|hypothesis|decision|open_question|next_step`、`summary`、`source_refs[]`、`captured_at`、`expires_at`、`promoted_to[]` | 会话/过程分析先写入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 默认从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 提炼，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，owner 决定保留、提炼成 signal/task、或丢弃 | `captured -> active -> promoted/discarded/expired` | 默认按 `captured_at desc`；`decision/next_step` 高于 `attempt`；过期条目不进入 recall | 当前 task owner 可写；handoff 接收方可续写；不得直接当正式真值 |
+| Working Memory | `task_uid`、`role`、`worktree_hint`、`entry_id`、`entry_kind=attempt|hypothesis|decision|open_question|next_step`、`summary`、`source_refs[]`、`captured_at`、`expires_at`、`promoted_to[]` | 会话/过程分析先写入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 默认从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 提炼，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，owner 决定保留、提炼成 signal/task、或丢弃 | `captured -> active -> promoted/discarded/expired` | 默认按 `captured_at desc`；`decision/next_step` 高于 `attempt`；过期条目不进入 recall | 当前 task owner 可写；handoff 接收方可续写；不得直接当正式真值 |
 | Reflection Signal Contract | `source_type=reflection`、`summary`、`source_ref`、`role_hint`、`severity`、`candidate_kind`、`candidate_topic` | `promote-signal` 写入反思信号；owner 决定 `promoted_candidate_task`、`promoted_memory`、`rejected` 或 `deferred` | `new -> triaged -> promoted/rejected/deferred` | 已有同 topic active memory 时优先复用/更新，避免重复创建 | 全角色可提交；对应 owner 负责处置；QA/producer 可阻断高风险反思 |
 | Belief Review Gate | `confidence`、`review_due_at`、`last_reviewed_at`、`contradicted_by[]` | `memory-report` / `workflow-report` 对过期 `belief` 标记 `needs_review`；`supersede-memory` 处理冲突 | `active -> needs_review -> superseded/retired` | 过期 `belief` 在 review 视图优先级高于普通 stale memory | owner role 负责复核；producer 可升级为阶段阻断 |
 | External Inspiration Matrix | `source_name`、`source_ref`、`pattern`、`decision=adopted|rejected|deferred`、`rationale`、`target_object` | 设计/PRD 中冻结 adopted / rejected 项；后续实现只能引用已 adopted 模式 | `proposed -> adopted/rejected/deferred -> superseded` | adopted 项按影响范围和依赖前置排序 | 仅 producer_system_designer 可冻结正式结论；相关工程 owner 联审实现影响 |
@@ -91,7 +91,7 @@
   - `memoryOSS` 提供的借鉴点仅限本地优先、显式 mode/namespace、预算化召回与 fail-open 工程习惯；不引入其产品形态作为正式依赖。
   - 《Hindsight》提供的借鉴点仅限 `fact/experience/summary/belief` 记忆分层，以及 `retain/recall/reflect` 闭环；不把论文实验结果直接等同于 oasis7 工程治理结论。
   - 原始会话与过程日志属于 `raw evidence`，先进入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 raw evidence 默认优先直读 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，只有被提炼过的结论才进入 `signal`、`task` 或长期 `memory`。
-  - 反思链路统一为 `.codex/task execution log/evidence -> working_memory -> signal(reflection) -> owner review -> memory/task/rejected`，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_id>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
+  - 反思链路统一为 `.codex/task execution log/evidence -> working_memory -> signal(reflection) -> owner review -> memory/task/rejected`，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_uid>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
@@ -122,7 +122,7 @@
   - `belief` 长时间无人复核：report 标记 `needs_review`，producer review 视图必须显式暴露。
   - Recall profile 超预算：输出必须说明是因 `max_items` / `budget_chars` / `freshness_days` 被裁剪，不能静默吞掉。
   - 同一 topic 同时存在互斥 `fact` 与 `belief`：lint 直接失败，要求 supersede 或改 topic。
-  - 同一 transcript 被重复抽取：若 `task_id + source_ref + summary hash` 已存在 active `working_memory`，默认复用旧条目而不是重复创建。
+  - 同一 transcript 被重复抽取：若 `task_uid + source_ref + summary hash` 已存在 active `working_memory`，默认复用旧条目而不是重复创建。
   - 反思信号重复：若同一 `source_ref + candidate_topic + summary hash` 已存在未闭环记录，默认复用旧 signal/task，而不是再次创建。
   - 外部方案升级/失效：若 `memoryOSS` 或论文后续版本与现有 adopted 结论冲突，应新增 review task，旧结论走 superseded，不原地改写历史。
   - 网络不可用：外部资料只作为专题决策输入，仓库运行态不依赖在线访问；离线时不得阻断既有 `.pm` 工作流。
@@ -172,7 +172,7 @@
 | DEC-MIR-004 | 召回必须预算化并按 phase/role/kind 控制 | 允许 agent 自由检索并全量注入历史记忆 | 无预算的长上下文会放大噪声和相互矛盾记忆，不符合 oasis7 的 deterministic governance 目标。 |
 | DEC-MIR-005 | 对 `belief` 施加 review_due_at 与 superseded 约束 | 把 `belief` 与 `fact` 一视同仁长期保留 active | 暂定判断本质上是待验证假设，必须更快过期和复核。 |
 | DEC-MIR-006 | 将会话/过程记忆先落到 task-scoped `working_memory` | 直接把 transcript 或中间推理写入长期 memory | 过程认知变化快、噪声高，且主要服务于当前任务，不适合直接变成长期真值。 |
-| DEC-MIR-007 | Codex/engineering task 的 phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl` | 先要求 wrapper 导出 `output/.../<task_id>.jsonl` 作为唯一 transcript 来源 | 当前环境已存在可直接读取的本地 Codex 会话索引与 rollout 存档；先复用现成 raw evidence 更快闭环，且不新增第二套导出前置依赖。 |
+| DEC-MIR-007 | Codex/engineering task 的 phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl` | 先要求 wrapper 导出 `output/.../<task_uid>.jsonl` 作为唯一 transcript 来源 | 当前环境已存在可直接读取的本地 Codex 会话索引与 rollout 存档；先复用现成 raw evidence 更快闭环，且不新增第二套导出前置依赖。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

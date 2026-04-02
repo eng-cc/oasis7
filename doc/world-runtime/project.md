@@ -211,8 +211,8 @@
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
-    - `.pm/tasks/TASK-PM-0013.yaml`
-    - `.pm/tasks/TASK-PM-0013.execution.md`
+    - `.pm/tasks/task_5013d728670c5d9aa3f634ca6e665fab.yaml`
+    - `.pm/tasks/task_5013d728670c5d9aa3f634ca6e665fab.execution.md`
     - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
     - `crates/oasis7_node/src/lib.rs`
     - `crates/oasis7_node/src/node_runtime_core.rs`

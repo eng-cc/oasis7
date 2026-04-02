@@ -5,7 +5,7 @@
 
 
 ## 开发工作流
-1. 新需求先读目标模块 `doc/<module>/prd.md`、`doc/<module>/project.md`，必要时补读当前任务的 `.pm/tasks/TASK-PM-XXXX.execution.md`
+1. 新需求先读目标模块 `doc/<module>/prd.md`、`doc/<module>/project.md`，必要时补读当前任务的 `.pm/tasks/<TASK-UID>.execution.md`
    1. `prd.md` 只写目标态规格（Why/What/Done），`project.md` 只写执行计划（How/When/Who），task execution log 只写该任务过程；历史 `doc/devlog/YYYY-MM-DD.md` 仅作归档参考
    2. PRD 写作与审查门禁以 `.agents/skills/prd/SKILL.md` 与 `.agents/skills/prd/check.md` 为准
 
@@ -24,7 +24,7 @@
       1. 低风险、短任务：`./.agents/roles/templates/handoff-brief.md`
       2. 跨模块、高风险：`./.agents/roles/templates/handoff-detailed.md`
    3. 接收方开始前必须确认目标、输入、输出、完成定义和验证方式
-   4. 仓库已启用 `.pm/` 运行层时，进入实施前先执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-id <TASK-ID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审或尚未建 task 时，才允许省略 `--task-id`
+   4. 仓库已启用 `.pm/` 运行层时，进入实施前先执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审或尚未建 task 时，才允许省略 `--task-uid`
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -54,13 +54,13 @@
    2. 文档组织、allowlist、互链、引用可达性等继续遵守工程治理门禁
 
 9. 每个任务完成后都要写日志并跑对应测试
-   1. 执行日志 canonical 路径为 `.pm/tasks/<TASK-ID>.execution.md`；不再新增集中式 `doc/devlog/YYYY-MM-DD.md`
+   1. 执行日志 canonical 路径为 `.pm/tasks/<TASK-UID>.execution.md`；不再新增集中式 `doc/devlog/YYYY-MM-DD.md`
    2. 一个任务只维护一个 execution log 文件；多角色协作时继续在条目级标注角色，不按角色拆文件
    3. 日志至少包含：日期、时刻、角色、完成内容、遗留事项
    4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## YYYY-MM-DD HH:MM:SS CST / role_name`
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
    6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
-   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-id <TASK-ID>`，把 `last_closed_at` 写入当前任务，再按 checklist 回写 signal / memory / backlog，不允许只写 execution log 不同步 `.pm/`
+   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`，把 `last_closed_at` 写入当前任务，再按 checklist 回写 signal / memory / backlog，不允许只写 execution log 不同步 `.pm/`
    8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 

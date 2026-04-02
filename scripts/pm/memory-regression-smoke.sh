@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+FIXTURE_TASK_UID="task_3eb31966906e5ae7b8b8676d756c5510"
 
 OUTPUT_JSON=0
 KEEP_TEMP=0
@@ -103,7 +104,7 @@ records:
     topic: viewer.startup.blocker
     summary: "viewer startup blocker still needs fresh review"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - failure_signature
       - gate
@@ -125,7 +126,7 @@ records:
     topic: viewer.startup.blocker
     summary: "older viewer startup blocker signature"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-10T09:00:00+08:00
@@ -149,7 +150,7 @@ records:
     topic: stage.current
     summary: "current stage remains internal_playable_alpha_late"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - stage
     effective_at: 2026-03-31T10:00:00+08:00
@@ -170,7 +171,7 @@ records:
     topic: gate.claim_envelope
     summary: "claim envelope remains internal_only"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - claim_envelope
     effective_at: 2026-03-31T10:00:00+08:00
@@ -181,6 +182,24 @@ records:
 """,
     encoding="utf-8",
 )
+PY
+
+python3 - "$TMPDIR" "$FIXTURE_TASK_UID" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+fixture_task_uid = sys.argv[2]
+for path in (
+    root / ".pm/roles/qa_engineer/memory/active.yaml",
+    root / ".pm/roles/qa_engineer/memory/superseded.yaml",
+    root / ".pm/roles/producer_system_designer/memory/active.yaml",
+    root / ".pm/shared/memory/active.yaml",
+):
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("__FIXTURE_TASK_UID__", fixture_task_uid),
+        encoding="utf-8",
+    )
 PY
 
 cat > "$TMPDIR/.agents/roles/report_smoke_engineer.md" <<'EOF'
@@ -219,12 +238,12 @@ TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --priority P1 \
   --source-ref .pm/evidence/bootstrap.md \
   --json)"
-TASK_ID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_id"])' <<<"$TASK_JSON")"
+TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$TASK_JSON")"
 TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$TASK_JSON")"
 cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
-# $TASK_ID Execution Log
+# $TASK_UID Execution Log
 
-- task_id: $TASK_ID
+- task_uid: $TASK_UID
 - title: investigate stale viewer blocker
 - owner_role: qa_engineer
 - worktree_hint: null
@@ -233,9 +252,9 @@ cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 - 完成内容: memory regression smoke fixture.
 - 遗留事项: stale blocker still needs review.
 EOF
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status committed >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-id "$TASK_ID" --json >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-id "$TASK_ID" --to-status blocked >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status committed >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status blocked >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --current-stage internal_playable_alpha_late \
   --claim-envelope internal_only \
@@ -243,7 +262,7 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --gate-id GATE-SMOKE-001 \
   --gate-status blocked \
   --lane-status qa=blocked \
-  --blocking-task "$TASK_ID" \
+  --blocking-task "$TASK_UID" \
   --source-ref "$TASK_LOG_PATH" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
@@ -254,7 +273,7 @@ ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" 
 QA_ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
 EXPANDED_WORKFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role report_smoke_engineer --phase start --json)"
 
-python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$EXPANDED_WORKFLOW_JSON" "$TASK_ID" <<'PY'
+python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$EXPANDED_WORKFLOW_JSON" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -265,7 +284,7 @@ qa_report = json.loads(sys.argv[2])
 role_report = json.loads(sys.argv[3])
 qa_role_report = json.loads(sys.argv[4])
 expanded_workflow = json.loads(sys.argv[5])
-task_id = sys.argv[6]
+task_uid = sys.argv[6]
 
 if report["counts"] != {"active": 3, "needs_review": 1, "superseded": 1}:
     raise SystemExit(f"unexpected report counts: {report['counts']}")
@@ -285,7 +304,7 @@ if expanded_workflow["signal_summary"]["pending_count"] != 0:
     raise SystemExit("workflow_report pending signal count mismatch for expanded role")
 if role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
     raise SystemExit("role_report missing blocked QA task count")
-if role_report["roles"]["qa_engineer"]["tasks"]["blocked"][0]["task_id"] != task_id:
+if role_report["roles"]["qa_engineer"]["tasks"]["blocked"][0]["task_uid"] != task_uid:
     raise SystemExit("role_report missing expected blocked QA task")
 if qa_role_report["role_filter"] != "qa_engineer":
     raise SystemExit("qa_role_report filter mismatch")
@@ -304,7 +323,7 @@ text += """  - id: MEM-QA-0003
     topic: viewer.startup.blocker
     summary: "duplicate blocker topic"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-31T11:00:00+08:00
@@ -341,7 +360,7 @@ records:
     topic: viewer.startup.blocker
     summary: "viewer startup blocker still needs fresh review"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - failure_signature
       - gate
@@ -364,7 +383,7 @@ records:
     topic: viewer.startup.blocker
     summary: "older viewer startup blocker signature"
     source_refs:
-      - .pm/tasks/TASK-PM-0001.execution.md
+      - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - failure_signature
     effective_at: 2026-03-10T09:00:00+08:00
@@ -380,6 +399,22 @@ records:
 )
 PY
 
+python3 - "$TMPDIR" "$FIXTURE_TASK_UID" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+fixture_task_uid = sys.argv[2]
+for path in (
+    root / ".pm/roles/qa_engineer/memory/active.yaml",
+    root / ".pm/roles/qa_engineer/memory/superseded.yaml",
+):
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("__FIXTURE_TASK_UID__", fixture_task_uid),
+        encoding="utf-8",
+    )
+PY
+
 CHAIN_OUTPUT="$(
   set +e
   PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" 2>&1
@@ -390,7 +425,7 @@ if [[ "$CHAIN_OUTPUT" != *"superseded_by missing target"* ]] || [[ "$CHAIN_OUTPU
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_ID" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -404,7 +439,7 @@ print(
             "qa_report": json.loads(sys.argv[3]),
             "role_report": json.loads(sys.argv[4]),
             "qa_role_report": json.loads(sys.argv[5]),
-            "blocked_task_id": sys.argv[6],
+            "blocked_task_uid": sys.argv[6],
             "conflict_failure": "active memory topic conflict",
             "chain_failure": "superseded_by missing target",
             "expanded_role": "report_smoke_engineer",
@@ -433,7 +468,7 @@ print(f"- active_count: {payload['report']['counts']['active']}")
 print(f"- needs_review_count: {payload['report']['counts']['needs_review']}")
 print(f"- superseded_count: {payload['report']['counts']['superseded']}")
 print(f"- expanded_role: {payload['expanded_role']}")
-print(f"- qa_blocked_task_id: {payload['blocked_task_id']}")
+print(f"- qa_blocked_task_uid: {payload['blocked_task_uid']}")
 print(f"- conflict_failure: {payload['conflict_failure']}")
 print(f"- chain_failure: {payload['chain_failure']}")
 PY

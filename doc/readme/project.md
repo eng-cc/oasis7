@@ -580,8 +580,8 @@
     - `doc/readme/prd.index.md`
     - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
     - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
-    - `.pm/tasks/TASK-PM-0014.yaml`
-    - `.pm/tasks/TASK-PM-0014.execution.md`
+    - `.pm/tasks/task_49617bcff6985802b74d61cb4c12d59f.yaml`
+    - `.pm/tasks/task_49617bcff6985802b74d61cb4c12d59f.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "GUI已死？这次我是认同的|GUI 不再适合当第一交互层|操作权|判断权|观察层|校正层|反馈层" doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
     - `./scripts/doc-governance-check.sh`
@@ -592,8 +592,8 @@
     - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
     - `site/social/xiaohongshu-gui-death-cover.html`
     - `site/social/xiaohongshu-gui-death-cover.png`
-    - `.pm/tasks/TASK-PM-0017.yaml`
-    - `.pm/tasks/TASK-PM-0017.execution.md`
+    - `.pm/tasks/task_2b83556ab85d58d49a234db47cdfa89c.yaml`
+    - `.pm/tasks/task_2b83556ab85d58d49a234db47cdfa89c.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "xiaohongshu-gui-death-cover.html|xiaohongshu-gui-death-cover.png|极简 editorial|低 GUI 感" doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md site/social/xiaohongshu-gui-death-cover.html`
     - `file site/social/xiaohongshu-gui-death-cover.png`

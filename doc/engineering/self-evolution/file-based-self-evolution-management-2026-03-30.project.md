@@ -14,13 +14,14 @@
 - [x] TASK-ENGINEERING-079 (PRD-ENGINEERING-SE-002/003/006) [test_tier_required] + [test_tier_full]: 建立 `devlog -> signal -> memory/task -> stage report` required-tier 验证链路，并评估角色扩容与多 worktree 并发回归。
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-SE-005/006) [test_tier_required]: 建立长期 memory 自建专题 `prd/design/project`，将 role memory schema、promotion 与 superseded 规则从总专题中单独冻结。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required] + [test_tier_full]: 落地 `role-report` 入口，汇总 role backlog + role memory，并补按角色查询与扩容回归。
-- [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
+- [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的默认流程口径，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 - [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪互链，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
-- [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-SE-004/007) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换到 `.pm/tasks/TASK-PM-*.execution.md`，并同步回写 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
+- [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-SE-004/007) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换到 `.pm/tasks/task_<32hex>.execution.md`，并同步回写 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
 - [x] TASK-ENGINEERING-097 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并把运行环境阻断边界同步回写到正式文档与 `workflow-report` checklist。
-- [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
+- [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
+- [ ] TASK-ENGINEERING-099 (PRD-ENGINEERING-SE-004/006/007/008) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐 task/state/source_ref 迁移脚本与回归验证。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -29,7 +30,7 @@
 - `doc/engineering/README.md`
 - `AGENTS.md`
 - `.agents/roles/*.md`
-- `.pm/tasks/TASK-PM-*.execution.md`
+- `.pm/tasks/task_<32hex>.execution.md`
 - `testing-manual.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
@@ -43,15 +44,15 @@
 ## 状态
 - 更新日期: 2026-04-02
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-098` 已完成；`workflow-report --phase close --task-id` 的 working_memory 提示现已按当前 task 计数，零条目时先暴露 bootstrap 入口，`TASK-ENGINEERING-074~085/092/093/094/096/097/098` 均已完成。
+- 当前任务: `TASK-ENGINEERING-099` 进行中；目标是把 `.pm` task 的 canonical identity 收敛为 `task_uid` 单一真值，并将 task registry/backlog 收敛为扫描重建视图，彻底消除顺序 `TASK-PM-xxxx` 在多 worktree rebase 中的结构性冲突。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
   - `TASK-ENGINEERING-097`：已收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并补齐运行环境阻断边界。
-  - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
-  - `TASK-ENGINEERING-096`：已将执行日志 canonical 路径切到 `.pm/tasks/TASK-PM-*.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。
+  - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
+  - `TASK-ENGINEERING-096`：已将执行日志 canonical 路径切到 `.pm/tasks/task_<32hex>.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。
   - `TASK-ENGINEERING-094`：已将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
-  - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。
+  - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。
   - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并把后续 recall/reflection 增量任务挂回 `self-evolution` 总专题依赖链。
   - `TASK-ENGINEERING-084`：已落地 `role-report.sh` 与 `pm_store.py role-report`，可按角色汇总 backlog 状态、blocked tasks 与 active/needs_review/superseded memory；required/full smoke 均已覆盖真实 backlog + stale memory + 扩容场景。
   - `TASK-ENGINEERING-083`：已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容的 lint/scaffold，以及 `memory-regression-smoke.sh` full-tier 回归；长期 memory 现具备 active / needs_review / superseded 统一查询入口。
@@ -65,5 +66,6 @@
   - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 devlog。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
+  - 先完成 `TASK-ENGINEERING-099` 的 task_uid 迁移、lint/smoke 升级与正式文档收口；
   - 视后续优先级，转入 `TASK-ENGINEERING-087~090` 的 recall / reflection 增量补强；
   - 之后若要推进 overdue SLA、跨角色 review board 或 shared dashboard，再单列新治理任务。

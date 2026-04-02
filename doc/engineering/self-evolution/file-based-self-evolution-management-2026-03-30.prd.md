@@ -20,12 +20,14 @@
   - SC-6: 文件化项目管理层与现有 `PRD / project / doc archive` 的职责边界清晰；task execution log 留在 `.pm/tasks/`，正式规格继续留在 `doc/`，运行态数据留在 `.pm/`，重复定义率为 0。
   - SC-7B: task file 100% 带 `execution_log_path`，且 `workflow-report`、task lint、required/full smoke 都按该路径读写同一份日志。
   - SC-7: 每个标准角色在“开始任务 / 收口任务 / 阶段评审”三个场景下都有统一 `workflow-report` 入口与固定 checklist，不再依赖人工拼接 `role-report`、`memory-report`、`stage-report` 与 signal inbox 状态。
-  - SC-7A: `workflow-report --phase start|close --task-id <TASK-ID>` 会在对应 task file 内回写 `last_started_at` / `last_closed_at`，让 `.pm` 工作流执行具备可审计证据，而不是只留在口头约定。
+  - SC-7A: `workflow-report --phase start|close --task-uid <TASK-UID>` 会在对应 task file 内回写 `last_started_at` / `last_closed_at`，让 `.pm` 工作流执行具备可审计证据，而不是只留在口头约定。
   - SC-8: `workflow-report --phase close` 的 checklist 必须明确要求“commit 前启动独立 subagent review 当前 diff，并先处理 findings 再提交”，不得只在人工约定层存在；在 Codex 环境中，该动作默认指通过 `spawn_agent` 派生独立 review agent。
   - SC-8A: `workflow-report --phase close` 与根 `AGENTS.md` 必须一致说明：commit 前 subagent review 属于仓库默认流程，不需要仅因执行该流程再单独向用户申请。
   - SC-8B: `codex exec review --uncommitted` 不得记作 `workflow-report --phase close` 所要求的 subagent review；若运行环境禁止派生 agent，必须显式记录为运行环境阻断。
   - SC-8C: 根 `AGENTS.md`、engineering 主 PRD 与本专题正式追踪必须只保留这一条默认流程口径。
-  - SC-8D: `workflow-report --phase close --task-id <TASK-ID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
+  - SC-8D: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
+  - SC-9: `.pm` task 的唯一身份必须收敛为去中心分配的 `task_uid`；`TASK-PM-xxxx`、`display_id`、`legacy_ids` 与 `next_sequence` 均不得再作为正式字段或路径依赖。
+  - SC-10: task file、execution log、working_memory、stage blocker、source refs 与 codex session 映射都必须直接以 `task_uid` 引用；registry/backlog 如保留，只能作为由 canonical task 对象扫描重建的视图。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -48,23 +50,25 @@
   - PRD-ENGINEERING-SE-005: As a governance maintainer, I want role memory records to support `superseded` lifecycle and source references, so that evolving decisions remain auditable instead of overwritten.
   - PRD-ENGINEERING-SE-006: As a future role owner, I want the file layout to support role expansion without schema breakage, so that the system can evolve beyond the current 7 roles.
   - PRD-ENGINEERING-SE-007: As any active role owner, I want one canonical workflow entrypoint for `start/close/review`, so that `.pm` becomes the default operating loop instead of a set of optional low-level scripts.
+  - PRD-ENGINEERING-SE-008: As a multi-worktree task owner, I want canonical `.pm` task identity to be a merge-stable `task_uid`, so that rebase/landing no longer collides on sequence allocation or task file names.
 - Critical User Flows:
-  1. Flow-SE-001: `角色完成任务执行 -> 写入 .pm/tasks/TASK-PM-XXXX.execution.md -> promoter 脚本抽取高价值信号 -> 进入 .pm/inbox/signals.jsonl -> owner 决定提升为 memory 或 candidate task`
+  1. Flow-SE-001: `角色完成任务执行 -> 写入 .pm/tasks/<task_uid>.execution.md -> promoter 脚本抽取高价值信号 -> 进入 .pm/inbox/signals.jsonl -> owner 决定提升为 memory 或 candidate task`
   2. Flow-SE-002: `qa_engineer 发现 block / failure signature -> 生成 signal -> promote 到 qa backlog -> 若影响阶段或对外口径则同步 stage/gate -> producer 在阶段评审时直接读取`
   3. Flow-SE-003: `liveops_community 收到真实反馈 / 事故 -> 归档 signal -> 聚类后生成 candidate task 或 incident memory -> 相关 owner 接收并回写 follow-up`
   4. Flow-SE-004: `producer_system_designer 通过 set-stage 更新 stage/gate 当前态 -> stage-report 汇总 role backlog、关键 blocker、claim envelope 和 trend inputs -> 输出 continue / hold / reassess`
   5. Flow-SE-005: `历史结论被新结论取代 -> 原 memory 记录转为 superseded -> 新记录写入 active -> superseded_by / source_refs / effective range 形成链路`
   6. Flow-SE-006: `新增标准角色 -> 基于角色模板生成 memory/backlog 容器 -> 注册到 registry -> 既有脚本自动将其纳入 lint / report / stage aggregation`
-  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-id <TASK-ID> -> task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-id <TASK-ID> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> commit 前通过 spawn_agent 启动独立 subagent review 当前 diff 并处理 findings -> producer/owner 在评审时执行 workflow-report --phase review`
+  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-uid <task_uid> -> canonical task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-uid <task_uid> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> commit 前通过 spawn_agent 启动独立 subagent review 当前 diff 并处理 findings -> producer/owner 在评审时执行 workflow-report --phase review`
+  8. Flow-SE-008: `owner 创建新 task -> 系统本地生成 task_uid -> task file / execution log / working_memory 直接落到 task_uid 路径 -> registry/backlog 视图按扫描重建 -> rebase 时不再因 next_sequence/TASK-PM 抢号而冲突`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 角色长期 memory | `id`、`role`、`topic`、`summary`、`source_refs[]`、`effective_at`、`last_reviewed_at`、`status`、`superseded_by` | `promote-signal` 生成新记录，`supersede-memory` 废止旧记录 | `draft -> active -> superseded/retired` | 默认按 `role/topic/effective_at desc`；active 优先于 superseded | 角色 owner 可新增/更新；producer 与治理维护者可联审关键跨角色结论 |
-| 角色 backlog 条目 | `task_id`、`title`、`owner_role`、`status`、`priority`、`source_signal`、`related_prd[]`、`acceptance[]`、`handoff_to[]` | `new-task` 创建，`review-task` 升降级，`close-task` 完结 | `candidate -> committed -> blocked -> done/deferred` | 按 `priority`、`updated_at`、`stage_impact` 排序 | owner role 主责；producer 可调优先级；QA 可对 blocker 给阻断建议 |
+| 角色 backlog 条目 | `task_uid`、`title`、`owner_role`、`status`、`priority`、`source_signal`、`related_prd[]`、`acceptance[]`、`handoff_to[]` | `new-task` 创建 canonical task，对应 backlog 视图由扫描重建；`review-task` 升降级，`close-task` 完结 | `candidate -> committed -> blocked -> done/deferred` | 按 `priority`、`updated_at`、`stage_impact` 排序 | owner role 主责；producer 可调优先级；QA 可对 blocker 给阻断建议 |
 | Signal inbox | `signal_id`、`source_type`、`source_ref`、`role_hint`、`severity`、`summary`、`promotion_state` | `ingest-signal` 录入，`promote-signal` 提升，`discard-signal` 放弃 | `new -> triaged -> promoted/discarded/deferred` | `severity` 高于时间；QA / liveops / gate signal 优先 | 全角色可提交；对应 owner 负责处置；治理维护者可审计 |
-| Task registry | `task_id`、`owner_role`、`worktree_hint`、`execution_log_path`、`status`、`source_refs[]`、`doc_refs[]`、`last_started_at`、`last_closed_at`、`updated_at` | 统一扫描 `.pm/tasks/*.yaml` 与对应 `.execution.md`，生成索引与报告；`workflow-report --task-id` 回写 start/close 时间戳；lint 要求 `blocked/done/deferred` 任务必须已有 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at` | `missing -> registered -> active -> closed` | 任务 ID 单调递增；按 owner_role 分组 | 任务创建者负责建档；owner role 负责状态更新 |
+| Task registry | `task_uid`、`owner_role`、`worktree_hint`、`execution_log_path`、`status`、`source_refs[]`、`doc_refs[]`、`last_started_at`、`last_closed_at`、`updated_at` | 统一扫描 `.pm/tasks/*.yaml` 与对应 `.execution.md`，生成索引与报告；`workflow-report --task-uid` 回写 start/close 时间戳；lint 要求 `blocked/done/deferred` 任务必须已有 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at` | `missing -> registered -> active -> closed` | 按 `priority`、`updated_at`、`owner_role` 排序；不再依赖单调递增序号 | 任务创建者负责建档；owner role 负责状态更新 |
 | Stage / gate 汇总 | `current_stage`、`candidate_stage`、`claim_envelope`、`lane_status[]`、`blocking_tasks[]`、`updated_from` | `set-stage` 统一更新 `.pm/stage/*.yaml` 当前态，`stage-report` 读取 role backlog 和 gate 文件汇总 | `draft -> aligned -> adopted -> superseded` | 任一 blocking lane 优先显示；更新时间最近优先 | 仅 `producer_system_designer` 可修改正式阶段结论；各 owner 提供输入；stage 文件是当前态唯一真值 |
-| Workflow 汇总入口 | `phase`、`role`、`task_id`、`signal_counts`、`checklist[]`、`pending_signals[]` | `workflow-report` 聚合 `role-report`、`memory-report`、`stage-report` 与 signal inbox，输出 `start/close/review` 固定动作建议；`start/close + --task-id` 额外记录 workflow evidence；producer 的 `review` 额外汇总全部角色 pending signals | `start -> close -> review` | 先按 `phase` 固定分桶，再按 `severity`、blocked task、needs_review memory 排序；已 `promoted/rejected/deferred` 的 signal 不再计为 pending | 全角色可读；对应 owner 负责执行 checklist；producer 额外负责阶段裁决相关步骤 |
+| Workflow 汇总入口 | `phase`、`role`、`task_uid`、`signal_counts`、`checklist[]`、`pending_signals[]` | `workflow-report` 聚合 `role-report`、`memory-report`、`stage-report` 与 signal inbox，输出 `start/close/review` 固定动作建议；`start/close + --task-uid` 额外记录 workflow evidence；producer 的 `review` 额外汇总全部角色 pending signals | `start -> close -> review` | 先按 `phase` 固定分桶，再按 `severity`、blocked task、needs_review memory 排序；已 `promoted/rejected/deferred` 的 signal 不再计为 pending | 全角色可读；对应 owner 负责执行 checklist；producer 额外负责阶段裁决相关步骤 |
 | 角色 registry | `role_name`、`memory_path`、`backlog_path`、`is_active`、`introduced_at` | `register-role` 新增角色，lint 自动纳入 | `pending -> active -> retired` | 稳定按 role_name 排序 | 治理维护者维护；角色扩容需 producer 联审 |
 | 自动化脚本 | `script_name`、`inputs`、`outputs`、`failure_signature` | 执行 `lint / report / promote / scaffold` | `available -> verified -> blocked` | required-tier 脚本先于 full-tier 扩展脚本 | 所有人可执行；治理维护者维护契约 |
 - Acceptance Criteria:
@@ -75,12 +79,14 @@
   - AC-5: 任务 registry、signal inbox、memory 记录全部具备 machine-readable 格式，并能在 repo 内被脚本枚举和 lint。
   - AC-6: 专题 project 文档给出分阶段实施计划，且至少将 `.pm` 目录脚手架、signal promotion、role backlog、stage report、QA gate 五条实施线拆成独立任务。
   - AC-7: topic 文档、engineering 根入口、索引和 task execution log 规则全部完成互链，进入正式治理链。
-  - AC-8: `AGENTS.md`、角色职责卡与 `new-task-worktree` 提示明确要求在任务开始/收口/评审时执行 `workflow-report`；其中 `start/close` 默认带 `--task-id <TASK-ID>`，且 required/full smoke 会覆盖该入口。
+  - AC-8: `AGENTS.md`、角色职责卡与 `new-task-worktree` 提示明确要求在任务开始/收口/评审时执行 `workflow-report`；其中 `start/close` 默认带 `--task-uid <TASK-UID>`，且 required/full smoke 会覆盖该入口。
   - AC-9: `workflow-report --phase close`、根 `AGENTS.md` 与工程主项目口径一致要求 commit 前启动独立 subagent review，且 required-tier smoke 会断言该 checklist 项存在。
   - AC-9A: 上述正式口径必须统一为“默认流程 + findings 先处理后提交”的单一路径，不允许在同一套正式文档中再保留例外边界分支。
   - AC-9B: 根 `AGENTS.md` 与专题文档不得再引入额外分支文案，必须维持单一默认流程描述。
-  - AC-9C: required-tier smoke 必须断言：当 `workflow-report --phase close --task-id <TASK-ID>` 面对零条目的 task-scoped working_memory 时，会出现 bootstrap 提示，且不会错误暴露 review/autoflow 动作。
+  - AC-9C: required-tier smoke 必须断言：当 `workflow-report --phase close --task-uid <TASK-UID>` 面对零条目的 task-scoped working_memory 时，会出现 bootstrap 提示，且不会错误暴露 review/autoflow 动作。
   - AC-10: `set-stage` 必须成为 producer 修改 `.pm/stage/*.yaml` 的 canonical 入口；若 active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空、缺 `updated_from` 或缺关联 blocker，则 lint 必须失败。
+  - AC-11: `.pm` task canonical object 必须以 `task_uid` 为唯一主键；新任务创建不再依赖 `next_sequence` 或任何顺序 `TASK-PM-xxxx` 分配。
+  - AC-12: 旧 `.pm` 数据向 `task_uid` 模型迁移后，不允许出现 mixed identity 状态；若 task file、execution log、working_memory、stage blocker、registry/backlog 中仍残留未迁移的旧 task 主键，lint 必须失败。
 - Non-Goals:
   - 不引入 OpenProject、Mem0、Graphiti、Supabase 或外部 SaaS 作为首期真值系统。
   - 不要求首期自动修改 `doc/**/prd.md` 或 `doc/**/project.md`；正式规格仍由 owner 审核回写。
@@ -111,7 +117,7 @@
   - `.agents/roles/*.md`
   - `doc/engineering/prd.md`
   - `doc/engineering/project.md`
-  - `.pm/tasks/TASK-PM-*.execution.md`
+  - `.pm/tasks/task_<32hex>.execution.md`
   - `testing-manual.md`
   - `doc/playability_test_result/*`
   - `doc/readme/*`
@@ -126,7 +132,7 @@
   - orphan task：若 task 缺失 owner_role、source_ref 或 acceptance，lint 直接失败，不允许进入 `committed`。
   - dangling memory：若 memory 记录引用不存在的文档/信号，lint 直接失败。
   - stage drift：若 stage 文件未包含当前 blocking task、claim envelope 与正式对外口径冲突，或 active memory 仍声称存在 `stage.current` / `gate.claim_envelope` 但 stage 当前态为空，lint/report 必须标红并拒绝输出 `aligned`。
-  - workflow evidence 缺失：若 owner 在任务开始/收口时未通过 `workflow-report --task-id` 留下 `last_started_at` / `last_closed_at`，则 task registry 只能视为“未完成工作流接入”，不得宣称 `.pm` 已成为默认执行链路；其中进入 `blocked/done/deferred` 的任务必须已有 `last_started_at`，进入 `done/deferred` 的任务必须已有 `last_closed_at`。
+  - workflow evidence 缺失：若 owner 在任务开始/收口时未通过 `workflow-report --task-uid` 留下 `last_started_at` / `last_closed_at`，则 task registry 只能视为“未完成工作流接入”，不得宣称 `.pm` 已成为默认执行链路；其中进入 `blocked/done/deferred` 的任务必须已有 `last_started_at`，进入 `done/deferred` 的任务必须已有 `last_closed_at`。
   - execution log promotion 漏提：若高严重度 QA/liveops signal 在 SLA 内未被处理，report 需显式列出 overdue。
   - `.pm/` 与 `doc/` 冲突：当 `.pm/` 中的建议和正式 PRD/project 冲突时，以正式文档为准，并将 `.pm/` 记录为待裁决而非自动覆盖。
 - Non-Functional Requirements:
@@ -140,7 +146,8 @@
   - NFR-SE-8: 正式阶段结论与 `.pm/stage/*.yaml` 的一致率 100%，不得出现“文件汇总 pass，但正式口径仍未知”的漂移状态。
   - NFR-SE-9: 角色 backlog 的 `candidate/committed/blocked/done/deferred` 状态定义在所有角色间一致率 100%。
   - NFR-SE-10: `.pm/` 与 `doc/` 之间的引用可达性覆盖率 100%。
-  - NFR-SE-11: 通过 `.pm` 执行的活跃任务，`workflow-report --phase start|close --task-id <TASK-ID>` 留痕覆盖率 100%；任务文件中的 `last_started_at` / `last_closed_at` 必须可被 lint 与 report 读取。
+  - NFR-SE-11: 通过 `.pm` 执行的活跃任务，`workflow-report --phase start|close --task-uid <TASK-UID>` 留痕覆盖率 100%；任务文件中的 `last_started_at` / `last_closed_at` 必须可被 lint 与 report 读取。
+  - NFR-SE-12: 多 worktree 并发创建 task 时，由 task identity 分配导致的 rebase/landing 冲突率必须为 0；剩余冲突只能来自同一 canonical task 对象被并发编辑。
 - Security & Privacy:
   - `.pm/` 仅保存工程治理元信息，不存储凭据、密钥或第三方平台 cookies。
   - 任何自动提炼脚本都不得把敏感数据从 runbook / incident 原文复制进 `.pm/`。
@@ -153,12 +160,14 @@
   - v2.0: 完成 7 个标准角色的长期 memory/backlog 收口，并交付 stage/gate 汇总脚本。
   - v2.1: 建立 `task execution log -> signal -> memory/task -> doc backflow` 的固定操作规约与 required-tier lint。
   - v2.2: 建立 `workflow-report` 统一入口，并接入 `AGENTS.md`、角色职责卡、`new-task-worktree.sh`、commit 前 subagent review 规则与 smoke，使 `.pm` 成为默认执行链路。
+  - v2.3: 将 `.pm` task identity 从顺序 `TASK-PM-xxxx` 迁移到 `task_uid` 单一真值，并将 registry/backlog 收敛为扫描重建视图。
   - v3.0: 在角色扩容、阶段评审和多 worktree 并行场景下稳定运行，形成仓库级自我进化操作层。
 - Technical Risks:
   - 风险-1: `.pm/` 与 `doc/` 双层体系若分工不清，会产生第二真值和重复维护。
   - 风险-2: 过早追求自动化，可能让错误 signal 进入长期 memory/backlog，反而放大噪声。
   - 风险-3: 若对象建模过粗，角色 backlog 会退化为另一份 `devlog`；若过细，又会造成编辑负担过高。
   - 风险-4: 多 worktree 并发下，若没有单任务单文件原则和 lint/merge 规约，冲突会迅速增多。
+  - 风险-5: 若 task identity 仍绑定中心顺序号，新的 canonical task 对象即使彼此无关，也会在 rebase 时争抢 `next_sequence` 与文件名，制造无意义冲突。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
@@ -167,21 +176,23 @@
 | PRD-ENGINEERING-SE-001 | TASK-ENGINEERING-074/078/085 | `test_tier_required` | stage/gate 文件结构检查、`set-stage` 当前态更新、stage 汇总样例验证与 drift lint | 制作人阶段评审输入、跨角色裁决链 |
 | PRD-ENGINEERING-SE-002 | TASK-ENGINEERING-076/079 | `test_tier_required` | QA signal ingestion / promotion / overdue 报表验证 | QA block 回流、required/full 放行链 |
 | PRD-ENGINEERING-SE-003 | TASK-ENGINEERING-076/079 | `test_tier_required` | liveops signal inbox、candidate task 生成与 follow-up 链检查 | 社区反馈回流、事故收口 |
-| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
+| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084/099 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
 | PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
-| PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证 | 角色扩容、治理脚本兼容性 |
-| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094/097/098 | `test_tier_required` + `test_tier_full` | `workflow-report --task-id` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory bootstrap/review 分流、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
+| PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084/099 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证，以及 task identity 迁移后 schema 兼容验证 | 角色扩容、治理脚本兼容性 |
+| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094/097/098/099 | `test_tier_required` + `test_tier_full` | `workflow-report --task-uid` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory bootstrap/review 分流、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
+| PRD-ENGINEERING-SE-008 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | canonical task_uid 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-SE-001 | 在仓库内建立文件化项目管理层 `.pm/` | 直接接入外部 PM/SaaS 作为真值 | 当前仓库已有 Git/worktree/文档治理体系，先在本地闭环成本更低、审计一致性更强。 |
-| DEC-SE-002 | 任务过程日志收敛到 `.pm/tasks/TASK-PM-*.execution.md`，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | `.pm` 已以 task 为基本执行单元，task-local log 更利于 worktree 隔离、lint、signal promotion 与 task 追溯。 |
+| DEC-SE-002 | 任务过程日志收敛到 `.pm/tasks/task_<32hex>.execution.md`，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | `.pm` 已以 task 为基本执行单元，task-local log 更利于 worktree 隔离、lint、signal promotion 与 task 追溯。 |
 | DEC-SE-003 | 采用 role memory + role backlog + signal inbox + task registry + stage/gate 五对象模型 | 仅做一份共享任务清单 | 自我进化需要同时解决长期记忆、候选任务、阶段判断和真实反馈回流，单一清单不够。 |
 | DEC-SE-004 | memory 支持 `superseded` 生命周期和 source refs | 直接覆盖旧结论 | 角色判断和阶段口径会演化，必须保留历史链路。 |
 | DEC-SE-005 | 首期禁止外部网络依赖，脚本与真值全部在仓库内运行 | 依赖远程数据库、消息队列或托管服务 | 当前目标是仓库内最强自治，不是平台集成展示。 |
 | DEC-SE-006 | 用 `workflow-report` 把 `role/memory/stage/signal` 四类视图收敛成统一 workflow 入口 | 继续要求 owner 手工组合多个低层 report / promote 命令 | 基础脚本已经齐全，真正缺的是默认操作入口；若不收敛入口，`.pm` 仍会停留在“可用但不默认使用”。 |
 | DEC-SE-007 | `.pm/stage/current.yaml` / `gate.yaml` 是阶段当前态唯一真值，并通过 `set-stage` 统一更新 | 继续允许 producer memory 单独表达当前阶段，再由 stage-report 被动拼接 | 当前阶段是裁决输入，不是历史注释；若不把 current state 固定到 stage 文件，report 会继续出现“memory 说有阶段、stage 文件却是 null”的分叉。 |
-| DEC-SE-008 | `workflow-report --phase start|close --task-id <TASK-ID>` 显式回写 task workflow evidence | 依赖当前 worktree / branch 名做隐式任务猜测 | `.pm` 已要求单任务单 worktree，但 task/worktree 命名并不总是一一可逆；显式 `task_id` 更可审计，也更适合 lint/smoke。 |
+| DEC-SE-008 | `workflow-report --phase start|close --task-uid <TASK-UID>` 显式回写 task workflow evidence | 依赖当前 worktree / branch 名做隐式任务猜测 | `.pm` 已要求单任务单 worktree，但 task/worktree 命名并不总是一一可逆；显式 `task_uid` 更可审计，也更适合 lint/smoke。 |
+| DEC-SE-009 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 退化为由 canonical task 对象扫描重建的视图 | 继续让顺序 `TASK-PM-xxxx` 同时承担主键、文件名、registry 索引和人类展示号 | 顺序号一旦承担多重职责，就会在多 worktree 并发创建 task 时产生结构性 rebase 冲突；`task_uid` 可以把冲突面收敛到真正被并发编辑的 task 对象。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

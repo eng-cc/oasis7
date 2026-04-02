@@ -1,0 +1,151 @@
+version: 1
+task_uid: task_6d7c3d84f6ae5fca8966b69460033552
+role: producer_system_designer
+worktree_hint: engineering-working-memory-conversation-analysis
+source_session_id: 019d4257-3fbc-79a2-8a6c-4b03d871a43a
+source_thread_name: "评估自我进化借鉴价值'} }]} }]}"
+transcript_source: sessions_rollout
+last_extracted_ts: 2026-03-31T12:38:29.320Z
+captured_until_ts: 2026-03-31T12:38:29.320Z
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "会话记录只作 raw evidence；先提炼为 task-scoped working_memory，再决定是否升为 signal、memory 或 task。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L446"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: decision
+    summary: "Phase 1 采用 `.codex` 作为工程任务 transcript 来源，本地脚本只做确定性预处理，`codex exec --ephemeral` 只做结构化提炼。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L981"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: attempt
+    summary: "已实现 `.codex JSONL -> working_memory -> reflection signal -> candidate task` 自动化链路，并通过 smoke、lint 和文档门禁。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1490"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0004
+    entry_kind: attempt
+    summary: "尝试直接用 `session_index.jsonl + history.jsonl` 提炼当前任务记忆，但结果为空，因为当前机器上的 `history.jsonl` 不是这条任务的真实 transcript。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1733"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0005
+    entry_kind: decision
+    summary: "将 `~/.codex/sessions/.../rollout-*.jsonl` 加入 transcript fallback，修正 phase-1 只读 `history.jsonl` 的缺口。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1769"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0006
+    entry_kind: attempt
+    summary: "`sessions rollout` fallback 已接入并通过 smoke，当前任务 transcript 现在可以从真实 session 文件提取。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1894"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0007
+    entry_kind: next_step
+    summary: "基于 session `019d4257-3fbc-79a2-8a6c-4b03d871a43a` 重新抽取当前任务的 working_memory，并检查提炼结果。"
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1724"
+    captured_at: 2026-03-31T20:05:47+08:00
+    expires_at: 2026-04-02T20:05:47+08:00
+    promoted_to: []
+  - entry_id: WM-0008
+    entry_kind: decision
+    summary: "Use `working_memory` as the task-scoped buffer between conversation/devlog evidence and reflection signals; do not write conversation directly to long-term memory."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L579"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0009
+    entry_kind: decision
+    summary: "Phase 1 transcript ingestion reads `~/.codex` directly and falls back to `sessions/.../rollout-*.jsonl` when `history.jsonl` is incomplete."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1733"
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1962"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0010
+    entry_kind: decision
+    summary: "Local preprocessing only filters, sorts, dedups, crops, and redacts; `codex exec --ephemeral` only performs structured `working_memory` extraction."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L981"
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1010"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0011
+    entry_kind: attempt
+    summary: "Implemented the `.codex -> working_memory -> reflection signal -> candidate task` workflow in `.pm` and verified it with smoke, lint, and doc gates."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1633"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0012
+    entry_kind: decision
+    summary: "Automation stops at reflection signals and candidate tasks; long-term memory, stage/gate, and formal docs remain manual."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1490"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0013
+    entry_kind: decision
+    summary: "Prevent self-pollution by extracting from a snapshot window with watermark fields `source_session_id`, `last_extracted_ts`, and `captured_until_ts`."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1972"
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L2043"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0014
+    entry_kind: attempt
+    summary: "On this machine, `history.jsonl` was effectively unusable; current-task memory was extracted from the real `sessions/rollout` transcript instead."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1688"
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1962"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0015
+    entry_kind: attempt
+    summary: "Smoke failures were caused by reusing real `task_6d7c3d84f6ae5fca8966b69460033552` state; tests need isolated temporary task state."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L2202"
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L2247"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0016
+    entry_kind: decision
+    summary: "Persist `task_id -> session_id` mappings in `codex-sessions.yaml` so later extraction runs can omit `--session-id`."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L1490"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []
+  - entry_id: WM-0017
+    entry_kind: next_step
+    summary: "Rerun real `task_6d7c3d84f6ae5fca8966b69460033552` extraction to backfill watermark header fields on the existing `working_memory` file."
+    source_refs:
+      - "/home/scc/.codex/sessions/2026/03/31/rollout-2026-03-31T13-21-47-019d4257-3fbc-79a2-8a6c-4b03d871a43a.jsonl#L2372"
+    captured_at: 2026-03-31T20:39:51+08:00
+    expires_at: 2026-04-02T20:39:51+08:00
+    promoted_to: []

@@ -1,7 +1,7 @@
 {
   "signal_id": "SIG-EXAMPLE-0001",
   "source_type": "task_execution_log",
-  "source_ref": ".pm/tasks/TASK-PM-0001.execution.md",
+  "source_ref": ".pm/tasks/task_0123456789abcdef0123456789abcdef.execution.md",
   "role_hint": "producer_system_designer",
   "severity": "medium",
   "summary": "replace me",
