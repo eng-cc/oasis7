@@ -1,0 +1,22 @@
+task_uid: task_cd8ed21c50784b96b34fe5a04dd37e94
+title: "Fix viewer_automation parse import regression"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-viewer-automation-parse-import-fix
+execution_log_path: .pm/tasks/task_cd8ed21c50784b96b34fe5a04dd37e94.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_viewer/src/viewer_automation/mod.rs
+doc_refs:
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "oasis7_viewer source-tree build no longer fails in viewer_automation due to missing parse imports."
+  - "viewer_automation wasm/native compile path preserves existing parse API behavior; only compile regression is addressed."
+  - "task execution log and validation capture the compile fix and any residual unrelated warnings."
+handoff_to: []
+updated_at: 2026-04-02T23:49:26+08:00
+last_started_at: 2026-04-02T23:20:44+08:00
+last_closed_at: 2026-04-02T23:48:58+08:00

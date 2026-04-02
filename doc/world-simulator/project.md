@@ -925,6 +925,7 @@
 - [x] TASK-WORLD_SIMULATOR-287 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` Web UI 迁到 SolidJS 组件架构，保持 `software_safe.js` / `__AW_TEST__` / auth/bootstrap / 选择与 playback contract 不变，并把 Viewer Web freshness gate 扩到新的构建输入。
 - [x] TASK-WORLD_SIMULATOR-288 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建链收口为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，保持最终 `software_safe.js` 路径不变，并把 finalize 脚本纳入 freshness source scope。
 - [x] TASK-WORLD_SIMULATOR-289 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `software_safe` 新增 repo-owned 最小浏览器回归脚本，稳定覆盖加载、连接、选中 Agent、`step` 与 DOM/`lastControlFeedback` 反馈，并同步 testing/manual/project 入口。
+- [x] TASK-WORLD_SIMULATOR-290 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复 `crates/oasis7_viewer/src/viewer_automation/mod.rs` 的 parse import 回归，恢复 `oasis7_viewer` 在 native/wasm 下的编译闭环，不改变既有 automation parse 语义。
 ## 依赖
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
@@ -994,7 +995,6 @@
 - `crates/oasis7_client_launcher/src/explorer_window_view.rs`
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
 - `crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`
-- `crates/oasis7_viewer/{Cargo.toml,src/main.rs}`
-- `scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`、`testing-manual.md`
+- `crates/oasis7_viewer/{Cargo.toml,src/main.rs}`、`scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`、`testing-manual.md`
 ## 状态
-- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-02 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-289`（已为 `software_safe` 增加 repo-owned 最小浏览器回归脚本，稳定覆盖加载、连接、选中 Agent、`step` 与 DOM/`lastControlFeedback` 反馈，并同步 testing/manual/project 入口。）；`TASK-WORLD_SIMULATOR-288`（已将 `software_safe` SolidJS 构建链收口为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，保持最终 `software_safe.js` 路径不变，并把 finalize 脚本纳入 freshness source scope。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。
+- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-02 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-290`（已修复 `viewer_automation/mod.rs` 的 parse import 回归，恢复 `oasis7_viewer` 在 native/wasm 下的编译闭环，不改变既有 automation parse 语义。）；`TASK-WORLD_SIMULATOR-289`（已为 `software_safe` 增加 repo-owned 最小浏览器回归脚本，稳定覆盖加载、连接、选中 Agent、`step` 与 DOM/`lastControlFeedback` 反馈，并同步 testing/manual/project 入口。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。
