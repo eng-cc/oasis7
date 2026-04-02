@@ -1,6 +1,6 @@
 # p2p 模块设计总览
 
-审计轮次: 6
+审计轮次: 7
 
 - 对应需求文档: `doc/p2p/prd.md`
 - 对应项目管理文档: `doc/p2p/project.md`
@@ -17,7 +17,7 @@
 5. 下钻 `blockchain/`、`consensus/`、`distfs/`、`network/`、`node/` 等专题目录
 
 ## 3. 设计结构
-- 网络层：节点发现、连接、同步与传输边界。
+- 网络层：节点发现、连接、同步、传输与非全公网 reachability 边界。
 - 共识层：身份、投票、状态传播与一致性策略。
 - 存储层：distfs、路径索引、复制与恢复。
 - 节点层：奖励、执行、观测与治理对接。
@@ -29,6 +29,7 @@
 
 ## 5. 专题导航
 - 基础链路进入 `network/`、`consensus/`
+- mixed-topology / 非全公网主链级覆盖网络进入 `network/p2p-mainnet-private-reachability-architecture-2026-04-01.*`
 - 数据与复制进入 `distfs/`
 - 节点执行与奖励进入 `node/`
 - 区块链和生产化扩展进入 `blockchain/`、`distributed/`

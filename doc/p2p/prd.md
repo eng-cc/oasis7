@@ -1,6 +1,6 @@
 # p2p PRD
 
-审计轮次: 12
+审计轮次: 13
 
 ## 目标
 - 建立 p2p 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -46,6 +46,7 @@
   - SC-14: 历史 PRD/project 文档中的 `oasis7_viewer_live` 旧文件路径完成替换，不再指向已删除的 `src/bin/oasis7_viewer_live/` 子目录文件。
   - SC-15: 主链 Token 创世分配与早期贡献奖励口径具备可审计分桶、低流通边界、单人直持上限与贡献制发放约束，能够直接映射到现有 runtime 创世/金库机制。
   - SC-16: hosted world 网页远程接入具备明确的 `public player plane / private control plane / signer plane` 分层、`guest/player/strong-auth` 授权梯度、公开 join admission control 与 `gui-agent` surface split 策略，且浏览器不再被视为可持有 host 节点长期私钥的受信环境。
+  - SC-17: p2p 模块具备一份 public-chain-grade 的“非全公网依赖”覆盖网络目标态，明确 `public/hybrid/private/relay_only/validator_hidden` 多部署模式、`validator core/sentry/relay` 角色分离，以及 `peer record + discovery + reachability + traffic lanes` 的统一框架边界。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -56,6 +57,7 @@
   - 制作人与金库治理维护者：需要在创世前冻结主链 Token 分配结构，避免过早流通、单人过度控盘或“玩就发币”的错误口径。
   - hosted world host / operator：需要把可公开分享的 join URL 与私有世界控制面拆开，避免分享试玩地址时连控制权一起暴露。
   - hosted world 远程玩家：需要通过网页先建立 session 再游玩，而不是直接继承 host 节点 signer。
+  - 私网 / 家宽 / 企业内网节点运营者：需要在没有公网 IP 的前提下，仍能以正式角色加入网络、同步状态或通过 sentry/relay 参与主链。
 - User Scenarios & Frequency:
   - 协议演进评审：每次共识或网络协议改动前执行。
   - 多节点长跑：按周执行并记录稳定性与恢复结果。
@@ -88,6 +90,7 @@
   - PRD-P2P-021: As a producer_system_designer, I want one explicit benchmark against mainstream public-chain testing systems, so that oasis7 testing maturity is judged by layered evidence rather than isolated green checks.
   - PRD-P2P-022: As a producer_system_designer, I want one explicit shared network / release train minimum model, so that oasis7 can turn `L5` from a known gap into an executable workstream without overclaiming it is already in place.
   - PRD-P2P-023: As a producer_system_designer, I want one explicit hosted-world player access and session-auth model, so that one player部署服务给另一个玩家通过网页进入时，不会再把 host control-plane、shared `gui-agent` control surface 与 node signer 暴露给浏览器。
+  - PRD-P2P-024: As a producer_system_designer, I want one public-chain-grade private-reachability P2P architecture, so that oasis7 不再把“所有正式节点都要有公网 IP”当成默认前提，并能在 mixed-topology 现实下继续对标公共主链。
 - Critical User Flows:
   1. Flow-P2P-001: `网络拓扑变更 -> 共识联调 -> DistFS 同步 -> 节点状态一致性验证`
   2. Flow-P2P-002: `执行 S9/S10 长跑 -> 采集故障与恢复数据 -> 输出收敛报告`
@@ -164,6 +167,7 @@
   - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `shared network/release train` 缺口，以及真实 governance drill 证据的当前优先级。
   - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-040`，明确 `shared_devnet/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 `specified_not_executed` 结论。
   - AC-29: `p2p-hosted-world-player-access-and-session-auth-2026-03-25` 专题文档落盘并映射任务链 `TASK-P2P-041`，明确 hosted world 的 `public player plane / private control plane / signer plane`、`guest/player/strong-auth` 会话梯度、`gui-agent` surface split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界。
+  - AC-30: `p2p-mainnet-private-reachability-architecture-2026-04-01` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -191,6 +195,7 @@
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+  - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
   - `world-rule.md`
   - `doc/world-simulator/viewer/viewer-manual.md`
@@ -218,6 +223,9 @@
   - 阶段误升级：若 `STRAUTH-3` 已完成但生产级 keystore、治理 signer 外部化或创世 ceremony 仍未通过，就把安全阶段升级为 `mainnet-grade`，必须直接阻断并回到 readiness gate 检查。
   - hosted world 误暴露：若 public join URL 仍可命中 world 启停、链控制或 GUI operator action 等管理接口，则必须直接判定为架构越界而非部署细节问题。
   - 浏览器 signer 泄露：若 HTML bootstrap、JS 全局对象或任意 public API 仍返回长期 signer 私钥、seed 或等价真值，则 hosted-world 路径必须直接阻断。
+  - 私网节点离网：若家宽 / NAT / CGNAT 节点因缺少公网入站而被默认判定为不可参与，则必须回到覆盖网络架构重审，而不是继续追加静态 peer 补丁。
+  - relay 单点依赖：若 private/validator_hidden 节点只剩单一 relay-domain 路径，必须直接降级 verdict，不得继续声称已具备 public-chain-grade mixed-topology。
+  - 拓扑安全退化：若 active peer set 集中于单一 operator、ASN 或 `/24`，则必须触发 anti-eclipse 阻断，而不是只要“能连上”就放行。
   - 权限混层：若 guest/player session 在没有强鉴权的情况下能执行资产转账、治理或高风险 prompt/control，则必须回退到 hosted-world 权限设计审查。
   - admission 失控：若 public join 在没有 `max_guest/max_player/rate_limit/world_full_policy` 的情况下无界签发 session，则必须回退到 hosted-world admission 设计审查。
 - Non-Functional Requirements:
@@ -287,6 +295,7 @@
 | PRD-P2P-021 | TASK-P2P-039 | `test_tier_required` | 主流公链测试体系 benchmark 专题 PRD/project/design 建档、testing-manual 映射、gap matrix 与执行优先级冻结 | 测试成熟度口径、QA 证据体系与后续 hardening 排序 |
 | PRD-P2P-022 | TASK-P2P-040 | `test_tier_required` | shared network / release train minimum 专题 PRD/project/design/runbook 建档、three-track model、candidate bundle、claims gate 与 `testing-manual` 入口冻结 | shared-network 执行模型、release train 口径与后续 rehearsal 排序 |
 | PRD-P2P-023 | TASK-P2P-041 | `test_tier_required` | hosted-world player access / session-auth 专题 PRD/project/design 建档、plane split、session ladder、`gui-agent` split、admission control、sensitive-action capability 与 claims boundary 冻结 | hosted web multiplayer 边界、浏览器 signer 暴露风险与后续实现排序 |
+| PRD-P2P-024 | TASK-P2P-043 | `test_tier_required` | 非全公网覆盖网络专题 PRD/project/design 建档、deployment mode / role model / peer record / reachability / traffic lanes 与 claims gate 冻结 | mixed-topology 网络边界、私网节点参与能力与后续框架拆解排序 |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
 | 字段 | 说明 | 来源 |
 | --- | --- | --- |

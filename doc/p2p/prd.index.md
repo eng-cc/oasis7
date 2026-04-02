@@ -2,7 +2,7 @@
 
 审计轮次: 12
 
-更新时间：2026-03-25
+更新时间：2026-04-02
 
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
@@ -67,6 +67,7 @@
 | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.prd.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.design.md` | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.project.md` |
 | `doc/p2p/network/net-runtime-bridge-closure.prd.md` | `doc/p2p/network/net-runtime-bridge-closure.design.md` | `doc/p2p/network/net-runtime-bridge-closure.project.md` |
 | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.prd.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.design.md` | `doc/p2p/network/p2p-mobile-light-client-authoritative-state-2026-03-06.project.md` |
+| `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md` | `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md` | `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md` |
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
 | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
 | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.prd.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.design.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.project.md` |

@@ -122,3 +122,18 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0010.yaml
+  - task_id: TASK-PM-0018
+    title: "Freeze public-chain-grade private-reachability P2P architecture"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/prd.md
+    acceptance:
+      - "A new p2p network architecture topic freezes public-chain-grade private-reachability design without assuming every node has a public IP."
+      - "The topic defines transport, discovery, reachability, anti-eclipse, security and deployment mode boundaries for validator/sentry/relay/full/observer roles."
+      - "doc/p2p/prd.md, doc/p2p/project.md and doc/p2p/prd.index.md map the new topic into the module traceability chain."
+    handoff_to:
+      - runtime_engineer
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0018.yaml

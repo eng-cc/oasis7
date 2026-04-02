@@ -1,6 +1,6 @@
 # p2p PRD Project
 
-审计轮次: 12
+审计轮次: 13
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-P2P-001 (PRD-P2P-001) [test_tier_required]: 完成 p2p PRD 改写，建立分布式系统设计入口。
@@ -384,6 +384,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher -- --nocapture`
     - `./scripts/ci-tests.sh required`
+- [x] TASK-P2P-043 (PRD-P2P-024) [test_tier_required]: 新增“主链级非全公网 P2P 覆盖网络架构”专题 PRD / design / project，并把 `public/hybrid/private/relay_only/validator_hidden`、`validator core/sentry/relay/full-storage/observer-light`、`peer record/discovery/reachability/traffic lanes` 与 mixed-topology claims gate 纳入模块追踪。
+  - 产物文件:
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/design.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/prd.index.md`
+    - `doc/p2p/README.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`
@@ -402,6 +416,7 @@
 - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+- `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `oasis7_viewer_live.release.example.toml`
@@ -417,9 +432,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-27
-- 当前状态: active（ROUND-026）
-- 下一任务: 若要继续提升 hosted-world 等级，另立 production custody / wallet-plugin / hosted handoff hardening 子专题；`TASK-P2P-041` 当前范围已完成，不再继续在本主题内追加 blocker。
+- 更新日期: 2026-04-02
+- 当前状态: active（ROUND-027）
+- 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
+- 最新完成: `TASK-P2P-043`（已完成“主链级非全公网 P2P 覆盖网络架构”专题建档，正式冻结 `public/hybrid/private/relay_only/validator_hidden`、`validator core/sentry/relay/full-storage/observer-light`、`peer record/discovery/reachability/traffic lanes` 与 mixed-topology claims gate。）
 - 最新完成: `TASK-P2P-042`（已恢复 2026-03-27 p2p required 编译/CI 主链路：`cargo check -p oasis7 --bins`、`cargo check -p oasis7_viewer --target wasm32-unknown-unknown`、`cargo test -p oasis7 --bin oasis7_chain_runtime -- --nocapture`、`cargo test -p oasis7 --bin oasis7_game_launcher -- --nocapture` 与 `./scripts/ci-tests.sh required` 全部通过；剩余仅为若干 warning，不再阻断当前任务 landing。）
 - 最新完成: `TASK-P2P-041-F`（已补齐 hosted operator runbook、incident 模板、分享 announcement 模板、对外更正模板与远程 tunnel/reverse-proxy 最低策略，`分享 / 误分享 / 撤销 / 事故通报` 四类 liveops 输出物已具备正式模板与执行边界。）
 - 最新完成: `TASK-P2P-041-B/C/D/E`（已把 hosted viewer join/login/reconnect UX、runtime player-session bind/revoke、preview-grade hosted strong-auth、abuse-suite six-case matrix 一并收口；`doc/testing/evidence/hosted-world-abuse-suite-matrix-2026-03-27.md` 已把 replay / expiry / revocation / operator-public URL confusion / admission limit / capability bypass 汇总成可追溯证据矩阵。）
