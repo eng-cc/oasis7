@@ -126,8 +126,8 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-SITE-001 | TASK-SITE-001/002/005 | `test_tier_required` | 首页结构与导航检查 | 用户首次访问体验 |
-| PRD-SITE-002 | TASK-SITE-002/003/005/006 | `test_tier_required` | 下载与文档链接巡检、手册镜像语义对齐校验 | 安装与文档可用性 |
-| PRD-SITE-003 | TASK-SITE-003/004/005/007 | `test_tier_required` + `test_tier_full` | 发布门禁与回归节奏复核、项目状态回写核对 | 发布稳定性与回滚能力 |
+| PRD-SITE-002 | TASK-SITE-002/003/005/006/020 | `test_tier_required` | 下载与文档链接巡检、手册镜像语义对齐校验 | 安装与文档可用性 |
+| PRD-SITE-003 | TASK-SITE-003/004/005/007/020 | `test_tier_required` + `test_tier_full` | 发布门禁与回归节奏复核、项目状态回写核对 | 发布稳定性与回滚能力 |
 | PRD-SITE-004 | TASK-SITE-008/009 | `test_tier_required` | 中英文首页与文档入口页状态文案一致性核验 | 对外信任与信息准确性 |
 | PRD-SITE-005 | TASK-SITE-010 | `test_tier_required` | 首页/下载区已区分构建说明与正式公告 | 公开站点状态理解 |
 | PRD-SITE-006 | TASK-SITE-010 | `test_tier_required` | 站点存在统一“公开说明准备态”占位 | 发布沟通入口一致性 |

@@ -8,7 +8,7 @@ on:
       - "scripts/site-link-check.sh"
       - "scripts/site-manual-sync-check.sh"
       - "scripts/site-download-check.sh"
-      - "doc/world-simulator/viewer/viewer-manual.md"
+      - "doc/world-simulator/viewer/viewer-manual.manual.md"
       - ".github/workflows/pages.yml"
       - "README.md"
   workflow_dispatch:

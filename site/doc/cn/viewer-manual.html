@@ -65,8 +65,9 @@
         <h2>快速开始</h2>
         <h3>1) 启动 live server（推荐）</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>`oasis7_viewer_live` 默认使用脚本决策；如需 LLM 决策可显式传 `--llm`（需先配置 key）。</p>
+        <p>`oasis7_viewer_live` 当前默认走 LLM 模式；正式 gameplay 需要已配置且可连通的 LLM provider。</p>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
+        <p>`--no-llm` 仅用于观战/调试；`gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 则会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。</p>
 
         <h3>2) 启动 viewer</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
@@ -80,7 +81,7 @@
 
         <h3>5) 发行模式（P2P 推荐）</h3>
         <p>`oasis7_viewer_live` 当前为纯 Viewer live 服务，不再承载 `--release-config`、`--runtime-world` 与 `--node-*` 控制面参数。</p>
-        <p>P2P 发行建议使用 `oasis7_chain_runtime`（可由 `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher` 托管）锁定链参数，Viewer 仅保留 `--bind`、`--web-bind`、`--llm/--no-llm`。</p>
+        <p>P2P 发行建议使用 `oasis7_chain_runtime`（可由 `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher` 托管）锁定链参数，Viewer 仅保留 `--bind`、`--web-bind`、`--llm/--no-llm`；其中 `--no-llm` 只用于 observer/debug。</p>
       </section>
 
       <section class="section" data-reveal>
@@ -136,6 +137,7 @@
         <h3>标准流程</h3>
         <p>终端 A：启动 live server。</p>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
+        <p>默认链路要求 active LLM access；若显式切到 `--no-llm`，该 Web 路径只能用于 observer/debug 诊断，不计入正式可玩性证据。</p>
         <p>终端 B：启动 Web Viewer。</p>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
         <p>终端 C：执行 agent-browser 闭环采样。</p>

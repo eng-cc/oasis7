@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-SOURCE_MANUAL="${REPO_ROOT}/doc/world-simulator/viewer/viewer-manual.md"
+SOURCE_MANUAL="${REPO_ROOT}/doc/world-simulator/viewer/viewer-manual.manual.md"
 MIRROR_MANUALS=(
   "${REPO_ROOT}/site/doc/cn/viewer-manual.html"
   "${REPO_ROOT}/site/doc/en/viewer-manual.html"

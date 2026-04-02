@@ -65,8 +65,9 @@
         <h2>Quick Start</h2>
         <h3>1) Start live server (recommended)</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>`oasis7_viewer_live` runs script decisions by default; pass `--llm` to enable LLM mode (configure key(s) first).</p>
+        <p>`oasis7_viewer_live` now defaults to LLM mode; formal gameplay requires a configured, reachable LLM provider.</p>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
+        <p>`--no-llm` is observer/debug only; `gameplay_action/prompt/chat` returns `llm_mode_required` or `llm_init_failed`, while `step/play` returns `ControlCompletionAck` with `Blocked + error_code/error_message`.</p>
 
         <h3>2) Start viewer</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
@@ -80,7 +81,7 @@
 
         <h3>5) Release mode (P2P recommended)</h3>
         <p>`oasis7_viewer_live` is now a pure viewer live service and no longer accepts `--release-config`, `--runtime-world`, or `--node-*` control-plane flags.</p>
-        <p>For P2P release flows, lock chain parameters through `oasis7_chain_runtime` (typically managed by `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher`). Viewer keeps only `--bind`, `--web-bind`, and `--llm/--no-llm`.</p>
+        <p>For P2P release flows, lock chain parameters through `oasis7_chain_runtime` (typically managed by `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher`). Viewer keeps only `--bind`, `--web-bind`, and `--llm/--no-llm`; `--no-llm` remains observer/debug only.</p>
       </section>
 
       <section class="section" data-reveal>
@@ -136,6 +137,7 @@
         <h3>Standard Flow</h3>
         <p>Terminal A: start live server.</p>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
+        <p>The default path assumes active LLM access; if you explicitly switch to `--no-llm`, this Web route is observer/debug only and does not count as formal gameplay evidence.</p>
         <p>Terminal B: start web viewer.</p>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
         <p>Terminal C: run the agent-browser capture loop.</p>

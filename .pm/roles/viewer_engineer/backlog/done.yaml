@@ -70,3 +70,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_335bb10de14b40ea8e2800bf86c74b6a.yaml
+  - task_uid: task_1e3b470c2a10452f8d3846e7745c4df6
+    title: "Sync GitHub Pages viewer manual mirrors with current LLM gating"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/site/prd.md
+    acceptance:
+      - "site/doc cn/en viewer manual mirrors match the current canonical LLM access and observer-debug wording."
+      - "docs hub metadata no longer claims a stale mirror sync date and continues to describe the public preview posture correctly."
+      - "GitHub Pages deploy and manual sync gates watch the canonical viewer manual path so future manual-only updates still republish."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_1e3b470c2a10452f8d3846e7745c4df6.yaml

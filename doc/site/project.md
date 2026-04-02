@@ -44,6 +44,7 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SITE-019 (PRD-SITE-002/003) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，明确 `doc/site/README.md`、公开 docs hub、手册镜像策略与仓库权威手册的职责边界。
+- [x] TASK-SITE-020 (PRD-SITE-002/003) [test_tier_required]: 同步 GitHub Pages Viewer 手册镜像与 docs hub 口径到当前 canonical LLM gating，并修正 Pages / sync gate 对 canonical 手册路径的监听。
 
 ## 依赖
 - 模块设计总览：`doc/site/design.md`
@@ -56,9 +57,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-20
+- 更新日期: 2026-04-02
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SITE-020`（`site/doc/cn|en/viewer-manual.html` 已追平 current LLM gating 口径，docs hub 已移除陈旧同步日期，Pages workflow 与 `site-manual-sync-check` 已改为监听 canonical `viewer-manual.manual.md`。）
 - 最新完成: `TASK-SITE-019`（已为 `doc/site/README.md` 补齐 site 模块与公开 docs hub、静态手册镜像、仓库权威手册之间的入口映射。）
 - 最新完成: `TASK-SITE-018`（`doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径已统一切到 `oasis7_viewer` / `crates/oasis7*` 当前口径。）
 - 最新完成: `TASK-SITE-017`（`release-packages.yml` 的 Web dist / soak prewarm 当前路径与包名已切到 `oasis7*`，相关 github-pages 发布链路文档已同步。）
