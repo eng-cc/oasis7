@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::channel::oneshot;
+use libp2p::{Multiaddr, PeerId};
 use oasis7_proto::distributed_dht::DistributedDht as ProtoDistributedDht;
 use oasis7_proto::distributed_net::DistributedNetwork as ProtoDistributedNetwork;
 
@@ -13,9 +14,51 @@ use oasis7_proto::distributed::{
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
 };
-use oasis7_proto::distributed_net::NetworkSubscription;
+use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
 use super::{Command, Libp2pNetwork};
+
+impl Libp2pNetwork {
+    pub fn peer_id(&self) -> PeerId {
+        self.peer_id
+    }
+
+    pub fn keypair(&self) -> &libp2p::identity::Keypair {
+        &self.keypair
+    }
+
+    pub fn published(&self) -> Vec<NetworkMessage> {
+        self.published.lock().expect("lock published").clone()
+    }
+
+    pub fn dial(&self, addr: Multiaddr) -> Result<(), WorldError> {
+        self.enqueue_command(Command::Dial { addr })
+    }
+
+    pub fn listening_addrs(&self) -> Vec<Multiaddr> {
+        self.listening_addrs
+            .lock()
+            .expect("lock listening addrs")
+            .clone()
+    }
+
+    pub fn connected_peers(&self) -> Vec<PeerId> {
+        self.connected_peers
+            .lock()
+            .expect("lock connected peers")
+            .iter()
+            .cloned()
+            .collect()
+    }
+
+    pub fn debug_errors(&self) -> Vec<String> {
+        self.errors.lock().expect("lock errors").clone()
+    }
+
+    pub(super) fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {
+        super::try_send_command(&self.command_tx, command)
+    }
+}
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {

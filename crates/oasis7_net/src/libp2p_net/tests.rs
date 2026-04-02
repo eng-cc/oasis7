@@ -1,4 +1,8 @@
 use super::peer_record::{sign_peer_record, verify_signed_peer_record};
+use super::transport_paths::{
+    peer_record_transport_paths, select_preferred_transport_path, sync_known_transport_paths,
+    TransportPathKind,
+};
 use super::utils::push_bounded_vec;
 use super::*;
 
@@ -206,4 +210,98 @@ fn try_send_command_reports_queue_disconnect() {
         WorldError::NetworkProtocolUnavailable { ref protocol }
             if protocol.contains("disconnected")
     ));
+}
+
+#[test]
+fn peer_record_transport_paths_rank_direct_before_relay() {
+    let keypair = Keypair::generate_ed25519();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: PeerId::from(keypair.public()).to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec![
+                "/ip4/127.0.0.1/tcp/4102".to_string(),
+                "/ip4/127.0.0.1/tcp/4102".to_string(),
+            ],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &keypair,
+    )
+    .expect("sign peer record");
+
+    let paths = peer_record_transport_paths(&signed).expect("transport paths");
+    assert_eq!(paths.len(), 2);
+    assert_eq!(paths[0].kind, TransportPathKind::Direct);
+    assert_eq!(paths[1].kind, TransportPathKind::Relay);
+    assert!(paths[0].addr.to_string().contains("/p2p/"));
+}
+
+#[test]
+fn preferred_transport_path_skips_failed_direct_and_falls_back_to_relay() {
+    let keypair = Keypair::generate_ed25519();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: PeerId::from(keypair.public()).to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &keypair,
+    )
+    .expect("sign peer record");
+
+    let paths = peer_record_transport_paths(&signed).expect("transport paths");
+    let failed: HashSet<String> = [paths[0].label()].into_iter().collect();
+    let selected =
+        select_preferred_transport_path(paths.as_slice(), &failed).expect("fallback path");
+    assert_eq!(selected.kind, TransportPathKind::Relay);
+}
+
+#[test]
+fn sync_known_transport_paths_removes_stale_failed_labels() {
+    let keypair = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(keypair.public());
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: peer_id.to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &keypair,
+    )
+    .expect("sign peer record");
+    let initial_paths = peer_record_transport_paths(&signed).expect("transport paths");
+
+    let mut known = HashMap::new();
+    let mut failed: HashSet<String> = [initial_paths[1].label()].into_iter().collect();
+    sync_known_transport_paths(&mut known, &mut failed, peer_id, initial_paths.clone());
+    sync_known_transport_paths(
+        &mut known,
+        &mut failed,
+        peer_id,
+        vec![initial_paths[0].clone()],
+    );
+    assert!(failed.is_empty());
 }

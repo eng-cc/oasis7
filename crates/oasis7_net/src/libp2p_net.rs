@@ -8,6 +8,7 @@ mod discovery;
 mod kad_queries;
 mod peer_record;
 mod swarm_behaviour;
+mod transport_paths;
 mod utils;
 
 use futures::channel::{mpsc, oneshot};
@@ -43,6 +44,10 @@ use discovery::{
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
 use peer_record::{publish_configured_peer_record, put_record_query};
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
+use transport_paths::{
+    failover_transport_path, note_established_transport_path, retry_transport_path_after_error,
+    TransportPath,
+};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
     try_send_command,
@@ -211,6 +216,10 @@ impl Libp2pNetwork {
             let mut peers: Vec<PeerId> = Vec::new();
             let mut provider_keys: HashMap<String, i64> = HashMap::new();
             let mut discovered_peer_records: HashMap<PeerId, SignedPeerRecord> = HashMap::new();
+            let mut known_transport_paths: HashMap<PeerId, Vec<TransportPath>> = HashMap::new();
+            let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
+            let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
+            let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
             let mut pending_discovery_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_peer_records: HashSet<PeerId> = HashSet::new();
@@ -624,6 +633,10 @@ impl Libp2pNetwork {
                                                             &mut pending_peer_record_requests,
                                                             &mut pending_dht,
                                                         &mut discovered_peer_records,
+                                                            &mut known_transport_paths,
+                                                            &mut last_dialed_transport_paths,
+                                                            &active_transport_paths,
+                                                            &mut failed_transport_path_labels,
                                                             &mut pending_discovery_peer_records,
                                                             &mut dialed_discovery_addrs,
                                                             peer_record_template.as_ref(),
@@ -715,6 +728,10 @@ impl Libp2pNetwork {
                                                             if let Err(err) = process_discovered_peer_record(
                                                                 &mut swarm,
                                                                 &mut discovered_peer_records,
+                                                                &mut known_transport_paths,
+                                                                &mut last_dialed_transport_paths,
+                                                                &active_transport_paths,
+                                                                &mut failed_transport_path_labels,
                                                                 &mut dialed_discovery_addrs,
                                                                 peer_record_template.as_ref(),
                                                                 record,
@@ -912,12 +929,48 @@ impl Libp2pNetwork {
                                     );
                                     match endpoint {
                                         libp2p::core::connection::ConnectedPoint::Dialer { address, .. } => {
+                                            let active_path = note_established_transport_path(
+                                                &known_transport_paths,
+                                                &mut active_transport_paths,
+                                                &mut last_dialed_transport_paths,
+                                                &mut failed_transport_path_labels,
+                                                peer_id,
+                                                &address,
+                                            );
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p transport active peer={peer_id} kind={} addr={}",
+                                                    active_path.kind_label(),
+                                                    active_path.addr,
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
                                             swarm
                                                 .behaviour_mut()
                                                 .kademlia
                                                 .add_address(&peer_id, address.clone());
                                         }
                                         libp2p::core::connection::ConnectedPoint::Listener { send_back_addr, .. } => {
+                                            let active_path = note_established_transport_path(
+                                                &known_transport_paths,
+                                                &mut active_transport_paths,
+                                                &mut last_dialed_transport_paths,
+                                                &mut failed_transport_path_labels,
+                                                peer_id,
+                                                &send_back_addr,
+                                            );
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p transport active peer={peer_id} kind={} addr={}",
+                                                    active_path.kind_label(),
+                                                    active_path.addr,
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
                                             swarm
                                                 .behaviour_mut()
                                                 .kademlia
@@ -993,6 +1046,38 @@ impl Libp2pNetwork {
                                 }
                                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                     peers.retain(|peer| peer != &peer_id);
+                                    match failover_transport_path(
+                                        &mut swarm,
+                                        &known_transport_paths,
+                                        &mut active_transport_paths,
+                                        &mut last_dialed_transport_paths,
+                                        &mut failed_transport_path_labels,
+                                        peer_id,
+                                    ) {
+                                        Ok(Some((active_path, next_path))) => {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p transport failover peer={peer_id} from={} to={}",
+                                                    active_path.addr,
+                                                    next_path.addr,
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        Err(err) => {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p transport failover dial failed peer={peer_id}: {err:?}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        Ok(None) => {}
+                                    }
                                     pending_rendezvous_registers.remove(&peer_id);
                                     pending_rendezvous_discovers.remove(&peer_id);
                                     registered_rendezvous_nodes.remove(&peer_id);
@@ -1009,6 +1094,39 @@ impl Libp2pNetwork {
                                     );
                                 }
                                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                                    if let Some(peer_id) = peer_id {
+                                        match retry_transport_path_after_error(
+                                            &mut swarm,
+                                            &known_transport_paths,
+                                            &mut last_dialed_transport_paths,
+                                            &mut failed_transport_path_labels,
+                                            peer_id,
+                                        ) {
+                                            Ok(Some((last_path, next_path))) => {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p transport retry peer={peer_id} from={} to={}",
+                                                        last_path.addr,
+                                                        next_path.addr,
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
+                                            Err(retry_err) => {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p transport retry dial failed peer={peer_id}: {retry_err:?}"
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
+                                            Ok(None) => {}
+                                        }
+                                    }
                                     push_bounded_clone(
                                         &event_errors,
                                         format!(
@@ -1052,46 +1170,6 @@ impl Libp2pNetwork {
             connected_peers,
             errors,
         }
-    }
-
-    pub fn peer_id(&self) -> PeerId {
-        self.peer_id
-    }
-
-    pub fn keypair(&self) -> &Keypair {
-        &self.keypair
-    }
-
-    pub fn published(&self) -> Vec<NetworkMessage> {
-        self.published.lock().expect("lock published").clone()
-    }
-
-    pub fn dial(&self, addr: Multiaddr) -> Result<(), WorldError> {
-        self.enqueue_command(Command::Dial { addr })
-    }
-
-    pub fn listening_addrs(&self) -> Vec<Multiaddr> {
-        self.listening_addrs
-            .lock()
-            .expect("lock listening addrs")
-            .clone()
-    }
-
-    pub fn connected_peers(&self) -> Vec<PeerId> {
-        self.connected_peers
-            .lock()
-            .expect("lock connected peers")
-            .iter()
-            .cloned()
-            .collect()
-    }
-
-    pub fn debug_errors(&self) -> Vec<String> {
-        self.errors.lock().expect("lock errors").clone()
-    }
-
-    fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {
-        try_send_command(&self.command_tx, command)
     }
 }
 

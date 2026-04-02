@@ -25,6 +25,7 @@
   - `P2PARCH-1` 已落首个 identity/discovery substrate 切片：runtime 现在会从 node root key 派生稳定 libp2p identity，并发布/校验 signed peer record。
   - `P2PARCH-1` 已补齐 query-driven discovery acquisition：runtime 会周期性刷新 DHT peer discovery，并在 provider 查询只返回 self 或未命中 peer record 时，向已连接 bootstrap 拉取缓存 peer 列表/peer record，再按 world/network/signature 校验后并入候选集。
   - `P2PARCH-1` 已补齐 rendezvous 自动化：runtime 会在连接 bootstrap / rendezvous 节点后自动注册当前 namespace，并带 cookie 周期 discover 同 namespace registrations；发现结果仍需经 peer record 校验后才会入候选与拨号集合。
+  - `P2PARCH-2` 已落首个 transport substrate 切片：runtime 现在会把 signed peer record 中的 `direct_addrs/relay_addrs` 显式提升成带 kind/security/mux 语义的 transport path 集合，并按 `direct -> relay` 顺序选路；当首选 path 失效时，会自动尝试下一条已知 path。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -55,6 +56,10 @@
 - 输出:
   - direct / punched / relay 统一 transport API
   - path ranking 与 failover 策略
+- 本轮已交付:
+  - libp2p runtime 内部 `transport path` substrate：把 peer record 的 `direct_addrs/relay_addrs` 物化为显式 path 集合，冻结当前 `kind/security/mux` 语义
+  - direct-before-relay 选路：discovery/peer record 处理不再盲拨全部地址，而是先按显式 path ranking 选择首选 path
+  - path failover：当首选 path 在连接建立前失败或已建立连接关闭时，runtime 会自动切到下一条已知 path
 - 完成定义:
   - direct -> punched -> relay 对业务透明
   - relay failure 可自动切换备用路径
@@ -126,5 +131,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 进入 `P2PARCH-2~3` 的 transport / role policy 收口；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
+- 下一步: 继续补齐 `P2PARCH-2` 余量，把 hole-punched / relay reservation / QUIC-TCP fallback 语义也接进同一 transport substrate，再进入 `P2PARCH-3` 的 deployment role policy 收口；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
 - 最近更新: 2026-04-02

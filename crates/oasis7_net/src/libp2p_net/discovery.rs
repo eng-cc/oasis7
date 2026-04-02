@@ -19,11 +19,14 @@ use oasis7_proto::distributed_net::NetworkRequest;
 
 use super::kad_queries::PendingDhtQuery;
 use super::peer_record::{
-    build_configured_peer_record, peer_record_dial_addrs, put_record_query,
-    validate_discovered_peer_record,
+    build_configured_peer_record, put_record_query, validate_discovered_peer_record,
 };
 use super::swarm_behaviour::{
     dial_addr_with_optional_peer_id, ensure_peer_id, split_peer_id, Behaviour,
+};
+use super::transport_paths::{
+    dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
+    sync_known_transport_paths, TransportPath,
 };
 use super::{push_bounded_clone, Handler};
 
@@ -329,6 +332,10 @@ pub(super) fn handle_rendezvous_discovered(
 pub(super) fn process_discovered_peer_record(
     swarm: &mut Swarm<Behaviour>,
     discovered_peer_records: &mut HashMap<PeerId, SignedPeerRecord>,
+    known_transport_paths: &mut HashMap<PeerId, Vec<TransportPath>>,
+    last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    failed_transport_path_labels: &mut HashSet<String>,
     dialed_discovery_addrs: &mut HashSet<String>,
     template: Option<&PeerRecord>,
     record: SignedPeerRecord,
@@ -339,15 +346,33 @@ pub(super) fn process_discovered_peer_record(
             protocol: "peer record peer_id must be valid".to_string(),
         }
     })?;
-    for addr in peer_record_dial_addrs(&record) {
-        let (_, kad_addr) = split_peer_id(addr.clone());
+    let transport_paths = peer_record_transport_paths(&record)?;
+    for path in &transport_paths {
+        let (_, kad_addr) = split_peer_id(path.addr.clone());
         swarm
             .behaviour_mut()
             .kademlia
             .add_address(&peer_id, kad_addr);
-        let addr_label = addr.to_string();
+    }
+    sync_known_transport_paths(
+        known_transport_paths,
+        failed_transport_path_labels,
+        peer_id,
+        transport_paths.clone(),
+    );
+    if let Some(preferred_path) =
+        select_preferred_transport_path(transport_paths.as_slice(), failed_transport_path_labels)
+    {
+        let should_dial = active_transport_paths
+            .get(&peer_id)
+            .map(|active| preferred_path.kind < active.kind)
+            .unwrap_or(true);
+        let addr_label = preferred_path.label();
         if dialed_discovery_addrs.insert(addr_label.clone()) {
-            let _ = dial_addr_with_optional_peer_id(swarm, addr);
+            if should_dial {
+                let _ =
+                    dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());
+            }
         }
     }
     discovered_peer_records.insert(peer_id, record);
@@ -425,6 +450,10 @@ pub(super) fn handle_peer_record_response(
     >,
     pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
     discovered_peer_records: &mut HashMap<PeerId, SignedPeerRecord>,
+    known_transport_paths: &mut HashMap<PeerId, Vec<TransportPath>>,
+    last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    failed_transport_path_labels: &mut HashSet<String>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     dialed_discovery_addrs: &mut HashSet<String>,
     peer_record_template: Option<&PeerRecord>,
@@ -488,6 +517,10 @@ pub(super) fn handle_peer_record_response(
             if let Err(err) = process_discovered_peer_record(
                 swarm,
                 discovered_peer_records,
+                known_transport_paths,
+                last_dialed_transport_paths,
+                active_transport_paths,
+                failed_transport_path_labels,
                 dialed_discovery_addrs,
                 peer_record_template,
                 record.clone(),

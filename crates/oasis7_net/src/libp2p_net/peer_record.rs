@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use futures::channel::oneshot;
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, Quorum, RecordKey};
-use libp2p::multiaddr::Protocol;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
 
@@ -42,21 +41,6 @@ pub(super) fn build_configured_peer_record(
 ) -> Result<SignedPeerRecord, WorldError> {
     let materialized = materialize_peer_record(template, listening_addrs);
     sign_peer_record(&materialized, keypair)
-}
-
-pub(super) fn peer_record_dial_addrs(record: &SignedPeerRecord) -> Vec<Multiaddr> {
-    let peer_id = match record.record.peer_id.parse::<PeerId>() {
-        Ok(peer_id) => peer_id,
-        Err(_) => return Vec::new(),
-    };
-    record
-        .record
-        .direct_addrs
-        .iter()
-        .chain(record.record.relay_addrs.iter())
-        .filter_map(|raw| raw.parse::<Multiaddr>().ok())
-        .map(|addr| append_peer_id(addr, peer_id))
-        .collect()
 }
 
 pub(super) fn validate_discovered_peer_record(
@@ -100,11 +84,12 @@ pub(super) fn sign_peer_record(
         record.peer_id = PeerId::from(keypair.public()).to_string();
     }
     let payload = encode_peer_record_signing_payload(&record)?;
-    let signature = keypair
-        .sign(payload.as_slice())
-        .map_err(|err| WorldError::NetworkProtocolUnavailable {
-            protocol: format!("peer record sign failed: {err}"),
-        })?;
+    let signature =
+        keypair
+            .sign(payload.as_slice())
+            .map_err(|err| WorldError::NetworkProtocolUnavailable {
+                protocol: format!("peer record sign failed: {err}"),
+            })?;
     Ok(SignedPeerRecord {
         record,
         identity_public_key_protobuf_hex: hex::encode(keypair.public().encode_protobuf()),
@@ -113,11 +98,12 @@ pub(super) fn sign_peer_record(
 }
 
 pub(super) fn verify_signed_peer_record(record: &SignedPeerRecord) -> Result<(), WorldError> {
-    let public_key_bytes = hex::decode(record.identity_public_key_protobuf_hex.as_str()).map_err(|_| {
-        WorldError::NetworkProtocolUnavailable {
-            protocol: "peer record public key must be valid hex".to_string(),
-        }
-    })?;
+    let public_key_bytes =
+        hex::decode(record.identity_public_key_protobuf_hex.as_str()).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "peer record public key must be valid hex".to_string(),
+            }
+        })?;
     let public_key = libp2p::identity::PublicKey::try_decode_protobuf(public_key_bytes.as_slice())
         .map_err(|err| WorldError::NetworkProtocolUnavailable {
             protocol: format!("peer record public key decode failed: {err}"),
@@ -183,12 +169,4 @@ fn encode_peer_record_signing_payload(record: &PeerRecord) -> Result<Vec<u8>, Wo
     let mut payload = b"oasis7-peer-record-v1|".to_vec();
     payload.extend_from_slice(&to_canonical_cbor(record)?);
     Ok(payload)
-}
-
-fn append_peer_id(mut addr: Multiaddr, peer_id: PeerId) -> Multiaddr {
-    let needs_peer_id = !matches!(addr.iter().last(), Some(Protocol::P2p(_)));
-    if needs_peer_id {
-        addr.push(Protocol::P2p(peer_id.into()));
-    }
-    addr
 }

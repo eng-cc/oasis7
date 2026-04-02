@@ -74,3 +74,18 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/TASK-PM-0022.yaml
+  - task_id: TASK-PM-0023
+    title: "Implement P2PARCH-2 transport substrate"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-2 defines a transport path substrate that distinguishes direct and relay paths without leaking path-specific logic into business callers."
+      - "Runtime chooses preferred transport paths with an explicit direct-before-relay ranking and can fail over when the preferred path disappears."
+      - "Implementation, tests, project docs and execution log remain traceable to PRD-P2P-024 / P2PARCH-2."
+    handoff_to:
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0023.yaml

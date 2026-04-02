@@ -264,7 +264,9 @@ pub(super) fn handle_dht_progress(
                     ..
                 })) => {
                     if let Some(record) = records.first() {
-                        if let Ok(decoded) = super::decode_membership_directory(&record.record.value) {
+                        if let Ok(decoded) =
+                            super::decode_membership_directory(&record.record.value)
+                        {
                             *snapshot = Some(decoded);
                         }
                     } else {
