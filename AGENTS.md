@@ -66,9 +66,11 @@
 
 10. commit 前必须开一个独立 subagent review 当前改动
    1. subagent 只负责 review diff、指出风险/回归/缺测，不替代 owner role 做开发决策
-   2. owner 必须先处理或记录 review 结论，再允许提交 commit
-   3. 这一步属于仓库默认工作流，不需要因为“只是执行 commit 前 review”再单独向用户申请一次
-   4. 若用户明确要求“先不要提交”，也要先完成 review，再保留本地改动
+   2. 在 Codex 环境中，这里的 “subagent review” 指通过 `spawn_agent` 派生独立 review agent；shell 命令 `codex exec review --uncommitted` 不算这条流程的等价替代
+   3. owner 必须先处理或记录 review 结论，再允许提交 commit
+   4. 这一步属于仓库默认工作流，不需要因为“只是执行 commit 前 review”再单独向用户申请一次
+   5. 若用户明确要求“先不要提交”，也要先完成 review，再保留本地改动
+   6. 若当前运行环境对 agent 派生还有更高优先级限制，必须按运行环境处理为阻断或等待显式授权；禁止静默退化成 `codex exec review --uncommitted` 冒充已完成 subagent review
 
 11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
 

@@ -176,10 +176,11 @@
 ### Flow D: 工作流接入
 1. owner 在新 task worktree 中执行 `workflow-report.sh --phase start --role <owner> --task-id <TASK-ID>`
 2. 脚本先聚合 role backlog、memory stale、pending signals 与 stage/gate 摘要，构建 report/checklist 成功后再把 `last_started_at` 回写到 task file，避免失败时留下假证据
-3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-id <TASK-ID>`，按 checklist 回写 task execution log、signal、memory 与 backlog；其中 working_memory 提示按当前 task 统计，零条目时先暴露 `codex-working-memory` bootstrap 入口，再在 commit 前启动独立 subagent review 当前 diff
-4. 该 review 属于仓库默认 close 流程，不需要仅因执行这一步再单独向用户申请
-5. owner 先处理或记录 subagent review findings，再提交 commit
-6. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
+3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-id <TASK-ID>`，按 checklist 回写 task execution log、signal、memory 与 backlog；其中 working_memory 提示按当前 task 统计，零条目时先暴露 `codex-working-memory` bootstrap 入口，再在 commit 前通过 `spawn_agent` 启动独立 subagent review 当前 diff
+4. 该 review 属于仓库默认 close 流程，不需要仅因执行这一步再单独向用户申请；`codex exec review --uncommitted` 只算 shell 内自检，不计作该步骤完成
+5. 若当前运行环境禁止派生 agent，owner 必须把它记录为运行环境阻断或等待显式授权，不能静默降级为 shell review
+6. owner 先处理或记录 subagent review findings，再提交 commit
+7. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
 
 ## 分阶段实施
 ### Phase 1: 骨架

@@ -162,3 +162,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0024.yaml
+  - task_id: TASK-PM-0027
+    title: "Audit and tighten wording around pre-commit subagent review vs codex exec review fallback"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "Locate wording that steers review toward codex exec review --uncommitted instead of an actual subagent review."
+      - "Update formal workflow wording so Codex-side subagent review resolves to spawn_agent-style review, not shelling out to codex exec review."
+      - "Document any remaining top-level tool-policy conflict explicitly in task log and final summary."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0027.yaml

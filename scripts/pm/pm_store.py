@@ -2203,7 +2203,7 @@ def build_workflow_checklist(
             )
         add(
             "subagent-review",
-            "commit 前必须启动独立 subagent review 当前 diff；review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
+            "commit 前必须启动独立 subagent review 当前 diff；在 Codex 环境中默认通过 spawn_agent 派生独立 review agent。`codex exec review --uncommitted` 只算 shell 自检，不计作该流程完成；若运行环境禁止派生 agent，需显式记录为阻断。review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(

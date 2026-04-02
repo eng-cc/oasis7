@@ -21,10 +21,11 @@
   - SC-7B: task file 100% 带 `execution_log_path`，且 `workflow-report`、task lint、required/full smoke 都按该路径读写同一份日志。
   - SC-7: 每个标准角色在“开始任务 / 收口任务 / 阶段评审”三个场景下都有统一 `workflow-report` 入口与固定 checklist，不再依赖人工拼接 `role-report`、`memory-report`、`stage-report` 与 signal inbox 状态。
   - SC-7A: `workflow-report --phase start|close --task-id <TASK-ID>` 会在对应 task file 内回写 `last_started_at` / `last_closed_at`，让 `.pm` 工作流执行具备可审计证据，而不是只留在口头约定。
-  - SC-8: `workflow-report --phase close` 的 checklist 必须明确要求“commit 前启动独立 subagent review 当前 diff，并先处理 findings 再提交”，不得只在人工约定层存在。
+  - SC-8: `workflow-report --phase close` 的 checklist 必须明确要求“commit 前启动独立 subagent review 当前 diff，并先处理 findings 再提交”，不得只在人工约定层存在；在 Codex 环境中，该动作默认指通过 `spawn_agent` 派生独立 review agent。
   - SC-8A: `workflow-report --phase close` 与根 `AGENTS.md` 必须一致说明：commit 前 subagent review 属于仓库默认流程，不需要仅因执行该流程再单独向用户申请。
-  - SC-8B: 根 `AGENTS.md`、engineering 主 PRD 与本专题正式追踪必须只保留这一条默认流程口径。
-  - SC-8C: `workflow-report --phase close --task-id <TASK-ID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
+  - SC-8B: `codex exec review --uncommitted` 不得记作 `workflow-report --phase close` 所要求的 subagent review；若运行环境禁止派生 agent，必须显式记录为运行环境阻断。
+  - SC-8C: 根 `AGENTS.md`、engineering 主 PRD 与本专题正式追踪必须只保留这一条默认流程口径。
+  - SC-8D: `workflow-report --phase close --task-id <TASK-ID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -54,7 +55,7 @@
   4. Flow-SE-004: `producer_system_designer 通过 set-stage 更新 stage/gate 当前态 -> stage-report 汇总 role backlog、关键 blocker、claim envelope 和 trend inputs -> 输出 continue / hold / reassess`
   5. Flow-SE-005: `历史结论被新结论取代 -> 原 memory 记录转为 superseded -> 新记录写入 active -> superseded_by / source_refs / effective range 形成链路`
   6. Flow-SE-006: `新增标准角色 -> 基于角色模板生成 memory/backlog 容器 -> 注册到 registry -> 既有脚本自动将其纳入 lint / report / stage aggregation`
-  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-id <TASK-ID> -> task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-id <TASK-ID> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> commit 前启动独立 subagent review 当前 diff 并处理 findings -> producer/owner 在评审时执行 workflow-report --phase review`
+  7. Flow-SE-007: `owner 进入新 worktree -> 执行 workflow-report --phase start --role <owner> --task-id <TASK-ID> -> task file 记录 last_started_at 并读取 backlog/memory/signal/stage 汇总 -> 开发完成后执行 workflow-report --phase close --task-id <TASK-ID> -> 回写 task execution log + signal/memory/backlog + last_closed_at -> commit 前通过 spawn_agent 启动独立 subagent review 当前 diff 并处理 findings -> producer/owner 在评审时执行 workflow-report --phase review`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -169,7 +170,7 @@
 | PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
 | PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
 | PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证 | 角色扩容、治理脚本兼容性 |
-| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094/098 | `test_tier_required` + `test_tier_full` | `workflow-report --task-id` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、task-scoped working_memory bootstrap/review 分流、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
+| PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094/097/098 | `test_tier_required` + `test_tier_full` | `workflow-report --task-id` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory bootstrap/review 分流、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
