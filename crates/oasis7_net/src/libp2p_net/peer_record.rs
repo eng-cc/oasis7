@@ -1,0 +1,194 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use futures::channel::oneshot;
+use libp2p::identity::Keypair;
+use libp2p::kad::{self, Quorum, RecordKey};
+use libp2p::multiaddr::Protocol;
+use libp2p::swarm::Swarm;
+use libp2p::{Multiaddr, PeerId};
+
+use crate::error::WorldError;
+use crate::util::to_canonical_cbor;
+use oasis7_proto::distributed::dht_peer_record_key;
+use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
+
+use super::kad_queries::PendingDhtQuery;
+use super::Behaviour;
+
+pub(super) fn publish_configured_peer_record(
+    swarm: &mut Swarm<Behaviour>,
+    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
+    keypair: &Keypair,
+    template: &PeerRecord,
+    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    response: Option<oneshot::Sender<Result<(), WorldError>>>,
+) -> Result<SignedPeerRecord, WorldError> {
+    let signed = build_configured_peer_record(keypair, template, listening_addrs)?;
+    let key = dht_peer_record_key(
+        signed.record.world_id.as_str(),
+        signed.record.peer_id.as_str(),
+    );
+    let payload = to_canonical_cbor(&signed)?;
+    let query_id = put_record_query(swarm, key, payload)?;
+    pending_dht.insert(query_id, PendingDhtQuery::PutPeerRecord { response });
+    Ok(signed)
+}
+
+pub(super) fn build_configured_peer_record(
+    keypair: &Keypair,
+    template: &PeerRecord,
+    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+) -> Result<SignedPeerRecord, WorldError> {
+    let materialized = materialize_peer_record(template, listening_addrs);
+    sign_peer_record(&materialized, keypair)
+}
+
+pub(super) fn peer_record_dial_addrs(record: &SignedPeerRecord) -> Vec<Multiaddr> {
+    let peer_id = match record.record.peer_id.parse::<PeerId>() {
+        Ok(peer_id) => peer_id,
+        Err(_) => return Vec::new(),
+    };
+    record
+        .record
+        .direct_addrs
+        .iter()
+        .chain(record.record.relay_addrs.iter())
+        .filter_map(|raw| raw.parse::<Multiaddr>().ok())
+        .map(|addr| append_peer_id(addr, peer_id))
+        .collect()
+}
+
+pub(super) fn validate_discovered_peer_record(
+    discovered: &SignedPeerRecord,
+    local_template: Option<&PeerRecord>,
+) -> Result<(), WorldError> {
+    verify_signed_peer_record(discovered)?;
+    if let Some(local_template) = local_template {
+        if discovered.record.world_id != local_template.world_id {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: format!(
+                    "peer record world mismatch expected={} actual={}",
+                    local_template.world_id, discovered.record.world_id
+                ),
+            });
+        }
+        if discovered.record.network_id != local_template.network_id {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: format!(
+                    "peer record network mismatch expected={} actual={}",
+                    local_template.network_id, discovered.record.network_id
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn decode_peer_record(bytes: &[u8]) -> Result<SignedPeerRecord, WorldError> {
+    let record: SignedPeerRecord = serde_cbor::from_slice(bytes)?;
+    verify_signed_peer_record(&record)?;
+    Ok(record)
+}
+
+pub(super) fn sign_peer_record(
+    record: &PeerRecord,
+    keypair: &Keypair,
+) -> Result<SignedPeerRecord, WorldError> {
+    let mut record = record.clone();
+    if record.peer_id.trim().is_empty() {
+        record.peer_id = PeerId::from(keypair.public()).to_string();
+    }
+    let payload = encode_peer_record_signing_payload(&record)?;
+    let signature = keypair
+        .sign(payload.as_slice())
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("peer record sign failed: {err}"),
+        })?;
+    Ok(SignedPeerRecord {
+        record,
+        identity_public_key_protobuf_hex: hex::encode(keypair.public().encode_protobuf()),
+        signature_hex: hex::encode(signature),
+    })
+}
+
+pub(super) fn verify_signed_peer_record(record: &SignedPeerRecord) -> Result<(), WorldError> {
+    let public_key_bytes = hex::decode(record.identity_public_key_protobuf_hex.as_str()).map_err(|_| {
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record public key must be valid hex".to_string(),
+        }
+    })?;
+    let public_key = libp2p::identity::PublicKey::try_decode_protobuf(public_key_bytes.as_slice())
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("peer record public key decode failed: {err}"),
+        })?;
+    if public_key.to_peer_id().to_string() != record.record.peer_id {
+        return Err(WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record peer_id does not match identity public key".to_string(),
+        });
+    }
+    let signature = hex::decode(record.signature_hex.as_str()).map_err(|_| {
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record signature must be valid hex".to_string(),
+        }
+    })?;
+    let payload = encode_peer_record_signing_payload(&record.record)?;
+    if !public_key.verify(payload.as_slice(), signature.as_slice()) {
+        return Err(WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record signature verification failed".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn materialize_peer_record(
+    template: &PeerRecord,
+    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+) -> PeerRecord {
+    let mut record = template.clone();
+    if record.direct_addrs.is_empty() {
+        record.direct_addrs = listening_addrs
+            .lock()
+            .expect("lock listening addrs")
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+    }
+    record.published_at_ms = super::now_ms();
+    record
+}
+
+pub(super) fn put_record_query(
+    swarm: &mut Swarm<Behaviour>,
+    key: String,
+    payload: Vec<u8>,
+) -> Result<kad::QueryId, WorldError> {
+    let dht_key = RecordKey::new(&key);
+    let record = kad::Record {
+        key: dht_key,
+        value: payload,
+        publisher: None,
+        expires: None,
+    };
+    swarm
+        .behaviour_mut()
+        .kademlia
+        .put_record(record, Quorum::One)
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("kad put_record failed: {err}"),
+        })
+}
+
+fn encode_peer_record_signing_payload(record: &PeerRecord) -> Result<Vec<u8>, WorldError> {
+    let mut payload = b"oasis7-peer-record-v1|".to_vec();
+    payload.extend_from_slice(&to_canonical_cbor(record)?);
+    Ok(payload)
+}
+
+fn append_peer_id(mut addr: Multiaddr, peer_id: PeerId) -> Multiaddr {
+    let needs_peer_id = !matches!(addr.iter().last(), Some(Protocol::P2p(_)));
+    if needs_peer_id {
+        addr.push(Protocol::P2p(peer_id.into()));
+    }
+    addr
+}

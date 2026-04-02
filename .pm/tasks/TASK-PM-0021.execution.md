@@ -1,0 +1,12 @@
+# TASK-PM-0021 Execution Log
+
+- task_id: TASK-PM-0021
+- title: Implement P2PARCH-1 query-driven discovery acquisition
+- owner_role: runtime_engineer
+- worktree_hint: oasis7-p2p-p2parch-1-discovery-acquisition
+
+## 2026-04-02 12:04:31 CST / runtime_engineer
+- 完成内容: 为 `P2PARCH-1` 落地 query-driven discovery acquisition。runtime 现已支持 `dht_peer_discovery_key(world_id)` 查询驱动的 peer acquisition，周期性刷新本地 signed peer record / discovery provider，并在 DHT provider 结果只回 self 或 peer record 尚未命中时，向已连接 bootstrap 拉取缓存的 discovery peer 列表与 cached peer record；所有发现到的 peer record 继续经过 world/network/signature 校验后再写入 kademlia candidate set，并尝试拨号。补充 `libp2p_discovery_acquires_peer_from_dht_peer_record` smoke，验证 seeker 可经 bootstrap 缓存链路发现 publisher。
+- 完成内容: 为避免单文件继续膨胀，继续沿用并补齐 `crates/oasis7_net/src/libp2p_net/kad_queries.rs` 与 `crates/oasis7_net/src/libp2p_net/peer_record.rs` 辅助拆分，保留 `libp2p_net.rs` 主循环只做事件编排。
+- 完成内容: 已完成回归验证：`env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib libp2p_discovery_acquires_peer_from_dht_peer_record`、`env -u RUSTC_WRAPPER cargo test -p oasis7_net --features libp2p --lib`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`。
+- 遗留事项: `P2PARCH-1` 仍剩 rendezvous 自动化未接入；当前 project 文档已把余量明确收敛到该切片，后续再进入 `P2PARCH-2~3`。
