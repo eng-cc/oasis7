@@ -21,6 +21,7 @@
 - [x] T13 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复标准模式 bootstrap loading overlay 在 wasm 已启动后仍残留并压缩左侧视口的问题，补齐 cleanup 生命周期与最小回归验证。
 - [x] T14 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` UI 渲染层迁到 SolidJS 组件架构，保留既有 `software_safe.js` 产物/协议契约，并把 freshness gate 扩到 Solid 构建输入。
 - [x] T15 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建改为“临时 bundle 输出 + finalize 回写 `software_safe.js`”正式流程，消除当前 Vite `outDir` 警告，并把 finalize 脚本纳入 freshness source scope。
+- [x] T16 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 新增 repo-owned `software_safe` 最小浏览器回归脚本，稳定验证“加载 -> 连接 -> 选择目标 -> `step` -> DOM/`lastControlFeedback` 反馈”闭环，并把入口写回 testing/manual。
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -36,8 +37,9 @@
 - 当前阶段：T0~T13 已完成，标准模式 bootstrap loading overlay 已改为一次性覆盖层并在 wasm Viewer 启动后自动 cleanup，不再持续压缩左侧视口。
 - 当前阶段：T0~T14 已完成，`software_safe` 已迁到 SolidJS 组件化渲染层，同时保留既有 product contract，并把 source-tree freshness gate 扩到框架构建输入。
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
+- 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
 - 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 OpenClaw runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-02（`viewer_engineer` 已将 `software_safe` SolidJS 构建改为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，并保持最终 `software_safe.js` 产物路径不变。）
+- 最近更新：2026-04-02（`viewer_engineer` 已补 `scripts/viewer-software-safe-step-regression.sh`，把 `software_safe` 最小 step 闭环回归脚本纳入 repo 正式入口，并同步 testing/manual/project 口径。）
 - 阻塞项：无；后续仅保留交互体验扩展与更多自动化覆盖。
 
 ## 备注

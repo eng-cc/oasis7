@@ -1,0 +1,28 @@
+task_uid: task_335bb10de14b40ea8e2800bf86c74b6a
+title: "Add software_safe browser regression script"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-software-safe-browser-regression
+execution_log_path: .pm/tasks/task_335bb10de14b40ea8e2800bf86c74b6a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - testing-manual.md
+  - scripts/agent-browser-lib.sh
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "repo owns a repeatable browser regression path for software_safe that verifies load, connect, select target, step, and control feedback."
+  - "the regression uses existing web/runtime harness conventions instead of introducing a parallel manual-only path."
+  - "docs and project tracking point to the new regression entry and validation evidence."
+handoff_to: []
+updated_at: 2026-04-02T22:45:41+08:00
+last_started_at: 2026-04-02T21:42:11+08:00
+last_closed_at: 2026-04-02T22:44:59+08:00
