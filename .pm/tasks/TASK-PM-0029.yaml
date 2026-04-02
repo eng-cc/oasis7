@@ -1,0 +1,28 @@
+task_id: TASK-PM-0029
+title: "Migrate software_safe Viewer UI to SolidJS component architecture"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-solidjs-software-safe-ui
+execution_log_path: .pm/tasks/TASK-PM-0029.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - crates/oasis7_viewer/software_safe.html
+  - crates/oasis7_viewer/software_safe.js
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "software_safe frontend is reorganized into SolidJS components instead of a single monolithic script."
+  - "existing software_safe product contract stays intact: render_mode entry, __AW_TEST__.getState(), auth/bootstrap surface, and basic play/pause/step + selection flows remain available."
+  - "build or generation flow for software_safe assets is documented and validated without weakening current freshness/fallback guarantees."
+handoff_to: []
+updated_at: 2026-04-02T17:35:38+08:00
+last_started_at: 2026-04-02T17:05:10+08:00
+last_closed_at: 2026-04-02T17:35:26+08:00

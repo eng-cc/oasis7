@@ -1,0 +1,15 @@
+{
+  "name": "oasis7-viewer-software-safe-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:software-safe": "vite build --config vite.software-safe.config.mjs"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7",
+    "vite-plugin-solid": "^2.11.8"
+  }
+}

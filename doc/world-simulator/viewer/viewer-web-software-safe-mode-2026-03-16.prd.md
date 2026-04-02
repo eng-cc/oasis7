@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.design.md`
 - 对应项目管理文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 目标
 - 为 Web Viewer 新增一个不依赖 GPU 硬件能力的 `software_safe` 模式，保障 software renderer / 受限浏览器环境下的最小玩法闭环。
@@ -75,7 +75,7 @@
 - **不采用**“继续在同一 Bevy/WGPU Web Viewer 中只关特效”的方案作为根治手段。
 - **采用**“双前端模式”方案：
   - 标准模式：沿用现有 Bevy/WGPU Web Viewer。
-  - 安全模式：新增一个 **不依赖 WGPU/WebGL** 的轻量 Web frontend（DOM/SVG/Canvas2D 优先）。
+  - 安全模式：新增一个 **不依赖 WGPU/WebGL** 的轻量 Web frontend（DOM/SVG/Canvas2D 优先）；当前组件化实现允许使用 SolidJS，但不得改变既有 product contract。
 - 原因：只有把 `software_safe` 模式从图形后端层面与 WGPU 解耦，才能真正满足“无 GPU 硬件依赖”。
 
 ### 4.3 Software-Safe Mode Capability Floor
@@ -125,7 +125,7 @@
 - NFR-2: `software_safe` 模式首页可见状态（连接状态或错误）应在 2 秒内可观测。
 - NFR-3: `software_safe` 模式必须保持 `console fatal = 0` 的目标；若失败，必须给出结构化错误而不是黑屏。
 - NFR-4: `software_safe` 模式与标准模式共享同一套世界 authority / 控制语义，禁止出现“安全模式能做的控制与标准模式行为不一致”。
-- NFR-5: Viewer Web freshness gate 必须覆盖 `crates/oasis7_viewer/` 根入口文件（至少 `index.html`、`software_safe.html`、`software_safe.js`）与静态资源，避免 stale dist 重新放出 issue `#39` 的黑屏表象。
+- NFR-5: Viewer Web freshness gate 必须覆盖 `crates/oasis7_viewer/` 根入口文件与 software-safe 构建输入（至少 `index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`software_safe_src/`）以及静态资源，避免 stale dist 重新放出 issue `#39` 的黑屏表象。
 
 ## 7. Risks & Roadmap
 - 风险 1：双前端模式增加维护成本。
@@ -178,3 +178,20 @@
 ## 8. Validation & Decision Record
 - Traceability:
   - `PRD-WORLD_SIMULATOR-039 -> T13 / TASK-WORLD_SIMULATOR-162 -> test_tier_required`
+
+## 增量实现说明（2026-04-02）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - `software_safe.js` 已从单文件 imperative UI 演进到较大体量的多面板实现；继续在单个脚本内叠加 observer/debug/auth/chat/prompt 逻辑，会持续放大维护与回归成本。
+- Proposed Solution:
+  - 保持 `software_safe.html`、`software_safe.js`、`render_mode`、`__AW_TEST__`、viewer auth/bootstrap 与 play/pause/step/select 等对外契约不变；
+  - 将 UI 渲染层迁到 SolidJS 组件树，并把原有协议/状态/命令逻辑保留在可复用的 `legacy_core` 中；
+  - freshness gate 必须把 Solid 构建输入纳入 source scope，避免 source-tree Web 闭环错误消费旧 bundle。
+- Functional Constraints:
+  - 不新增新的后端协议，不改变 `software_safe` 的 capability floor。
+  - 不把当前页面收口成依赖框架运行时特性的“新产品”；只允许做组件化拆分与维护性改造。
+  - 产物路径继续保持 `crates/oasis7_viewer/software_safe.js`，避免 launcher / script / freshness contract 额外漂移。
+- Acceptance Criteria:
+  - AC-12: `software_safe` UI 组件化后，真实 Web smoke 仍能完成“加载 -> 连接 -> 选择目标 -> `step` -> 看到 control feedback”最小闭环。
+  - AC-13: `__AW_TEST__.getState()`、auth/bootstrap surface、observer/debug 标识与现有 `software_safe` 页面按钮/字段 contract 不得回退。
+  - AC-14: Viewer Web freshness gate 必须把 `package.json`、`package-lock.json`、`vite.software-safe.config.mjs` 与 `software_safe_src/` 作为 software-safe bundle 的正式输入。
