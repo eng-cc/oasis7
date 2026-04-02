@@ -1,6 +1,6 @@
 version: 1
 task_id_prefix: TASK-PM
-next_sequence: 25
+next_sequence: 26
 tasks:
   - task_id: TASK-PM-0001
     owner_role: producer_system_designer
@@ -170,3 +170,10 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-02T14:48:19+08:00
+  - task_id: TASK-PM-0025
+    owner_role: runtime_engineer
+    task_path: .pm/tasks/TASK-PM-0025.yaml
+    status: done
+    priority: P2
+    source_signal: null
+    updated_at: 2026-04-02T15:00:25+08:00

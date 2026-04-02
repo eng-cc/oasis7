@@ -1,3 +1,6 @@
+use futures::future::Either;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::transport::OrTransport;
 use libp2p::gossipsub::{self, MessageAuthenticity};
 use libp2p::identity::Keypair;
 use libp2p::kad::{self, store::MemoryStore};
@@ -89,10 +92,18 @@ pub(super) fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
         rendezvous_server: rendezvous_server::Behaviour::new(Default::default()),
     };
 
-    let transport = libp2p::tcp::async_io::Transport::new(libp2p::tcp::Config::default())
+    let quic_transport =
+        libp2p::quic::async_std::Transport::new(libp2p::quic::Config::new(keypair));
+    let tcp_transport = libp2p::tcp::async_io::Transport::new(libp2p::tcp::Config::default())
         .upgrade(libp2p::core::upgrade::Version::V1)
         .authenticate(noise::Config::new(keypair).expect("noise config"))
         .multiplex(libp2p::yamux::Config::default())
+        .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)));
+    let transport = OrTransport::new(quic_transport, tcp_transport)
+        .map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, muxer),
+        })
         .boxed();
 
     Swarm::new(transport, behaviour, peer_id, swarm_config)

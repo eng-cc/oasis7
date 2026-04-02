@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use libp2p::multiaddr::Protocol;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
 
@@ -25,13 +26,30 @@ impl TransportPathKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum TransportSessionFlavor {
+    Quic,
+    TcpNoiseYamux,
+}
+
+impl TransportSessionFlavor {
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Quic => "quic",
+            Self::TcpNoiseYamux => "tcp+noise+yamux",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TransportSecurity {
+    QuicTls,
     Noise,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TransportMuxer {
+    Quic,
     Yamux,
 }
 
@@ -40,6 +58,7 @@ pub(super) struct TransportPath {
     pub(super) peer_id: PeerId,
     pub(super) addr: Multiaddr,
     pub(super) kind: TransportPathKind,
+    pub(super) flavor: TransportSessionFlavor,
     pub(super) security: TransportSecurity,
     pub(super) muxer: TransportMuxer,
 }
@@ -51,6 +70,14 @@ impl TransportPath {
 
     pub(super) fn kind_label(&self) -> &'static str {
         self.kind.label()
+    }
+
+    pub(super) fn flavor_label(&self) -> &'static str {
+        self.flavor.label()
+    }
+
+    pub(super) fn preference_rank(&self) -> (TransportPathKind, TransportSessionFlavor) {
+        (self.kind, self.flavor)
     }
 }
 
@@ -79,6 +106,7 @@ pub(super) fn peer_record_transport_paths(
         record.record.relay_addrs.iter(),
         TransportPathKind::Relay,
     );
+    paths.sort_unstable_by_key(TransportPath::preference_rank);
 
     Ok(paths)
 }
@@ -137,9 +165,10 @@ pub(super) fn active_transport_path_from_endpoint(
     TransportPath {
         peer_id,
         addr: normalized,
-        kind: TransportPathKind::Direct,
-        security: TransportSecurity::Noise,
-        muxer: TransportMuxer::Yamux,
+        kind: infer_transport_path_kind(&normalized_without_peer_id),
+        flavor: infer_transport_session_flavor(&normalized_without_peer_id),
+        security: infer_transport_security(&normalized_without_peer_id),
+        muxer: infer_transport_muxer(&normalized_without_peer_id),
     }
 }
 
@@ -233,12 +262,50 @@ fn extend_paths<'a>(
         if !seen.insert(label) {
             continue;
         }
+        let addr_without_peer_id = split_peer_id(addr.clone()).1;
         paths.push(TransportPath {
             peer_id,
             addr,
             kind,
-            security: TransportSecurity::Noise,
-            muxer: TransportMuxer::Yamux,
+            flavor: infer_transport_session_flavor(&addr_without_peer_id),
+            security: infer_transport_security(&addr_without_peer_id),
+            muxer: infer_transport_muxer(&addr_without_peer_id),
         });
+    }
+}
+
+fn infer_transport_path_kind(addr: &Multiaddr) -> TransportPathKind {
+    if addr
+        .iter()
+        .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+    {
+        TransportPathKind::Relay
+    } else {
+        TransportPathKind::Direct
+    }
+}
+
+fn infer_transport_session_flavor(addr: &Multiaddr) -> TransportSessionFlavor {
+    if addr
+        .iter()
+        .any(|protocol| matches!(protocol, Protocol::QuicV1))
+    {
+        TransportSessionFlavor::Quic
+    } else {
+        TransportSessionFlavor::TcpNoiseYamux
+    }
+}
+
+fn infer_transport_security(addr: &Multiaddr) -> TransportSecurity {
+    match infer_transport_session_flavor(addr) {
+        TransportSessionFlavor::Quic => TransportSecurity::QuicTls,
+        TransportSessionFlavor::TcpNoiseYamux => TransportSecurity::Noise,
+    }
+}
+
+fn infer_transport_muxer(addr: &Multiaddr) -> TransportMuxer {
+    match infer_transport_session_flavor(addr) {
+        TransportSessionFlavor::Quic => TransportMuxer::Quic,
+        TransportSessionFlavor::TcpNoiseYamux => TransportMuxer::Yamux,
     }
 }

@@ -89,3 +89,18 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/TASK-PM-0023.yaml
+  - task_id: TASK-PM-0025
+    title: "Implement P2PARCH-2 QUIC TCP fallback"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-2 transport substrate distinguishes QUIC and TCP path variants while preserving direct-before-relay ranking."
+      - "Runtime can dial and classify both QUIC and TCP direct paths and preserve failover semantics across those path variants."
+      - "Implementation, tests, project docs and execution log remain traceable to PRD-P2P-024 / P2PARCH-2."
+    handoff_to:
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0025.yaml

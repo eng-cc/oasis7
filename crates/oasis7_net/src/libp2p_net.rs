@@ -940,8 +940,9 @@ impl Libp2pNetwork {
                                             push_bounded_clone(
                                                 &event_errors,
                                                 format!(
-                                                    "libp2p transport active peer={peer_id} kind={} addr={}",
+                                                    "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
                                                     active_path.kind_label(),
+                                                    active_path.flavor_label(),
                                                     active_path.addr,
                                                 ),
                                                 max_error_messages,
@@ -964,8 +965,9 @@ impl Libp2pNetwork {
                                             push_bounded_clone(
                                                 &event_errors,
                                                 format!(
-                                                    "libp2p transport active peer={peer_id} kind={} addr={}",
+                                                    "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
                                                     active_path.kind_label(),
+                                                    active_path.flavor_label(),
                                                     active_path.addr,
                                                 ),
                                                 max_error_messages,

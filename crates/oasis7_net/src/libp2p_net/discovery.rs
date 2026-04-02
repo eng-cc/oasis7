@@ -365,7 +365,7 @@ pub(super) fn process_discovered_peer_record(
     {
         let should_dial = active_transport_paths
             .get(&peer_id)
-            .map(|active| preferred_path.kind < active.kind)
+            .map(|active| preferred_path.preference_rank() < active.preference_rank())
             .unwrap_or(true);
         let addr_label = preferred_path.label();
         if dialed_discovery_addrs.insert(addr_label.clone()) {

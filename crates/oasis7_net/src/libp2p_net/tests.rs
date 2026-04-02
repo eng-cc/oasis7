@@ -1,7 +1,8 @@
 use super::peer_record::{sign_peer_record, verify_signed_peer_record};
 use super::transport_paths::{
-    peer_record_transport_paths, select_preferred_transport_path, sync_known_transport_paths,
-    TransportPathKind,
+    active_transport_path_from_endpoint, peer_record_transport_paths,
+    select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
+    TransportSecurity, TransportSessionFlavor,
 };
 use super::utils::push_bounded_vec;
 use super::*;
@@ -213,7 +214,7 @@ fn try_send_command_reports_queue_disconnect() {
 }
 
 #[test]
-fn peer_record_transport_paths_rank_direct_before_relay() {
+fn peer_record_transport_paths_rank_quic_direct_before_tcp_and_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
         &PeerRecord {
@@ -225,9 +226,10 @@ fn peer_record_transport_paths_rank_direct_before_relay() {
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec![
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
+                "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
             ],
-            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
             ttl_ms: 60_000,
@@ -237,14 +239,21 @@ fn peer_record_transport_paths_rank_direct_before_relay() {
     .expect("sign peer record");
 
     let paths = peer_record_transport_paths(&signed).expect("transport paths");
-    assert_eq!(paths.len(), 2);
+    assert_eq!(paths.len(), 3);
     assert_eq!(paths[0].kind, TransportPathKind::Direct);
-    assert_eq!(paths[1].kind, TransportPathKind::Relay);
+    assert_eq!(paths[0].flavor, TransportSessionFlavor::Quic);
+    assert_eq!(paths[0].security, TransportSecurity::QuicTls);
+    assert_eq!(paths[0].muxer, TransportMuxer::Quic);
+    assert_eq!(paths[1].kind, TransportPathKind::Direct);
+    assert_eq!(paths[1].flavor, TransportSessionFlavor::TcpNoiseYamux);
+    assert_eq!(paths[1].security, TransportSecurity::Noise);
+    assert_eq!(paths[1].muxer, TransportMuxer::Yamux);
+    assert_eq!(paths[2].kind, TransportPathKind::Relay);
     assert!(paths[0].addr.to_string().contains("/p2p/"));
 }
 
 #[test]
-fn preferred_transport_path_skips_failed_direct_and_falls_back_to_relay() {
+fn preferred_transport_path_skips_failed_quic_and_falls_back_to_tcp_before_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
         &PeerRecord {
@@ -254,8 +263,11 @@ fn preferred_transport_path_skips_failed_direct_and_falls_back_to_relay() {
             network_id: "network-a".to_string(),
             node_role: "storage".to_string(),
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
-            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
-            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            direct_addrs: vec![
+                "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
+                "/ip4/127.0.0.1/tcp/4102".to_string(),
+            ],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
             ttl_ms: 60_000,
@@ -268,7 +280,8 @@ fn preferred_transport_path_skips_failed_direct_and_falls_back_to_relay() {
     let failed: HashSet<String> = [paths[0].label()].into_iter().collect();
     let selected =
         select_preferred_transport_path(paths.as_slice(), &failed).expect("fallback path");
-    assert_eq!(selected.kind, TransportPathKind::Relay);
+    assert_eq!(selected.kind, TransportPathKind::Direct);
+    assert_eq!(selected.flavor, TransportSessionFlavor::TcpNoiseYamux);
 }
 
 #[test]
@@ -283,8 +296,11 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
             network_id: "network-a".to_string(),
             node_role: "storage".to_string(),
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
-            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
-            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            direct_addrs: vec![
+                "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
+                "/ip4/127.0.0.1/tcp/4102".to_string(),
+            ],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             published_at_ms: 77,
             ttl_ms: 60_000,
@@ -295,13 +311,45 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
     let initial_paths = peer_record_transport_paths(&signed).expect("transport paths");
 
     let mut known = HashMap::new();
-    let mut failed: HashSet<String> = [initial_paths[1].label()].into_iter().collect();
+    let mut failed: HashSet<String> = [initial_paths[2].label()].into_iter().collect();
     sync_known_transport_paths(&mut known, &mut failed, peer_id, initial_paths.clone());
     sync_known_transport_paths(
         &mut known,
         &mut failed,
         peer_id,
-        vec![initial_paths[0].clone()],
+        initial_paths[..2].to_vec(),
     );
     assert!(failed.is_empty());
+}
+
+#[test]
+fn active_transport_path_from_endpoint_infers_quic_and_relay_semantics() {
+    let peer_id = PeerId::random();
+
+    let quic_path = active_transport_path_from_endpoint(
+        &HashMap::new(),
+        peer_id,
+        &"/ip4/127.0.0.1/udp/4103/quic-v1"
+            .parse()
+            .expect("quic endpoint"),
+    );
+    assert_eq!(quic_path.kind, TransportPathKind::Direct);
+    assert_eq!(quic_path.flavor, TransportSessionFlavor::Quic);
+    assert_eq!(quic_path.security, TransportSecurity::QuicTls);
+    assert_eq!(quic_path.muxer, TransportMuxer::Quic);
+
+    let relay_path = active_transport_path_from_endpoint(
+        &HashMap::new(),
+        peer_id,
+        &format!(
+            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+            PeerId::random()
+        )
+        .parse()
+        .expect("relay endpoint"),
+    );
+    assert_eq!(relay_path.kind, TransportPathKind::Relay);
+    assert_eq!(relay_path.flavor, TransportSessionFlavor::TcpNoiseYamux);
+    assert_eq!(relay_path.security, TransportSecurity::Noise);
+    assert_eq!(relay_path.muxer, TransportMuxer::Yamux);
 }
