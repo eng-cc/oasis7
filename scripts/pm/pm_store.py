@@ -1097,6 +1097,149 @@ def import_working_memory_entries(
     }
 
 
+def resolve_working_memory_context(
+    root: pathlib.Path,
+    task_id: str,
+    role: str | None,
+) -> tuple[pathlib.Path, OrderedDict[str, object], list[OrderedDict[str, object]], str]:
+    path, header, entries = load_working_memory_document(root, task_id)
+    resolved_role = str(role or header.get("role") or "")
+    if resolved_role not in load_roles(root):
+        raise ValueError(f"unknown role: {resolved_role}")
+    return path, header, entries, resolved_role
+
+
+def plan_working_memory_signal_promotions(
+    root: pathlib.Path,
+    task_id: str,
+    role: str | None,
+    entry_ids: list[str],
+    severity: str,
+) -> dict[str, object]:
+    if severity not in SEVERITY_ORDER:
+        raise ValueError(f"unsupported severity: {severity}")
+    if not entry_ids:
+        raise ValueError("at least one --entry-id is required")
+
+    path, header, entries, resolved_role = resolve_working_memory_context(root, task_id, role)
+    entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
+    signal_entries = load_signal_entries(root)
+    relative_source_path = str(path.relative_to(root))
+    plans: list[dict[str, object]] = []
+
+    for entry_id in entry_ids:
+        entry = entries_by_id.get(entry_id)
+        if entry is None:
+            raise ValueError(f"working_memory entry not found: {entry_id}")
+
+        source_ref = f"{relative_source_path}#entry_id={entry_id}"
+        summary = str(entry.get("summary") or "")
+        existing_signal = None
+        for payload in signal_entries:
+            if (
+                payload.get("source_type") == "reflection"
+                and payload.get("source_ref") == source_ref
+                and payload.get("summary") == summary
+                and payload.get("role_hint") == resolved_role
+            ):
+                existing_signal = payload
+                break
+
+        plan: dict[str, object] = {
+            "entry_id": entry_id,
+            "source_ref": source_ref,
+            "summary": summary,
+        }
+        if existing_signal is not None:
+            plan["decision"] = "reuse"
+            plan["signal_id"] = str(existing_signal["signal_id"])
+        else:
+            plan["decision"] = "create"
+        plans.append(plan)
+
+    return {
+        "task_id": task_id,
+        "role": resolved_role,
+        "severity": severity,
+        "working_memory_path": relative_source_path,
+        "path": path,
+        "header": header,
+        "entries": entries,
+        "plans": plans,
+    }
+
+
+def summarize_working_memory_signal_plan(
+    plan: dict[str, object],
+    *,
+    applied: bool,
+) -> dict[str, object]:
+    created: list[dict[str, object]] = []
+    reused: list[dict[str, object]] = []
+    for item in plan["plans"]:
+        shaped = {
+            "entry_id": item["entry_id"],
+            "source_ref": item["source_ref"],
+            "summary": item["summary"],
+        }
+        if item["decision"] == "reuse":
+            shaped["signal_id"] = item["signal_id"]
+            reused.append(shaped)
+        else:
+            if "signal_id" in item:
+                shaped["signal_id"] = item["signal_id"]
+            created.append(shaped)
+
+    return {
+        "task_id": plan["task_id"],
+        "role": plan["role"],
+        "severity": plan["severity"],
+        "working_memory_path": plan["working_memory_path"],
+        "applied": applied,
+        "created": created,
+        "reused": reused,
+    }
+
+
+def apply_working_memory_signal_plan(plan: dict[str, object], root: pathlib.Path) -> dict[str, object]:
+    path = plan["path"]
+    header = plan["header"]
+    entries = plan["entries"]
+    entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
+    signal_entries = load_signal_entries(root)
+
+    for item in plan["plans"]:
+        if item["decision"] == "reuse":
+            signal_id = str(item["signal_id"])
+            entry = entries_by_id[str(item["entry_id"])]
+            if signal_id not in entry["promoted_to"]:
+                entry["promoted_to"].append(signal_id)
+            continue
+
+        signal_id = next_signal_id(root)
+        payload = OrderedDict(
+            [
+                ("signal_id", signal_id),
+                ("source_type", "reflection"),
+                ("source_ref", item["source_ref"]),
+                ("role_hint", plan["role"]),
+                ("severity", plan["severity"]),
+                ("summary", item["summary"]),
+                ("promotion_state", "triaged"),
+                ("memory_promotion_state", "pending"),
+            ]
+        )
+        signal_entries.append(payload)
+        item["signal_id"] = signal_id
+        entry = entries_by_id[str(item["entry_id"])]
+        if signal_id not in entry["promoted_to"]:
+            entry["promoted_to"].append(signal_id)
+
+    dump_signal_entries(root, signal_entries)
+    dump_list_document(path, header, "entries", entries)
+    return summarize_working_memory_signal_plan(plan, applied=True)
+
+
 def next_signal_id(root: pathlib.Path) -> str:
     max_sequence = 0
     for payload in load_signal_entries(root):
@@ -1240,90 +1383,8 @@ def promote_working_memory_to_signals(
     entry_ids: list[str],
     severity: str,
 ) -> dict[str, object]:
-    if severity not in SEVERITY_ORDER:
-        raise ValueError(f"unsupported severity: {severity}")
-
-    path, header, entries = load_working_memory_document(root, task_id)
-    resolved_role = str(role or header.get("role") or "")
-    if resolved_role not in load_roles(root):
-        raise ValueError(f"unknown role: {resolved_role}")
-
-    if not entry_ids:
-        raise ValueError("at least one --entry-id is required")
-
-    entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
-    signal_entries = load_signal_entries(root)
-    created: list[dict[str, object]] = []
-    reused: list[dict[str, object]] = []
-    relative_source_path = str(path.relative_to(root))
-
-    for entry_id in entry_ids:
-        entry = entries_by_id.get(entry_id)
-        if entry is None:
-            raise ValueError(f"working_memory entry not found: {entry_id}")
-
-        source_ref = f"{relative_source_path}#entry_id={entry_id}"
-        summary = str(entry.get("summary") or "")
-        existing_signal = None
-        for payload in signal_entries:
-            if (
-                payload.get("source_type") == "reflection"
-                and payload.get("source_ref") == source_ref
-                and payload.get("summary") == summary
-                and payload.get("role_hint") == resolved_role
-            ):
-                existing_signal = payload
-                break
-
-        if existing_signal is not None:
-            signal_id = str(existing_signal["signal_id"])
-            if signal_id not in entry["promoted_to"]:
-                entry["promoted_to"].append(signal_id)
-            reused.append(
-                {
-                    "entry_id": entry_id,
-                    "signal_id": signal_id,
-                    "source_ref": source_ref,
-                    "summary": summary,
-                }
-            )
-            continue
-
-        signal_id = next_signal_id(root)
-        payload = OrderedDict(
-            [
-                ("signal_id", signal_id),
-                ("source_type", "reflection"),
-                ("source_ref", source_ref),
-                ("role_hint", resolved_role),
-                ("severity", severity),
-                ("summary", summary),
-                ("promotion_state", "triaged"),
-                ("memory_promotion_state", "pending"),
-            ]
-        )
-        signal_entries.append(payload)
-        if signal_id not in entry["promoted_to"]:
-            entry["promoted_to"].append(signal_id)
-        created.append(
-            {
-                "entry_id": entry_id,
-                "signal_id": signal_id,
-                "source_ref": source_ref,
-                "summary": summary,
-            }
-        )
-
-    dump_signal_entries(root, signal_entries)
-    dump_list_document(path, header, "entries", entries)
-    return {
-        "task_id": task_id,
-        "role": resolved_role,
-        "severity": severity,
-        "working_memory_path": relative_source_path,
-        "created": created,
-        "reused": reused,
-    }
+    plan = plan_working_memory_signal_promotions(root, task_id, role, entry_ids, severity)
+    return apply_working_memory_signal_plan(plan, root)
 
 
 def autoflow_working_memory(
@@ -1340,10 +1401,7 @@ def autoflow_working_memory(
     if priority not in PRIORITY_ORDER:
         raise ValueError(f"unsupported priority: {priority}")
 
-    path, header, entries = load_working_memory_document(root, task_id)
-    resolved_role = str(role or header.get("role") or "")
-    if resolved_role not in load_roles(root):
-        raise ValueError(f"unknown role: {resolved_role}")
+    path, header, entries, resolved_role = resolve_working_memory_context(root, task_id, role)
 
     selected_ids = set(entry_ids or [])
     selected_entries: list[OrderedDict[str, object]] = []
@@ -1363,28 +1421,40 @@ def autoflow_working_memory(
         if str(entry.get("entry_kind") or "") in {"decision", "hypothesis", "open_question", "next_step"}
     ]
 
-    signal_result = promote_working_memory_to_signals(
+    signal_plan = plan_working_memory_signal_promotions(
         root,
         task_id=task_id,
         role=resolved_role,
         entry_ids=signal_candidates,
         severity=severity,
-    ) if signal_candidates else {
+    ) if signal_candidates else None
+
+    signal_result = summarize_working_memory_signal_plan(signal_plan, applied=False) if signal_plan is not None else {
         "task_id": task_id,
         "role": resolved_role,
         "severity": severity,
         "working_memory_path": str(path.relative_to(root)),
+        "applied": False,
         "created": [],
         "reused": [],
     }
 
     signals_by_entry_id: dict[str, str] = {}
     for item in [*signal_result["created"], *signal_result["reused"]]:
-        signals_by_entry_id[str(item["entry_id"])] = str(item["signal_id"])
+        signal_id = item.get("signal_id")
+        if signal_id:
+            signals_by_entry_id[str(item["entry_id"])] = str(signal_id)
+
+    if not dry_run and signal_plan is not None:
+        signal_result = apply_working_memory_signal_plan(signal_plan, root)
+        path, header, entries = load_working_memory_document(root, task_id)
+        signals_by_entry_id = {}
+        for item in [*signal_result["created"], *signal_result["reused"]]:
+            signal_id = item.get("signal_id")
+            if signal_id:
+                signals_by_entry_id[str(item["entry_id"])] = str(signal_id)
 
     task_actions: list[dict[str, object]] = []
-    if not dry_run:
-        _, header, entries = load_working_memory_document(root, task_id)
     for entry in entries:
         entry_id = str(entry.get("entry_id") or "")
         if selected_ids and entry_id not in selected_ids:
@@ -3248,6 +3318,7 @@ def cmd_working_memory_autoflow(args: argparse.Namespace) -> int:
     else:
         print(
             "working-memory-autoflow: "
+            f"mode={'plan' if args.dry_run else 'apply'} "
             f"signals(created={len(result['signal_result']['created'])}, reused={len(result['signal_result']['reused'])}) "
             f"tasks={len(result['task_actions'])} dry_run={'yes' if result['dry_run'] else 'no'}"
         )

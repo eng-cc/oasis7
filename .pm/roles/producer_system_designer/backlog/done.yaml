@@ -150,3 +150,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0019.yaml
+  - task_id: TASK-PM-0024
+    title: "Root-fix working-memory-autoflow dry-run to be strictly read-only"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md
+    acceptance:
+      - "working-memory-autoflow --dry-run does not mutate signals, working_memory, task registry, or task files"
+      - "smoke coverage proves dry-run returns a plan without side effects"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0024.yaml

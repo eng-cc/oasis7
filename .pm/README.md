@@ -104,6 +104,8 @@ working_memory 基础用法：
 - 同一 `task_id + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取，避免当前 live session 在提炼过程中把新生成消息再次吸回本轮输入；需要重扫整段 transcript 时显式传 `--full-scan`。
 - `working_memory` header 会记录 `source_session_id`、`source_thread_name`、`transcript_source`、`last_extracted_ts` 与 `captured_until_ts`，用于回放抽取来源与当前水位。
 - `working-memory-autoflow.sh` 只自动做安全动作：reflection signal + candidate task；不会自动升长期 memory，也不会自动改 stage / 正式文档。
+- `working-memory-autoflow.sh --dry-run` 是严格只读的 plan 模式：它只返回“会创建/复用哪些 reflection signal 与 candidate task”，不会改 `.pm/inbox/signals.jsonl`、`.pm/working_memory/*.yaml`、task registry 或 task files。
+- dry-run 结果里只有已存在对象才会带真实 `signal_id` / `task_id`；若对象尚未创建，apply 之前不会预留 ID，也不会留下任何半完成状态。
 
 role report 基础用法：
 - `./scripts/pm/role-report.sh`

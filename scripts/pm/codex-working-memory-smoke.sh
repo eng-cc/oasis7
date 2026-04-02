@@ -83,6 +83,28 @@ for path in root.glob(".pm/**/*.yaml"):
 testing_manual = root / "testing-manual.md"
 if not testing_manual.exists():
     testing_manual.write_text("placeholder testing manual\n", encoding="utf-8")
+
+for path in root.glob(".pm/tasks/*.execution.md"):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    filtered = [
+        line for line in lines
+        if line not in {
+            "<!-- Append entries using:",
+            "## YYYY-MM-DD HH:MM:SS CST / role_name",
+            "- 完成内容: ...",
+            "- 遗留事项: ...",
+            "-->",
+        }
+    ]
+    text = "\n".join(filtered).rstrip() + "\n"
+    if "\n## " in text or text.startswith("## "):
+        path.write_text(text, encoding="utf-8")
+        continue
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write(text.rstrip() + "\n")
+        handle.write("\n## 2026-03-31 18:00:00 CST / producer_system_designer\n")
+        handle.write("- 完成内容: smoke fixture seeded a minimal execution-log entry for lint compatibility.\n")
+        handle.write("- 遗留事项: none.\n")
 PY
 
 cat > "$TMPDIR/.codex/session_index.jsonl" <<'EOF'
@@ -174,6 +196,24 @@ RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-workin
   --codex-bin "$TMPDIR/fake-codex" \
   --json)"
 
+DRY_RUN_SIGNAL_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
+DRY_RUN_WM_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_ID.yaml" | awk '{print $1}')"
+DRY_RUN_TASK_REGISTRY_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
+DRY_RUN_BACKLOG_SHA_BEFORE="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
+DRY_RUN_TASK_LIST_BEFORE="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
+DRY_RUN_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-autoflow.sh" \
+  --task-id "$SMOKE_TASK_ID" \
+  --entry-id WM-0002 \
+  --severity medium \
+  --priority P2 \
+  --dry-run \
+  --json)"
+DRY_RUN_SIGNAL_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/inbox/signals.jsonl" | awk '{print $1}')"
+DRY_RUN_WM_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/working_memory/$SMOKE_TASK_ID.yaml" | awk '{print $1}')"
+DRY_RUN_TASK_REGISTRY_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/registry/tasks.yaml" | awk '{print $1}')"
+DRY_RUN_BACKLOG_SHA_AFTER="$(sha256sum "$TMPDIR/.pm/roles/producer_system_designer/backlog/candidate.yaml" | awk '{print $1}')"
+DRY_RUN_TASK_LIST_AFTER="$(find "$TMPDIR/.pm/tasks" -maxdepth 1 -type f -printf '%f\n' | sort)"
+
 SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-to-signal.sh" \
   --task-id "$SMOKE_TASK_ID" \
   --entry-id WM-0001 \
@@ -187,11 +227,45 @@ AUTOFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-auto
   --priority P2 \
   --json)"
 
+python3 - "$TMPDIR" "$AUTOFLOW_JSON" <<'PY'
+from __future__ import annotations
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+payload = json.loads(sys.argv[2])
+for item in payload.get("task_actions", []):
+    if item.get("decision") != "created":
+        continue
+    task = item.get("task") or {}
+    task_id = task.get("task_id")
+    if not task_id:
+        continue
+    path = root / f".pm/tasks/{task_id}.execution.md"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    filtered = [
+        line for line in lines
+        if line not in {
+            "<!-- Append entries using:",
+            "## YYYY-MM-DD HH:MM:SS CST / role_name",
+            "- 完成内容: ...",
+            "- 遗留事项: ...",
+            "-->",
+        }
+    ]
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write("\n".join(filtered).rstrip() + "\n")
+        handle.write("\n## 2026-03-31 18:10:00 CST / producer_system_designer\n")
+        handle.write("- 完成内容: smoke fixture backfilled the created candidate task execution log so pm-lint can validate the autoflow output.\n")
+        handle.write("- 遗留事项: none.\n")
+PY
+
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-report.sh" --task-id "$SMOKE_TASK_ID" --json)"
 
-python3 - "$TMPDIR" "$SMOKE_TASK_ID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
+python3 - "$TMPDIR" "$SMOKE_TASK_ID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$DRY_RUN_JSON" "$DRY_RUN_SIGNAL_SHA_BEFORE" "$DRY_RUN_SIGNAL_SHA_AFTER" "$DRY_RUN_WM_SHA_BEFORE" "$DRY_RUN_WM_SHA_AFTER" "$DRY_RUN_TASK_REGISTRY_SHA_BEFORE" "$DRY_RUN_TASK_REGISTRY_SHA_AFTER" "$DRY_RUN_BACKLOG_SHA_BEFORE" "$DRY_RUN_BACKLOG_SHA_AFTER" "$DRY_RUN_TASK_LIST_BEFORE" "$DRY_RUN_TASK_LIST_AFTER" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
 from __future__ import annotations
 import json
 import sys
@@ -203,10 +277,21 @@ prepared = json.loads(sys.argv[3])
 prepared_fallback = json.loads(sys.argv[4])
 result = json.loads(sys.argv[5])
 result_registry = json.loads(sys.argv[6])
-signal_json = json.loads(sys.argv[7])
-autoflow_json = json.loads(sys.argv[8])
-report = json.loads(sys.argv[9])
-output_json = sys.argv[10] == "1"
+dry_run = json.loads(sys.argv[7])
+dry_run_signal_sha_before = sys.argv[8]
+dry_run_signal_sha_after = sys.argv[9]
+dry_run_wm_sha_before = sys.argv[10]
+dry_run_wm_sha_after = sys.argv[11]
+dry_run_task_registry_sha_before = sys.argv[12]
+dry_run_task_registry_sha_after = sys.argv[13]
+dry_run_backlog_sha_before = sys.argv[14]
+dry_run_backlog_sha_after = sys.argv[15]
+dry_run_task_list_before = sys.argv[16]
+dry_run_task_list_after = sys.argv[17]
+signal_json = json.loads(sys.argv[18])
+autoflow_json = json.loads(sys.argv[19])
+report = json.loads(sys.argv[20])
+output_json = sys.argv[21] == "1"
 
 assert prepared["messages"][0]["ts"] == 100
 assert prepared["messages"][1]["ts"] == 200
@@ -222,9 +307,21 @@ assert str(result_registry["prepared"]["after_ts"]) == "300"
 assert result_registry["import_result"]["added"] == 0
 assert result_registry["import_result"]["skipped"] == 0
 assert result_registry["prepared"]["resolution_source"] == "registry"
+assert dry_run["dry_run"] is True
+assert dry_run["signal_result"]["applied"] is False
+assert len(dry_run["signal_result"]["created"]) == 1
+assert "signal_id" not in dry_run["signal_result"]["created"][0]
+assert len(dry_run["task_actions"]) == 1
+assert dry_run["task_actions"][0]["decision"] == "would_create"
+assert dry_run_signal_sha_before == dry_run_signal_sha_after
+assert dry_run_wm_sha_before == dry_run_wm_sha_after
+assert dry_run_task_registry_sha_before == dry_run_task_registry_sha_after
+assert dry_run_backlog_sha_before == dry_run_backlog_sha_after
+assert dry_run_task_list_before == dry_run_task_list_after
 assert len(signal_json["created"]) == 1
 assert signal_json["created"][0]["signal_id"].startswith("SIG-PM-")
 assert len(autoflow_json["signal_result"]["created"]) == 1
+assert autoflow_json["signal_result"]["applied"] is True
 assert len(autoflow_json["task_actions"]) == 1
 assert autoflow_json["task_actions"][0]["decision"] == "created"
 assert report["entry_count"] == 2
@@ -241,6 +338,7 @@ payload = {
     "prepared_fallback": prepared_fallback,
     "result": result,
     "result_registry": result_registry,
+    "dry_run": dry_run,
     "signal": signal_json,
     "autoflow": autoflow_json,
     "report": report,
