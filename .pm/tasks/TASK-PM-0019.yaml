@@ -1,0 +1,22 @@
+task_id: TASK-PM-0019
+title: "Make workflow close working-memory guidance task-scoped and bootstrap-friendly"
+owner_role: producer_system_designer
+worktree_hint: engineering-task-scoped-working-memory-checklist
+execution_log_path: .pm/tasks/TASK-PM-0019.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/pm/pm_store.py
+doc_refs:
+  - doc/engineering/prd.md
+related_prd:
+  - doc/engineering/prd.md
+acceptance:
+  - "workflow-report close uses task-scoped working_memory counts when --task-id is present."
+  - "when a task has zero working_memory entries, checklist points to extraction/bootstrap commands instead of implying review-only flow."
+  - "smoke coverage catches regressions in task-scoped working_memory checklist behavior."
+handoff_to: []
+updated_at: 2026-04-02T10:25:25+08:00
+last_started_at: 2026-04-02T10:15:48+08:00
+last_closed_at: 2026-04-02T10:25:18+08:00

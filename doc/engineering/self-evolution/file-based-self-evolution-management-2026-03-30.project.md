@@ -19,6 +19,7 @@
 - [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪互链，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
 - [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-SE-004/007) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换到 `.pm/tasks/TASK-PM-*.execution.md`，并同步回写 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
+- [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -39,12 +40,13 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-04-01
+- 更新日期: 2026-04-02
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-096` 已完成；task-local execution log 已成为 `.pm` 默认执行日志口径，`TASK-ENGINEERING-074~085/092/093/094/096` 均已完成。
+- 当前任务: `TASK-ENGINEERING-098` 已完成；`workflow-report --phase close --task-id` 的 working_memory 提示现已按当前 task 计数，零条目时先暴露 bootstrap 入口，`TASK-ENGINEERING-074~085/092/093/094/096/098` 均已完成。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
+  - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
   - `TASK-ENGINEERING-096`：已将执行日志 canonical 路径切到 `.pm/tasks/TASK-PM-*.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。
   - `TASK-ENGINEERING-094`：已将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
   - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-id` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。

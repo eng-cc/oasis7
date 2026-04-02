@@ -137,3 +137,16 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/TASK-PM-0018.yaml
+  - task_id: TASK-PM-0019
+    title: "Make workflow close working-memory guidance task-scoped and bootstrap-friendly"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+    acceptance:
+      - "workflow-report close uses task-scoped working_memory counts when --task-id is present."
+      - "when a task has zero working_memory entries, checklist points to extraction/bootstrap commands instead of implying review-only flow."
+      - "smoke coverage catches regressions in task-scoped working_memory checklist behavior."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/TASK-PM-0019.yaml

@@ -102,6 +102,7 @@
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-021) [test_tier_required]: 将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 专题中的 commit 前 subagent review 规则统一收口为仓库默认流程口径。
 - [x] TASK-ENGINEERING-095 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 修复 `memory-regression-smoke` 的 blocked-task fixture，使其按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造测试数据，恢复 full-tier smoke 通过。
 - [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换为 `.pm/tasks/TASK-PM-*.execution.md`，并同步接入 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
+- [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-021) [test_tier_required]: 将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -143,12 +144,13 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-01
+- 更新日期: 2026-04-02
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-096` 已完成 task-local execution log 迁移，`TASK-ENGINEERING-095` 已先修复 `.pm` full-tier smoke 的 blocked-task fixture 漂移。
+- 下一任务: `TASK-ENGINEERING-089/090` 待启动，用于继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-098` 已修正 `workflow-report --phase close --task-id` 的 working_memory 提示口径，`TASK-ENGINEERING-096` 已完成 task-local execution log 迁移。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-098`（已将 `workflow-report --phase close --task-id` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。）
 - 最新完成: `TASK-ENGINEERING-096`（已将执行日志 canonical 路径切到 `.pm/tasks/TASK-PM-*.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。）
 - 最新完成: `TASK-ENGINEERING-095`（已将 `memory-regression-smoke` 的 blocked-task fixture 改为按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造，恢复 full-tier smoke 通过。）
 - 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 subagent review 规则统一收口为仓库默认流程。）

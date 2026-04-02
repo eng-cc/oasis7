@@ -54,6 +54,7 @@
   - SC-23: 每次 commit 前都必须启动一个独立 subagent review 当前 diff，并在提交前处理或显式记录 review findings。
   - SC-24: commit 前 subagent review 在仓库流程层面属于默认执行步骤，不需要因为“只是执行这条既有流程”再单独向用户申请一次。
   - SC-24A: 根 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪必须对该流程维持单一口径：commit 前先做独立 subagent review，再处理 findings 后提交。
+  - SC-25: `workflow-report --phase close --task-id <TASK-ID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -243,7 +244,7 @@
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且只允许把 subagent 用作 commit 前 review | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-id` 留痕、signal promotion、workflow/role/stage report、subagent review 默认流程文案一致性、角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/098 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-id` 留痕、signal promotion、workflow/role/stage report、subagent review 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 
 - Decision Log:

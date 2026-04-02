@@ -2106,7 +2106,13 @@ def build_workflow_checklist(
             "extract-memory",
             "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 execution log。",
         )
-        if working_memory_entries > 0:
+        if task_context is not None and working_memory_entries == 0:
+            add(
+                "bootstrap-working-memory",
+                "当前 task 还没有 working_memory；若本轮主要过程发生在 Codex 会话里，先抽取一次 task-scoped working_memory，再决定是否需要 reflection signal / candidate task。",
+                command=f"./scripts/pm/codex-working-memory.sh --task-id {task_context['task_id']} --role {role}",
+            )
+        elif working_memory_entries > 0:
             add(
                 "review-working-memory",
                 "先处理 task-scoped working_memory：提炼成 reflection signal、转 task/memory，或显式保留待过期，不要让过程认知悬空。",
@@ -2207,7 +2213,10 @@ def build_workflow_report(
     stage_report = build_stage_report(root)
     signal_role_filter = None if (phase == "review" and role == "producer_system_designer") else role
     signal_summary = build_signal_summary(root, role_filter=signal_role_filter)
-    working_memory_summary = build_working_memory_report(root, task_id=None, role_filter=role)
+    if task_id:
+        working_memory_summary = build_working_memory_report(root, task_id=task_id, role_filter=None)
+    else:
+        working_memory_summary = build_working_memory_report(root, task_id=None, role_filter=role)
     reflection_summary = build_reflection_summary(root, role_filter=signal_role_filter)
     checklist = build_workflow_checklist(
         role,

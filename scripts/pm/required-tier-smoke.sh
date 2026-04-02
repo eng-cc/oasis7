@@ -85,6 +85,7 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     "version: 1\nscope: shared\nkind: memory_superseded\nrecords: []\n",
     encoding="utf-8",
 )
+(root / ".pm/inbox/signals.jsonl").write_text("", encoding="utf-8")
 (root / ".pm/stage/current.yaml").write_text(
     "version: 1\ncurrent_stage: null\ncandidate_stage: null\nclaim_envelope: null\ndecision_date: null\nupdated_from: []\nblocking_tasks: []\n",
     encoding="utf-8",
@@ -335,10 +336,27 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 MEMORY_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
 ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
 WORKFLOW_CLOSE_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-id "$TASK_ID" --json)"
+mkdir -p "$TMPDIR/.pm/working_memory"
+cat > "$TMPDIR/.pm/working_memory/$TASK_ID.yaml" <<EOF
+version: 1
+task_id: $TASK_ID
+role: qa_engineer
+worktree_hint: null
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "viewer startup blocker should be reflected into follow-up review"
+    source_refs:
+      - $TASK_LOG_PATH
+    captured_at: 2026-03-30T22:40:00+08:00
+    expires_at: 2026-04-01T22:40:00+08:00
+    promoted_to: []
+EOF
+WORKFLOW_CLOSE_WITH_WM_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase close --task-id "$TASK_ID" --json)"
 WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -356,8 +374,9 @@ memory_report = json.loads(sys.argv[10])
 role_report = json.loads(sys.argv[11])
 workflow_start = json.loads(sys.argv[12])
 workflow_close = json.loads(sys.argv[13])
-workflow_review = json.loads(sys.argv[14])
-stage_report = json.loads(sys.argv[15])
+workflow_close_with_wm = json.loads(sys.argv[14])
+workflow_review = json.loads(sys.argv[15])
+stage_report = json.loads(sys.argv[16])
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -367,6 +386,8 @@ if not workflow_start["task_context"]["last_started_at"]:
     raise SystemExit("workflow start should record last_started_at")
 if not workflow_close["task_context"]["last_closed_at"]:
     raise SystemExit("workflow close should record last_closed_at")
+if workflow_close["working_memory_summary"]["entry_count"] != 0:
+    raise SystemExit("workflow close should use task-scoped working_memory counts for explicit task_id")
 if workflow_review["signal_summary"]["pending_count"] != 1:
     raise SystemExit("producer workflow review should see one cross-role pending signal")
 pending = workflow_review["signal_summary"]["pending_signals"]
@@ -380,6 +401,20 @@ if any(item.get("id") == "triage-signals" and "command" in item for item in work
     raise SystemExit("workflow start checklist should not suggest promote-signal for pending signal handling")
 if not any(item.get("id") == "subagent-review" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should require subagent review before commit")
+if not any(item.get("id") == "bootstrap-working-memory" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should suggest bootstrapping working_memory when the current task has no entries")
+if any(item.get("id") == "review-working-memory" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should not suggest reviewing working_memory when the current task has no entries")
+if any(item.get("id") == "autoflow-working-memory" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should not suggest autoflow before the current task has working_memory entries")
+if workflow_close_with_wm["working_memory_summary"]["entry_count"] != 1:
+    raise SystemExit("workflow close with seeded working_memory should report one task-scoped entry")
+if any(item.get("id") == "bootstrap-working-memory" for item in workflow_close_with_wm["checklist"]):
+    raise SystemExit("workflow close with seeded working_memory should not suggest bootstrap")
+if not any(item.get("id") == "review-working-memory" for item in workflow_close_with_wm["checklist"]):
+    raise SystemExit("workflow close with seeded working_memory should suggest reviewing task-scoped working_memory")
+if not any(item.get("id") == "autoflow-working-memory" for item in workflow_close_with_wm["checklist"]):
+    raise SystemExit("workflow close with seeded working_memory should suggest autoflow for task-scoped working_memory")
 
 print(
     json.dumps(
@@ -397,6 +432,7 @@ print(
             "role_report": role_report,
             "workflow_start": workflow_start,
             "workflow_close": workflow_close,
+            "workflow_close_with_wm": workflow_close_with_wm,
             "workflow_review": workflow_review,
             "stage_report": stage_report,
         },
