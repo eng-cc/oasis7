@@ -81,6 +81,9 @@ pub(super) fn sign_peer_record(
     keypair: &Keypair,
 ) -> Result<SignedPeerRecord, WorldError> {
     let mut record = record.clone();
+    record
+        .validate_policy()
+        .map_err(|reason| WorldError::NetworkProtocolUnavailable { protocol: reason })?;
     if record.peer_id.trim().is_empty() {
         record.peer_id = PeerId::from(keypair.public()).to_string();
     }
@@ -99,6 +102,10 @@ pub(super) fn sign_peer_record(
 }
 
 pub(super) fn verify_signed_peer_record(record: &SignedPeerRecord) -> Result<(), WorldError> {
+    record
+        .record
+        .validate_policy()
+        .map_err(|reason| WorldError::NetworkProtocolUnavailable { protocol: reason })?;
     let public_key_bytes =
         hex::decode(record.identity_public_key_protobuf_hex.as_str()).map_err(|_| {
             WorldError::NetworkProtocolUnavailable {

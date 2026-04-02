@@ -10,7 +10,8 @@
   已落地 stable libp2p identity、signed peer record schema + DHT contract、默认 bootstrap/DHT/rendezvous discovery taxonomy，以及 query-driven peer acquisition（DHT discovery query + bootstrap cached peer list/record fallback + rendezvous register/discover 自动化）；rendezvous-discovered peer 继续经由 world/network/signature 校验后才进入候选集。
 - [x] P2PARCH-2 (PRD-P2P-024-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 transport abstraction，统一 direct / hole-punched / relay path，并把 QUIC/TCP/Noise/mux 语义冻结到 substrate。
   已落地 transport substrate 收口：peer record 现在显式区分 `direct_addrs / hole_punch_addrs / relay_addrs`，runtime 会按 `direct QUIC -> direct TCP -> hole-punched QUIC/TCP -> relay-reserved` 排序与 failover；swarm 同时承载 direct transport 与 relay client transport，并记录 relay reservation / DCUtR 事件用于后续 reachability lifecycle。
-- [ ] P2PARCH-3 (PRD-P2P-024-C/D) [test_tier_required + test_tier_full]: `runtime_engineer` 落 `public / hybrid / private / relay_only / validator_hidden` deployment mode 与 `validator core / sentry / relay / full-storage / observer-light` 角色策略。
+- [x] P2PARCH-3 (PRD-P2P-024-C/D) [test_tier_required + test_tier_full]: `runtime_engineer` 落 `public / hybrid / private / relay_only / validator_hidden` deployment mode 与 `validator core / sentry / relay / full-storage / observer-light` 角色策略。
+  已落地 role policy substrate：runtime config 新增显式 `deployment_mode + node_role_claim`，默认把 `sequencer/storage/observer` 映射到 `validator_core/full_storage/observer_light`，并允许 observer runtime 显式声明 `sentry/relay`。peer record 现在显式携带 `deployment_mode`，且会校验 deployment mode、network role 与 direct surface 的一致性，旧 `sequencer/storage/observer` peer record label 仍可兼容解析到新角色语义。
 - [ ] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
@@ -30,6 +31,9 @@
   - `P2PARCH-2` 已补 QUIC/TCP fallback 切片：swarm 现在同时承载 QUIC 与 TCP/Noise/Yamux，transport path 会按 `direct QUIC -> direct TCP -> relay` 排序；active path、failover 与 discovery 升级判断也会保留这一语义。
   - `P2PARCH-2` 已补 hole-punched / relay-reserved substrate：peer record 新增 `hole_punch_addrs`，listener materialization 会把 `/p2p-circuit` 地址单独沉淀进 `relay_addrs`；transport path 排序固定为 `direct QUIC -> direct TCP -> hole-punched QUIC/TCP -> relay-reserved`，active path 也会保留已知 path kind。
   - `P2PARCH-2` 已补 relay client transport 与 DCUtR 事件接线：swarm 现在可直接承载 `/p2p-circuit` relay transport，并在 reservation accepted 时刷新 peer record / provider 广告；hole-punch success/failure 事件已进入 runtime 观测面，后续只剩 reachability lifecycle 自动化与 mixed-topology 套件闭环。
+  - `P2PARCH-3` 已落 deployment/role policy substrate：`NodeConfig` / chain runtime CLI / default peer record 现在显式承载 `p2p_deployment_mode` 与 `p2p_node_role`，不再把 deployment mode 只留给 operator 约定。
+  - `P2PARCH-3` 已落 role admission：runtime 会校验 `sequencer -> validator_core`、`storage -> full_storage`、`observer -> observer_light|sentry|relay`，并拒绝 `validator_core + public/relay_only`、`sentry + 非 public/hybrid`、`relay + 非 public`、`validator_hidden + 非 validator_core` 这类无效组合。
+  - `P2PARCH-3` 已落 exposed-surface contract：peer record 会显式校验 `private/relay_only/validator_hidden` 不得发布 `direct_addrs`，`validator_core` 也不得直接暴露 public direct surface；对 legacy `sequencer/storage/observer` peer record label 仍保持兼容解析，避免 discovery 面一次性断代。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -79,6 +83,11 @@
 - 输出:
   - deployment config schema
   - role admission / exposed-surface policy
+- 本轮已交付:
+  - `NodeNetworkPolicy`：runtime config 现在显式区分共识 `NodeRole` 与 P2P `deployment_mode/node_role_claim`
+  - chain runtime CLI 接线：新增 `--p2p-deployment-mode` / `--p2p-node-role`，默认从现有 `--node-role` 派生 `validator_core/full_storage/observer_light`
+  - peer record schema 扩展：新增 `deployment_mode`，并把 `node_role` 解析升级为 canonical `validator_core/sentry/relay/full_storage/observer_light`，同时兼容旧 `sequencer/storage/observer` 标签
+  - role admission / exposed-surface 校验：runtime config 与 signed peer record 都会拒绝无效 deployment-role 组合，以及 `private/relay_only/validator_hidden` 发布 direct public surface 的配置
 - 完成定义:
   - `validator_hidden`、`relay_only` 成为正式配置，不再靠脚本约定
   - validator core 不再要求自身全公网暴露
@@ -140,5 +149,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 进入 `P2PARCH-3` 的 deployment mode / role policy 收口，并把 AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化与 mixed-topology evidence 继续压到后续 `P2PARCH-6` 套件；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
+- 下一步: 进入 `P2PARCH-4` 的 traffic lane / QoS substrate，把 consensus gossip、sync、blob/state、control 从统一 transport substrate 上拆成 role-aware lane；AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化与 mixed-topology evidence 继续压到后续 `P2PARCH-6` 套件。
 - 最近更新: 2026-04-02

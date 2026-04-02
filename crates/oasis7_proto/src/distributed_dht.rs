@@ -1,5 +1,8 @@
 //! Distributed DHT adapter abstractions (provider/head indexing).
 
+use std::fmt;
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 use crate::distributed::WorldHeadAnnounce;
@@ -48,6 +51,156 @@ pub enum PeerReachabilityClass {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum PeerDeploymentMode {
+    Public,
+    Hybrid,
+    Private,
+    RelayOnly,
+    ValidatorHidden,
+}
+
+impl PeerDeploymentMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Hybrid => "hybrid",
+            Self::Private => "private",
+            Self::RelayOnly => "relay_only",
+            Self::ValidatorHidden => "validator_hidden",
+        }
+    }
+
+    pub fn initial_reachability_class(self) -> PeerReachabilityClass {
+        match self {
+            Self::Public => PeerReachabilityClass::Public,
+            Self::Hybrid => PeerReachabilityClass::Hybrid,
+            Self::Private => PeerReachabilityClass::Private,
+            Self::RelayOnly => PeerReachabilityClass::RelayOnly,
+            Self::ValidatorHidden => PeerReachabilityClass::ValidatorHidden,
+        }
+    }
+}
+
+impl fmt::Display for PeerDeploymentMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PeerDeploymentMode {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "public" => Ok(Self::Public),
+            "hybrid" => Ok(Self::Hybrid),
+            "private" => Ok(Self::Private),
+            "relay_only" => Ok(Self::RelayOnly),
+            "validator_hidden" => Ok(Self::ValidatorHidden),
+            _ => Err(
+                "deployment_mode must be one of: public, hybrid, private, relay_only, validator_hidden"
+                    .to_string(),
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PeerNodeRole {
+    ValidatorCore,
+    Sentry,
+    Relay,
+    FullStorage,
+    ObserverLight,
+}
+
+impl PeerNodeRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ValidatorCore => "validator_core",
+            Self::Sentry => "sentry",
+            Self::Relay => "relay",
+            Self::FullStorage => "full_storage",
+            Self::ObserverLight => "observer_light",
+        }
+    }
+
+    pub fn parse_wire(raw: &str) -> Result<Self, String> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "validator_core" | "sequencer" => Ok(Self::ValidatorCore),
+            "sentry" => Ok(Self::Sentry),
+            "relay" => Ok(Self::Relay),
+            "full_storage" | "storage" => Ok(Self::FullStorage),
+            "observer_light" | "observer" => Ok(Self::ObserverLight),
+            _ => Err(
+                "node_role must be one of: validator_core, sentry, relay, full_storage, observer_light"
+                    .to_string(),
+            ),
+        }
+    }
+
+    pub fn validate_deployment_mode(self, deployment_mode: PeerDeploymentMode) -> Result<(), String> {
+        match self {
+            Self::ValidatorCore => {
+                if matches!(
+                    deployment_mode,
+                    PeerDeploymentMode::Public | PeerDeploymentMode::RelayOnly
+                ) {
+                    return Err(format!(
+                        "node_role={} cannot use deployment_mode={deployment_mode}",
+                        self.as_str()
+                    ));
+                }
+            }
+            Self::Sentry => {
+                if !matches!(
+                    deployment_mode,
+                    PeerDeploymentMode::Public | PeerDeploymentMode::Hybrid
+                ) {
+                    return Err(format!(
+                        "node_role={} requires deployment_mode public or hybrid, got {deployment_mode}",
+                        self.as_str()
+                    ));
+                }
+            }
+            Self::Relay => {
+                if !matches!(deployment_mode, PeerDeploymentMode::Public) {
+                    return Err(format!(
+                        "node_role={} requires deployment_mode public, got {deployment_mode}",
+                        self.as_str()
+                    ));
+                }
+            }
+            Self::FullStorage | Self::ObserverLight => {
+                if matches!(deployment_mode, PeerDeploymentMode::ValidatorHidden) {
+                    return Err(format!(
+                        "node_role={} cannot use deployment_mode={deployment_mode}",
+                        self.as_str()
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for PeerNodeRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PeerNodeRole {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::parse_wire(raw)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PeerDiscoverySource {
     StaticBootstrap,
     Dht,
@@ -63,6 +216,8 @@ pub struct PeerRecord {
     pub world_id: String,
     pub network_id: String,
     pub node_role: String,
+    #[serde(default = "default_peer_deployment_mode")]
+    pub deployment_mode: PeerDeploymentMode,
     pub reachability_class: PeerReachabilityClass,
     #[serde(default)]
     pub direct_addrs: Vec<String>,
@@ -74,6 +229,37 @@ pub struct PeerRecord {
     pub discovery_sources: Vec<PeerDiscoverySource>,
     pub published_at_ms: i64,
     pub ttl_ms: i64,
+}
+
+fn default_peer_deployment_mode() -> PeerDeploymentMode {
+    PeerDeploymentMode::Private
+}
+
+impl PeerRecord {
+    pub fn parsed_node_role(&self) -> Result<PeerNodeRole, String> {
+        PeerNodeRole::parse_wire(self.node_role.as_str())
+    }
+
+    pub fn validate_policy(&self) -> Result<(), String> {
+        let node_role = self.parsed_node_role()?;
+        node_role.validate_deployment_mode(self.deployment_mode)?;
+        if matches!(
+            self.deployment_mode,
+            PeerDeploymentMode::Private
+                | PeerDeploymentMode::RelayOnly
+                | PeerDeploymentMode::ValidatorHidden
+        ) && !self.direct_addrs.is_empty()
+        {
+            return Err(format!(
+                "deployment_mode={} cannot advertise direct_addrs",
+                self.deployment_mode
+            ));
+        }
+        if matches!(node_role, PeerNodeRole::ValidatorCore) && !self.direct_addrs.is_empty() {
+            return Err("node_role=validator_core cannot advertise direct_addrs".to_string());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,7 +303,8 @@ pub trait DistributedDht<E> {
 #[cfg(test)]
 mod tests {
     use super::{
-        PeerDiscoverySource, PeerReachabilityClass, PeerRecord, ProviderRecord, SignedPeerRecord,
+        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
+        ProviderRecord, SignedPeerRecord,
     };
 
     #[test]
@@ -172,7 +359,8 @@ mod tests {
                 node_id: "node-a".to_string(),
                 world_id: "world-a".to_string(),
                 network_id: "network-a".to_string(),
-                node_role: "sequencer".to_string(),
+                node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::ValidatorHidden,
                 reachability_class: PeerReachabilityClass::Private,
                 direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
                 hole_punch_addrs: Vec::new(),
@@ -192,5 +380,46 @@ mod tests {
         let decoded: SignedPeerRecord =
             serde_json::from_str(encoded.as_str()).expect("deserialize");
         assert_eq!(decoded, record);
+    }
+
+    #[test]
+    fn peer_record_policy_accepts_legacy_role_labels() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
+            reachability_class: PeerReachabilityClass::Private,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert_eq!(record.parsed_node_role(), Ok(PeerNodeRole::FullStorage));
+        assert!(record.validate_policy().is_ok());
+    }
+
+    #[test]
+    fn peer_record_policy_rejects_public_validator_core_direct_surface() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Public,
+            reachability_class: PeerReachabilityClass::Public,
+            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert!(record.validate_policy().is_err());
     }
 }

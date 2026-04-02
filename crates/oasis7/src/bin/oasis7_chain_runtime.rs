@@ -16,11 +16,13 @@ use oasis7::runtime::{
 };
 use oasis7_node::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeFeedbackP2pConfig, NodePosConfig, NodeReplicationConfig,
+    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig, NodeReplicationConfig,
     NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, PosConsensusStatus,
     PosValidator,
 };
-use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass, PeerRecord};
+use oasis7_proto::distributed_dht::{
+    PeerDiscoverySource, PeerRecord,
+};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -257,6 +259,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     )
     .and_then(|cfg| cfg.with_tick_interval(Duration::from_millis(options.node_tick_ms)))
     .map_err(|err| format!("failed to build node config: {err:?}"))?;
+    config = config
+        .with_network_policy(build_node_network_policy(&options))
+        .map_err(|err| format!("failed to apply network policy: {err:?}"))?;
 
     let validators = if options.node_validators.is_empty() {
         config.pos_config.validators.clone()
@@ -964,13 +969,15 @@ fn build_default_replication_network_config(
 }
 
 fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
+    let network_policy = build_node_network_policy(options);
     PeerRecord {
         peer_id: String::new(),
         node_id: options.node_id.clone(),
         world_id: options.world_id.clone(),
         network_id: options.world_id.clone(),
-        node_role: options.node_role.as_str().to_string(),
-        reachability_class: PeerReachabilityClass::Private,
+        node_role: network_policy.node_role_claim.as_str().to_string(),
+        deployment_mode: network_policy.deployment_mode,
+        reachability_class: network_policy.advertised_reachability_class(),
         direct_addrs: Vec::new(),
         hole_punch_addrs: Vec::new(),
         relay_addrs: Vec::new(),
@@ -980,6 +987,13 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
         ],
         published_at_ms: 0,
         ttl_ms: 60 * 60 * 1000,
+    }
+}
+
+fn build_node_network_policy(options: &CliOptions) -> NodeNetworkPolicy {
+    NodeNetworkPolicy {
+        deployment_mode: options.p2p_deployment_mode,
+        node_role_claim: options.p2p_node_role,
     }
 }
 

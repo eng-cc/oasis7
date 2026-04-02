@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use oasis7::runtime::RewardAssetConfig;
 use oasis7_node::{NodeRole, PosValidator};
+use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::storage_profile::StorageProfile;
 
 use super::distfs_probe_runtime::{parse_distfs_probe_runtime_option, DistfsProbeRuntimeConfig};
@@ -32,6 +33,8 @@ pub(super) struct CliOptions {
     pub status_bind: String,
     pub storage_profile: StorageProfile,
     pub node_role: NodeRole,
+    pub p2p_deployment_mode: PeerDeploymentMode,
+    pub p2p_node_role: PeerNodeRole,
     pub node_tick_ms: u64,
     pub pos_slot_duration_ms: u64,
     pub pos_ticks_per_slot: u64,
@@ -55,6 +58,8 @@ pub(super) struct CliOptions {
     pub reward_runtime_auto_redeem: bool,
     pub reward_initial_reserve_power_units: i64,
     pub reward_distfs_probe_config: DistfsProbeRuntimeConfig,
+    pub p2p_deployment_mode_explicit: bool,
+    pub p2p_node_role_explicit: bool,
 }
 
 impl Default for CliOptions {
@@ -65,6 +70,8 @@ impl Default for CliOptions {
             status_bind: DEFAULT_STATUS_BIND.to_string(),
             storage_profile: StorageProfile::DevLocal,
             node_role: NodeRole::Sequencer,
+            p2p_deployment_mode: PeerDeploymentMode::Private,
+            p2p_node_role: PeerNodeRole::ValidatorCore,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
             pos_slot_duration_ms: DEFAULT_POS_SLOT_DURATION_MS,
             pos_ticks_per_slot: DEFAULT_POS_TICKS_PER_SLOT,
@@ -88,6 +95,8 @@ impl Default for CliOptions {
             reward_runtime_auto_redeem: false,
             reward_initial_reserve_power_units: DEFAULT_REWARD_RUNTIME_RESERVE_UNITS,
             reward_distfs_probe_config: DistfsProbeRuntimeConfig::default(),
+            p2p_deployment_mode_explicit: false,
+            p2p_node_role_explicit: false,
         }
     }
 }
@@ -112,6 +121,19 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.node_role = raw.parse::<NodeRole>().map_err(|_| {
                     "--node-role must be one of: sequencer, storage, observer".to_string()
                 })?;
+                if !options.p2p_node_role_explicit {
+                    options.p2p_node_role = default_p2p_node_role(options.node_role);
+                }
+            }
+            "--p2p-deployment-mode" => {
+                let raw = parse_required_value(&mut iter, "--p2p-deployment-mode")?;
+                options.p2p_deployment_mode = raw.parse::<PeerDeploymentMode>()?;
+                options.p2p_deployment_mode_explicit = true;
+            }
+            "--p2p-node-role" => {
+                let raw = parse_required_value(&mut iter, "--p2p-node-role")?;
+                options.p2p_node_role = raw.parse::<PeerNodeRole>()?;
+                options.p2p_node_role_explicit = true;
             }
             "--node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--node-tick-ms")?;
@@ -345,6 +367,8 @@ Options:\n\
   --storage-profile <name>          dev_local|release_default|soak_forensics (default: dev_local)\n\
   --status-bind <host:port>         status HTTP bind (default: {DEFAULT_STATUS_BIND})\n\
   --node-role <role>                sequencer|storage|observer (default: sequencer)\n\
+  --p2p-deployment-mode <mode>      public|hybrid|private|relay_only|validator_hidden (default: private)\n\
+  --p2p-node-role <role>            validator_core|sentry|relay|full_storage|observer_light\n\
   --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
   --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {DEFAULT_POS_SLOT_DURATION_MS})\n\
   --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {DEFAULT_POS_TICKS_PER_SLOT})\n\
@@ -380,4 +404,12 @@ Options:\n\
   -h, --help                        show help",
         RewardAssetConfig::default().points_per_credit
     );
+}
+
+fn default_p2p_node_role(node_role: NodeRole) -> PeerNodeRole {
+    match node_role {
+        NodeRole::Sequencer => PeerNodeRole::ValidatorCore,
+        NodeRole::Storage => PeerNodeRole::FullStorage,
+        NodeRole::Observer => PeerNodeRole::ObserverLight,
+    }
 }

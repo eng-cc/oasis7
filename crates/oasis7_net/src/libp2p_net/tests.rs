@@ -8,6 +8,7 @@ use super::transport_paths::{
 };
 use super::utils::push_bounded_vec;
 use super::*;
+use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 
 #[test]
 fn libp2p_network_generates_peer_id() {
@@ -119,9 +120,10 @@ fn sign_and_verify_peer_record_round_trip() {
         node_id: "node-a".to_string(),
         world_id: "world-a".to_string(),
         network_id: "network-a".to_string(),
-        node_role: "sequencer".to_string(),
+        node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+        deployment_mode: PeerDeploymentMode::ValidatorHidden,
         reachability_class: crate::dht::PeerReachabilityClass::Private,
-        direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
+        direct_addrs: Vec::new(),
         hole_punch_addrs: Vec::new(),
         relay_addrs: Vec::new(),
         discovery_sources: vec![
@@ -157,7 +159,8 @@ fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: Vec::new(),
             hole_punch_addrs: Vec::new(),
@@ -185,7 +188,8 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
             hole_punch_addrs: Vec::new(),
@@ -266,7 +270,8 @@ fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec![
                 "/ip4/127.0.0.1/tcp/4102".to_string(),
@@ -309,7 +314,8 @@ fn preferred_transport_path_skips_direct_and_falls_back_to_hole_punch_before_rel
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec![
                 "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
@@ -343,7 +349,8 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: vec![
                 "/ip4/127.0.0.1/udp/4103/quic-v1".to_string(),
@@ -413,7 +420,8 @@ fn active_transport_path_from_endpoint_keeps_hole_punch_kind_when_known() {
             node_id: "node-a".to_string(),
             world_id: "world-a".to_string(),
             network_id: "network-a".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
             reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
             direct_addrs: Vec::new(),
             hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],

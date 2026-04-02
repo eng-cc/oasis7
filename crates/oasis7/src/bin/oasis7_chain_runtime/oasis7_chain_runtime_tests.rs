@@ -7,8 +7,10 @@ use super::{
 };
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
-use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
-use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass};
+use oasis7_node::{NodeConfig, NodeConsensusSnapshot, NodeNetworkPolicy, NodeRole, NodeSnapshot};
+use oasis7_proto::distributed_dht::{
+    PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
+};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -82,6 +84,8 @@ fn parse_options_reads_custom_values() {
     assert_eq!(options.storage_profile, StorageProfile::SoakForensics);
     assert_eq!(options.status_bind, "127.0.0.1:6221");
     assert_eq!(options.node_role.as_str(), "storage");
+    assert_eq!(options.p2p_deployment_mode, PeerDeploymentMode::Private);
+    assert_eq!(options.p2p_node_role, PeerNodeRole::FullStorage);
     assert_eq!(options.node_tick_ms, 350);
     assert_eq!(options.pos_slot_duration_ms, 12_000);
     assert_eq!(options.pos_ticks_per_slot, 10);
@@ -204,7 +208,8 @@ fn default_replication_network_config_uses_loopback_ephemeral_listen() {
     assert!(config.keypair.is_some());
     let peer_record = config.peer_record.expect("peer record");
     assert_eq!(peer_record.node_id, DEFAULT_NODE_ID);
-    assert_eq!(peer_record.node_role, "sequencer");
+    assert_eq!(peer_record.node_role, "validator_core");
+    assert_eq!(peer_record.deployment_mode, PeerDeploymentMode::Private);
     assert_eq!(
         peer_record.reachability_class,
         PeerReachabilityClass::Private
@@ -224,6 +229,7 @@ fn build_default_peer_record_tracks_runtime_identity_boundary() {
         node_id: "node-p2p".to_string(),
         world_id: "world-p2p".to_string(),
         node_role: NodeRole::Storage,
+        p2p_node_role: PeerNodeRole::FullStorage,
         ..CliOptions::default()
     };
     let record = build_default_peer_record(&options);
@@ -231,8 +237,40 @@ fn build_default_peer_record_tracks_runtime_identity_boundary() {
     assert_eq!(record.node_id, "node-p2p");
     assert_eq!(record.world_id, "world-p2p");
     assert_eq!(record.network_id, "world-p2p");
-    assert_eq!(record.node_role, "storage");
+    assert_eq!(record.node_role, "full_storage");
+    assert_eq!(record.deployment_mode, PeerDeploymentMode::Private);
     assert_eq!(record.reachability_class, PeerReachabilityClass::Private);
+}
+
+#[test]
+fn parse_options_reads_explicit_p2p_policy_overrides() {
+    let options = parse_options(
+        [
+            "--node-role",
+            "observer",
+            "--p2p-deployment-mode",
+            "public",
+            "--p2p-node-role",
+            "relay",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+    assert_eq!(options.node_role, NodeRole::Observer);
+    assert_eq!(options.p2p_deployment_mode, PeerDeploymentMode::Public);
+    assert_eq!(options.p2p_node_role, PeerNodeRole::Relay);
+}
+
+#[test]
+fn node_network_policy_rejects_incompatible_runtime_role_combo() {
+    let err = NodeConfig::new("node-a", "world-a", NodeRole::Observer)
+        .expect("config")
+        .with_network_policy(NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::ValidatorHidden,
+            node_role_claim: PeerNodeRole::ValidatorCore,
+        })
+        .expect_err("observer cannot claim validator_core");
+    assert!(matches!(err, oasis7_node::NodeError::InvalidConfig { reason } if reason.contains("cannot use network node_role_claim")));
 }
 
 #[test]

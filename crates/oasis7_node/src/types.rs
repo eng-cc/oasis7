@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use oasis7_distfs::FeedbackStoreConfig;
+use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 
 use crate::pos_validation::validate_pos_config;
 use crate::{NodeConsensusAction, NodeError, NodeReplicationConfig};
@@ -36,6 +37,92 @@ pub enum NodeRole {
     Sequencer,
     Storage,
     Observer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeNetworkPolicy {
+    pub deployment_mode: PeerDeploymentMode,
+    pub node_role_claim: PeerNodeRole,
+}
+
+impl NodeNetworkPolicy {
+    pub fn for_runtime_role(role: NodeRole) -> Self {
+        let node_role_claim = match role {
+            NodeRole::Sequencer => PeerNodeRole::ValidatorCore,
+            NodeRole::Storage => PeerNodeRole::FullStorage,
+            NodeRole::Observer => PeerNodeRole::ObserverLight,
+        };
+        Self {
+            deployment_mode: PeerDeploymentMode::Private,
+            node_role_claim,
+        }
+    }
+
+    pub fn validate_for_runtime_role(&self, runtime_role: NodeRole) -> Result<(), NodeError> {
+        self.node_role_claim
+            .validate_deployment_mode(self.deployment_mode)
+            .map_err(|reason| NodeError::InvalidConfig { reason })?;
+        match runtime_role {
+            NodeRole::Sequencer => {
+                if self.node_role_claim != PeerNodeRole::ValidatorCore {
+                    return Err(NodeError::InvalidConfig {
+                        reason: format!(
+                            "node role {} requires network node_role_claim=validator_core, got {}",
+                            runtime_role,
+                            self.node_role_claim
+                        ),
+                    });
+                }
+            }
+            NodeRole::Storage => {
+                if self.node_role_claim != PeerNodeRole::FullStorage {
+                    return Err(NodeError::InvalidConfig {
+                        reason: format!(
+                            "node role {} requires network node_role_claim=full_storage, got {}",
+                            runtime_role,
+                            self.node_role_claim
+                        ),
+                    });
+                }
+            }
+            NodeRole::Observer => {
+                if matches!(
+                    self.node_role_claim,
+                    PeerNodeRole::ValidatorCore | PeerNodeRole::FullStorage
+                ) {
+                    return Err(NodeError::InvalidConfig {
+                        reason: format!(
+                            "node role {} cannot use network node_role_claim={}",
+                            runtime_role,
+                            self.node_role_claim
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn advertised_reachability_class(&self) -> PeerReachabilityClass {
+        self.deployment_mode.initial_reachability_class()
+    }
+
+    pub fn minimum_independent_ingress_paths(&self) -> usize {
+        if matches!(self.deployment_mode, PeerDeploymentMode::ValidatorHidden) {
+            2
+        } else {
+            0
+        }
+    }
+
+    pub fn public_direct_surface_allowed(&self) -> bool {
+        !matches!(
+            self.deployment_mode,
+            PeerDeploymentMode::Private
+                | PeerDeploymentMode::RelayOnly
+                | PeerDeploymentMode::ValidatorHidden
+        ) && !matches!(self.node_role_claim, PeerNodeRole::ValidatorCore)
+    }
 }
 
 impl NodeRole {
@@ -181,6 +268,7 @@ pub struct NodeConfig {
     pub world_id: String,
     pub tick_interval: Duration,
     pub role: NodeRole,
+    pub network_policy: NodeNetworkPolicy,
     pub pos_config: NodePosConfig,
     pub auto_attest_all_validators: bool,
     pub require_execution_on_commit: bool,
@@ -472,6 +560,7 @@ impl NodeConfig {
             world_id,
             tick_interval: Duration::from_millis(200),
             role,
+            network_policy: NodeNetworkPolicy::for_runtime_role(role),
             pos_config,
             auto_attest_all_validators: false,
             require_execution_on_commit: matches!(role, NodeRole::Sequencer),
@@ -519,6 +608,15 @@ impl NodeConfig {
 
     pub fn with_pos_validators(self, validators: Vec<PosValidator>) -> Result<Self, NodeError> {
         self.with_pos_config(NodePosConfig::ethereum_like(validators))
+    }
+
+    pub fn with_network_policy(
+        mut self,
+        network_policy: NodeNetworkPolicy,
+    ) -> Result<Self, NodeError> {
+        network_policy.validate_for_runtime_role(self.role)?;
+        self.network_policy = network_policy;
+        Ok(self)
     }
 
     pub fn with_auto_attest_all_validators(mut self, enabled: bool) -> Self {

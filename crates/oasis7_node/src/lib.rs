@@ -79,7 +79,7 @@ pub use replication::NodeReplicationConfig;
 pub use types::{
     NodeCommittedActionBatch, NodeConfig, NodeConsensusMode, NodeConsensusSnapshot,
     NodeFeedbackP2pConfig, NodeGossipConfig, NodeMainTokenControllerBindingConfig,
-    NodeMainTokenControllerSignerPolicy, NodePeerCommittedHead, NodePosConfig,
+    NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy, NodePeerCommittedHead, NodePosConfig,
     NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, PosConsensusStatus, PosValidator,
 };
 

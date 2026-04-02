@@ -212,7 +212,9 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
     use std::time::{Duration, Instant};
 
     use libp2p::Multiaddr;
-    use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass, PeerRecord};
+    use oasis7_proto::distributed_dht::{
+        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
+    };
 
     fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
         while Instant::now() < deadline {
@@ -230,7 +232,8 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
             node_id: node_id.to_string(),
             world_id: "world-discovery".to_string(),
             network_id: "world-discovery".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
             reachability_class: PeerReachabilityClass::Private,
             direct_addrs: Vec::new(),
             hole_punch_addrs: Vec::new(),
@@ -305,7 +308,9 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
     use std::time::{Duration, Instant};
 
     use libp2p::Multiaddr;
-    use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass, PeerRecord};
+    use oasis7_proto::distributed_dht::{
+        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
+    };
 
     fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
         while Instant::now() < deadline {
@@ -323,7 +328,8 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
             node_id: node_id.to_string(),
             world_id: "world-rendezvous".to_string(),
             network_id: "world-rendezvous".to_string(),
-            node_role: "storage".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
             reachability_class: PeerReachabilityClass::Private,
             direct_addrs: Vec::new(),
             hole_punch_addrs: Vec::new(),
