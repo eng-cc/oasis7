@@ -25,6 +25,7 @@ pub const RR_GET_MODULE_ARTIFACT: &str = "/aw/rr/1.0.0/get_module_artifact";
 
 pub const DHT_WORLD_PREFIX: &str = "/aw/world";
 pub const DHT_MEMBERSHIP_SUFFIX: &str = "membership";
+pub const DHT_PEER_RECORDS_SUFFIX: &str = "peer-records";
 
 pub fn gossipsub_topic(world_id: &str, suffix: &str) -> String {
     format!("{GOSSIPSUB_PREFIX}.{world_id}.{suffix}")
@@ -68,6 +69,10 @@ pub fn dht_provider_key(world_id: &str, content_hash: &str) -> String {
 
 pub fn dht_membership_key(world_id: &str) -> String {
     format!("{DHT_WORLD_PREFIX}/{world_id}/{DHT_MEMBERSHIP_SUFFIX}")
+}
+
+pub fn dht_peer_record_key(world_id: &str, peer_id: &str) -> String {
+    format!("{DHT_WORLD_PREFIX}/{world_id}/{DHT_PEER_RECORDS_SUFFIX}/{peer_id}")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

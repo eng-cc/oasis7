@@ -29,3 +29,18 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/TASK-PM-0013.yaml
+  - task_id: TASK-PM-0020
+    title: "Implement P2PARCH-1 identity and discovery substrate"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-1 lands a node identity and signed peer record substrate with discovery sources separated from static UDP peer truth."
+      - "Business-layer networking no longer depends on static peer addresses as the only discovery source for the implemented path."
+      - "Implementation, tests, project docs and execution log are all traceable to PRD-P2P-024 / P2PARCH-1."
+    handoff_to:
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0020.yaml

@@ -1,5 +1,5 @@
 use super::{
-    build_chain_balances_payload_from_world, build_chain_status_payload,
+    build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_node_replication_config,
     derive_node_consensus_signer_keypair, node_keypair_config, parse_options, parse_validator_spec,
     release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
@@ -8,6 +8,7 @@ use super::{
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
+use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -186,7 +187,12 @@ fn default_runtime_paths_depend_on_node_id() {
 
 #[test]
 fn default_replication_network_config_uses_loopback_ephemeral_listen() {
-    let config = build_default_replication_network_config()
+    let signing_key = SigningKey::from_bytes(&[9_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+    let config = build_default_replication_network_config(&CliOptions::default(), &keypair)
         .expect("default replication network config should build");
     assert_eq!(config.listen_addrs.len(), 1);
     assert_eq!(
@@ -195,6 +201,35 @@ fn default_replication_network_config_uses_loopback_ephemeral_listen() {
     );
     assert!(config.bootstrap_peers.is_empty());
     assert!(!config.allow_local_handler_fallback_when_no_peers);
+    assert!(config.keypair.is_some());
+    let peer_record = config.peer_record.expect("peer record");
+    assert_eq!(peer_record.node_id, DEFAULT_NODE_ID);
+    assert_eq!(peer_record.node_role, "sequencer");
+    assert_eq!(peer_record.reachability_class, PeerReachabilityClass::Private);
+    assert_eq!(
+        peer_record.discovery_sources,
+        vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht
+        ]
+    );
+}
+
+#[test]
+fn build_default_peer_record_tracks_runtime_identity_boundary() {
+    let options = CliOptions {
+        node_id: "node-p2p".to_string(),
+        world_id: "world-p2p".to_string(),
+        node_role: NodeRole::Storage,
+        ..CliOptions::default()
+    };
+    let record = build_default_peer_record(&options);
+    assert!(record.peer_id.is_empty());
+    assert_eq!(record.node_id, "node-p2p");
+    assert_eq!(record.world_id, "world-p2p");
+    assert_eq!(record.network_id, "world-p2p");
+    assert_eq!(record.node_role, "storage");
+    assert_eq!(record.reachability_class, PeerReachabilityClass::Private);
 }
 
 #[test]

@@ -17,10 +17,12 @@ use oasis7_proto::distributed_net::DistributedNetwork as ProtoDistributedNetwork
 
 use crate::error::WorldError;
 use oasis7_proto::distributed::{
-    dht_membership_key, dht_provider_key, dht_world_head_key, DistributedErrorCode, ErrorResponse,
-    WorldHeadAnnounce, RR_PROTOCOL_PREFIX,
+    dht_membership_key, dht_peer_record_key, dht_provider_key, dht_world_head_key,
+    DistributedErrorCode, ErrorResponse, WorldHeadAnnounce, RR_PROTOCOL_PREFIX,
 };
-use oasis7_proto::distributed_dht::{MembershipDirectorySnapshot, ProviderRecord};
+use oasis7_proto::distributed_dht::{
+    MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
+};
 use oasis7_proto::distributed_net::{
     push_bounded_inbox_message, NetworkMessage, NetworkRequest, NetworkResponse,
     NetworkSubscription, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
@@ -36,6 +38,7 @@ const DEFAULT_MAX_LISTENING_ADDRS: usize = 128;
 #[derive(Debug, Clone)]
 pub struct Libp2pNetworkConfig {
     pub keypair: Option<Keypair>,
+    pub peer_record: Option<PeerRecord>,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub republish_interval_ms: i64,
@@ -49,6 +52,7 @@ impl Default for Libp2pNetworkConfig {
     fn default() -> Self {
         Self {
             keypair: None,
+            peer_record: None,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
             republish_interval_ms: 5 * 60 * 1000,
@@ -121,6 +125,15 @@ enum Command {
         key: String,
         response: oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>,
     },
+    PutPeerRecord {
+        key: String,
+        payload: Vec<u8>,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
+    GetPeerRecord {
+        key: String,
+        response: oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>,
+    },
     RepublishProviders,
     Shutdown,
 }
@@ -148,6 +161,14 @@ enum PendingDhtQuery {
     GetMembershipDirectory {
         response: Option<oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>>,
         snapshot: Option<MembershipDirectorySnapshot>,
+        error: Option<WorldError>,
+    },
+    PutPeerRecord {
+        response: Option<oneshot::Sender<Result<(), WorldError>>>,
+    },
+    GetPeerRecord {
+        response: Option<oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>>,
+        record: Option<SignedPeerRecord>,
         error: Option<WorldError>,
     },
 }
@@ -179,6 +200,7 @@ impl Libp2pNetwork {
         let keypair_clone = keypair.clone();
         let republish_tx = command_tx.clone();
         let bootstrap_peers = config.bootstrap_peers.clone();
+        let peer_record_template = config.peer_record.clone();
 
         std::thread::spawn(move || {
             let mut swarm = build_swarm(&keypair_clone);
@@ -192,6 +214,7 @@ impl Libp2pNetwork {
             let mut pending_dht: HashMap<kad::QueryId, PendingDhtQuery> = HashMap::new();
             let mut peers: Vec<PeerId> = Vec::new();
             let mut provider_keys: HashMap<String, i64> = HashMap::new();
+            let mut peer_record_last_published_at_ms = None;
             let republish_interval_ms = config_clone.republish_interval_ms;
 
             for addr in config_clone.listen_addrs {
@@ -386,6 +409,33 @@ impl Libp2pNetwork {
                                         },
                                     );
                                 }
+                                Some(Command::PutPeerRecord { key, payload, response }) => {
+                                    match put_record_query(&mut swarm, key, payload) {
+                                        Ok(query_id) => {
+                                            pending_dht.insert(
+                                                query_id,
+                                                PendingDhtQuery::PutPeerRecord {
+                                                    response: Some(response),
+                                                },
+                                            );
+                                        }
+                                        Err(err) => {
+                                            let _ = response.send(Err(err));
+                                        }
+                                    }
+                                }
+                                Some(Command::GetPeerRecord { key, response }) => {
+                                    let dht_key = RecordKey::new(&key);
+                                    let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
+                                    pending_dht.insert(
+                                        query_id,
+                                        PendingDhtQuery::GetPeerRecord {
+                                            response: Some(response),
+                                            record: None,
+                                            error: None,
+                                        },
+                                    );
+                                }
                                 Some(Command::RepublishProviders) => {
                                     if republish_interval_ms > 0 {
                                         let now = now_ms();
@@ -403,6 +453,25 @@ impl Libp2pNetwork {
                                             let dht_key = RecordKey::new(&key);
                                             if swarm.behaviour_mut().kademlia.start_providing(dht_key).is_ok() {
                                                 provider_keys.insert(key, now);
+                                            }
+                                        }
+                                        if let Some(template) = peer_record_template.as_ref() {
+                                            if peer_record_last_published_at_ms
+                                                .map(|last_ms| should_republish(last_ms, now, republish_interval_ms))
+                                                .unwrap_or(true)
+                                            {
+                                                if publish_configured_peer_record(
+                                                    &mut swarm,
+                                                    &mut pending_dht,
+                                                    &keypair_clone,
+                                                    template,
+                                                    &event_listening_addrs,
+                                                    None,
+                                                )
+                                                .is_ok()
+                                                {
+                                                    peer_record_last_published_at_ms = Some(now);
+                                                }
                                             }
                                         }
                                     }
@@ -480,10 +549,21 @@ impl Libp2pNetwork {
                                 SwarmEvent::NewListenAddr { address, .. } => {
                                     push_bounded_clone(
                                         &event_listening_addrs,
-                                        address,
+                                        address.clone(),
                                         max_listening_addrs,
                                         "lock listening addrs",
                                     );
+                                    if let Some(template) = peer_record_template.as_ref() {
+                                        let _ = publish_configured_peer_record(
+                                            &mut swarm,
+                                            &mut pending_dht,
+                                            &keypair_clone,
+                                            template,
+                                            &event_listening_addrs,
+                                            None,
+                                        );
+                                        peer_record_last_published_at_ms = Some(now_ms());
+                                    }
                                 }
                                 SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
                                     if !peers.contains(&peer_id) {
@@ -778,6 +858,40 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
             }
         })?
     }
+
+    fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
+        let key = dht_peer_record_key(world_id, record.record.peer_id.as_str());
+        let payload = to_canonical_cbor(record)?;
+        let (sender, receiver) = oneshot::channel();
+        self.enqueue_command(Command::PutPeerRecord {
+            key,
+            payload,
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })?
+    }
+
+    fn get_peer_record(
+        &self,
+        world_id: &str,
+        peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        let key = dht_peer_record_key(world_id, peer_id);
+        let (sender, receiver) = oneshot::channel();
+        self.enqueue_command(Command::GetPeerRecord {
+            key,
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })?
+    }
 }
 
 #[derive(NetworkBehaviour)]
@@ -883,6 +997,114 @@ fn split_peer_id(mut addr: Multiaddr) -> (Option<PeerId>, Multiaddr) {
     (peer_id, addr)
 }
 
+fn publish_configured_peer_record(
+    swarm: &mut Swarm<Behaviour>,
+    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
+    keypair: &Keypair,
+    template: &PeerRecord,
+    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    response: Option<oneshot::Sender<Result<(), WorldError>>>,
+) -> Result<(), WorldError> {
+    let materialized = materialize_peer_record(template, listening_addrs);
+    let signed = sign_peer_record(&materialized, keypair)?;
+    let key = dht_peer_record_key(materialized.world_id.as_str(), materialized.peer_id.as_str());
+    let payload = to_canonical_cbor(&signed)?;
+    let query_id = put_record_query(swarm, key, payload)?;
+    pending_dht.insert(query_id, PendingDhtQuery::PutPeerRecord { response });
+    Ok(())
+}
+
+fn materialize_peer_record(
+    template: &PeerRecord,
+    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+) -> PeerRecord {
+    let mut record = template.clone();
+    if record.direct_addrs.is_empty() {
+        record.direct_addrs = listening_addrs
+            .lock()
+            .expect("lock listening addrs")
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+    }
+    record.published_at_ms = now_ms();
+    record
+}
+
+fn put_record_query(
+    swarm: &mut Swarm<Behaviour>,
+    key: String,
+    payload: Vec<u8>,
+) -> Result<kad::QueryId, WorldError> {
+    let dht_key = RecordKey::new(&key);
+    let record = kad::Record {
+        key: dht_key,
+        value: payload,
+        publisher: None,
+        expires: None,
+    };
+    swarm
+        .behaviour_mut()
+        .kademlia
+        .put_record(record, Quorum::One)
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("kad put_record failed: {err}"),
+        })
+}
+
+fn sign_peer_record(record: &PeerRecord, keypair: &Keypair) -> Result<SignedPeerRecord, WorldError> {
+    let mut record = record.clone();
+    if record.peer_id.trim().is_empty() {
+        record.peer_id = PeerId::from(keypair.public()).to_string();
+    }
+    let payload = encode_peer_record_signing_payload(&record)?;
+    let signature = keypair
+        .sign(payload.as_slice())
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("peer record sign failed: {err}"),
+        })?;
+    Ok(SignedPeerRecord {
+        record,
+        identity_public_key_protobuf_hex: hex::encode(keypair.public().encode_protobuf()),
+        signature_hex: hex::encode(signature),
+    })
+}
+
+fn verify_signed_peer_record(record: &SignedPeerRecord) -> Result<(), WorldError> {
+    let public_key_bytes = hex::decode(record.identity_public_key_protobuf_hex.as_str()).map_err(|_| {
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record public key must be valid hex".to_string(),
+        }
+    })?;
+    let public_key = libp2p::identity::PublicKey::try_decode_protobuf(public_key_bytes.as_slice())
+        .map_err(|err| WorldError::NetworkProtocolUnavailable {
+            protocol: format!("peer record public key decode failed: {err}"),
+        })?;
+    if public_key.to_peer_id().to_string() != record.record.peer_id {
+        return Err(WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record peer_id does not match identity public key".to_string(),
+        });
+    }
+    let signature = hex::decode(record.signature_hex.as_str()).map_err(|_| {
+        WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record signature must be valid hex".to_string(),
+        }
+    })?;
+    let payload = encode_peer_record_signing_payload(&record.record)?;
+    if !public_key.verify(payload.as_slice(), signature.as_slice()) {
+        return Err(WorldError::NetworkProtocolUnavailable {
+            protocol: "peer record signature verification failed".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn encode_peer_record_signing_payload(record: &PeerRecord) -> Result<Vec<u8>, WorldError> {
+    let mut payload = b"oasis7-peer-record-v1|".to_vec();
+    payload.extend_from_slice(&to_canonical_cbor(record)?);
+    Ok(payload)
+}
+
 fn handle_dht_progress(pending: &mut PendingDhtQuery, result: kad::QueryResult, is_last: bool) {
     match pending {
         PendingDhtQuery::PublishProvider { response } => {
@@ -922,6 +1144,24 @@ fn handle_dht_progress(pending: &mut PendingDhtQuery, result: kad::QueryResult, 
             }
         }
         PendingDhtQuery::PutMembershipDirectory { response } => {
+            if is_last {
+                let outcome = match result {
+                    kad::QueryResult::PutRecord(Ok(_))
+                    | kad::QueryResult::RepublishRecord(Ok(_)) => Ok(()),
+                    kad::QueryResult::PutRecord(Err(err))
+                    | kad::QueryResult::RepublishRecord(Err(err)) => {
+                        Err(WorldError::NetworkProtocolUnavailable {
+                            protocol: format!("kad put_record failed: {err}"),
+                        })
+                    }
+                    _ => Ok(()),
+                };
+                if let Some(response) = response.take() {
+                    let _ = response.send(outcome);
+                }
+            }
+        }
+        PendingDhtQuery::PutPeerRecord { response } => {
             if is_last {
                 let outcome = match result {
                     kad::QueryResult::PutRecord(Ok(_))
@@ -1088,6 +1328,59 @@ fn handle_dht_progress(pending: &mut PendingDhtQuery, result: kad::QueryResult, 
                 }
             }
         }
+        PendingDhtQuery::GetPeerRecord {
+            response,
+            record,
+            error,
+        } => {
+            match result {
+                kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(found))) => {
+                    match decode_peer_record(&found.record.value) {
+                        Ok(decoded) => *record = Some(decoded),
+                        Err(err) => *error = Some(err),
+                    }
+                }
+                kad::QueryResult::GetRecord(Ok(
+                    kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. },
+                )) => {}
+                kad::QueryResult::GetRecord(Err(kad::GetRecordError::NotFound { .. })) => {
+                    *error = None;
+                }
+                kad::QueryResult::GetRecord(Err(kad::GetRecordError::QuorumFailed {
+                    records,
+                    ..
+                })) => {
+                    if let Some(found) = records.first() {
+                        match decode_peer_record(&found.record.value) {
+                            Ok(decoded) => *record = Some(decoded),
+                            Err(err) => *error = Some(err),
+                        }
+                    } else {
+                        *error = Some(WorldError::NetworkProtocolUnavailable {
+                            protocol: "kad get_record quorum failed".to_string(),
+                        });
+                    }
+                }
+                kad::QueryResult::GetRecord(Err(err)) => {
+                    *error = Some(WorldError::NetworkProtocolUnavailable {
+                        protocol: format!("kad get_record failed: {err}"),
+                    });
+                }
+                _ => {}
+            }
+            if is_last {
+                let outcome = if record.is_some() {
+                    Ok(record.clone())
+                } else if let Some(err) = error.take() {
+                    Err(err)
+                } else {
+                    Ok(None)
+                };
+                if let Some(response) = response.take() {
+                    let _ = response.send(outcome);
+                }
+            }
+        }
     }
 }
 
@@ -1097,6 +1390,12 @@ fn decode_world_head(bytes: &[u8]) -> Result<WorldHeadAnnounce, WorldError> {
 
 fn decode_membership_directory(bytes: &[u8]) -> Result<MembershipDirectorySnapshot, WorldError> {
     Ok(serde_cbor::from_slice(bytes)?)
+}
+
+fn decode_peer_record(bytes: &[u8]) -> Result<SignedPeerRecord, WorldError> {
+    let record: SignedPeerRecord = serde_cbor::from_slice(bytes)?;
+    verify_signed_peer_record(&record)?;
+    Ok(record)
 }
 
 fn now_ms() -> i64 {

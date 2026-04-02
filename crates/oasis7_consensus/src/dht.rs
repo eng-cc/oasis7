@@ -7,7 +7,7 @@ use oasis7_proto::distributed_dht as proto_dht;
 
 use crate::error::WorldError;
 
-pub use proto_dht::{MembershipDirectorySnapshot, ProviderRecord};
+pub use proto_dht::{MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord};
 
 pub trait DistributedDht: proto_dht::DistributedDht<WorldError> {}
 
@@ -18,6 +18,7 @@ pub struct InMemoryDht {
     providers: Arc<Mutex<BTreeMap<(String, String), BTreeMap<String, ProviderRecord>>>>,
     heads: Arc<Mutex<BTreeMap<String, WorldHeadAnnounce>>>,
     memberships: Arc<Mutex<BTreeMap<String, MembershipDirectorySnapshot>>>,
+    peer_records: Arc<Mutex<BTreeMap<(String, String), SignedPeerRecord>>>,
 }
 
 impl InMemoryDht {
@@ -92,6 +93,26 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
     ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
         let memberships = self.memberships.lock().expect("lock memberships");
         Ok(memberships.get(world_id).cloned())
+    }
+
+    fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
+        let mut peer_records = self.peer_records.lock().expect("lock peer records");
+        peer_records.insert(
+            (world_id.to_string(), record.record.peer_id.clone()),
+            record.clone(),
+        );
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        world_id: &str,
+        peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        let peer_records = self.peer_records.lock().expect("lock peer records");
+        Ok(peer_records
+            .get(&(world_id.to_string(), peer_id.to_string()))
+            .cloned())
     }
 }
 

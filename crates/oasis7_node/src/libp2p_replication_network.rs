@@ -5,17 +5,21 @@ use std::sync::{Arc, Mutex};
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{Libp2pNetwork, Libp2pNetworkConfig};
+use oasis7_proto::distributed_dht::PeerRecord;
 use oasis7_proto::distributed::ErrorResponse;
 use oasis7_proto::distributed_net::{
     DistributedNetwork as ProtoDistributedNetwork, NetworkSubscription,
 };
 use oasis7_proto::world_error::WorldError;
 
+use crate::NodeError;
+
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub struct Libp2pReplicationNetworkConfig {
     pub keypair: Option<Keypair>,
+    pub peer_record: Option<PeerRecord>,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub allow_local_handler_fallback_when_no_peers: bool,
@@ -25,6 +29,7 @@ impl Default for Libp2pReplicationNetworkConfig {
     fn default() -> Self {
         Self {
             keypair: None,
+            peer_record: None,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
             allow_local_handler_fallback_when_no_peers: false,
@@ -44,6 +49,7 @@ impl Libp2pReplicationNetwork {
     pub fn new(config: Libp2pReplicationNetworkConfig) -> Self {
         let inner = Libp2pNetwork::new(Libp2pNetworkConfig {
             keypair: config.keypair,
+            peer_record: config.peer_record,
             listen_addrs: config.listen_addrs,
             bootstrap_peers: config.bootstrap_peers,
             ..Libp2pNetworkConfig::default()
@@ -121,6 +127,15 @@ impl Libp2pReplicationNetwork {
 
         Ok(response)
     }
+}
+
+pub fn derive_libp2p_identity_keypair(private_key_hex: &str) -> Result<Keypair, NodeError> {
+    let private_key_bytes = hex::decode(private_key_hex).map_err(|_| NodeError::InvalidConfig {
+        reason: "node.private_key must be valid hex for libp2p identity derivation".to_string(),
+    })?;
+    Keypair::ed25519_from_bytes(private_key_bytes).map_err(|err| NodeError::InvalidConfig {
+        reason: format!("failed to derive libp2p identity keypair: {err}"),
+    })
 }
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {

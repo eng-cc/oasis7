@@ -5735,6 +5735,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "futures",
+ "hex",
  "libp2p",
  "oasis7_distfs",
  "oasis7_proto",

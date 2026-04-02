@@ -20,6 +20,7 @@ oasis7_proto = { path = "../oasis7_proto" }
 oasis7_wasm_abi = { path = "../oasis7_wasm_abi" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
+hex = "0.4"
 futures = { version = "0.3", optional = true }
 async-std = { version = "1", optional = true }
 libp2p = { version = "0.53", optional = true, default-features = false, features = ["async-std", "cbor", "dns", "gossipsub", "kad", "macros", "noise", "request-response", "tcp", "yamux"] }

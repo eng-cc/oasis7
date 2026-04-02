@@ -103,6 +103,74 @@ fn dht_get_membership_directory_decodes_record() {
 }
 
 #[test]
+fn sign_and_verify_peer_record_round_trip() {
+    let keypair = Keypair::generate_ed25519();
+    let record = PeerRecord {
+        peer_id: PeerId::from(keypair.public()).to_string(),
+        node_id: "node-a".to_string(),
+        world_id: "world-a".to_string(),
+        network_id: "network-a".to_string(),
+        node_role: "sequencer".to_string(),
+        reachability_class: crate::dht::PeerReachabilityClass::Private,
+        direct_addrs: vec!["/ip4/127.0.0.1/tcp/4101".to_string()],
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::StaticBootstrap,
+            crate::dht::PeerDiscoverySource::Dht,
+        ],
+        published_at_ms: 42,
+        ttl_ms: 60_000,
+    };
+
+    let signed = sign_peer_record(&record, &keypair).expect("sign peer record");
+    verify_signed_peer_record(&signed).expect("verify peer record");
+}
+
+#[test]
+fn dht_get_peer_record_decodes_and_verifies_record() {
+    let keypair = Keypair::generate_ed25519();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: PeerId::from(keypair.public()).to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: "storage".to_string(),
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/127.0.0.1/tcp/4102".to_string()],
+            relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &keypair,
+    )
+    .expect("sign peer record");
+    let payload = to_canonical_cbor(&signed).expect("encode peer record");
+    let key_label = "peer-record".to_string();
+    let record = kad::Record {
+        key: RecordKey::new(&key_label),
+        value: payload,
+        publisher: None,
+        expires: None,
+    };
+    let peer_record = kad::PeerRecord { peer: None, record };
+    let (sender, receiver) = oneshot::channel();
+    let mut pending = PendingDhtQuery::GetPeerRecord {
+        response: Some(sender),
+        record: None,
+        error: None,
+    };
+    let result = kad::QueryResult::GetRecord(Ok(kad::GetRecordOk::FoundRecord(peer_record)));
+    handle_dht_progress(&mut pending, result, true);
+
+    let loaded = futures::executor::block_on(receiver)
+        .expect("oneshot")
+        .expect("get peer record");
+    assert_eq!(loaded, Some(signed));
+}
+
+#[test]
 fn republish_interval_gate() {
     assert!(!should_republish(100, 150, 100));
     assert!(should_republish(100, 200, 100));

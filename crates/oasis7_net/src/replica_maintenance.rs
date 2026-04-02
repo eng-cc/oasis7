@@ -514,6 +514,22 @@ mod tests {
         {
             Ok(None)
         }
+
+        fn put_peer_record(
+            &self,
+            _world_id: &str,
+            _record: &super::super::distributed_dht::SignedPeerRecord,
+        ) -> Result<(), WorldError> {
+            Ok(())
+        }
+
+        fn get_peer_record(
+            &self,
+            _world_id: &str,
+            _peer_id: &str,
+        ) -> Result<Option<super::super::distributed_dht::SignedPeerRecord>, WorldError> {
+            Ok(None)
+        }
     }
 
     #[derive(Clone, Default)]

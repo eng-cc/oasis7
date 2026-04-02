@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use oasis7_proto::distributed as proto_distributed;
 use oasis7_proto::distributed_dht::DistributedDht as _;
+use oasis7_proto::distributed_dht::SignedPeerRecord;
 use oasis7_proto::distributed_net as proto_net;
 use oasis7_proto::distributed_net::DistributedNetwork as _;
 use oasis7_proto::distributed_storage as proto_storage;
@@ -602,6 +603,22 @@ impl proto_dht::DistributedDht<WorldError> for StaticProvidersDht {
         &self,
         _world_id: &str,
     ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_peer_record(
+        &self,
+        _world_id: &str,
+        _record: &SignedPeerRecord,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
         Ok(None)
     }
 }

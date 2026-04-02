@@ -15,10 +15,12 @@ use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
 };
 use oasis7_node::{
-    Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, NodeConfig, NodeFeedbackP2pConfig,
-    NodePosConfig, NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole, NodeRuntime,
-    NodeSnapshot, PosConsensusStatus, PosValidator,
+    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+    NodeConfig, NodeFeedbackP2pConfig, NodePosConfig, NodeReplicationConfig,
+    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, PosConsensusStatus,
+    PosValidator,
 };
+use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerReachabilityClass, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -316,7 +318,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
-    runtime = attach_default_replication_network(runtime)?;
+    runtime = attach_default_replication_network(runtime, &options, &keypair)?;
 
     runtime
         .start()
@@ -927,8 +929,12 @@ fn build_node_replication_config(
         .map_err(|err| format!("failed to build node replication config: {err:?}"))
 }
 
-fn attach_default_replication_network(runtime: NodeRuntime) -> Result<NodeRuntime, String> {
-    let mut network_config = build_default_replication_network_config()?;
+fn attach_default_replication_network(
+    runtime: NodeRuntime,
+    options: &CliOptions,
+    root_keypair: &node_keypair_config::NodeKeypairConfig,
+) -> Result<NodeRuntime, String> {
+    let mut network_config = build_default_replication_network_config(options, root_keypair)?;
     network_config.allow_local_handler_fallback_when_no_peers = true;
     let network = Arc::new(Libp2pReplicationNetwork::new(network_config));
     Ok(runtime
@@ -936,8 +942,16 @@ fn attach_default_replication_network(runtime: NodeRuntime) -> Result<NodeRuntim
         .with_replication_network_consensus_enabled(false))
 }
 
-fn build_default_replication_network_config() -> Result<Libp2pReplicationNetworkConfig, String> {
+fn build_default_replication_network_config(
+    options: &CliOptions,
+    root_keypair: &node_keypair_config::NodeKeypairConfig,
+) -> Result<Libp2pReplicationNetworkConfig, String> {
     let mut config = Libp2pReplicationNetworkConfig::default();
+    config.keypair = Some(
+        derive_libp2p_identity_keypair(root_keypair.private_key_hex.as_str())
+            .map_err(|err| format!("failed to derive libp2p identity keypair: {err:?}"))?,
+    );
+    config.peer_record = Some(build_default_peer_record(options));
     config
         .listen_addrs
         .push(DEFAULT_REPLICATION_NETWORK_LISTEN.parse().map_err(|err| {
@@ -947,6 +961,25 @@ fn build_default_replication_network_config() -> Result<Libp2pReplicationNetwork
             )
         })?);
     Ok(config)
+}
+
+fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
+    PeerRecord {
+        peer_id: String::new(),
+        node_id: options.node_id.clone(),
+        world_id: options.world_id.clone(),
+        network_id: options.world_id.clone(),
+        node_role: options.node_role.as_str().to_string(),
+        reachability_class: PeerReachabilityClass::Private,
+        direct_addrs: Vec::new(),
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ],
+        published_at_ms: 0,
+        ttl_ms: 60 * 60 * 1000,
+    }
 }
 
 fn build_feedback_submit_signer(

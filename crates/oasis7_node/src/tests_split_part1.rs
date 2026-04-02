@@ -7,7 +7,7 @@ use oasis7_consensus::node_consensus_signature::{
 use oasis7_distfs::{FileStore as _, LocalCasStore, SingleWriterReplicationGuard};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::{
-    self as proto_dht, MembershipDirectorySnapshot, ProviderRecord,
+    self as proto_dht, MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::NetworkSubscription;
 use oasis7_proto::world_error::WorldError;
@@ -376,6 +376,14 @@ impl proto_dht::DistributedDht<WorldError> for TestReplicaMaintenanceDht {
             .expect("lock memberships")
             .get(world_id)
             .cloned())
+    }
+
+    fn put_peer_record(&self, _world_id: &str, _record: &SignedPeerRecord) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(&self, _world_id: &str, _peer_id: &str) -> Result<Option<SignedPeerRecord>, WorldError> {
+        Ok(None)
     }
 }
 

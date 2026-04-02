@@ -7,6 +7,7 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] P2PARCH-0 (PRD-P2P-024-A/B/C/D/E) [test_tier_required]: 新建“主链级非全公网 P2P 覆盖网络架构”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
 - [ ] P2PARCH-1 (PRD-P2P-024-A/B) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 node identity、signed peer record、bootnode/DHT/rendezvous 发现链路，并让业务层不再直接依赖静态 UDP peer truth。
+  本轮已落地首个 substrate 切片: stable libp2p identity、signed peer record schema + DHT contract、默认 bootstrap/DHT discovery taxonomy；query-driven peer acquisition 与 rendezvous 自动化仍待后续切片补齐。
 - [ ] P2PARCH-2 (PRD-P2P-024-B/D) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 transport abstraction，统一 direct / hole-punched / relay path，并把 QUIC/TCP/Noise/mux 语义冻结到 substrate。
 - [ ] P2PARCH-3 (PRD-P2P-024-C/D) [test_tier_required + test_tier_full]: `runtime_engineer` 落 `public / hybrid / private / relay_only / validator_hidden` deployment mode 与 `validator core / sentry / relay / full-storage / observer-light` 角色策略。
 - [ ] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
@@ -18,9 +19,10 @@
 - 当前阶段:
   - 游戏阶段口径: `limited playable technical preview`
   - 安全阶段口径: `crypto-hardened preview`
-  - 覆盖网络架构 verdict: `specified_not_implemented`
+  - 覆盖网络架构 verdict: `partial`
 - 当前专题结论:
   - 已冻结目标态，不走 “先做一个 NAT patch 的 MVP” 路线。
+  - `P2PARCH-1` 已落首个 identity/discovery substrate 切片：runtime 现在会从 node root key 派生稳定 libp2p identity，并发布/校验 signed peer record。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -34,6 +36,10 @@
   - peer record schema
   - discovery source taxonomy
   - node identity 与 consensus signer 分离方案
+- 本轮已交付:
+  - `peer_id` 从现有 node root key 稳定派生，避免 runtime 重启后 libp2p identity 漂移
+  - `SignedPeerRecord` / `PeerRecord` schema、DHT key contract、签名校验与查询/发布接口
+  - runtime 默认 peer record 组装与 `static_bootstrap` / `dht` discovery source 标记
 - 完成定义:
   - 业务层不再把静态 peer 地址当作唯一网络真值
   - discovery 至少支持两类独立 source
@@ -115,5 +121,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 先做 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
+- 下一步: 继续补齐 `P2PARCH-1` 余量，把 DHT/rendezvous 查询驱动的 peer acquisition 接进 runtime，再进入 `P2PARCH-2~3` 的 transport / role policy 收口；在此之前，不再把“本机无公网 IP 连不上”视为单点部署事故。
 - 最近更新: 2026-04-02

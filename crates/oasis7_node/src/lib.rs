@@ -67,10 +67,12 @@ use gossip_udp::{
     GossipProposalMessage,
 };
 #[cfg(not(target_arch = "wasm32"))]
-pub use libp2p_replication_network::{Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig};
+pub use libp2p_replication_network::{
+    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+};
 #[cfg(target_arch = "wasm32")]
 pub use libp2p_replication_network_wasm::{
-    Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
 pub use replication::NodeReplicationConfig;
@@ -940,6 +942,22 @@ impl proto_dht::DistributedDht<ProtoWorldError> for RuntimeReplicaMaintenanceDht
         world_id: &str,
     ) -> Result<Option<proto_dht::MembershipDirectorySnapshot>, ProtoWorldError> {
         self.inner.get_membership_directory(world_id)
+    }
+
+    fn put_peer_record(
+        &self,
+        world_id: &str,
+        record: &proto_dht::SignedPeerRecord,
+    ) -> Result<(), ProtoWorldError> {
+        self.inner.put_peer_record(world_id, record)
+    }
+
+    fn get_peer_record(
+        &self,
+        world_id: &str,
+        peer_id: &str,
+    ) -> Result<Option<proto_dht::SignedPeerRecord>, ProtoWorldError> {
+        self.inner.get_peer_record(world_id, peer_id)
     }
 }
 

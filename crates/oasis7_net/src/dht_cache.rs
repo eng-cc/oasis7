@@ -3,7 +3,9 @@ use std::sync::Arc;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::DistributedDht as ProtoDistributedDht;
 
-use super::distributed_dht::{DistributedDht, MembershipDirectorySnapshot, ProviderRecord};
+use super::distributed_dht::{
+    DistributedDht, MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
+};
 use super::distributed_index_store::DistributedIndexStore;
 use super::error::WorldError;
 
@@ -171,6 +173,18 @@ impl ProtoDistributedDht<WorldError> for CachedDht {
         world_id: &str,
     ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
         self.inner.get_membership_directory(world_id)
+    }
+
+    fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
+        self.inner.put_peer_record(world_id, record)
+    }
+
+    fn get_peer_record(
+        &self,
+        world_id: &str,
+        peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        self.inner.get_peer_record(world_id, peer_id)
     }
 }
 
