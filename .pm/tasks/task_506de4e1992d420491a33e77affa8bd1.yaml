@@ -1,0 +1,25 @@
+task_uid: task_506de4e1992d420491a33e77affa8bd1
+title: "为多 worktree 提供共享 cargo 开发缓存入口"
+owner_role: producer_system_designer
+worktree_hint: scripts-cargo-shared-cache
+execution_log_path: .pm/tasks/task_506de4e1992d420491a33e77affa8bd1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/scripts/prd.md
+  - scripts/build-wasm-module.sh
+doc_refs:
+  - doc/scripts/prd.md
+  - doc/scripts/project.md
+  - testing-manual.md
+related_prd:
+  - doc/scripts/prd.md
+acceptance:
+  - "仓库提供一个面向开发态的共享 cargo 入口，使同一 repo family 下多个 worktree 能复用构建缓存"
+  - "正式文档明确共享缓存只适用于开发态 cargo 流程，确定性 wasm/release 链路继续保持隔离"
+  - "脚本与文档门禁通过，且默认 cargo 口径不破坏现有 build-wasm-module 的 CARGO_TARGET_DIR 围栏"
+handoff_to: []
+updated_at: 2026-04-03T00:00:04+08:00
+last_started_at: 2026-04-02T23:39:11+08:00
+last_closed_at: 2026-04-02T23:48:31+08:00

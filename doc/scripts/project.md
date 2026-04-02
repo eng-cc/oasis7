@@ -185,6 +185,21 @@
     - `rg -n '先写一版|先不要提交|顺手改一下|复用当前 `worktree`|切错 worktree' AGENTS.md doc/scripts/prd.md doc/scripts/project.md doc/scripts/governance/task-worktree-bootstrap-2026-03-27.*`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SCRIPTS-021 (PRD-SCRIPTS-009) [test_tier_required]: 新增 repo-family 共享 cargo 开发缓存入口，允许多个 worktree 复用 Rust 开发态构建缓存，同时保持 deterministic wasm / release 链路继续走未设置 `CARGO_TARGET_DIR` 的原始入口。
+  - 产物文件:
+    - `scripts/cargo-dev.sh`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/README.md`
+    - `testing-manual.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/cargo-dev.sh`
+    - `./scripts/cargo-dev.sh --help`
+    - `./scripts/cargo-dev.sh --print-target-dir`
+    - `./scripts/cargo-dev.sh check -p oasis7_wasm_sdk`
+    - `(cd <sibling-worktree> && ./scripts/cargo-dev.sh --print-target-dir)`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -195,9 +210,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-01
+- 更新日期: 2026-04-02
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-021`（已新增 `scripts/cargo-dev.sh` 作为开发态共享 cargo target 入口，并把 scripts/testing 文档明确切分为“开发态共享缓存”与“deterministic wasm/release 不共享”的双轨口径。）
 - 最新完成: `TASK-SCRIPTS-020`（已统一收紧 worktree 例外授权口径，明确文档/脚本/测试/话术改动也算新需求，且发现切错 worktree 后必须立即切走。）
 - 最新完成: `TASK-SCRIPTS-019`（已为 `scripts/README.md` 补齐 task worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
 - 最新完成: `TASK-SCRIPTS-018`（收紧 task worktree 生命周期口径，要求 landing 成功后必须删除已完成 task worktree / branch。）

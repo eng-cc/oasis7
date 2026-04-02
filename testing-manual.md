@@ -29,6 +29,11 @@
 - 不引入新的测试框架或新的业务代码。
 - 不做覆盖率百分比硬门槛治理（如行覆盖率 >= N%）。
 
+## 开发态缓存约定
+- 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，可用 `./scripts/cargo-dev.sh <cargo-args...>` 让 `cargo check/test/run/build` 复用 shared target 目录，减少重复编译。
+- 该入口只服务开发态缓存复用，不替代本手册中的正式验收命令；手册里的 canonical 验收命令仍显式写原始 `env -u RUSTC_WRAPPER cargo ...`。
+- deterministic wasm / release 链路继续保持 `CARGO_TARGET_DIR` 为空；涉及 `scripts/build-wasm-module.sh`、release evidence 或 hash/receipt 对账时，不要改用 `scripts/cargo-dev.sh`。
+
 ## 当前实现分布（2026-02-18 基线）
 
 ### 应用主链（world + runtime + simulator + viewer 协议）
@@ -139,6 +144,7 @@
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
 ```
+- 本地日常迭代若只是为了更快得到开发反馈，可把同类命令替换为 `./scripts/cargo-dev.sh check/test/run/build ...`；但进入正式 required/full 验收、尤其是 deterministic wasm/release 相关链路时，仍以本手册列出的原始 cargo 命令为准。
 - `./scripts/check-rust-file-size.sh` 现同时校验超限基线、`touch-and-shrink` 和 `split_part/include!` 结构切片基线，不再只是“有没有新 >1200 文件”。
 - 可选（按需执行 builtin wasm hash 校验）：
 ```bash

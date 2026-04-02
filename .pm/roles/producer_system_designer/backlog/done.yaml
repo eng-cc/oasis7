@@ -191,3 +191,16 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_954545178699530ca3312cd4fa987c95.yaml
+  - task_uid: task_506de4e1992d420491a33e77affa8bd1
+    title: "为多 worktree 提供共享 cargo 开发缓存入口"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/scripts/prd.md
+    acceptance:
+      - "仓库提供一个面向开发态的共享 cargo 入口，使同一 repo family 下多个 worktree 能复用构建缓存"
+      - "正式文档明确共享缓存只适用于开发态 cargo 流程，确定性 wasm/release 链路继续保持隔离"
+      - "脚本与文档门禁通过，且默认 cargo 口径不破坏现有 build-wasm-module 的 CARGO_TARGET_DIR 围栏"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_506de4e1992d420491a33e77affa8bd1.yaml

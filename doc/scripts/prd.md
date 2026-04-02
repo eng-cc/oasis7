@@ -64,6 +64,7 @@
   - PRD-SCRIPTS-006: As a `qa_engineer`, I want the task-worktree bootstrap command to optionally inspect module docs and prewarm the worktree harness, so that a new task can move from creation to “read docs + boot isolated stack” in one hop.
   - PRD-SCRIPTS-007: As a `producer_system_designer`, I want a standard task-worktree landing command, so that completed work can be merged back into `main` with one consistent, auditable path instead of ad hoc git sequences.
   - PRD-SCRIPTS-008: As a `producer_system_designer`, I want every completed task worktree deleted after landing, so that the local workspace and branch namespace do not fill with stale finished slices.
+  - PRD-SCRIPTS-009: As a 开发者, I want a repo-family shared cargo development wrapper, so that multiple git worktrees can reuse Rust build artifacts without weakening deterministic wasm/release gates.
 - Critical User Flows:
   1. Flow-SCR-001: `调用主入口脚本 -> 执行检查/测试 -> 输出结构化结果`
   2. Flow-SCR-002: `CI 触发脚本 -> 失败定位到参数/环境 -> 修复后重跑`
@@ -72,6 +73,7 @@
   5. Flow-SCR-005: `new-task-worktree.sh <module> <task> --init-docs --with-harness -> 检查 doc/<module>/{prd,project}.md 与当日 devlog -> 在新 worktree 中后台预热 worktree-harness.sh up --no-llm -> 输出文档检查与 harness 摘要`
   6. Flow-SCR-006: `land-task-worktree.sh [task/<module>-<task>] -> 检查 source/本地 main worktree 干净状态 -> 在任务 worktree 上 rebase 本地 main -> 在本地 main worktree 上 fast-forward 合入 -> 输出 cleanup 命令 -> 删除已完成 task worktree/branch`
   7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
+  8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family 的 shared target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -83,6 +85,7 @@
 | task worktree bootstrap | `module_slug`、`task_slug`、`branch_name`、`worktree_path`、`base_ref` | 通过统一入口创建或附着任务 worktree，并输出下一步命令 / JSON 摘要 | `draft -> validated -> created/attached -> ready` | 默认派生 `task/<module>-<task>` 分支与 `../worktrees/<repo>-<module>-<task>` 路径 | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | task bootstrap followups | `doc_checks`、`today_devlog_path`、`harness_mode`、`harness_state_file`、`viewer_url` | 通过 `--init-docs` / `--with-harness` 补齐文档检查与 harness 预热 | `ready -> doc_checked -> harness_booted` | `--init-docs` 只读检查模块文档；`--with-harness` 默认调用 `worktree-harness.sh up --no-llm` | `qa_engineer` 与 scripts owner 协同维护 |
 | task worktree landing | `source_branch`、`source_worktree`、`target_branch`、`target_worktree`、`rebase_status`、`landed_commit` | 通过统一入口把任务分支 rebase 到本地 `main` 并在本地 `main` worktree fast-forward 合入 | `ready_to_land -> rebased -> landed -> cleaned_up` | 默认源分支取当前 branch，目标分支默认本地 `main`，landing 完成后必须执行 cleanup | `producer_system_designer` 定流程，scripts owner 维护入口 |
+| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为开发态 `cargo` 命令注入稳定共享 `CARGO_TARGET_DIR` | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 派生 repo-family namespace，并按 host/toolchain 拆分目录；deterministic wasm/release 流程继续要求 `CARGO_TARGET_DIR` 为空 | 开发者可执行，scripts owner 维护入口 |
 - Acceptance Criteria:
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
   - AC-2: scripts project 文档维护脚本治理任务。
@@ -106,6 +109,9 @@
   - AC-20: landing 成功后，正式流程文档与脚本输出必须明确该 task `worktree` / branch 需要被删除；cleanup 命令不得再被表述为“可选建议”。
   - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
   - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
+  - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 repo-family 共享缓存入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
+  - AC-24: `scripts/cargo-dev.sh --print-target-dir` 必须输出稳定共享目录；同一 repo family 下不同 worktree 输出一致，且可通过环境变量覆盖。
+  - AC-25: 正式文档必须明确：`scripts/cargo-dev.sh` 只服务开发态缓存复用，不适用于要求 `CARGO_TARGET_DIR` 为空的 deterministic wasm / release 构建链路。
 - Non-Goals:
   - 不在 scripts PRD 中替代业务功能设计。
   - 不承诺所有历史脚本长期向后兼容。
@@ -124,8 +130,10 @@
   - `scripts/run-game-test.sh`
   - `scripts/run-producer-playtest.sh`
   - `scripts/worktree-harness.sh`
+  - `scripts/cargo-dev.sh`
   - `scripts/new-task-worktree.sh`
   - `scripts/land-task-worktree.sh`
+  - `scripts/build-wasm-module.sh`
   - `testing-manual.md`
   - `.github/workflows/*`
 - Edge Cases & Error Handling:
@@ -142,6 +150,7 @@
   - bootstrap followups：`--json` 模式下即便开启 `--with-harness`，也不得把 harness 子命令的人类输出混入 JSON；模块文档不存在时只报告缺失，不替用户静默创建空文档。
   - task landing：若 `main` 已前进且 task branch 尚未 rebase，必须先在 source worktree 上完成 rebase；若 rebase/fast-forward 失败，脚本只中断并保留现场，不擅自 `reset` 或删除 branch/worktree。
   - task cleanup：已完成任务的 task `worktree` 若长期不删，会让后续搜索、branch 占用检查与本地磁盘占用持续失真；因此 cleanup 必须成为 landing 成功后的必做步骤。
+  - shared cargo dev cache：同一 repo family 的多个 worktree 必须映射到同一 shared target namespace，但 deterministic wasm / release 脚本若要求 `CARGO_TARGET_DIR` 为空，必须继续走原始 cargo 入口而不是 `cargo-dev.sh`。
 - Non-Functional Requirements:
   - NFR-SCR-1: 核心脚本具备可读帮助信息与失败语义说明。
   - NFR-SCR-2: 主入口脚本在 Linux/macOS 环境可执行一致。
@@ -155,6 +164,7 @@
   - NFR-SCR-10: task worktree landing 入口必须默认使用非交互、可审计的线性历史策略；JSON 模式下 stdout 只能输出单个结构化对象。
   - NFR-SCR-11: 已完成 task 的 cleanup 语义必须清晰一致，不允许不同文档同时出现“建议删除”和“必须删除”两套口径。
   - NFR-SCR-12: worktree 例外授权与错误 worktree 处置口径在 `AGENTS.md`、模块 PRD 与专题文档之间必须保持一致，不允许根规则更严、模块专题更松。
+  - NFR-SCR-13: 开发态 shared cargo target 目录必须稳定且默认落在工作区外部缓存位置，避免污染仓库源码树或让不同 repo family 相互踩缓存。
 - Security & Privacy: 脚本不得在默认输出中泄漏密钥；涉及网络调用时需要显式参数与最小权限。
 
 ## 5. Risks & Roadmap
@@ -183,9 +193,11 @@
 | PRD-SCRIPTS-006 | TASK-SCRIPTS-016/020 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + 错误 worktree 处置文案一致性检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
 | PRD-SCRIPTS-007 | TASK-SCRIPTS-017 | `test_tier_required` | `bash -n` + `--help` + 临时 source/target worktree landing smoke + JSON 字段检查 + 文档治理检查 | 多 task worktree 向 `main` 回流的一致性与可审计性 |
 | PRD-SCRIPTS-008 | TASK-SCRIPTS-018 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
+| PRD-SCRIPTS-009 | TASK-SCRIPTS-021 | `test_tier_required` | `bash -n` + `--help` + `--print-target-dir` 跨 worktree 一致性检查 + 文档治理检查 | 多 worktree Rust 开发回归速度与 deterministic wasm/release 口径隔离 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-SCR-001 | 主入口 + fallback 分层治理 | 全脚本平级使用 | 分层更利于稳定维护。 |
 | DEC-SCR-002 | 参数契约显式化 | 依赖隐式约定 | 可减少 CI 误用与回归。 |
 | DEC-SCR-003 | fallback 仅在受控场景启用 | 默认对所有场景开放 | 可避免过度依赖应急链路。 |
+| DEC-SCR-004 | 用独立 `cargo-dev.sh` 包装开发态共享 `CARGO_TARGET_DIR`，而不把共享 target 设成仓库全局默认 | 直接把所有 cargo 流程切到同一个全局 `CARGO_TARGET_DIR` | 能让日常多 worktree 开发复用缓存，同时不破坏 deterministic wasm / release 脚本对空 `CARGO_TARGET_DIR` 的围栏。 |
