@@ -2,14 +2,16 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 
+const tempOutDir = resolve(__dirname, ".software-safe-build");
+
 export default defineConfig({
   plugins: [solid()],
   build: {
     target: "es2020",
-    emptyOutDir: false,
+    emptyOutDir: true,
     minify: false,
     sourcemap: false,
-    outDir: resolve(__dirname),
+    outDir: tempOutDir,
     lib: {
       entry: resolve(__dirname, "software_safe_src/main.jsx"),
       formats: ["es"],

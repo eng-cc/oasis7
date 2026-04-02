@@ -42,3 +42,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_468d5569fbd6559692870328d6c0ba94.yaml
+  - task_uid: task_4cf53c9429cb4120a30ee52e48a87be3
+    title: "Finalize software_safe SolidJS build pipeline"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "software_safe SolidJS build no longer emits the current Vite outDir warning while keeping final output at crates/oasis7_viewer/software_safe.js."
+      - "source-tree docs and scripts describe a repeatable software_safe build path consistent with the new SolidJS pipeline."
+      - "validation proves the finalized build still preserves software_safe page contract and freshness behavior."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_4cf53c9429cb4120a30ee52e48a87be3.yaml

@@ -186,7 +186,7 @@
 - Proposed Solution:
   - 保持 `software_safe.html`、`software_safe.js`、`render_mode`、`__AW_TEST__`、viewer auth/bootstrap 与 play/pause/step/select 等对外契约不变；
   - 将 UI 渲染层迁到 SolidJS 组件树，并把原有协议/状态/命令逻辑保留在可复用的 `legacy_core` 中；
-  - freshness gate 必须把 Solid 构建输入纳入 source scope，避免 source-tree Web 闭环错误消费旧 bundle。
+  - freshness gate 必须把 Solid 构建输入与 finalize 脚本纳入 source scope，避免 source-tree Web 闭环错误消费旧 bundle。
 - Functional Constraints:
   - 不新增新的后端协议，不改变 `software_safe` 的 capability floor。
   - 不把当前页面收口成依赖框架运行时特性的“新产品”；只允许做组件化拆分与维护性改造。
@@ -194,4 +194,4 @@
 - Acceptance Criteria:
   - AC-12: `software_safe` UI 组件化后，真实 Web smoke 仍能完成“加载 -> 连接 -> 选择目标 -> `step` -> 看到 control feedback”最小闭环。
   - AC-13: `__AW_TEST__.getState()`、auth/bootstrap surface、observer/debug 标识与现有 `software_safe` 页面按钮/字段 contract 不得回退。
-  - AC-14: Viewer Web freshness gate 必须把 `package.json`、`package-lock.json`、`vite.software-safe.config.mjs` 与 `software_safe_src/` 作为 software-safe bundle 的正式输入。
+  - AC-14: Viewer Web freshness gate 必须把 `package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/` 与 `software_safe_src/` 作为 software-safe bundle 的正式输入。

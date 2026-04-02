@@ -923,6 +923,7 @@
 - [x] TASK-WORLD_SIMULATOR-285 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 完成“暂停 3D 可视化专题、将用户交互分支转为暂存态”PRD / Design / Project 建模，回写模块主 PRD / project / index，并冻结 3D workstream 的恢复门禁与允许修改范围。
 - [x] TASK-WORLD_SIMULATOR-286 (PRD-WORLD_SIMULATOR-041) [test_tier_required]: 对齐 Viewer operator 脚本与手册，把 `capture-viewer-frame` 的默认 auto-focus 行为、Viewer 手册排障路径与纯 3D visual QA 工具帮助文案同步收口到“2D/`software_safe` 优先，3D hold-only”。
 - [x] TASK-WORLD_SIMULATOR-287 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` Web UI 迁到 SolidJS 组件架构，保持 `software_safe.js` / `__AW_TEST__` / auth/bootstrap / 选择与 playback contract 不变，并把 Viewer Web freshness gate 扩到新的构建输入。
+- [x] TASK-WORLD_SIMULATOR-288 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建链收口为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，保持最终 `software_safe.js` 路径不变，并把 finalize 脚本纳入 freshness source scope。
 ## 依赖
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
@@ -976,7 +977,7 @@
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02.prd.md`
-- `.agents/skills/prd/check.md`
+- `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02.prd.md`、`.agents/skills/prd/check.md`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
 - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
 - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
@@ -994,7 +995,6 @@
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
 - `crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`
 - `crates/oasis7_viewer/{Cargo.toml,src/main.rs}`
-- `scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`
-- `testing-manual.md`
+- `scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`、`testing-manual.md`
 ## 状态
-- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-02 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-287`（已将 `software_safe` Web UI 迁到 SolidJS 组件架构，保持 `software_safe.js` / `__AW_TEST__` / auth/bootstrap / playback contract 不变，并把 freshness gate 扩到 `software_safe_src/` 与 Vite/package 输入。）；`TASK-WORLD_SIMULATOR-286`（已把 Viewer operator 脚本与手册默认值收口到 2D/`software_safe` 优先，并将纯 3D visual QA 工具标记为 hold-only。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。
+- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-02 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-288`（已将 `software_safe` SolidJS 构建链收口为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，保持最终 `software_safe.js` 路径不变，并把 finalize 脚本纳入 freshness source scope。）；`TASK-WORLD_SIMULATOR-287`（已将 `software_safe` Web UI 迁到 SolidJS 组件架构，保持 `software_safe.js` / `__AW_TEST__` / auth/bootstrap / playback contract 不变，并把 freshness gate 扩到 `software_safe_src/` 与 Vite/package 输入。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。

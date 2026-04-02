@@ -223,6 +223,7 @@ scope = [
     "crates/oasis7_viewer/package.json",
     "crates/oasis7_viewer/package-lock.json",
     "crates/oasis7_viewer/vite.software-safe.config.mjs",
+    "crates/oasis7_viewer/scripts",
     "crates/oasis7_viewer/software_safe_src",
     "crates/oasis7_viewer/favicon.ico",
     "crates/oasis7_viewer/src",

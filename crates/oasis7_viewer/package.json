@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:software-safe": "vite build --config vite.software-safe.config.mjs"
+    "build:software-safe:bundle": "vite build --config vite.software-safe.config.mjs",
+    "build:software-safe": "npm run build:software-safe:bundle && node ./scripts/finalize-software-safe-build.mjs"
   },
   "dependencies": {
     "solid-js": "^1.9.9"
