@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use oasis7_distfs::FeedbackStoreConfig;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
+use oasis7_proto::distributed_net::{NetworkLane, NetworkLaneOperation};
 
 use crate::pos_validation::validate_pos_config;
 use crate::{NodeConsensusAction, NodeError, NodeReplicationConfig};
@@ -68,8 +69,7 @@ impl NodeNetworkPolicy {
                     return Err(NodeError::InvalidConfig {
                         reason: format!(
                             "node role {} requires network node_role_claim=validator_core, got {}",
-                            runtime_role,
-                            self.node_role_claim
+                            runtime_role, self.node_role_claim
                         ),
                     });
                 }
@@ -79,8 +79,7 @@ impl NodeNetworkPolicy {
                     return Err(NodeError::InvalidConfig {
                         reason: format!(
                             "node role {} requires network node_role_claim=full_storage, got {}",
-                            runtime_role,
-                            self.node_role_claim
+                            runtime_role, self.node_role_claim
                         ),
                     });
                 }
@@ -93,8 +92,7 @@ impl NodeNetworkPolicy {
                     return Err(NodeError::InvalidConfig {
                         reason: format!(
                             "node role {} cannot use network node_role_claim={}",
-                            runtime_role,
-                            self.node_role_claim
+                            runtime_role, self.node_role_claim
                         ),
                     });
                 }
@@ -122,6 +120,14 @@ impl NodeNetworkPolicy {
                 | PeerDeploymentMode::RelayOnly
                 | PeerDeploymentMode::ValidatorHidden
         ) && !matches!(self.node_role_claim, PeerNodeRole::ValidatorCore)
+    }
+
+    pub fn allows_lane_operation(
+        &self,
+        lane: NetworkLane,
+        operation: NetworkLaneOperation,
+    ) -> bool {
+        lane.allows_role(self.node_role_claim, operation)
     }
 }
 
@@ -968,4 +974,54 @@ pub struct NodeSnapshot {
     pub last_tick_unix_ms: Option<i64>,
     pub consensus: NodeConsensusSnapshot,
     pub last_error: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn network_policy_blocks_observer_from_consensus_publish_lane() {
+        let policy = NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Private,
+            node_role_claim: PeerNodeRole::ObserverLight,
+        };
+        assert!(!policy
+            .allows_lane_operation(NetworkLane::ConsensusGossip, NetworkLaneOperation::Publish));
+        assert!(policy.allows_lane_operation(
+            NetworkLane::ConsensusGossip,
+            NetworkLaneOperation::Subscribe
+        ));
+    }
+
+    #[test]
+    fn network_policy_limits_relay_to_control_lane() {
+        let policy = NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Public,
+            node_role_claim: PeerNodeRole::Relay,
+        };
+        assert!(policy.allows_lane_operation(NetworkLane::Control, NetworkLaneOperation::Serve));
+        assert!(!policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Request));
+        assert!(
+            !policy.allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Subscribe)
+        );
+    }
+
+    #[test]
+    fn network_policy_allows_observer_requests_but_blocks_data_serving() {
+        let policy = NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Private,
+            node_role_claim: PeerNodeRole::ObserverLight,
+        };
+        assert!(policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Request));
+        assert!(policy.allows_lane_operation(
+            NetworkLane::BlobState,
+            NetworkLaneOperation::Request
+        ));
+        assert!(!policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Serve));
+        assert!(!policy.allows_lane_operation(
+            NetworkLane::BlobState,
+            NetworkLaneOperation::Serve
+        ));
+    }
 }

@@ -686,6 +686,45 @@ fn runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode() {
 }
 
 #[test]
+fn runtime_start_rejects_observer_feedback_p2p_without_blob_state_lane_access() {
+    let world_id = "world-feedback-observer-gate";
+    let dir = temp_dir("feedback-observer-gate");
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 130)],
+    );
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 130))
+        .with_feedback_p2p(NodeFeedbackP2pConfig::default())
+        .expect("feedback p2p");
+    let mut runtime = NodeRuntime::new(config)
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+
+    let err = runtime
+        .start()
+        .expect_err("observer feedback_p2p should fail blob/state lane gate");
+    assert!(matches!(err, NodeError::InvalidConfig { .. }));
+    assert!(
+        err.to_string()
+            .contains("feedback_p2p requires blob/state lane publish+subscribe access"),
+        "unexpected error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn runtime_feedback_submit_publishes_and_peer_ingests() {
     let world_id = "world-feedback-runtime-sync";
     let dir_a = temp_dir("feedback-sync-a");
@@ -713,7 +752,7 @@ fn runtime_feedback_submit_publishes_and_peer_ingests() {
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = network_impl.clone();
 
-    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Observer)
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Storage)
         .expect("config a")
         .with_tick_interval(Duration::from_millis(10))
         .expect("tick a")
@@ -722,7 +761,7 @@ fn runtime_feedback_submit_publishes_and_peer_ingests() {
         .with_replication(signed_replication_config(dir_a.clone(), 131))
         .with_feedback_p2p(feedback_config.clone())
         .expect("feedback config a");
-    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Storage)
         .expect("config b")
         .with_tick_interval(Duration::from_millis(10))
         .expect("tick b")
@@ -733,9 +772,11 @@ fn runtime_feedback_submit_publishes_and_peer_ingests() {
         .expect("feedback config b");
 
     let mut runtime_a = NodeRuntime::new(config_a)
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)))
+        .with_replication_network_consensus_enabled(false);
     let mut runtime_b = NodeRuntime::new(config_b)
-        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)))
+        .with_replication_network_consensus_enabled(false);
     runtime_a.start().expect("start node a");
     runtime_b.start().expect("start node b");
 

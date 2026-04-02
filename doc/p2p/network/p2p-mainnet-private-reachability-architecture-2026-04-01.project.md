@@ -12,7 +12,8 @@
   已落地 transport substrate 收口：peer record 现在显式区分 `direct_addrs / hole_punch_addrs / relay_addrs`，runtime 会按 `direct QUIC -> direct TCP -> hole-punched QUIC/TCP -> relay-reserved` 排序与 failover；swarm 同时承载 direct transport 与 relay client transport，并记录 relay reservation / DCUtR 事件用于后续 reachability lifecycle。
 - [x] P2PARCH-3 (PRD-P2P-024-C/D) [test_tier_required + test_tier_full]: `runtime_engineer` 落 `public / hybrid / private / relay_only / validator_hidden` deployment mode 与 `validator core / sentry / relay / full-storage / observer-light` 角色策略。
   已落地 role policy substrate：runtime config 新增显式 `deployment_mode + node_role_claim`，默认把 `sequencer/storage/observer` 映射到 `validator_core/full_storage/observer_light`，并允许 observer runtime 显式声明 `sentry/relay`。peer record 现在显式携带 `deployment_mode`，且会校验 deployment mode、network role 与 direct surface 的一致性，旧 `sequencer/storage/observer` peer record label 仍可兼容解析到新角色语义。
-- [ ] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
+- [x] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
+  已落地 lane/QoS substrate：`oasis7_proto::distributed_net` 现已冻结 `NetworkLane` / `NetworkLaneQosClass` / topic+protocol classifier；`PeerRecord` 新增 `capability_lanes` 并对 legacy record 做 role-based defaulting，且 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力；`oasis7_net` 会按 lane 选择 subscription inbox 配额，并在 req/resp 选 peer 时优先过滤掉不具备对应 lane capability 的 peer；`oasis7_node` 已把 replication / consensus / `feedback_p2p` 绑定提升为显式 lane registry，并对 `node_role_claim` 执行 publish/subscribe/request/serve 权限校验，observer 只保留 data-lane request，不注册 data-lane serve handler，也不能通过 `feedback_p2p` 订阅或发布 `blob_state` lane topic。
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
@@ -34,6 +35,10 @@
   - `P2PARCH-3` 已落 deployment/role policy substrate：`NodeConfig` / chain runtime CLI / default peer record 现在显式承载 `p2p_deployment_mode` 与 `p2p_node_role`，不再把 deployment mode 只留给 operator 约定。
   - `P2PARCH-3` 已落 role admission：runtime 会校验 `sequencer -> validator_core`、`storage -> full_storage`、`observer -> observer_light|sentry|relay`，并拒绝 `validator_core + public/relay_only`、`sentry + 非 public/hybrid`、`relay + 非 public`、`validator_hidden + 非 validator_core` 这类无效组合。
   - `P2PARCH-3` 已落 exposed-surface contract：peer record 会显式校验 `private/relay_only/validator_hidden` 不得发布 `direct_addrs`，`validator_core` 也不得直接暴露 public direct surface；对 legacy `sequencer/storage/observer` peer record label 仍保持兼容解析，避免 discovery 面一次性断代。
+  - `P2PARCH-4` 已落 lane taxonomy substrate：共享协议层现在显式区分 `consensus_gossip/sync/blob_state/control` 四条 lane，并冻结每条 lane 的 QoS class 与 topic/protocol classifier，不再把 lane 判断散落在业务字符串上。
+  - `P2PARCH-4` 已落 peer capability substrate：peer record 现在可显式声明 `capability_lanes`，未声明时按 canonical `node_role` 自动回填默认 lane capability，保证 discovery/selection 面能平滑兼容旧 record；其中 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力。
+  - `P2PARCH-4` 已落 role-aware binding：runtime 会拒绝 `observer_light` 直接 publish consensus lane、服务 `sync/blob_state` data lane、或通过 `feedback_p2p` 订阅/发布 `blob_state` topic，以及 `relay` 请求或服务 data lane 这类明显越权的 lane 操作；replication fetch handler 注册也会受 `node_role_claim` gate 约束。
+  - `P2PARCH-4` 已落 request peer subset：`fetch-commit/fetch-blob` 这类 req/resp 现在会优先筛选声明具备对应 lane capability 的 peer record，再发起 outbound request，避免继续对所有已连接 peer 一视同仁。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -98,6 +103,11 @@
 - 输出:
   - lane registry
   - consensus/sync/blob/control QoS policy
+- 本轮已交付:
+  - `NetworkLane` / `NetworkLaneQosClass` / topic+protocol classifier：把 `consensus gossip / sync / blob-state / control` 提升为共享协议层类型，而不是继续散落在 topic / protocol 字符串判断里
+  - `capability_lanes` peer record schema：peer record 可显式声明 lane capability；legacy record 若未声明则按 `validator_core/sentry/relay/full_storage/observer_light` 自动回填默认值
+  - lane-aware `oasis7_net` substrate：subscription inbox 配额按 lane 区分；req/resp 在 `fetch-commit/fetch-blob` 等路径会优先选择具备对应 lane capability 的 peer record
+  - role-aware `oasis7_node` binding：replication/consensus 绑定提升成 traffic lane registry，并对 publish/subscribe/request/serve 四类操作做 `node_role_claim` gate
 - 完成定义:
   - blob/state 流量不能拖垮 consensus/control
   - 不同链适配器只绑定 lane，不重写 substrate
@@ -149,5 +159,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 进入 `P2PARCH-4` 的 traffic lane / QoS substrate，把 consensus gossip、sync、blob/state、control 从统一 transport substrate 上拆成 role-aware lane；AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化与 mixed-topology evidence 继续压到后续 `P2PARCH-6` 套件。
+- 下一步: 进入 `P2PARCH-5` 的 peer manager / anti-eclipse / diversity / relay budget substrate，并补 `P2PARCH-4` 的更高层 mixed-topology integration evidence；AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化继续压到后续 `P2PARCH-6` 套件。
 - 最近更新: 2026-04-02

@@ -6,6 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::distributed::WorldHeadAnnounce;
+use crate::distributed_net::NetworkLane;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderRecord {
@@ -140,7 +141,10 @@ impl PeerNodeRole {
         }
     }
 
-    pub fn validate_deployment_mode(self, deployment_mode: PeerDeploymentMode) -> Result<(), String> {
+    pub fn validate_deployment_mode(
+        self,
+        deployment_mode: PeerDeploymentMode,
+    ) -> Result<(), String> {
         match self {
             Self::ValidatorCore => {
                 if matches!(
@@ -182,6 +186,25 @@ impl PeerNodeRole {
             }
         }
         Ok(())
+    }
+
+    pub fn default_capability_lanes(self) -> Vec<NetworkLane> {
+        match self {
+            Self::ValidatorCore | Self::Sentry => vec![
+                NetworkLane::ConsensusGossip,
+                NetworkLane::Sync,
+                NetworkLane::BlobState,
+                NetworkLane::Control,
+            ],
+            Self::Relay => vec![NetworkLane::Control],
+            Self::FullStorage => vec![
+                NetworkLane::ConsensusGossip,
+                NetworkLane::Sync,
+                NetworkLane::BlobState,
+                NetworkLane::Control,
+            ],
+            Self::ObserverLight => vec![NetworkLane::ConsensusGossip, NetworkLane::Control],
+        }
     }
 }
 
@@ -227,6 +250,8 @@ pub struct PeerRecord {
     pub relay_addrs: Vec<String>,
     #[serde(default)]
     pub discovery_sources: Vec<PeerDiscoverySource>,
+    #[serde(default)]
+    pub capability_lanes: Vec<NetworkLane>,
     pub published_at_ms: i64,
     pub ttl_ms: i64,
 }
@@ -258,7 +283,48 @@ impl PeerRecord {
         if matches!(node_role, PeerNodeRole::ValidatorCore) && !self.direct_addrs.is_empty() {
             return Err("node_role=validator_core cannot advertise direct_addrs".to_string());
         }
+        if !self
+            .effective_capability_lanes()
+            .contains(&NetworkLane::Control)
+        {
+            return Err("peer record capability_lanes must include control".to_string());
+        }
+        if matches!(node_role, PeerNodeRole::Relay)
+            && self
+                .effective_capability_lanes()
+                .iter()
+                .any(|lane| !matches!(lane, NetworkLane::Control))
+        {
+            return Err("node_role=relay can only advertise control capability".to_string());
+        }
+        if self.effective_capability_lanes().iter().any(|lane| {
+            matches!(lane, NetworkLane::Sync | NetworkLane::BlobState)
+                && !lane.allows_role(node_role, crate::distributed_net::NetworkLaneOperation::Serve)
+        }) {
+            return Err(format!(
+                "node_role={} cannot advertise sync/blob_state service capability",
+                node_role.as_str()
+            ));
+        }
         Ok(())
+    }
+
+    pub fn effective_capability_lanes(&self) -> Vec<NetworkLane> {
+        let node_role = match self.parsed_node_role() {
+            Ok(role) => role,
+            Err(_) => return Vec::new(),
+        };
+        if self.capability_lanes.is_empty() {
+            return node_role.default_capability_lanes();
+        }
+        let mut lanes = self.capability_lanes.clone();
+        lanes.sort_by_key(|lane| lane.as_str());
+        lanes.dedup();
+        lanes
+    }
+
+    pub fn supports_lane(&self, lane: NetworkLane) -> bool {
+        self.effective_capability_lanes().contains(&lane)
     }
 }
 
@@ -306,6 +372,7 @@ mod tests {
         PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
         ProviderRecord, SignedPeerRecord,
     };
+    use crate::distributed_net::NetworkLane;
 
     #[test]
     fn provider_record_deserializes_legacy_json_without_capability_fields() {
@@ -369,6 +436,7 @@ mod tests {
                     PeerDiscoverySource::StaticBootstrap,
                     PeerDiscoverySource::Dht,
                 ],
+                capability_lanes: vec![NetworkLane::ConsensusGossip, NetworkLane::Control],
                 published_at_ms: 42,
                 ttl_ms: 60_000,
             },
@@ -396,6 +464,7 @@ mod tests {
             hole_punch_addrs: Vec::new(),
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: Vec::new(),
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -417,6 +486,96 @@ mod tests {
             hole_punch_addrs: Vec::new(),
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: Vec::new(),
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert!(record.validate_policy().is_err());
+    }
+
+    #[test]
+    fn peer_record_defaults_capability_lanes_from_role() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
+            reachability_class: PeerReachabilityClass::Private,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: Vec::new(),
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert!(record.supports_lane(NetworkLane::Sync));
+        assert!(record.supports_lane(NetworkLane::BlobState));
+        assert!(record.supports_lane(NetworkLane::Control));
+    }
+
+    #[test]
+    fn observer_light_defaults_to_non_serving_capabilities() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::ObserverLight.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
+            reachability_class: PeerReachabilityClass::Private,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: Vec::new(),
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert!(record.supports_lane(NetworkLane::ConsensusGossip));
+        assert!(record.supports_lane(NetworkLane::Control));
+        assert!(!record.supports_lane(NetworkLane::Sync));
+        assert!(!record.supports_lane(NetworkLane::BlobState));
+    }
+
+    #[test]
+    fn peer_record_policy_rejects_non_control_capability_for_relay() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::Relay.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Public,
+            reachability_class: PeerReachabilityClass::Public,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: vec![NetworkLane::Control, NetworkLane::Sync],
+            published_at_ms: 1,
+            ttl_ms: 1_000,
+        };
+        assert!(record.validate_policy().is_err());
+    }
+
+    #[test]
+    fn peer_record_policy_rejects_observer_data_service_capabilities() {
+        let record = PeerRecord {
+            peer_id: "12D3KooWExample".to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::ObserverLight.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
+            reachability_class: PeerReachabilityClass::Private,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![PeerDiscoverySource::Dht],
+            capability_lanes: vec![NetworkLane::Control, NetworkLane::Sync],
             published_at_ms: 1,
             ttl_ms: 1_000,
         };

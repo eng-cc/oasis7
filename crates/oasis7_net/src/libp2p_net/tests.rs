@@ -9,6 +9,7 @@ use super::transport_paths::{
 use super::utils::push_bounded_vec;
 use super::*;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
+use oasis7_proto::distributed_net::NetworkLane;
 
 #[test]
 fn libp2p_network_generates_peer_id() {
@@ -130,6 +131,7 @@ fn sign_and_verify_peer_record_round_trip() {
             crate::dht::PeerDiscoverySource::StaticBootstrap,
             crate::dht::PeerDiscoverySource::Dht,
         ],
+        capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
         published_at_ms: 42,
         ttl_ms: 60_000,
     };
@@ -166,6 +168,7 @@ fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
             hole_punch_addrs: Vec::new(),
             relay_addrs: Vec::new(),
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 0,
             ttl_ms: 60_000,
         },
@@ -195,6 +198,7 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
             hole_punch_addrs: Vec::new(),
             relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -262,6 +266,69 @@ fn try_send_command_reports_queue_disconnect() {
 }
 
 #[test]
+fn filter_request_peers_by_lane_prefers_capable_peer_records() {
+    let blob_peer_key = Keypair::generate_ed25519();
+    let sync_only_peer_key = Keypair::generate_ed25519();
+    let blob_peer_id = PeerId::from(blob_peer_key.public());
+    let sync_only_peer_id = PeerId::from(sync_only_peer_key.public());
+    let mut discovered = HashMap::new();
+    discovered.insert(
+        blob_peer_id,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: blob_peer_id.to_string(),
+                node_id: "blob-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Hybrid,
+                reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::BlobState, NetworkLane::Control],
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &blob_peer_key,
+        )
+        .expect("blob peer record"),
+    );
+    discovered.insert(
+        sync_only_peer_id,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: sync_only_peer_id.to_string(),
+                node_id: "sync-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Private,
+                reachability_class: crate::dht::PeerReachabilityClass::Private,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::Sync, NetworkLane::Control],
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &sync_only_peer_key,
+        )
+        .expect("sync peer record"),
+    );
+
+    let filtered = filter_request_peers_by_lane(
+        vec![sync_only_peer_id, blob_peer_id],
+        "/aw/node/replication/fetch-blob/1.0.0",
+        &discovered,
+    );
+
+    assert_eq!(filtered, vec![blob_peer_id]);
+}
+
+#[test]
 fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
@@ -281,6 +348,7 @@ fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
             hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -324,6 +392,7 @@ fn preferred_transport_path_skips_direct_and_falls_back_to_hole_punch_before_rel
             hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -359,6 +428,7 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
             hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -427,6 +497,7 @@ fn active_transport_path_from_endpoint_keeps_hole_punch_kind_when_known() {
             hole_punch_addrs: vec!["/ip4/127.0.0.1/udp/5103/quic-v1".to_string()],
             relay_addrs: Vec::new(),
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 77,
             ttl_ms: 60_000,
         },

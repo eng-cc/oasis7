@@ -44,7 +44,7 @@
 | `reachability_class` | `public/hybrid/private/relay_only/validator_hidden` |
 | `public_addrs` | 可公开 direct dial 的地址 |
 | `relay_addrs` | 可通过 relay 抵达的地址或 reservation 引用 |
-| `capability_mask` | gossip、sync、blob、control 可服务能力 |
+| `capability_lanes` | `consensus_gossip/sync/blob_state/control` 可服务能力；缺省时按角色回填默认 lane 集 |
 | `ttl` / `sequence` | 刷新、撤销和地址漂移控制 |
 | `signature` | 链域隔离签名 |
 
@@ -79,6 +79,12 @@
 | `sync lane` | header range、block range、state checkpoint | full-storage、sentry、private full | 可重试、支持长流 |
 | `blob/state lane` | DistFS、DA、snapshot、proof | storage、archive、proof provider | 独立限速，不能压制 consensus |
 | `control lane` | heartbeat、peer record refresh、reachability probe | role-aware | 高优先、低带宽 |
+
+实现落点（2026-04-02 / P2PARCH-4）:
+- `oasis7_proto::distributed_net` 现在冻结 `NetworkLane` / `NetworkLaneQosClass` / topic+protocol classifier，作为 lane registry 的共享真值。
+- `PeerRecord` 现在显式支持 `capability_lanes`；若旧 record 未声明，则按 `node_role` 回填默认 lane capability，保持向后兼容。`observer-light` 只默认声明 `consensus_gossip + control`，不再被当作 `sync/blob_state` 服务提供者。
+- `oasis7_net` 现在按 lane 选择 subscription inbox 配额，并在 req/resp 路径优先筛掉不具备对应 lane capability 的 peer record。
+- `oasis7_node` 现在把 replication / consensus 的 topic-protocol 绑定提升为 traffic lane registry，并在 runtime config 的 `node_role_claim` 上执行 lane publish/subscribe/request/serve 权限校验；`observer-light` 仍可主动请求 `sync/blob_state`，但不会注册对应 serve handler，也不能通过 `feedback_p2p` 绕过 `blob_state` lane 的 publish/subscribe gate。
 
 ## Anti-Eclipse / Anti-Spam 基线
 - Active peer set 至少来自两类 discovery source。

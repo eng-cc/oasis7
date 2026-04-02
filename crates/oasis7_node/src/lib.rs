@@ -398,6 +398,7 @@ impl NodeRuntime {
                 network,
                 replication_config,
                 self.config.world_id.as_str(),
+                &self.config.network_policy,
             ) {
                 self.running.store(false, Ordering::SeqCst);
                 return Err(err);
@@ -405,7 +406,12 @@ impl NodeRuntime {
         }
         let mut replication_network = if let Some(network) = &self.replication_network {
             let subscribe = !matches!(self.config.role, NodeRole::Sequencer);
-            match ReplicationNetworkEndpoint::new(network, &self.config.world_id, subscribe) {
+            match ReplicationNetworkEndpoint::new(
+                network,
+                &self.config.world_id,
+                subscribe,
+                &self.config.network_policy,
+            ) {
                 Ok(endpoint) => Some(endpoint),
                 Err(err) => {
                     self.running.store(false, Ordering::SeqCst);
@@ -417,7 +423,12 @@ impl NodeRuntime {
         };
         let mut consensus_network = if let Some(network) = &self.replication_network {
             if self.replication_network_consensus_enabled {
-                match ConsensusNetworkEndpoint::new(network, &self.config.world_id, true) {
+                match ConsensusNetworkEndpoint::new(
+                    network,
+                    &self.config.world_id,
+                    true,
+                    &self.config.network_policy,
+                ) {
                     Ok(endpoint) => Some(endpoint),
                     Err(err) => {
                         self.running.store(false, Ordering::SeqCst);
@@ -454,6 +465,21 @@ impl NodeRuntime {
                     reason: "feedback_p2p requires replication network".to_string(),
                 });
             };
+            if !self.config.network_policy.allows_lane_operation(
+                oasis7_proto::distributed_net::NetworkLane::BlobState,
+                oasis7_proto::distributed_net::NetworkLaneOperation::Publish,
+            ) || !self.config.network_policy.allows_lane_operation(
+                oasis7_proto::distributed_net::NetworkLane::BlobState,
+                oasis7_proto::distributed_net::NetworkLaneOperation::Subscribe,
+            ) {
+                self.running.store(false, Ordering::SeqCst);
+                return Err(NodeError::InvalidConfig {
+                    reason: format!(
+                        "feedback_p2p requires blob/state lane publish+subscribe access for node_role_claim={}",
+                        self.config.network_policy.node_role_claim
+                    ),
+                });
+            }
             match FeedbackAnnounceBridge::new(
                 self.config.world_id.as_str(),
                 network.clone_network(),
@@ -695,80 +721,104 @@ fn register_replication_fetch_handlers(
     handle: &NodeReplicationNetworkHandle,
     replication: &NodeReplicationConfig,
     world_id: &str,
+    network_policy: &NodeNetworkPolicy,
 ) -> Result<(), NodeError> {
     let network = handle.clone_network();
-
-    let commit_root_dir = replication.root_dir.clone();
-    let commit_world_id = world_id.to_string();
-    let commit_replication_config = replication.clone();
-    network
-        .register_handler(
-            REPLICATION_FETCH_COMMIT_PROTOCOL,
-            Box::new(move |payload| {
-                let request =
-                    serde_json::from_slice::<FetchCommitRequest>(payload).map_err(|err| {
-                        network_bad_request(format!("decode fetch-commit request failed: {}", err))
-                    })?;
-                if request.world_id != commit_world_id {
-                    return Err(network_bad_request(format!(
-                        "fetch-commit world mismatch: expected={}, got={}",
-                        commit_world_id, request.world_id
-                    )));
-                }
-                commit_replication_config
-                    .authorize_fetch_commit_request(&request)
-                    .map_err(|err| {
-                        network_bad_request(format!("fetch-commit authorization failed: {}", err))
-                    })?;
-                let message = load_commit_message_from_root(
-                    commit_root_dir.as_path(),
-                    commit_world_id.as_str(),
-                    request.height,
-                )
-                .map_err(network_internal_error)?;
-                let response = FetchCommitResponse {
-                    found: message.is_some(),
-                    message,
-                };
-                serde_json::to_vec(&response).map_err(|err| {
-                    network_internal_error(NodeError::Replication {
-                        reason: format!("encode fetch-commit response failed: {}", err),
+    if network_policy.allows_lane_operation(
+        oasis7_proto::distributed_net::NetworkLane::Sync,
+        oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
+    ) {
+        let commit_root_dir = replication.root_dir.clone();
+        let commit_world_id = world_id.to_string();
+        let commit_replication_config = replication.clone();
+        network
+            .register_handler(
+                REPLICATION_FETCH_COMMIT_PROTOCOL,
+                Box::new(move |payload| {
+                    let request =
+                        serde_json::from_slice::<FetchCommitRequest>(payload).map_err(|err| {
+                            network_bad_request(format!(
+                                "decode fetch-commit request failed: {}",
+                                err
+                            ))
+                        })?;
+                    if request.world_id != commit_world_id {
+                        return Err(network_bad_request(format!(
+                            "fetch-commit world mismatch: expected={}, got={}",
+                            commit_world_id, request.world_id
+                        )));
+                    }
+                    commit_replication_config
+                        .authorize_fetch_commit_request(&request)
+                        .map_err(|err| {
+                            network_bad_request(format!(
+                                "fetch-commit authorization failed: {}",
+                                err
+                            ))
+                        })?;
+                    let message = load_commit_message_from_root(
+                        commit_root_dir.as_path(),
+                        commit_world_id.as_str(),
+                        request.height,
+                    )
+                    .map_err(network_internal_error)?;
+                    let response = FetchCommitResponse {
+                        found: message.is_some(),
+                        message,
+                    };
+                    serde_json::to_vec(&response).map_err(|err| {
+                        network_internal_error(NodeError::Replication {
+                            reason: format!("encode fetch-commit response failed: {}", err),
+                        })
                     })
-                })
-            }),
-        )
-        .map_err(network_replication_error)?;
+                }),
+            )
+            .map_err(network_replication_error)?;
+    }
 
-    let blob_root_dir = replication.root_dir.clone();
-    let blob_replication_config = replication.clone();
-    network
-        .register_handler(
-            REPLICATION_FETCH_BLOB_PROTOCOL,
-            Box::new(move |payload| {
-                let request =
-                    serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
-                        network_bad_request(format!("decode fetch-blob request failed: {}", err))
-                    })?;
-                blob_replication_config
-                    .authorize_fetch_blob_request(&request)
-                    .map_err(|err| {
-                        network_bad_request(format!("fetch-blob authorization failed: {}", err))
-                    })?;
-                let blob =
-                    load_blob_from_root(blob_root_dir.as_path(), request.content_hash.as_str())
-                        .map_err(network_internal_error)?;
-                let response = FetchBlobResponse {
-                    found: blob.is_some(),
-                    blob,
-                };
-                serde_json::to_vec(&response).map_err(|err| {
-                    network_internal_error(NodeError::Replication {
-                        reason: format!("encode fetch-blob response failed: {}", err),
+    if network_policy.allows_lane_operation(
+        oasis7_proto::distributed_net::NetworkLane::BlobState,
+        oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
+    ) {
+        let blob_root_dir = replication.root_dir.clone();
+        let blob_replication_config = replication.clone();
+        network
+            .register_handler(
+                REPLICATION_FETCH_BLOB_PROTOCOL,
+                Box::new(move |payload| {
+                    let request =
+                        serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
+                            network_bad_request(format!(
+                                "decode fetch-blob request failed: {}",
+                                err
+                            ))
+                        })?;
+                    blob_replication_config
+                        .authorize_fetch_blob_request(&request)
+                        .map_err(|err| {
+                            network_bad_request(format!(
+                                "fetch-blob authorization failed: {}",
+                                err
+                            ))
+                        })?;
+                    let blob =
+                        load_blob_from_root(blob_root_dir.as_path(), request.content_hash.as_str())
+                            .map_err(network_internal_error)?;
+                    let response = FetchBlobResponse {
+                        found: blob.is_some(),
+                        blob,
+                    };
+                    serde_json::to_vec(&response).map_err(|err| {
+                        network_internal_error(NodeError::Replication {
+                            reason: format!("encode fetch-blob response failed: {}", err),
+                        })
                     })
-                })
-            }),
-        )
-        .map_err(network_replication_error)
+                }),
+            )
+            .map_err(network_replication_error)?;
+    }
+
+    Ok(())
 }
 
 fn network_bad_request(message: impl Into<String>) -> ProtoWorldError {

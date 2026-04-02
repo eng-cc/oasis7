@@ -1,7 +1,10 @@
 use std::fmt;
 use std::sync::Arc;
 
-use oasis7_proto::distributed_net::{DistributedNetwork, NetworkSubscription};
+use oasis7_proto::distributed_net::{
+    classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
+    NetworkSubscription,
+};
 use oasis7_proto::world_error::WorldError;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -10,7 +13,7 @@ use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
 use crate::replication::GossipReplicationMessage;
-use crate::NodeError;
+use crate::{NodeError, NodeNetworkPolicy};
 
 pub(crate) const DEFAULT_REPLICATION_TOPIC_PREFIX: &str = "aw";
 pub(crate) const DEFAULT_CONSENSUS_PROPOSAL_TOPIC_SUFFIX: &str = "consensus.proposal";
@@ -40,6 +43,42 @@ pub(crate) fn default_consensus_commit_topic(world_id: &str) -> String {
         "{DEFAULT_REPLICATION_TOPIC_PREFIX}.{world_id}.{}",
         DEFAULT_CONSENSUS_COMMIT_TOPIC_SUFFIX
     )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TrafficLaneRegistry {
+    pub replication_topic: String,
+    pub consensus_proposal_topic: String,
+    pub consensus_attestation_topic: String,
+    pub consensus_commit_topic: String,
+}
+
+impl TrafficLaneRegistry {
+    fn for_handle(handle: &NodeReplicationNetworkHandle, world_id: &str) -> Self {
+        Self {
+            replication_topic: handle.resolved_topic(world_id),
+            consensus_proposal_topic: default_consensus_proposal_topic(world_id),
+            consensus_attestation_topic: default_consensus_attestation_topic(world_id),
+            consensus_commit_topic: default_consensus_commit_topic(world_id),
+        }
+    }
+}
+
+fn validate_lane_access(
+    network_policy: &NodeNetworkPolicy,
+    lane: NetworkLane,
+    operation: NetworkLaneOperation,
+    label: &str,
+) -> Result<(), NodeError> {
+    if network_policy.allows_lane_operation(lane, operation) {
+        return Ok(());
+    }
+    Err(NodeError::InvalidConfig {
+        reason: format!(
+            "node_role_claim={} cannot {:?} {} on lane={}",
+            network_policy.node_role_claim, operation, label, lane
+        ),
+    })
 }
 
 #[derive(Clone)]
@@ -84,10 +123,15 @@ impl NodeReplicationNetworkHandle {
             .clone()
             .unwrap_or_else(|| default_replication_topic(world_id))
     }
+
+    fn resolved_lane_registry(&self, world_id: &str) -> TrafficLaneRegistry {
+        TrafficLaneRegistry::for_handle(self, world_id)
+    }
 }
 
 pub(crate) struct ReplicationNetworkEndpoint {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
+    network_policy: NodeNetworkPolicy,
     topic: String,
     subscription: Option<NetworkSubscription>,
 }
@@ -97,9 +141,17 @@ impl ReplicationNetworkEndpoint {
         handle: &NodeReplicationNetworkHandle,
         world_id: &str,
         subscribe: bool,
+        network_policy: &NodeNetworkPolicy,
     ) -> Result<Self, NodeError> {
-        let topic = handle.resolved_topic(world_id);
+        let registry = handle.resolved_lane_registry(world_id);
+        let topic = registry.replication_topic;
         let subscription = if subscribe {
+            validate_lane_access(
+                network_policy,
+                NetworkLane::Sync,
+                NetworkLaneOperation::Subscribe,
+                topic.as_str(),
+            )?;
             Some(
                 handle
                     .network
@@ -111,6 +163,7 @@ impl ReplicationNetworkEndpoint {
         };
         Ok(Self {
             network: Arc::clone(&handle.network),
+            network_policy: network_policy.clone(),
             topic,
             subscription,
         })
@@ -120,6 +173,12 @@ impl ReplicationNetworkEndpoint {
         &self,
         message: &GossipReplicationMessage,
     ) -> Result<(), NodeError> {
+        validate_lane_access(
+            &self.network_policy,
+            NetworkLane::Sync,
+            NetworkLaneOperation::Publish,
+            self.topic.as_str(),
+        )?;
         let payload = serde_json::to_vec(message).map_err(|err| NodeError::Replication {
             reason: format!("serialize replication network message failed: {}", err),
         })?;
@@ -151,6 +210,14 @@ impl ReplicationNetworkEndpoint {
         Req: Serialize,
         Resp: DeserializeOwned,
     {
+        if let Some(lane) = classify_network_protocol(protocol) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                protocol,
+            )?;
+        }
         let payload = serde_json::to_vec(request).map_err(|err| NodeError::Replication {
             reason: format!("serialize replication request {} failed: {}", protocol, err),
         })?;
@@ -174,6 +241,14 @@ impl ReplicationNetworkEndpoint {
         Req: Serialize,
         Resp: DeserializeOwned,
     {
+        if let Some(lane) = classify_network_protocol(protocol) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                protocol,
+            )?;
+        }
         let payload = serde_json::to_vec(request).map_err(|err| NodeError::Replication {
             reason: format!("serialize replication request {} failed: {}", protocol, err),
         })?;
@@ -189,6 +264,7 @@ impl ReplicationNetworkEndpoint {
 
 pub(crate) struct ConsensusNetworkEndpoint {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
+    network_policy: NodeNetworkPolicy,
     proposal_topic: String,
     attestation_topic: String,
     commit_topic: String,
@@ -202,11 +278,19 @@ impl ConsensusNetworkEndpoint {
         handle: &NodeReplicationNetworkHandle,
         world_id: &str,
         subscribe: bool,
+        network_policy: &NodeNetworkPolicy,
     ) -> Result<Self, NodeError> {
-        let proposal_topic = default_consensus_proposal_topic(world_id);
-        let attestation_topic = default_consensus_attestation_topic(world_id);
-        let commit_topic = default_consensus_commit_topic(world_id);
+        let registry = handle.resolved_lane_registry(world_id);
+        let proposal_topic = registry.consensus_proposal_topic;
+        let attestation_topic = registry.consensus_attestation_topic;
+        let commit_topic = registry.consensus_commit_topic;
         let proposal_subscription = if subscribe {
+            validate_lane_access(
+                network_policy,
+                NetworkLane::ConsensusGossip,
+                NetworkLaneOperation::Subscribe,
+                proposal_topic.as_str(),
+            )?;
             Some(
                 handle
                     .network
@@ -238,6 +322,7 @@ impl ConsensusNetworkEndpoint {
         };
         Ok(Self {
             network: Arc::clone(&handle.network),
+            network_policy: network_policy.clone(),
             proposal_topic,
             attestation_topic,
             commit_topic,
@@ -274,6 +359,12 @@ impl ConsensusNetworkEndpoint {
     }
 
     fn publish_json<T: Serialize>(&self, topic: &str, message: &T) -> Result<(), NodeError> {
+        validate_lane_access(
+            &self.network_policy,
+            NetworkLane::ConsensusGossip,
+            NetworkLaneOperation::Publish,
+            topic,
+        )?;
         let payload = serde_json::to_vec(message).map_err(|err| NodeError::Replication {
             reason: format!("serialize consensus network message failed: {}", err),
         })?;

@@ -28,8 +28,8 @@ use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
-    push_bounded_inbox_message, NetworkMessage, NetworkRequest, NetworkResponse,
-    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    classify_network_protocol, classify_network_topic, push_bounded_inbox_message, NetworkMessage,
+    NetworkRequest, NetworkResponse, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 use crate::util::to_canonical_cbor;
@@ -169,6 +169,31 @@ enum Command {
     Shutdown,
 }
 
+fn filter_request_peers_by_lane(
+    peers: Vec<PeerId>,
+    protocol: &str,
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
+) -> Vec<PeerId> {
+    let Some(lane) = classify_network_protocol(protocol) else {
+        return peers;
+    };
+    let lane_filtered: Vec<PeerId> = peers
+        .iter()
+        .copied()
+        .filter(|peer_id| {
+            discovered_peer_records
+                .get(peer_id)
+                .map(|record| record.record.supports_lane(lane))
+                .unwrap_or(true)
+        })
+        .collect();
+    if lane_filtered.is_empty() {
+        peers
+    } else {
+        lane_filtered
+    }
+}
+
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -204,6 +229,7 @@ impl Libp2pNetwork {
             let mut swarm = build_swarm(&keypair_clone);
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
+            let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
             let mut handlers: HashMap<String, Handler> = HashMap::new();
             let mut pending: HashMap<
                 request_response::OutboundRequestId,
@@ -296,6 +322,10 @@ impl Libp2pNetwork {
                                     if subscriptions.insert(topic.clone()) {
                                         let topic_handle = IdentTopic::new(topic.clone());
                                         if swarm.behaviour_mut().gossipsub.subscribe(&topic_handle).is_ok() {
+                                            let inbox_limit = classify_network_topic(topic.as_str())
+                                                .map(|lane| lane.default_subscription_inbox_messages())
+                                                .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
+                                            topic_inbox_limits.insert(topic.clone(), inbox_limit);
                                             topic_map.insert(topic_handle.hash(), topic);
                                         }
                                     }
@@ -320,18 +350,25 @@ impl Libp2pNetwork {
                                         }
                                         continue;
                                     }
-                                    let mut selected_peer = None;
+                                    let mut candidate_peers: Vec<PeerId> = Vec::new();
                                     if !providers.is_empty() {
                                         for provider in providers {
                                             if let Ok(peer_id) = provider.parse::<PeerId>() {
                                                 if peers.contains(&peer_id) {
-                                                    selected_peer = Some(peer_id);
-                                                    break;
+                                                    candidate_peers.push(peer_id);
                                                 }
                                             }
                                         }
                                     }
-                                    let peer = selected_peer.unwrap_or_else(|| peers[0]);
+                                    if candidate_peers.is_empty() {
+                                        candidate_peers = peers.clone();
+                                    }
+                                    candidate_peers = filter_request_peers_by_lane(
+                                        candidate_peers,
+                                        protocol.as_str(),
+                                        &discovered_peer_records,
+                                    );
+                                    let peer = candidate_peers[0];
                                     let request = NetworkRequest { protocol: protocol.clone(), payload };
                                     let request_id = swarm.behaviour_mut().request_response.send_request(&peer, request);
                                     pending.insert(request_id, response);
@@ -592,11 +629,19 @@ impl Libp2pNetwork {
                                         .get(&message.topic)
                                         .cloned()
                                         .unwrap_or_else(|| message.topic.as_str().to_string());
+                                    let inbox_limit = topic_inbox_limits
+                                        .get(topic.as_str())
+                                        .copied()
+                                        .or_else(|| {
+                                            classify_network_topic(topic.as_str())
+                                                .map(|lane| lane.default_subscription_inbox_messages())
+                                        })
+                                        .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
                                     push_bounded_inbox_message(
                                         &event_inbox,
                                         topic.as_str(),
                                         message.data,
-                                        DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+                                        inbox_limit,
                                     );
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => {

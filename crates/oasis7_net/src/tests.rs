@@ -242,6 +242,7 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
                 PeerDiscoverySource::StaticBootstrap,
                 PeerDiscoverySource::Dht,
             ],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 0,
             ttl_ms: 60_000,
         }
@@ -338,6 +339,7 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
                 PeerDiscoverySource::StaticBootstrap,
                 PeerDiscoverySource::Rendezvous,
             ],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
             published_at_ms: 0,
             ttl_ms: 60_000,
         }

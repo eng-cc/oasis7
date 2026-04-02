@@ -20,9 +20,7 @@ use oasis7_node::{
     NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, PosConsensusStatus,
     PosValidator,
 };
-use oasis7_proto::distributed_dht::{
-    PeerDiscoverySource, PeerRecord,
-};
+use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -985,6 +983,7 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
             PeerDiscoverySource::StaticBootstrap,
             PeerDiscoverySource::Dht,
         ],
+        capability_lanes: network_policy.node_role_claim.default_capability_lanes(),
         published_at_ms: 0,
         ttl_ms: 60 * 60 * 1000,
     }

@@ -41,7 +41,7 @@
 
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Peer identity 与 record | `peer_id/node_identity_key/chain_id/role_mask/reachability_class/public_addrs/relay_addrs/ttl/signature` | 节点发布带有效期的签名 peer record | `draft -> published -> refreshed -> expired/revoked` | record 必须链内域分离签名，过期或域不匹配即拒绝 | 只有节点身份持有者可发布；consensus signer 不直接暴露 |
+| Peer identity 与 record | `peer_id/node_identity_key/chain_id/role_mask/reachability_class/public_addrs/relay_addrs/capability_lanes/ttl/signature` | 节点发布带有效期的签名 peer record，并显式声明可服务的 traffic lanes | `draft -> published -> refreshed -> expired/revoked` | record 必须链内域分离签名，过期或域不匹配即拒绝；未声明某 lane 的 peer 不应被优先选为该 lane provider | 只有节点身份持有者可发布；consensus signer 不直接暴露 |
 | Reachability service | `observed_addr/autonat_status/hole_punch_status/relay_reservation/path_quality` | 探测 direct、尝试打洞、预留 relay、维护路径排序 | `unknown -> direct/private/relay_only -> degraded/recovered` | direct 优先于 punched，punched 优先于 relay；不能打洞时自动降级 relay | 节点本地决策；relay 只提供转发，不授予签名权限 |
 | Discovery fabric | `bootnodes/dht_namespace/rendezvous_topic/peer_record_cache/source_diversity` | 从 bootnode、DHT、rendezvous 与静态 allowlist 聚合候选 peer | `seeded -> converging -> healthy/degraded` | 至少保留两类独立 discovery source；单源集中不得视为 healthy | bootnode/relay 可公开；validator core 可只做 consumer |
 | Transport abstraction | `transport_id/directness/security/mux/qos_class/max_streams` | 在 direct、hole-punched、relay 路径上复用统一流接口 | `dialing -> established -> draining -> closed` | QUIC 为主、TCP/Noise 为回退；UDP 只可作为加速，不得成为唯一真值链路 | transport key 可轮换；长期 signer 不进入 transport session |

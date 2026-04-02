@@ -112,6 +112,63 @@ fn runtime_network_replication_gap_sync_reports_error_after_retries_exhausted() 
 }
 
 #[test]
+fn observer_replication_runtime_starts_without_registering_data_service_handlers() {
+    let world_id = "world-observer-lane-gate";
+    let dir = temp_dir("observer-lane-gate");
+    let network_impl = Arc::new(TestInMemoryNetwork::default());
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 91)],
+    );
+    let config = NodeConfig::new("node-observer", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 92));
+
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config))
+        .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
+    runtime.start().expect("start runtime");
+
+    let commit_request = signed_fetch_commit_request_for_test(world_id, 1, 92);
+    let commit_payload = serde_json::to_vec(&commit_request).expect("encode commit request");
+    let commit_err = network
+        .request(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            commit_payload.as_slice(),
+        )
+        .expect_err("observer should not serve commit sync protocol");
+    assert!(matches!(
+        commit_err,
+        WorldError::NetworkProtocolUnavailable { .. }
+    ));
+
+    let blob_request = signed_fetch_blob_request_for_test("content-hash-1", 92);
+    let blob_payload = serde_json::to_vec(&blob_request).expect("encode blob request");
+    let blob_err = network
+        .request(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            blob_payload.as_slice(),
+        )
+        .expect_err("observer should not serve blob/state protocol");
+    assert!(matches!(
+        blob_err,
+        WorldError::NetworkProtocolUnavailable { .. }
+    ));
+
+    runtime.stop().expect("stop runtime");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn runtime_replication_storage_challenge_gate_blocks_on_local_probe_failure() {
     let dir = temp_dir("challenge-gate-local");
     let pos_config = signed_pos_config_with_signer_seeds(
