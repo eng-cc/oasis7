@@ -59,3 +59,18 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/TASK-PM-0021.yaml
+  - task_id: TASK-PM-0022
+    title: "Implement P2PARCH-1 rendezvous automation"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-1 runtime advertises and queries rendezvous discovery alongside existing bootstrap/DHT paths for the implemented path."
+      - "Rendezvous-discovered peer candidates still require world/domain/signature validation before entering the candidate set."
+      - "Implementation, tests, project docs and execution log remain traceable to PRD-P2P-024 / P2PARCH-1."
+    handoff_to:
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/TASK-PM-0022.yaml

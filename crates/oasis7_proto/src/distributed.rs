@@ -76,6 +76,10 @@ pub fn dht_peer_discovery_key(world_id: &str) -> String {
     format!("{DHT_WORLD_PREFIX}/{world_id}/{DHT_PEER_DISCOVERY_SUFFIX}")
 }
 
+pub fn rendezvous_namespace(world_id: &str, network_id: &str) -> String {
+    format!("aw-{world_id}-{network_id}")
+}
+
 pub fn dht_peer_record_key(world_id: &str, peer_id: &str) -> String {
     format!("{DHT_WORLD_PREFIX}/{world_id}/{DHT_PEER_RECORDS_SUFFIX}/{peer_id}")
 }

@@ -3,41 +3,49 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+mod api;
+mod discovery;
 mod kad_queries;
 mod peer_record;
+mod swarm_behaviour;
+mod utils;
 
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
-use libp2p::gossipsub::{self, IdentTopic, MessageAuthenticity, TopicHash};
+use libp2p::gossipsub::{self, IdentTopic, TopicHash};
 use libp2p::identity::Keypair;
-use libp2p::kad::{self, store::MemoryStore, Quorum, RecordKey};
-use libp2p::noise;
-use libp2p::request_response::{self, ProtocolSupport};
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::{Multiaddr, PeerId, StreamProtocol, Transport as _};
-use oasis7_proto::distributed_dht::DistributedDht as ProtoDistributedDht;
-use oasis7_proto::distributed_net::DistributedNetwork as ProtoDistributedNetwork;
+use libp2p::kad::{self, Quorum, RecordKey};
+use libp2p::rendezvous;
+use libp2p::request_response::{self};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
-use oasis7_proto::distributed::{
-    dht_membership_key, dht_peer_discovery_key, dht_peer_record_key, dht_provider_key,
-    dht_world_head_key,
-    DistributedErrorCode, ErrorResponse, WorldHeadAnnounce, RR_PROTOCOL_PREFIX,
-};
+use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse, WorldHeadAnnounce};
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
     push_bounded_inbox_message, NetworkMessage, NetworkRequest, NetworkResponse,
-    NetworkSubscription, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
-use crate::util::{to_canonical_cbor, unix_now_ms_i64};
+use crate::util::to_canonical_cbor;
+use discovery::{
+    clear_pending_peer_record_request, dial_routing_updated_addrs, handle_peer_record_response,
+    handle_rendezvous_discovered, handle_request_response_request,
+    maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
+    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
+    maybe_request_cached_peer_record, maybe_request_connected_peer_record,
+    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
+    PendingPeerRecordRequest,
+};
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
-use peer_record::{
-    build_configured_peer_record, peer_record_dial_addrs, publish_configured_peer_record,
-    put_record_query,
-    validate_discovered_peer_record,
+use peer_record::{publish_configured_peer_record, put_record_query};
+use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
+use utils::{
+    decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
+    try_send_command,
 };
 
 const DEFAULT_COMMAND_BUFFER_CAPACITY: usize = 2048;
@@ -155,12 +163,6 @@ enum Command {
     Shutdown,
 }
 
-enum PendingPeerRecordRequest {
-    ConnectedPeerRecord { peer_id: PeerId },
-    CachedPeerRecord { peer_id: PeerId },
-    CachedDiscoveryPeers { peer_id: PeerId },
-}
-
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -213,6 +215,10 @@ impl Libp2pNetwork {
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_discovery_peers: HashSet<PeerId> = HashSet::new();
+            let mut pending_rendezvous_registers: HashSet<PeerId> = HashSet::new();
+            let mut pending_rendezvous_discovers: HashSet<PeerId> = HashSet::new();
+            let mut registered_rendezvous_nodes: HashSet<PeerId> = HashSet::new();
+            let mut rendezvous_cookies: HashMap<PeerId, rendezvous::Cookie> = HashMap::new();
             let mut dialed_discovery_addrs: HashSet<String> = HashSet::new();
             let mut peer_record_last_published_at_ms = None;
             let republish_interval_ms = config_clone.republish_interval_ms;
@@ -482,6 +488,40 @@ impl Libp2pNetwork {
                                                 peer_id,
                                                 local_peer_id,
                                             );
+                                            if let Err(err) = maybe_register_rendezvous_namespace(
+                                                &mut swarm,
+                                                &mut pending_rendezvous_registers,
+                                                &registered_rendezvous_nodes,
+                                                peer_id,
+                                                local_peer_id,
+                                                template,
+                                            ) {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p rendezvous register failed peer={peer_id}: {err:?}"
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
+                                            if let Err(err) = maybe_discover_rendezvous_namespace(
+                                                &mut swarm,
+                                                &mut pending_rendezvous_discovers,
+                                                &rendezvous_cookies,
+                                                peer_id,
+                                                local_peer_id,
+                                                template,
+                                            ) {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p rendezvous discover failed peer={peer_id}: {err:?}"
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -762,7 +802,77 @@ impl Libp2pNetwork {
                                         _ => {}
                                     }
                                 }
+                                SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(event)) => {
+                                    match event {
+                                        rendezvous::client::Event::Registered { rendezvous_node, .. } => {
+                                            pending_rendezvous_registers.remove(&rendezvous_node);
+                                            registered_rendezvous_nodes.insert(rendezvous_node);
+                                        }
+                                        rendezvous::client::Event::RegisterFailed { rendezvous_node, namespace, error } => {
+                                            pending_rendezvous_registers.remove(&rendezvous_node);
+                                            registered_rendezvous_nodes.remove(&rendezvous_node);
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p rendezvous register rejected peer={rendezvous_node} namespace={namespace}: {error:?}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        rendezvous::client::Event::Discovered {
+                                            rendezvous_node,
+                                            registrations,
+                                            cookie,
+                                        } => {
+                                            pending_rendezvous_discovers.remove(&rendezvous_node);
+                                            rendezvous_cookies.insert(rendezvous_node, cookie);
+                                            handle_rendezvous_discovered(
+                                                &mut swarm,
+                                                rendezvous_node,
+                                                registrations,
+                                                &mut pending_dht,
+                                                &mut pending_peer_record_requests,
+                                                &mut pending_discovery_peer_records,
+                                                &mut pending_cached_peer_records,
+                                                &mut dialed_discovery_addrs,
+                                                peers.as_slice(),
+                                                local_peer_id,
+                                                peer_record_template.as_ref(),
+                                                max_error_messages,
+                                                &event_errors,
+                                            );
+                                        }
+                                        rendezvous::client::Event::DiscoverFailed { rendezvous_node, namespace, error } => {
+                                            pending_rendezvous_discovers.remove(&rendezvous_node);
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p rendezvous discover rejected peer={rendezvous_node} namespace={namespace:?}: {error:?}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        rendezvous::client::Event::Expired { peer } => {
+                                            rendezvous_cookies.remove(&peer);
+                                        }
+                                    }
+                                }
+                                SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => {
+                                    if let rendezvous::server::Event::PeerNotRegistered { peer, namespace, error } = event {
+                                        push_bounded_clone(
+                                            &event_errors,
+                                            format!(
+                                                "libp2p rendezvous server rejected peer={peer} namespace={namespace}: {error:?}"
+                                            ),
+                                            max_error_messages,
+                                            "lock errors",
+                                        );
+                                    }
+                                }
                                 SwarmEvent::NewListenAddr { address, .. } => {
+                                    swarm.add_external_address(address.clone());
                                     push_bounded_clone(
                                         &event_listening_addrs,
                                         address.clone(),
@@ -840,6 +950,40 @@ impl Libp2pNetwork {
                                         local_peer_id,
                                     );
                                     if let Some(template) = peer_record_template.as_ref() {
+                                        if let Err(err) = maybe_register_rendezvous_namespace(
+                                            &mut swarm,
+                                            &mut pending_rendezvous_registers,
+                                            &registered_rendezvous_nodes,
+                                            peer_id,
+                                            local_peer_id,
+                                            template,
+                                        ) {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p rendezvous register failed peer={peer_id}: {err:?}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
+                                        if let Err(err) = maybe_discover_rendezvous_namespace(
+                                            &mut swarm,
+                                            &mut pending_rendezvous_discovers,
+                                            &rendezvous_cookies,
+                                            peer_id,
+                                            local_peer_id,
+                                            template,
+                                        ) {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p rendezvous discover failed peer={peer_id}: {err:?}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        }
                                         start_peer_discovery_query(
                                             &mut swarm,
                                             &mut pending_dht,
@@ -849,6 +993,10 @@ impl Libp2pNetwork {
                                 }
                                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                     peers.retain(|peer| peer != &peer_id);
+                                    pending_rendezvous_registers.remove(&peer_id);
+                                    pending_rendezvous_discovers.remove(&peer_id);
+                                    registered_rendezvous_nodes.remove(&peer_id);
+                                    rendezvous_cookies.remove(&peer_id);
                                     event_connected_peers
                                         .lock()
                                         .expect("lock connected peers")
@@ -951,828 +1099,6 @@ impl Drop for Libp2pNetwork {
     fn drop(&mut self) {
         let _ = self.enqueue_command(Command::Shutdown);
     }
-}
-
-impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
-    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
-        self.enqueue_command(Command::Publish {
-            topic: topic.to_string(),
-            payload: payload.to_vec(),
-        })
-    }
-
-    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        self.enqueue_command(Command::Subscribe {
-            topic: topic.to_string(),
-        })?;
-        Ok(NetworkSubscription::new(
-            topic.to_string(),
-            Arc::clone(&self.inbox),
-        ))
-    }
-
-    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
-        self.request_with_providers(protocol, payload, &[])
-    }
-
-    fn request_with_providers(
-        &self,
-        protocol: &str,
-        payload: &[u8],
-        providers: &[String],
-    ) -> Result<Vec<u8>, WorldError> {
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::Request {
-            protocol: protocol.to_string(),
-            payload: payload.to_vec(),
-            providers: providers.to_vec(),
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn register_handler(
-        &self,
-        protocol: &str,
-        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
-    ) -> Result<(), WorldError> {
-        self.enqueue_command(Command::RegisterHandler {
-            protocol: protocol.to_string(),
-            handler: Arc::from(handler),
-        })
-    }
-}
-
-impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
-    fn publish_provider(
-        &self,
-        world_id: &str,
-        content_hash: &str,
-        _provider_id: &str,
-    ) -> Result<(), WorldError> {
-        let key = dht_provider_key(world_id, content_hash);
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::PublishProvider {
-            key,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn get_providers(
-        &self,
-        world_id: &str,
-        content_hash: &str,
-    ) -> Result<Vec<ProviderRecord>, WorldError> {
-        let key = dht_provider_key(world_id, content_hash);
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetProviders {
-            key,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn put_world_head(&self, world_id: &str, head: &WorldHeadAnnounce) -> Result<(), WorldError> {
-        let key = dht_world_head_key(world_id);
-        let payload = to_canonical_cbor(head)?;
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::PutWorldHead {
-            key,
-            payload,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn get_world_head(&self, world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
-        let key = dht_world_head_key(world_id);
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetWorldHead {
-            key,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn put_membership_directory(
-        &self,
-        world_id: &str,
-        snapshot: &MembershipDirectorySnapshot,
-    ) -> Result<(), WorldError> {
-        let key = dht_membership_key(world_id);
-        let payload = to_canonical_cbor(snapshot)?;
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::PutMembershipDirectory {
-            key,
-            payload,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn get_membership_directory(
-        &self,
-        world_id: &str,
-    ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
-        let key = dht_membership_key(world_id);
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetMembershipDirectory {
-            key,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
-        let key = dht_peer_record_key(world_id, record.record.peer_id.as_str());
-        let payload = to_canonical_cbor(record)?;
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::PutPeerRecord {
-            key,
-            payload,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-
-    fn get_peer_record(
-        &self,
-        world_id: &str,
-        peer_id: &str,
-    ) -> Result<Option<SignedPeerRecord>, WorldError> {
-        let key = dht_peer_record_key(world_id, peer_id);
-        let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetPeerRecord {
-            key,
-            response: sender,
-        })?;
-        futures::executor::block_on(receiver).map_err(|_| {
-            WorldError::NetworkProtocolUnavailable {
-                protocol: "libp2p".to_string(),
-            }
-        })?
-    }
-}
-
-#[derive(NetworkBehaviour)]
-#[behaviour(out_event = "BehaviourEvent")]
-struct Behaviour {
-    gossipsub: gossipsub::Behaviour,
-    request_response: request_response::cbor::Behaviour<NetworkRequest, NetworkResponse>,
-    kademlia: kad::Behaviour<MemoryStore>,
-}
-
-#[derive(Debug)]
-enum BehaviourEvent {
-    Gossipsub(gossipsub::Event),
-    RequestResponse(request_response::Event<NetworkRequest, NetworkResponse>),
-    Kademlia(kad::Event),
-}
-
-impl From<gossipsub::Event> for BehaviourEvent {
-    fn from(event: gossipsub::Event) -> Self {
-        BehaviourEvent::Gossipsub(event)
-    }
-}
-
-impl From<request_response::Event<NetworkRequest, NetworkResponse>> for BehaviourEvent {
-    fn from(event: request_response::Event<NetworkRequest, NetworkResponse>) -> Self {
-        BehaviourEvent::RequestResponse(event)
-    }
-}
-
-impl From<kad::Event> for BehaviourEvent {
-    fn from(event: kad::Event) -> Self {
-        BehaviourEvent::Kademlia(event)
-    }
-}
-
-fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
-    let swarm_config = libp2p::swarm::Config::with_async_std_executor()
-        .with_idle_connection_timeout(std::time::Duration::from_secs(30));
-
-    let peer_id = PeerId::from(keypair.public());
-    let gossipsub = gossipsub::Behaviour::new(
-        MessageAuthenticity::Signed(keypair.clone()),
-        gossipsub::Config::default(),
-    )
-    .expect("gossipsub config");
-
-    let protocols = vec![(
-        StreamProtocol::new(RR_PROTOCOL_PREFIX),
-        ProtocolSupport::Full,
-    )];
-    let request_response =
-        request_response::cbor::Behaviour::new(protocols, request_response::Config::default());
-
-    let store = MemoryStore::new(peer_id);
-    let kademlia = kad::Behaviour::new(peer_id, store);
-
-    let behaviour = Behaviour {
-        gossipsub,
-        request_response,
-        kademlia,
-    };
-
-    let transport = libp2p::tcp::async_io::Transport::new(libp2p::tcp::Config::default())
-        .upgrade(libp2p::core::upgrade::Version::V1)
-        .authenticate(noise::Config::new(keypair).expect("noise config"))
-        .multiplex(libp2p::yamux::Config::default())
-        .boxed();
-
-    Swarm::new(transport, behaviour, peer_id, swarm_config)
-}
-
-fn dial_addr_with_optional_peer_id(
-    swarm: &mut Swarm<Behaviour>,
-    addr: Multiaddr,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let (peer_id, dial_addr) = split_peer_id(addr);
-    if let Some(peer_id) = peer_id {
-        swarm
-            .behaviour_mut()
-            .kademlia
-            .add_address(&peer_id, dial_addr.clone());
-        let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_id)
-            .addresses(vec![dial_addr])
-            .build();
-        swarm.dial(opts)?;
-    } else {
-        swarm.dial(dial_addr)?;
-    }
-    Ok(())
-}
-
-fn split_peer_id(mut addr: Multiaddr) -> (Option<PeerId>, Multiaddr) {
-    use libp2p::multiaddr::Protocol;
-
-    let peer_id = match addr.pop() {
-        Some(Protocol::P2p(peer)) => Some(peer),
-        Some(protocol) => {
-            addr.push(protocol);
-            None
-        }
-        None => None,
-    };
-    (peer_id, addr)
-}
-
-fn start_peer_discovery_query(
-    swarm: &mut Swarm<Behaviour>,
-    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
-    template: &PeerRecord,
-) {
-    let key = dht_peer_discovery_key(template.world_id.as_str());
-    let query_id = swarm
-        .behaviour_mut()
-        .kademlia
-        .get_providers(RecordKey::new(&key));
-    pending_dht.insert(
-        query_id,
-        PendingDhtQuery::DiscoverPeers {
-            peers: HashSet::new(),
-            error: None,
-        },
-    );
-}
-
-fn publish_discovery_provider(
-    swarm: &mut Swarm<Behaviour>,
-    provider_keys: &mut HashMap<String, i64>,
-    world_id: &str,
-) {
-    let key = dht_peer_discovery_key(world_id);
-    if swarm
-        .behaviour_mut()
-        .kademlia
-        .start_providing(RecordKey::new(&key))
-        .is_ok()
-    {
-        provider_keys.insert(key, now_ms());
-    }
-}
-
-fn maybe_queue_discovery_peer_record(
-    swarm: &mut Swarm<Behaviour>,
-    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
-    pending_discovery_peer_records: &mut HashSet<PeerId>,
-    peer_id: PeerId,
-    local_peer_id: PeerId,
-    world_id: &str,
-) {
-    if world_id.trim().is_empty()
-        || peer_id == local_peer_id
-        || pending_discovery_peer_records.contains(&peer_id)
-    {
-        return;
-    }
-    let key = dht_peer_record_key(world_id, peer_id.to_string().as_str());
-    let query_id = swarm.behaviour_mut().kademlia.get_record(RecordKey::new(&key));
-    pending_discovery_peer_records.insert(peer_id);
-    pending_dht.insert(
-        query_id,
-        PendingDhtQuery::DiscoverPeerRecord {
-            peer_id,
-            record: None,
-            error: None,
-        },
-    );
-}
-
-fn maybe_request_connected_peer_record(
-    swarm: &mut Swarm<Behaviour>,
-    pending_peer_record_requests: &mut HashMap<
-        request_response::OutboundRequestId,
-        PendingPeerRecordRequest,
-    >,
-    pending_connected_peer_records: &mut HashSet<PeerId>,
-    peer_id: PeerId,
-    local_peer_id: PeerId,
-) {
-    if peer_id == local_peer_id || pending_connected_peer_records.contains(&peer_id) {
-        return;
-    }
-    let request_id = swarm
-        .behaviour_mut()
-        .request_response
-        .send_request(
-            &peer_id,
-            NetworkRequest {
-                protocol: RR_GET_LOCAL_PEER_RECORD.to_string(),
-                payload: Vec::new(),
-            },
-        );
-    pending_connected_peer_records.insert(peer_id);
-    pending_peer_record_requests.insert(
-        request_id,
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id },
-    );
-}
-
-fn request_cached_peer_record_via(
-    swarm: &mut Swarm<Behaviour>,
-    pending_peer_record_requests: &mut HashMap<
-        request_response::OutboundRequestId,
-        PendingPeerRecordRequest,
-    >,
-    pending_cached_peer_records: &mut HashSet<PeerId>,
-    ask_peer: PeerId,
-    peer_id: PeerId,
-    local_peer_id: PeerId,
-) -> bool {
-    if peer_id == local_peer_id
-        || ask_peer == local_peer_id
-        || pending_cached_peer_records.contains(&peer_id)
-    {
-        return false;
-    }
-    let request_id = swarm
-        .behaviour_mut()
-        .request_response
-        .send_request(
-            &ask_peer,
-            NetworkRequest {
-                protocol: RR_GET_CACHED_PEER_RECORD.to_string(),
-                payload: peer_id.to_string().into_bytes(),
-            },
-        );
-    pending_cached_peer_records.insert(peer_id);
-    pending_peer_record_requests.insert(
-        request_id,
-        PendingPeerRecordRequest::CachedPeerRecord { peer_id },
-    );
-    true
-}
-
-fn maybe_request_cached_peer_record(
-    swarm: &mut Swarm<Behaviour>,
-    pending_peer_record_requests: &mut HashMap<
-        request_response::OutboundRequestId,
-        PendingPeerRecordRequest,
-    >,
-    pending_cached_peer_records: &mut HashSet<PeerId>,
-    connected_peers: &[PeerId],
-    peer_id: PeerId,
-    local_peer_id: PeerId,
-) -> bool {
-    if peer_id == local_peer_id || pending_cached_peer_records.contains(&peer_id) {
-        return false;
-    }
-    let Some(ask_peer) = connected_peers
-        .iter()
-        .copied()
-        .find(|candidate| *candidate != peer_id && *candidate != local_peer_id)
-        .or_else(|| connected_peers.first().copied())
-    else {
-        return false;
-    };
-    request_cached_peer_record_via(
-        swarm,
-        pending_peer_record_requests,
-        pending_cached_peer_records,
-        ask_peer,
-        peer_id,
-        local_peer_id,
-    )
-}
-
-fn maybe_request_cached_discovery_peers(
-    swarm: &mut Swarm<Behaviour>,
-    pending_peer_record_requests: &mut HashMap<
-        request_response::OutboundRequestId,
-        PendingPeerRecordRequest,
-    >,
-    pending_cached_discovery_peers: &mut HashSet<PeerId>,
-    peer_id: PeerId,
-    local_peer_id: PeerId,
-) {
-    if peer_id == local_peer_id || pending_cached_discovery_peers.contains(&peer_id) {
-        return;
-    }
-    let request_id = swarm
-        .behaviour_mut()
-        .request_response
-        .send_request(
-            &peer_id,
-            NetworkRequest {
-                protocol: RR_GET_CACHED_DISCOVERY_PEERS.to_string(),
-                payload: Vec::new(),
-            },
-        );
-    pending_cached_discovery_peers.insert(peer_id);
-    pending_peer_record_requests.insert(
-        request_id,
-        PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id },
-    );
-}
-
-fn process_discovered_peer_record(
-    swarm: &mut Swarm<Behaviour>,
-    discovered_peer_records: &mut HashMap<PeerId, SignedPeerRecord>,
-    dialed_discovery_addrs: &mut HashSet<String>,
-    template: Option<&PeerRecord>,
-    record: SignedPeerRecord,
-) -> Result<(), WorldError> {
-    validate_discovered_peer_record(&record, template)?;
-    let peer_id = record
-        .record
-        .peer_id
-        .parse::<PeerId>()
-        .map_err(|_| WorldError::NetworkProtocolUnavailable {
-            protocol: "peer record peer_id must be valid".to_string(),
-        })?;
-    for addr in peer_record_dial_addrs(&record) {
-        let (_, kad_addr) = split_peer_id(addr.clone());
-        swarm
-            .behaviour_mut()
-            .kademlia
-            .add_address(&peer_id, kad_addr);
-        let addr_label = addr.to_string();
-        if dialed_discovery_addrs.insert(addr_label.clone()) {
-            let _ = dial_addr_with_optional_peer_id(swarm, addr);
-        }
-    }
-    discovered_peer_records.insert(peer_id, record);
-    Ok(())
-}
-
-fn handle_request_response_request(
-    request: &NetworkRequest,
-    handlers: &HashMap<String, Handler>,
-    peer_record_template: Option<&PeerRecord>,
-    keypair: &Keypair,
-    listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
-    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
-) -> Result<Vec<u8>, WorldError> {
-    match request.protocol.as_str() {
-        RR_GET_LOCAL_PEER_RECORD => {
-            let Some(template) = peer_record_template else {
-                return Err(WorldError::NetworkProtocolUnavailable {
-                    protocol: RR_GET_LOCAL_PEER_RECORD.to_string(),
-                });
-            };
-            let record = build_configured_peer_record(keypair, template, listening_addrs)?;
-            to_canonical_cbor(&record)
-        }
-        RR_GET_CACHED_PEER_RECORD => {
-            let peer_id = String::from_utf8(request.payload.clone())
-                .map_err(|_| WorldError::NetworkProtocolUnavailable {
-                    protocol: "cached peer record payload must be utf-8".to_string(),
-                })?
-                .parse::<PeerId>()
-                .map_err(|_| {
-                WorldError::NetworkProtocolUnavailable {
-                    protocol: "cached peer record peer_id must be valid".to_string(),
-                }
-            })?;
-            let record = discovered_peer_records.get(&peer_id).ok_or_else(|| {
-                WorldError::NetworkProtocolUnavailable {
-                    protocol: RR_GET_CACHED_PEER_RECORD.to_string(),
-                }
-            })?;
-            to_canonical_cbor(record)
-        }
-        RR_GET_CACHED_DISCOVERY_PEERS => {
-            let peers: Vec<String> = discovered_peer_records
-                .values()
-                .filter(|record| {
-                    peer_record_template
-                        .map(|template| {
-                            record.record.world_id == template.world_id
-                                && record.record.network_id == template.network_id
-                        })
-                        .unwrap_or(true)
-                })
-                .map(|record| record.record.peer_id.clone())
-                .collect();
-            to_canonical_cbor(&peers)
-        }
-        _ => {
-            if let Some(handler) = handlers.get(&request.protocol) {
-                handler(&request.payload)
-            } else {
-                Err(WorldError::NetworkProtocolUnavailable {
-                    protocol: request.protocol.clone(),
-                })
-            }
-        }
-    }
-}
-
-fn handle_peer_record_response(
-    swarm: &mut Swarm<Behaviour>,
-    kind: PendingPeerRecordRequest,
-    payload: &[u8],
-    pending_peer_record_requests: &mut HashMap<
-        request_response::OutboundRequestId,
-        PendingPeerRecordRequest,
-    >,
-    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
-    discovered_peer_records: &mut HashMap<PeerId, SignedPeerRecord>,
-    pending_discovery_peer_records: &mut HashSet<PeerId>,
-    dialed_discovery_addrs: &mut HashSet<String>,
-    peer_record_template: Option<&PeerRecord>,
-    local_peer_id: PeerId,
-    pending_connected_peer_records: &mut HashSet<PeerId>,
-    pending_cached_peer_records: &mut HashSet<PeerId>,
-    pending_cached_discovery_peers: &mut HashSet<PeerId>,
-    max_error_messages: usize,
-    event_errors: &Arc<Mutex<Vec<String>>>,
-) {
-    clear_pending_peer_record_request(
-        &kind,
-        pending_connected_peer_records,
-        pending_cached_peer_records,
-        pending_cached_discovery_peers,
-    );
-    let requested_peer_id = match &kind {
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id }
-        | PendingPeerRecordRequest::CachedPeerRecord { peer_id }
-        | PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => *peer_id,
-    };
-    if let PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } = &kind {
-        match decode_cached_discovery_peers_response(payload) {
-            Ok(peer_ids) => {
-                for discovered_peer_id in peer_ids {
-                    maybe_queue_discovery_peer_record(
-                        swarm,
-                        pending_dht,
-                        pending_discovery_peer_records,
-                        discovered_peer_id,
-                        local_peer_id,
-                        peer_record_template
-                            .map(|record| record.world_id.as_str())
-                            .unwrap_or_default(),
-                    );
-                    let _ = request_cached_peer_record_via(
-                        swarm,
-                        pending_peer_record_requests,
-                        pending_cached_peer_records,
-                        *peer_id,
-                        discovered_peer_id,
-                        local_peer_id,
-                    );
-                }
-            }
-            Err(err) => {
-                push_bounded_clone(
-                    event_errors,
-                    format!(
-                        "libp2p cached discovery peers decode failed peer={requested_peer_id}: {err:?}"
-                    ),
-                    max_error_messages,
-                    "lock errors",
-                );
-            }
-        }
-        return;
-    }
-    match decode_optional_peer_record_response(payload) {
-        Ok(Some(record)) => {
-            if let Err(err) = process_discovered_peer_record(
-                swarm,
-                discovered_peer_records,
-                dialed_discovery_addrs,
-                peer_record_template,
-                record.clone(),
-            ) {
-                push_bounded_clone(
-                    event_errors,
-                    format!(
-                        "libp2p peer record response rejected peer={requested_peer_id}: {err:?}"
-                    ),
-                    max_error_messages,
-                    "lock errors",
-                );
-            } else {
-                let _ = republish_cached_peer_record(swarm, pending_dht, &record);
-            }
-        }
-        Ok(None) => {}
-        Err(err) => {
-            push_bounded_clone(
-                event_errors,
-                format!(
-                    "libp2p peer record response decode failed peer={requested_peer_id}: {err:?}"
-                ),
-                max_error_messages,
-                "lock errors",
-            );
-        }
-    }
-}
-
-fn clear_pending_peer_record_request(
-    kind: &PendingPeerRecordRequest,
-    pending_connected_peer_records: &mut HashSet<PeerId>,
-    pending_cached_peer_records: &mut HashSet<PeerId>,
-    pending_cached_discovery_peers: &mut HashSet<PeerId>,
-) {
-    match kind {
-        PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
-            pending_connected_peer_records.remove(peer_id);
-        }
-        PendingPeerRecordRequest::CachedPeerRecord { peer_id } => {
-            pending_cached_peer_records.remove(peer_id);
-        }
-        PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => {
-            pending_cached_discovery_peers.remove(peer_id);
-        }
-    }
-}
-
-fn decode_optional_peer_record_response(payload: &[u8]) -> Result<Option<SignedPeerRecord>, WorldError> {
-    if let Ok(error) = serde_cbor::from_slice::<ErrorResponse>(payload) {
-        if error.code == DistributedErrorCode::ErrNotFound {
-            return Ok(None);
-        }
-        return Err(WorldError::NetworkRequestFailed {
-            code: error.code,
-            message: error.message,
-            retryable: error.retryable,
-        });
-    }
-    Ok(Some(serde_cbor::from_slice(payload)?))
-}
-
-fn decode_cached_discovery_peers_response(payload: &[u8]) -> Result<Vec<PeerId>, WorldError> {
-    let peer_ids: Vec<String> = serde_cbor::from_slice(payload)?;
-    let mut decoded = Vec::with_capacity(peer_ids.len());
-    for peer_id in peer_ids {
-        let peer_id = peer_id
-            .parse::<PeerId>()
-            .map_err(|_| WorldError::NetworkProtocolUnavailable {
-                protocol: "cached discovery peer_id must be valid".to_string(),
-            })?;
-        decoded.push(peer_id);
-    }
-    Ok(decoded)
-}
-
-fn republish_cached_peer_record(
-    swarm: &mut Swarm<Behaviour>,
-    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
-    record: &SignedPeerRecord,
-) -> Result<(), WorldError> {
-    let key = dht_peer_record_key(record.record.world_id.as_str(), record.record.peer_id.as_str());
-    let payload = to_canonical_cbor(record)?;
-    let query_id = put_record_query(swarm, key, payload)?;
-    pending_dht.insert(
-        query_id,
-        PendingDhtQuery::PutPeerRecord { response: None },
-    );
-    Ok(())
-}
-
-fn dial_routing_updated_addrs<'a>(
-    swarm: &mut Swarm<Behaviour>,
-    peer_id: PeerId,
-    addrs: impl Iterator<Item = &'a Multiaddr>,
-    dialed_discovery_addrs: &mut HashSet<String>,
-) {
-    for addr in addrs.cloned().map(|addr| ensure_peer_id(addr, peer_id)) {
-        let addr_label = addr.to_string();
-        if dialed_discovery_addrs.insert(addr_label) {
-            let _ = dial_addr_with_optional_peer_id(swarm, addr);
-        }
-    }
-}
-
-fn ensure_peer_id(mut addr: Multiaddr, peer_id: PeerId) -> Multiaddr {
-    use libp2p::multiaddr::Protocol;
-
-    let needs_peer_id = !matches!(addr.iter().last(), Some(Protocol::P2p(_)));
-    if needs_peer_id {
-        addr.push(Protocol::P2p(peer_id.into()));
-    }
-    addr
-}
-
-fn decode_world_head(bytes: &[u8]) -> Result<WorldHeadAnnounce, WorldError> {
-    Ok(serde_cbor::from_slice(bytes)?)
-}
-
-fn decode_membership_directory(bytes: &[u8]) -> Result<MembershipDirectorySnapshot, WorldError> {
-    Ok(serde_cbor::from_slice(bytes)?)
-}
-
-fn now_ms() -> i64 {
-    unix_now_ms_i64()
-}
-
-fn try_send_command(
-    command_tx: &mpsc::Sender<Command>,
-    command: Command,
-) -> Result<(), WorldError> {
-    let mut sender = command_tx.clone();
-    sender
-        .try_send(command)
-        .map_err(|err| WorldError::NetworkProtocolUnavailable {
-            protocol: if err.is_full() {
-                "libp2p command queue saturated".to_string()
-            } else {
-                "libp2p command queue disconnected".to_string()
-            },
-        })
-}
-
-fn push_bounded_clone<T: Clone>(
-    values: &Arc<Mutex<Vec<T>>>,
-    value: T,
-    max_len: usize,
-    lock_label: &str,
-) {
-    let mut guard = values.lock().expect(lock_label);
-    push_bounded_vec(&mut guard, value, max_len);
-}
-
-fn push_bounded_vec<T>(values: &mut Vec<T>, value: T, max_len: usize) {
-    let max_len = max_len.max(1);
-    values.push(value);
-    let overflow = values.len().saturating_sub(max_len);
-    if overflow > 0 {
-        values.drain(0..overflow);
-    }
-}
-
-fn should_republish(last_ms: i64, now_ms: i64, interval_ms: i64) -> bool {
-    if interval_ms <= 0 {
-        return false;
-    }
-    now_ms.saturating_sub(last_ms) >= interval_ms
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
-use super::*;
 use super::peer_record::{sign_peer_record, verify_signed_peer_record};
+use super::utils::push_bounded_vec;
+use super::*;
 
 #[test]
 fn libp2p_network_generates_peer_id() {
