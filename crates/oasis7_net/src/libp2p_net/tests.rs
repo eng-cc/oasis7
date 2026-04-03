@@ -1,6 +1,7 @@
 use super::peer_record::{
     build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
+use super::peer_manager::{PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
     select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
@@ -10,6 +11,34 @@ use super::utils::push_bounded_vec;
 use super::*;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
+
+fn signed_discovery_peer_record(
+    keypair: &Keypair,
+    discovery_sources: Vec<crate::dht::PeerDiscoverySource>,
+    published_at_ms: i64,
+) -> SignedPeerRecord {
+    let peer_id = PeerId::from(keypair.public());
+    sign_peer_record(
+        &PeerRecord {
+            peer_id: peer_id.to_string(),
+            node_id: format!("node-{peer_id}"),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/127.0.0.1/udp/4103/quic-v1".to_string()],
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources,
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            published_at_ms,
+            ttl_ms: 60_000,
+        },
+        keypair,
+    )
+    .expect("sign discovery peer record")
+}
 
 #[test]
 fn libp2p_network_generates_peer_id() {
@@ -245,6 +274,179 @@ fn push_bounded_vec_keeps_recent_window() {
 
     push_bounded_vec(&mut values, 5, 1);
     assert_eq!(values, vec![5]);
+}
+
+#[test]
+fn filter_request_peers_by_health_prefers_non_suspect_peers() {
+    let peer_a = PeerId::random();
+    let peer_b = PeerId::random();
+    let peer_c = PeerId::random();
+    let peers = vec![peer_a, peer_b, peer_c];
+    let healths = HashMap::from([
+        (
+            peer_a,
+            PeerManagerPeerHealth {
+                peer_id: peer_a.to_string(),
+                status: PeerManagerHealthStatus::Suspect,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+            },
+        ),
+        (
+            peer_b,
+            PeerManagerPeerHealth {
+                peer_id: peer_b.to_string(),
+                status: PeerManagerHealthStatus::Active,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            peer_c,
+            PeerManagerPeerHealth {
+                peer_id: peer_c.to_string(),
+                status: PeerManagerHealthStatus::Candidate,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: None,
+            },
+        ),
+    ]);
+
+    let filtered = filter_request_peers_by_health(peers, &healths);
+    assert_eq!(filtered, vec![peer_b, peer_c, peer_a]);
+}
+
+#[test]
+fn filter_request_peers_by_health_excludes_all_blocked_peers() {
+    let peer_a = PeerId::random();
+    let peer_b = PeerId::random();
+    let peers = vec![peer_a, peer_b];
+    let healths = HashMap::from([
+        (
+            peer_a,
+            PeerManagerPeerHealth {
+                peer_id: peer_a.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: None,
+            },
+        ),
+        (
+            peer_b,
+            PeerManagerPeerHealth {
+                peer_id: peer_b.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: None,
+            },
+        ),
+    ]);
+
+    let filtered = filter_request_peers_by_health(peers, &healths);
+    assert!(filtered.is_empty());
+}
+
+#[test]
+fn process_discovered_peer_record_dials_candidate_peer() {
+    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519());
+    let peer_key = Keypair::generate_ed25519();
+    let record = signed_discovery_peer_record(
+        &peer_key,
+        vec![
+            crate::dht::PeerDiscoverySource::Dht,
+            crate::dht::PeerDiscoverySource::Rendezvous,
+        ],
+        1,
+    );
+    let peer_id = PeerId::from(peer_key.public());
+    let mut discovered_peer_records = HashMap::new();
+    let mut known_transport_paths = HashMap::new();
+    let mut last_dialed_transport_paths = HashMap::new();
+    let active_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+    let mut dialed_discovery_addrs = HashSet::new();
+
+    super::discovery::process_discovered_peer_record(
+        &mut swarm,
+        &mut discovered_peer_records,
+        &mut known_transport_paths,
+        &mut last_dialed_transport_paths,
+        &active_transport_paths,
+        &mut failed_transport_path_labels,
+        &mut dialed_discovery_addrs,
+        None,
+        &PeerManagerPolicy::default(),
+        record.clone(),
+    )
+    .expect("process candidate peer record");
+
+    assert!(discovered_peer_records.contains_key(&peer_id));
+    assert!(known_transport_paths.contains_key(&peer_id));
+    assert!(last_dialed_transport_paths.contains_key(&peer_id));
+    assert_eq!(dialed_discovery_addrs.len(), 1);
+}
+
+#[test]
+fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer() {
+    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519());
+    let peer_key = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(peer_key.public());
+    let suspect_record =
+        signed_discovery_peer_record(&peer_key, vec![crate::dht::PeerDiscoverySource::Dht], 1);
+    let upgraded_record = signed_discovery_peer_record(
+        &peer_key,
+        vec![
+            crate::dht::PeerDiscoverySource::Dht,
+            crate::dht::PeerDiscoverySource::Rendezvous,
+        ],
+        2,
+    );
+    let mut discovered_peer_records = HashMap::new();
+    let mut known_transport_paths = HashMap::new();
+    let mut last_dialed_transport_paths = HashMap::new();
+    let active_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+    let mut dialed_discovery_addrs = HashSet::new();
+
+    super::discovery::process_discovered_peer_record(
+        &mut swarm,
+        &mut discovered_peer_records,
+        &mut known_transport_paths,
+        &mut last_dialed_transport_paths,
+        &active_transport_paths,
+        &mut failed_transport_path_labels,
+        &mut dialed_discovery_addrs,
+        None,
+        &PeerManagerPolicy::default(),
+        suspect_record,
+    )
+    .expect("process suspect peer record");
+
+    assert!(discovered_peer_records.contains_key(&peer_id));
+    assert!(!last_dialed_transport_paths.contains_key(&peer_id));
+    assert!(dialed_discovery_addrs.is_empty());
+
+    super::discovery::process_discovered_peer_record(
+        &mut swarm,
+        &mut discovered_peer_records,
+        &mut known_transport_paths,
+        &mut last_dialed_transport_paths,
+        &active_transport_paths,
+        &mut failed_transport_path_labels,
+        &mut dialed_discovery_addrs,
+        None,
+        &PeerManagerPolicy::default(),
+        upgraded_record,
+    )
+    .expect("process upgraded peer record");
+
+    assert!(last_dialed_transport_paths.contains_key(&peer_id));
+    assert_eq!(dialed_discovery_addrs.len(), 1);
 }
 
 #[test]

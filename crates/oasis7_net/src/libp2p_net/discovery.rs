@@ -18,12 +18,11 @@ use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
 use oasis7_proto::distributed_net::NetworkRequest;
 
 use super::kad_queries::PendingDhtQuery;
+use super::peer_manager::{recompute_peer_manager_healths, PeerManagerHealthStatus, PeerManagerPolicy};
 use super::peer_record::{
     build_configured_peer_record, put_record_query, validate_discovered_peer_record,
 };
-use super::swarm_behaviour::{
-    dial_addr_with_optional_peer_id, ensure_peer_id, split_peer_id, Behaviour,
-};
+use super::swarm_behaviour::{split_peer_id, Behaviour};
 use super::transport_paths::{
     dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
     sync_known_transport_paths, TransportPath,
@@ -277,7 +276,6 @@ pub(super) fn handle_rendezvous_discovered(
     >,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     pending_cached_peer_records: &mut HashSet<PeerId>,
-    dialed_discovery_addrs: &mut HashSet<String>,
     connected_peers: &[PeerId],
     local_peer_id: PeerId,
     template: Option<&PeerRecord>,
@@ -304,12 +302,6 @@ pub(super) fn handle_rendezvous_discovered(
         if peer_id == local_peer_id {
             continue;
         }
-        dial_routing_updated_addrs(
-            swarm,
-            peer_id,
-            registration.record.addresses().iter(),
-            dialed_discovery_addrs,
-        );
         maybe_queue_discovery_peer_record(
             swarm,
             pending_dht,
@@ -338,6 +330,7 @@ pub(super) fn process_discovered_peer_record(
     failed_transport_path_labels: &mut HashSet<String>,
     dialed_discovery_addrs: &mut HashSet<String>,
     template: Option<&PeerRecord>,
+    peer_manager_policy: &PeerManagerPolicy,
     record: SignedPeerRecord,
 ) -> Result<(), WorldError> {
     validate_discovered_peer_record(&record, template)?;
@@ -360,22 +353,31 @@ pub(super) fn process_discovered_peer_record(
         peer_id,
         transport_paths.clone(),
     );
+    discovered_peer_records.insert(peer_id, record);
+    let peer_healths = recompute_peer_manager_healths(
+        discovered_peer_records,
+        active_transport_paths,
+        peer_manager_policy,
+    );
+    let peer_status = peer_healths
+        .get(&peer_id)
+        .map(|health| health.status)
+        .unwrap_or(PeerManagerHealthStatus::Candidate);
     if let Some(preferred_path) =
         select_preferred_transport_path(transport_paths.as_slice(), failed_transport_path_labels)
     {
-        let should_dial = active_transport_paths
-            .get(&peer_id)
-            .map(|active| preferred_path.preference_rank() < active.preference_rank())
-            .unwrap_or(true);
+        let should_dial = !matches!(
+            peer_status,
+            PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
+        ) && active_transport_paths
+                .get(&peer_id)
+                .map(|active| preferred_path.preference_rank() < active.preference_rank())
+                .unwrap_or(true);
         let addr_label = preferred_path.label();
-        if dialed_discovery_addrs.insert(addr_label.clone()) {
-            if should_dial {
-                let _ =
-                    dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());
-            }
+        if should_dial && dialed_discovery_addrs.insert(addr_label) {
+            let _ = dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());
         }
     }
-    discovered_peer_records.insert(peer_id, record);
     Ok(())
 }
 
@@ -463,6 +465,7 @@ pub(super) fn handle_peer_record_response(
     pending_cached_discovery_peers: &mut HashSet<PeerId>,
     max_error_messages: usize,
     event_errors: &Arc<Mutex<Vec<String>>>,
+    peer_manager_policy: &PeerManagerPolicy,
 ) {
     clear_pending_peer_record_request(
         &kind,
@@ -523,6 +526,7 @@ pub(super) fn handle_peer_record_response(
                 failed_transport_path_labels,
                 dialed_discovery_addrs,
                 peer_record_template,
+                peer_manager_policy,
                 record.clone(),
             ) {
                 push_bounded_clone(
@@ -583,20 +587,6 @@ pub(super) fn republish_cached_peer_record(
     let query_id = put_record_query(swarm, key, payload)?;
     pending_dht.insert(query_id, PendingDhtQuery::PutPeerRecord { response: None });
     Ok(())
-}
-
-pub(super) fn dial_routing_updated_addrs<'a>(
-    swarm: &mut Swarm<Behaviour>,
-    peer_id: PeerId,
-    addrs: impl Iterator<Item = &'a Multiaddr>,
-    dialed_discovery_addrs: &mut HashSet<String>,
-) {
-    for addr in addrs.cloned().map(|addr| ensure_peer_id(addr, peer_id)) {
-        let addr_label = addr.to_string();
-        if dialed_discovery_addrs.insert(addr_label) {
-            let _ = dial_addr_with_optional_peer_id(swarm, addr);
-        }
-    }
 }
 
 pub(super) fn decode_optional_peer_record_response(

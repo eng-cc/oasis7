@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 mod api;
 mod discovery;
 mod kad_queries;
+mod peer_manager;
 mod peer_record;
 mod swarm_behaviour;
 mod transport_paths;
@@ -34,7 +35,7 @@ use oasis7_proto::distributed_net::{
 
 use crate::util::to_canonical_cbor;
 use discovery::{
-    clear_pending_peer_record_request, dial_routing_updated_addrs, handle_peer_record_response,
+    clear_pending_peer_record_request, handle_peer_record_response,
     handle_rendezvous_discovered, handle_request_response_request,
     maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
@@ -43,6 +44,10 @@ use discovery::{
     PendingPeerRecordRequest,
 };
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
+pub use peer_manager::{
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+};
+use peer_manager::recompute_peer_manager_healths;
 use peer_record::{publish_configured_peer_record, put_record_query};
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use transport_paths::{
@@ -75,6 +80,7 @@ pub struct Libp2pNetworkConfig {
     pub max_published_messages: usize,
     pub max_error_messages: usize,
     pub max_listening_addrs: usize,
+    pub peer_manager_policy: PeerManagerPolicy,
 }
 
 impl Default for Libp2pNetworkConfig {
@@ -90,6 +96,7 @@ impl Default for Libp2pNetworkConfig {
             max_published_messages: DEFAULT_MAX_PUBLISHED_MESSAGES,
             max_error_messages: DEFAULT_MAX_ERROR_MESSAGES,
             max_listening_addrs: DEFAULT_MAX_LISTENING_ADDRS,
+            peer_manager_policy: PeerManagerPolicy::default(),
         }
     }
 }
@@ -104,6 +111,7 @@ pub struct Libp2pNetwork {
     listening_addrs: Arc<Mutex<Vec<Multiaddr>>>,
     connected_peers: Arc<Mutex<HashSet<PeerId>>>,
     errors: Arc<Mutex<Vec<String>>>,
+    peer_healths: Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
 }
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
@@ -194,6 +202,86 @@ fn filter_request_peers_by_lane(
     }
 }
 
+fn filter_request_peers_by_health(
+    peers: Vec<PeerId>,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> Vec<PeerId> {
+    let mut ranked: Vec<(usize, PeerId)> = peers
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(idx, peer_id)| {
+            let rank: usize = match peer_healths.get(&peer_id).map(|health| health.status) {
+                Some(PeerManagerHealthStatus::Active) => 0,
+                Some(PeerManagerHealthStatus::Candidate) | None => 1,
+                Some(PeerManagerHealthStatus::Suspect) => 2,
+                Some(PeerManagerHealthStatus::Blocked) => 3,
+            };
+            (idx, (rank, peer_id))
+        })
+        .map(|(idx, (rank, peer_id))| (rank.saturating_mul(10_000).saturating_add(idx), peer_id))
+        .collect();
+    ranked.sort_by_key(|(rank, _)| *rank);
+    let filtered: Vec<PeerId> = ranked
+        .iter()
+        .filter(|(_, peer_id)| {
+            !matches!(
+                peer_healths.get(peer_id).map(|health| health.status),
+                Some(PeerManagerHealthStatus::Blocked)
+            )
+        })
+        .map(|(_, peer_id)| *peer_id)
+        .collect();
+    filtered
+}
+
+fn refresh_peer_manager_healths(
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    peer_manager_policy: &PeerManagerPolicy,
+    event_peer_healths: &Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    max_error_messages: usize,
+) -> HashMap<PeerId, PeerManagerPeerHealth> {
+    let healths = recompute_peer_manager_healths(
+        discovered_peer_records,
+        active_transport_paths,
+        peer_manager_policy,
+    );
+    {
+        let mut guard = event_peer_healths.lock().expect("lock peer healths");
+        let previous = guard.clone();
+        let latest: HashMap<String, PeerManagerPeerHealth> = healths
+            .values()
+            .cloned()
+            .map(|health| (health.peer_id.clone(), health))
+            .collect();
+        for (peer_id, health) in &latest {
+            let old = previous.get(peer_id);
+            let transitioned_to_suspect = matches!(
+                old.map(|entry| entry.status),
+                None | Some(PeerManagerHealthStatus::Active | PeerManagerHealthStatus::Candidate)
+            ) && matches!(
+                health.status,
+                PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
+            );
+            if transitioned_to_suspect {
+                push_bounded_clone(
+                    event_errors,
+                    format!(
+                        "libp2p peer manager suspect peer={} issues={:?}",
+                        peer_id, health.issues
+                    ),
+                    max_error_messages,
+                    "lock errors",
+                );
+            }
+        }
+        *guard = latest;
+    }
+    healths
+}
+
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -206,6 +294,7 @@ impl Libp2pNetwork {
         let listening_addrs = Arc::new(Mutex::new(Vec::new()));
         let connected_peers = Arc::new(Mutex::new(HashSet::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
+        let peer_healths = Arc::new(Mutex::new(HashMap::<String, PeerManagerPeerHealth>::new()));
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
         let max_published_messages = config.max_published_messages.max(1);
@@ -217,6 +306,7 @@ impl Libp2pNetwork {
         let event_listening_addrs = Arc::clone(&listening_addrs);
         let event_connected_peers = Arc::clone(&connected_peers);
         let event_errors = Arc::clone(&errors);
+        let event_peer_healths = Arc::clone(&peer_healths);
         let config_clone = config.clone();
         let keypair_clone = keypair.clone();
         let local_peer_id = peer_id;
@@ -246,6 +336,7 @@ impl Libp2pNetwork {
             let mut known_transport_paths: HashMap<PeerId, Vec<TransportPath>> = HashMap::new();
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
+            let mut peer_healths_by_id: HashMap<PeerId, PeerManagerPeerHealth> = HashMap::new();
             let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
             let mut pending_discovery_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();
@@ -368,6 +459,18 @@ impl Libp2pNetwork {
                                         protocol.as_str(),
                                         &discovered_peer_records,
                                     );
+                                    candidate_peers = filter_request_peers_by_health(
+                                        candidate_peers,
+                                        &peer_healths_by_id,
+                                    );
+                                    if candidate_peers.is_empty() {
+                                        let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
+                                            protocol: format!(
+                                                "no healthy provider for protocol {protocol}"
+                                            ),
+                                        }));
+                                        continue;
+                                    }
                                     let peer = candidate_peers[0];
                                     let request = NetworkRequest { protocol: protocol.clone(), payload };
                                     let request_id = swarm.behaviour_mut().request_response.send_request(&peer, request);
@@ -692,6 +795,15 @@ impl Libp2pNetwork {
                                                             &mut pending_cached_discovery_peers,
                                                             max_error_messages,
                                                             &event_errors,
+                                                            &config_clone.peer_manager_policy,
+                                                        );
+                                                        peer_healths_by_id = refresh_peer_manager_healths(
+                                                            &discovered_peer_records,
+                                                            &active_transport_paths,
+                                                            &config_clone.peer_manager_policy,
+                                                            &event_peer_healths,
+                                                            &event_errors,
+                                                            max_error_messages,
                                                         );
                                                     } else if let Some(sender) = pending.remove(&request_id) {
                                                         let _ = sender.send(Ok(response.payload));
@@ -780,6 +892,7 @@ impl Libp2pNetwork {
                                                                 &mut failed_transport_path_labels,
                                                                 &mut dialed_discovery_addrs,
                                                                 peer_record_template.as_ref(),
+                                                                &config_clone.peer_manager_policy,
                                                                 record,
                                                             ) {
                                                                 push_bounded_clone(
@@ -795,6 +908,15 @@ impl Libp2pNetwork {
                                                                     peers.as_slice(),
                                                                     peer_id,
                                                                     local_peer_id,
+                                                                );
+                                                            } else {
+                                                                peer_healths_by_id = refresh_peer_manager_healths(
+                                                                    &discovered_peer_records,
+                                                                    &active_transport_paths,
+                                                                    &config_clone.peer_manager_policy,
+                                                                    &event_peer_healths,
+                                                                    &event_errors,
+                                                                    max_error_messages,
                                                                 );
                                                             }
                                                         }
@@ -834,12 +956,6 @@ impl Libp2pNetwork {
                                                 format!("libp2p routing updated peer={peer} addrs={addresses:?}"),
                                                 max_error_messages,
                                                 "lock errors",
-                                            );
-                                            dial_routing_updated_addrs(
-                                                &mut swarm,
-                                                peer,
-                                                addresses.iter(),
-                                                &mut dialed_discovery_addrs,
                                             );
                                             maybe_queue_discovery_peer_record(
                                                 &mut swarm,
@@ -970,7 +1086,6 @@ impl Libp2pNetwork {
                                                 &mut pending_peer_record_requests,
                                                 &mut pending_discovery_peer_records,
                                                 &mut pending_cached_peer_records,
-                                                &mut dialed_discovery_addrs,
                                                 peers.as_slice(),
                                                 local_peer_id,
                                                 peer_record_template.as_ref(),
@@ -1163,6 +1278,14 @@ impl Libp2pNetwork {
                                             template,
                                         );
                                     }
+                                    peer_healths_by_id = refresh_peer_manager_healths(
+                                        &discovered_peer_records,
+                                        &active_transport_paths,
+                                        &config_clone.peer_manager_policy,
+                                        &event_peer_healths,
+                                        &event_errors,
+                                        max_error_messages,
+                                    );
                                 }
                                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                     peers.retain(|peer| peer != &peer_id);
@@ -1211,6 +1334,14 @@ impl Libp2pNetwork {
                                         format!("libp2p connection closed peer={peer_id}"),
                                         max_error_messages,
                                         "lock errors",
+                                    );
+                                    peer_healths_by_id = refresh_peer_manager_healths(
+                                        &discovered_peer_records,
+                                        &active_transport_paths,
+                                        &config_clone.peer_manager_policy,
+                                        &event_peer_healths,
+                                        &event_errors,
+                                        max_error_messages,
                                     );
                                 }
                                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -1289,6 +1420,7 @@ impl Libp2pNetwork {
             listening_addrs,
             connected_peers,
             errors,
+            peer_healths,
         }
     }
 }

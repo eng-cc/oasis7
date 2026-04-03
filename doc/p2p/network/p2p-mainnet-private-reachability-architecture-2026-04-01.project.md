@@ -15,6 +15,7 @@
 - [x] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
   已落地 lane/QoS substrate：`oasis7_proto::distributed_net` 现已冻结 `NetworkLane` / `NetworkLaneQosClass` / topic+protocol classifier；`PeerRecord` 新增 `capability_lanes` 并对 legacy record 做 role-based defaulting，且 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力；`oasis7_net` 会按 lane 选择 subscription inbox 配额，并在 req/resp 选 peer 时优先过滤掉不具备对应 lane capability 的 peer；`oasis7_node` 已把 replication / consensus / `feedback_p2p` 绑定提升为显式 lane registry，并对 `node_role_claim` 执行 publish/subscribe/request/serve 权限校验，observer 只保留 data-lane request，不注册 data-lane serve handler，也不能通过 `feedback_p2p` 订阅或发布 `blob_state` lane topic。
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
+  进行中首个切片：`oasis7_net` 已新增本地 peer-manager substrate，基于 `discovery_sources + active transport path` 产出 `candidate/active/suspect/blocked` health snapshot 与 fail reasons，并先落 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 四类 anti-eclipse / anti-spam 判定；`request_with_providers` 现在会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer，discovery ingress 也不再对 `RoutingUpdated` / rendezvous 裸地址做未校验的 speculative dial。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
 
@@ -39,6 +40,8 @@
   - `P2PARCH-4` 已落 peer capability substrate：peer record 现在可显式声明 `capability_lanes`，未声明时按 canonical `node_role` 自动回填默认 lane capability，保证 discovery/selection 面能平滑兼容旧 record；其中 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力。
   - `P2PARCH-4` 已落 role-aware binding：runtime 会拒绝 `observer_light` 直接 publish consensus lane、服务 `sync/blob_state` data lane、或通过 `feedback_p2p` 订阅/发布 `blob_state` topic，以及 `relay` 请求或服务 data lane 这类明显越权的 lane 操作；replication fetch handler 注册也会受 `node_role_claim` gate 约束。
   - `P2PARCH-4` 已落 request peer subset：`fetch-commit/fetch-blob` 这类 req/resp 现在会优先筛选声明具备对应 lane capability 的 peer record，再发起 outbound request，避免继续对所有已连接 peer 一视同仁。
+  - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer。
+  - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -119,6 +122,16 @@
   - peer scoring
   - diversity policy
   - anti-eclipse / anti-spam fail signatures
+- 本轮已交付:
+  - `PeerManagerPolicy` / `PeerManagerPeerHealth` / `PeerManagerHealthIssue` substrate：冻结 `candidate/active/suspect/blocked` health 状态与本地 fail signatures
+  - `oasis7_net` libp2p worker 接线：基于 `discovery_sources + active transport path` 计算 peer health snapshot，并把 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限标成 `suspect`
+  - request peer 健康优先级：req/resp 在 lane 过滤后会进一步优先选择 `active/candidate` peer，把 `suspect` 压到最后，并直接排除 `blocked`
+  - discovery ingress enforcement：`RoutingUpdated` / rendezvous registration 不再对未校验地址做 speculative dial；只有 validated peer record 进入 `process_discovered_peer_record` 后，才会按 health 决定是否拨号
+  - discovery dial dedupe 修正：`suspect/blocked` peer 不再提前写入 `dialed_discovery_addrs`，避免同地址在 record 升级为健康后失去首拨机会
+- 仍待补齐:
+  - operator / ASN 多样性输入与阈值
+  - quarantine / block 对实际连接集和拨号策略的更强 enforcement
+  - `qa_engineer` mixed-topology 与 fail-signature required/full 套件
 - 完成定义:
   - operator/ASN/subnet/relay-domain 多样性具备正式阈值与 block 条件
 

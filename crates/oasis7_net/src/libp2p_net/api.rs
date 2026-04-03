@@ -16,7 +16,7 @@ use oasis7_proto::distributed_dht::{
 };
 use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
-use super::{Command, Libp2pNetwork};
+use super::{Command, Libp2pNetwork, PeerManagerPeerHealth};
 
 impl Libp2pNetwork {
     pub fn peer_id(&self) -> PeerId {
@@ -53,6 +53,15 @@ impl Libp2pNetwork {
 
     pub fn debug_errors(&self) -> Vec<String> {
         self.errors.lock().expect("lock errors").clone()
+    }
+
+    pub fn debug_peer_healths(&self) -> Vec<PeerManagerPeerHealth> {
+        self.peer_healths
+            .lock()
+            .expect("lock peer healths")
+            .values()
+            .cloned()
+            .collect()
     }
 
     pub(super) fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {
