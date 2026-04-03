@@ -3,16 +3,17 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 1. Executive Summary
-- Problem Statement: oasis7 现在已经具备 `required/full`、Web-first 闭环、S9/S10 长跑和首轮真实 governance drill 证据，但这些验证大多仍停留在本地或单 owner 控制的 execution world。缺少共享 `devnet/staging/canary` 与 release train，意味着团队还没有一条“多人共享环境里把同一候选版本连续推进、观察、回滚、留证据”的正式路径。
-- Proposed Solution: 冻结一份 producer-owned 的 shared network / release train minimum PRD，定义 `shared_devnet -> staging -> canary` 三层最小执行轨道、`release_candidate_bundle` 单一真值、promotion/rollback/freeze 规则和 QA/liveops 证据门禁，让 oasis7 把 benchmark 中的 `L5 shared network/release train` 从“仅有缺口描述”升级成正式 execution workstream。
+- Problem Statement: oasis7 现在已经具备 `required/full`、Web-first 闭环、S9/S10 长跑和首轮真实 governance drill 证据，但这些验证大多仍停留在本地或单 owner 控制的 execution world。即便 `P2PARCH-6` 已补出 mixed-topology matrix，shared network / release train 若没有把 mixed-topology 作为显式 required lane，团队仍可能把“本地矩阵通过”误记成“共享环境已准备好 promotion”。
+- Proposed Solution: 冻结一份 producer-owned 的 shared network / release train minimum PRD，定义 `shared_devnet -> staging -> canary` 三层最小执行轨道、`release_candidate_bundle` 单一真值、promotion/rollback/freeze 规则和 QA/liveops 证据门禁，并把 mixed-topology baseline / rehearsal / claim review 升级为各轨必经 lane，让 oasis7 把 benchmark 中的 `L5 shared network/release train` 从“仅有缺口描述”升级成正式 execution workstream。
 - Success Criteria:
   - SC-1: 明确冻结不少于三层的 shared execution track：`shared_devnet`、`staging`、`canary`，并写清各层目标、输入、owner 和通过标准。
   - SC-2: 明确冻结统一的 `release_candidate_bundle` 字段集合，要求同一候选版本在三个轨道之间可追溯、可回滚、不可口头漂移。
   - SC-3: 明确区分 `complete / partial / blocked` 三种 shared-network 状态，避免把“单机 smoke”误记成 release train。
   - SC-4: 明确当前 public claims 在 shared network 未执行前仍只能维持 `limited playable technical preview` 与 `crypto-hardened preview`。
   - SC-5: 输出 producer 可直接排任务的 project 拆解，至少覆盖 `runtime_engineer`、`qa_engineer`、`liveops_community` 三个角色。
+  - SC-6: 明确 shared-devnet / staging / canary 三轨都必须包含 mixed-topology required lane；仅有 matrix baseline 时最多记为 `partial`，不得直接 promotion 或升级 claims。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -39,7 +40,7 @@
 | --- | --- | --- | --- | --- | --- |
 | Shared track 定义 | `track_id/purpose/world_scope/access_mode/owner_roles/min_entry_gate` | 冻结 `shared_devnet`、`staging`、`canary` 的用途与入口门禁 | `draft -> frozen` | 至少三层；缺任一层则 release train 仍为 `blocked` | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer`/`liveops_community` 联审 |
 | Release candidate bundle | `candidate_id/git_commit/runtime_build/world_snapshot_ref/governance_manifest_ref/evidence_refs` | 把单一候选版本推进到共享轨道 | `draft -> promoted -> retired` | 三个轨道必须引用同一 `candidate_id`；字段缺失则不得 promotion | `runtime_engineer` 生成，`qa_engineer` 校验 |
-| Promotion gate | `from_track/to_track/gate_inputs/gate_result/approved_by` | 根据证据决定是否升级到下一轨道 | `pending -> pass/block` | 上一轨道未 `pass`、无 rollback bundle、或 evidence 不全时一律 `block` | `qa_engineer` 给出结论，`producer_system_designer`/`liveops_community` 审批 |
+| Promotion gate | `from_track/to_track/gate_inputs/gate_result/approved_by` | 根据证据决定是否升级到下一轨道 | `pending -> pass/block` | 上一轨道未 `pass`、无 rollback bundle、缺 mixed-topology required lane、或 evidence 不全时一律 `block/hold` | `qa_engineer` 给出结论，`producer_system_designer`/`liveops_community` 审批 |
 | Freeze / rollback | `incident_id/affected_track/fallback_candidate_id/freeze_reason/recovery_status` | 事故时冻结 promotion 并回滚到前一 bundle | `idle -> frozen -> restored` | 回滚目标必须是最近一次 `pass` 的 candidate；只有“停在当前环境观察”不算恢复 | `liveops_community` 执行，`runtime_engineer` 支持 |
 | Claims gate | `claim_phrase/min_track_status/reject_reason` | 根据 shared-network 真值决定对外口径 | `draft -> enforced` | 只要 `shared_devnet/staging/canary` 任一缺失或仅 `partial`，就不得说 release train 已建立 | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
@@ -51,6 +52,7 @@
   - AC-6: `doc/p2p/project.md` 必须建立 `TASK-P2P-040` 任务链，并拆出后续 runtime/QA/liveops 子任务。
   - AC-7: 本专题必须明确 shared-network 当前状态仍是 `specified_not_executed`，不得把建档误写成完成执行。
   - AC-8: 本专题必须给出 first shared-devnet dry run、first staging rehearsal、first canary rehearsal 的顺序与阻断条件。
+  - AC-9: 本专题必须明确 mixed-topology 是 `shared_devnet/staging/canary` 的 required lane；`P2PARCH-6` matrix baseline 只能作为 shared-devnet 的起始输入，不能单独构成 shared-network `pass` 或 public claim 升级依据。
 - Non-Goals:
   - 不在本专题内直接搭建真实 shared devnet/testnet/canary 环境。
   - 不在本专题内升级 `limited playable technical preview` 或 `crypto-hardened preview` 口径。
@@ -79,6 +81,7 @@
   - 若 canary 没有明确的 duration、incident review 与 freeze 条件，则不得记为 `canary_complete`。
   - 若 governance truth、genesis truth 或 claims boundary 发生变化但未更新 candidate bundle 编号，则该 bundle 失效，必须重新编号。
   - 若 shared-network 证据只包含命令记录，没有 `summary/status/incident` 结论，则 promotion 只能记为 `partial_evidence_missing`。
+  - 若 shared-devnet 只引用 `P2PARCH-6` matrix baseline、没有 same-window mixed-topology 结论，则最多记为 `partial_mixed_topology_baseline_only`。
 - Non-Functional Requirements:
   - NFR-P2P-RTMIN-1: 每个 track 的每次 promotion 必须对应唯一 `candidate_id`，且能回链到 `git_commit/runtime_build/world_snapshot_ref/governance_manifest_ref`。
   - NFR-P2P-RTMIN-2: 任一 track 若无共享访问方式、无 owner、无 evidence path、无 rollback target，则不得标记为 `pass`。
@@ -86,6 +89,7 @@
   - NFR-P2P-RTMIN-4: 所有 shared-network 结论必须使用 `pass/partial/block/frozen/restored` 这些显式状态，不得使用 `looks_good` 一类口头结论。
   - NFR-P2P-RTMIN-5: 在 `shared_devnet/staging/canary` 三层都有最新审计轮次的正式证据前，公开口径不得出现 `release train established`、`shared network validated` 或更高成熟度描述。
   - NFR-P2P-RTMIN-6: shared-network 证据不得包含私钥、助记词、离线签名材料或 operator 私密基础设施细节。
+  - NFR-P2P-RTMIN-7: mixed-topology required lane 必须显式区分 `baseline/rehearsal/claim review` 三种阶段；proxy drill 不得在 runbook 或 claims gate 中冒充 dedicated sentry/NAT lab 真值。
 - Security & Privacy: 本专题涉及共享环境与升级轨道，但不引入新的密钥托管方案。任何 candidate bundle、运行记录与证据都只能引用公钥、版本号、world snapshot 标识和审计结论，不得把敏感 custody 材料写入仓库。
 
 ## 5. Risks & Roadmap

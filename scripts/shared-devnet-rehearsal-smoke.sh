@@ -33,6 +33,7 @@ printf '# headless evidence\n' >"$smoke_root/evidence/headless.md"
 printf '# pure api evidence\n' >"$smoke_root/evidence/pure-api.md"
 printf '# governance evidence\n' >"$smoke_root/evidence/governance.md"
 printf '# longrun evidence\n' >"$smoke_root/evidence/longrun.md"
+printf '# mixed topology evidence\n' >"$smoke_root/evidence/mixed-topology.md"
 printf '{"candidate":"fallback"}\n' >"$smoke_root/fallback/pass-bundle.json"
 
 partial_out="$smoke_root/output-partial"
@@ -57,6 +58,7 @@ partial_lanes="$partial_out/shared-devnet-orch-smoke-partial/lanes.shared_devnet
 ensure_file_contains "$partial_gate" '"gate_result": "partial"'
 ensure_file_contains "$partial_gate" '"promotion_recommendation": "hold_promotion"'
 ensure_file_contains "$partial_lanes" $'multi_entry_closure\tqa_engineer\tpartial'
+ensure_file_contains "$partial_lanes" $'mixed_topology_baseline\tqa_engineer\tpartial'
 ensure_file_contains "$partial_lanes" $'short_window_longrun\truntime_engineer\tpartial'
 
 pass_out="$smoke_root/output-pass"
@@ -78,6 +80,8 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --pure-api-evidence-ref "$smoke_root/evidence/pure-api.md" \
   --governance-mode evidence \
   --governance-window-evidence-ref "$smoke_root/evidence/governance.md" \
+  --mixed-topology-pass \
+  --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology.md" \
   --longrun-mode evidence \
   --longrun-window-evidence-ref "$smoke_root/evidence/longrun.md" \
   --shared-access-pass \
@@ -90,6 +94,7 @@ pass_lanes="$pass_out/shared-devnet-orch-smoke-pass/lanes.shared_devnet.tsv"
 ensure_file_contains "$pass_gate" '"gate_result": "pass"'
 ensure_file_contains "$pass_gate" '"promotion_recommendation": "eligible_for_promotion"'
 ensure_file_contains "$pass_lanes" $'shared_access\tqa_engineer\tpass'
+ensure_file_contains "$pass_lanes" $'mixed_topology_baseline\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'governance_live_drill\truntime_engineer\tpass'
 
 echo "shared-devnet rehearsal smoke checks passed"

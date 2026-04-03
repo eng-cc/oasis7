@@ -4,7 +4,7 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 
-审计轮次: 3
+审计轮次: 4
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -22,6 +22,7 @@
   - `limited playable technical preview`
   - `crypto-hardened preview`
   - `first shared_devnet dry run is recorded, but shared execution remains partial`
+  - `mixed-topology matrix baseline is pinned, but shared-network mixed-topology evidence is still incomplete`
 
 ## 2. 开窗前输入
 每次开任何 track 窗口前，必须先固定以下输入：
@@ -49,6 +50,7 @@
 - 上一轨不是 `pass` 却申请 promotion：直接 `hold`
 - 没有 fallback candidate 却申请下一轨：直接 `hold`
 - 共享访问入口、值班 owner、evidence root 未冻结：直接 `hold`
+- required mixed-topology lane 仍停留在 baseline / proxy 近似、没有对应 track 的正式结论：直接 `hold`
 - 对外口径越过 preview 边界：立即 `freeze`
 
 ## 4. 三层执行循环
@@ -56,14 +58,16 @@
 ### 4.1 `shared_devnet`
 - 目标：
   - 首次把统一 `candidate_id` 放进多人共享环境
-  - 留下 shared access、统一版本和 rollback 目标的正式记录
+  - 留下 shared access、统一版本、mixed-topology baseline 和 rollback 目标的正式记录
 - 开窗前：
   - 固定共享访问入口
+  - 固定 `P2PARCH-6` mixed-topology baseline evidence
   - 生成 `promotion_record`
   - 固定 `rollback_target_candidate_id`
 - 收窗判定：
   - `shared-network-track-gate` 为 `pass` 才可申请进入 `staging`
   - 若 shared access 退化成单 owner 私有访问，最多只能记 `partial`
+  - 若 mixed-topology 仍只有 baseline / proxy 近似，没有 same-window shared 结论，最多只能记 `partial`
 
 ### 4.2 `staging`
 - 目标：
@@ -74,6 +78,7 @@
   - 固定 upgrade window
   - 生成新的 `promotion_record`
   - 预填 `incident_template`
+  - 固定 same-candidate `mixed_topology_rehearsal` evidence plan
 - 收窗判定：
   - 只有 `staging` gate 为 `pass` 才可申请进入 `canary`
   - 任何 required lane 退回 `partial/block` 都先 `hold`
@@ -86,10 +91,12 @@
   - 固定 `canary_window_start/end`
   - 固定 `freeze_owner`
   - 生成新的 `promotion_record`
+  - 固定 mixed-topology claim review 输入与对外口径边界
 - 收窗判定：
   - 必须留下 `incident_review`
   - 必须留下 `exit_decision`
-  - 没有这两项，不得记 `canary` 完成
+  - 必须留下 `mixed_topology_claim_review`
+  - 没有这三项，不得记 `canary` 完成
 
 ## 5. Freeze / Rollback
 
@@ -136,10 +143,11 @@
   - `当前仍是 limited playable technical preview。`
   - `安全与治理硬化在推进，但仍是 crypto-hardened preview。`
   - `shared network / release train 已有首轮 shared_devnet dry run，但 shared execution 仍是 partial。`
+  - `mixed-topology matrix 已建基线，但 shared-network mixed-topology gate 仍未通过。`
 
 ## 8. 回写要求
 - 每个窗口至少回写一次：
-  - `doc/devlog/YYYY-MM-DD.md`
+  - `.pm/tasks/<TASK-UID>.execution.md`
   - 对应 track 的 QA gate `summary.json/md`
   - 当前 topic 的 `project.md`
 - 若出现 `freeze` / `rollback` / claim 风险，还必须补：
@@ -154,7 +162,8 @@
   - liveops promotion/freeze/rollback/run window/public claims runbook
   - first `shared_devnet` dry-run candidate / gate / promotion / incident 产物
 - shared-network 总 verdict 当前是 `partial`，不是 `pass`。
-- shared-devnet 剩余 blocker 当前只收敛到：
+- shared-devnet 剩余 blocker 当前收敛到：
   - `shared_access`
   - `rollback_target_ready`
-- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这两条 lane 提升到 `pass`。
+  - `mixed_topology_baseline`
+- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`。

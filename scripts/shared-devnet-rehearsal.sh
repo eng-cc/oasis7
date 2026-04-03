@@ -70,7 +70,12 @@ Governance evidence:
   --governance-pass-manifest-mode <rotate|baseline>
                                          Execute-mode pass manifest mode (default: rotate)
 
-Longrun evidence:
+Mixed-topology / Longrun evidence:
+  --mixed-topology-baseline-evidence-ref <path>
+                                         Override mixed-topology baseline evidence
+  --mixed-topology-shared-evidence-ref <path>
+                                         Reuse same-window mixed-topology evidence
+  --mixed-topology-pass                  Mark mixed-topology lane as pass
   --longrun-window-evidence-ref <path>    Reuse same-window short-window longrun evidence
   --s9-duration-secs <n>                  S9 duration (default: 300)
   --s10-duration-secs <n>                 S10 duration (default: 300)
@@ -267,12 +272,16 @@ headless_evidence_ref=""
 pure_api_evidence_ref=""
 governance_window_evidence_ref=""
 longrun_window_evidence_ref=""
+mixed_topology_baseline_evidence_ref="doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md"
+mixed_topology_shared_evidence_ref=""
 governance_source_world_dir=""
 governance_baseline_manifest=""
 governance_slot_id=""
 governance_replace_signer_id=""
 governance_replacement_signer_id=""
 governance_replacement_public_key=""
+mixed_topology_pass=0
+mixed_topology_baseline_evidence_override=0
 declare -a governance_block_remove_signer_ids=()
 declare -a candidate_evidence_refs=()
 declare -a candidate_notes=()
@@ -386,6 +395,19 @@ while [[ $# -gt 0 ]]; do
       governance_window_evidence_ref=${2:-}
       shift 2
       ;;
+    --mixed-topology-baseline-evidence-ref)
+      mixed_topology_baseline_evidence_ref=${2:-}
+      mixed_topology_baseline_evidence_override=1
+      shift 2
+      ;;
+    --mixed-topology-shared-evidence-ref)
+      mixed_topology_shared_evidence_ref=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-pass)
+      mixed_topology_pass=1
+      shift
+      ;;
     --longrun-window-evidence-ref)
       longrun_window_evidence_ref=${2:-}
       shift 2
@@ -495,6 +517,18 @@ ensure_positive_int "--s10-base-port" "$s10_base_port"
 ensure_positive_int "--viewer-port" "$viewer_port"
 parse_host_port "--live-bind" "$live_bind" >/dev/null
 parse_host_port "--web-bind" "$web_bind" >/dev/null
+if [[ "$mixed_topology_baseline_evidence_override" -eq 1 ]]; then
+  require_file "--mixed-topology-baseline-evidence-ref" "$mixed_topology_baseline_evidence_ref"
+elif [[ ! -f "$mixed_topology_baseline_evidence_ref" ]]; then
+  mixed_topology_baseline_evidence_ref=""
+fi
+if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
+  require_file "--mixed-topology-shared-evidence-ref" "$mixed_topology_shared_evidence_ref"
+fi
+if [[ "$mixed_topology_pass" -eq 1 && -z "$mixed_topology_shared_evidence_ref" ]]; then
+  echo "error: --mixed-topology-pass requires --mixed-topology-shared-evidence-ref" >&2
+  exit 2
+fi
 
 for passthrough in "${passthrough_args[@]}"; do
   case "$passthrough" in
@@ -985,6 +1019,50 @@ cat >>"$rollback_summary_path" <<EOF
   - $rollback_note
 EOF
 
+mixed_topology_summary_path="$window_dir/mixed-topology-gate.md"
+mixed_topology_status="partial"
+mixed_topology_note="P2PARCH-6 matrix baseline is pinned, but shared-network mixed-topology evidence remains incomplete and proxy drills are not equivalent to a dedicated sentry/NAT lab"
+if [[ -z "$mixed_topology_baseline_evidence_ref" ]]; then
+  mixed_topology_note="no mixed-topology baseline evidence is pinned; keep the shared-network lane partial until P2PARCH-6 baseline or same-window evidence is attached"
+fi
+if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
+  mixed_topology_note="same-window mixed-topology evidence is pinned, but shared-network claim review still decides whether this lane can advance beyond partial"
+fi
+if [[ "$mixed_topology_pass" -eq 1 ]]; then
+  mixed_topology_status="pass"
+  mixed_topology_note="same-window mixed-topology evidence is pinned and approved as sufficient for the shared-devnet gate"
+fi
+cat >"$mixed_topology_summary_path" <<EOF
+# Shared Devnet Mixed-Topology Gate Note
+
+审计轮次: 1
+
+## Baseline
+- P2PARCH-6 matrix evidence:
+EOF
+if [[ -n "$mixed_topology_baseline_evidence_ref" ]]; then
+  cat >>"$mixed_topology_summary_path" <<EOF
+  - \`$mixed_topology_baseline_evidence_ref\`
+EOF
+else
+  cat >>"$mixed_topology_summary_path" <<EOF
+  - missing; pin \`--mixed-topology-baseline-evidence-ref\` before promotion
+EOF
+fi
+if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
+  cat >>"$mixed_topology_summary_path" <<EOF
+- same-window mixed-topology evidence:
+  - \`$mixed_topology_shared_evidence_ref\`
+EOF
+fi
+cat >>"$mixed_topology_summary_path" <<EOF
+
+## Verdict
+- lane result: \`$mixed_topology_status\`
+- reason:
+  - $mixed_topology_note
+EOF
+
 candidate_bundle_note="bundle validates"
 if [[ -n "$release_gate_summary_path" ]]; then
   candidate_bundle_note="$candidate_bundle_note and release-gate dry-run summary is pinned"
@@ -995,6 +1073,7 @@ cat >"$lanes_tsv" <<EOF
 candidate_bundle_integrity	qa_engineer	pass	$candidate_bundle	$candidate_bundle_note
 shared_access	qa_engineer	$shared_access_status	$shared_access_summary_path	$shared_access_note
 multi_entry_closure	qa_engineer	$multi_entry_status	$multi_entry_summary_path	$multi_entry_note
+mixed_topology_baseline	qa_engineer	$mixed_topology_status	$mixed_topology_summary_path	$mixed_topology_note
 governance_live_drill	runtime_engineer	$governance_status	$governance_summary_path	$governance_note
 short_window_longrun	runtime_engineer	$longrun_status	$longrun_summary_path	$longrun_note
 rollback_target_ready	liveops_community	$rollback_status	$rollback_summary_path	$rollback_note
@@ -1014,7 +1093,7 @@ gate_summary_path=$(latest_summary_path "$window_dir/gate" "summary.md" || true)
 gate_summary_json=$(latest_summary_path "$window_dir/gate" "summary.json" || true)
 
 run_config_path="$window_dir/run_config.json"
-python3 - "$run_config_path" "$window_id" "$candidate_bundle" "$candidate_id" "$release_gate_mode" "$web_mode" "$headless_mode" "$pure_api_mode" "$governance_mode" "$longrun_mode" "$bundle_dir" "$fallback_candidate_bundle" <<'PY'
+python3 - "$run_config_path" "$window_id" "$candidate_bundle" "$candidate_id" "$release_gate_mode" "$web_mode" "$headless_mode" "$pure_api_mode" "$governance_mode" "$longrun_mode" "$bundle_dir" "$fallback_candidate_bundle" "$mixed_topology_baseline_evidence_ref" "$mixed_topology_shared_evidence_ref" "$mixed_topology_pass" <<'PY'
 import json
 import pathlib
 import sys
@@ -1033,6 +1112,9 @@ payload = {
     "longrun_mode": sys.argv[10],
     "bundle_dir": sys.argv[11],
     "fallback_candidate_bundle": sys.argv[12],
+    "mixed_topology_baseline_evidence_ref": sys.argv[13],
+    "mixed_topology_shared_evidence_ref": sys.argv[14],
+    "mixed_topology_pass": sys.argv[15] == "1",
 }
 path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
@@ -1064,6 +1146,8 @@ cat >"$summary_path" <<EOF
   - \`$multi_entry_summary_path\`
 - governance:
   - \`$governance_summary_path\`
+- mixed-topology:
+  - \`$mixed_topology_summary_path\`
 - longrun:
   - \`$longrun_summary_path\`
 - rollback:

@@ -595,7 +595,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 - 当前状态：
   - `partial`
-  - 这表示 first `shared_devnet` dry run 已完成并留有正式 evidence，但 shared access / multi-entry / longrun / rollback target 仍未达到 promotion-ready `pass`，`staging/canary` 也尚未执行。
+  - 这表示 first `shared_devnet` dry run 已完成并留有正式 evidence，但 shared access / mixed-topology / rollback target 仍未达到 promotion-ready `pass`，`staging/canary` 也尚未执行。
 - 通过 shared-network gate 之前，以下表述都不允许：
   - `production release train is established`
   - `shared network validated`
@@ -604,6 +604,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   1. 生成统一 `release_candidate_bundle`
   2. 执行 first `shared_devnet` dry run（当前已完成，结论 `partial`）
   3. 把 `shared_devnet` 从 `partial` 提升到 `pass`
+     这里至少要补齐 `shared_access`、`rollback_target_ready` 与 same-window `mixed_topology_baseline`
   4. 执行 `staging` rehearsal
   5. 执行 `canary` rehearsal
 - 当前 evidence 入口：
@@ -662,13 +663,16 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - 当前 `shared-devnet-rehearsal` 最小职责：
   - 复用同一 `candidate_bundle` 作为 shared-devnet 编排真值
   - 用 execute/evidence/skip 模式统一收口 same-candidate `headed Web + no-ui + pure_api`
-  - 统一生成 `multi-entry-summary`、lane scaffold、`lanes.shared_devnet.tsv` 与 gate 输出
-  - 未提供 shared access / rollback / governance / short-window 新证据时，默认保持保守 `partial`，避免误判为已 `pass`
+  - 统一生成 `multi-entry-summary`、mixed-topology gate note、lane scaffold、`lanes.shared_devnet.tsv` 与 gate 输出
+  - 未提供 shared access / rollback / governance / short-window / same-window mixed-topology 新证据时，默认保持保守 `partial`，避免误判为已 `pass`
 - 当前 `shared-devnet-blocker-packet` 最小职责：
   - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `rollback_target_ready` 的实例草稿
   - 固定最后两条 blocker 的留证字段，避免后续 shared operator / fallback candidate 输入到位后还要手工重写结构
 - 当前 QA gate 最小职责：
   - 按 `shared_devnet / staging / canary` 校验 required lanes 是否齐全
+  - `shared_devnet` 必须包含 `candidate_bundle_integrity / shared_access / multi_entry_closure / mixed_topology_baseline / governance_live_drill / short_window_longrun / rollback_target_ready`
+  - `staging` 必须包含 `candidate_bundle_integrity / shared_access / unified_candidate_gate / mixed_topology_rehearsal / governance_live_drill / upgrade_rehearsal / rollback_rehearsal / incident_template`
+  - `canary` 必须包含 `candidate_bundle_integrity / promotion_record / canary_window / mixed_topology_claim_review / rollback_rehearsal / incident_review / exit_decision`
   - 统一输出 `pass / partial / block`
   - 统一生成 `summary.json` 与 `summary.md`
   - 缺 required lane 时直接 `block`
@@ -702,6 +706,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `shared_access=partial`
   - `short_window_longrun=partial`
   - `rollback_target_ready=partial`
+  - 按当前 gate 语义还必须补 `mixed_topology_baseline`；仅有 `P2PARCH-6` matrix baseline 时最多仍是 `partial`
   - 因此整体仍是 `gate_result=partial`
 - 当前 short-window follow-up `shared-devnet-20260324-06` 结论：
   - `candidate_bundle_integrity=pass`
@@ -710,7 +715,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `short_window_longrun=pass`
   - `shared_access=partial`
   - `rollback_target_ready=partial`
-  - 因此 shared-devnet 剩余 blocker 只收敛到 `shared_access / rollback_target_ready`
+  - `mixed_topology_baseline` 在当前语义下仍未升到 shared-window `pass`
+  - 因此 shared-devnet 剩余 blocker 现收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
 - `--dry-run` 用于门禁编排冒烟，不执行真实命令。
 
 ### S11：去中心化模块发布运行与告警（world-runtime）

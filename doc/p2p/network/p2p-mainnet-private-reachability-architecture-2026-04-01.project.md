@@ -19,6 +19,7 @@
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
   已落首个 executable mixed-topology matrix slice：`scripts/p2p-mixed-topology-matrix.sh` 会把 `private/validator_hidden/relay_only` role boundary、bootstrap poisoning、relay-budget detection 与 path failover 收成 `required` exact cases，并把 triad/triad_distributed 的 disconnect/restart/release-chaos 收成 `full` proxy cases；matrix 明确输出 `summary.json/md` 与 per-case command/log 目录，并显式标注当前 `proxy` case 只是 sentry-loss / mixed-topology live recovery 的近似 drill，不等价于 dedicated sentry/NAT lab。`full` live evidence 仍待后续继续执行。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
+  已把 mixed-topology lane 升级为 shared-network required gate：`shared-network-track-gate.sh` 现在要求 `shared_devnet/mixed_topology_baseline`、`staging/mixed_topology_rehearsal`、`canary/mixed_topology_claim_review` 三条显式 lane；`shared-devnet-rehearsal.sh` 也会自动生成 mixed-topology gate note，并默认把仅有 `P2PARCH-6` matrix baseline 的窗口保持在 `partial`。
 
 ## 当前结论
 - 当前阶段:
@@ -181,5 +182,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 继续执行 `P2PARCH-6` 的 full live evidence，并在 shared-network / release-train 收口前决定是否需要 dedicated sentry/NAT lab 来替换当前 proxy live drills。
+- 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence，把 `shared_devnet` 的 mixed-topology lane 从 baseline 提升到 same-window `pass`，再决定是否需要 dedicated sentry/NAT lab 来替换当前 proxy live drills。
 - 最近更新: 2026-04-03

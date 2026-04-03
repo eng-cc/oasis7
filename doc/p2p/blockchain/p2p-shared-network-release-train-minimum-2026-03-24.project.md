@@ -4,7 +4,7 @@
 - 对应需求文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
 - 对应运行手册: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
 
-审计轮次: 6
+审计轮次: 7
 ## 任务拆解（含 PRD-ID 映射）
 - [x] RTMIN-0 (PRD-P2P-RTMIN-001/002/003/004) [test_tier_required]: 新建 shared network / release train minimum 专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪与 `testing-manual`。
 - [x] RTMIN-1 (PRD-P2P-RTMIN-001/002) [test_tier_required]: `runtime_engineer` 落地 `release_candidate_bundle` 真值、版本 pinning 与 drift blocker，并把 bundle 校验接入 `release-gate` 前置步骤。
@@ -94,7 +94,8 @@
   - shared network verdict: `partial`
 - 当前缺口:
   - `shared_devnet` 仍未到 `pass`
-  - 剩余 blocker 已收敛到 `shared_access / rollback_target_ready`
+  - 剩余 blocker 已收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
+  - `P2PARCH-6` matrix baseline 已成为 shared-network required lane，但它当前只足以阻止 claims 越界，不等价于 shared-window `pass`
   - 对应 draft evidence 已生成，等待真实 shared operator / fallback candidate 真值填充
   - 没有正式 `staging/canary`
 
@@ -119,5 +120,5 @@
 
 ## 状态
 - 当前阶段: active
-- 下一步: 继续用 `./scripts/shared-devnet-rehearsal.sh` 保持既有 `pass` lanes，不再重复 dry-run；优先补齐真实 `shared_access` 与 formal `rollback_target_ready`，把 `shared_devnet` 从 `partial` 提升到 `pass`；在此之前继续维持 preview claims，再进入 `staging/canary` rehearsal。
+- 下一步: 继续用 `./scripts/shared-devnet-rehearsal.sh` 保持既有 `pass` lanes，不再重复 dry-run；优先补齐真实 `shared_access`、formal `rollback_target_ready` 与 same-window mixed-topology 证据，把 `shared_devnet` 从 `partial` 提升到 `pass`；在此之前继续维持 preview claims，再进入 `staging/canary` rehearsal。
 - 最近更新: 2026-03-24
