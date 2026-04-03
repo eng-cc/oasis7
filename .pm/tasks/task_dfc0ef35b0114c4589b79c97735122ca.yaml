@@ -1,0 +1,22 @@
+task_uid: task_dfc0ef35b0114c4589b79c97735122ca
+title: "TASK-README-058 为第十篇补充优秀同事密度论点"
+owner_role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-offer-choice-peer-density-refresh
+execution_log_path: .pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md
+doc_refs:
+  - doc/readme/project.md
+related_prd:
+  - PRD-README-035
+  - PRD-README-036
+acceptance:
+  - "Add the argument that large-platform teams are more likely to surround fresh grads with very strong peers, and propagate that point consistently through the long-form post, carousel pack, and carousel assets without changing the core platform-first / not-anti-AI boundary."
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-03T12:50:15+08:00
+last_started_at: 2026-04-03T12:43:11+08:00
+last_closed_at: 2026-04-03T12:50:07+08:00

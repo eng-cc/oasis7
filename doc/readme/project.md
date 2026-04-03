@@ -646,6 +646,22 @@
     - `file site/social/xiaohongshu-offer-choice-carousel-slide1.png site/social/xiaohongshu-offer-choice-carousel-slide2.png site/social/xiaohongshu-offer-choice-carousel-slide3.png site/social/xiaohongshu-offer-choice-carousel-slide4.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-058 (PRD-README-035/036) [test_tier_required]: 为第十篇补充“优秀同事密度”论点，把“大平台里身边的人大概率更强、反馈质量更高”同步进长文版、轮播版与轮播资产，同时保持平台优先 / 不反 AI 的判断边界。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
+    - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
+    - `site/social/xiaohongshu-offer-choice-carousel.html`
+    - `site/social/xiaohongshu-offer-choice-carousel-slide3.png`
+    - `.pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.yaml`
+    - `.pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md`
+    - `.pm/working_memory/task_dfc0ef35b0114c4589b79c97735122ca.yaml`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "优秀同事|反馈质量|review|平台优先|不反 AI" doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md site/social/xiaohongshu-offer-choice-carousel.html`
+    - `file site/social/xiaohongshu-offer-choice-carousel-slide3.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -661,6 +677,7 @@
 - 更新日期: 2026-04-03
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
 - 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
 - 最新完成: `TASK-README-055`（已为小红书第十篇固定“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“先拿平台和训练体系”的表达边界。）

@@ -1,0 +1,39 @@
+version: 1
+task_uid: task_dfc0ef35b0114c4589b79c97735122ca
+role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-offer-choice-peer-density-refresh
+source_session_id: manual
+source_thread_name: "xiaohongshu-offer-choice-peer-density-refresh"
+transcript_source: manual_summary
+last_extracted_ts: 2026-04-03T12:48:00+08:00
+captured_until_ts: 2026-04-03T12:48:00+08:00
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "第十篇新增的“优秀同事密度”论点被收口为训练环境的一部分，而不是单独的大厂光环论；文案和轮播第 3 页都把它和 review、反馈质量、做事标准绑定。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu-offer-choice-carousel.html"
+      - ".pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md"
+    captured_at: 2026-04-03T12:48:00+08:00
+    expires_at: 2026-04-05T12:48:00+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: attempt
+    summary: "这次是第十篇已有选题的观点加固，不新增新素材包类型，只改长文版、轮播版和第 3 页轮播资产，并通过 `TASK-README-058` 记录为一次 wording/asset refresh。"
+    source_refs:
+      - "doc/readme/project.md"
+      - ".pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md"
+    captured_at: 2026-04-03T12:48:00+08:00
+    expires_at: 2026-04-05T12:48:00+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: next_step
+    summary: "如果后续继续强化这条观点，优先考虑补 caption 或发布版开头，不要再继续往第 3 页塞更多概念，避免轮播信息密度过满。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - ".pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.execution.md"
+    captured_at: 2026-04-03T12:48:00+08:00
+    expires_at: 2026-04-05T12:48:00+08:00
+    promoted_to: []
