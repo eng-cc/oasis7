@@ -926,6 +926,9 @@
 - [x] TASK-WORLD_SIMULATOR-288 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建链收口为临时 bundle + finalize 正式流程，消除 Vite `outDir` 警告，保持最终 `software_safe.js` 路径不变，并把 finalize 脚本纳入 freshness source scope。
 - [x] TASK-WORLD_SIMULATOR-289 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `software_safe` 新增 repo-owned 最小浏览器回归脚本，稳定覆盖加载、连接、选中 Agent、`step` 与 DOM/`lastControlFeedback` 反馈，并同步 testing/manual/project 入口。
 - [x] TASK-WORLD_SIMULATOR-290 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复 `crates/oasis7_viewer/src/viewer_automation/mod.rs` 的 parse import 回归，恢复 `oasis7_viewer` 在 native/wasm 下的编译闭环，不改变既有 automation parse 语义。
+- [x] TASK-WORLD_SIMULATOR-291 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复 `software_safe` 在 legacy preview auth 下的 `prompt apply/chat` 回执回归，补齐 `authoritative_recovery_ack` 会话绑定收口、QA chat echo 的 no-LLM fallback 与即时虚拟事件冲刷，恢复 prompt/chat/message-flow 回归闭环。
+  - 产物文件: `doc/world-simulator/project.md`、`crates/oasis7_viewer/software_safe_src/legacy_core.js`、`crates/oasis7_viewer/software_safe.js`、`crates/oasis7/src/viewer/runtime_live/control_plane.rs`、`crates/oasis7/src/viewer/runtime_live.rs`、`crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs`
+  - 验收命令 (`test_tier_required`): `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_agent_chat_echo -- --nocapture`；`./scripts/viewer-software-safe-step-regression.sh --headless --viewer-port 4183 --live-bind 127.0.0.1:5033 --web-bind 127.0.0.1:5021 --chain-status-bind 127.0.0.1:5131`；`./scripts/viewer-software-safe-chat-regression.sh --headless --viewer-port 4184 --live-bind 127.0.0.1:5034 --web-bind 127.0.0.1:5022 --chain-status-bind 127.0.0.1:5132`；`node --check crates/oasis7_viewer/software_safe.js`；`./scripts/doc-governance-check.sh`；`./scripts/pm/lint.sh`；`git diff --check`
 ## 依赖
 - 模块设计总览：`doc/world-simulator/design.md`
 - doc/world-simulator/prd.index.md
@@ -954,10 +957,7 @@
 - `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.project.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.project.md`
+- `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.project.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.prd.md`
@@ -997,4 +997,4 @@
 - `crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`
 - `crates/oasis7_viewer/{Cargo.toml,src/main.rs}`、`scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`、`testing-manual.md`
 ## 状态
-- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-02 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-290`（已修复 `viewer_automation/mod.rs` 的 parse import 回归，恢复 `oasis7_viewer` 在 native/wasm 下的编译闭环，不改变既有 automation parse 语义。）；`TASK-WORLD_SIMULATOR-289`（已为 `software_safe` 增加 repo-owned 最小浏览器回归脚本，稳定覆盖加载、连接、选中 Agent、`step` 与 DOM/`lastControlFeedback` 反馈，并同步 testing/manual/project 入口。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。
+- 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-03 / active / 无（3D 可视化暂停，等待显式恢复 gate） / `TASK-WORLD_SIMULATOR-291`（已修复 `software_safe` 在 legacy preview auth 下的 `prompt apply/chat` 回执回归，补齐 session register ack 收口、QA chat echo 的 no-LLM fallback 与即时虚拟事件冲刷，恢复 prompt/chat/message-flow 回归闭环。）；`TASK-WORLD_SIMULATOR-290`（已修复 `viewer_automation/mod.rs` 的 parse import 回归，恢复 `oasis7_viewer` 在 native/wasm 下的编译闭环，不改变既有 automation parse 语义。） / `world-simulator` 当前不再继续推进新的 3D scene/camera/render/material/light/post-process 需求；活跃交付优先级为 `software_safe`、launcher/runtime interaction 与 OpenClaw formal gameplay 闭环。 / `PRD-WORLD_SIMULATOR-041` 已生效，3D 相关工作仅允许为主链路不腐烂而做的最小维护；`PRD-WORLD_SIMULATOR-040` 仍维持 OpenClaw latency 收敛目标，达到 `latency_class A` 前不得讨论默认启用。 / 真实 `OpenClaw(Local HTTP)` 单 NPC 闭环试点（T5 / `experimental`）与继续优化 OpenClaw absolute wait latency；3D 可视化方向保持暂停，直至显式恢复 gate 通过。

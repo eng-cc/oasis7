@@ -396,6 +396,9 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::AgentChat { request } => match self.handle_agent_chat(request) {
                 Ok(ack) => {
                     send_response(writer, &ViewerResponse::AgentChatAck { ack })?;
+                    if control_plane::runtime_agent_chat_echo_enabled_from_env() {
+                        self.flush_pending_virtual_events(session, writer)?;
+                    }
                 }
                 Err(error) => {
                     send_response(writer, &ViewerResponse::AgentChatError { error })?;
@@ -651,6 +654,60 @@ impl ViewerRuntimeLiveServer {
                 &ack,
             ));
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
+        }
+
+        Ok(())
+    }
+
+    fn flush_pending_virtual_events(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if self.pending_virtual_events.is_empty() {
+            return Ok(());
+        }
+        let mapped_events: Vec<_> = self.pending_virtual_events.drain(..).collect();
+        let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
+        let batch_finality_updates =
+            self.advance_authoritative_batch_finality(self.world.state().time)?;
+
+        if session.subscribed.contains(&ViewerStream::Events) {
+            for event in &mapped_events {
+                if session.event_allowed(event) {
+                    send_response(
+                        writer,
+                        &ViewerResponse::Event {
+                            event: event.clone(),
+                        },
+                    )?;
+                }
+            }
+            send_response(
+                writer,
+                &ViewerResponse::AuthoritativeBatch {
+                    batch: pending_batch,
+                },
+            )?;
+            for batch in batch_finality_updates {
+                send_response(writer, &ViewerResponse::AuthoritativeBatch { batch })?;
+            }
+        }
+
+        if session.subscribed.contains(&ViewerStream::Snapshot) {
+            let snapshot = self.compat_snapshot();
+            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+        }
+
+        session.metrics = runtime_metrics(&self.world);
+        if session.subscribed.contains(&ViewerStream::Metrics) {
+            send_response(
+                writer,
+                &ViewerResponse::Metrics {
+                    time: Some(self.world.state().time),
+                    metrics: session.metrics.clone(),
+                },
+            )?;
         }
 
         Ok(())

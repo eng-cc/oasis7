@@ -2885,11 +2885,14 @@ function handleAgentChatError(error) {
   state.lastChatFeedback = feedback;
 }
 function adoptHostedRecoveryAck(ack) {
-  if (!ack || !state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!ack || !state.auth.available) {
     return;
   }
+  const usesLegacyPreviewBootstrap = state.auth.source === "legacy_viewer_auth_bootstrap";
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
+  const nextBoundAgentId = ack.agent_id || state.auth.boundAgentId || null;
+  const nextRequestedAgentId = ack.agent_id || state.auth.pendingRequestedAgentId || state.auth.boundAgentId || null;
   state.auth.syncInFlight = false;
   state.auth.recoveryErrorCode = null;
   state.auth.recoveryErrorMessage = null;
@@ -2905,28 +2908,38 @@ function adoptHostedRecoveryAck(ack) {
   if (ack.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
-  state.auth.boundAgentId = ack.agent_id || null;
-  state.auth.pendingRequestedAgentId = ack.agent_id || state.auth.pendingRequestedAgentId || null;
+  state.auth.boundAgentId = nextBoundAgentId;
+  state.auth.pendingRequestedAgentId = nextRequestedAgentId;
   state.auth.pendingForceRebind = false;
   if (ack.status === "session_registered" && hadPendingForceRebind) {
     state.auth.rebindNotice = `Player session switched to ${ack.agent_id || previousRequestedAgentId || "requested agent"}.`;
   }
   state.auth.registrationStatus = ack.status === "session_registered" || ack.status === "catch_up_ready" ? "registered" : ack.status === "session_revoked" ? "guest" : "issued";
-  state.auth.runtimeStatus = ack.status === "session_revoked" ? "revoked" : ack.agent_id ? "registered" : "registered_unbound";
+  state.auth.runtimeStatus = ack.status === "session_revoked" ? "revoked" : nextBoundAgentId ? "registered" : "registered_unbound";
   if (ack.status === "session_revoked") {
-    void releaseHostedPlayerSlot().catch(() => {
-    });
-    resetHostedPlayerAuthState(
-      ack.message || "hosted player session was revoked",
-      {
-        revokeReason: ack.revoke_reason || ack.message || null,
-        revokedBy: ack.revoked_by || null
-      }
-    );
+    if (usesLegacyPreviewBootstrap) {
+      state.auth.registrationStatus = "issued";
+      state.auth.runtimeStatus = "revoked";
+      state.auth.error = ack.message || "legacy preview player session was revoked";
+      state.auth.pendingRequestedAgentId = null;
+      state.auth.pendingForceRebind = false;
+    } else {
+      void releaseHostedPlayerSlot().catch(() => {
+      });
+      resetHostedPlayerAuthState(
+        ack.message || "hosted player session was revoked",
+        {
+          revokeReason: ack.revoke_reason || ack.message || null,
+          revokedBy: ack.revoked_by || null
+        }
+      );
+    }
   } else {
-    persistHostedPlayerSession(state.auth);
-    void refreshHostedPlayerLease();
-    syncHostedSessionRefreshLoop();
+    if (!usesLegacyPreviewBootstrap) {
+      persistHostedPlayerSession(state.auth);
+      void refreshHostedPlayerLease();
+      syncHostedSessionRefreshLoop();
+    }
   }
   if (pendingSessionRegisterWaiter && ack.status === "session_registered") {
     const waiter = pendingSessionRegisterWaiter;

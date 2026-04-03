@@ -619,6 +619,66 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
 }
 
 #[test]
+fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
+    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(33);
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello runtime echo without llm config".to_string(),
+            intent_tick: Some(11),
+            intent_seq: Some(33),
+        },
+        33,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        32,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+
+    let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
+    assert!(events.iter().any(|event| matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, message, .. }
+            if event_agent_id == &agent_id && message == "[qa-echo] hello runtime echo without llm config"
+    )));
+}
+
+#[test]
 fn runtime_agent_chat_echo_removed_old_brand_env_is_ignored() {
     let _guard = lock_test_llm_env();
     std::env::set_var(

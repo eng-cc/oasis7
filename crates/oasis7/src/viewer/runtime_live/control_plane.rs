@@ -37,7 +37,7 @@ struct ResolvedAgentChatIntent {
     intent_seq: u64,
 }
 
-fn runtime_agent_chat_echo_enabled_from_env() -> bool {
+pub(super) fn runtime_agent_chat_echo_enabled_from_env() -> bool {
     std::env::var(RUNTIME_AGENT_CHAT_ECHO_ENV)
         .ok()
         .map(|value| {
@@ -446,13 +446,19 @@ impl ViewerRuntimeLiveServer {
             player_id.as_str(),
             public_key.as_deref(),
         )?;
-        self.llm_sidecar.push_chat_message(
+        let chat_echo_enabled = runtime_agent_chat_echo_enabled_from_env();
+        match self.llm_sidecar.push_chat_message(
             &self.world,
             &self.snapshot_config,
             agent_id.as_str(),
             message.as_str(),
-        )?;
-        self.llm_sidecar.request_decision();
+        ) {
+            Ok(()) => {
+                self.llm_sidecar.request_decision();
+            }
+            Err(error) if chat_echo_enabled && error.code == "llm_init_failed" => {}
+            Err(error) => return Err(error),
+        }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
         let ack = AgentChatAck {
             agent_id: agent_id.clone(),

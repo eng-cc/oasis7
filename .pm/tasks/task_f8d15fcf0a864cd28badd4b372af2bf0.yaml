@@ -1,0 +1,24 @@
+task_uid: task_f8d15fcf0a864cd28badd4b372af2bf0
+title: "Fix software_safe prompt apply ack regression"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-software-safe-prompt-apply-ack-fix
+execution_log_path: .pm/tasks/task_f8d15fcf0a864cd28badd4b372af2bf0.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/viewer-software-safe-chat-regression.sh
+  - crates/oasis7_viewer/software_safe.js
+doc_refs:
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "software_safe chat regression reaches prompt apply ack again under the repo-owned browser closure path."
+  - "fix preserves existing software_safe auth/bootstrap and prompt contract while restoring queued->ack feedback progression."
+  - "validation records step regression still passes and chat regression no longer stops at prompt apply queued."
+handoff_to: []
+updated_at: 2026-04-03T11:48:54+08:00
+last_started_at: 2026-04-03T11:13:06+08:00
+last_closed_at: 2026-04-03T11:48:54+08:00
