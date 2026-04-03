@@ -624,6 +624,28 @@
     - `rg -n "下周、下个月|全面转向|平台|训练体系|工程基本功" doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-057 (PRD-README-036) [test_tier_required]: 为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，采用“offer decision memo / 决策档案”方向，把讨论收口到“平台优先、不反 AI、趋势会快速扩散”的判断链。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
+    - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
+    - `site/social/xiaohongshu-offer-choice-carousel.html`
+    - `site/social/xiaohongshu-offer-choice-carousel-slide1.png`
+    - `site/social/xiaohongshu-offer-choice-carousel-slide2.png`
+    - `site/social/xiaohongshu-offer-choice-carousel-slide3.png`
+    - `site/social/xiaohongshu-offer-choice-carousel-slide4.png`
+    - `.pm/tasks/task_eceb1ea8964a449683d754632c860cdc.yaml`
+    - `.pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md`
+    - `.pm/working_memory/task_eceb1ea8964a449683d754632c860cdc.yaml`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "AI岗和大厂后端|平台和训练体系|成熟团队真正能给你的|下周下个月|xiaohongshu-offer-choice-carousel.html" doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md site/social/xiaohongshu-offer-choice-carousel.html`
+    - `file site/social/xiaohongshu-offer-choice-carousel-slide1.png site/social/xiaohongshu-offer-choice-carousel-slide2.png site/social/xiaohongshu-offer-choice-carousel-slide3.png site/social/xiaohongshu-offer-choice-carousel-slide4.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -639,6 +661,7 @@
 - 更新日期: 2026-04-03
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
 - 最新完成: `TASK-README-055`（已为小红书第十篇固定“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“先拿平台和训练体系”的表达边界。）
 - 最新完成: `TASK-README-054`（已为小红书第九篇补齐极简封面 HTML 与 PNG，并把视觉语言收口到低 GUI 感的大留白判断海报。）

@@ -129,6 +129,15 @@ AI岗和大厂后端
 我会先看平台和训练体系
 ```
 
+## 轮播版衍生入口
+- 轮播版文档：`doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
+- 轮播版 HTML：`site/social/xiaohongshu-offer-choice-carousel.html`
+- 轮播版 PNG：
+  - `site/social/xiaohongshu-offer-choice-carousel-slide1.png`
+  - `site/social/xiaohongshu-offer-choice-carousel-slide2.png`
+  - `site/social/xiaohongshu-offer-choice-carousel-slide3.png`
+  - `site/social/xiaohongshu-offer-choice-carousel-slide4.png`
+
 ## 关键词与标签建议
 - 核心关键词：`offer选择`、`应届生`、`大厂后端`
 - 长尾关键词：`AI就业`、`工程师成长`、`第一份工作`、`训练体系`、`后端开发`

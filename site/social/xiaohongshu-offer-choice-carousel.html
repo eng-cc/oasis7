@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Offer Choice Carousel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;700&family=Noto+Sans+SC:wght@500;700;900&family=Noto+Serif+SC:wght@600;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f4efe7;
+        --paper-warm: #fbf7f0;
+        --paper-deep: #e7ddd1;
+        --ink: #1a2433;
+        --ink-soft: rgba(26, 36, 51, 0.72);
+        --line: rgba(26, 36, 51, 0.11);
+        --navy: #24354e;
+        --navy-soft: #dbe4f2;
+        --brick: #c85d42;
+        --gold: #d7b56d;
+        --mint: #d7e3d4;
+        --rose: #eed7d1;
+        --shadow: 0 28px 76px rgba(38, 43, 54, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 14% 14%, rgba(200, 93, 66, 0.14), transparent 22%),
+          radial-gradient(circle at 84% 18%, rgba(36, 53, 78, 0.12), transparent 24%),
+          linear-gradient(150deg, #f8f3eb 0%, #eee4d8 50%, #edf0f5 100%);
+        color: var(--ink);
+        font-family: "Noto Sans SC", sans-serif;
+      }
+
+      .gallery {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 26px 0 72px;
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        border-radius: 28px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 18%),
+          radial-gradient(circle at 12% 12%, rgba(215, 181, 109, 0.34), transparent 22%),
+          radial-gradient(circle at 88% 16%, rgba(219, 228, 242, 0.94), transparent 22%),
+          linear-gradient(180deg, var(--paper-warm) 0%, var(--paper) 56%, var(--paper-deep) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .grain,
+      .grid,
+      .frame,
+      .marks {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.12;
+        background-image:
+          radial-gradient(circle at 20% 20%, rgba(0, 0, 0, 0.52) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 72% 28%, rgba(0, 0, 0, 0.34) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 40% 78%, rgba(0, 0, 0, 0.28) 0.8px, transparent 0.9px);
+        background-size: 28px 28px, 36px 36px, 42px 42px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.36), transparent 92%);
+      }
+
+      .frame::before,
+      .frame::after {
+        content: "";
+        position: absolute;
+        inset: 34px;
+        border: 1px solid rgba(26, 36, 51, 0.08);
+        border-radius: 24px;
+      }
+
+      .frame::after {
+        inset: 52px;
+        border-style: dashed;
+        border-color: rgba(26, 36, 51, 0.05);
+        border-radius: 18px;
+      }
+
+      .marks::before,
+      .marks::after {
+        content: "";
+        position: absolute;
+        width: 112px;
+        height: 18px;
+        background: rgba(36, 53, 78, 0.08);
+        border-radius: 999px;
+        transform: rotate(-8deg);
+      }
+
+      .marks::before {
+        right: 98px;
+        top: 124px;
+      }
+
+      .marks::after {
+        left: 116px;
+        bottom: 214px;
+      }
+
+      .header,
+      .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .header {
+        top: 62px;
+      }
+
+      .footer {
+        bottom: 50px;
+      }
+
+      .brand,
+      .meta,
+      .chip,
+      .tag,
+      .footer-note,
+      .option-tag {
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--ink-soft);
+        font-size: 17px;
+      }
+
+      .brand::before,
+      .meta::before,
+      .tag::before,
+      .option-tag::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--brick);
+        box-shadow: 4px 4px 0 rgba(200, 93, 66, 0.14);
+      }
+
+      .progress {
+        display: flex;
+        gap: 10px;
+      }
+
+      .progress span {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(26, 36, 51, 0.12);
+      }
+
+      .progress span.active {
+        width: 42px;
+        background: var(--navy);
+      }
+
+      .canvas {
+        position: absolute;
+        inset: 130px 72px 112px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .card {
+        position: relative;
+        overflow: hidden;
+        background: rgba(255, 252, 247, 0.88);
+        border: 1px solid rgba(26, 36, 51, 0.1);
+        box-shadow: var(--shadow);
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--navy), var(--brick), var(--gold));
+      }
+
+      .dark-card {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(36, 53, 78, 0.98), rgba(26, 36, 51, 0.98));
+        color: #f4efe7;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .dark-card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--gold), #fff4cf, var(--brick));
+      }
+
+      .dark-card .tag {
+        color: rgba(244, 239, 231, 0.72);
+      }
+
+      .dark-card p {
+        color: rgba(244, 239, 231, 0.82);
+      }
+
+      .tag,
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        color: var(--ink-soft);
+      }
+
+      .chip {
+        padding: 12px 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(26, 36, 51, 0.08);
+      }
+
+      .slide-1 .canvas {
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 28px;
+      }
+
+      .hero {
+        padding: 40px 40px 36px;
+      }
+
+      .hero .tag {
+        margin-bottom: 34px;
+      }
+
+      .hero h1 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 112px;
+        line-height: 1.02;
+        letter-spacing: -0.08em;
+        font-weight: 900;
+        color: var(--navy);
+      }
+
+      .hero h1 span {
+        display: block;
+      }
+
+      .hero .divider {
+        width: 132px;
+        height: 6px;
+        margin: 42px 0 32px;
+        background: var(--brick);
+      }
+
+      .hero p {
+        max-width: 420px;
+        font-size: 34px;
+        line-height: 1.58;
+        color: var(--ink-soft);
+      }
+
+      .split-panel {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 22px;
+      }
+
+      .memo-card,
+      .question-card,
+      .note-card {
+        padding: 28px 28px 26px;
+      }
+
+      .memo-card h2,
+      .question-card h2,
+      .note-card h2 {
+        margin-top: 18px;
+        font-size: 36px;
+        line-height: 1.25;
+      }
+
+      .memo-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .memo-block {
+        padding: 18px 18px 20px;
+        border-radius: 22px;
+        background: rgba(36, 53, 78, 0.08);
+      }
+
+      .memo-block strong {
+        display: block;
+        font-size: 18px;
+        color: var(--brick);
+      }
+
+      .memo-block span {
+        display: block;
+        margin-top: 10px;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.3;
+      }
+
+      .question-card {
+        background: linear-gradient(180deg, rgba(238, 215, 209, 0.9), rgba(244, 239, 231, 0.9));
+      }
+
+      .question-card h2 {
+        font-size: 34px;
+      }
+
+      .question-card p {
+        margin-top: 12px;
+        font-size: 22px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .slide-2 .canvas,
+      .slide-3 .canvas,
+      .slide-4 .canvas {
+        display: grid;
+        gap: 24px;
+      }
+
+      .lead {
+        padding: 34px 36px 32px;
+      }
+
+      .lead h2 {
+        margin-top: 18px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 68px;
+        line-height: 1.12;
+        letter-spacing: -0.05em;
+      }
+
+      .lead p {
+        margin-top: 20px;
+        max-width: 760px;
+        font-size: 28px;
+        line-height: 1.65;
+        color: var(--ink-soft);
+      }
+
+      .dark-card.lead p {
+        color: rgba(244, 239, 231, 0.82);
+      }
+
+      .priority-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+      }
+
+      .priority-item,
+      .skill-item {
+        padding: 24px 20px 22px;
+        min-height: 220px;
+      }
+
+      .priority-item .num,
+      .skill-item .num {
+        font-family: "Fraunces", serif;
+        font-size: 44px;
+        color: var(--brick);
+      }
+
+      .priority-item h3,
+      .skill-item h3 {
+        margin-top: 14px;
+        font-size: 34px;
+        line-height: 1.18;
+      }
+
+      .priority-item p,
+      .skill-item p {
+        margin-top: 14px;
+        font-size: 22px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .explain {
+        padding: 24px 28px;
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: center;
+        background: rgba(215, 227, 212, 0.88);
+      }
+
+      .explain p {
+        max-width: 660px;
+        font-size: 24px;
+        line-height: 1.7;
+      }
+
+      .stamp {
+        padding: 16px 18px;
+        border: 2px solid rgba(200, 93, 66, 0.44);
+        color: var(--brick);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        transform: rotate(-7deg);
+      }
+
+      .skill-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+      }
+
+      .conclusion {
+        display: grid;
+        grid-template-columns: 1.02fr 0.98fr;
+        gap: 22px;
+      }
+
+      .conclusion-lead {
+        padding: 36px 34px 34px;
+      }
+
+      .conclusion-lead h2 {
+        margin-top: 18px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 74px;
+        line-height: 1.12;
+        letter-spacing: -0.05em;
+      }
+
+      .conclusion-lead p {
+        margin-top: 18px;
+        font-size: 25px;
+        line-height: 1.66;
+        color: rgba(244, 239, 231, 0.78);
+      }
+
+      .choice-panel {
+        display: grid;
+        gap: 16px;
+      }
+
+      .option {
+        position: relative;
+        padding: 26px 24px 24px;
+        background: rgba(255, 252, 247, 0.9);
+        border: 1px solid rgba(26, 36, 51, 0.1);
+        box-shadow: var(--shadow);
+      }
+
+      .option.hot {
+        background: linear-gradient(180deg, rgba(238, 215, 209, 0.92), rgba(255, 252, 247, 0.92));
+      }
+
+      .option.stable {
+        background: linear-gradient(180deg, rgba(215, 227, 212, 0.94), rgba(255, 252, 247, 0.92));
+      }
+
+      .option-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .option strong {
+        display: block;
+        margin-top: 16px;
+        font-size: 38px;
+        line-height: 1.2;
+      }
+
+      .option p {
+        margin-top: 12px;
+        font-size: 22px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .prompt {
+        padding: 24px 28px;
+        background: rgba(255, 252, 247, 0.82);
+        border: 1px solid rgba(26, 36, 51, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .prompt strong {
+        display: block;
+        font-size: 34px;
+        line-height: 1.38;
+      }
+
+      .prompt p {
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide slide-1" data-slide="1">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="marks"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 01 / conflict</span>
+        </header>
+        <div class="canvas">
+          <article class="card hero">
+            <div class="tag">offer decision memo</div>
+            <h1>
+              <span>AI岗</span>
+              <span>和大厂后端</span>
+              <span>怎么选</span>
+            </h1>
+            <div class="divider"></div>
+            <p>
+              第一份 offer，
+              <br />
+              到底先看方向更热，
+              <br />
+              还是先看成长结构？
+            </p>
+          </article>
+          <div class="split-panel">
+            <article class="card memo-card">
+              <div class="chip">same person / two paths</div>
+              <h2>一个偏 AI，一个是传统大厂后端。</h2>
+              <div class="memo-grid">
+                <div class="memo-block">
+                  <strong>Option A</strong>
+                  <span>岗位名更像风口</span>
+                </div>
+                <div class="memo-block">
+                  <strong>Option B</strong>
+                  <span>平台和体系更成熟</span>
+                </div>
+              </div>
+            </article>
+            <article class="card question-card">
+              <div class="chip">my lens</div>
+              <h2>我真正会先问的，不是哪个名字更热。</h2>
+              <p>
+                我会先看，
+                <br />
+                这份工作能不能把一个应届生真正带起来。
+              </p>
+            </article>
+            <article class="dark-card note-card">
+              <div class="tag">page stop</div>
+              <h2>这不是反 AI。是第一份工作先拿什么的问题。</h2>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span class="active"></span><span></span><span></span><span></span></div>
+          <span class="footer-note">conflict setup</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-2" data-slide="2">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="marks"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 02 / priority</span>
+        </header>
+        <div class="canvas">
+          <article class="card lead">
+            <div class="tag">priority first</div>
+            <h2>如果你是应届生，我会先看平台和训练体系。</h2>
+            <p>
+              不是因为 AI 不重要。
+              <br />
+              而是第一份工作先进一个能把你带起来的环境，很多时候更重要。
+            </p>
+          </article>
+          <div class="priority-grid">
+            <article class="card priority-item">
+              <div class="num">01</div>
+              <h3>平台</h3>
+              <p>你能接触到怎样的工程密度和真实问题。</p>
+            </article>
+            <article class="card priority-item">
+              <div class="num">02</div>
+              <h3>训练体系</h3>
+              <p>有没有明确的规范、节奏和成长路径。</p>
+            </article>
+            <article class="card priority-item">
+              <div class="num">03</div>
+              <h3>带教</h3>
+              <p>有没有人会真看你的代码和判断过程。</p>
+            </article>
+            <article class="card priority-item">
+              <div class="num">04</div>
+              <h3>工程基本功</h3>
+              <p>这些能力会在后面很多年里反复起作用。</p>
+            </article>
+          </div>
+          <article class="card explain">
+            <p>风口当然重要，但第一份工作更重要的，很多时候不是先押中哪个词更热，而是先拿到一个能持续训练你的系统。</p>
+            <span class="stamp">platform first</span>
+          </article>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span class="active"></span><span></span><span></span></div>
+          <span class="footer-note">judgment order</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-3" data-slide="3">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="marks"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 03 / team value</span>
+        </header>
+        <div class="canvas">
+          <article class="dark-card lead">
+            <div class="tag">what you really get</div>
+            <h2>成熟团队真正能给你的，不只是一个岗位名字。</h2>
+            <p>
+              更值钱的是，你会被迫进入真实工程现场：
+              <br />
+              怎么 review，怎么协作，怎么守稳定性，线上问题出了以后怎么处理。
+            </p>
+          </article>
+          <div class="skill-grid">
+            <article class="card skill-item">
+              <div class="num">01</div>
+              <h3>review</h3>
+              <p>有人真的看你的实现，不只是看结果。</p>
+            </article>
+            <article class="card skill-item">
+              <div class="num">02</div>
+              <h3>协作</h3>
+              <p>你会知道工程不是一个人闷头把功能写完。</p>
+            </article>
+            <article class="card skill-item">
+              <div class="num">03</div>
+              <h3>稳定性</h3>
+              <p>你会开始理解什么叫能跑、能扛、能维护。</p>
+            </article>
+            <article class="card skill-item">
+              <div class="num">04</div>
+              <h3>线上处理</h3>
+              <p>真出问题时，怎么定位、怎么收口、怎么复盘。</p>
+            </article>
+          </div>
+          <article class="card explain">
+            <p>这些东西听上去没那么像风口，但它们会一直跟着你。岗位名字会变，工程能力留下来的时间更长。</p>
+            <span class="stamp">skills compound</span>
+          </article>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span class="active"></span><span></span></div>
+          <span class="footer-note">team value</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-4" data-slide="4">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="marks"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 04 / vote</span>
+        </header>
+        <div class="canvas">
+          <div class="conclusion">
+            <article class="dark-card conclusion-lead">
+              <div class="tag">trend note</div>
+              <h2>今天没做 AI，不代表下周、下个月不做。</h2>
+              <p>
+                趋势会扩得很快，
+                <br />
+                甚至说不定很快就全面转向了。
+                <br />
+                但基本功不会自己长出来。
+              </p>
+            </article>
+            <div class="choice-panel">
+              <article class="option hot">
+                <div class="option-tag">option a</div>
+                <strong>先选方向更热</strong>
+                <p>先站到最热的位置，再看后面能不能补训练。</p>
+              </article>
+              <article class="option stable">
+                <div class="option-tag">option b</div>
+                <strong>先选平台更稳</strong>
+                <p>先把成长结构和基本功拿住，再去追下一波变化。</p>
+              </article>
+            </div>
+          </div>
+          <article class="prompt">
+            <strong>如果是你的第一份 offer，你会先选方向更热，还是平台更稳？</strong>
+            <p>我自己的答案更偏后者。但这题最有价值的地方，本来就不是统一答案，而是你优先看什么。</p>
+          </article>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span></span><span class="active"></span></div>
+          <span class="footer-note">comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slide = params.get("slide");
+      if (slide) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((node) => {
+          node.style.display = node.dataset.slide === slide ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>

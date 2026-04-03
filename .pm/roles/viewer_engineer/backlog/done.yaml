@@ -124,3 +124,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_ce19184e957d4ab5a3027a95a6049d60.yaml
+  - task_uid: task_eceb1ea8964a449683d754632c860cdc
+    title: "TASK-README-057 为小红书第十篇补齐 4 页轮播版素材包与资产"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-README-036
+    acceptance:
+      - "Create a 4-slide Xiaohongshu carousel pack, HTML, and 1080x1440 PNG exports for the offer-choice topic while preserving the platform-first, not-anti-AI, and rapid-trend-shift boundary."
+    handoff_to:
+      - liveops_community
+    status: done
+    task_path: .pm/tasks/task_eceb1ea8964a449683d754632c860cdc.yaml

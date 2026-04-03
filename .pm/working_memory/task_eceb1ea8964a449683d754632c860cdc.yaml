@@ -1,0 +1,37 @@
+version: 1
+task_uid: task_eceb1ea8964a449683d754632c860cdc
+role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-offer-choice-carousel
+source_session_id: manual
+source_thread_name: "xiaohongshu-offer-choice-carousel"
+transcript_source: manual_summary
+last_extracted_ts: 2026-04-03T12:36:00+08:00
+captured_until_ts: 2026-04-03T12:36:00+08:00
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "第十篇轮播版采用 4 页 `offer decision memo / 决策档案` 结构，而不是把长文正文直接切成 4 张纯文字截图；四页分别承担冲突题、优先级判断、成熟团队价值和评论区站队。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - "site/social/xiaohongshu-offer-choice-carousel.html"
+      - ".pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md"
+    captured_at: 2026-04-03T12:36:00+08:00
+    expires_at: 2026-04-05T12:36:00+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: attempt
+    summary: "headless Chrome 导出 PNG 时持续出现 `inotify_init() failed: Too many open files` 噪音，但不影响 `xiaohongshu-offer-choice-carousel-slide1.png` 到 `slide4.png` 成功写出；需要看实际文件和图片内容，而不能只根据 stderr 判失败。"
+    source_refs:
+      - ".pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md"
+    captured_at: 2026-04-03T12:36:00+08:00
+    expires_at: 2026-04-05T12:36:00+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: next_step
+    summary: "若用户后续要把这组轮播继续加强成封面首图、发布 caption 或第二版视觉微调，应单独新开任务，不继续复用本次 carousel asset task。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md"
+      - ".pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md"
+    captured_at: 2026-04-03T12:36:00+08:00
+    expires_at: 2026-04-05T12:36:00+08:00
+    promoted_to: []

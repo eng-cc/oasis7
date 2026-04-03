@@ -1,0 +1,23 @@
+task_uid: task_eceb1ea8964a449683d754632c860cdc
+title: "TASK-README-057 为小红书第十篇补齐 4 页轮播版素材包与资产"
+owner_role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-offer-choice-carousel
+execution_log_path: .pm/tasks/task_eceb1ea8964a449683d754632c860cdc.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md
+doc_refs:
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md
+  - site/social/xiaohongshu-offer-choice-carousel.html
+related_prd:
+  - PRD-README-036
+acceptance:
+  - "Create a 4-slide Xiaohongshu carousel pack, HTML, and 1080x1440 PNG exports for the offer-choice topic while preserving the platform-first, not-anti-AI, and rapid-trend-shift boundary."
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-03T12:38:28+08:00
+last_started_at: 2026-04-03T12:26:27+08:00
+last_closed_at: 2026-04-03T12:38:17+08:00
