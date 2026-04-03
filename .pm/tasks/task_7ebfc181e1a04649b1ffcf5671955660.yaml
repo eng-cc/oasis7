@@ -1,0 +1,21 @@
+task_uid: task_7ebfc181e1a04649b1ffcf5671955660
+title: "Document auto-selected P2P user modes over formal role semantics"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-user-modes-auto-role-selection
+execution_log_path: .pm/tasks/task_7ebfc181e1a04649b1ffcf5671955660.execution.md
+status: done
+priority: P2
+source_signal: SIG-PM-0010
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "P2P architecture PRD defines 2-3 user-visible deployment modes that cover normal users through validator operators while keeping internal formal roles"
+  - "Default behavior is fully automatic based on reachability detection, with explicit user confirmation only for high-risk public entry responsibilities"
+handoff_to: []
+updated_at: 2026-04-03T13:51:09+08:00
+last_started_at: 2026-04-03T13:39:47+08:00
+last_closed_at: 2026-04-03T13:51:09+08:00

@@ -529,6 +529,38 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/cases/<case_id>/`
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
+
+### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
+- 当前状态（2026-04-03）：
+  - `P2PARCH-8` 已完成文档冻结：用户层默认只暴露 `自动加入 / 私有安全 / 公网入口` 三档简单模式，底层继续保留 `deployment_mode/node_role` 正式语义。
+  - `P2PARCH-9` 尚未落实现；当前手册先冻结 required/full 应覆盖的验证语义，避免后续实现落地后缺少 QA 对账口径。
+- required 验证（本轮 docs-only baseline）：
+```bash
+rg -n "自动加入|私有安全|公网入口|deployment_mode|node_role|AutoNAT|高风险职责|显式确认" \
+  doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md \
+  doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md \
+  testing-manual.md
+./scripts/doc-governance-check.sh
+git diff --check
+```
+- `P2PARCH-8` 通过标准：
+  - PRD / project / testing manual 对用户可见模式、内部正式角色语义、默认全自动路径三者口径一致。
+  - 文档明确要求普通用户默认路径不必理解 `deployment_mode/node_role`。
+  - 文档明确要求涉及 `公网入口`、`relay`、`sentry` 等外部暴露职责时必须显式确认，不能静默自动升级。
+- `P2PARCH-9` required 覆盖要求（实现落地时必须补 executable required evidence）：
+  - 启动后 `60s` 内至少完成一次 reachability 检测，并在默认路径给出一个用户模式建议。
+  - 当 AutoNAT、公网端口探测与打洞结果互相矛盾时，默认回退到保守模式，不能直接提升为 `公网入口`。
+  - 当检测结果建议承担 `公网入口` 或等价暴露职责时，UI/CLI 必须要求显式确认，并记录检测依据与风险提示。
+  - 用户拒绝 `公网入口` 后，系统必须回退到非入口模式，同时不破坏底层 `deployment_mode/node_role` 权限边界。
+- `P2PARCH-9` full 覆盖要求（实现落地时必须补 executable full evidence）：
+  - 至少覆盖 `公网可达`、`受限 NAT 可打洞`、`对称 NAT/CGNAT 无法打洞`、`检测结果抖动或冲突` 四类 reachability 场景。
+  - 覆盖用户从默认推荐切到高级设置覆盖，再回退到自动模式的往返路径，并验证审计证据持续可读。
+  - 覆盖多节点混合场景中，非公网节点、公网入口节点与 relay/sentry 语义的映射一致性，避免 UI 用户模式与底层 role policy 脱节。
+  - 若复用 shared-network / mixed-topology lane 作为 full-tier 证据，summary 中必须单独标注哪些 case 验证的是用户模式推荐，哪些 case 验证的是底层 reachability 真值。
+- 证据要求：
+  - docs-only 阶段至少留下 `rg` 命中结果与文档门禁通过记录。
+  - 实现阶段至少留下模式推荐结果、触发确认的风险提示文本、用户接受/拒绝后的最终模式，以及对应的检测依据摘要。
+  - 若当轮仍无法提供 dedicated NAT/public-entry lab，则必须在 evidence 中明确哪些结果来自 proxy/shared-network drill，不能冒充真实公网探测实验。
 - 反作弊/反女巫证据链门禁（TASK-GAME-015）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::governance::governance_identity_penalty_ -- --nocapture

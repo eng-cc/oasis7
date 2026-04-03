@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
 - 对应项目管理文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 1. Executive Summary
 - Problem Statement: 当前 triad 实测已经证明，家宽 / NAT / CGNAT / 企业内网节点无法稳定接收入站 UDP 时，现有“节点最好有公网地址”假设会直接把本机、边缘机房和大量运营环境排除在主路径之外。若继续把公网可达当成默认前提，oasis7 很难对标公共主链常见的 mixed-topology 现实。
 - Proposed Solution: 冻结一套 public-chain-grade 的 P2P 目标态，把 `identity`、`addressability`、`transport`、`discovery`、`relay/overlay` 与 `consensus/data plane` 解耦，使 validator / full / storage / observer 节点在 `public / hybrid / private / relay_only / validator_hidden` 多种部署模式下都能成为一等公民。
@@ -13,6 +13,7 @@
   - SC-3: 协议层明确拆出 `gossip plane / sync plane / blob-state plane / control plane`，不同链型只替换上层适配器，不重写底层可达性框架。
   - SC-4: 安全边界明确冻结 `validator core / sentry / relay / full-storage / observer-light` 的角色和密钥边界，禁止 relay/browser/operator public plane 持有长期共识 signer。
   - SC-5: 文档明确给出 anti-eclipse、anti-spam、peer diversity、relay budget 与 shared-network 验证要求，后续实现可直接据此拆任务和测门禁。
+  - SC-6: 用户层默认只暴露 `2~3` 个简单模式，并由系统根据公网/NAT/打洞结果自动选择默认值；普通用户不必先理解 `validator_core/sentry/relay` 等正式角色。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -20,11 +21,13 @@
   - `runtime_engineer`: 需要知道底层 P2P core 应该抽象到什么层，哪些能力必须做成框架层，而不是继续散落在 runtime 业务里。
   - validator / sentry operator: 需要明确什么时候节点必须公开暴露，什么时候只需要 outbound reachability。
   - home / CGNAT / enterprise operator: 需要在没有公网 IP 的条件下仍然能加入网络、同步状态并承担受限角色。
+  - 普通玩家 / 社区节点用户: 需要用简单模式加入网络，而不是先学完整的部署角色矩阵。
   - `qa_engineer`: 需要把 mixed-topology、relay fallback、anti-eclipse 和 shared-network 变成正式验证矩阵。
 - User Scenarios & Frequency:
   - 每次有人提出“某个节点没有公网 IP，是否还能成为正式节点”时，先看本专题。
   - 每次设计 validator / sentry / relay 部署形态时，先看本专题角色边界。
   - 每次网络层计划从点状补丁进入框架重构时，先以本专题冻结目标态和非目标。
+  - 每次新用户首次启动节点、切换网络环境或重新检测公网/NAT 条件时，系统都应自动重算默认模式。
   - 每次 shared network / release train / chaos drill 设计新门禁时，把本专题当作流量分层和 reachability 真值。
 - User Stories:
   - PRD-P2P-024-A: As a `producer_system_designer`, I want one public-chain-grade private-reachability architecture, so that oasis7 不会因为家宽/NAT 现实被迫退回“全员公网节点”假设。
@@ -32,11 +35,13 @@
   - PRD-P2P-024-C: As a validator operator, I want one explicit `validator core / sentry / relay` model, so that signing节点可以隐藏在私网后面，公开面只承担转发和抗攻击吸收。
   - PRD-P2P-024-D: As a private-node operator, I want hole punching / relay / overlay fallback frozen as first-class paths, so that no-public-IP 节点仍可稳定同步与参与网络。
   - PRD-P2P-024-E: As a `qa_engineer`, I want anti-eclipse, peer diversity and mixed-topology test gates defined up front, so that public-chain-grade claims are tied to evidence rather than直觉。
+  - PRD-P2P-024-F: As a normal node user, I want `自动加入 / 私有安全 / 公网入口` 这类简单模式，并由系统自动给默认值, so that I can join the network without先理解底层部署角色。
 - Critical User Flows:
   1. Flow-P2P-PRA-001: `private validator boot -> outbound connect to bootstrap/sentry -> reachability service classifies self as private -> reserve relay or attach sentry -> advertise signed peer record without exposing home IP -> join consensus/control lanes`
   2. Flow-P2P-PRA-002: `private full/storage node boot -> attempt direct reachability -> hole punch succeeds则升级 direct path；失败则保留 relay path -> sync plane 仍可追块/追状态 -> gossip 只按本角色订阅必要 topic`
   3. Flow-P2P-PRA-003: `public node receives peer record -> verify chain/domain/signature -> apply diversity policy -> assign gossip/sync/data lanes -> monitor peer score and path quality -> re-route on relay loss or direct-path recovery`
   4. Flow-P2P-PRA-004: `bootstrap poisoning / eclipse suspicion -> peer manager detects discovery-source集中、ASN集中或 relay abuse -> downgrade suspicious peers -> force rebootstrap from independent anchors -> emit block signal for release gate`
+  5. Flow-P2P-PRA-005: `new user boots node -> system probes public IP / NAT / port reachability / hole-punch viability -> system picks default user mode -> internal deployment_mode + node_role are derived -> if result implies public entry responsibility, UI asks for explicit confirmation before advertising that surface`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
@@ -45,6 +50,7 @@
 | Reachability service | `observed_addr/autonat_status/hole_punch_status/relay_reservation/path_quality` | 探测 direct、尝试打洞、预留 relay、维护路径排序 | `unknown -> direct/private/relay_only -> degraded/recovered` | direct 优先于 punched，punched 优先于 relay；不能打洞时自动降级 relay | 节点本地决策；relay 只提供转发，不授予签名权限 |
 | Discovery fabric | `bootnodes/dht_namespace/rendezvous_topic/peer_record_cache/source_diversity` | 从 bootnode、DHT、rendezvous 与静态 allowlist 聚合候选 peer | `seeded -> converging -> healthy/degraded` | 至少保留两类独立 discovery source；单源集中不得视为 healthy | bootnode/relay 可公开；validator core 可只做 consumer |
 | Transport abstraction | `transport_id/directness/security/mux/qos_class/max_streams` | 在 direct、hole-punched、relay 路径上复用统一流接口 | `dialing -> established -> draining -> closed` | QUIC 为主、TCP/Noise 为回退；UDP 只可作为加速，不得成为唯一真值链路 | transport key 可轮换；长期 signer 不进入 transport session |
+| User-visible deployment mode | `user_mode/auto_detect_result/allow_public_entry/high_value_node/override_source` | 给用户展示 `自动加入 / 私有安全 / 公网入口` 简化模式，并映射到正式角色语义 | `auto_detected -> proposed -> confirmed/enforced` | 默认必须自动选择；只有检测结果涉及 `public entry` 或高价值角色暴露面时才要求显式确认；普通路径不要求用户先理解底层正式角色 | 普通用户只能选简化模式；高级用户才可覆盖内部 role/deployment 配置 |
 | Role policy | `deployment_mode/node_role/sentry_set/relay_budget/exposed_surface` | 根据角色限制订阅、入站、转发与公开面 | `declared -> admitted -> enforced` | validator_hidden 至少配 2 条独立 ingress path；observer 不得请求 validator-private RPC | 角色由 operator 配置并被 peer manager 强制执行 |
 | Traffic lanes | `lane_id/topic_or_stream/qos/peer_subset/replay_policy` | 分离 gossip、sync、blob/state、control 流量 | `registered -> active -> throttled/quarantined` | consensus lane 优先低抖动；blob/state lane 独立限速，不得拖垮 finality | 不同角色只开放最小必要 lane |
 | Peer manager / anti-eclipse | `score/source_asn/source_operator/subnet_bucket/relay_dependence/misbehavior` | 评分、淘汰、重连、路径切换与 quarantine | `candidate -> active -> suspect -> blocked` | 同一 operator、同一 `/24`、同一 relay-domain 占比超过阈值即降权 | 安全策略由本地 peer manager 执行，不能由远端覆盖 |
@@ -60,18 +66,21 @@
   - AC-9: 本专题必须明确写出 key boundary：transport/session key、node identity key、consensus signer、governance signer 彼此分离；relay、browser 和 public control plane 不得持有长期 signer 真值。
   - AC-10: 对应 `project.md` 必须把实现拆成 identity、transport、reachability、role policy、traffic lanes、shared-network validation 等 workstreams，而不是只停留在概念描述。
   - AC-11: `doc/p2p/prd.md`、`doc/p2p/project.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/README.md` 必须接入本专题，形成模块级追踪链。
+  - AC-12: 本专题必须明确用户层默认只暴露 `2~3` 个简单模式，且默认行为是全自动检测与推荐，不要求普通用户手动理解 `deployment_mode/node_role`。
+  - AC-13: 本专题必须明确高风险职责边界：系统可以全自动给出默认值，但当结果会让节点承担 `public entry / relay / sentry` 等外部暴露职责时，必须有显式确认或等价的风险同意机制。
 - Non-Goals:
   - 不在本专题内绑定单一网络库实现，不把 “libp2p / 自研 / 混合” 之一提前冻结成唯一方案。
   - 不把当前目标降级成“能连起来就行”的家宽补丁；本专题讨论的是公共主链级目标态。
   - 不在本专题内定义单一链型的共识算法细节；这里只冻结链无关的 P2P substrate 和数据面适配边界。
   - 不把 browser wallet、production signer custody 或 shared-network 实跑证据在此专题内冒充已实现。
+  - 不要求普通用户直接配置 `validator_core / sentry / relay / full_storage / observer_light` 原始角色枚举。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用。
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 目标态采用四层框架。第一层是 `identity/discovery`，用带 TTL 的签名 peer record 把节点身份从瞬时地址中解耦；第二层是 `reachability/transport`，统一 direct、hole-punched 与 relay 路径，并对 QUIC/TCP/Noise/mux 做抽象；第三层是 `traffic lanes`，把 consensus gossip、header/block sync、state/blob transfer、control/heartbeat 分离；第四层是 `chain adapters`，让不同公共主链风格的数据面挂到同一底层 P2P core 上，而不是各自重造 discoverability 和 NAT 穿透。
+- Architecture Overview: 目标态采用五层框架。第一层是 `user mode abstraction`，给普通用户暴露 `自动加入 / 私有安全 / 公网入口` 这类简化模式，并把自动探测结果映射到底层正式语义；第二层是 `identity/discovery`，用带 TTL 的签名 peer record 把节点身份从瞬时地址中解耦；第三层是 `reachability/transport`，统一 direct、hole-punched 与 relay 路径，并对 QUIC/TCP/Noise/mux 做抽象；第四层是 `traffic lanes`，把 consensus gossip、header/block sync、state/blob transfer、control/heartbeat 分离；第五层是 `chain adapters`，让不同公共主链风格的数据面挂到同一底层 P2P core 上，而不是各自重造 discoverability 和 NAT 穿透。
 - Integration Points:
   - `doc/p2p/prd.md`
   - `doc/p2p/project.md`
@@ -84,7 +93,9 @@
   - `doc/p2p/node/node-distfs-replication-network-closure.prd.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
+  - 自动探测结果不稳定：若公网检测、NAT 类型与打洞结果互相矛盾，默认回退到较保守的 `私有安全` 或 `relay_only`，而不是默认升级到公网入口。
   - 对称 NAT / CGNAT 无法打洞：节点必须自动降级为 `relay_only` 或 `validator_hidden + sentry`，而不是直接失去网络身份。
+  - 用户拒绝承担公网入口职责：即便检测结果显示机器可公网暴露，也必须允许节点回退到非入口模式，并保持底层正式角色不越权。
   - relay reservation 过期或 relay 宕机：peer manager 必须主动切换备用 relay/sentry，并降低该 relay-domain 权重。
   - 公开地址漂移：peer record 需快速 refresh；过期地址不得继续作为优选路径。
   - bootnode / rendezvous 污染：若候选 peer 集中于单一 operator、ASN 或 relay-domain，必须触发 suspect 状态和重引导。
@@ -100,6 +111,8 @@
   - NFR-P2P-PRA-5: signed peer record 的默认 TTL 不得超过 `1h`，reachability 状态变化后必须支持快速 refresh/revoke。
   - NFR-P2P-PRA-6: transport/session key、node identity key 与 consensus/governance signer 必须逻辑隔离；任何 relay 或 browser surface 泄露 transport key 都不得等价为节点治理权或出块权泄露。
   - NFR-P2P-PRA-7: gossip、sync、blob/state、control 四条 lane 必须支持独立的 rate limit、peer subset 和 quarantine 规则。
+  - NFR-P2P-PRA-8: 默认安装/启动路径中，用户在不打开高级设置的情况下不应被迫选择底层正式角色；系统必须在 `60s` 内完成一次自动探测并给出默认用户模式。
+  - NFR-P2P-PRA-9: 任何会把节点提升为 `公网入口` 的自动决策，都必须带可审计的检测依据与风险提示；无依据时默认保持保守模式。
 - Security & Privacy:
   - 所有 peer record 必须做链域隔离签名，防止跨链、跨环境重放。
   - transport 默认要求加密和双向身份确认；未认证链路不得进入 consensus/control lane。
@@ -112,7 +125,8 @@
   - Phase 0: 冻结目标态文档、角色边界、lane taxonomy 与 mixed-topology 验证口径。
   - Phase 1: 落 peer record / discovery / reachability service，把现有静态 peer 与双路径网络接线收敛为统一 substrate。
   - Phase 2: 落 relay/sentry/validator_hidden 与 traffic lanes，把 consensus、sync、blob/state、control 分离成独立 QoS。
-  - Phase 3: 落 anti-eclipse、peer scoring、shared-network mixed-topology、chaos/release-train 验证，之后才允许更高 public-chain maturity claims。
+  - Phase 3: 落用户可见部署模式抽象与自动检测默认值，把正式角色留在高级设置和内部策略层。
+  - Phase 4: 落 anti-eclipse、peer scoring、shared-network mixed-topology、chaos/release-train 验证，之后才允许更高 public-chain maturity claims。
 - Technical Risks:
   - 风险-1: 若继续在业务层保留“直接发 UDP 给静态地址”的逃生路径，框架层的 role policy 与 reachability 会长期失真。
   - 风险-2: 若把 relay 设计成“万能兜底”却不做预算和多样性限制，网络会从“全公网依赖”退化成“单 relay 依赖”。
@@ -129,6 +143,7 @@
 | PRD-P2P-024-C | P2PARCH-2/3 | `test_tier_required + test_tier_full` | validator_hidden、sentry、relay、full-storage、observer 角色矩阵与权限回归 | operator 部署与安全边界 |
 | PRD-P2P-024-D | P2PARCH-2/3/6 | `test_tier_required + test_tier_full` | AutoNAT / hole punch / relay fallback / relay exhaustion / path failover 套件 | 私网节点可达性与恢复 |
 | PRD-P2P-024-E | P2PARCH-5/6/7 | `test_tier_required + test_tier_full` | anti-eclipse、diversity、shared-network mixed-topology、chaos/release-train 证据 | public-chain-grade claims gate |
+| PRD-P2P-024-F | P2PARCH-8/9 | `test_tier_required + test_tier_full` | 用户可见部署模式、自动探测默认值、高风险职责确认与高级设置覆盖 | 部署 UX 与 role policy 可用性 |
 - Decision Log:
 
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
@@ -138,3 +153,4 @@
 | DEC-P2P-PRA-003 | validator 采用 `validator core + sentry/relay` 模型 | 要求 validator 自身全公网暴露 | 公开入站面与长期 signer 不应强耦合。 |
 | DEC-P2P-PRA-004 | 将链差异限制在数据面适配器 | 每种链型各自重做 discovery/reachability | 发现、可达性、加密和 peer scoring 是跨链共性能力。 |
 | DEC-P2P-PRA-005 | 把 anti-eclipse / diversity / relay budget 写成框架层硬约束 | 先实现连通，后续再补安全策略 | 公共主链级 P2P 不能把“安全拓扑”推迟到上线后再补。 |
+| DEC-P2P-PRA-006 | 用户层只暴露 `2~3` 个简单模式，默认全自动探测，底层继续保留正式角色语义 | 让所有用户直接选择 `deployment_mode/node_role`，或彻底取消内部正式角色 | 普通用户不应先学基础设施术语，但系统内部仍需要精确职责语义来守住安全边界。 |

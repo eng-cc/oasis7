@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md`
 - 对应需求文档: `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 
-审计轮次: 1
+审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
 - [x] P2PARCH-0 (PRD-P2P-024-A/B/C/D/E) [test_tier_required]: 新建“主链级非全公网 P2P 覆盖网络架构”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
 - [x] P2PARCH-1 (PRD-P2P-024-A/B) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 node identity、signed peer record、bootnode/DHT/rendezvous 发现链路，并让业务层不再直接依赖静态 UDP peer truth。
@@ -21,6 +21,8 @@
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
   已把 mixed-topology lane 升级为 shared-network required gate：`shared-network-track-gate.sh` 现在要求 `shared_devnet/mixed_topology_baseline`、`staging/mixed_topology_rehearsal`、`canary/mixed_topology_claim_review` 三条显式 lane；`shared-devnet-rehearsal.sh` 也会自动生成 mixed-topology gate note，并默认把仅有 `P2PARCH-6` matrix baseline 的窗口保持在 `partial`。
   当前补到 shared-window draft scaffold：`shared-devnet-blocker-packet.sh` 现在可一并生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份草稿，方便后续把 same-window mixed-topology 证据回填到 shared-devnet gate，而不冒充已 `pass`。
+- [x] P2PARCH-8 (PRD-P2P-024-F) [test_tier_required]: `producer_system_designer` 冻结用户层部署模式抽象：用户界面只暴露 `自动加入 / 私有安全 / 公网入口` 这类 `2~3` 个简单模式，默认由系统根据公网/NAT/打洞结果自动选择；底层继续保留 `deployment_mode/node_role` 正式语义。
+- [ ] P2PARCH-9 (PRD-P2P-024-F) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 把 AutoNAT / port reachability / hole-punch 结果接成用户层默认模式推荐，并为 `公网入口` 或其他高风险暴露职责补显式确认与高级设置覆盖。
 
 ## 当前结论
 - 当前阶段:
@@ -47,6 +49,7 @@
   - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
   - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
+  - `P2PARCH-8` 已冻结用户层部署抽象：后续产品默认应把正式角色藏在内部，普通用户只看到 `2~3` 个简单模式，且默认由系统自动选择。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -166,6 +169,30 @@
 - 完成定义:
   - 未完成 mixed-topology shared-network 证据前，不得宣称 public-chain-grade P2P 已落地
 
+### P2PARCH-8 / producer_system_designer
+- 输入:
+  - 本专题 deployment mode / role policy 目标态
+  - 用户希望“全覆盖 + 默认完全自动”的部署 UX 约束
+- 输出:
+  - 用户层 `2~3` 档简单模式定义
+  - 自动探测默认值与高风险职责确认边界
+- 本轮已交付:
+  - 冻结 `自动加入 / 私有安全 / 公网入口` 三档用户可见模式
+  - 明确底层继续保留 `deployment_mode/node_role` 正式语义，不把安全边界直接暴露给普通用户
+  - 明确默认行为是基于公网/NAT/打洞结果自动推荐，只有涉及 `公网入口` 等高风险职责时才允许显式确认或高级覆盖
+- 完成定义:
+  - 普通用户不必在默认路径上手动选择底层正式角色
+
+### P2PARCH-9 / runtime_engineer + viewer_engineer
+- 输入:
+  - P2PARCH-1~4 reachability / role / lane substrate
+  - P2PARCH-8 用户层模式定义
+- 输出:
+  - 自动探测到用户模式的映射器
+  - 高风险职责确认 / 高级设置覆盖
+- 完成定义:
+  - 系统可在默认启动路径中自动选择用户模式，并给出可审计的探测依据
+
 ## 依赖
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
@@ -177,11 +204,12 @@
 - `testing-manual.md`
 
 ## 验收命令（本轮）
-- `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md`
+- `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct|自动加入|私有安全|公网入口|deployment_mode|node_role|显式确认" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md testing-manual.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
 ## 状态
 - 当前状态: active
 - 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence，把 `shared_devnet` 的 mixed-topology lane 从 baseline 提升到 same-window `pass`，再决定是否需要 dedicated sentry/NAT lab 来替换当前 proxy live drills。
+- 下一步: `producer_system_designer` 侧已冻结用户层三档模式；后续进入 `P2PARCH-9`，把 AutoNAT / 公网可达性 / 打洞结果真正接成“默认全自动”的用户模式推荐与高风险职责确认。
 - 最近更新: 2026-04-03
