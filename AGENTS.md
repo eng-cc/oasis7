@@ -85,7 +85,7 @@
 ## 工程架构
 - 各个子模块各自闭环基础模块功能
 - third_party下面的代码只可读，不能写
-- 执行cargo命令需要如下形式 env -u RUSTC_WRAPPER cargo check
+- 执行原始 cargo 命令时需要使用 `env -u RUSTC_WRAPPER cargo ...` 形式；若只是本地开发态 `check/test/run/build` 需要在多个 worktree 之间复用缓存，可改用 `./scripts/cargo-dev.sh ...`，但 deterministic wasm / release 链路仍必须保持 `CARGO_TARGET_DIR` 为空并继续走原始 cargo 入口
 - 使用手册都放在site/doc(cn/en)，可作为静态站内容
 
 ## Agent 专用：UI Web 闭环调试（给 Codex 用，agent-browser 优先）

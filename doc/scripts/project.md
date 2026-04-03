@@ -200,6 +200,15 @@
     - `(cd <sibling-worktree> && ./scripts/cargo-dev.sh --print-target-dir)`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SCRIPTS-022 (PRD-SCRIPTS-009) [test_tier_required]: 对齐根 `AGENTS.md` 与 `cargo-dev.sh` / `testing-manual.md` 的 cargo 规则，明确“原始 cargo 入口”与“开发态共享缓存入口”的边界。
+  - 产物文件:
+    - `AGENTS.md`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "cargo-dev\\.sh|env -u RUSTC_WRAPPER cargo|CARGO_TARGET_DIR" AGENTS.md doc/scripts/prd.md doc/scripts/project.md testing-manual.md scripts/cargo-dev.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -210,9 +219,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-02
+- 更新日期: 2026-04-03
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-022`（已把根 `AGENTS.md` 的 cargo 规则补齐到与 `scripts/cargo-dev.sh` / `testing-manual.md` 一致，明确原始 cargo 入口与开发态共享缓存入口的边界。）
 - 最新完成: `TASK-SCRIPTS-021`（已新增 `scripts/cargo-dev.sh` 作为开发态共享 cargo target 入口，并把 scripts/testing 文档明确切分为“开发态共享缓存”与“deterministic wasm/release 不共享”的双轨口径。）
 - 最新完成: `TASK-SCRIPTS-020`（已统一收紧 worktree 例外授权口径，明确文档/脚本/测试/话术改动也算新需求，且发现切错 worktree 后必须立即切走。）
 - 最新完成: `TASK-SCRIPTS-019`（已为 `scripts/README.md` 补齐 task worktree bootstrap / landing / harness 的轻量入口映射，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）

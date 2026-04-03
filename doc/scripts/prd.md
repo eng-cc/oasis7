@@ -112,6 +112,7 @@
   - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 repo-family 共享缓存入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
   - AC-24: `scripts/cargo-dev.sh --print-target-dir` 必须输出稳定共享目录；同一 repo family 下不同 worktree 输出一致，且可通过环境变量覆盖。
   - AC-25: 正式文档必须明确：`scripts/cargo-dev.sh` 只服务开发态缓存复用，不适用于要求 `CARGO_TARGET_DIR` 为空的 deterministic wasm / release 构建链路。
+  - AC-26: 根 `AGENTS.md` 的 cargo 规则必须与 `scripts/cargo-dev.sh` / `testing-manual.md` 对齐，明确“原始 cargo 命令走 `env -u RUSTC_WRAPPER cargo ...`，开发态共享缓存可走 `./scripts/cargo-dev.sh ...`，但 deterministic wasm / release 仍必须保持 `CARGO_TARGET_DIR` 为空”。
 - Non-Goals:
   - 不在 scripts PRD 中替代业务功能设计。
   - 不承诺所有历史脚本长期向后兼容。
@@ -193,7 +194,7 @@
 | PRD-SCRIPTS-006 | TASK-SCRIPTS-016/020 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + 错误 worktree 处置文案一致性检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
 | PRD-SCRIPTS-007 | TASK-SCRIPTS-017 | `test_tier_required` | `bash -n` + `--help` + 临时 source/target worktree landing smoke + JSON 字段检查 + 文档治理检查 | 多 task worktree 向 `main` 回流的一致性与可审计性 |
 | PRD-SCRIPTS-008 | TASK-SCRIPTS-018 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
-| PRD-SCRIPTS-009 | TASK-SCRIPTS-021 | `test_tier_required` | `bash -n` + `--help` + `--print-target-dir` 跨 worktree 一致性检查 + 文档治理检查 | 多 worktree Rust 开发回归速度与 deterministic wasm/release 口径隔离 |
+| PRD-SCRIPTS-009 | TASK-SCRIPTS-021/022 | `test_tier_required` | `bash -n` + `--help` + `--print-target-dir` 跨 worktree 一致性检查 + `AGENTS.md`/scripts/testing 文档口径一致性检查 + 文档治理检查 | 多 worktree Rust 开发回归速度与 deterministic wasm/release 口径隔离 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

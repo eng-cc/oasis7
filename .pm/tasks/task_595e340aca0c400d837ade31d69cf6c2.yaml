@@ -1,0 +1,26 @@
+task_uid: task_595e340aca0c400d837ade31d69cf6c2
+title: "对齐根 AGENTS 与 cargo-dev 开发态入口口径"
+owner_role: producer_system_designer
+worktree_hint: scripts-cargo-command-policy-alignment
+execution_log_path: .pm/tasks/task_595e340aca0c400d837ade31d69cf6c2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+  - doc/scripts/prd.md
+doc_refs:
+  - AGENTS.md
+  - doc/scripts/prd.md
+  - doc/scripts/project.md
+  - testing-manual.md
+related_prd:
+  - doc/scripts/prd.md
+acceptance:
+  - "AGENTS.md 明确原始 cargo 形式是 canonical 口径，同时允许开发态使用 scripts/cargo-dev.sh 复用缓存"
+  - "doc/scripts PRD/project 把这次 AGENTS 对齐纳入正式追踪"
+  - "文档治理、PM lint 与 diff 门禁通过"
+handoff_to: []
+updated_at: 2026-04-03T11:15:28+08:00
+last_closed_at: 2026-04-03T11:15:28+08:00
+last_started_at: 2026-04-03T11:14:23+08:00
