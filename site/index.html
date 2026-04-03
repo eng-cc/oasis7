@@ -238,7 +238,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
             <h3>在线验证（standard_3d / software_safe）</h3>
             <p>进入持续运行模式，验证实时事件流、观测面板与控制链路；硬件路径正常时走 `standard_3d`，弱图形环境下可降到 `software_safe`。</p>
             <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-# 可选：回退脚本决策
+# 仅诊断：--no-llm 只用于 observer/debug，不计入正式验证证据
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>

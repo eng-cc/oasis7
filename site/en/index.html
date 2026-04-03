@@ -238,8 +238,8 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
 	          <article class="card">
 	            <h3>Online Verification (`standard_3d` / `software_safe`)</h3>
 	            <p>Run continuously to verify real-time events, panel updates, and control flow; use `standard_3d` on the normal hardware path and fall back to `software_safe` on weak-graphics environments.</p>
-	            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-# Optional: fallback to scripted decisions
+		            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+# Diagnostics only: --no-llm is observer/debug-only and not formal verification evidence
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 	          </article>

@@ -177,3 +177,14 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_8e4fa44427b24006b2ed162c0576b66b.yaml
+  - task_uid: task_fe853f282152419eae1f5898c3116b85
+    title: "Align Pages homepage no-LLM diagnostics wording"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/site/prd.md
+    acceptance:
+      - "site/index.html and site/en/index.html clearly mark --no-llm as observer/debug-only diagnostics and no longer imply formal online verification"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_fe853f282152419eae1f5898c3116b85.yaml

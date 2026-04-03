@@ -1,0 +1,20 @@
+task_uid: task_fe853f282152419eae1f5898c3116b85
+title: "Align Pages homepage no-LLM diagnostics wording"
+owner_role: viewer_engineer
+worktree_hint: oasis7-site-pages-no-llm-home-copy
+execution_log_path: .pm/tasks/task_fe853f282152419eae1f5898c3116b85.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - site/index.html
+doc_refs:
+  - doc/site/project.md
+related_prd:
+  - doc/site/prd.md
+acceptance:
+  - "site/index.html and site/en/index.html clearly mark --no-llm as observer/debug-only diagnostics and no longer imply formal online verification"
+handoff_to: []
+updated_at: 2026-04-03T13:51:24+08:00
+last_started_at: 2026-04-03T13:49:41+08:00
+last_closed_at: 2026-04-03T13:50:57+08:00
