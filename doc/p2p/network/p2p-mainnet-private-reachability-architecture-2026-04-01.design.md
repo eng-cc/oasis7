@@ -99,7 +99,9 @@
 - req/resp peer 选择现在会在 lane capability 过滤后，继续优先选择 `active/candidate` peer，把 `suspect` 压到最后，并直接排除 `blocked` peer。
 - discovery ingress 现在不再对 `RoutingUpdated` / rendezvous registration 暴露的裸地址做 speculative dial；runtime 会先拿到并校验 signed peer record，再按 peer health 决定是否拨号，避免 `MissingPeerRecord => Blocked` 语义被旁路。
 - `suspect/blocked` peer 现在也不会污染 discovery dial dedupe 状态；同一地址若后续随更健康的 peer record 刷新回来，仍可重新进入首拨决策。
-- 当前仍未接线 operator / ASN 外部情报，也还没把 `suspect` 全面升级成连接级 quarantine/block；这些收口继续留在后续 `P2PARCH-5` / `P2PARCH-6`。
+- active-set quarantine 现在已开始生效：当已连接 peer 刷新为 `suspect` 或已验证的 hard-`blocked` 时，runtime 会主动 `disconnect_peer_id`，并在 `ConnectionClosed` / `OutgoingConnectionError` 上抑制 failover 与 retry，避免 quarantined peer 被本地状态机立即拉回 active set。
+- peer health 对外发布前会先剔除未准入 active peer：待校验的 `MissingPeerRecord` 连接与本轮判定出的 quarantined active peer 不再参与同轮 `/24`、relay-domain、relay budget 的健康统计，避免瞬时污染其他健康 peer。
+- 当前仍未接线 operator / ASN 外部情报，也还没把 `blocked` 升级成持久 banlist / release-gate 级 block artifact；这些收口继续留在后续 `P2PARCH-5` / `P2PARCH-6`。
 
 ## 适配多链型的数据面
 | 适配器 | 典型链型 | 说明 |

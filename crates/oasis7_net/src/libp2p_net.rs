@@ -20,7 +20,7 @@ use libp2p::kad::{self, Quorum, RecordKey};
 use libp2p::relay;
 use libp2p::rendezvous;
 use libp2p::request_response::{self};
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
@@ -235,19 +235,159 @@ fn filter_request_peers_by_health(
     filtered
 }
 
+fn peer_requires_active_quarantine(
+    peer_id: PeerId,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> bool {
+    let Some(health) = peer_healths.get(&peer_id) else {
+        return false;
+    };
+    match health.status {
+        PeerManagerHealthStatus::Suspect => true,
+        PeerManagerHealthStatus::Blocked => !health.issues.iter().all(|issue| {
+            matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)
+        }),
+        PeerManagerHealthStatus::Active | PeerManagerHealthStatus::Candidate => false,
+    }
+}
+
+#[cfg(test)]
+fn collect_quarantined_active_peers(
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> Vec<PeerId> {
+    active_transport_paths
+        .keys()
+        .copied()
+        .filter(|peer_id| peer_requires_active_quarantine(*peer_id, peer_healths))
+        .collect()
+}
+
+#[cfg(test)]
+fn admitted_active_transport_paths(
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
+) -> HashMap<PeerId, TransportPath> {
+    active_transport_paths
+        .iter()
+        .filter(|(peer_id, _)| {
+            matches!(
+                peer_healths.get(*peer_id).map(|health| health.status),
+                Some(PeerManagerHealthStatus::Active)
+            )
+        })
+        .map(|(peer_id, path)| (*peer_id, path.clone()))
+        .collect()
+}
+
+fn active_transport_paths_for_peers(
+    active_transport_paths: &HashMap<PeerId, TransportPath>,
+    peer_ids: &HashSet<PeerId>,
+) -> HashMap<PeerId, TransportPath> {
+    active_transport_paths
+        .iter()
+        .filter(|(peer_id, _)| peer_ids.contains(peer_id))
+        .map(|(peer_id, path)| (*peer_id, path.clone()))
+        .collect()
+}
+
 fn refresh_peer_manager_healths(
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
+    previously_admitted_active_peers: &HashSet<PeerId>,
     peer_manager_policy: &PeerManagerPolicy,
     event_peer_healths: &Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
     event_errors: &Arc<Mutex<Vec<String>>>,
     max_error_messages: usize,
-) -> HashMap<PeerId, PeerManagerPeerHealth> {
-    let healths = recompute_peer_manager_healths(
+) -> (
+    HashMap<PeerId, PeerManagerPeerHealth>,
+    HashSet<PeerId>,
+    HashSet<PeerId>,
+) {
+    let raw_healths = recompute_peer_manager_healths(
         discovered_peer_records,
         active_transport_paths,
         peer_manager_policy,
     );
+    let mut quarantined_active_peers = HashSet::new();
+    let mut admitted_active_peers: HashSet<PeerId> = previously_admitted_active_peers
+        .iter()
+        .copied()
+        .filter(|peer_id| active_transport_paths.contains_key(peer_id))
+        .collect();
+    let admitted_baseline_paths =
+        active_transport_paths_for_peers(active_transport_paths, &admitted_active_peers);
+    let admitted_baseline_healths = recompute_peer_manager_healths(
+        discovered_peer_records,
+        &admitted_baseline_paths,
+        peer_manager_policy,
+    );
+    for peer_id in admitted_active_peers.clone() {
+        if peer_requires_active_quarantine(peer_id, &admitted_baseline_healths) {
+            admitted_active_peers.remove(&peer_id);
+            quarantined_active_peers.insert(peer_id);
+        }
+    }
+    let mut admitted_active_transport_paths =
+        active_transport_paths_for_peers(active_transport_paths, &admitted_active_peers);
+    let mut pending_active_peers: Vec<PeerId> = active_transport_paths
+        .keys()
+        .copied()
+        .filter(|peer_id| !admitted_active_peers.contains(peer_id))
+        .collect();
+    pending_active_peers.sort_unstable_by_key(|peer_id| peer_id.to_string());
+    for peer_id in pending_active_peers {
+        if quarantined_active_peers.contains(&peer_id)
+            || !discovered_peer_records.contains_key(&peer_id)
+        {
+            continue;
+        }
+        let Some(path) = active_transport_paths.get(&peer_id).cloned() else {
+            continue;
+        };
+        let mut trial_active_transport_paths = admitted_active_transport_paths.clone();
+        trial_active_transport_paths.insert(peer_id, path.clone());
+        let trial_healths = recompute_peer_manager_healths(
+            discovered_peer_records,
+            &trial_active_transport_paths,
+            peer_manager_policy,
+        );
+        let peer_is_active = matches!(
+            trial_healths.get(&peer_id).map(|health| health.status),
+            Some(PeerManagerHealthStatus::Active)
+        );
+        let degrades_admitted_peer = admitted_active_peers.iter().any(|admitted_peer_id| {
+            !matches!(
+                trial_healths
+                    .get(admitted_peer_id)
+                    .map(|health| health.status),
+                Some(PeerManagerHealthStatus::Active)
+            )
+        });
+        if peer_is_active && !degrades_admitted_peer {
+            admitted_active_transport_paths.insert(peer_id, path);
+            admitted_active_peers.insert(peer_id);
+        } else if peer_requires_active_quarantine(peer_id, &trial_healths) {
+            quarantined_active_peers.insert(peer_id);
+        }
+    }
+    let mut healths = if admitted_active_transport_paths.len() == active_transport_paths.len() {
+        raw_healths.clone()
+    } else {
+        recompute_peer_manager_healths(
+            discovered_peer_records,
+            &admitted_active_transport_paths,
+            peer_manager_policy,
+        )
+    };
+    for peer_id in active_transport_paths.keys().copied() {
+        if admitted_active_transport_paths.contains_key(&peer_id) {
+            continue;
+        }
+        if let Some(raw_health) = raw_healths.get(&peer_id) {
+            healths.insert(peer_id, raw_health.clone());
+        }
+    }
     {
         let mut guard = event_peer_healths.lock().expect("lock peer healths");
         let previous = guard.clone();
@@ -279,7 +419,32 @@ fn refresh_peer_manager_healths(
         }
         *guard = latest;
     }
-    healths
+    (healths, quarantined_active_peers, admitted_active_peers)
+}
+
+fn enforce_peer_manager_quarantine(
+    swarm: &mut Swarm<Behaviour>,
+    quarantined_active_peers: &HashSet<PeerId>,
+    pending_quarantine_disconnects: &mut HashSet<PeerId>,
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    max_error_messages: usize,
+) {
+    pending_quarantine_disconnects.retain(|peer_id| quarantined_active_peers.contains(peer_id));
+    for peer_id in quarantined_active_peers.iter().copied() {
+        if !pending_quarantine_disconnects.insert(peer_id) {
+            continue;
+        }
+        if swarm.disconnect_peer_id(peer_id).is_ok() {
+            push_bounded_clone(
+                event_errors,
+                format!("libp2p peer manager quarantine disconnect peer={peer_id}"),
+                max_error_messages,
+                "lock errors",
+            );
+        } else {
+            pending_quarantine_disconnects.remove(&peer_id);
+        }
+    }
 }
 
 impl Libp2pNetwork {
@@ -337,7 +502,10 @@ impl Libp2pNetwork {
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut peer_healths_by_id: HashMap<PeerId, PeerManagerPeerHealth> = HashMap::new();
+            let mut quarantined_active_peers: HashSet<PeerId> = HashSet::new();
+            let mut admitted_active_peers: HashSet<PeerId> = HashSet::new();
             let mut failed_transport_path_labels: HashSet<String> = HashSet::new();
+            let mut pending_quarantine_disconnects: HashSet<PeerId> = HashSet::new();
             let mut pending_discovery_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_peer_records: HashSet<PeerId> = HashSet::new();
@@ -797,11 +965,23 @@ impl Libp2pNetwork {
                                                             &event_errors,
                                                             &config_clone.peer_manager_policy,
                                                         );
-                                                        peer_healths_by_id = refresh_peer_manager_healths(
+                                                        (
+                                                            peer_healths_by_id,
+                                                            quarantined_active_peers,
+                                                            admitted_active_peers,
+                                                        ) = refresh_peer_manager_healths(
                                                             &discovered_peer_records,
                                                             &active_transport_paths,
+                                                            &admitted_active_peers,
                                                             &config_clone.peer_manager_policy,
                                                             &event_peer_healths,
+                                                            &event_errors,
+                                                            max_error_messages,
+                                                        );
+                                                        enforce_peer_manager_quarantine(
+                                                            &mut swarm,
+                                                            &quarantined_active_peers,
+                                                            &mut pending_quarantine_disconnects,
                                                             &event_errors,
                                                             max_error_messages,
                                                         );
@@ -910,11 +1090,23 @@ impl Libp2pNetwork {
                                                                     local_peer_id,
                                                                 );
                                                             } else {
-                                                                peer_healths_by_id = refresh_peer_manager_healths(
+                                                                (
+                                                                    peer_healths_by_id,
+                                                                    quarantined_active_peers,
+                                                                    admitted_active_peers,
+                                                                ) = refresh_peer_manager_healths(
                                                                     &discovered_peer_records,
                                                                     &active_transport_paths,
+                                                                    &admitted_active_peers,
                                                                     &config_clone.peer_manager_policy,
                                                                     &event_peer_healths,
+                                                                    &event_errors,
+                                                                    max_error_messages,
+                                                                );
+                                                                enforce_peer_manager_quarantine(
+                                                                    &mut swarm,
+                                                                    &quarantined_active_peers,
+                                                                    &mut pending_quarantine_disconnects,
                                                                     &event_errors,
                                                                     max_error_messages,
                                                                 );
@@ -1278,48 +1470,77 @@ impl Libp2pNetwork {
                                             template,
                                         );
                                     }
-                                    peer_healths_by_id = refresh_peer_manager_healths(
+                                    (
+                                        peer_healths_by_id,
+                                        quarantined_active_peers,
+                                        admitted_active_peers,
+                                    ) = refresh_peer_manager_healths(
                                         &discovered_peer_records,
                                         &active_transport_paths,
+                                        &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
+                                        &event_errors,
+                                        max_error_messages,
+                                    );
+                                    enforce_peer_manager_quarantine(
+                                        &mut swarm,
+                                        &quarantined_active_peers,
+                                        &mut pending_quarantine_disconnects,
                                         &event_errors,
                                         max_error_messages,
                                     );
                                 }
                                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                     peers.retain(|peer| peer != &peer_id);
-                                    match failover_transport_path(
-                                        &mut swarm,
-                                        &known_transport_paths,
-                                        &mut active_transport_paths,
-                                        &mut last_dialed_transport_paths,
-                                        &mut failed_transport_path_labels,
-                                        peer_id,
-                                    ) {
-                                        Ok(Some((active_path, next_path))) => {
-                                            push_bounded_clone(
-                                                &event_errors,
-                                                format!(
-                                                    "libp2p transport failover peer={peer_id} from={} to={}",
-                                                    active_path.addr,
-                                                    next_path.addr,
-                                                ),
-                                                max_error_messages,
-                                                "lock errors",
-                                            );
+                                    admitted_active_peers.remove(&peer_id);
+                                    let quarantined = quarantined_active_peers.remove(&peer_id)
+                                        || pending_quarantine_disconnects.contains(&peer_id);
+                                    pending_quarantine_disconnects.remove(&peer_id);
+                                    if quarantined {
+                                        active_transport_paths.remove(&peer_id);
+                                        last_dialed_transport_paths.remove(&peer_id);
+                                        push_bounded_clone(
+                                            &event_errors,
+                                            format!(
+                                                "libp2p peer manager quarantine suppresses failover peer={peer_id}"
+                                            ),
+                                            max_error_messages,
+                                            "lock errors",
+                                        );
+                                    } else {
+                                        match failover_transport_path(
+                                            &mut swarm,
+                                            &known_transport_paths,
+                                            &mut active_transport_paths,
+                                            &mut last_dialed_transport_paths,
+                                            &mut failed_transport_path_labels,
+                                            peer_id,
+                                        ) {
+                                            Ok(Some((active_path, next_path))) => {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p transport failover peer={peer_id} from={} to={}",
+                                                        active_path.addr,
+                                                        next_path.addr,
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
+                                            Err(err) => {
+                                                push_bounded_clone(
+                                                    &event_errors,
+                                                    format!(
+                                                        "libp2p transport failover dial failed peer={peer_id}: {err:?}"
+                                                    ),
+                                                    max_error_messages,
+                                                    "lock errors",
+                                                );
+                                            }
+                                            Ok(None) => {}
                                         }
-                                        Err(err) => {
-                                            push_bounded_clone(
-                                                &event_errors,
-                                                format!(
-                                                    "libp2p transport failover dial failed peer={peer_id}: {err:?}"
-                                                ),
-                                                max_error_messages,
-                                                "lock errors",
-                                            );
-                                        }
-                                        Ok(None) => {}
                                     }
                                     pending_rendezvous_registers.remove(&peer_id);
                                     pending_rendezvous_discovers.remove(&peer_id);
@@ -1335,9 +1556,14 @@ impl Libp2pNetwork {
                                         max_error_messages,
                                         "lock errors",
                                     );
-                                    peer_healths_by_id = refresh_peer_manager_healths(
+                                    (
+                                        peer_healths_by_id,
+                                        quarantined_active_peers,
+                                        admitted_active_peers,
+                                    ) = refresh_peer_manager_healths(
                                         &discovered_peer_records,
                                         &active_transport_paths,
+                                        &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
                                         &event_errors,
@@ -1346,36 +1572,50 @@ impl Libp2pNetwork {
                                 }
                                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                                     if let Some(peer_id) = peer_id {
-                                        match retry_transport_path_after_error(
-                                            &mut swarm,
-                                            &known_transport_paths,
-                                            &mut last_dialed_transport_paths,
-                                            &mut failed_transport_path_labels,
-                                            peer_id,
-                                        ) {
-                                            Ok(Some((last_path, next_path))) => {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p transport retry peer={peer_id} from={} to={}",
-                                                        last_path.addr,
-                                                        next_path.addr,
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
+                                        if quarantined_active_peers.contains(&peer_id)
+                                            || pending_quarantine_disconnects.contains(&peer_id)
+                                        {
+                                            last_dialed_transport_paths.remove(&peer_id);
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p peer manager quarantine suppresses retry peer={peer_id}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        } else {
+                                            match retry_transport_path_after_error(
+                                                &mut swarm,
+                                                &known_transport_paths,
+                                                &mut last_dialed_transport_paths,
+                                                &mut failed_transport_path_labels,
+                                                peer_id,
+                                            ) {
+                                                Ok(Some((last_path, next_path))) => {
+                                                    push_bounded_clone(
+                                                        &event_errors,
+                                                        format!(
+                                                            "libp2p transport retry peer={peer_id} from={} to={}",
+                                                            last_path.addr,
+                                                            next_path.addr,
+                                                        ),
+                                                        max_error_messages,
+                                                        "lock errors",
+                                                    );
+                                                }
+                                                Err(retry_err) => {
+                                                    push_bounded_clone(
+                                                        &event_errors,
+                                                        format!(
+                                                            "libp2p transport retry dial failed peer={peer_id}: {retry_err:?}"
+                                                        ),
+                                                        max_error_messages,
+                                                        "lock errors",
+                                                    );
+                                                }
+                                                Ok(None) => {}
                                             }
-                                            Err(retry_err) => {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p transport retry dial failed peer={peer_id}: {retry_err:?}"
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
-                                            }
-                                            Ok(None) => {}
                                         }
                                     }
                                     push_bounded_clone(

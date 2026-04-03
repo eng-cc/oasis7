@@ -1,7 +1,9 @@
 use super::peer_record::{
     build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
-use super::peer_manager::{PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy};
+use super::peer_manager::{
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
     select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
@@ -349,6 +351,295 @@ fn filter_request_peers_by_health_excludes_all_blocked_peers() {
 
     let filtered = filter_request_peers_by_health(peers, &healths);
     assert!(filtered.is_empty());
+}
+
+#[test]
+fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
+    let active_peer = PeerId::random();
+    let suspect_peer = PeerId::random();
+    let blocked_peer = PeerId::random();
+    let missing_record_peer = PeerId::random();
+    let healths = HashMap::from([
+        (
+            active_peer,
+            PeerManagerPeerHealth {
+                peer_id: active_peer.to_string(),
+                status: PeerManagerHealthStatus::Active,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            suspect_peer,
+            PeerManagerPeerHealth {
+                peer_id: suspect_peer.to_string(),
+                status: PeerManagerHealthStatus::Suspect,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+            },
+        ),
+        (
+            blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                    relayed_active_peers: 3,
+                    active_peer_count: 4,
+                    limit_per_mille: 500,
+                }],
+                discovery_sources: Vec::new(),
+                active_path_kind: None,
+            },
+        ),
+        (
+            missing_record_peer,
+            PeerManagerPeerHealth {
+                peer_id: missing_record_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::MissingPeerRecord],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+    ]);
+
+    assert!(!peer_requires_active_quarantine(active_peer, &healths));
+    assert!(peer_requires_active_quarantine(suspect_peer, &healths));
+    assert!(peer_requires_active_quarantine(blocked_peer, &healths));
+    assert!(!peer_requires_active_quarantine(missing_record_peer, &healths));
+}
+
+#[test]
+fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
+    let active_peer = PeerId::random();
+    let suspect_peer = PeerId::random();
+    let blocked_peer = PeerId::random();
+    let inactive_blocked_peer = PeerId::random();
+    let mut active_transport_paths = HashMap::new();
+    active_transport_paths.insert(
+        active_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            active_peer,
+            &"/ip4/127.0.0.1/udp/4103/quic-v1"
+                .parse()
+                .expect("active endpoint"),
+        ),
+    );
+    active_transport_paths.insert(
+        suspect_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            suspect_peer,
+            &format!(
+                "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+                PeerId::random()
+            )
+            .parse()
+            .expect("suspect endpoint"),
+        ),
+    );
+    active_transport_paths.insert(
+        blocked_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            blocked_peer,
+            &"/ip4/127.0.0.2/udp/4104/quic-v1"
+                .parse()
+                .expect("blocked endpoint"),
+        ),
+    );
+    let healths = HashMap::from([
+        (
+            active_peer,
+            PeerManagerPeerHealth {
+                peer_id: active_peer.to_string(),
+                status: PeerManagerHealthStatus::Active,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            suspect_peer,
+            PeerManagerPeerHealth {
+                peer_id: suspect_peer.to_string(),
+                status: PeerManagerHealthStatus::Suspect,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("relay_reserved".to_string()),
+            },
+        ),
+        (
+            blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                    relayed_active_peers: 3,
+                    active_peer_count: 4,
+                    limit_per_mille: 500,
+                }],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            inactive_blocked_peer,
+            PeerManagerPeerHealth {
+                peer_id: inactive_blocked_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: None,
+            },
+        ),
+    ]);
+
+    let mut quarantined = collect_quarantined_active_peers(&active_transport_paths, &healths);
+    quarantined.sort_unstable_by_key(|peer| peer.to_string());
+
+    let mut expected = vec![blocked_peer, suspect_peer];
+    expected.sort_unstable_by_key(|peer| peer.to_string());
+    assert_eq!(quarantined, expected);
+}
+
+#[test]
+fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompute() {
+    let active_peer = PeerId::random();
+    let suspect_peer = PeerId::random();
+    let missing_record_peer = PeerId::random();
+    let mut active_transport_paths = HashMap::new();
+    active_transport_paths.insert(
+        active_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            active_peer,
+            &"/ip4/127.0.0.1/udp/4103/quic-v1"
+                .parse()
+                .expect("active endpoint"),
+        ),
+    );
+    active_transport_paths.insert(
+        suspect_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            suspect_peer,
+            &"/ip4/127.0.0.2/udp/4104/quic-v1"
+                .parse()
+                .expect("suspect endpoint"),
+        ),
+    );
+    active_transport_paths.insert(
+        missing_record_peer,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            missing_record_peer,
+            &"/ip4/127.0.0.3/udp/4105/quic-v1"
+                .parse()
+                .expect("missing record endpoint"),
+        ),
+    );
+    let healths = HashMap::from([
+        (
+            active_peer,
+            PeerManagerPeerHealth {
+                peer_id: active_peer.to_string(),
+                status: PeerManagerHealthStatus::Active,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            suspect_peer,
+            PeerManagerPeerHealth {
+                peer_id: suspect_peer.to_string(),
+                status: PeerManagerHealthStatus::Suspect,
+                issues: Vec::new(),
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+        (
+            missing_record_peer,
+            PeerManagerPeerHealth {
+                peer_id: missing_record_peer.to_string(),
+                status: PeerManagerHealthStatus::Blocked,
+                issues: vec![PeerManagerHealthIssue::MissingPeerRecord],
+                discovery_sources: Vec::new(),
+                active_path_kind: Some("direct".to_string()),
+            },
+        ),
+    ]);
+
+    let admitted = admitted_active_transport_paths(&active_transport_paths, &healths);
+    let admitted_peers: HashSet<PeerId> = admitted.keys().copied().collect();
+    assert_eq!(admitted_peers, HashSet::from([active_peer]));
+}
+
+#[test]
+fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_set_but_in_health_map() {
+    let healthy_peer_key = Keypair::generate_ed25519();
+    let healthy_peer = PeerId::from(healthy_peer_key.public());
+    let unverified_peer = PeerId::random();
+    let discovered_peer_records = HashMap::from([(
+        healthy_peer,
+        signed_discovery_peer_record(
+            &healthy_peer_key,
+            vec![
+                crate::dht::PeerDiscoverySource::Dht,
+                crate::dht::PeerDiscoverySource::Rendezvous,
+            ],
+            1,
+        ),
+    )]);
+    let active_transport_paths = HashMap::from([
+        (
+            healthy_peer,
+            active_transport_path_from_endpoint(
+                &HashMap::new(),
+                healthy_peer,
+                &"/ip4/10.0.0.1/udp/4103/quic-v1"
+                    .parse()
+                    .expect("healthy endpoint"),
+            ),
+        ),
+        (
+            unverified_peer,
+            active_transport_path_from_endpoint(
+                &HashMap::new(),
+                unverified_peer,
+                &"/ip4/10.0.0.2/udp/4104/quic-v1"
+                    .parse()
+                    .expect("unverified endpoint"),
+            ),
+        ),
+    ]);
+    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+
+    let (healths, quarantined, admitted) = refresh_peer_manager_healths(
+        &discovered_peer_records,
+        &active_transport_paths,
+        &HashSet::from([healthy_peer]),
+        &PeerManagerPolicy::default(),
+        &event_peer_healths,
+        &event_errors,
+        32,
+    );
+
+    assert_eq!(healths[&healthy_peer].status, PeerManagerHealthStatus::Active);
+    assert_eq!(healths[&unverified_peer].status, PeerManagerHealthStatus::Blocked);
+    assert!(healths[&unverified_peer]
+        .issues
+        .iter()
+        .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
+    assert!(quarantined.is_empty());
+    assert_eq!(admitted, HashSet::from([healthy_peer]));
 }
 
 #[test]
