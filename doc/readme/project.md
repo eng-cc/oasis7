@@ -613,6 +613,17 @@
     - `rg -n "AI岗和大厂后端怎么选|平台|训练体系|工程基本功|AI 会越来越普及" doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-056 (PRD-README-035) [test_tier_required]: 收紧小红书第十篇里对传统团队转向 AI 的时间判断，把“半年后、一年后”收口为“可能下周或下个月就全面转向”，同时保持平台 / 训练体系 / 工程基本功优先的表达边界。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
+    - `.pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.yaml`
+    - `.pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "下周、下个月|全面转向|平台|训练体系|工程基本功" doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -628,6 +639,7 @@
 - 更新日期: 2026-04-03
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
 - 最新完成: `TASK-README-055`（已为小红书第十篇固定“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“先拿平台和训练体系”的表达边界。）
 - 最新完成: `TASK-README-054`（已为小红书第九篇补齐极简封面 HTML 与 PNG，并把视觉语言收口到低 GUI 感的大留白判断海报。）
 - 最新完成: `TASK-README-053`（已为小红书第九篇固定“GUI已死？这次我是认同的”的标题、正文、互动问题、关键词与“GUI 退到二线 / 判断权高于操作权”的表达边界。）

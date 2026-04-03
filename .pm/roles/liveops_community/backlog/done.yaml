@@ -50,3 +50,14 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.yaml
+  - task_uid: task_d205e719d6634bbfbf0be51944d4e7fb
+    title: "TASK-README-056 收紧小红书 offer 选择帖的 AI 转向时间判断"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-README-035
+    acceptance:
+      - "把素材包里的‘今天传统部门没做，不代表半年后、一年后不做’收口为更近的时间判断，并保持不反 AI、平台优先、训练体系优先的表达边界。"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.yaml

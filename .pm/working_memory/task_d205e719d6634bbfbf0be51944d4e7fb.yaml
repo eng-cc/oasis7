@@ -1,0 +1,38 @@
+version: 1
+task_uid: task_d205e719d6634bbfbf0be51944d4e7fb
+role: liveops_community
+worktree_hint: readme-xiaohongshu-offer-choice-wording-refresh
+source_session_id: manual
+source_thread_name: "xiaohongshu-offer-choice-wording-refresh"
+transcript_source: manual_summary
+last_extracted_ts: 2026-04-03T12:10:00+08:00
+captured_until_ts: 2026-04-03T12:10:00+08:00
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "第十篇小红书 offer 选择帖继续保留“平台 / 训练体系 / 带教 / 工程基本功优先”的主判断，只把传统团队转向 AI 的时间感从“半年后、一年后”收紧为“可能下周或下个月就全面转向”。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
+      - ".pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.execution.md"
+    captured_at: 2026-04-03T12:10:00+08:00
+    expires_at: 2026-04-05T12:10:00+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: attempt
+    summary: "本次作为 wording refresh 微任务处理，没有新开题材或新素材文件，而是在原素材包内同步修改长版、短版、PRD 边界和 project 追踪，避免正文与登记口径脱节。"
+    source_refs:
+      - "doc/readme/prd.md"
+      - "doc/readme/project.md"
+      - ".pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.execution.md"
+    captured_at: 2026-04-03T12:10:00+08:00
+    expires_at: 2026-04-05T12:10:00+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: next_step
+    summary: "如果用户后续要发布版封面、轮播图或更强的小红书爆款开头，应单独新开后续任务，不和本次一句话口径修订混做。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
+      - ".pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.execution.md"
+    captured_at: 2026-04-03T12:10:00+08:00
+    expires_at: 2026-04-05T12:10:00+08:00
+    promoted_to: []
