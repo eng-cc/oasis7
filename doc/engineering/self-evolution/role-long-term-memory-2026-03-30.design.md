@@ -32,7 +32,7 @@
   summary: current stage remains internal_playable_alpha_late
   source_refs:
     - doc/game/project.md
-    - doc/devlog/2026-03-30.md
+    - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
   tags:
     - stage
     - claim_envelope
@@ -204,4 +204,4 @@ roles:
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
-- `doc/devlog/2026-03-30.md`
+- `.pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md`

@@ -15,6 +15,7 @@
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
 - `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
 - task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图。
+- stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
 首批标准角色：

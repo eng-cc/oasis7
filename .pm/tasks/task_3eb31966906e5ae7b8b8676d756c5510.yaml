@@ -7,7 +7,7 @@ status: done
 priority: P1
 source_signal: SIG-PM-0001
 source_refs:
-  - doc/devlog/2026-03-31.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md
 doc_refs:
   - doc/engineering/project.md
 related_prd:

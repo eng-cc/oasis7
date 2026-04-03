@@ -1,0 +1,23 @@
+task_uid: task_86bdf7bdbfad437ead72d4f85db342a2
+title: "Remove devlog as PM runtime source of truth"
+owner_role: producer_system_designer
+worktree_hint: oasis7-engineering-pm-devlog-truth-cleanup
+execution_log_path: .pm/tasks/task_86bdf7bdbfad437ead72d4f85db342a2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+acceptance:
+  - "stage and active memory examples no longer cite doc/devlog as runtime source refs"
+  - "PM docs and smoke text treat doc/devlog only as historical archive, not canonical PM runtime input"
+  - "lint and PM smoke remain green after the source-of-truth cleanup"
+handoff_to: []
+updated_at: 2026-04-03T11:50:24+08:00
+last_started_at: 2026-04-02T22:46:55+08:00
+last_closed_at: 2026-04-03T11:50:24+08:00

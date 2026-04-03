@@ -6,22 +6,23 @@
 审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] TASK-ENGINEERING-074 (PRD-ENGINEERING-SE-001/004/006) [test_tier_required]: 建立 `self-evolution` 专题 `prd/design/project`，并同步回写 engineering 根入口、主项目、索引与 devlog。
+- [x] TASK-ENGINEERING-074 (PRD-ENGINEERING-SE-001/004/006) [test_tier_required]: 建立 `self-evolution` 专题 `prd/design/project`，并同步回写 engineering 根入口、主项目、索引与 task execution log 规则。
 - [x] TASK-ENGINEERING-075 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required]: 建立 `.pm/` 目录骨架、role registry、task registry 与模板文件，明确首批 7 角色及扩容规则。
 - [x] TASK-ENGINEERING-076 (PRD-ENGINEERING-SE-002/003/004) [test_tier_required]: 落地 signal inbox 与 `promote-signal` 基础链路，优先覆盖 `qa_engineer` 与 `liveops_community`。
 - [x] TASK-ENGINEERING-077 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required]: 落地 role memory / backlog 文件格式、`superseded` 生命周期与 lint 规则。
 - [x] TASK-ENGINEERING-078 (PRD-ENGINEERING-SE-001/004) [test_tier_required]: 落地 `stage/gate` 文件与 `stage-report` 汇总入口，为制作人阶段评审提供 canonical 输入。
-- [x] TASK-ENGINEERING-079 (PRD-ENGINEERING-SE-002/003/006) [test_tier_required] + [test_tier_full]: 建立 `devlog -> signal -> memory/task -> stage report` required-tier 验证链路，并评估角色扩容与多 worktree 并发回归。
+- [x] TASK-ENGINEERING-079 (PRD-ENGINEERING-SE-002/003/006) [test_tier_required] + [test_tier_full]: 建立 `task execution log / evidence -> signal -> memory/task -> stage report` required-tier 验证链路，并评估角色扩容与多 worktree 并发回归。
 - [x] TASK-ENGINEERING-080 (PRD-ENGINEERING-SE-005/006) [test_tier_required]: 建立长期 memory 自建专题 `prd/design/project`，将 role memory schema、promotion 与 superseded 规则从总专题中单独冻结。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-SE-004/005/006) [test_tier_required] + [test_tier_full]: 落地 `role-report` 入口，汇总 role backlog + role memory，并补按角色查询与扩容回归。
 - [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-SE-001/002/003/004/007) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
-- [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的默认流程口径，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
-- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪互链，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 devlog。
+- [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 subagent review 的默认流程口径，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 task execution log。
+- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-SE-007) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪互链，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题与 task execution log。
 - [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
 - [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-SE-004/007) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换到 `.pm/tasks/task_<32hex>.execution.md`，并同步回写 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
 - [x] TASK-ENGINEERING-097 (PRD-ENGINEERING-SE-007) [test_tier_required]: 收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并把运行环境阻断边界同步回写到正式文档与 `workflow-report` checklist。
 - [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
-- [ ] TASK-ENGINEERING-099 (PRD-ENGINEERING-SE-004/006/007/008) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐 task/state/source_ref 迁移脚本与回归验证。
+- [x] TASK-ENGINEERING-099 (PRD-ENGINEERING-SE-004/006/007/008) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐 task/state/source_ref 迁移脚本与回归验证。
+- [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-SE-001/004/007) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 `source_ref(s)` / `updated_from` 的残留口径，补齐 stage/signal/task/memory 门禁与正式文档回写。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -42,14 +43,16 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-04-02
+- 更新日期: 2026-04-03
 - 当前阶段: active
-- 当前任务: `TASK-ENGINEERING-099` 进行中；目标是把 `.pm` task 的 canonical identity 收敛为 `task_uid` 单一真值，并将 task registry/backlog 收敛为扫描重建视图，彻底消除顺序 `TASK-PM-xxxx` 在多 worktree rebase 中的结构性冲突。
+- 当前任务: 回到 `TASK-ENGINEERING-089/090` 的 recall / reflection 契约与质量回归；`TASK-ENGINEERING-099` 已完成 `.pm` task identity 向 `task_uid` 单一真值的收敛，`TASK-ENGINEERING-100` 已完成 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
   - `TASK-ENGINEERING-097`：已收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并补齐运行环境阻断边界。
   - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
+  - `TASK-ENGINEERING-099`：已将 `.pm` task identity 收敛为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并完成 lint/smoke 与正式文档迁移收口。
+  - `TASK-ENGINEERING-100`：已明确 `doc/devlog/*.md` 仅作历史归档，`.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence，并补齐 lint / promote-signal / set-stage 阻断。
   - `TASK-ENGINEERING-096`：已将执行日志 canonical 路径切到 `.pm/tasks/task_<32hex>.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。
   - `TASK-ENGINEERING-094`：已将根 `AGENTS.md`、engineering 主 PRD 与本专题中的 commit 前 subagent review 规则统一收口为默认流程口径。
   - `TASK-ENGINEERING-085`：已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。
@@ -58,14 +61,13 @@
   - `TASK-ENGINEERING-083`：已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容的 lint/scaffold，以及 `memory-regression-smoke.sh` full-tier 回归；长期 memory 现具备 active / needs_review / superseded 统一查询入口。
   - `TASK-ENGINEERING-082`：已落地 `promote-memory.sh` 与 signal `memory_promotion_state` 决策回写，required-tier smoke 现可覆盖 accepted/rejected memory promotion case。
   - `TASK-ENGINEERING-081`：已为 `producer_system_designer`、`qa_engineer`、`liveops_community` 与 `shared` 落地首批 active/superseded 样例，覆盖 stage current、QA failure signature、community messaging boundary 与 shared claim envelope 场景。
-  - `TASK-ENGINEERING-079`：已新增 `required-tier-smoke.sh`，可在临时 PM 根目录内跑通 `devlog -> signal -> blocked task -> stage report` 验证链；同时记录角色扩容仍受 `.agents/roles/*.md` 白名单约束，而 `.pm/registry/tasks.yaml` / `signals.jsonl` 仍是多 worktree 并发下的主要合流点。
+  - `TASK-ENGINEERING-079`：已新增 `required-tier-smoke.sh`，可在临时 PM 根目录内跑通 `task execution log / evidence -> signal -> blocked task -> stage report` 验证链；同时记录角色扩容仍受 `.agents/roles/*.md` 白名单约束，而 `.pm/registry/tasks.yaml` / `signals.jsonl` 仍是多 worktree 并发下的主要合流点。
   - `TASK-ENGINEERING-078`：已落地 `stage-report.sh`，可汇总 `.pm/stage/{current,gate}.yaml`、blocked tasks、按角色 backlog 计数，以及 producer/shared active memory，为阶段评审提供统一输入。
   - `TASK-ENGINEERING-077`：已落地 `move-task.sh`、`supersede-memory.sh`、`memory-lint.sh` 与内部 `pm_store.py`，补齐 backlog 全状态迁移、role/shared memory 的 superseded 生命周期，以及 task/backlog/memory 一致性 lint。
   - `TASK-ENGINEERING-076`：已落地 `.pm/inbox/signals.jsonl`、`scripts/pm/promote-signal.sh` 与 `scripts/pm/new-task.sh`，可将 `qa_engineer` / `liveops_community` 高价值信号写入 inbox，并直接生成 candidate task、task registry 与 owner backlog 条目。
   - `TASK-ENGINEERING-075`：已建立 `.pm/` 目录骨架、role registry、task registry、stage/shared 容器、首批 7 角色 memory/backlog 文件，以及 `scripts/pm/{scaffold,lint,new-task,promote-signal,stage-report,role-report}.sh` Phase 1 入口。
-  - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 devlog。
+  - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 task execution log 规则。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
-  - 先完成 `TASK-ENGINEERING-099` 的 task_uid 迁移、lint/smoke 升级与正式文档收口；
-  - 视后续优先级，转入 `TASK-ENGINEERING-087~090` 的 recall / reflection 增量补强；
+- 转入 `TASK-ENGINEERING-087~090` 的 recall / reflection 增量补强；
   - 之后若要推进 overdue SLA、跨角色 review board 或 shared dashboard，再单列新治理任务。

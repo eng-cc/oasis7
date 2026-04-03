@@ -7,7 +7,7 @@ status: done
 priority: P1
 source_signal: null
 source_refs:
-  - doc/devlog/2026-03-31.md
+  - doc/core/player-access-mode-contract-2026-03-19.project.md
 doc_refs:
   - doc/core/player-access-mode-contract-2026-03-19.project.md
   - doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.project.md

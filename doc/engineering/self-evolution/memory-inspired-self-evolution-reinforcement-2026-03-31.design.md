@@ -26,7 +26,7 @@
   summary: start phase agents should prefer fact and experience memories first
   source_refs:
     - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md
-    - doc/devlog/2026-03-31.md
+    - .pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.execution.md
   tags:
     - recall
     - memory
@@ -194,4 +194,4 @@
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`
-- `doc/devlog/2026-03-31.md`
+- `.pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.execution.md`

@@ -557,6 +557,28 @@ def resolve_source_ref_path(root: pathlib.Path, source_ref: str) -> pathlib.Path
     return root / path
 
 
+def is_devlog_archive_reference(source_ref: str) -> bool:
+    source_path = parse_reference_path(str(source_ref))
+    if not source_path:
+        return False
+    normalized = source_path.replace("\\", "/")
+    parts = pathlib.PurePosixPath(normalized).parts
+    return len(parts) >= 2 and parts[0] == "doc" and parts[1] == "devlog"
+
+
+def ensure_non_devlog_runtime_source_ref(source_ref: str, context: str) -> None:
+    if is_devlog_archive_reference(source_ref):
+        raise ValueError(f"{context} must not use doc/devlog archive as runtime source_ref: {source_ref}")
+
+
+def validate_runtime_source_ref(root: pathlib.Path, source_ref: str, context: str) -> pathlib.Path:
+    ensure_non_devlog_runtime_source_ref(source_ref, context)
+    resolved_source = resolve_source_ref_path(root, source_ref)
+    if not resolved_source.exists():
+        raise ValueError(f"{context} missing: {parse_reference_path(str(source_ref))}")
+    return resolved_source
+
+
 def redact_text(text: str) -> tuple[str, int]:
     redacted = text
     replacements = 0
@@ -1408,6 +1430,10 @@ def create_candidate_task(
             raise ValueError(f"unknown handoff role: {role}")
     if priority not in PRIORITY_ORDER:
         raise ValueError(f"unsupported priority: {priority}")
+    if not source_refs:
+        raise ValueError("task source_refs must be a non-empty list")
+    for source_ref in source_refs:
+        validate_runtime_source_ref(root, str(source_ref), "task source_ref")
 
     task_uid = next_task_uid(root)
     task_path_rel = task_relative_path(task_uid)
@@ -1949,6 +1975,11 @@ def run_memory_lint(root: pathlib.Path) -> None:
                     if not source_path:
                         fail(f"{path.relative_to(root)} {record_id} has empty source_ref")
                         continue
+                    if is_devlog_archive_reference(str(source_ref)):
+                        fail(
+                            f"{path.relative_to(root)} {record_id} source_ref must not use doc/devlog archive: "
+                            f"{source_ref}"
+                        )
                     if not (root / source_path).exists():
                         fail(f"{path.relative_to(root)} {record_id} source_ref missing: {source_path}")
 
@@ -2617,6 +2648,24 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             continue
         if payload["role_hint"] not in roles:
             fail(f"signal role_hint not registered: {payload['signal_id']} -> {payload['role_hint']}")
+        if str(payload.get("source_type") or "") == "devlog":
+            fail(f"signal source_type must not be devlog archive: {payload['signal_id']}")
+        source_ref = str(payload.get("source_ref") or "")
+        if not source_ref:
+            fail(f"signal source_ref missing: {payload['signal_id']}")
+        else:
+            if is_devlog_archive_reference(source_ref):
+                fail(f"signal source_ref must not use doc/devlog archive: {payload['signal_id']} -> {source_ref}")
+            try:
+                resolved_signal_source = resolve_source_ref_path(root, source_ref)
+            except ValueError as exc:
+                fail(f"signal source_ref invalid: {payload['signal_id']} -> {exc}")
+            else:
+                if not resolved_signal_source.exists():
+                    fail(
+                        f"signal source_ref missing: {payload['signal_id']} -> "
+                        f"{parse_reference_path(source_ref)}"
+                    )
         if payload["promotion_state"] not in ALLOWED_SIGNAL_STATES:
             fail(f"signal promotion_state invalid: {payload['signal_id']} -> {payload['promotion_state']}")
         memory_state = str(payload.get("memory_promotion_state", "pending"))
@@ -2729,6 +2778,23 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
             task_source_signals.add(str(source_signal))
             if str(source_signal) not in signal_ids:
                 fail(f"task source_signal missing from inbox: {task_uid} -> {source_signal}")
+        source_refs = fields.get("source_refs")
+        if not isinstance(source_refs, list) or not source_refs:
+            fail(f"task file source_refs must be a non-empty list: {task_uid}")
+        else:
+            for source_ref in source_refs:
+                if is_devlog_archive_reference(str(source_ref)):
+                    fail(f"task file source_ref must not use doc/devlog archive: {task_uid} -> {source_ref}")
+                try:
+                    resolved_source = resolve_source_ref_path(root, str(source_ref))
+                except ValueError as exc:
+                    fail(f"task file source_ref invalid: {task_uid} -> {exc}")
+                else:
+                    if not resolved_source.exists():
+                        fail(
+                            f"task file source_ref missing: {task_uid} -> "
+                            f"{parse_reference_path(str(source_ref))}"
+                        )
         for key in ("last_started_at", "last_closed_at"):
             value = fields.get(key)
             if value in {None, ""}:
@@ -2922,6 +2988,12 @@ def run_stage_lint(root: pathlib.Path) -> None:
             fail("current_stage is set but claim_envelope is null")
         if not isinstance(updated_from, list) or not updated_from:
             fail("stage current requires non-empty updated_from once current_stage is set")
+        else:
+            for source_ref in updated_from:
+                try:
+                    validate_runtime_source_ref(root, str(source_ref), "stage current updated_from")
+                except ValueError as exc:
+                    fail(str(exc))
         decision_date = stage_current.get("decision_date")
         if decision_date in {None, ""}:
             fail("stage current requires decision_date once current_stage is set")
@@ -2934,6 +3006,12 @@ def run_stage_lint(root: pathlib.Path) -> None:
     if gate_status != "draft":
         if not isinstance(gate_updated_from, list) or not gate_updated_from:
             fail("gate requires non-empty updated_from once status leaves draft")
+        else:
+            for source_ref in gate_updated_from:
+                try:
+                    validate_runtime_source_ref(root, str(source_ref), "gate updated_from")
+                except ValueError as exc:
+                    fail(str(exc))
         if gate.get("gate_id") in {None, ""}:
             fail("gate requires gate_id once status leaves draft")
 
@@ -2996,6 +3074,8 @@ def cmd_stage_lint(args: argparse.Namespace) -> int:
 def cmd_set_stage(args: argparse.Namespace) -> int:
     if not args.source_ref:
         raise ValueError("at least one --source-ref is required")
+    for source_ref in args.source_ref:
+        validate_runtime_source_ref(args.root, str(source_ref), "set-stage source_ref")
 
     stage_current_path = args.root / ".pm/stage/current.yaml"
     gate_path = args.root / ".pm/stage/gate.yaml"
@@ -3644,6 +3724,7 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
 
     source_refs: list[str] = []
     for source_ref in [str(signal_entry["source_ref"]), *args.source_ref]:
+        ensure_non_devlog_runtime_source_ref(str(source_ref), "memory source_ref")
         if source_ref not in source_refs:
             source_refs.append(source_ref)
 

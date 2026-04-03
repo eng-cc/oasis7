@@ -28,6 +28,7 @@
   - SC-8D: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 统计；若当前 task 还没有 working_memory，close checklist 必须先暴露 `codex-working-memory` bootstrap 入口，而不是直接提示 review/autoflow 已存在条目。
   - SC-9: `.pm` task 的唯一身份必须收敛为去中心分配的 `task_uid`；`TASK-PM-xxxx`、`display_id`、`legacy_ids` 与 `next_sequence` 均不得再作为正式字段或路径依赖。
   - SC-10: task file、execution log、working_memory、stage blocker、source refs 与 codex session 映射都必须直接以 `task_uid` 引用；registry/backlog 如保留，只能作为由 canonical task 对象扫描重建的视图。
+  - SC-10A: stage/gate、signal、task 与 memory 的 `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或显式 evidence。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -87,6 +88,7 @@
   - AC-10: `set-stage` 必须成为 producer 修改 `.pm/stage/*.yaml` 的 canonical 入口；若 active memory 仍声称存在 `stage.current` / `gate.claim_envelope`，但 stage 文件为空、缺 `updated_from` 或缺关联 blocker，则 lint 必须失败。
   - AC-11: `.pm` task canonical object 必须以 `task_uid` 为唯一主键；新任务创建不再依赖 `next_sequence` 或任何顺序 `TASK-PM-xxxx` 分配。
   - AC-12: 旧 `.pm` 数据向 `task_uid` 模型迁移后，不允许出现 mixed identity 状态；若 task file、execution log、working_memory、stage blocker、registry/backlog 中仍残留未迁移的旧 task 主键，lint 必须失败。
+  - AC-13: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 必须阻断 `doc/devlog/*.md`；若输入仍指向历史归档，promote/lint/set-stage 必须要求改为 task execution log、正式文档或显式 evidence。
 - Non-Goals:
   - 不引入 OpenProject、Mem0、Graphiti、Supabase 或外部 SaaS 作为首期真值系统。
   - 不要求首期自动修改 `doc/**/prd.md` 或 `doc/**/project.md`；正式规格仍由 owner 审核回写。
@@ -131,6 +133,7 @@
   - worktree 并发编辑：若不同 worktree 同时修改同一 `.pm` 对象，以 landing 后的主干重放 lint/report 为准；必要时通过单任务单文件拆分减少冲突。
   - orphan task：若 task 缺失 owner_role、source_ref 或 acceptance，lint 直接失败，不允许进入 `committed`。
   - dangling memory：若 memory 记录引用不存在的文档/信号，lint 直接失败。
+  - archive source drift：若 stage/gate、signal、task 或 memory 仍把 `doc/devlog/*.md` 当 `source_ref(s)` / `updated_from`，lint/promote/set-stage 必须直接失败，避免把历史归档误当当前态真值。
   - stage drift：若 stage 文件未包含当前 blocking task、claim envelope 与正式对外口径冲突，或 active memory 仍声称存在 `stage.current` / `gate.claim_envelope` 但 stage 当前态为空，lint/report 必须标红并拒绝输出 `aligned`。
   - workflow evidence 缺失：若 owner 在任务开始/收口时未通过 `workflow-report --task-uid` 留下 `last_started_at` / `last_closed_at`，则 task registry 只能视为“未完成工作流接入”，不得宣称 `.pm` 已成为默认执行链路；其中进入 `blocked/done/deferred` 的任务必须已有 `last_started_at`，进入 `done/deferred` 的任务必须已有 `last_closed_at`。
   - execution log promotion 漏提：若高严重度 QA/liveops signal 在 SLA 内未被处理，report 需显式列出 overdue。
@@ -165,7 +168,7 @@
 - Technical Risks:
   - 风险-1: `.pm/` 与 `doc/` 双层体系若分工不清，会产生第二真值和重复维护。
   - 风险-2: 过早追求自动化，可能让错误 signal 进入长期 memory/backlog，反而放大噪声。
-  - 风险-3: 若对象建模过粗，角色 backlog 会退化为另一份 `devlog`；若过细，又会造成编辑负担过高。
+  - 风险-3: 若对象建模过粗，角色 backlog 会退化为另一份自由文本日记层；若过细，又会造成编辑负担过高。
   - 风险-4: 多 worktree 并发下，若没有单任务单文件原则和 lint/merge 规约，冲突会迅速增多。
   - 风险-5: 若 task identity 仍绑定中心顺序号，新的 canonical task 对象即使彼此无关，也会在 rebase 时争抢 `next_sequence` 与文件名，制造无意义冲突。
 
@@ -176,7 +179,7 @@
 | PRD-ENGINEERING-SE-001 | TASK-ENGINEERING-074/078/085 | `test_tier_required` | stage/gate 文件结构检查、`set-stage` 当前态更新、stage 汇总样例验证与 drift lint | 制作人阶段评审输入、跨角色裁决链 |
 | PRD-ENGINEERING-SE-002 | TASK-ENGINEERING-076/079 | `test_tier_required` | QA signal ingestion / promotion / overdue 报表验证 | QA block 回流、required/full 放行链 |
 | PRD-ENGINEERING-SE-003 | TASK-ENGINEERING-076/079 | `test_tier_required` | liveops signal inbox、candidate task 生成与 follow-up 链检查 | 社区反馈回流、事故收口 |
-| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084/099 | `test_tier_required` | task registry 模板、状态机、lint、索引生成与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
+| PRD-ENGINEERING-SE-004 | TASK-ENGINEERING-075/077/084/099/100 | `test_tier_required` | task registry 模板、状态机、lint、索引生成、runtime `source_ref(s)` 非-`doc/devlog` 约束与 `role-report` backlog 视图验证 | worktree 任务追踪、角色 backlog |
 | PRD-ENGINEERING-SE-005 | TASK-ENGINEERING-075/077/084 | `test_tier_required` | memory active/superseded 生命周期、source ref 可达性、superseded_by 链与 `role-report` memory 视图检查 | 长期记忆审计与历史裁决回放 |
 | PRD-ENGINEERING-SE-006 | TASK-ENGINEERING-075/079/084/099 | `test_tier_required` + `test_tier_full` | 新角色注册、模板脚手架、全量 report/lint/role-report 扩容验证，以及 task identity 迁移后 schema 兼容验证 | 角色扩容、治理脚本兼容性 |
 | PRD-ENGINEERING-SE-007 | TASK-ENGINEERING-085/092/093/094/097/098/099 | `test_tier_required` + `test_tier_full` | `workflow-report --task-uid` start/close/review 视图、task file 时间戳留痕、close checklist 中的 subagent review 要求、默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory bootstrap/review 分流、signal 汇总、`new-task-worktree` 提示和角色扩容场景验证 | 日常开发工作流、角色收口动作、阶段评审入口 |
@@ -196,7 +199,7 @@
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:
-  - ✔ 是否明确说明本期解决什么问题：第 1 章说明了现有 `PRD/project/devlog` 只能覆盖正式规格和单次执行，尚缺长期 memory/backlog 层。
+  - ✔ 是否明确说明本期解决什么问题：第 1 章说明了现有 `PRD/project/task execution log/历史归档` 只能覆盖正式规格和单次执行，尚缺长期 memory/backlog 层。
   - ✔ 是否定义成功指标（可量化）：SC-1~SC-7、NFR-SE-1~10 给出角色覆盖、字段完整率、时延和一致率指标。
   - ✔ 是否与公司/项目阶段目标一致：与当前项目“自我进化”和角色协作治理方向一致。
   - ✔ 是否说明优先级来源：来自当前 7 角色长期状态缺失、阶段评审输入手工拼装和 QA/liveops 信号难沉淀的问题。
@@ -240,12 +243,12 @@
   - ✔ 是否存在逻辑冲突：未发现明显冲突；`.pm/` 运行态与 `doc/` 正式文档的边界已区分。
   - ✔ 是否存在目标与设计不匹配：目标直接映射到五类核心对象与脚本层。
   - ✔ 是否存在自相矛盾：未发现。
-  - ✔ 是否与历史版本冲突：与现有 `PRD/project/devlog` 形成补充分层，而不是替代。
+  - ✔ 是否与历史版本冲突：与现有 `PRD/project/task execution log/历史归档` 形成补充分层，而不是替代。
 - 依赖与影响分析（Impact）:
   - ✔ 是否明确依赖系统：`AGENTS.md`、角色卡、engineering 主文档、`testing-manual.md`、`.pm/` 和 `scripts/pm` 均已列出。
   - ✔ 是否明确接口依赖：Integration Points 已覆盖。
   - ✔ 是否评估影响模块：producer/QA/liveops/工程角色和 stage gate 均已覆盖。
-  - ✔ 是否评估数据迁移：已说明从 `devlog` 到 signal/memory/task 的提升链路。
+  - ✔ 是否评估数据迁移：已说明从 task execution log / evidence 到 signal/memory/task 的提升链路。
   - ✔ 是否识别上线风险：第 5 章技术风险已列出。
 - 决策透明度（Decision Record）:
   - ✔ 是否说明方案选择原因：DEC-SE-001~005。
@@ -257,5 +260,5 @@
   - ✔ 是否重复定义已有模型：未重写正式玩法/运行时规则，只定义项目管理运行层。
   - ✔ 是否清晰标注跨模块依赖：Integration Points 已列出。
   - ✔ 是否遵守抽象层级：本文聚焦 Why/What/Done，实施细节下沉到 design/project。
-  - ✔ 是否保证依赖可追溯性：Traceability、root engineering 追踪、devlog 和入口索引均已定义。
+  - ✔ 是否保证依赖可追溯性：Traceability、root engineering 追踪、task execution log 规则和入口索引均已定义。
 - 总体 Gate 结果: 🟢 Ready

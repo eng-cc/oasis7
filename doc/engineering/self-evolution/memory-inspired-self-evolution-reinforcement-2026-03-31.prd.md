@@ -63,7 +63,7 @@
   - AC-4: 反思产物必须先走 signal/owner review，再决定是否进入 memory/task；不得自动覆盖正式文档或直接触发高风险代码修改。
   - AC-5: 会话记录与过程日志必须先提炼到 task-scoped `working_memory`，不得整段直接写入长期 memory；Codex/engineering task 的 phase 1 必须优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，而不是先要求 wrapper 导出独立 transcript artifact。
   - AC-6: project 文档至少拆出“建档、schema 扩展、召回 profile、working memory、reflection 契约、验证回归”六类任务。
-  - AC-7: 专题文档、engineering 根入口、索引、主项目与 `doc/devlog/2026-03-31.md` 全部完成互链。
+  - AC-7: 专题文档、engineering 根入口、索引、主项目与相关 task execution log 全部完成互链。
   - AC-8: `working_memory` 必须定义过期/清理/提升规则，避免任务结束后残留未治理临时认知。
 - Non-Goals:
   - 不把 `memoryOSS`、向量数据库或外部 SaaS 接入为 oasis7 首期运行态真值。
@@ -99,7 +99,7 @@
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/README.md`
-  - `doc/devlog/2026-03-31.md`
+  - `.pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.execution.md`
   - `.pm/roles/*/memory/{active,superseded}.yaml`
   - `.pm/working_memory/*.yaml`（新增）
   - `.pm/inbox/signals.jsonl`
@@ -238,5 +238,5 @@
   - ✔ 是否引用已有定义，而不是重写：已引用 `self-evolution` 总专题与长期 memory 子专题。
   - ✔ 是否清晰标注跨模块依赖：已列明 `scripts/pm`、`.pm` 与外部参考边界。
   - ✔ 是否混合错误抽象层级：未把实现细节混入模块级 Why/What/Done 范围之外。
-  - ✔ 是否具备依赖可追溯性：已补齐 PRD/project/design/devlog/engineering 根入口互链。
+  - ✔ 是否具备依赖可追溯性：已补齐 PRD/project/design/task execution log/engineering 根入口互链。
 - 总体 Gate 结果: 🟢 Ready

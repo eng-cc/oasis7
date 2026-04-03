@@ -224,7 +224,7 @@
   - 确认 worktree 间修改只会在真正并发编辑同一 canonical task object 时冲突，而不会因顺序 task id 分配冲突
 
 ## 风险与缓解
-- 风险：`.pm/` 退化成另一份 `devlog`
+- 风险：`.pm/` 退化成另一份自由文本日记层
   - 缓解：所有记录必须结构化并带状态，不允许自由流水文本替代 task/memory 对象。
 - 风险：`.pm/` 退化成另一份 `project.md`
   - 缓解：明确 `.pm/` 是运行态，正式规格和正式任务定义仍留在 `doc/`。
@@ -239,4 +239,4 @@
 - `doc/engineering/project.md`
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
-- `doc/devlog/2026-03-30.md`
+- `.pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md`

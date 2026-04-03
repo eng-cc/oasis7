@@ -8,7 +8,7 @@ records:
     summary: "formal pure_api gameplay requires active LLM access; no-LLM is observer/debug only"
     source_refs:
       - doc/core/player-access-mode-contract-2026-03-19.prd.md
-      - doc/devlog/2026-03-31.md
+      - .pm/tasks/task_63a90a761d435a1e8723c8af73bac3f4.execution.md
     tags:
       - player_access
       - llm_required
@@ -27,7 +27,7 @@ records:
     summary: "current stage remains internal_playable_alpha_mid"
     source_refs:
       - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
-      - doc/devlog/2026-03-30.md
+      - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
     tags:
       - stage
     effective_at: 2026-03-30T19:32:00+08:00

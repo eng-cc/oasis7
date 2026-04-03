@@ -7,7 +7,6 @@ records:
     topic: community.persona_positioning
     summary: "community-facing copy should frame AI persona as world-facing action and accountability, not as companionship"
     source_refs:
-      - doc/devlog/2026-03-30.md
       - doc/readme/governance/readme-xiaohongshu-ai-persona-world-post-pack-2026-03-30.md
     tags:
       - community_pattern

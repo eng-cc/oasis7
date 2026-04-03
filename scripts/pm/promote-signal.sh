@@ -149,6 +149,33 @@ case "$SEVERITY" in
     ;;
 esac
 
+[[ "$SOURCE_TYPE" != "devlog" ]] || {
+  echo "promote-signal: source_type=devlog is no longer allowed for PM runtime objects" >&2
+  exit 2
+}
+
+python3 - "$ROOT_DIR" "$SOURCE_REF" <<'PY'
+from __future__ import annotations
+
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+source_ref = sys.argv[2]
+source_path = source_ref.split("#", 1)[0]
+if not source_path:
+    raise SystemExit("promote-signal: empty source_ref path")
+parts = pathlib.PurePosixPath(source_path.replace("\\", "/")).parts
+if len(parts) >= 2 and parts[0] == "doc" and parts[1] == "devlog":
+    raise SystemExit(
+        f"promote-signal: doc/devlog archive cannot be used as PM runtime source_ref: {source_ref}"
+    )
+path = pathlib.Path(source_path).expanduser()
+resolved = path if path.is_absolute() else root / path
+if not resolved.exists():
+    raise SystemExit(f"promote-signal: source_ref missing: {source_path}")
+PY
+
 grep -Fxq "$ROLE_HINT" < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yaml) || {
   echo "promote-signal: unknown role hint: $ROLE_HINT" >&2
   exit 2

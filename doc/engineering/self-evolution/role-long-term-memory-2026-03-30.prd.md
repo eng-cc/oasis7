@@ -78,7 +78,7 @@
   - AC-3: `promote-memory` 与 `supersede-memory` 的输入、输出、失败条件和角色权限明确。
   - AC-4: 至少覆盖 `producer_system_designer`、`qa_engineer`、`liveops_community` 三类高价值 memory 场景，并给出 role-agnostic 扩容规则。
   - AC-5: project 文档给出记忆容器、模板、脚本、report 和验证任务拆解。
-  - AC-6: 专题文档与 `self-evolution` 总专题、engineering 根入口、索引和 devlog 全部完成互链。
+  - AC-6: 专题文档与 `self-evolution` 总专题、engineering 根入口、索引和相关 task execution log 全部完成互链。
   - AC-7: 长期 memory 专题必须提供 7 个标准角色的 `topic` allowlist 草案、允许的 `promotion_reason` 范围与反例，不允许只靠口头理解决定“什么能进 memory”。
   - AC-8: `workflow-report --phase close` 与角色职责卡必须显式要求执行统一记忆抽取三问；任一回答为 yes 时，不得只写 execution log 就结束。
 - Non-Goals:

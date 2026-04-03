@@ -4,5 +4,5 @@ candidate_stage: null
 claim_envelope: internal_only
 decision_date: 2026-03-30
 updated_from:
-  - doc/devlog/2026-03-30.md
+  - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
 blocking_tasks: []

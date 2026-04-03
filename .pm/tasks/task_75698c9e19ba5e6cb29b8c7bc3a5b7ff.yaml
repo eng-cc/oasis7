@@ -8,14 +8,13 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md
-  - doc/devlog/2026-04-01.md
 doc_refs:
   - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md
 related_prd:
   - doc/readme/prd.md
 acceptance:
   - "Unread Moltbook notifications are classified and high-value comments are either replied to or explicitly left for no-reply with reason."
-  - "Execution log and daily devlog capture comment triage, replies sent, and remaining follow-up."
+  - "Task execution log records comment triage, replies sent, and remaining follow-up."
 handoff_to: []
 last_started_at: 2026-04-01T22:27:18+08:00
 last_closed_at: 2026-04-01T22:37:27+08:00

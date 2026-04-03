@@ -57,6 +57,7 @@
   - SC-24B: `codex exec review --uncommitted` 仅可视为 shell 内自检，不得记作仓库要求的 subagent review；若运行环境禁止派生 agent，必须显式记录为运行环境阻断，而不是静默降级。
   - SC-25: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
+  - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -147,6 +148,7 @@
   - AC-22: 外部 memory/reflective-agent 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted/rejected/deferred 边界，再进入实现任务拆解。
   - AC-23: `.pm` task file、execution log、working_memory、stage blocker 与 codex session 映射全部以 `task_uid` 作为唯一主键；`TASK-PM-xxxx` 顺序号、`legacy_ids` 与 `display_id` 不得再作为正式字段或路径依赖。
   - AC-24: `.pm/registry/tasks.yaml` 与 role backlog 若保留，必须退化为由 canonical task 对象扫描重建的视图，且重建过程不要求 `next_sequence`、不要求中心抢号。
+  - AC-25: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 只允许引用 task execution log、`doc/devlog/**` 之外的正式文档或其他显式 evidence；若仍指向 `doc/devlog/*.md`，lint/promote/set-stage 必须阻断。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -193,6 +195,7 @@
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
   - 审读进度漂移：若已读清单不随批次更新，会导致“已完成”状态失真，必须在同提交更新清单。
   - 运行态真值冲突：若 `.pm/` 与正式 `doc/` 对同一阶段/任务给出不同口径，必须以正式文档为准并把 `.pm/` 记录标成待裁决。
+  - 归档源污染：若 `.pm` runtime `source_ref(s)` / `updated_from` 仍引用 `doc/devlog/**`，必须视为把历史归档误当运行态真值，lint/promote/set-stage 直接阻断并要求改为 task execution log、正式文档或显式 evidence。
   - `.pm` task identity 迁移：若旧 `TASK-PM-xxxx` 数据未在同批次迁到 `task_uid`，lint/report 必须阻断 mixed-identity 状态，避免新旧主键同时写入造成引用漂移。
 - Non-Functional Requirements:
   - NFR-ENG-1: required 门禁平均执行时长 <= 10 分钟。
@@ -253,7 +256,7 @@
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且只允许把 subagent 用作 commit 前 review | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、subagent review 默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory checklist 回归、角色扩容回归验证，以及 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、subagent review 默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory checklist 回归、角色扩容回归验证，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 
@@ -283,3 +286,4 @@
 | DEC-ENG-020 | 角色名通过 `.agents/roles/*.md` 自动生成白名单并由门禁校验 | 允许自由填写角色名或维护独立手写名单 | 自动从单一事实源派生，最不容易漂移。 |
 | DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
+| DEC-ENG-022 | `doc/devlog/*.md` 仅保留历史归档职责，`.pm` runtime `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence | 继续让 `doc/devlog/*.md` 同时承担归档与 `.pm` 运行态真值 | 集中式日表已退役为归档层；若继续把它写进 stage/signal/task/memory 的 runtime 引用，会让 `.pm` 当前态重新依赖历史流水，削弱 worktree 隔离、lint 可判定性与 task-local traceability。 |

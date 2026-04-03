@@ -7,7 +7,7 @@ status: done
 priority: P2
 source_signal: SIG-PM-0002
 source_refs:
-  - doc/devlog/2026-03-31.md
+  - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md
 doc_refs:
   - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md
 related_prd:

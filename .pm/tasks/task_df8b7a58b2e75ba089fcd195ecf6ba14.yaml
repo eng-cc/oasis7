@@ -8,7 +8,7 @@ priority: P2
 source_signal: null
 source_refs:
   - AGENTS.md
-  - doc/devlog/2026-04-01.md
+  - .pm/tasks/task_df8b7a58b2e75ba089fcd195ecf6ba14.execution.md
 doc_refs:
   - doc/engineering/project.md
 related_prd:
@@ -16,7 +16,7 @@ related_prd:
   - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
 acceptance:
   - "仓库规则中的 commit 前 subagent review 已统一为单一默认流程"
-  - "AGENTS.md、engineering 追踪文档与 devlog 已同步留痕本轮规则收口"
+  - "AGENTS.md、engineering 追踪文档与 task execution log 已同步留痕本轮规则收口"
   - "doc-governance-check 与 git diff --check 通过"
 handoff_to: []
 last_started_at: 2026-04-01T16:52:07+08:00

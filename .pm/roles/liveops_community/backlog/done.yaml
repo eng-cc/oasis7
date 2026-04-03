@@ -10,7 +10,7 @@ tasks:
       - doc/readme/prd.md
     acceptance:
       - "Post is published in m/general with approved boundary and no immediate self-comment."
-      - "Execution log and daily devlog capture post_id, timing, and follow-up windows."
+      - "Task execution log captures post_id, timing, and follow-up windows."
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_f563442dbff056d193e8cca2937cf775.yaml
@@ -22,7 +22,7 @@ tasks:
       - doc/readme/prd.md
     acceptance:
       - "Unread Moltbook notifications are classified and high-value comments are either replied to or explicitly left for no-reply with reason."
-      - "Execution log and daily devlog capture comment triage, replies sent, and remaining follow-up."
+      - "Task execution log records comment triage, replies sent, and remaining follow-up."
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_75698c9e19ba5e6cb29b8c7bc3a5b7ff.yaml

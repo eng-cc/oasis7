@@ -8,14 +8,13 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md
-  - doc/devlog/2026-03-29.md
 doc_refs:
   - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md
 related_prd:
   - doc/readme/prd.md
 acceptance:
   - "Post is published in m/general with approved boundary and no immediate self-comment."
-  - "Execution log and daily devlog capture post_id, timing, and follow-up windows."
+  - "Task execution log captures post_id, timing, and follow-up windows."
 handoff_to: []
 last_started_at: 2026-04-01T22:02:29+08:00
 last_closed_at: 2026-04-01T22:13:37+08:00

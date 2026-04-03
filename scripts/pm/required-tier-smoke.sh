@@ -57,6 +57,67 @@ cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
 mkdir -p "$TMPDIR/.pm/evidence" "$TMPDIR/.pm/shared/memory" "$TMPDIR/.pm/stage"
 
+python3 - "$TMPDIR" "$ROOT_DIR" <<'PY'
+from pathlib import Path
+import json
+import shutil
+import sys
+
+import yaml
+
+root = Path(sys.argv[1])
+source_root = Path(sys.argv[2])
+
+
+def mirror_source_ref(source_ref: str) -> None:
+    path = str(source_ref).split("#", 1)[0].strip()
+    if not path:
+        return
+    if path.startswith(("http://", "https://")):
+        return
+    resolved = Path(path).expanduser()
+    if resolved.is_absolute():
+        return
+    target = root / resolved
+    if target.exists():
+        return
+    source = source_root / resolved
+    if not source.exists():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir():
+        shutil.copytree(source, target)
+    else:
+        shutil.copy2(source, target)
+
+
+for task_path in (root / ".pm/tasks").glob("*.yaml"):
+    payload = yaml.safe_load(task_path.read_text(encoding="utf-8")) or {}
+    for source_ref in payload.get("source_refs") or []:
+        mirror_source_ref(str(source_ref))
+    execution_log = payload.get("execution_log_path")
+    if execution_log:
+        mirror_source_ref(str(execution_log))
+
+for memory_path in list((root / ".pm/roles").glob("*/memory/*.yaml")) + list((root / ".pm/shared/memory").glob("*.yaml")):
+    payload = yaml.safe_load(memory_path.read_text(encoding="utf-8")) or {}
+    for record in payload.get("records") or []:
+        for source_ref in record.get("source_refs") or []:
+            mirror_source_ref(str(source_ref))
+
+for stage_path in (root / ".pm/stage").glob("*.yaml"):
+    payload = yaml.safe_load(stage_path.read_text(encoding="utf-8")) or {}
+    for source_ref in payload.get("updated_from") or []:
+        mirror_source_ref(str(source_ref))
+
+signals_path = root / ".pm/inbox/signals.jsonl"
+for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+    raw_line = raw_line.strip()
+    if not raw_line:
+        continue
+    mirror_source_ref(str(json.loads(raw_line).get("source_ref") or ""))
+PY
+
 python3 - "$TMPDIR" <<'PY'
 from pathlib import Path
 import sys

@@ -7,7 +7,7 @@ status: done
 priority: P2
 source_signal: SIG-PM-0003
 source_refs:
-  - doc/devlog/2026-03-31.md
+  - .pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.execution.md
 doc_refs:
   - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md
 related_prd:
@@ -15,7 +15,7 @@ related_prd:
 acceptance:
   - "working_memory 已定义为 task-scoped 中间层"
   - "Codex/engineering task phase 1 来源已冻结为 ~/.codex/session_index.jsonl + ~/.codex/history.jsonl"
-  - ".codex/devlog -> working_memory -> reflection signal 路径已写入专题"
+  - ".codex/task execution log -> working_memory -> reflection signal 路径已写入专题"
 handoff_to: []
 last_started_at: 2026-03-31T17:28:09+08:00
 last_closed_at: 2026-03-31T17:28:09+08:00
