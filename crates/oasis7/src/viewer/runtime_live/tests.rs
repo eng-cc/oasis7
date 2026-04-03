@@ -384,6 +384,139 @@ fn runtime_live_run_accepts_probe_while_viewer_session_is_open() {
 }
 
 #[test]
+fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
+    std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
+    std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
+    std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("reserve port");
+    let addr = listener.local_addr().expect("local addr");
+    drop(listener);
+
+    let server_addr = addr.to_string();
+    thread::spawn(move || {
+        let server = ViewerRuntimeLiveServer::new(
+            ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                .with_bind_addr(server_addr)
+                .with_decision_mode(ViewerLiveDecisionMode::Llm),
+        )
+        .expect("create server");
+        server.run().expect("run server");
+    });
+    wait_for_runtime_live_server(addr.to_string().as_str());
+
+    let (mut reader, mut writer) = connect_runtime_live_client(addr.to_string().as_str());
+    send_runtime_live_request(&mut writer, &ViewerRequest::RequestSnapshot);
+    let snapshot = read_runtime_live_snapshot(&mut reader);
+    let agent_id = snapshot
+        .model
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    match read_runtime_live_response(&mut reader) {
+        ViewerResponse::AuthoritativeRecoveryAck { ack } => {
+            assert_eq!(ack.status, AuthoritativeRecoveryStatus::CatchUpReady);
+        }
+        other => panic!("expected recovery ack after snapshot request, got {other:?}"),
+    }
+
+    send_runtime_live_request(
+        &mut writer,
+        &ViewerRequest::Subscribe {
+            streams: vec![ViewerStream::Events],
+            event_kinds: Vec::new(),
+        },
+    );
+
+    let (public_key, private_key) = test_signer(34);
+    let register_request = signed_session_register_request(
+        crate::viewer::AuthoritativeSessionRegisterRequest {
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+            requested_agent_id: Some(agent_id.clone()),
+            force_rebind: false,
+        },
+        34,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    send_runtime_live_request(
+        &mut writer,
+        &ViewerRequest::AuthoritativeRecovery {
+            command: AuthoritativeRecoveryCommand::RegisterSession {
+                request: register_request,
+            },
+        },
+    );
+    match read_runtime_live_response(&mut reader) {
+        ViewerResponse::AuthoritativeRecoveryAck { ack } => {
+            assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
+            assert_eq!(ack.player_id.as_deref(), Some("player-a"));
+            assert_eq!(ack.agent_id.as_deref(), Some(agent_id.as_str()));
+        }
+        other => panic!("expected session register ack, got {other:?}"),
+    }
+
+    let chat_request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello runtime echo over socket".to_string(),
+            intent_tick: Some(snapshot.time),
+            intent_seq: Some(35),
+        },
+        35,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    send_runtime_live_request(
+        &mut writer,
+        &ViewerRequest::AgentChat {
+            request: chat_request,
+        },
+    );
+
+    match read_runtime_live_response(&mut reader) {
+        ViewerResponse::AgentChatAck { ack } => {
+            assert_eq!(ack.agent_id, agent_id);
+            assert_eq!(ack.player_id.as_deref(), Some("player-a"));
+        }
+        other => panic!("expected agent chat ack, got {other:?}"),
+    }
+    let mut saw_echo_event = false;
+    loop {
+        match read_runtime_live_response(&mut reader) {
+            ViewerResponse::Event { event } => {
+                saw_echo_event |= matches!(
+                    &event.kind,
+                    crate::simulator::WorldEventKind::AgentSpoke {
+                        agent_id: event_agent_id,
+                        message,
+                        ..
+                    } if event_agent_id == &agent_id && message == "[qa-echo] hello runtime echo over socket"
+                );
+            }
+            ViewerResponse::AuthoritativeBatch { .. } => {
+                assert!(
+                    saw_echo_event,
+                    "expected qa echo event before authoritative batch flush"
+                );
+                break;
+            }
+            other => panic!("expected event stream or authoritative batch after chat ack, got {other:?}"),
+        }
+    }
+}
+
+#[test]
 fn openclaw_settings_from_env_defaults_to_none() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();

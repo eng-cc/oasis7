@@ -1,0 +1,24 @@
+task_uid: task_ce19184e957d4ab5a3027a95a6049d60
+title: "Add runtime_live socket test for chat echo immediate flush"
+owner_role: viewer_engineer
+worktree_hint: world-simulator-software-safe-chat-socket-flush-test
+execution_log_path: .pm/tasks/task_ce19184e957d4ab5a3027a95a6049d60.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7/src/viewer/runtime_live.rs
+  - crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs
+doc_refs:
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "runtime_live socket/protocol coverage proves agent_chat ack is followed by immediate event-stream flushing when OASIS7_RUNTIME_AGENT_CHAT_ECHO=1, and the qa-echo AgentSpoke arrives before the first AuthoritativeBatch."
+  - "test reuses runtime_live TCP contract instead of only inspecting pending_virtual_events, so regressions in response ordering or writer flushing are caught earlier."
+  - "project tracking and execution log capture the narrower follow-up coverage added after TASK-WORLD_SIMULATOR-291."
+handoff_to: []
+updated_at: 2026-04-03T12:26:27+08:00
+last_started_at: 2026-04-03T12:14:11+08:00
+last_closed_at: 2026-04-03T12:26:27+08:00

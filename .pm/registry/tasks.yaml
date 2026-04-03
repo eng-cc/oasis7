@@ -268,6 +268,7 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-03T11:33:08+08:00
+<<<<<<< HEAD
   - task_uid: task_86bdf7bdbfad437ead72d4f85db342a2
     owner_role: producer_system_designer
     task_path: .pm/tasks/task_86bdf7bdbfad437ead72d4f85db342a2.yaml
@@ -275,6 +276,8 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-03T11:50:24+08:00
+=======
+>>>>>>> c2d6b579 (Add runtime_live chat echo socket flush test)
   - task_uid: task_f8d15fcf0a864cd28badd4b372af2bf0
     owner_role: viewer_engineer
     task_path: .pm/tasks/task_f8d15fcf0a864cd28badd4b372af2bf0.yaml
@@ -282,13 +285,13 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-03T11:48:54+08:00
-  - task_uid: task_f5ff387007264254b4cafde421f34e10
-    owner_role: qa_engineer
-    task_path: .pm/tasks/task_f5ff387007264254b4cafde421f34e10.yaml
+  - task_uid: task_86bdf7bdbfad437ead72d4f85db342a2
+    owner_role: producer_system_designer
+    task_path: .pm/tasks/task_86bdf7bdbfad437ead72d4f85db342a2.yaml
     status: done
     priority: P2
     source_signal: null
-    updated_at: 2026-04-03T12:09:44+08:00
+    updated_at: 2026-04-03T11:50:24+08:00
   - task_uid: task_a6d0a5218ce642fcb33ba8aa0e5bbc67
     owner_role: liveops_community
     task_path: .pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.yaml
@@ -296,6 +299,13 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-03T11:51:52+08:00
+  - task_uid: task_f5ff387007264254b4cafde421f34e10
+    owner_role: qa_engineer
+    task_path: .pm/tasks/task_f5ff387007264254b4cafde421f34e10.yaml
+    status: done
+    priority: P2
+    source_signal: null
+    updated_at: 2026-04-03T12:09:44+08:00
   - task_uid: task_d205e719d6634bbfbf0be51944d4e7fb
     owner_role: liveops_community
     task_path: .pm/tasks/task_d205e719d6634bbfbf0be51944d4e7fb.yaml
@@ -303,6 +313,13 @@ tasks:
     priority: P2
     source_signal: null
     updated_at: 2026-04-03T12:11:19+08:00
+  - task_uid: task_ce19184e957d4ab5a3027a95a6049d60
+    owner_role: viewer_engineer
+    task_path: .pm/tasks/task_ce19184e957d4ab5a3027a95a6049d60.yaml
+    status: done
+    priority: P2
+    source_signal: null
+    updated_at: 2026-04-03T12:26:27+08:00
   - task_uid: task_cd0753c5c26c5caebf06f653bef1b435
     owner_role: liveops_community
     task_path: .pm/tasks/task_cd0753c5c26c5caebf06f653bef1b435.yaml
