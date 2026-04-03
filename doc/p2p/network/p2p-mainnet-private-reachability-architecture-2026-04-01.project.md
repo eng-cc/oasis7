@@ -17,6 +17,7 @@
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
   进行中第二个切片：在首个 peer-manager substrate 基础上，`oasis7_net` 现在开始把 `suspect` 与已验证的 hard-`blocked` 升级成 active-set quarantine enforcement。已连接 peer 一旦因 source diversity、subnet、relay-domain 或 relay budget 规则进入 quarantine，runtime 会主动断连，并在 `ConnectionClosed` / `OutgoingConnectionError` 路径抑制 failover / retry，避免 quarantined peer 立刻被本地 transport 状态机拉回；同轮 health 统计也会剔除未准入 active peer，避免瞬时污染其他健康 peer。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
+  已落首个 executable mixed-topology matrix slice：`scripts/p2p-mixed-topology-matrix.sh` 会把 `private/validator_hidden/relay_only` role boundary、bootstrap poisoning、relay-budget detection 与 path failover 收成 `required` exact cases，并把 triad/triad_distributed 的 disconnect/restart/release-chaos 收成 `full` proxy cases；matrix 明确输出 `summary.json/md` 与 per-case command/log 目录，并显式标注当前 `proxy` case 只是 sentry-loss / mixed-topology live recovery 的近似 drill，不等价于 dedicated sentry/NAT lab。`full` live evidence 仍待后续继续执行。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
 
 ## 当前结论
@@ -43,6 +44,7 @@
   - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer。
   - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
+  - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -144,6 +146,10 @@
 - 输出:
   - mixed-topology matrix
   - chaos / failover / relay exhaustion 证据模板
+- 本轮已交付:
+  - `scripts/p2p-mixed-topology-matrix.sh`：统一输出 `required` exact + `full` proxy 两档 matrix summary
+  - `scripts/p2p-mixed-topology-matrix-smoke.sh`：对 matrix case 装配与 summary 结构做快速 smoke
+  - `testing-manual.md` S9B：补 mixed-topology 推荐命令、通过标准、产物路径与 `proxy` 边界口径
 - 完成定义:
   - 家宽 / NAT / CGNAT / cloud mixed topology 均有 required/full 套件
 
@@ -175,5 +181,5 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 进入 `P2PARCH-5` 的 peer manager / anti-eclipse / diversity / relay budget substrate，并补 `P2PARCH-4` 的更高层 mixed-topology integration evidence；AutoNAT -> hole punch -> relay reservation 的 lifecycle 自动化继续压到后续 `P2PARCH-6` 套件。
-- 最近更新: 2026-04-02
+- 下一步: 继续执行 `P2PARCH-6` 的 full live evidence，并在 shared-network / release-train 收口前决定是否需要 dedicated sentry/NAT lab 来替换当前 proxy live drills。
+- 最近更新: 2026-04-03

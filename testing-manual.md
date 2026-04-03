@@ -485,6 +485,50 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `rollback_to_snapshot_with_reconciliation` 后 `first_tick_consensus_drift() == None`；
   - `verify_tick_consensus_chain()` 通过。
 - 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`。
+
+### S9B：P2P Mixed-Topology Matrix（P2PARCH-6）
+- 当前状态（2026-04-03）：`scripts/p2p-mixed-topology-matrix.sh` 已把 `P2PARCH-6` 收口成一个可执行矩阵，区分 `exact` 与 `proxy` 两类覆盖。
+- 目标语义：
+  - `exact`：直接运行当前仓库已经存在的 deterministic cargo tests，验证 private/validator_hidden/relay_only 边界、bootstrap poisoning、relay exhaustion 和 path failover。
+  - `proxy`：运行当前可用的 triad/triad_distributed longrun 命令，给 mixed-topology recovery 留下可执行 full-tier drill；它不等价于 dedicated sentry/NAT lab。
+- 建议命令（required）：
+```bash
+./scripts/p2p-mixed-topology-matrix.sh --tier required
+```
+- 建议命令（full plan / 预览）：
+```bash
+./scripts/p2p-mixed-topology-matrix.sh --tier full --dry-run
+```
+- 建议命令（full 执行）：
+```bash
+./scripts/p2p-mixed-topology-matrix.sh --tier full
+```
+- 脚本 smoke：
+```bash
+./scripts/p2p-mixed-topology-matrix-smoke.sh
+```
+- 通过标准：
+  - live 执行时 `summary.json.overall_status == "ok"` 且 `totals.failed_count == 0`；
+  - `required` 档位下所有 case 必须为 `coverage=exact`；
+  - `full` 档位必须额外包含 `coverage=proxy` 的 longrun case，并在 evidence 中明确它们是 sentry-loss / mixed-topology live recovery 的当前代理，而不是 dedicated sentry/NAT lab 真值；
+  - 产物目录下必须同时有 `summary.json`、`summary.md`、`cases/<case_id>/command.txt`，live 执行还必须留下 `stdout.log/stderr.log`。
+- 当前 exact case 入口：
+  - `nat_private_role_policy`
+  - `validator_hidden_boundary`
+  - `relay_only_lane_budget`
+  - `cgnat_relay_path_ranking`
+  - `bootstrap_poisoning_dedupe`
+  - `relay_budget_detection`
+  - `path_failover_selection`
+- 当前 proxy case 入口：
+  - `sentry_loss_proxy_longrun`
+  - `mixed_topology_release_proxy`
+- 产物路径：
+  - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/summary.json`
+  - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/summary.md`
+  - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/cases/<case_id>/`
+- 边界说明：
+  - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
 - 反作弊/反女巫证据链门禁（TASK-GAME-015）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::governance::governance_identity_penalty_ -- --nocapture

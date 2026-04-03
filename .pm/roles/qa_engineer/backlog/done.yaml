@@ -1,4 +1,15 @@
 version: 1
 role: qa_engineer
 status: done
-tasks: []
+tasks:
+  - task_uid: task_f5ff387007264254b4cafde421f34e10
+    title: "Implement P2PARCH-6 mixed-topology validation matrix"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "P2PARCH-6 defines executable required/full mixed-topology validation covering NAT/CGNAT relay exhaustion sentry loss bootstrap poisoning and path failover, with docs and evidence entrypoints updated"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_f5ff387007264254b4cafde421f34e10.yaml
