@@ -1,0 +1,36 @@
+version: 1
+task_uid: task_a6d0a5218ce642fcb33ba8aa0e5bbc67
+role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-offer-choice-post
+source_session_id: manual
+source_thread_name: "xiaohongshu-offer-choice-post-pack"
+transcript_source: manual_summary
+last_extracted_ts: 2026-04-03T11:55:30+08:00
+captured_until_ts: 2026-04-03T11:55:30+08:00
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "第十篇小红书素材包不把 `AI岗 vs 大厂后端` 写成输赢帖，而是收口为“对应届生先拿平台、训练体系、带教和工程基本功”的优先级判断。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
+      - ".pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.execution.md"
+    captured_at: 2026-04-03T11:55:30+08:00
+    expires_at: 2026-04-05T11:55:30+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: attempt
+    summary: "`./scripts/pm/codex-working-memory.sh --task-uid task_a6d0a5218ce642fcb33ba8aa0e5bbc67 --role liveops_community` 失败，原因是当前 worktree 名称没有匹配到可提取的 Codex session，因此本任务改为手工补最小 working_memory。"
+    source_refs:
+      - ".pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.execution.md"
+    captured_at: 2026-04-03T11:55:30+08:00
+    expires_at: 2026-04-05T11:55:30+08:00
+    promoted_to: []
+  - entry_id: WM-0003
+    entry_kind: next_step
+    summary: "若后续把这篇扩成封面图或轮播版，应单独新开 `viewer_engineer` 任务，避免把文案收口和视觉资产制作混进同一 task。"
+    source_refs:
+      - "doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md"
+      - ".pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.execution.md"
+    captured_at: 2026-04-03T11:55:30+08:00
+    expires_at: 2026-04-05T11:55:30+08:00
+    promoted_to: []

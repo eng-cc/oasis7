@@ -38,3 +38,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_49617bcff6985802b74d61cb4c12d59f.yaml
+  - task_uid: task_a6d0a5218ce642fcb33ba8aa0e5bbc67
+    title: "Freeze Xiaohongshu offer-choice post pack for offer anxiety topic"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "The tenth Xiaohongshu post pack freezes title, body, short-form copy, interaction prompt, keywords, and boundary notes for the offer-choice topic."
+      - "readme module tracking and Xiaohongshu channel entry docs trace the new post pack without drifting into job-listing or release claims."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_a6d0a5218ce642fcb33ba8aa0e5bbc67.yaml

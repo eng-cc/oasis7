@@ -82,6 +82,7 @@
 - PRD-README-032: As a `liveops_community`, I want a reusable Xiaohongshu anti-demo-hype post pack from the game-maker perspective, so that we can借“AI demo 很猛”这类高频讨论，讲清楚我为什么越来越看重稳定、收口和能不能真的放进项目，而不是只被第一眼高光打动。
 - PRD-README-033: As a `liveops_community`, I want a reusable Xiaohongshu demo-skepticism carousel pack derived from the approved eighth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “先停住”“demo vs project”“我会先问什么” and the final comment hook, instead of only one industrial cover plus long caption.
 - PRD-README-034: As a `liveops_community`, I want a reusable Xiaohongshu GUI-retreat post pack from the game-maker perspective, so that we can borrow the current `GUI已死` discussion heat to explain why `oasis7` no longer treats GUI as the primary interaction layer, without sliding into generic industry prophecy, front-end job panic, or unsafe “full automation” claims.
+- PRD-README-035: As a `liveops_community`, I want a reusable Xiaohongshu offer-choice post pack from the mentor / project-owner perspective, so that we can borrow the current `offer 焦虑` discussion heat to explain why fresh graduates in engineering often should prioritize platform, training, mentorship, and engineering fundamentals over a岗位名看起来更像风口的第一份工作, without drifting into anti-AI absolutism, generic career coaching, or recruiting claims.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -141,6 +142,7 @@
 - AC-20: 若第八篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要明显区别于前几篇的暖纸面判断卡，更接近“项目审查板 / build review wall”，并保持“先问它能撑多久”的主判断不被装饰稀释。
 - AC-21: 若第八篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用第八篇的工业审查板 / build review wall 视觉语言，不回退到前几篇的暖纸便签风。
 - AC-22: 若小红书内容链路进入第九篇，必须补齐“GUI已死？这次我是认同的”素材包，明确标题、正文、互动问题、关键词与“死掉的不是屏幕，而是 GUI 作为主执行入口”边界，并保持人类开发者第一人称、非上线口径与“玩家负责判断、系统负责执行”的项目收束。
+- AC-23: 若小红书内容链路进入第十篇，必须补齐“AI岗和大厂后端怎么选”素材包，明确标题、正文、短版备选、互动问题、关键词与“对应届生先拿平台 / 训练体系 / 工程基本功，不是否定 AI 趋势”的表达边界，并保持人类开发者第一人称、非招聘口径与非绝对化择业建议。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
   - 不在 readme PRD 中替代各模块详细设计。
@@ -226,6 +228,7 @@
 | PRD-README-032 | TASK-README-050/051 | `test_tier_required` | 小红书第八篇素材包明确“做AI游戏以后，我越来越不信demo了”的标题、正文、短版文案、互动问题、关键词与封面 HTML/PNG，并保持“demo 高光不等于项目能扛住”的边界 | 渠道内容从“AI人格/陪聊”继续推进到“我怎么判断 AI 游戏里什么能信”，把讨论收口到真实项目判断与长期可玩性 |
 | PRD-README-033 | TASK-README-052 | `test_tier_required` | 小红书第八篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用“项目审查板 / build review wall”视觉语言收口成更适合 feed 滑读的发布形态 | 第八篇从工业感单图封面 + 长文版扩展到更适合小红书停留和评论站队的轮播版，同时保持“先问它能撑多久”的判断主线 |
 | PRD-README-034 | TASK-README-053 | `test_tier_required` | 小红书第九篇素材包明确“GUI已死？这次我是认同的”的标题、正文、互动问题、关键词与“GUI 退到二线 / 判断权高于操作权”的表达边界 | 渠道内容从“demo 祛魅”继续推进到“在 `oasis7` 这类游戏里为什么 GUI 不再是主交互层”，把讨论收口到玩家位置、判断权与系统执行分工 |
+| PRD-README-035 | TASK-README-055 | `test_tier_required` | 小红书第十篇素材包明确“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“对应届生先拿平台 / 训练体系 / 工程基本功，不是否定 AI 趋势”的表达边界 | 渠道内容从春招焦虑继续推进到第一份工作该优先拿什么能力，把讨论收口到工程训练结构、平台价值与趋势判断的先后顺序 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -260,3 +263,4 @@
 | DEC-RM-029 | 第七篇采用“AI人格热词 + 不做陪聊搭子”的立场切入，而不是顺着热点泛聊情感陪伴或做 AI 产品点评 | 直接做“AI人格是什么”的抽象讨论，或把帖子写成陪伴型 AI 产品比较/安利 | `AI人格` 的平台热度足够高，但账号主线仍是游戏与 agent 设计判断；先用强立场把注意力拉住，再迅速收回“放进世界后会不会行动与承担后果”，更符合 `oasis7` 现有内容链。 |
 | DEC-RM-030 | 第七篇轮播版采用“4 页分割判断卡”而非继续只发单图封面或把长文整段截图切成多页 | 维持仅有封面图+长文；或直接把长文逐段截成 4-6 页纯文字卡 | 这一篇最强的传播点在“会聊天 vs 会行动”的对照。把它压成 4 页，每页只停在一个判断，更利于 feed 内读完率和评论区站队。 |
 | DEC-RM-031 | 第九篇采用“GUI 作为主交互层退场”而不是泛喊“屏幕消失 / UI 行业已死” | 顺着热点做行业预言、岗位焦虑或全自动论战 | 小红书站内 `GUI已死` 讨论已经很挤，真正适合 `oasis7` 的切口不是预测所有软件怎么变，而是讲这款游戏为什么把玩家从操作员抬成判断者。 |
+| DEC-RM-032 | 第十篇采用“应届生第一份 offer 的优先级排序”而不是泛做 `AI岗 vs 非AI岗` 输赢帖 | 直接写成“千万别去 AI”或“必须去风口”的绝对站队；或做泛职业咨询帖 | `offer 焦虑` 的站内热度足够高，但账号主线仍应保持为做项目的人对训练结构、工程成长和趋势判断的真实经验；把重点放在“先拿能把人带起来的系统”，比单纯站队岗位名更稳，也更符合用户真实困惑。 |

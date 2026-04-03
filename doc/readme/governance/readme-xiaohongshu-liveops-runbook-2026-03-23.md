@@ -20,6 +20,7 @@
   - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md`
   - `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md`
   - `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md`
+  - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在小红书进入“持续发帖与持续看反馈”阶段后的日常运营。
