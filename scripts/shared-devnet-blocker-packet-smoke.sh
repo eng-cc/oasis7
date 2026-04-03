@@ -32,6 +32,9 @@ printf '# oncall\n' >"$smoke_root/evidence/oncall.md"
 printf '# operator handoff\n' >"$smoke_root/evidence/operator.md"
 printf '# restore\n' >"$smoke_root/evidence/restore.md"
 printf '# screenshot\n' >"$smoke_root/evidence/screenshot.md"
+printf '# mixed topology baseline\n' >"$smoke_root/evidence/mixed-topology-baseline.md"
+printf '# mixed topology shared window\n' >"$smoke_root/evidence/mixed-topology-shared.md"
+printf '# proxy drill\n' >"$smoke_root/evidence/mixed-topology-proxy.md"
 
 current_bundle="$smoke_root/current.json"
 fallback_bundle="$smoke_root/fallback.json"
@@ -55,18 +58,23 @@ run ./scripts/release-candidate-bundle.sh create \
   --allow-dirty-worktree
 
 access_out="$smoke_root/shared-access.md"
+mixed_topology_out="$smoke_root/mixed-topology.md"
 rollback_out="$smoke_root/rollback-target.md"
 run ./scripts/shared-devnet-blocker-packet.sh \
   --window-id shared-devnet-20260324-06 \
   --candidate-bundle "$current_bundle" \
   --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
   --access-out "$access_out" \
+  --mixed-topology-out "$mixed_topology_out" \
   --rollback-out "$rollback_out" \
   --viewer-url "https://shared.example.invalid/viewer" \
   --live-addr "shared.example.invalid:443" \
   --operator-contact-ref "$smoke_root/evidence/operator.md" \
   --independent-operator-ref "$smoke_root/evidence/oncall.md" \
   --access-evidence-ref "$smoke_root/evidence/screenshot.md" \
+  --mixed-topology-baseline-ref "$smoke_root/evidence/mixed-topology-baseline.md" \
+  --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology-shared.md" \
+  --mixed-topology-proxy-ref "$smoke_root/evidence/mixed-topology-proxy.md" \
   --fallback-candidate-bundle "$fallback_bundle" \
   --fallback-gate-summary "$smoke_root/evidence/fallback-gate.md" \
   --fallback-owner-ref "$smoke_root/evidence/oncall.md" \
@@ -74,6 +82,8 @@ run ./scripts/shared-devnet-blocker-packet.sh \
 
 ensure_file_contains "$access_out" 'shared-devnet-current-01'
 ensure_file_contains "$access_out" 'https://shared.example.invalid/viewer'
+ensure_file_contains "$mixed_topology_out" 'mixed-topology-baseline.md'
+ensure_file_contains "$mixed_topology_out" 'mixed-topology-shared.md'
 ensure_file_contains "$rollback_out" 'shared-devnet-fallback-01'
 ensure_file_contains "$rollback_out" 'fallback-gate.md'
 

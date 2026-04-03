@@ -68,6 +68,7 @@
   - `shared-network-track-gate` 为 `pass` 才可申请进入 `staging`
   - 若 shared access 退化成单 owner 私有访问，最多只能记 `partial`
   - 若 mixed-topology 仍只有 baseline / proxy 近似，没有 same-window shared 结论，最多只能记 `partial`
+  - 可先用 `shared-devnet-blocker-packet` 生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 三份 draft，再等待真实窗口证据填充
 
 ### 4.2 `staging`
 - 目标：
@@ -130,6 +131,7 @@
 - `doc/testing/templates/shared-network-incident-template.md`
 - `doc/testing/templates/shared-network-incident-review-template.md`
 - `doc/testing/templates/shared-network-exit-decision-template.md`
+- `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
 - `doc/testing/templates/shared-network-shared-access-check-template.md`
 - `doc/testing/templates/shared-network-rollback-target-template.md`
 

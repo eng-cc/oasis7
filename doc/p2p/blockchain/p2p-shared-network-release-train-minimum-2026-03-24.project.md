@@ -70,6 +70,7 @@
 - `scripts/shared-devnet-rehearsal-smoke.sh`
 - `scripts/shared-devnet-blocker-packet.sh`
 - `scripts/shared-devnet-blocker-packet-smoke.sh`
+- `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
 - `doc/testing/templates/shared-network-shared-access-check-template.md`
 - `doc/testing/templates/shared-network-rollback-target-template.md`
 - `doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md`
@@ -96,7 +97,7 @@
   - `shared_devnet` 仍未到 `pass`
   - 剩余 blocker 已收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
   - `P2PARCH-6` matrix baseline 已成为 shared-network required lane，但它当前只足以阻止 claims 越界，不等价于 shared-window `pass`
-  - 对应 draft evidence 已生成，等待真实 shared operator / fallback candidate 真值填充
+  - `shared_access / rollback_target_ready` draft 已生成；`mixed_topology_baseline` draft scaffold 可通过 `shared-devnet-blocker-packet` 生成，仍等待 same-window 真实证据填充
   - 没有正式 `staging/canary`
 
 ## 依赖

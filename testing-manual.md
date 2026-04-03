@@ -645,6 +645,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
   --candidate-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
   --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md \
+  --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md \
   --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-target-draft-2026-03-24.md
 ./scripts/shared-devnet-blocker-packet-smoke.sh
 ./scripts/release-candidate-bundle-smoke.sh
@@ -666,8 +667,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 统一生成 `multi-entry-summary`、mixed-topology gate note、lane scaffold、`lanes.shared_devnet.tsv` 与 gate 输出
   - 未提供 shared access / rollback / governance / short-window / same-window mixed-topology 新证据时，默认保持保守 `partial`，避免误判为已 `pass`
 - 当前 `shared-devnet-blocker-packet` 最小职责：
-  - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `rollback_target_ready` 的实例草稿
-  - 固定最后两条 blocker 的留证字段，避免后续 shared operator / fallback candidate 输入到位后还要手工重写结构
+  - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 的实例草稿
+  - 固定三条 blocker 的留证字段，避免后续 shared operator / fallback candidate / same-window mixed-topology 输入到位后还要手工重写结构
 - 当前 QA gate 最小职责：
   - 按 `shared_devnet / staging / canary` 校验 required lanes 是否齐全
   - `shared_devnet` 必须包含 `candidate_bundle_integrity / shared_access / multi_entry_closure / mixed_topology_baseline / governance_live_drill / short_window_longrun / rollback_target_ready`
@@ -688,6 +689,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `doc/testing/templates/shared-network-incident-template.md`
   - `doc/testing/templates/shared-network-incident-review-template.md`
   - `doc/testing/templates/shared-network-exit-decision-template.md`
+  - `doc/testing/templates/shared-network-mixed-topology-gate-template.md`
   - `doc/testing/templates/shared-network-shared-access-check-template.md`
   - `doc/testing/templates/shared-network-rollback-target-template.md`
 - 当前 liveops 最小职责：

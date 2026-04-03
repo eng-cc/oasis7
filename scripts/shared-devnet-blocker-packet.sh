@@ -12,13 +12,16 @@ Usage:
     --candidate-bundle <bundle.json> \
     --candidate-gate-summary <summary.md> \
     --access-out <path> \
+    --mixed-topology-out <path> \
     --rollback-out <path> \
     [shared access flags...] \
+    [mixed-topology flags...] \
     [rollback flags...]
 
 Purpose:
-  Generate concrete markdown drafts for the last two shared-devnet blockers:
+  Generate concrete markdown drafts for the current shared-devnet blockers:
   - shared access evidence
+  - mixed-topology baseline evidence
   - rollback target evidence
 
 Shared access flags:
@@ -31,6 +34,15 @@ Shared access flags:
   --access-evidence-ref <ref>         Repeatable
   --access-lane-result <pass|partial|block>
   --access-reason <text>
+
+Mixed-topology flags:
+  --mixed-topology-baseline-ref <ref>
+  --mixed-topology-shared-evidence-ref <ref>   Repeatable
+  --mixed-topology-proxy-ref <ref>             Repeatable
+  --mixed-topology-validated-by <text>
+  --mixed-topology-validated-at <text>
+  --mixed-topology-lane-result <pass|partial|block>
+  --mixed-topology-reason <text>
 
 Rollback flags:
   --fallback-candidate-bundle <bundle.json>
@@ -49,11 +61,13 @@ Examples:
     --candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
     --candidate-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
     --access-out doc/testing/evidence/shared-network-shared-devnet-shared-access-draft-2026-03-24.md \
+    --mixed-topology-out doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md \
     --rollback-out doc/testing/evidence/shared-network-shared-devnet-rollback-target-draft-2026-03-24.md \
     --viewer-url https://example.invalid/viewer \
     --live-addr devnet.example.invalid:443 \
     --operator-contact-ref doc/ops/handoff.md \
     --independent-operator-ref doc/ops/oncall.md \
+    --mixed-topology-baseline-ref doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md \
     --fallback-candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
     --fallback-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
     --fallback-owner-ref doc/testing/evidence/shared-network-shared-devnet-short-window-promotion-record-2026-03-24.md
@@ -130,6 +144,7 @@ window_id=""
 candidate_bundle=""
 candidate_gate_summary=""
 access_out=""
+mixed_topology_out=""
 rollback_out=""
 viewer_url=""
 live_addr=""
@@ -137,6 +152,11 @@ access_validated_by="<qa operator / runtime operator>"
 access_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
 access_lane_result="partial"
 access_reason="shared access input is still draft; convert to pass only after independent operator access is verified"
+mixed_topology_baseline_ref="doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md"
+mixed_topology_validated_by="<qa owner / runtime owner>"
+mixed_topology_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
+mixed_topology_lane_result="partial"
+mixed_topology_reason="P2PARCH-6 matrix baseline is pinned, but same-window shared mixed-topology evidence is still missing or only proxy-level"
 fallback_candidate_bundle=""
 fallback_gate_summary=""
 fallback_owner_ref=""
@@ -148,6 +168,8 @@ rollback_reason="formal previous shared-devnet pass fallback is not pinned yet"
 declare -a operator_contact_refs=()
 declare -a independent_operator_refs=()
 declare -a access_evidence_refs=()
+declare -a mixed_topology_shared_evidence_refs=()
+declare -a mixed_topology_proxy_refs=()
 declare -a restore_steps_refs=()
 
 while [[ $# -gt 0 ]]; do
@@ -166,6 +188,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --access-out)
       access_out=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-out)
+      mixed_topology_out=${2:-}
       shift 2
       ;;
     --rollback-out)
@@ -206,6 +232,34 @@ while [[ $# -gt 0 ]]; do
       ;;
     --access-reason)
       access_reason=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-baseline-ref)
+      mixed_topology_baseline_ref=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-shared-evidence-ref)
+      mixed_topology_shared_evidence_refs+=("${2:-}")
+      shift 2
+      ;;
+    --mixed-topology-proxy-ref)
+      mixed_topology_proxy_refs+=("${2:-}")
+      shift 2
+      ;;
+    --mixed-topology-validated-by)
+      mixed_topology_validated_by=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-validated-at)
+      mixed_topology_validated_at=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-lane-result)
+      mixed_topology_lane_result=${2:-}
+      shift 2
+      ;;
+    --mixed-topology-reason)
+      mixed_topology_reason=${2:-}
       shift 2
       ;;
     --fallback-candidate-bundle)
@@ -260,11 +314,16 @@ require_non_empty "--window-id" "$window_id"
 require_non_empty "--candidate-bundle" "$candidate_bundle"
 require_non_empty "--candidate-gate-summary" "$candidate_gate_summary"
 require_non_empty "--access-out" "$access_out"
+require_non_empty "--mixed-topology-out" "$mixed_topology_out"
 require_non_empty "--rollback-out" "$rollback_out"
 require_file "--candidate-bundle" "$candidate_bundle"
 require_file "--candidate-gate-summary" "$candidate_gate_summary"
 ensure_lane_result "--access-lane-result" "$access_lane_result"
+ensure_lane_result "--mixed-topology-lane-result" "$mixed_topology_lane_result"
 ensure_lane_result "--rollback-lane-result" "$rollback_lane_result"
+if [[ -n "$mixed_topology_baseline_ref" ]]; then
+  require_file "--mixed-topology-baseline-ref" "$mixed_topology_baseline_ref"
+fi
 
 ./scripts/release-candidate-bundle.sh validate --bundle "$candidate_bundle" >/dev/null
 candidate_id=$(bundle_field "$candidate_bundle" "candidate_id")
@@ -279,7 +338,7 @@ if [[ -n "$fallback_gate_summary" ]]; then
   require_file "--fallback-gate-summary" "$fallback_gate_summary"
 fi
 
-mkdir -p "$(dirname "$access_out")" "$(dirname "$rollback_out")"
+mkdir -p "$(dirname "$access_out")" "$(dirname "$mixed_topology_out")" "$(dirname "$rollback_out")"
 
 cat >"$access_out" <<EOF
 # Shared Network Shared Access Check
@@ -342,6 +401,61 @@ cat >>"$access_out" <<EOF
 - \`block\` if endpoint is unreachable, candidate truth mismatches, or owner handoff is missing.
 EOF
 
+cat >"$mixed_topology_out" <<EOF
+# Shared Network Mixed-Topology Gate Check
+
+审计轮次: 1
+
+## Meta
+- \`window_id\`:
+  - \`$window_id\`
+- \`track\`:
+  - \`shared_devnet\`
+- \`candidate_id\`:
+  - \`$candidate_id\`
+- \`owner\`:
+  - \`qa_engineer\`
+
+## Candidate Truth
+- \`candidate_bundle_ref\`:
+  - \`$candidate_bundle\`
+- \`candidate_gate_summary_ref\`:
+  - \`$candidate_gate_summary\`
+
+## Mixed-Topology Inputs
+- \`baseline_evidence_ref\`:
+  - \`${mixed_topology_baseline_ref:-<doc/testing/evidence/p2p-mixed-topology-validation-matrix-YYYY-MM-DD.md>}\`
+- \`same_window_shared_evidence_ref\`:
+EOF
+write_ref_block "$mixed_topology_out" "${mixed_topology_shared_evidence_refs[@]}"
+cat >>"$mixed_topology_out" <<EOF
+- \`proxy_drill_ref\`:
+EOF
+write_ref_block "$mixed_topology_out" "${mixed_topology_proxy_refs[@]}"
+cat >>"$mixed_topology_out" <<EOF
+
+## Validation
+- \`validated_by\`:
+  - \`$mixed_topology_validated_by\`
+- \`validated_at\`:
+  - \`$mixed_topology_validated_at\`
+- \`validation_expectations\`:
+  - \`baseline candidate_id and role boundary still match current shared-devnet bundle truth\`
+  - \`same-window mixed-topology evidence is explicitly linked when claiming pass\`
+  - \`proxy drill evidence is called out as approximation, not dedicated sentry/NAT lab truth\`
+
+## Verdict
+- \`lane_result\`:
+  - \`$mixed_topology_lane_result\`
+- \`reason\`:
+  - $mixed_topology_reason
+
+## Notes
+- \`pass\` only if same-window shared mixed-topology evidence is pinned and reviewed against the current candidate truth.
+- \`partial\` if only the P2PARCH-6 baseline or proxy drill evidence is available.
+- \`block\` if there is no credible mixed-topology basis for the current candidate or the evidence contradicts the gate claim.
+EOF
+
 cat >"$rollback_out" <<EOF
 # Shared Network Rollback Target
 
@@ -400,4 +514,5 @@ cat >>"$rollback_out" <<EOF
 EOF
 
 echo "shared access draft: $access_out"
+echo "mixed-topology draft: $mixed_topology_out"
 echo "rollback target draft: $rollback_out"

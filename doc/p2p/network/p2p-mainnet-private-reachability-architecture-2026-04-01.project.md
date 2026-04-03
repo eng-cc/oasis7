@@ -20,6 +20,7 @@
   已落首个 executable mixed-topology matrix slice：`scripts/p2p-mixed-topology-matrix.sh` 会把 `private/validator_hidden/relay_only` role boundary、bootstrap poisoning、relay-budget detection 与 path failover 收成 `required` exact cases，并把 triad/triad_distributed 的 disconnect/restart/release-chaos 收成 `full` proxy cases；matrix 明确输出 `summary.json/md` 与 per-case command/log 目录，并显式标注当前 `proxy` case 只是 sentry-loss / mixed-topology live recovery 的近似 drill，不等价于 dedicated sentry/NAT lab。`full` live evidence 仍待后续继续执行。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
   已把 mixed-topology lane 升级为 shared-network required gate：`shared-network-track-gate.sh` 现在要求 `shared_devnet/mixed_topology_baseline`、`staging/mixed_topology_rehearsal`、`canary/mixed_topology_claim_review` 三条显式 lane；`shared-devnet-rehearsal.sh` 也会自动生成 mixed-topology gate note，并默认把仅有 `P2PARCH-6` matrix baseline 的窗口保持在 `partial`。
+  当前补到 shared-window draft scaffold：`shared-devnet-blocker-packet.sh` 现在可一并生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份草稿，方便后续把 same-window mixed-topology 证据回填到 shared-devnet gate，而不冒充已 `pass`。
 
 ## 当前结论
 - 当前阶段:
