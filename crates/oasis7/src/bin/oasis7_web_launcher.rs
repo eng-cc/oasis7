@@ -59,6 +59,7 @@ const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
+const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
@@ -99,6 +100,8 @@ struct LauncherConfig {
     chain_storage_profile: String,
     chain_world_id: String,
     chain_node_role: String,
+    chain_p2p_user_mode: String,
+    chain_p2p_accept_public_entry: bool,
     chain_node_tick_ms: String,
     chain_pos_slot_duration_ms: String,
     chain_pos_ticks_per_slot: String,
@@ -131,6 +134,8 @@ impl Default for LauncherConfig {
             chain_storage_profile: StorageProfile::DevLocal.as_str().to_string(),
             chain_world_id: String::new(),
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
+            chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
+            chain_p2p_accept_public_entry: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
@@ -483,6 +488,8 @@ Options:\n\
   --chain-storage-profile <name>  dev_local|release_default|soak_forensics\n\
   --chain-world-id <id>\n\
   --chain-node-role <role>        sequencer|storage|observer\n\
+  --chain-p2p-user-mode <mode>    auto_join|private_safe|public_entry\n\
+  --chain-p2p-accept-public-entry / --chain-p2p-reject-public-entry\n\
   --chain-node-tick-ms <ms>       worker poll/fallback interval ms\n\
   --chain-pos-slot-duration-ms <n>\n\
   --chain-pos-ticks-per-slot <n>\n\
@@ -589,6 +596,16 @@ where
                 options.initial_config.chain_node_role =
                     next_value(&mut iter, "--chain-node-role")?;
             }
+            "--chain-p2p-user-mode" => {
+                options.initial_config.chain_p2p_user_mode =
+                    next_value(&mut iter, "--chain-p2p-user-mode")?;
+            }
+            "--chain-p2p-accept-public-entry" => {
+                options.initial_config.chain_p2p_accept_public_entry = true;
+            }
+            "--chain-p2p-reject-public-entry" => {
+                options.initial_config.chain_p2p_accept_public_entry = false;
+            }
             "--chain-node-tick-ms" => {
                 options.initial_config.chain_node_tick_ms =
                     next_value(&mut iter, "--chain-node-tick-ms")?;
@@ -662,6 +679,7 @@ where
             .chain_storage_profile
             .parse::<StorageProfile>()?;
         parse_chain_role(options.initial_config.chain_node_role.as_str())?;
+        parse_chain_p2p_user_mode(options.initial_config.chain_p2p_user_mode.as_str())?;
         parse_positive_u64(
             options.initial_config.chain_node_tick_ms.as_str(),
             "--chain-node-tick-ms",
@@ -711,6 +729,17 @@ where
     }
 
     Ok(options)
+}
+
+fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "auto_join" | "private_safe" | "public_entry" => Ok(normalized),
+        _ => Err(
+            "--chain-p2p-user-mode must be one of: auto_join, private_safe, public_entry"
+                .to_string(),
+        ),
+    }
 }
 
 fn deployment_mode_from_config(config: &LauncherConfig) -> DeploymentMode {

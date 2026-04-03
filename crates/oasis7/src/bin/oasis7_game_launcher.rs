@@ -65,6 +65,7 @@ const DEFAULT_VIEWER_PLAYER_ID: &str = "viewer-player";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
+const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
@@ -119,6 +120,8 @@ struct CliOptions {
     chain_storage_profile: StorageProfile,
     chain_world_id: Option<String>,
     chain_node_role: String,
+    chain_p2p_user_mode: String,
+    chain_p2p_accept_public_entry: bool,
     chain_node_tick_ms: u64,
     chain_pos_slot_duration_ms: u64,
     chain_pos_ticks_per_slot: u64,
@@ -153,6 +156,8 @@ impl Default for CliOptions {
             chain_storage_profile: StorageProfile::DevLocal,
             chain_world_id: None,
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
+            chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
+            chain_p2p_accept_public_entry: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS,
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT,
@@ -363,32 +368,6 @@ fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, 
 fn spawn_oasis7_chain_runtime(path: &Path, options: &CliOptions) -> Result<Child, String> {
     let mut command = Command::new(path);
     command.args(build_oasis7_chain_runtime_args(options));
-    command
-        .arg("--node-role")
-        .arg(options.chain_node_role.as_str())
-        .arg("--node-tick-ms")
-        .arg(options.chain_node_tick_ms.to_string())
-        .arg("--pos-slot-duration-ms")
-        .arg(options.chain_pos_slot_duration_ms.to_string())
-        .arg("--pos-ticks-per-slot")
-        .arg(options.chain_pos_ticks_per_slot.to_string())
-        .arg("--pos-proposal-tick-phase")
-        .arg(options.chain_pos_proposal_tick_phase.to_string())
-        .arg("--pos-max-past-slot-lag")
-        .arg(options.chain_pos_max_past_slot_lag.to_string())
-        .arg(if options.chain_pos_adaptive_tick_scheduler_enabled {
-            "--pos-adaptive-tick-scheduler"
-        } else {
-            "--pos-no-adaptive-tick-scheduler"
-        });
-    if let Some(genesis) = options.chain_pos_slot_clock_genesis_unix_ms {
-        command
-            .arg("--pos-slot-clock-genesis-unix-ms")
-            .arg(genesis.to_string());
-    }
-    for validator in &options.chain_node_validators {
-        command.arg("--node-validator").arg(validator.as_str());
-    }
     command.spawn().map_err(|err| {
         format!(
             "failed to start oasis7_chain_runtime from `{}`: {err}",
@@ -415,7 +394,7 @@ fn chain_execution_world_dir(node_id: &str) -> String {
 
 fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
     let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
-    vec![
+    let mut args = vec![
         "--node-id".to_string(),
         options.chain_node_id.clone(),
         "--world-id".to_string(),
@@ -426,7 +405,40 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         options.chain_storage_profile.as_str().to_string(),
         "--execution-world-dir".to_string(),
         execution_world_dir,
-    ]
+        "--node-role".to_string(),
+        options.chain_node_role.clone(),
+        "--p2p-user-mode".to_string(),
+        options.chain_p2p_user_mode.clone(),
+        "--node-tick-ms".to_string(),
+        options.chain_node_tick_ms.to_string(),
+        "--pos-slot-duration-ms".to_string(),
+        options.chain_pos_slot_duration_ms.to_string(),
+        "--pos-ticks-per-slot".to_string(),
+        options.chain_pos_ticks_per_slot.to_string(),
+        "--pos-proposal-tick-phase".to_string(),
+        options.chain_pos_proposal_tick_phase.to_string(),
+        if options.chain_pos_adaptive_tick_scheduler_enabled {
+            "--pos-adaptive-tick-scheduler".to_string()
+        } else {
+            "--pos-no-adaptive-tick-scheduler".to_string()
+        },
+        "--pos-max-past-slot-lag".to_string(),
+        options.chain_pos_max_past_slot_lag.to_string(),
+    ];
+    args.push(if options.chain_p2p_accept_public_entry {
+        "--p2p-accept-public-entry".to_string()
+    } else {
+        "--p2p-reject-public-entry".to_string()
+    });
+    if let Some(genesis) = options.chain_pos_slot_clock_genesis_unix_ms {
+        args.push("--pos-slot-clock-genesis-unix-ms".to_string());
+        args.push(genesis.to_string());
+    }
+    for validator in &options.chain_node_validators {
+        args.push("--node-validator".to_string());
+        args.push(validator.clone());
+    }
+    args
 }
 
 fn start_static_http_server(
@@ -893,6 +905,16 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 let raw = parse_required_value(&mut iter, "--chain-node-role")?;
                 options.chain_node_role = parse_chain_node_role(raw.as_str())?;
             }
+            "--chain-p2p-user-mode" => {
+                let raw = parse_required_value(&mut iter, "--chain-p2p-user-mode")?;
+                options.chain_p2p_user_mode = parse_chain_p2p_user_mode(raw.as_str())?;
+            }
+            "--chain-p2p-accept-public-entry" => {
+                options.chain_p2p_accept_public_entry = true;
+            }
+            "--chain-p2p-reject-public-entry" => {
+                options.chain_p2p_accept_public_entry = false;
+            }
             "--chain-node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--chain-node-tick-ms")?;
                 options.chain_node_tick_ms = raw.parse::<u64>().map_err(|_| {
@@ -984,6 +1006,7 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             return Err("--chain-node-id requires a non-empty value".to_string());
         }
         parse_chain_node_role(options.chain_node_role.as_str())?;
+        parse_chain_p2p_user_mode(options.chain_p2p_user_mode.as_str())?;
         if options.chain_node_tick_ms == 0 {
             return Err("--chain-node-tick-ms must be a positive integer".to_string());
         }
@@ -1076,6 +1099,17 @@ fn parse_chain_node_role(raw: &str) -> Result<String, String> {
     }
 }
 
+fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "auto_join" | "private_safe" | "public_entry" => Ok(normalized),
+        _ => Err(
+            "--chain-p2p-user-mode must be one of: auto_join, private_safe, public_entry"
+                .to_string(),
+        ),
+    }
+}
+
 fn validate_chain_node_validator(raw: &str) -> Result<(), String> {
     let (validator_id, stake) = raw.rsplit_once(':').ok_or_else(|| {
         "--chain-node-validator must be in <validator_id:stake> format".to_string()
@@ -1156,6 +1190,11 @@ Options:\n\
   --chain-storage-profile <name> oasis7_chain_runtime storage profile (default: dev_local)\n\
   --chain-world-id <id>        oasis7_chain_runtime world id (default: live-<scenario>)\n\
   --chain-node-role <role>     oasis7_chain_runtime role (default: {DEFAULT_CHAIN_NODE_ROLE})\n\
+  --chain-p2p-user-mode <mode> oasis7_chain_runtime user mode: auto_join|private_safe|public_entry (default: {DEFAULT_CHAIN_P2P_USER_MODE})\n\
+  --chain-p2p-accept-public-entry\n\
+                               accept auto-detected public-entry recommendation\n\
+  --chain-p2p-reject-public-entry\n\
+                               keep conservative fallback when auto mode suggests public entry (default)\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\
   --chain-pos-slot-duration-ms <n>\n\
                                oasis7_chain_runtime PoS slot duration ms (default: {DEFAULT_CHAIN_POS_SLOT_DURATION_MS})\n\

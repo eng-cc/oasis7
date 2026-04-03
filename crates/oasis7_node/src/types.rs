@@ -46,6 +46,110 @@ pub struct NodeNetworkPolicy {
     pub node_role_claim: PeerNodeRole,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeUserMode {
+    AutoJoin,
+    PrivateSafe,
+    PublicEntry,
+}
+
+impl NodeUserMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AutoJoin => "auto_join",
+            Self::PrivateSafe => "private_safe",
+            Self::PublicEntry => "public_entry",
+        }
+    }
+}
+
+impl fmt::Display for NodeUserMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for NodeUserMode {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "auto_join" => Ok(Self::AutoJoin),
+            "private_safe" => Ok(Self::PrivateSafe),
+            "public_entry" => Ok(Self::PublicEntry),
+            _ => Err(
+                "p2p user mode must be one of: auto_join, private_safe, public_entry"
+                    .to_string(),
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NodeHolePunchViability {
+    Unknown,
+    Viable,
+    Blocked,
+}
+
+impl NodeHolePunchViability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::Viable => "viable",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+impl fmt::Display for NodeHolePunchViability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for NodeHolePunchViability {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "unknown" => Ok(Self::Unknown),
+            "viable" => Ok(Self::Viable),
+            "blocked" => Ok(Self::Blocked),
+            _ => Err("hole punch viability must be one of: unknown, viable, blocked".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NodeReachabilityAutoDetection {
+    pub observed_reachability: Option<PeerReachabilityClass>,
+    pub hole_punch_viability: NodeHolePunchViability,
+    pub relay_available: bool,
+    pub probe_stable: bool,
+}
+
+impl Default for NodeReachabilityAutoDetection {
+    fn default() -> Self {
+        Self {
+            observed_reachability: None,
+            hole_punch_viability: NodeHolePunchViability::Unknown,
+            relay_available: true,
+            probe_stable: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodeUserModeRecommendation {
+    pub requested_user_mode: NodeUserMode,
+    pub recommended_user_mode: NodeUserMode,
+    pub effective_user_mode: NodeUserMode,
+    pub effective_policy: NodeNetworkPolicy,
+    pub requires_explicit_public_entry_confirmation: bool,
+    pub rationale: Vec<String>,
+}
+
 impl NodeNetworkPolicy {
     pub fn for_runtime_role(role: NodeRole) -> Self {
         let node_role_claim = match role {
@@ -128,6 +232,112 @@ impl NodeNetworkPolicy {
         operation: NetworkLaneOperation,
     ) -> bool {
         lane.allows_role(self.node_role_claim, operation)
+    }
+
+    pub fn recommend_for_user_mode(
+        runtime_role: NodeRole,
+        requested_user_mode: NodeUserMode,
+        detection: NodeReachabilityAutoDetection,
+        accept_public_entry: bool,
+    ) -> Result<NodeUserModeRecommendation, NodeError> {
+        let recommended_user_mode = recommend_user_mode(runtime_role, detection);
+        let requires_explicit_public_entry_confirmation =
+            requested_user_mode == NodeUserMode::AutoJoin
+                && recommended_user_mode == NodeUserMode::PublicEntry
+                && !accept_public_entry;
+        let effective_user_mode = match requested_user_mode {
+            NodeUserMode::AutoJoin => {
+                if requires_explicit_public_entry_confirmation {
+                    NodeUserMode::PrivateSafe
+                } else {
+                    recommended_user_mode
+                }
+            }
+            explicit => explicit,
+        };
+
+        let effective_policy = policy_for_user_mode(runtime_role, effective_user_mode);
+        effective_policy.validate_for_runtime_role(runtime_role)?;
+
+        let mut rationale = Vec::new();
+        if let Some(reachability) = detection.observed_reachability {
+            rationale.push(format!("observed_reachability={}", peer_reachability_as_str(reachability)));
+        } else {
+            rationale.push("observed_reachability=unknown".to_string());
+        }
+        rationale.push(format!(
+            "hole_punch_viability={}",
+            detection.hole_punch_viability
+        ));
+        rationale.push(format!("relay_available={}", detection.relay_available));
+        rationale.push(format!("probe_stable={}", detection.probe_stable));
+        if requires_explicit_public_entry_confirmation {
+            rationale.push("public_entry_confirmation=pending".to_string());
+        }
+
+        Ok(NodeUserModeRecommendation {
+            requested_user_mode,
+            recommended_user_mode,
+            effective_user_mode,
+            effective_policy,
+            requires_explicit_public_entry_confirmation,
+            rationale,
+        })
+    }
+}
+
+fn recommend_user_mode(
+    runtime_role: NodeRole,
+    detection: NodeReachabilityAutoDetection,
+) -> NodeUserMode {
+    if !detection.probe_stable {
+        return NodeUserMode::PrivateSafe;
+    }
+
+    if matches!(runtime_role, NodeRole::Sequencer) {
+        return NodeUserMode::PrivateSafe;
+    }
+
+    if matches!(
+        detection.observed_reachability,
+        Some(PeerReachabilityClass::Public | PeerReachabilityClass::Hybrid)
+    ) {
+        return NodeUserMode::PublicEntry;
+    }
+
+    if matches!(detection.hole_punch_viability, NodeHolePunchViability::Viable) {
+        return NodeUserMode::AutoJoin;
+    }
+
+    NodeUserMode::PrivateSafe
+}
+
+fn policy_for_user_mode(runtime_role: NodeRole, user_mode: NodeUserMode) -> NodeNetworkPolicy {
+    let node_role_claim = match runtime_role {
+        NodeRole::Sequencer => PeerNodeRole::ValidatorCore,
+        NodeRole::Storage => PeerNodeRole::FullStorage,
+        NodeRole::Observer => PeerNodeRole::ObserverLight,
+    };
+    let deployment_mode = match user_mode {
+        NodeUserMode::AutoJoin | NodeUserMode::PrivateSafe => PeerDeploymentMode::Private,
+        NodeUserMode::PublicEntry => match runtime_role {
+            NodeRole::Sequencer => PeerDeploymentMode::Hybrid,
+            NodeRole::Storage | NodeRole::Observer => PeerDeploymentMode::Public,
+        },
+    };
+    NodeNetworkPolicy {
+        deployment_mode,
+        node_role_claim,
+    }
+}
+
+fn peer_reachability_as_str(reachability: PeerReachabilityClass) -> &'static str {
+    match reachability {
+        PeerReachabilityClass::Public => "public",
+        PeerReachabilityClass::Hybrid => "hybrid",
+        PeerReachabilityClass::Private => "private",
+        PeerReachabilityClass::RelayOnly => "relay_only",
+        PeerReachabilityClass::ValidatorHidden => "validator_hidden",
     }
 }
 
@@ -1017,5 +1227,107 @@ mod tests {
         assert!(policy.allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Request));
         assert!(!policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Serve));
         assert!(!policy.allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve));
+    }
+
+    #[test]
+    fn auto_join_requires_confirmation_before_public_entry_upgrade() {
+        let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Storage,
+            NodeUserMode::AutoJoin,
+            NodeReachabilityAutoDetection {
+                observed_reachability: Some(PeerReachabilityClass::Public),
+                hole_punch_viability: NodeHolePunchViability::Viable,
+                relay_available: true,
+                probe_stable: true,
+            },
+            false,
+        )
+        .expect("recommendation");
+
+        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
+        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert!(recommendation.requires_explicit_public_entry_confirmation);
+        assert_eq!(
+            recommendation.effective_policy.deployment_mode,
+            PeerDeploymentMode::Private
+        );
+        assert_eq!(
+            recommendation.effective_policy.node_role_claim,
+            PeerNodeRole::FullStorage
+        );
+    }
+
+    #[test]
+    fn auto_join_can_promote_to_public_entry_after_consent() {
+        let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Observer,
+            NodeUserMode::AutoJoin,
+            NodeReachabilityAutoDetection {
+                observed_reachability: Some(PeerReachabilityClass::Hybrid),
+                hole_punch_viability: NodeHolePunchViability::Viable,
+                relay_available: true,
+                probe_stable: true,
+            },
+            true,
+        )
+        .expect("recommendation");
+
+        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
+        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PublicEntry);
+        assert!(!recommendation.requires_explicit_public_entry_confirmation);
+        assert_eq!(
+            recommendation.effective_policy.deployment_mode,
+            PeerDeploymentMode::Public
+        );
+        assert_eq!(
+            recommendation.effective_policy.node_role_claim,
+            PeerNodeRole::ObserverLight
+        );
+    }
+
+    #[test]
+    fn unstable_probe_falls_back_to_private_safe() {
+        let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Storage,
+            NodeUserMode::AutoJoin,
+            NodeReachabilityAutoDetection {
+                observed_reachability: Some(PeerReachabilityClass::Public),
+                hole_punch_viability: NodeHolePunchViability::Viable,
+                relay_available: true,
+                probe_stable: false,
+            },
+            true,
+        )
+        .expect("recommendation");
+
+        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(
+            recommendation.effective_policy.deployment_mode,
+            PeerDeploymentMode::Private
+        );
+    }
+
+    #[test]
+    fn sequencer_auto_join_never_auto_promotes_to_public_entry() {
+        let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Sequencer,
+            NodeUserMode::AutoJoin,
+            NodeReachabilityAutoDetection {
+                observed_reachability: Some(PeerReachabilityClass::Public),
+                hole_punch_viability: NodeHolePunchViability::Viable,
+                relay_available: true,
+                probe_stable: true,
+            },
+            true,
+        )
+        .expect("recommendation");
+
+        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(
+            recommendation.effective_policy.node_role_claim,
+            PeerNodeRole::ValidatorCore
+        );
     }
 }

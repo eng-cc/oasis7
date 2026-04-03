@@ -7,7 +7,10 @@ use super::{
 };
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
-use oasis7_node::{NodeConfig, NodeConsensusSnapshot, NodeNetworkPolicy, NodeRole, NodeSnapshot};
+use oasis7_node::{
+    NodeConfig, NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
+    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
+};
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
 };
@@ -21,6 +24,15 @@ fn parse_options_defaults() {
     assert_eq!(options.node_id, DEFAULT_NODE_ID);
     assert_eq!(options.status_bind, DEFAULT_STATUS_BIND);
     assert_eq!(options.storage_profile, StorageProfile::DevLocal);
+    assert_eq!(options.p2p_user_mode, NodeUserMode::AutoJoin);
+    assert!(!options.p2p_accept_public_entry);
+    assert_eq!(options.p2p_detected_reachability, None);
+    assert_eq!(
+        options.p2p_detected_hole_punch_viability,
+        NodeHolePunchViability::Unknown
+    );
+    assert!(options.p2p_detected_relay_available);
+    assert!(options.p2p_detected_probe_stable);
     assert!(!options.node_auto_attest_all_validators);
     assert!(options.node_validators.is_empty());
     assert!(options.reward_runtime_enabled);
@@ -262,6 +274,40 @@ fn parse_options_reads_explicit_p2p_policy_overrides() {
 }
 
 #[test]
+fn parse_options_reads_user_mode_detection_hints() {
+    let options = parse_options(
+        [
+            "--node-role",
+            "storage",
+            "--p2p-user-mode",
+            "auto_join",
+            "--p2p-accept-public-entry",
+            "--p2p-detected-reachability",
+            "public",
+            "--p2p-detected-hole-punch",
+            "viable",
+            "--p2p-detected-probe-unstable",
+            "--p2p-detected-relay-unavailable",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(options.p2p_user_mode, NodeUserMode::AutoJoin);
+    assert!(options.p2p_accept_public_entry);
+    assert_eq!(
+        options.p2p_detected_reachability,
+        Some(PeerReachabilityClass::Public)
+    );
+    assert_eq!(
+        options.p2p_detected_hole_punch_viability,
+        NodeHolePunchViability::Viable
+    );
+    assert!(!options.p2p_detected_probe_stable);
+    assert!(!options.p2p_detected_relay_available);
+}
+
+#[test]
 fn node_network_policy_rejects_incompatible_runtime_role_combo() {
     let err = NodeConfig::new("node-a", "world-a", NodeRole::Observer)
         .expect("config")
@@ -371,6 +417,28 @@ fn build_chain_status_payload_includes_storage_metrics() {
     let payload = build_chain_status_payload(
         snapshot,
         Path::new("/tmp/execution-world"),
+        &NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Storage,
+            NodeUserMode::AutoJoin,
+            NodeReachabilityAutoDetection {
+                observed_reachability: Some(PeerReachabilityClass::Public),
+                hole_punch_viability: NodeHolePunchViability::Viable,
+                relay_available: true,
+                probe_stable: true,
+            },
+            false,
+        )
+        .expect("recommendation"),
+        NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Private,
+            node_role_claim: PeerNodeRole::FullStorage,
+        },
+        NodeReachabilityAutoDetection {
+            observed_reachability: Some(PeerReachabilityClass::Public),
+            hole_punch_viability: NodeHolePunchViability::Viable,
+            relay_available: true,
+            probe_stable: true,
+        },
         ReleaseSecurityPolicy::default(),
         reward_runtime,
         storage.clone(),
@@ -395,6 +463,11 @@ fn build_chain_status_payload_includes_storage_metrics() {
         payload.storage.degraded_reason.as_deref(),
         Some("storage degraded")
     );
+    assert_eq!(payload.p2p.requested_user_mode, "auto_join");
+    assert_eq!(payload.p2p.recommended_user_mode, "public_entry");
+    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
+    assert!(payload.p2p.requires_explicit_public_entry_confirmation);
+    assert_eq!(payload.p2p.detected_reachability.as_deref(), Some("public"));
     assert_eq!(
         payload.release_security_policy,
         ReleaseSecurityPolicy::default()
@@ -455,6 +528,18 @@ fn production_release_policy_status_payload_reports_effective_policy() {
     let payload = build_chain_status_payload(
         snapshot,
         Path::new("/tmp/execution-world"),
+        &NodeNetworkPolicy::recommend_for_user_mode(
+            NodeRole::Sequencer,
+            NodeUserMode::PrivateSafe,
+            NodeReachabilityAutoDetection::default(),
+            false,
+        )
+        .expect("recommendation"),
+        NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Private,
+            node_role_claim: PeerNodeRole::ValidatorCore,
+        },
+        NodeReachabilityAutoDetection::default(),
         release_security_policy.clone(),
         reward_runtime,
         storage,
@@ -465,4 +550,80 @@ fn production_release_policy_status_payload_reports_effective_policy() {
         ReleaseSecurityPolicy::production_hardened()
     );
     assert!(payload.release_security_policy.is_production_hardened());
+}
+
+#[test]
+fn status_payload_reports_effective_policy_when_raw_override_differs_from_recommendation() {
+    let snapshot = NodeSnapshot {
+        node_id: "node-a".to_string(),
+        player_id: "player-a".to_string(),
+        world_id: "live-a".to_string(),
+        role: NodeRole::Observer,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus: NodeConsensusSnapshot::default(),
+        last_error: None,
+    };
+    let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
+        enabled: true,
+        metrics_available: true,
+        report_dir: "/tmp/reports".to_string(),
+        report_count: 0,
+        latest_epoch_index: 0,
+        latest_report_observed_at_unix_ms: 0,
+        latest_total_distributed_points: 0,
+        latest_minted_record_count: 0,
+        cumulative_minted_record_count: 0,
+        distfs_total_checks: 0,
+        distfs_failed_checks: 0,
+        distfs_failure_ratio: 0.0,
+        settlement_apply_attempts_total: 0,
+        settlement_apply_failures_total: 0,
+        settlement_apply_failure_ratio: 0.0,
+        invariant_ok: true,
+        last_error: None,
+    };
+    let storage = super::storage_metrics::StorageMetricsSnapshot {
+        storage_profile: "dev_local".to_string(),
+        effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
+        bytes_by_dir: BTreeMap::new(),
+        blob_counts: BTreeMap::new(),
+        ref_count: 0,
+        pin_count: 0,
+        retained_heights: Vec::new(),
+        checkpoint_count: 0,
+        replay_summary: super::storage_metrics::StorageReplaySummary::default(),
+        orphan_blob_count: 0,
+        last_gc_at_ms: None,
+        last_gc_result: "not_available".to_string(),
+        last_gc_error: None,
+        degraded_reason: None,
+    };
+    let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
+        NodeRole::Observer,
+        NodeUserMode::PrivateSafe,
+        NodeReachabilityAutoDetection::default(),
+        false,
+    )
+    .expect("recommendation");
+
+    let payload = build_chain_status_payload(
+        snapshot,
+        Path::new("/tmp/execution-world"),
+        &recommendation,
+        NodeNetworkPolicy {
+            deployment_mode: PeerDeploymentMode::Public,
+            node_role_claim: PeerNodeRole::Relay,
+        },
+        NodeReachabilityAutoDetection::default(),
+        ReleaseSecurityPolicy::default(),
+        reward_runtime,
+        storage,
+    );
+
+    assert_eq!(payload.p2p.requested_user_mode, "private_safe");
+    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
+    assert_eq!(payload.p2p.deployment_mode, "public");
+    assert_eq!(payload.p2p.node_role_claim, "relay");
 }

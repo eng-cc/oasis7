@@ -30,6 +30,8 @@ fn parse_options_defaults() {
         options.initial_config.chain_storage_profile,
         StorageProfile::DevLocal.as_str()
     );
+    assert_eq!(options.initial_config.chain_p2p_user_mode, "auto_join");
+    assert!(!options.initial_config.chain_p2p_accept_public_entry);
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
@@ -83,6 +85,9 @@ fn parse_options_accepts_overrides() {
             "--open-browser",
             "--chain-storage-profile",
             "release_default",
+            "--chain-p2p-user-mode",
+            "public_entry",
+            "--chain-p2p-accept-public-entry",
             "--chain-pos-slot-duration-ms",
             "12000",
             "--chain-pos-ticks-per-slot",
@@ -124,6 +129,8 @@ fn parse_options_accepts_overrides() {
         options.initial_config.chain_storage_profile,
         "release_default"
     );
+    assert_eq!(options.initial_config.chain_p2p_user_mode, "public_entry");
+    assert!(options.initial_config.chain_p2p_accept_public_entry);
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
@@ -240,6 +247,8 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
         chain_storage_profile: "soak_forensics".to_string(),
         chain_world_id: "live-chain-a".to_string(),
         chain_node_role: "storage".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: true,
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -265,6 +274,8 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
         chain_storage_profile: "soak_forensics".to_string(),
         chain_world_id: "live-chain-a".to_string(),
         chain_node_role: "storage".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: true,
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -282,6 +293,9 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
     assert!(args.contains(&"--storage-profile".to_string()));
     assert!(args.contains(&"soak_forensics".to_string()));
     assert!(args.contains(&"chain-a".to_string()));
+    assert!(args.contains(&"--p2p-user-mode".to_string()));
+    assert!(args.contains(&"public_entry".to_string()));
+    assert!(args.contains(&"--p2p-accept-public-entry".to_string()));
     assert!(args.contains(&"--node-validator".to_string()));
     assert!(args.contains(&"chain-a:55".to_string()));
     assert!(args.contains(&"chain-b:45".to_string()));
@@ -373,6 +387,7 @@ fn validate_game_config_reports_missing_required_fields() {
         chain_node_id: "".to_string(),
         chain_storage_profile: "invalid".to_string(),
         chain_node_role: "invalid".to_string(),
+        chain_p2p_user_mode: "invalid".to_string(),
         chain_node_tick_ms: "0".to_string(),
         chain_pos_slot_duration_ms: "0".to_string(),
         chain_pos_ticks_per_slot: "0".to_string(),
@@ -505,6 +520,7 @@ fn validate_chain_config_reports_missing_required_fields() {
     assert!(issues
         .iter()
         .any(|item| item.contains("chain storage profile")));
+    assert!(issues.iter().any(|item| item.contains("chain P2P user mode")));
     assert!(issues.iter().any(|item| item.contains("chain pos")));
 }
 

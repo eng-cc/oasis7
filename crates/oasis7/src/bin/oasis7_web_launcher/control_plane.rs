@@ -927,6 +927,12 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if parse_chain_role(config.chain_node_role.as_str()).is_err() {
         issues.push("chain role must be one of: sequencer|storage|observer".to_string());
     }
+    if parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()).is_err() {
+        issues.push(
+            "chain P2P user mode must be one of: auto_join|private_safe|public_entry"
+                .to_string(),
+        );
+    }
     if parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
         "chain node poll interval ms",
@@ -1055,6 +1061,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         return Err("chain node id cannot be empty".to_string());
     }
     let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
+    let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
     let chain_tick_ms = parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
         "chain node poll interval ms",
@@ -1102,6 +1109,8 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         execution_world_dir,
         "--node-role".to_string(),
         chain_role,
+        "--p2p-user-mode".to_string(),
+        chain_p2p_user_mode,
         "--node-tick-ms".to_string(),
         chain_tick_ms.to_string(),
         "--pos-slot-duration-ms".to_string(),
@@ -1118,6 +1127,11 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         "--pos-max-past-slot-lag".to_string(),
         pos_max_past_slot_lag.to_string(),
     ];
+    args.push(if config.chain_p2p_accept_public_entry {
+        "--p2p-accept-public-entry".to_string()
+    } else {
+        "--p2p-reject-public-entry".to_string()
+    });
     if let Some(genesis) = pos_slot_clock_genesis_unix_ms {
         args.push("--pos-slot-clock-genesis-unix-ms".to_string());
         args.push(genesis.to_string());
@@ -1173,4 +1187,15 @@ pub(super) fn chain_error_data_for_state(state: &ServiceState) -> Option<serde_j
         .chain_recovery
         .as_ref()
         .and_then(|value| serde_json::to_value(value).ok())
+}
+
+fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "auto_join" | "private_safe" | "public_entry" => Ok(normalized),
+        _ => Err(
+            "chain P2P user mode must be one of: auto_join, private_safe, public_entry"
+                .to_string(),
+        ),
+    }
 }

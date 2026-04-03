@@ -23,6 +23,7 @@
   当前补到 shared-window draft scaffold：`shared-devnet-blocker-packet.sh` 现在可一并生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份草稿，方便后续把 same-window mixed-topology 证据回填到 shared-devnet gate，而不冒充已 `pass`。
 - [x] P2PARCH-8 (PRD-P2P-024-F) [test_tier_required]: `producer_system_designer` 冻结用户层部署模式抽象：用户界面只暴露 `自动加入 / 私有安全 / 公网入口` 这类 `2~3` 个简单模式，默认由系统根据公网/NAT/打洞结果自动选择；底层继续保留 `deployment_mode/node_role` 正式语义。
 - [ ] P2PARCH-9 (PRD-P2P-024-F) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 把 AutoNAT / port reachability / hole-punch 结果接成用户层默认模式推荐，并为 `公网入口` 或其他高风险暴露职责补显式确认与高级设置覆盖。
+  已落 runtime slice：`oasis7_node` 新增 `auto_join / private_safe / public_entry` 用户模式、reachability auto-detection 与 recommendation contract；chain runtime / game launcher / web launcher 已统一透传用户模式与 `public_entry` 显式确认，并把推荐结果、探测依据、effective policy 暴露到 chain status payload，默认路径不再要求普通用户直接操作底层 `deployment_mode/node_role`。
 
 ## 当前结论
 - 当前阶段:
@@ -50,6 +51,7 @@
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
   - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
   - `P2PARCH-8` 已冻结用户层部署抽象：后续产品默认应把正式角色藏在内部，普通用户只看到 `2~3` 个简单模式，且默认由系统自动选择。
+  - `P2PARCH-9` 已落 runtime user-mode recommender slice：reachability evidence 现在会映射到 `auto_join / private_safe / public_entry` 推荐结果，`public_entry` 自动升级必须携带显式确认；chain runtime status payload 与 launcher config 也已带出 requested/recommended/effective user mode，便于后续 viewer UX 继续消费。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -190,6 +192,13 @@
 - 输出:
   - 自动探测到用户模式的映射器
   - 高风险职责确认 / 高级设置覆盖
+- 本轮已交付:
+  - `oasis7_node` 新增用户层模式、reachability auto-detection、recommendation/effective-policy contract，并把 `public_entry` 自动升级收口为显式确认门
+  - chain runtime CLI/status payload 已能承载 requested/recommended/effective user mode 与探测依据，且在未显式传入原始 `deployment_mode/node_role` 时默认走用户模式推荐
+  - game launcher / web launcher / launcher UI schema 已统一透传 `chain_p2p_user_mode` 与 `chain_p2p_accept_public_entry`，为后续 viewer UX 接推荐态与确认态留好接口
+- 遗留:
+  - 当前 recommender 仍消费 CLI 注入的 detection hint；真正把 AutoNAT / relay reservation / hole-punch live evidence 接成默认探测源，仍需后续网络观测面切片补齐
+  - `viewer_engineer` 仍需把 status payload / launcher config 真正渲染成用户可见的推荐说明与 `公网入口` 风险确认交互
 - 完成定义:
   - 系统可在默认启动路径中自动选择用户模式，并给出可审计的探测依据
 
@@ -211,5 +220,5 @@
 ## 状态
 - 当前状态: active
 - 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence，把 `shared_devnet` 的 mixed-topology lane 从 baseline 提升到 same-window `pass`，再决定是否需要 dedicated sentry/NAT lab 来替换当前 proxy live drills。
-- 下一步: `producer_system_designer` 侧已冻结用户层三档模式；后续进入 `P2PARCH-9`，把 AutoNAT / 公网可达性 / 打洞结果真正接成“默认全自动”的用户模式推荐与高风险职责确认。
+- 下一步: `P2PARCH-9` runtime slice 已落地；后续由 `viewer_engineer` 把 recommendation/status payload 接成用户可见的推荐说明与 `公网入口` 风险确认 UX，再补对应 `test_tier_full` 证据。
 - 最近更新: 2026-04-03

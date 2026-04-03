@@ -16,9 +16,9 @@ use oasis7::runtime::{
 };
 use oasis7_node::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig, NodeReplicationConfig,
-    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, PosConsensusStatus,
-    PosValidator,
+    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig, NodeReachabilityAutoDetection,
+    NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot,
+    NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -58,7 +58,8 @@ use balances_api::build_chain_balances_payload;
 #[cfg(test)]
 use balances_api::build_chain_balances_payload_from_world;
 use cli::{
-    parse_host_port, parse_options, print_help, CliOptions, DEFAULT_REPLICATION_NETWORK_LISTEN,
+    p2p_auto_detection_from_options, parse_host_port, parse_options, print_help, CliOptions,
+    DEFAULT_REPLICATION_NETWORK_LISTEN,
     DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE, DEFAULT_REWARD_RUNTIME_REPORT_DIR,
     DEFAULT_REWARD_RUNTIME_STATE_FILE, DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE,
 };
@@ -175,9 +176,25 @@ struct ChainStatusResponse {
     consensus: ChainConsensusStatus,
     last_error: Option<String>,
     execution_world_dir: String,
+    p2p: ChainP2pStatus,
     release_security_policy: ReleaseSecurityPolicy,
     reward_runtime: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage: storage_metrics::StorageMetricsSnapshot,
+}
+
+#[derive(Debug, Serialize)]
+struct ChainP2pStatus {
+    requested_user_mode: String,
+    recommended_user_mode: String,
+    effective_user_mode: String,
+    requires_explicit_public_entry_confirmation: bool,
+    detected_reachability: Option<String>,
+    hole_punch_viability: String,
+    relay_available: bool,
+    probe_stable: bool,
+    deployment_mode: String,
+    node_role_claim: String,
+    rationale: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -390,6 +407,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         Arc::clone(&reward_runtime_metrics),
     )?;
     let feedback_submit_signer = build_feedback_submit_signer(options.node_id.as_str(), &keypair)?;
+    let effective_p2p_policy = build_node_network_policy(&options);
+    let p2p_recommendation = build_node_network_policy_recommendation(&options)?;
+    let p2p_detection = p2p_auto_detection_from_options(&options);
     let (status_host, status_port) =
         parse_host_port(options.status_bind.as_str(), "--status-bind")?;
     let mut status_server = start_chain_status_server(
@@ -400,6 +420,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.world_id.clone(),
         paths.execution_world_dir.clone(),
         release_security_policy,
+        p2p_recommendation,
+        effective_p2p_policy,
+        p2p_detection,
         Arc::clone(&reward_runtime_metrics),
         Arc::clone(&storage_metrics),
         feedback_submit_signer,
@@ -537,6 +560,9 @@ fn start_chain_status_server(
     world_id: String,
     execution_world_dir: PathBuf,
     release_security_policy: ReleaseSecurityPolicy,
+    p2p_recommendation: NodeUserModeRecommendation,
+    effective_p2p_policy: NodeNetworkPolicy,
+    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
@@ -559,6 +585,9 @@ fn start_chain_status_server(
             world_id,
             execution_world_dir,
             release_security_policy,
+            p2p_recommendation,
+            effective_p2p_policy,
+            p2p_detection,
             reward_runtime_metrics,
             storage_metrics,
             feedback_submit_signer,
@@ -582,6 +611,9 @@ fn run_chain_status_server_loop(
     world_id: String,
     execution_world_dir: PathBuf,
     release_security_policy: ReleaseSecurityPolicy,
+    p2p_recommendation: NodeUserModeRecommendation,
+    effective_p2p_policy: NodeNetworkPolicy,
+    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
@@ -599,6 +631,9 @@ fn run_chain_status_server_loop(
                 let world_id = world_id.clone();
                 let execution_world_dir = execution_world_dir.clone();
                 let release_security_policy = release_security_policy.clone();
+                let p2p_recommendation = p2p_recommendation.clone();
+                let effective_p2p_policy = effective_p2p_policy.clone();
+                let p2p_detection = p2p_detection;
                 let reward_runtime_metrics = Arc::clone(&reward_runtime_metrics);
                 let storage_metrics = Arc::clone(&storage_metrics);
                 let feedback_submit_signer = feedback_submit_signer.clone();
@@ -610,6 +645,9 @@ fn run_chain_status_server_loop(
                         world_id.as_str(),
                         execution_world_dir.as_path(),
                         &release_security_policy,
+                        &p2p_recommendation,
+                        effective_p2p_policy,
+                        p2p_detection,
                         reward_runtime_metrics,
                         storage_metrics,
                         &feedback_submit_signer,
@@ -635,6 +673,9 @@ fn handle_chain_status_connection(
     world_id: &str,
     execution_world_dir: &Path,
     release_security_policy: &ReleaseSecurityPolicy,
+    p2p_recommendation: &NodeUserModeRecommendation,
+    effective_p2p_policy: NodeNetworkPolicy,
+    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: &FeedbackSubmitSigner,
@@ -766,6 +807,9 @@ fn handle_chain_status_connection(
             let payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
+                p2p_recommendation,
+                effective_p2p_policy,
+                p2p_detection,
                 release_security_policy.clone(),
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
@@ -794,6 +838,9 @@ fn handle_chain_status_connection(
 fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
+    p2p_recommendation: &NodeUserModeRecommendation,
+    effective_p2p_policy: NodeNetworkPolicy,
+    p2p_detection: NodeReachabilityAutoDetection,
     release_security_policy: ReleaseSecurityPolicy,
     reward_runtime_metrics: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage_metrics: storage_metrics::StorageMetricsSnapshot,
@@ -836,6 +883,23 @@ fn build_chain_status_payload(
         },
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
+        p2p: ChainP2pStatus {
+            requested_user_mode: p2p_recommendation.requested_user_mode.as_str().to_string(),
+            recommended_user_mode: p2p_recommendation.recommended_user_mode.as_str().to_string(),
+            effective_user_mode: p2p_recommendation.effective_user_mode.as_str().to_string(),
+            requires_explicit_public_entry_confirmation: p2p_recommendation
+                .requires_explicit_public_entry_confirmation,
+            detected_reachability: p2p_detection
+                .observed_reachability
+                .map(peer_reachability_as_str)
+                .map(str::to_string),
+            hole_punch_viability: p2p_detection.hole_punch_viability.to_string(),
+            relay_available: p2p_detection.relay_available,
+            probe_stable: p2p_detection.probe_stable,
+            deployment_mode: effective_p2p_policy.deployment_mode.as_str().to_string(),
+            node_role_claim: effective_p2p_policy.node_role_claim.as_str().to_string(),
+            rationale: p2p_recommendation.rationale.clone(),
+        },
         release_security_policy,
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,
@@ -990,9 +1054,38 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
 }
 
 fn build_node_network_policy(options: &CliOptions) -> NodeNetworkPolicy {
-    NodeNetworkPolicy {
-        deployment_mode: options.p2p_deployment_mode,
-        node_role_claim: options.p2p_node_role,
+    if options.p2p_deployment_mode_explicit || options.p2p_node_role_explicit {
+        return NodeNetworkPolicy {
+            deployment_mode: options.p2p_deployment_mode,
+            node_role_claim: options.p2p_node_role,
+        };
+    }
+    build_node_network_policy_recommendation(options)
+        .expect("user-mode recommendation should satisfy runtime policy constraints")
+        .effective_policy
+}
+
+fn build_node_network_policy_recommendation(
+    options: &CliOptions,
+) -> Result<NodeUserModeRecommendation, String> {
+    NodeNetworkPolicy::recommend_for_user_mode(
+        options.node_role,
+        options.p2p_user_mode,
+        p2p_auto_detection_from_options(options),
+        options.p2p_accept_public_entry,
+    )
+    .map_err(|err| format!("invalid p2p user-mode recommendation: {err}"))
+}
+
+fn peer_reachability_as_str(
+    reachability: oasis7_proto::distributed_dht::PeerReachabilityClass,
+) -> &'static str {
+    match reachability {
+        oasis7_proto::distributed_dht::PeerReachabilityClass::Public => "public",
+        oasis7_proto::distributed_dht::PeerReachabilityClass::Hybrid => "hybrid",
+        oasis7_proto::distributed_dht::PeerReachabilityClass::Private => "private",
+        oasis7_proto::distributed_dht::PeerReachabilityClass::RelayOnly => "relay_only",
+        oasis7_proto::distributed_dht::PeerReachabilityClass::ValidatorHidden => "validator_hidden",
     }
 }
 

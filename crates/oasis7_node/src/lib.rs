@@ -78,9 +78,11 @@ pub use network_bridge::NodeReplicationNetworkHandle;
 pub use replication::NodeReplicationConfig;
 pub use types::{
     NodeCommittedActionBatch, NodeConfig, NodeConsensusMode, NodeConsensusSnapshot,
-    NodeFeedbackP2pConfig, NodeGossipConfig, NodeMainTokenControllerBindingConfig,
-    NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy, NodePeerCommittedHead, NodePosConfig,
-    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, PosConsensusStatus, PosValidator,
+    NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
+    NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy,
+    NodePeerCommittedHead, NodePosConfig, NodeReachabilityAutoDetection,
+    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode,
+    NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 
 use feedback_runtime::{

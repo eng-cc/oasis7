@@ -70,6 +70,8 @@ fn parse_options_defaults() {
         .starts_with(&format!("{DEFAULT_CHAIN_NODE_ID}-fresh-")));
     assert_eq!(options.chain_storage_profile, StorageProfile::DevLocal);
     assert_eq!(options.chain_node_role, "sequencer");
+    assert_eq!(options.chain_p2p_user_mode, "auto_join");
+    assert!(!options.chain_p2p_accept_public_entry);
     assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
     assert_eq!(options.chain_pos_proposal_tick_phase, 9);
@@ -106,6 +108,9 @@ fn parse_options_accepts_overrides() {
             "live-chain-a",
             "--chain-node-role",
             "storage",
+            "--chain-p2p-user-mode",
+            "public_entry",
+            "--chain-p2p-accept-public-entry",
             "--chain-node-tick-ms",
             "350",
             "--chain-pos-slot-duration-ms",
@@ -152,6 +157,8 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.chain_storage_profile, StorageProfile::SoakForensics);
     assert_eq!(options.chain_world_id, Some("live-chain-a".to_string()));
     assert_eq!(options.chain_node_role, "storage");
+    assert_eq!(options.chain_p2p_user_mode, "public_entry");
+    assert!(options.chain_p2p_accept_public_entry);
     assert_eq!(options.chain_node_tick_ms, 350);
     assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
@@ -199,6 +206,13 @@ fn parse_options_rejects_unknown_deployment_mode() {
 fn parse_options_rejects_invalid_chain_role() {
     let err = parse_options(["--chain-node-role", "invalid"].into_iter()).expect_err("should fail");
     assert!(err.contains("sequencer, storage, observer"));
+}
+
+#[test]
+fn parse_options_rejects_invalid_chain_p2p_user_mode() {
+    let err = parse_options(["--chain-p2p-user-mode", "wild"].into_iter())
+        .expect_err("should fail");
+    assert!(err.contains("auto_join, private_safe, public_entry"));
 }
 
 #[test]
@@ -410,6 +424,8 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
         chain_node_id: "chain-a".to_string(),
         chain_status_bind: "127.0.0.1:6121".to_string(),
         chain_storage_profile: StorageProfile::ReleaseDefault,
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: true,
         ..CliOptions::default()
     };
     let args = build_oasis7_chain_runtime_args(&options);
@@ -418,6 +434,9 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
     assert!(args.contains(&"--world-id".to_string()));
     assert!(args.contains(&"live-sandbox".to_string()));
     assert!(args.contains(&"--execution-world-dir".to_string()));
+    assert!(args.contains(&"--p2p-user-mode".to_string()));
+    assert!(args.contains(&"public_entry".to_string()));
+    assert!(args.contains(&"--p2p-accept-public-entry".to_string()));
     assert!(
         args.contains(&"output/chain-runtime/chain-a/reward-runtime-execution-world".to_string())
     );

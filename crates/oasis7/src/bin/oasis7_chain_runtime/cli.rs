@@ -2,8 +2,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use oasis7::runtime::RewardAssetConfig;
-use oasis7_node::{NodeRole, PosValidator};
-use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
+use oasis7_node::{NodeHolePunchViability, NodeReachabilityAutoDetection, NodeRole, NodeUserMode, PosValidator};
+use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use oasis7_proto::storage_profile::StorageProfile;
 
 use super::distfs_probe_runtime::{parse_distfs_probe_runtime_option, DistfsProbeRuntimeConfig};
@@ -33,6 +33,12 @@ pub(super) struct CliOptions {
     pub status_bind: String,
     pub storage_profile: StorageProfile,
     pub node_role: NodeRole,
+    pub p2p_user_mode: NodeUserMode,
+    pub p2p_accept_public_entry: bool,
+    pub p2p_detected_reachability: Option<PeerReachabilityClass>,
+    pub p2p_detected_hole_punch_viability: NodeHolePunchViability,
+    pub p2p_detected_relay_available: bool,
+    pub p2p_detected_probe_stable: bool,
     pub p2p_deployment_mode: PeerDeploymentMode,
     pub p2p_node_role: PeerNodeRole,
     pub node_tick_ms: u64,
@@ -58,6 +64,7 @@ pub(super) struct CliOptions {
     pub reward_runtime_auto_redeem: bool,
     pub reward_initial_reserve_power_units: i64,
     pub reward_distfs_probe_config: DistfsProbeRuntimeConfig,
+    pub p2p_user_mode_explicit: bool,
     pub p2p_deployment_mode_explicit: bool,
     pub p2p_node_role_explicit: bool,
 }
@@ -70,6 +77,12 @@ impl Default for CliOptions {
             status_bind: DEFAULT_STATUS_BIND.to_string(),
             storage_profile: StorageProfile::DevLocal,
             node_role: NodeRole::Sequencer,
+            p2p_user_mode: NodeUserMode::AutoJoin,
+            p2p_accept_public_entry: false,
+            p2p_detected_reachability: None,
+            p2p_detected_hole_punch_viability: NodeHolePunchViability::Unknown,
+            p2p_detected_relay_available: true,
+            p2p_detected_probe_stable: true,
             p2p_deployment_mode: PeerDeploymentMode::Private,
             p2p_node_role: PeerNodeRole::ValidatorCore,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
@@ -95,6 +108,7 @@ impl Default for CliOptions {
             reward_runtime_auto_redeem: false,
             reward_initial_reserve_power_units: DEFAULT_REWARD_RUNTIME_RESERVE_UNITS,
             reward_distfs_probe_config: DistfsProbeRuntimeConfig::default(),
+            p2p_user_mode_explicit: false,
             p2p_deployment_mode_explicit: false,
             p2p_node_role_explicit: false,
         }
@@ -124,6 +138,40 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 if !options.p2p_node_role_explicit {
                     options.p2p_node_role = default_p2p_node_role(options.node_role);
                 }
+            }
+            "--p2p-user-mode" => {
+                let raw = parse_required_value(&mut iter, "--p2p-user-mode")?;
+                options.p2p_user_mode = raw.parse::<NodeUserMode>()?;
+                options.p2p_user_mode_explicit = true;
+            }
+            "--p2p-accept-public-entry" => {
+                options.p2p_accept_public_entry = true;
+            }
+            "--p2p-reject-public-entry" => {
+                options.p2p_accept_public_entry = false;
+            }
+            "--p2p-detected-reachability" => {
+                let raw = parse_required_value(&mut iter, "--p2p-detected-reachability")?;
+                options.p2p_detected_reachability = Some(parse_peer_reachability_class(raw.as_str())?);
+            }
+            "--p2p-clear-detected-reachability" => {
+                options.p2p_detected_reachability = None;
+            }
+            "--p2p-detected-hole-punch" => {
+                let raw = parse_required_value(&mut iter, "--p2p-detected-hole-punch")?;
+                options.p2p_detected_hole_punch_viability = raw.parse::<NodeHolePunchViability>()?;
+            }
+            "--p2p-detected-relay-available" => {
+                options.p2p_detected_relay_available = true;
+            }
+            "--p2p-detected-relay-unavailable" => {
+                options.p2p_detected_relay_available = false;
+            }
+            "--p2p-detected-probe-stable" => {
+                options.p2p_detected_probe_stable = true;
+            }
+            "--p2p-detected-probe-unstable" => {
+                options.p2p_detected_probe_stable = false;
             }
             "--p2p-deployment-mode" => {
                 let raw = parse_required_value(&mut iter, "--p2p-deployment-mode")?;
@@ -299,6 +347,17 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     Ok(options)
 }
 
+pub(super) fn p2p_auto_detection_from_options(
+    options: &CliOptions,
+) -> NodeReachabilityAutoDetection {
+    NodeReachabilityAutoDetection {
+        observed_reachability: options.p2p_detected_reachability,
+        hole_punch_viability: options.p2p_detected_hole_punch_viability,
+        relay_available: options.p2p_detected_relay_available,
+        probe_stable: options.p2p_detected_probe_stable,
+    }
+}
+
 fn parse_required_value<'a, I>(
     iter: &mut std::iter::Peekable<I>,
     flag: &str,
@@ -338,6 +397,20 @@ pub(super) fn parse_host_port(raw: &str, label: &str) -> Result<(String, u16), S
     Ok((host.trim().to_string(), port))
 }
 
+fn parse_peer_reachability_class(raw: &str) -> Result<PeerReachabilityClass, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "public" => Ok(PeerReachabilityClass::Public),
+        "hybrid" => Ok(PeerReachabilityClass::Hybrid),
+        "private" => Ok(PeerReachabilityClass::Private),
+        "relay_only" => Ok(PeerReachabilityClass::RelayOnly),
+        "validator_hidden" => Ok(PeerReachabilityClass::ValidatorHidden),
+        _ => Err(
+            "detected reachability must be one of: public, hybrid, private, relay_only, validator_hidden"
+                .to_string(),
+        ),
+    }
+}
+
 pub(super) fn parse_validator_spec(raw: &str) -> Result<PosValidator, String> {
     let (validator_id, stake_text) = raw
         .rsplit_once(':')
@@ -367,6 +440,16 @@ Options:\n\
   --storage-profile <name>          dev_local|release_default|soak_forensics (default: dev_local)\n\
   --status-bind <host:port>         status HTTP bind (default: {DEFAULT_STATUS_BIND})\n\
   --node-role <role>                sequencer|storage|observer (default: sequencer)\n\
+  --p2p-user-mode <mode>            auto_join|private_safe|public_entry (default: auto_join)\n\
+  --p2p-accept-public-entry         accept auto-detected public-entry recommendation\n\
+  --p2p-reject-public-entry         force conservative fallback when auto-detect suggests public entry (default)\n\
+  --p2p-detected-reachability <c>   public|hybrid|private|relay_only|validator_hidden\n\
+  --p2p-clear-detected-reachability clear detected reachability hint\n\
+  --p2p-detected-hole-punch <s>     unknown|viable|blocked (default: unknown)\n\
+  --p2p-detected-relay-available    mark relay fallback as available (default)\n\
+  --p2p-detected-relay-unavailable  mark relay fallback as unavailable\n\
+  --p2p-detected-probe-stable       mark auto-detection as stable (default)\n\
+  --p2p-detected-probe-unstable     mark auto-detection as unstable\n\
   --p2p-deployment-mode <mode>      public|hybrid|private|relay_only|validator_hidden (default: private)\n\
   --p2p-node-role <role>            validator_core|sentry|relay|full_storage|observer_light\n\
   --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
