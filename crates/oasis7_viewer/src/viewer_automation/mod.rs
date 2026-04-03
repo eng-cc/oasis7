@@ -7,10 +7,10 @@ use self::actions::{
     module_visibility_flag, resolve_target_entity, timeline_filter_flag,
 };
 use self::parse::config_from_values;
-#[cfg(any(test, target_arch = "wasm32"))]
-use self::parse::{parse_steps, parse_target};
 #[cfg(target_arch = "wasm32")]
 use self::parse::parse_mode;
+#[cfg(any(test, target_arch = "wasm32"))]
+use self::parse::{parse_steps, parse_target};
 use bevy::prelude::*;
 use std::collections::VecDeque;
 

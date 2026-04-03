@@ -322,7 +322,7 @@ impl World {
                 action_id,
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "restricted claim liveops pool top_up_id cannot be empty".to_string(),
+                        "restricted claim liveops pool top_up_id cannot be empty".to_string()
                     ],
                 },
             };
@@ -346,7 +346,7 @@ impl World {
                 action_id,
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "restricted claim liveops pool top-up amount must be > 0".to_string(),
+                        "restricted claim liveops pool top-up amount must be > 0".to_string()
                     ],
                 },
             };

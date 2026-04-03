@@ -1,7 +1,7 @@
 use super::super::{
     main_token_bucket_unlocked_amount, util::hash_json, Action, ActionEnvelope, ActionId, CausedBy,
-    CrisisStatus, DomainEvent, EconomicContractStatus, EpochSettlementReport,
-    GovernanceEvent, GovernanceProposalStatus, MainTokenConfig, MainTokenFeeKind,
+    CrisisStatus, DomainEvent, EconomicContractStatus, EpochSettlementReport, GovernanceEvent,
+    GovernanceProposalStatus, MainTokenConfig, MainTokenFeeKind,
     MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
     MainTokenNodePointsBridgeDistribution, MaterialLedgerId, MaterialStack,
     MaterialTransitPriority, NodeRewardMintRecord, NodeSettlement, ProposalId, ProposalStatus,

@@ -95,7 +95,8 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
                 options.public_manifest.display()
             )
         })?;
-    let slot_thresholds = resolve_manifest_slot_thresholds(entries.as_slice(), options.default_threshold)?;
+    let slot_thresholds =
+        resolve_manifest_slot_thresholds(entries.as_slice(), options.default_threshold)?;
     let mut world = load_or_create_world(options.world_dir.as_path())?;
     let finality_registry = build_finality_registry(
         entries.as_slice(),

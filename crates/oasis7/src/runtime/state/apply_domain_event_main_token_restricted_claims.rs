@@ -74,17 +74,18 @@ impl WorldState {
             target_treasury_bucket_id,
             amount,
         )?;
-        self.restricted_starter_claim_liveops_pool_top_up_records.insert(
-            top_up_id.to_string(),
-            RestrictedStarterClaimLiveopsPoolTopUpRecord {
-                controller_account_id: controller_account_id.to_string(),
-                top_up_id: top_up_id.to_string(),
-                source_treasury_bucket_id: source_treasury_bucket_id.to_string(),
-                target_treasury_bucket_id: target_treasury_bucket_id.to_string(),
-                amount,
-                topped_up_at_epoch,
-            },
-        );
+        self.restricted_starter_claim_liveops_pool_top_up_records
+            .insert(
+                top_up_id.to_string(),
+                RestrictedStarterClaimLiveopsPoolTopUpRecord {
+                    controller_account_id: controller_account_id.to_string(),
+                    top_up_id: top_up_id.to_string(),
+                    source_treasury_bucket_id: source_treasury_bucket_id.to_string(),
+                    target_treasury_bucket_id: target_treasury_bucket_id.to_string(),
+                    amount,
+                    topped_up_at_epoch,
+                },
+            );
         Ok(())
     }
 
@@ -175,16 +176,15 @@ impl WorldState {
                 account_id: beneficiary_account_id.to_string(),
                 ..MainTokenAccountBalance::default()
             });
-        account.restricted_starter_claim_balance =
-            account
-                .restricted_starter_claim_balance
-                .checked_add(amount)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "restricted grant credit overflow: beneficiary={} current={} amount={}",
-                        beneficiary_account_id, account.restricted_starter_claim_balance, amount
-                    ),
-                })?;
+        account.restricted_starter_claim_balance = account
+            .restricted_starter_claim_balance
+            .checked_add(amount)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "restricted grant credit overflow: beneficiary={} current={} amount={}",
+                    beneficiary_account_id, account.restricted_starter_claim_balance, amount
+                ),
+            })?;
         self.main_token_supply.circulating_supply = self
             .main_token_supply
             .circulating_supply
@@ -312,14 +312,14 @@ impl WorldState {
         configured_expires_at_epoch: u64,
         revoke_reason: &str,
     ) -> Result<(), WorldError> {
-        let grant =
-            self.restricted_starter_claim_grants
-                .get_mut(beneficiary_account_id)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "restricted grant not found for revoke: beneficiary={beneficiary_account_id}"
-                    ),
-                })?;
+        let grant = self
+            .restricted_starter_claim_grants
+            .get_mut(beneficiary_account_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "restricted grant not found for revoke: beneficiary={beneficiary_account_id}"
+                ),
+            })?;
         if grant.status != RestrictedStarterClaimGrantStatus::Issued {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(

@@ -676,7 +676,9 @@ impl World {
                 self.validate_guardian_signers(signer_node_ids, *threshold)?;
                 let next_until = self
                     .governance_emergency_brake_until_tick
-                    .map_or(*active_until_tick, |current| current.max(*active_until_tick));
+                    .map_or(*active_until_tick, |current| {
+                        current.max(*active_until_tick)
+                    });
                 self.governance_emergency_brake_until_tick = Some(next_until);
             }
             GovernanceEvent::EmergencyBrakeReleased {

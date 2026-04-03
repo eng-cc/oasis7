@@ -127,10 +127,7 @@ impl World {
     pub(super) fn restricted_starter_claim_admin_registry_controller_account_id<'a>(
         registry: &'a GovernanceMainTokenControllerRegistry,
     ) -> Result<&'a str, WorldError> {
-        Self::ecosystem_treasury_controller_account_id(
-            registry,
-            "restricted claim admin registry",
-        )
+        Self::ecosystem_treasury_controller_account_id(registry, "restricted claim admin registry")
     }
 
     // ---------------------------------------------------------------------
@@ -707,5 +704,4 @@ impl World {
             signer_node_ids,
         }
     }
-
 }

@@ -639,5 +639,7 @@ fn submit_consensus_action_payload_rejects_restricted_grant_admin_registry_actio
     let err = runtime
         .submit_consensus_action_payload(1, payload)
         .expect_err("wrong restricted admin registry controller slot must fail");
-    assert!(err.to_string().contains("restricted claim admin registry controller slot"));
+    assert!(err
+        .to_string()
+        .contains("restricted claim admin registry controller slot"));
 }

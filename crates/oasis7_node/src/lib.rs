@@ -796,10 +796,7 @@ fn register_replication_fetch_handlers(
                     blob_replication_config
                         .authorize_fetch_blob_request(&request)
                         .map_err(|err| {
-                            network_bad_request(format!(
-                                "fetch-blob authorization failed: {}",
-                                err
-                            ))
+                            network_bad_request(format!("fetch-blob authorization failed: {}", err))
                         })?;
                     let blob =
                         load_blob_from_root(blob_root_dir.as_path(), request.content_hash.as_str())

@@ -299,7 +299,10 @@ impl PeerRecord {
         }
         if self.effective_capability_lanes().iter().any(|lane| {
             matches!(lane, NetworkLane::Sync | NetworkLane::BlobState)
-                && !lane.allows_role(node_role, crate::distributed_net::NetworkLaneOperation::Serve)
+                && !lane.allows_role(
+                    node_role,
+                    crate::distributed_net::NetworkLaneOperation::Serve,
+                )
         }) {
             return Err(format!(
                 "node_role={} cannot advertise sync/blob_state service capability",

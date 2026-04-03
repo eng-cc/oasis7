@@ -643,7 +643,6 @@ impl World {
             _ => unreachable!("action_to_event_core received unsupported action variant"),
         }
     }
-
 }
 
 fn material_transit_priority_for_kind(world: &World, kind: &str) -> MaterialTransitPriority {

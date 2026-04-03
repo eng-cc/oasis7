@@ -1,7 +1,5 @@
 use super::*;
-use crate::viewer::runtime_live::authoritative::{
-    is_valid_root_hash, RuntimeBatchChallengeState,
-};
+use crate::viewer::runtime_live::authoritative::{is_valid_root_hash, RuntimeBatchChallengeState};
 
 fn commit_single_authoritative_batch(
     server: &mut ViewerRuntimeLiveServer,

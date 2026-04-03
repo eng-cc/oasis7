@@ -302,9 +302,7 @@ pub(super) fn dismiss_player_first_session_summary(onboarding: &mut PlayerOnboar
 }
 
 #[cfg(test)]
-pub(super) fn player_first_session_summary_visible(
-    onboarding: &PlayerOnboardingState,
-) -> bool {
+pub(super) fn player_first_session_summary_visible(onboarding: &PlayerOnboardingState) -> bool {
     onboarding.first_session_summary_visible
 }
 
@@ -446,10 +444,7 @@ pub(super) fn feedback_toast_snapshot(
 }
 
 #[cfg(test)]
-pub(super) fn feedback_toast_detail(
-    feedback: &FeedbackToastState,
-    index: usize,
-) -> Option<String> {
+pub(super) fn feedback_toast_detail(feedback: &FeedbackToastState, index: usize) -> Option<String> {
     feedback.toasts.get(index).map(|toast| toast.detail.clone())
 }
 
@@ -459,9 +454,7 @@ pub(super) fn player_achievement_popup_cap() -> usize {
 }
 
 #[cfg(test)]
-pub(super) fn player_achievement_popup_len(
-    achievements: &PlayerAchievementState,
-) -> usize {
+pub(super) fn player_achievement_popup_len(achievements: &PlayerAchievementState) -> usize {
     achievements.toasts.len()
 }
 
@@ -502,9 +495,7 @@ pub(super) fn player_agent_chatter_last_seen_event_id(
 }
 
 #[cfg(test)]
-pub(super) fn player_agent_chatter_ids(
-    achievements: &PlayerAchievementState,
-) -> Vec<u64> {
+pub(super) fn player_agent_chatter_ids(achievements: &PlayerAchievementState) -> Vec<u64> {
     achievements
         .chatter
         .bubbles

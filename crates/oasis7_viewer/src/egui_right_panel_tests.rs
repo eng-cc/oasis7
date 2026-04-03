@@ -14,6 +14,8 @@ use std::time::Duration;
 const SNAPSHOT_OUTPUT_DIR: &str = "tests/snapshots";
 const SNAPSHOT_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[path = "egui_right_panel_observe_tests.rs"]
+mod observe_tests;
 #[path = "egui_right_panel_player_achievements_tests.rs"]
 mod player_achievements_tests;
 #[path = "egui_right_panel_player_atmosphere_tests.rs"]
@@ -34,8 +36,6 @@ mod player_layout_tests;
 mod player_minimap_tests;
 #[path = "egui_right_panel_player_mission_tests.rs"]
 mod player_mission_tests;
-#[path = "egui_right_panel_observe_tests.rs"]
-mod observe_tests;
 #[path = "egui_right_panel_player_reward_tests.rs"]
 mod player_reward_tests;
 #[path = "egui_right_panel_player_stuck_tests.rs"]

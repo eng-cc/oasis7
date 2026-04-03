@@ -18,7 +18,9 @@ use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
 use oasis7_proto::distributed_net::NetworkRequest;
 
 use super::kad_queries::PendingDhtQuery;
-use super::peer_manager::{recompute_peer_manager_healths, PeerManagerHealthStatus, PeerManagerPolicy};
+use super::peer_manager::{
+    recompute_peer_manager_healths, PeerManagerHealthStatus, PeerManagerPolicy,
+};
 use super::peer_record::{
     build_configured_peer_record, put_record_query, validate_discovered_peer_record,
 };
@@ -370,9 +372,9 @@ pub(super) fn process_discovered_peer_record(
             peer_status,
             PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
         ) && active_transport_paths
-                .get(&peer_id)
-                .map(|active| preferred_path.preference_rank() < active.preference_rank())
-                .unwrap_or(true);
+            .get(&peer_id)
+            .map(|active| preferred_path.preference_rank() < active.preference_rank())
+            .unwrap_or(true);
         let addr_label = preferred_path.label();
         if should_dial && dialed_discovery_addrs.insert(addr_label) {
             let _ = dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());

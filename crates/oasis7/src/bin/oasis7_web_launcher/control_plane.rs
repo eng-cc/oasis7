@@ -24,13 +24,13 @@ mod support;
 #[path = "control_plane/tests.rs"]
 mod tests;
 
+#[cfg(test)]
+use self::support::resolve_viewer_static_env_override;
 use self::support::{
     chain_execution_world_dir, encoded_query_pair, resolve_chain_runtime_bin_from_config,
     resolve_chain_world_id, resolve_launcher_bin_from_config, resolve_runtime_host,
     resolve_viewer_static_dir_for_launcher, spawn_child_process, stop_child_process,
 };
-#[cfg(test)]
-use self::support::resolve_viewer_static_env_override;
 
 pub(super) fn host_for_url(host: &str) -> String {
     support::host_for_url(host)
@@ -885,7 +885,9 @@ pub(super) fn validate_game_config_with_launcher_bin(
         issues.push("viewer port must be integer in 1..=65535".to_string());
     }
     if !config.llm_enabled {
-        issues.push("llm must stay enabled because no-LLM is no longer a playable entry path".to_string());
+        issues.push(
+            "llm must stay enabled because no-LLM is no longer a playable entry path".to_string(),
+        );
     }
 
     let viewer_static_dir = config.viewer_static_dir.trim();

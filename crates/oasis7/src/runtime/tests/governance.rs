@@ -106,8 +106,7 @@ fn set_main_token_controller_registry_for_tests(
         GovernanceThresholdSignerPolicy {
             threshold: 1,
             allowed_public_keys: BTreeSet::from([
-                "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
-                    .to_string(),
+                "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30".to_string(),
             ]),
         },
     )]);
@@ -270,7 +269,9 @@ fn update_restricted_claim_admin_registry_rejects_controller_account_outside_eco
         controller_account_id: "msig.wrong_controller.v1".to_string(),
         next_admin_account_ids: vec!["ops_backup".to_string()],
     });
-    world.step().expect("reject wrong controller slot registry update");
+    world
+        .step()
+        .expect("reject wrong controller slot registry update");
 
     let rejection = world.journal().events[journal_len_before..]
         .iter()
@@ -310,9 +311,9 @@ fn update_restricted_claim_admin_registry_rejects_account_without_signer_policy(
         .expect("registry update rejection");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes.iter().any(|note| {
-                note.contains("missing restricted grant admin signer policy")
-            }));
+            assert!(notes
+                .iter()
+                .any(|note| { note.contains("missing restricted grant admin signer policy") }));
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -345,11 +346,13 @@ fn update_restricted_claim_admin_registry_applies_governance_event() {
         vec!["liveops".to_string(), "ops_backup".to_string()]
     );
     match &world.journal().events.last().expect("event").body {
-        WorldEventBody::Governance(GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
-            controller_account_id,
-            previous_admin_account_ids,
-            next_admin_account_ids,
-        }) => {
+        WorldEventBody::Governance(
+            GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
+                controller_account_id,
+                previous_admin_account_ids,
+                next_admin_account_ids,
+            },
+        ) => {
             assert_eq!(controller_account_id, "liveops");
             assert_eq!(previous_admin_account_ids, &vec!["liveops".to_string()]);
             assert_eq!(

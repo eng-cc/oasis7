@@ -24,7 +24,8 @@ fn read_http_request(stream: &mut std::net::TcpStream) -> Vec<u8> {
         let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
             continue;
         };
-        let header = std::str::from_utf8(&bytes[..boundary]).expect("request header should be UTF-8");
+        let header =
+            std::str::from_utf8(&bytes[..boundary]).expect("request header should be UTF-8");
         let content_length = header
             .lines()
             .find_map(|line| line.strip_prefix("Content-Length:"))
@@ -77,7 +78,9 @@ fn submit_chain_transfer_remote_posts_expected_payload_and_reads_success() {
         assert!(request_text.contains("\"to_account_id\":\"player:bob\""));
         assert!(request_text.contains("\"amount\":7"));
         assert!(request_text.contains("\"nonce\":2"));
-        assert!(request_text.contains("\"public_key\":\"1111111111111111111111111111111111111111111111111111111111111111\""));
+        assert!(request_text.contains(
+            "\"public_key\":\"1111111111111111111111111111111111111111111111111111111111111111\""
+        ));
         assert!(request_text.contains("\"signature\":\"awttransferauth:v1:"));
         write_http_json_response(
             &mut stream,
@@ -174,9 +177,10 @@ fn submit_chain_transfer_requires_strong_auth_for_hosted_public_join() {
 
     assert!(!response.ok);
     assert_eq!(response.error_code.as_deref(), Some("strong_auth_required"));
-    assert!(response.error.as_deref().is_some_and(
-        |message| message.contains("hosted public join blocks main token transfer")
-    ));
+    assert!(response
+        .error
+        .as_deref()
+        .is_some_and(|message| message.contains("hosted public join blocks main token transfer")));
     assert!(state
         .logs
         .iter()

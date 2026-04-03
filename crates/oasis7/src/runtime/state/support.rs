@@ -617,7 +617,10 @@ fn verify_reward_mint_record_signature_with_state(
                 record.signer_node_id
             )
         })?;
-    if record.signature.starts_with(REWARD_MINT_SIGNATURE_V2_PREFIX) {
+    if record
+        .signature
+        .starts_with(REWARD_MINT_SIGNATURE_V2_PREFIX)
+    {
         return verify_reward_mint_signature_v2(
             record.signature.as_str(),
             record.epoch_index,
@@ -629,7 +632,10 @@ fn verify_reward_mint_record_signature_with_state(
             signer_public_key,
         );
     }
-    if record.signature.starts_with(REWARD_MINT_SIGNATURE_V1_PREFIX) {
+    if record
+        .signature
+        .starts_with(REWARD_MINT_SIGNATURE_V1_PREFIX)
+    {
         if !state
             .reward_signature_governance_policy
             .allow_mintsig_v1_fallback

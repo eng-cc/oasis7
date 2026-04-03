@@ -1078,8 +1078,7 @@ mod action_to_event_economy_support;
 use action_to_event_economy_support::{
     build_material_market_quotes, compute_local_scarcity_delay_ticks, industry_stage_label,
     merge_recipe_consume_with_maintenance_sink, product_unlock_stage_allowed,
-    recipe_preferred_tags_compatible, recipe_stage_gate_allowed,
-    resolve_recipe_bottleneck_tags,
+    recipe_preferred_tags_compatible, recipe_stage_gate_allowed, resolve_recipe_bottleneck_tags,
 };
 
 pub(crate) fn ensure_profile_field_whitelist<T: serde::Serialize>(

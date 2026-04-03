@@ -143,13 +143,16 @@ pub(super) fn recompute_peer_manager_healths(
                 });
             }
             if let Some(bucket) = ipv4_subnet_bucket(active_path) {
-                let bucket_count = ipv4_subnet_counts.get(bucket.as_str()).copied().unwrap_or(0);
+                let bucket_count = ipv4_subnet_counts
+                    .get(bucket.as_str())
+                    .copied()
+                    .unwrap_or(0);
                 if bucket_count >= 2
                     && exceeds_share_limit(
-                    bucket_count,
-                    active_peer_count,
-                    policy.max_ipv4_subnet_share_per_mille,
-                )
+                        bucket_count,
+                        active_peer_count,
+                        policy.max_ipv4_subnet_share_per_mille,
+                    )
                 {
                     issues.push(PeerManagerHealthIssue::Ipv4SubnetConcentration {
                         subnet: bucket,
@@ -168,14 +171,16 @@ pub(super) fn recompute_peer_manager_healths(
                     });
                 }
                 if let Some(domain) = relay_domain(active_path) {
-                    let bucket_count =
-                        relay_domain_counts.get(domain.as_str()).copied().unwrap_or(0);
+                    let bucket_count = relay_domain_counts
+                        .get(domain.as_str())
+                        .copied()
+                        .unwrap_or(0);
                     if bucket_count >= 2
                         && exceeds_share_limit(
-                        bucket_count,
-                        active_peer_count,
-                        policy.max_relay_domain_share_per_mille,
-                    )
+                            bucket_count,
+                            active_peer_count,
+                            policy.max_relay_domain_share_per_mille,
+                        )
                     {
                         issues.push(PeerManagerHealthIssue::RelayDomainConcentration {
                             relay_domain: domain,
@@ -259,7 +264,9 @@ fn discovery_source_label(source: PeerDiscoverySource) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto_dht::{PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass};
+    use crate::proto_dht::{
+        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
+    };
     use crate::proto_net::NetworkLane;
     use libp2p::Multiaddr;
 
@@ -267,7 +274,10 @@ mod tests {
         TransportMuxer, TransportSecurity, TransportSessionFlavor,
     };
 
-    fn sample_record(peer_id: PeerId, discovery_sources: Vec<PeerDiscoverySource>) -> SignedPeerRecord {
+    fn sample_record(
+        peer_id: PeerId,
+        discovery_sources: Vec<PeerDiscoverySource>,
+    ) -> SignedPeerRecord {
         SignedPeerRecord {
             record: oasis7_proto::distributed_dht::PeerRecord {
                 peer_id: peer_id.to_string(),
@@ -281,7 +291,11 @@ mod tests {
                 hole_punch_addrs: Vec::new(),
                 relay_addrs: Vec::new(),
                 discovery_sources,
-                capability_lanes: vec![NetworkLane::Sync, NetworkLane::BlobState, NetworkLane::Control],
+                capability_lanes: vec![
+                    NetworkLane::Sync,
+                    NetworkLane::BlobState,
+                    NetworkLane::Control,
+                ],
                 published_at_ms: 0,
                 ttl_ms: 60_000,
             },
@@ -331,15 +345,24 @@ mod tests {
         let active = HashMap::from([
             (
                 peer_a,
-                transport_path(peer_a, "/ip4/10.0.0.1/udp/4101/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_a,
+                    "/ip4/10.0.0.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
             (
                 peer_b,
-                transport_path(peer_b, "/ip4/10.0.1.1/udp/4102/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_b,
+                    "/ip4/10.0.1.1/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
         ]);
 
-        let healths = recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
         for peer in [peer_a, peer_b] {
             let health = healths.get(&peer).expect("health");
             assert_eq!(health.status, PeerManagerHealthStatus::Suspect);
@@ -359,7 +382,10 @@ mod tests {
         let peer_a = PeerId::random();
         let peer_b = PeerId::random();
         let peer_c = PeerId::random();
-        let discovery_sources = vec![PeerDiscoverySource::StaticBootstrap, PeerDiscoverySource::Dht];
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
         let discovered = HashMap::from([
             (peer_a, sample_record(peer_a, discovery_sources.clone())),
             (peer_b, sample_record(peer_b, discovery_sources.clone())),
@@ -368,19 +394,32 @@ mod tests {
         let active = HashMap::from([
             (
                 peer_a,
-                transport_path(peer_a, "/ip4/192.168.10.1/udp/4101/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_a,
+                    "/ip4/192.168.10.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
             (
                 peer_b,
-                transport_path(peer_b, "/ip4/192.168.10.2/udp/4102/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_b,
+                    "/ip4/192.168.10.2/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
             (
                 peer_c,
-                transport_path(peer_c, "/ip4/10.20.30.40/udp/4103/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_c,
+                    "/ip4/10.20.30.40/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
         ]);
 
-        let healths = recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
         assert!(healths[&peer_a].issues.iter().any(|issue| matches!(
             issue,
             PeerManagerHealthIssue::Ipv4SubnetConcentration { subnet, .. } if subnet == "192.168.10"
@@ -397,7 +436,10 @@ mod tests {
         let peer_a = PeerId::random();
         let peer_b = PeerId::random();
         let peer_c = PeerId::random();
-        let discovery_sources = vec![PeerDiscoverySource::StaticBootstrap, PeerDiscoverySource::Dht];
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
         let discovered = HashMap::from([
             (peer_a, sample_record(peer_a, discovery_sources.clone())),
             (peer_b, sample_record(peer_b, discovery_sources.clone())),
@@ -410,7 +452,8 @@ mod tests {
                 peer_a,
                 transport_path(
                     peer_a,
-                    format!("/dns4/relay-a.example/tcp/443/p2p/{relay_peer_a}/p2p-circuit").as_str(),
+                    format!("/dns4/relay-a.example/tcp/443/p2p/{relay_peer_a}/p2p-circuit")
+                        .as_str(),
                     TransportPathKind::RelayReserved,
                 ),
             ),
@@ -418,24 +461,30 @@ mod tests {
                 peer_b,
                 transport_path(
                     peer_b,
-                    format!("/dns4/relay-a.example/tcp/443/p2p/{relay_peer_b}/p2p-circuit").as_str(),
+                    format!("/dns4/relay-a.example/tcp/443/p2p/{relay_peer_b}/p2p-circuit")
+                        .as_str(),
                     TransportPathKind::RelayReserved,
                 ),
             ),
             (
                 peer_c,
-                transport_path(peer_c, "/ip4/10.20.30.40/udp/4103/quic-v1", TransportPathKind::Direct),
+                transport_path(
+                    peer_c,
+                    "/ip4/10.20.30.40/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
             ),
         ]);
 
-        let healths = recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
         for peer in [peer_a, peer_b] {
             let health = &healths[&peer];
             assert_eq!(health.status, PeerManagerHealthStatus::Suspect);
-            assert!(health.issues.iter().any(|issue| matches!(
-                issue,
-                PeerManagerHealthIssue::RelayBudgetExceeded { .. }
-            )));
+            assert!(health
+                .issues
+                .iter()
+                .any(|issue| matches!(issue, PeerManagerHealthIssue::RelayBudgetExceeded { .. })));
             assert!(health.issues.iter().any(|issue| matches!(
                 issue,
                 PeerManagerHealthIssue::RelayDomainConcentration { relay_domain, .. } if relay_domain == "relay-a.example"
@@ -451,12 +500,18 @@ mod tests {
             peer,
             sample_record(
                 peer,
-                vec![PeerDiscoverySource::StaticBootstrap, PeerDiscoverySource::Dht],
+                vec![
+                    PeerDiscoverySource::StaticBootstrap,
+                    PeerDiscoverySource::Dht,
+                ],
             ),
         )]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &HashMap::new(), &PeerManagerPolicy::default());
+        let healths = recompute_peer_manager_healths(
+            &discovered,
+            &HashMap::new(),
+            &PeerManagerPolicy::default(),
+        );
         let health = healths.get(&peer).expect("health");
         assert_eq!(health.status, PeerManagerHealthStatus::Candidate);
         assert!(health.issues.is_empty());
@@ -470,13 +525,16 @@ mod tests {
             sample_record(peer, vec![PeerDiscoverySource::StaticBootstrap]),
         )]);
 
-        let healths =
-            recompute_peer_manager_healths(&discovered, &HashMap::new(), &PeerManagerPolicy::default());
+        let healths = recompute_peer_manager_healths(
+            &discovered,
+            &HashMap::new(),
+            &PeerManagerPolicy::default(),
+        );
         let health = healths.get(&peer).expect("health");
         assert_eq!(health.status, PeerManagerHealthStatus::Suspect);
-        assert!(health.issues.iter().any(|issue| matches!(
-            issue,
-            PeerManagerHealthIssue::SingleSourceDiscovery { .. }
-        )));
+        assert!(health
+            .issues
+            .iter()
+            .any(|issue| matches!(issue, PeerManagerHealthIssue::SingleSourceDiscovery { .. })));
     }
 }

@@ -110,7 +110,10 @@ fn parse_openclaw_agent_command_output_accepts_local_shape() {
     .expect("parse local output");
     assert_eq!(parsed.text, "{\"decision\":\"wait\"}");
     assert_eq!(parsed.duration_ms, Some(2484));
-    assert_eq!(parsed.provider_version.as_deref(), Some("custom-right-codes/gpt-5.4"));
+    assert_eq!(
+        parsed.provider_version.as_deref(),
+        Some("custom-right-codes/gpt-5.4")
+    );
     assert_eq!(parsed.prompt_tokens, Some(9885));
     assert_eq!(parsed.completion_tokens, Some(9));
     assert_eq!(parsed.total_tokens, Some(9894));
@@ -154,7 +157,10 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
         Some("agent:main:subagent:world-simulator:test")
     );
     assert_eq!(value.get("agentId").and_then(Value::as_str), Some("main"));
-    assert_eq!(value.get("channel").and_then(Value::as_str), Some("webchat"));
+    assert_eq!(
+        value.get("channel").and_then(Value::as_str),
+        Some("webchat")
+    );
     assert_eq!(value.get("lane").and_then(Value::as_str), Some("nested"));
     assert_eq!(value.get("thinking").and_then(Value::as_str), Some("off"));
     assert_eq!(value.get("timeout").and_then(Value::as_u64), Some(15));
@@ -167,8 +173,9 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
 #[test]
 fn apply_profile_guardrails_reroutes_patrol_wait_to_move() {
     let mut request = sample_request();
-    request.observation.memory_summary =
-        Some("goal=巡游移动; prefer move_agent to nearest visible non-current location".to_string());
+    request.observation.memory_summary = Some(
+        "goal=巡游移动; prefer move_agent to nearest visible non-current location".to_string(),
+    );
     let (decision, note) = apply_profile_guardrails(&request, ProviderDecision::Wait);
     assert_eq!(
         decision,

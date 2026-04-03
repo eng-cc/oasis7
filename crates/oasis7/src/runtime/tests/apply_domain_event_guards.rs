@@ -61,13 +61,16 @@ fn sample_claim(target_agent_id: &str, claimer_agent_id: &str) -> AgentClaimStat
 #[test]
 fn economic_contract_settlement_missing_operator_returns_agent_not_found() {
     let mut state = WorldState::default();
-    state.agents.insert("creator".to_string(), test_agent_cell("creator"));
+    state
+        .agents
+        .insert("creator".to_string(), test_agent_cell("creator"));
     state
         .agents
         .insert("counterparty".to_string(), test_agent_cell("counterparty"));
-    state
-        .economic_contracts
-        .insert("contract.guard".to_string(), sample_contract("creator", "counterparty"));
+    state.economic_contracts.insert(
+        "contract.guard".to_string(),
+        sample_contract("creator", "counterparty"),
+    );
 
     let err = state
         .apply_domain_event(
@@ -104,7 +107,9 @@ fn economic_contract_settlement_missing_operator_returns_agent_not_found() {
 #[test]
 fn claim_release_request_missing_claimer_returns_error_without_mutating_claim() {
     let mut state = WorldState::default();
-    state.agents.insert("target".to_string(), test_agent_cell("target"));
+    state
+        .agents
+        .insert("target".to_string(), test_agent_cell("target"));
     state
         .agent_claims
         .insert("target".to_string(), sample_claim("target", "claimer"));
@@ -135,7 +140,9 @@ fn claim_release_request_missing_claimer_returns_error_without_mutating_claim() 
 #[test]
 fn claim_reclaim_missing_claimer_returns_error_without_removing_claim() {
     let mut state = WorldState::default();
-    state.agents.insert("target".to_string(), test_agent_cell("target"));
+    state
+        .agents
+        .insert("target".to_string(), test_agent_cell("target"));
     state
         .agent_claims
         .insert("target".to_string(), sample_claim("target", "claimer"));

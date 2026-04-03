@@ -3,10 +3,10 @@ use super::helpers::{
     resolve_main_token_effective_config_for_epoch,
 };
 use super::*;
-use crate::runtime::MainTokenTreasuryDistribution;
 use crate::runtime::main_token::{
     is_main_token_treasury_distribution_bucket, validate_main_token_config_bounds,
 };
+use crate::runtime::MainTokenTreasuryDistribution;
 use std::collections::BTreeSet;
 
 impl WorldState {
@@ -20,7 +20,10 @@ impl WorldState {
         ecosystem_pool_amount: u64,
         security_reserve_amount: u64,
     ) -> Result<(), WorldError> {
-        if self.main_token_epoch_issuance_records.contains_key(&epoch_index) {
+        if self
+            .main_token_epoch_issuance_records
+            .contains_key(&epoch_index)
+        {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!("main token epoch issuance already exists: epoch={epoch_index}"),
             });
@@ -130,15 +133,14 @@ impl WorldState {
                 reason: "main token fee amount must be > 0".to_string(),
             });
         }
-        let settled_sum =
-            burn_amount
-                .checked_add(treasury_amount)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token fee settled overflow: amount={} burn={} treasury={}",
-                        amount, burn_amount, treasury_amount
-                    ),
-                })?;
+        let settled_sum = burn_amount.checked_add(treasury_amount).ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "main token fee settled overflow: amount={} burn={} treasury={}",
+                    amount, burn_amount, treasury_amount
+                ),
+            }
+        })?;
         if settled_sum != amount {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -253,7 +255,10 @@ impl WorldState {
             .any(|item| item.proposal_id == proposal_id)
         {
             return Err(WorldError::ResourceBalanceInvalid {
-                reason: format!("main token policy proposal already scheduled: {}", proposal_id),
+                reason: format!(
+                    "main token policy proposal already scheduled: {}",
+                    proposal_id
+                ),
             });
         }
 
@@ -347,15 +352,14 @@ impl WorldState {
                     ),
                 });
             }
-            distributions_sum =
-                distributions_sum
-                    .checked_add(item.amount)
-                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                        reason: format!(
-                            "main token treasury distribution sum overflow: distribution_id={}",
-                            distribution_id
-                        ),
-                    })?;
+            distributions_sum = distributions_sum.checked_add(item.amount).ok_or_else(|| {
+                WorldError::ResourceBalanceInvalid {
+                    reason: format!(
+                        "main token treasury distribution sum overflow: distribution_id={}",
+                        distribution_id
+                    ),
+                }
+            })?;
         }
         if distributions_sum != total_amount {
             return Err(WorldError::ResourceBalanceInvalid {
@@ -399,15 +403,16 @@ impl WorldState {
                     ),
                 });
             }
-            account.liquid_balance = account
-                .liquid_balance
-                .checked_add(item.amount)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token treasury account overflow: account={} current={} amount={}",
-                        account_id, account.liquid_balance, item.amount
-                    ),
-                })?;
+            account.liquid_balance =
+                account
+                    .liquid_balance
+                    .checked_add(item.amount)
+                    .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "main token treasury account overflow: account={} current={} amount={}",
+                            account_id, account.liquid_balance, item.amount
+                        ),
+                    })?;
         }
 
         self.main_token_supply.circulating_supply = self

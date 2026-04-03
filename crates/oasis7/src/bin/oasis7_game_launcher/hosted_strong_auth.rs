@@ -296,7 +296,7 @@ mod tests {
             grant.release_token.as_str(),
             &mut issuer,
         );
-        assert!(response.ok);
+        assert!(response.ok, "{response:?}");
         let issued_grant = response.grant.expect("backend grant");
         assert_eq!(issued_grant.action_id, "prompt_control_apply");
         assert_eq!(issued_grant.player_id, grant.player_id);

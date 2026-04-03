@@ -511,7 +511,9 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
                 );
                 break;
             }
-            other => panic!("expected event stream or authoritative batch after chat ack, got {other:?}"),
+            other => {
+                panic!("expected event stream or authoritative batch after chat ack, got {other:?}")
+            }
         }
     }
 }

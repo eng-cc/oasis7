@@ -43,7 +43,8 @@ impl Libp2pReplicationNetwork {
 }
 
 pub fn derive_libp2p_identity_keypair(private_key_hex: &str) -> Result<Keypair, WorldError> {
-    let private_key_bytes = hex::decode(private_key_hex).map_err(|_| WorldError::SignatureKeyInvalid)?;
+    let private_key_bytes =
+        hex::decode(private_key_hex).map_err(|_| WorldError::SignatureKeyInvalid)?;
     Keypair::ed25519_from_bytes(private_key_bytes).map_err(|_| WorldError::SignatureKeyInvalid)
 }
 

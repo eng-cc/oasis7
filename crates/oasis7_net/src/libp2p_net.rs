@@ -8,19 +8,20 @@ mod discovery;
 mod kad_queries;
 mod peer_manager;
 mod peer_record;
+mod runtime_loop;
 mod swarm_behaviour;
 mod transport_paths;
 mod utils;
 
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, StreamExt};
-use libp2p::gossipsub::{self, IdentTopic, TopicHash};
+use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
-use libp2p::kad::{self, Quorum, RecordKey};
+use libp2p::kad::{self};
 use libp2p::relay;
 use libp2p::rendezvous;
 use libp2p::request_response::{self};
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
@@ -35,20 +36,23 @@ use oasis7_proto::distributed_net::{
 
 use crate::util::to_canonical_cbor;
 use discovery::{
-    clear_pending_peer_record_request, handle_peer_record_response,
-    handle_rendezvous_discovered, handle_request_response_request,
-    maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
-    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
-    maybe_request_cached_peer_record, maybe_request_connected_peer_record,
-    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
-    PendingPeerRecordRequest,
+    clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
+    handle_request_response_request, maybe_discover_rendezvous_namespace,
+    maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
+    maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
+    maybe_request_connected_peer_record, process_discovered_peer_record,
+    publish_discovery_provider, start_peer_discovery_query, PendingPeerRecordRequest,
 };
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
+use peer_manager::recompute_peer_manager_healths;
 pub use peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
-use peer_manager::recompute_peer_manager_healths;
 use peer_record::{publish_configured_peer_record, put_record_query};
+use runtime_loop::{
+    enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
+    CommandOutcome, CommandStateRefs,
+};
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use transport_paths::{
     failover_transport_path, note_established_transport_path, retry_transport_path_after_error,
@@ -57,6 +61,12 @@ use transport_paths::{
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
     try_send_command,
+};
+
+#[cfg(test)]
+use runtime_loop::{
+    admitted_active_transport_paths, collect_quarantined_active_peers,
+    filter_request_peers_by_health, filter_request_peers_by_lane,
 };
 
 const DEFAULT_COMMAND_BUFFER_CAPACITY: usize = 2048;
@@ -177,276 +187,6 @@ enum Command {
     Shutdown,
 }
 
-fn filter_request_peers_by_lane(
-    peers: Vec<PeerId>,
-    protocol: &str,
-    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
-) -> Vec<PeerId> {
-    let Some(lane) = classify_network_protocol(protocol) else {
-        return peers;
-    };
-    let lane_filtered: Vec<PeerId> = peers
-        .iter()
-        .copied()
-        .filter(|peer_id| {
-            discovered_peer_records
-                .get(peer_id)
-                .map(|record| record.record.supports_lane(lane))
-                .unwrap_or(true)
-        })
-        .collect();
-    if lane_filtered.is_empty() {
-        peers
-    } else {
-        lane_filtered
-    }
-}
-
-fn filter_request_peers_by_health(
-    peers: Vec<PeerId>,
-    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
-) -> Vec<PeerId> {
-    let mut ranked: Vec<(usize, PeerId)> = peers
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(idx, peer_id)| {
-            let rank: usize = match peer_healths.get(&peer_id).map(|health| health.status) {
-                Some(PeerManagerHealthStatus::Active) => 0,
-                Some(PeerManagerHealthStatus::Candidate) | None => 1,
-                Some(PeerManagerHealthStatus::Suspect) => 2,
-                Some(PeerManagerHealthStatus::Blocked) => 3,
-            };
-            (idx, (rank, peer_id))
-        })
-        .map(|(idx, (rank, peer_id))| (rank.saturating_mul(10_000).saturating_add(idx), peer_id))
-        .collect();
-    ranked.sort_by_key(|(rank, _)| *rank);
-    let filtered: Vec<PeerId> = ranked
-        .iter()
-        .filter(|(_, peer_id)| {
-            !matches!(
-                peer_healths.get(peer_id).map(|health| health.status),
-                Some(PeerManagerHealthStatus::Blocked)
-            )
-        })
-        .map(|(_, peer_id)| *peer_id)
-        .collect();
-    filtered
-}
-
-fn peer_requires_active_quarantine(
-    peer_id: PeerId,
-    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
-) -> bool {
-    let Some(health) = peer_healths.get(&peer_id) else {
-        return false;
-    };
-    match health.status {
-        PeerManagerHealthStatus::Suspect => true,
-        PeerManagerHealthStatus::Blocked => !health.issues.iter().all(|issue| {
-            matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)
-        }),
-        PeerManagerHealthStatus::Active | PeerManagerHealthStatus::Candidate => false,
-    }
-}
-
-#[cfg(test)]
-fn collect_quarantined_active_peers(
-    active_transport_paths: &HashMap<PeerId, TransportPath>,
-    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
-) -> Vec<PeerId> {
-    active_transport_paths
-        .keys()
-        .copied()
-        .filter(|peer_id| peer_requires_active_quarantine(*peer_id, peer_healths))
-        .collect()
-}
-
-#[cfg(test)]
-fn admitted_active_transport_paths(
-    active_transport_paths: &HashMap<PeerId, TransportPath>,
-    peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
-) -> HashMap<PeerId, TransportPath> {
-    active_transport_paths
-        .iter()
-        .filter(|(peer_id, _)| {
-            matches!(
-                peer_healths.get(*peer_id).map(|health| health.status),
-                Some(PeerManagerHealthStatus::Active)
-            )
-        })
-        .map(|(peer_id, path)| (*peer_id, path.clone()))
-        .collect()
-}
-
-fn active_transport_paths_for_peers(
-    active_transport_paths: &HashMap<PeerId, TransportPath>,
-    peer_ids: &HashSet<PeerId>,
-) -> HashMap<PeerId, TransportPath> {
-    active_transport_paths
-        .iter()
-        .filter(|(peer_id, _)| peer_ids.contains(peer_id))
-        .map(|(peer_id, path)| (*peer_id, path.clone()))
-        .collect()
-}
-
-fn refresh_peer_manager_healths(
-    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
-    active_transport_paths: &HashMap<PeerId, TransportPath>,
-    previously_admitted_active_peers: &HashSet<PeerId>,
-    peer_manager_policy: &PeerManagerPolicy,
-    event_peer_healths: &Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
-    event_errors: &Arc<Mutex<Vec<String>>>,
-    max_error_messages: usize,
-) -> (
-    HashMap<PeerId, PeerManagerPeerHealth>,
-    HashSet<PeerId>,
-    HashSet<PeerId>,
-) {
-    let raw_healths = recompute_peer_manager_healths(
-        discovered_peer_records,
-        active_transport_paths,
-        peer_manager_policy,
-    );
-    let mut quarantined_active_peers = HashSet::new();
-    let mut admitted_active_peers: HashSet<PeerId> = previously_admitted_active_peers
-        .iter()
-        .copied()
-        .filter(|peer_id| active_transport_paths.contains_key(peer_id))
-        .collect();
-    let admitted_baseline_paths =
-        active_transport_paths_for_peers(active_transport_paths, &admitted_active_peers);
-    let admitted_baseline_healths = recompute_peer_manager_healths(
-        discovered_peer_records,
-        &admitted_baseline_paths,
-        peer_manager_policy,
-    );
-    for peer_id in admitted_active_peers.clone() {
-        if peer_requires_active_quarantine(peer_id, &admitted_baseline_healths) {
-            admitted_active_peers.remove(&peer_id);
-            quarantined_active_peers.insert(peer_id);
-        }
-    }
-    let mut admitted_active_transport_paths =
-        active_transport_paths_for_peers(active_transport_paths, &admitted_active_peers);
-    let mut pending_active_peers: Vec<PeerId> = active_transport_paths
-        .keys()
-        .copied()
-        .filter(|peer_id| !admitted_active_peers.contains(peer_id))
-        .collect();
-    pending_active_peers.sort_unstable_by_key(|peer_id| peer_id.to_string());
-    for peer_id in pending_active_peers {
-        if quarantined_active_peers.contains(&peer_id)
-            || !discovered_peer_records.contains_key(&peer_id)
-        {
-            continue;
-        }
-        let Some(path) = active_transport_paths.get(&peer_id).cloned() else {
-            continue;
-        };
-        let mut trial_active_transport_paths = admitted_active_transport_paths.clone();
-        trial_active_transport_paths.insert(peer_id, path.clone());
-        let trial_healths = recompute_peer_manager_healths(
-            discovered_peer_records,
-            &trial_active_transport_paths,
-            peer_manager_policy,
-        );
-        let peer_is_active = matches!(
-            trial_healths.get(&peer_id).map(|health| health.status),
-            Some(PeerManagerHealthStatus::Active)
-        );
-        let degrades_admitted_peer = admitted_active_peers.iter().any(|admitted_peer_id| {
-            !matches!(
-                trial_healths
-                    .get(admitted_peer_id)
-                    .map(|health| health.status),
-                Some(PeerManagerHealthStatus::Active)
-            )
-        });
-        if peer_is_active && !degrades_admitted_peer {
-            admitted_active_transport_paths.insert(peer_id, path);
-            admitted_active_peers.insert(peer_id);
-        } else if peer_requires_active_quarantine(peer_id, &trial_healths) {
-            quarantined_active_peers.insert(peer_id);
-        }
-    }
-    let mut healths = if admitted_active_transport_paths.len() == active_transport_paths.len() {
-        raw_healths.clone()
-    } else {
-        recompute_peer_manager_healths(
-            discovered_peer_records,
-            &admitted_active_transport_paths,
-            peer_manager_policy,
-        )
-    };
-    for peer_id in active_transport_paths.keys().copied() {
-        if admitted_active_transport_paths.contains_key(&peer_id) {
-            continue;
-        }
-        if let Some(raw_health) = raw_healths.get(&peer_id) {
-            healths.insert(peer_id, raw_health.clone());
-        }
-    }
-    {
-        let mut guard = event_peer_healths.lock().expect("lock peer healths");
-        let previous = guard.clone();
-        let latest: HashMap<String, PeerManagerPeerHealth> = healths
-            .values()
-            .cloned()
-            .map(|health| (health.peer_id.clone(), health))
-            .collect();
-        for (peer_id, health) in &latest {
-            let old = previous.get(peer_id);
-            let transitioned_to_suspect = matches!(
-                old.map(|entry| entry.status),
-                None | Some(PeerManagerHealthStatus::Active | PeerManagerHealthStatus::Candidate)
-            ) && matches!(
-                health.status,
-                PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
-            );
-            if transitioned_to_suspect {
-                push_bounded_clone(
-                    event_errors,
-                    format!(
-                        "libp2p peer manager suspect peer={} issues={:?}",
-                        peer_id, health.issues
-                    ),
-                    max_error_messages,
-                    "lock errors",
-                );
-            }
-        }
-        *guard = latest;
-    }
-    (healths, quarantined_active_peers, admitted_active_peers)
-}
-
-fn enforce_peer_manager_quarantine(
-    swarm: &mut Swarm<Behaviour>,
-    quarantined_active_peers: &HashSet<PeerId>,
-    pending_quarantine_disconnects: &mut HashSet<PeerId>,
-    event_errors: &Arc<Mutex<Vec<String>>>,
-    max_error_messages: usize,
-) {
-    pending_quarantine_disconnects.retain(|peer_id| quarantined_active_peers.contains(peer_id));
-    for peer_id in quarantined_active_peers.iter().copied() {
-        if !pending_quarantine_disconnects.insert(peer_id) {
-            continue;
-        }
-        if swarm.disconnect_peer_id(peer_id).is_ok() {
-            push_bounded_clone(
-                event_errors,
-                format!("libp2p peer manager quarantine disconnect peer={peer_id}"),
-                max_error_messages,
-                "lock errors",
-            );
-        } else {
-            pending_quarantine_disconnects.remove(&peer_id);
-        }
-    }
-}
-
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -562,333 +302,46 @@ impl Libp2pNetwork {
 
             async_std::task::block_on(async move {
                 let mut command_rx = command_rx;
+                let command_ctx = CommandContext {
+                    event_published: &event_published,
+                    event_errors: &event_errors,
+                    event_listening_addrs: &event_listening_addrs,
+                    keypair: &keypair_clone,
+                    peer_record_template: peer_record_template.as_ref(),
+                    local_peer_id,
+                    max_published_messages,
+                    max_error_messages,
+                    republish_interval_ms,
+                };
                 loop {
                     futures::select! {
                         command = command_rx.next().fuse() => {
-                            match command {
-                                Some(Command::Publish { topic, payload }) => {
-                                    let message = NetworkMessage { topic: topic.clone(), payload: payload.clone() };
-                                    push_bounded_clone(
-                                        &event_published,
-                                        message,
-                                        max_published_messages,
-                                        "lock published",
-                                    );
-                                    let topic_handle = IdentTopic::new(topic.clone());
-                                    let _ = swarm.behaviour_mut().gossipsub.publish(topic_handle, payload);
-                                }
-                                Some(Command::Subscribe { topic }) => {
-                                    if subscriptions.insert(topic.clone()) {
-                                        let topic_handle = IdentTopic::new(topic.clone());
-                                        if swarm.behaviour_mut().gossipsub.subscribe(&topic_handle).is_ok() {
-                                            let inbox_limit = classify_network_topic(topic.as_str())
-                                                .map(|lane| lane.default_subscription_inbox_messages())
-                                                .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
-                                            topic_inbox_limits.insert(topic.clone(), inbox_limit);
-                                            topic_map.insert(topic_handle.hash(), topic);
-                                        }
-                                    }
-                                }
-                                Some(Command::Dial { addr }) => {
-                                    if let Err(err) = dial_addr_with_optional_peer_id(&mut swarm, addr) {
-                                        push_bounded_clone(
-                                            &event_errors,
-                                            format!("libp2p dial failed: {err}"),
-                                            max_error_messages,
-                                            "lock errors",
-                                        );
-                                    }
-                                }
-                                Some(Command::Request { protocol, payload, providers, response }) => {
-                                    if peers.is_empty() {
-                                        if let Some(handler) = handlers.get(&protocol) {
-                                            let reply = handler(&payload).map_err(|err| err);
-                                            let _ = response.send(reply);
-                                        } else {
-                                            let _ = response.send(Err(WorldError::NetworkProtocolUnavailable { protocol }));
-                                        }
-                                        continue;
-                                    }
-                                    let mut candidate_peers: Vec<PeerId> = Vec::new();
-                                    if !providers.is_empty() {
-                                        for provider in providers {
-                                            if let Ok(peer_id) = provider.parse::<PeerId>() {
-                                                if peers.contains(&peer_id) {
-                                                    candidate_peers.push(peer_id);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if candidate_peers.is_empty() {
-                                        candidate_peers = peers.clone();
-                                    }
-                                    candidate_peers = filter_request_peers_by_lane(
-                                        candidate_peers,
-                                        protocol.as_str(),
-                                        &discovered_peer_records,
-                                    );
-                                    candidate_peers = filter_request_peers_by_health(
-                                        candidate_peers,
-                                        &peer_healths_by_id,
-                                    );
-                                    if candidate_peers.is_empty() {
-                                        let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                                            protocol: format!(
-                                                "no healthy provider for protocol {protocol}"
-                                            ),
-                                        }));
-                                        continue;
-                                    }
-                                    let peer = candidate_peers[0];
-                                    let request = NetworkRequest { protocol: protocol.clone(), payload };
-                                    let request_id = swarm.behaviour_mut().request_response.send_request(&peer, request);
-                                    pending.insert(request_id, response);
-                                }
-                                Some(Command::RegisterHandler { protocol, handler }) => {
-                                    handlers.insert(protocol, handler);
-                                }
-                                Some(Command::PublishProvider { key, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    match swarm.behaviour_mut().kademlia.start_providing(dht_key) {
-                                        Ok(query_id) => {
-                                            provider_keys.insert(key, now_ms());
-                                            pending_dht.insert(
-                                                query_id,
-                                                PendingDhtQuery::PublishProvider {
-                                                    response: Some(response),
-                                                },
-                                            );
-                                        }
-                                        Err(err) => {
-                                            let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                                                protocol: format!("kad start_providing failed: {err}"),
-                                            }));
-                                        }
-                                    }
-                                }
-                                Some(Command::GetProviders { key, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let query_id = swarm.behaviour_mut().kademlia.get_providers(dht_key);
-                                    pending_dht.insert(
-                                        query_id,
-                                        PendingDhtQuery::GetProviders {
-                                            response: Some(response),
-                                            providers: HashSet::new(),
-                                            error: None,
-                                        },
-                                    );
-                                }
-                                Some(Command::PutWorldHead { key, payload, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let record = kad::Record {
-                                        key: dht_key,
-                                        value: payload,
-                                        publisher: None,
-                                        expires: None,
-                                    };
-                                    match swarm.behaviour_mut().kademlia.put_record(record, Quorum::One) {
-                                        Ok(query_id) => {
-                                            pending_dht.insert(
-                                                query_id,
-                                                PendingDhtQuery::PutWorldHead {
-                                                    response: Some(response),
-                                                },
-                                            );
-                                        }
-                                        Err(err) => {
-                                            let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                                                protocol: format!("kad put_record failed: {err}"),
-                                            }));
-                                        }
-                                    }
-                                }
-                                Some(Command::GetWorldHead { key, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
-                                    pending_dht.insert(
-                                        query_id,
-                                        PendingDhtQuery::GetWorldHead {
-                                            response: Some(response),
-                                            head: None,
-                                            error: None,
-                                        },
-                                    );
-                                }
-                                Some(Command::PutMembershipDirectory { key, payload, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let record = kad::Record {
-                                        key: dht_key,
-                                        value: payload,
-                                        publisher: None,
-                                        expires: None,
-                                    };
-                                    match swarm.behaviour_mut().kademlia.put_record(record, Quorum::One) {
-                                        Ok(query_id) => {
-                                            pending_dht.insert(
-                                                query_id,
-                                                PendingDhtQuery::PutMembershipDirectory {
-                                                    response: Some(response),
-                                                },
-                                            );
-                                        }
-                                        Err(err) => {
-                                            let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                                                protocol: format!("kad put_record failed: {err}"),
-                                            }));
-                                        }
-                                    }
-                                }
-                                Some(Command::GetMembershipDirectory { key, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
-                                    pending_dht.insert(
-                                        query_id,
-                                        PendingDhtQuery::GetMembershipDirectory {
-                                            response: Some(response),
-                                            snapshot: None,
-                                            error: None,
-                                        },
-                                    );
-                                }
-                                Some(Command::PutPeerRecord { key, payload, response }) => {
-                                    match put_record_query(&mut swarm, key, payload) {
-                                        Ok(query_id) => {
-                                            pending_dht.insert(
-                                                query_id,
-                                                PendingDhtQuery::PutPeerRecord {
-                                                    response: Some(response),
-                                                },
-                                            );
-                                        }
-                                        Err(err) => {
-                                            let _ = response.send(Err(err));
-                                        }
-                                    }
-                                }
-                                Some(Command::GetPeerRecord { key, response }) => {
-                                    let dht_key = RecordKey::new(&key);
-                                    let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
-                                    pending_dht.insert(
-                                        query_id,
-                                        PendingDhtQuery::GetPeerRecord {
-                                            response: Some(response),
-                                            record: None,
-                                            error: None,
-                                        },
-                                    );
-                                }
-                                Some(Command::RefreshPeerDiscovery) => {
-                                    if let Some(template) = peer_record_template.as_ref() {
-                                        let _ = publish_configured_peer_record(
-                                            &mut swarm,
-                                            &mut pending_dht,
-                                            &keypair_clone,
-                                            template,
-                                            &event_listening_addrs,
-                                            None,
-                                        );
-                                        publish_discovery_provider(
-                                            &mut swarm,
-                                            &mut provider_keys,
-                                            template.world_id.as_str(),
-                                        );
-                                        start_peer_discovery_query(
-                                            &mut swarm,
-                                            &mut pending_dht,
-                                            template,
-                                        );
-                                        let connected_peers = peers.clone();
-                                        for peer_id in connected_peers {
-                                            maybe_request_cached_discovery_peers(
-                                                &mut swarm,
-                                                &mut pending_peer_record_requests,
-                                                &mut pending_cached_discovery_peers,
-                                                peer_id,
-                                                local_peer_id,
-                                            );
-                                            if let Err(err) = maybe_register_rendezvous_namespace(
-                                                &mut swarm,
-                                                &mut pending_rendezvous_registers,
-                                                &registered_rendezvous_nodes,
-                                                peer_id,
-                                                local_peer_id,
-                                                template,
-                                            ) {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p rendezvous register failed peer={peer_id}: {err:?}"
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
-                                            }
-                                            if let Err(err) = maybe_discover_rendezvous_namespace(
-                                                &mut swarm,
-                                                &mut pending_rendezvous_discovers,
-                                                &rendezvous_cookies,
-                                                peer_id,
-                                                local_peer_id,
-                                                template,
-                                            ) {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p rendezvous discover failed peer={peer_id}: {err:?}"
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                                Some(Command::RepublishProviders) => {
-                                    if republish_interval_ms > 0 {
-                                        let now = now_ms();
-                                        let keys: Vec<String> = provider_keys
-                                            .iter()
-                                            .filter_map(|(key, last_publish)| {
-                                                if should_republish(*last_publish, now, republish_interval_ms) {
-                                                    Some(key.clone())
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .collect();
-                                        for key in keys {
-                                            let dht_key = RecordKey::new(&key);
-                                            if swarm.behaviour_mut().kademlia.start_providing(dht_key).is_ok() {
-                                                provider_keys.insert(key, now);
-                                            }
-                                        }
-                                            if let Some(template) = peer_record_template.as_ref() {
-                                                if peer_record_last_published_at_ms
-                                                    .map(|last_ms| should_republish(last_ms, now, republish_interval_ms))
-                                                    .unwrap_or(true)
-                                                {
-                                                if publish_configured_peer_record(
-                                                    &mut swarm,
-                                                    &mut pending_dht,
-                                                    &keypair_clone,
-                                                    template,
-                                                    &event_listening_addrs,
-                                                    None,
-                                                )
-                                                .is_ok()
-                                                {
-                                                    publish_discovery_provider(
-                                                        &mut swarm,
-                                                        &mut provider_keys,
-                                                        template.world_id.as_str(),
-                                                    );
-                                                    peer_record_last_published_at_ms = Some(now);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Some(Command::Shutdown) | None => {
+                            match handle_command(
+                                &mut swarm,
+                                command,
+                                CommandStateRefs {
+                                    subscriptions: &mut subscriptions,
+                                    topic_map: &mut topic_map,
+                                    topic_inbox_limits: &mut topic_inbox_limits,
+                                    handlers: &mut handlers,
+                                    pending: &mut pending,
+                                    pending_peer_record_requests: &mut pending_peer_record_requests,
+                                    pending_dht: &mut pending_dht,
+                                    peers: &mut peers,
+                                    provider_keys: &mut provider_keys,
+                                    discovered_peer_records: &discovered_peer_records,
+                                    peer_healths_by_id: &peer_healths_by_id,
+                                    pending_cached_discovery_peers: &mut pending_cached_discovery_peers,
+                                    pending_rendezvous_registers: &mut pending_rendezvous_registers,
+                                    pending_rendezvous_discovers: &mut pending_rendezvous_discovers,
+                                    registered_rendezvous_nodes: &registered_rendezvous_nodes,
+                                    rendezvous_cookies: &rendezvous_cookies,
+                                    peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
+                                },
+                                &command_ctx,
+                            ) {
+                                CommandOutcome::Continue => {}
+                                CommandOutcome::Break => {
                                     break;
                                 }
                             }

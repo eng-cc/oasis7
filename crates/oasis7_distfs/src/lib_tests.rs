@@ -108,10 +108,9 @@ fn segment_and_assemble_roundtrip() {
 
     let snapshot_loaded: DemoSnapshot =
         assemble_snapshot(&manifest, &store).expect("assemble snapshot");
-    let events_loaded: Vec<DemoEvent> = assemble_journal(&segments, &store, |event: &DemoEvent| {
-        event.id
-    })
-    .expect("assemble journal");
+    let events_loaded: Vec<DemoEvent> =
+        assemble_journal(&segments, &store, |event: &DemoEvent| event.id)
+            .expect("assemble journal");
 
     assert_eq!(snapshot_loaded, snapshot);
     assert_eq!(events_loaded, events);

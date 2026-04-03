@@ -238,9 +238,7 @@ pub(super) fn command_output(hello_ack: &Value, responses: &[CollectedResponse])
     })
 }
 
-pub(super) fn latest_snapshot<'a>(
-    responses: &'a [CollectedResponse],
-) -> Option<&'a WorldSnapshot> {
+pub(super) fn latest_snapshot<'a>(responses: &'a [CollectedResponse]) -> Option<&'a WorldSnapshot> {
     responses
         .iter()
         .rev()

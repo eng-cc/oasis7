@@ -1,0 +1,20 @@
+task_uid: task_a3a0fb6884bb4837bc8dba5c26838171
+title: "Split libp2p_net oversized file to restore CI"
+owner_role: runtime_engineer
+worktree_hint: p2p-libp2p-net-ci-size-gate
+execution_log_path: .pm/tasks/task_a3a0fb6884bb4837bc8dba5c26838171.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - crates/oasis7_net/src/libp2p_net.rs
+doc_refs:
+  - doc/p2p/project.md
+related_prd:
+  - doc/p2p/prd.md
+acceptance:
+  - "check-rust-file-size passes and CI required tier no longer fails on libp2p_net.rs"
+handoff_to: []
+updated_at: 2026-04-03T13:30:38+08:00
+last_started_at: 2026-04-03T12:47:19+08:00
+last_closed_at: 2026-04-03T13:30:01+08:00

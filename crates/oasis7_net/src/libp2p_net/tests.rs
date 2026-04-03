@@ -1,8 +1,8 @@
-use super::peer_record::{
-    build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
-};
 use super::peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+};
+use super::peer_record::{
+    build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
@@ -409,7 +409,10 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
     assert!(!peer_requires_active_quarantine(active_peer, &healths));
     assert!(peer_requires_active_quarantine(suspect_peer, &healths));
     assert!(peer_requires_active_quarantine(blocked_peer, &healths));
-    assert!(!peer_requires_active_quarantine(missing_record_peer, &healths));
+    assert!(!peer_requires_active_quarantine(
+        missing_record_peer,
+        &healths
+    ));
 }
 
 #[test]
@@ -582,7 +585,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
 }
 
 #[test]
-fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_set_but_in_health_map() {
+fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_set_but_in_health_map(
+) {
     let healthy_peer_key = Keypair::generate_ed25519();
     let healthy_peer = PeerId::from(healthy_peer_key.public());
     let unverified_peer = PeerId::random();
@@ -632,8 +636,14 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         32,
     );
 
-    assert_eq!(healths[&healthy_peer].status, PeerManagerHealthStatus::Active);
-    assert_eq!(healths[&unverified_peer].status, PeerManagerHealthStatus::Blocked);
+    assert_eq!(
+        healths[&healthy_peer].status,
+        PeerManagerHealthStatus::Active
+    );
+    assert_eq!(
+        healths[&unverified_peer].status,
+        PeerManagerHealthStatus::Blocked
+    );
     assert!(healths[&unverified_peer]
         .issues
         .iter()

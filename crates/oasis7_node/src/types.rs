@@ -1014,14 +1014,8 @@ mod tests {
             node_role_claim: PeerNodeRole::ObserverLight,
         };
         assert!(policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Request));
-        assert!(policy.allows_lane_operation(
-            NetworkLane::BlobState,
-            NetworkLaneOperation::Request
-        ));
+        assert!(policy.allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Request));
         assert!(!policy.allows_lane_operation(NetworkLane::Sync, NetworkLaneOperation::Serve));
-        assert!(!policy.allows_lane_operation(
-            NetworkLane::BlobState,
-            NetworkLaneOperation::Serve
-        ));
+        assert!(!policy.allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve));
     }
 }

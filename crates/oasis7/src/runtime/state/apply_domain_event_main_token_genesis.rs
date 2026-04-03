@@ -160,12 +160,12 @@ impl WorldState {
                 });
             }
         }
-        let bucket =
-            self.main_token_genesis_buckets
-                .get(bucket_id)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!("main token genesis bucket not found: {bucket_id}"),
-                })?;
+        let bucket = self
+            .main_token_genesis_buckets
+            .get(bucket_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!("main token genesis bucket not found: {bucket_id}"),
+            })?;
         if bucket.recipient != beneficiary {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -193,12 +193,12 @@ impl WorldState {
             });
         }
 
-        let account =
-            self.main_token_balances
-                .get_mut(beneficiary)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!("main token beneficiary account not found: {}", beneficiary),
-                })?;
+        let account = self
+            .main_token_balances
+            .get_mut(beneficiary)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!("main token beneficiary account not found: {}", beneficiary),
+            })?;
         if account.vested_balance < amount {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -208,33 +208,29 @@ impl WorldState {
             });
         }
         account.vested_balance -= amount;
-        account.liquid_balance =
-            account
-                .liquid_balance
-                .checked_add(amount)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token liquid balance overflow: beneficiary={} current={} claim={}",
-                        beneficiary, account.liquid_balance, amount
-                    ),
-                })?;
+        account.liquid_balance = account.liquid_balance.checked_add(amount).ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "main token liquid balance overflow: beneficiary={} current={} claim={}",
+                    beneficiary, account.liquid_balance, amount
+                ),
+            }
+        })?;
 
-        let bucket =
-            self.main_token_genesis_buckets
-                .get_mut(bucket_id)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!("main token genesis bucket not found: {bucket_id}"),
-                })?;
-        bucket.claimed_amount =
-            bucket
-                .claimed_amount
-                .checked_add(amount)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token claimed amount overflow: bucket={} current={} claim={}",
-                        bucket_id, bucket.claimed_amount, amount
-                    ),
-                })?;
+        let bucket = self
+            .main_token_genesis_buckets
+            .get_mut(bucket_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!("main token genesis bucket not found: {bucket_id}"),
+            })?;
+        bucket.claimed_amount = bucket.claimed_amount.checked_add(amount).ok_or_else(|| {
+            WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "main token claimed amount overflow: bucket={} current={} claim={}",
+                    bucket_id, bucket.claimed_amount, amount
+                ),
+            }
+        })?;
         if bucket.claimed_amount > bucket.allocated_amount {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -315,16 +311,16 @@ impl WorldState {
             }
         }
 
-        let from_before =
-            self.main_token_balances
-                .get(from_account_id)
-                .cloned()
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token transfer source account not found: {}",
-                        from_account_id
-                    ),
-                })?;
+        let from_before = self
+            .main_token_balances
+            .get(from_account_id)
+            .cloned()
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "main token transfer source account not found: {}",
+                    from_account_id
+                ),
+            })?;
         if from_before.account_id != from_account_id {
             return Err(WorldError::ResourceBalanceInvalid {
                 reason: format!(
@@ -367,15 +363,15 @@ impl WorldState {
                 ),
             })?;
 
-        let from_account =
-            self.main_token_balances
-                .get_mut(from_account_id)
-                .ok_or_else(|| WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "main token transfer source account not found: {}",
-                        from_account_id
-                    ),
-                })?;
+        let from_account = self
+            .main_token_balances
+            .get_mut(from_account_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "main token transfer source account not found: {}",
+                    from_account_id
+                ),
+            })?;
         from_account.liquid_balance = next_from_liquid;
 
         let to_account = self

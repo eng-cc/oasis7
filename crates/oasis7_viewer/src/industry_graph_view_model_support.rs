@@ -76,10 +76,7 @@ pub(super) fn dedup_in_place(entries: &mut Vec<String>) {
     entries.retain(|entry| seen.insert(entry.clone()));
 }
 
-pub(super) fn mark_node_congestion(
-    nodes: &mut BTreeMap<String, IndustryGraphNode>,
-    node_id: &str,
-) {
+pub(super) fn mark_node_congestion(nodes: &mut BTreeMap<String, IndustryGraphNode>, node_id: &str) {
     if let Some(node) = nodes.get_mut(node_id) {
         node.status.congestion = true;
         node.status.congestion_events += 1;
@@ -431,9 +428,7 @@ pub(super) fn bump_owner_throughput(
     }
 }
 
-pub(super) fn classify_visual_node_kind(
-    entity: &ModuleVisualEntity,
-) -> Option<IndustryNodeKind> {
+pub(super) fn classify_visual_node_kind(entity: &ModuleVisualEntity) -> Option<IndustryNodeKind> {
     let module_id = entity.module_id.to_ascii_lowercase();
     let kind = entity.kind.to_ascii_lowercase();
 
@@ -548,11 +543,7 @@ pub(super) fn root_cause_key(reason: &RejectReason) -> String {
         .to_string()
 }
 
-pub(super) fn add_amount(
-    map: &mut BTreeMap<ResourceKind, i64>,
-    kind: ResourceKind,
-    amount: i64,
-) {
+pub(super) fn add_amount(map: &mut BTreeMap<ResourceKind, i64>, kind: ResourceKind, amount: i64) {
     let entry = map.entry(kind).or_insert(0);
     *entry = entry.saturating_add(amount.max(0));
 }

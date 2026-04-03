@@ -270,7 +270,9 @@ fn node_network_policy_rejects_incompatible_runtime_role_combo() {
             node_role_claim: PeerNodeRole::ValidatorCore,
         })
         .expect_err("observer cannot claim validator_core");
-    assert!(matches!(err, oasis7_node::NodeError::InvalidConfig { reason } if reason.contains("cannot use network node_role_claim")));
+    assert!(
+        matches!(err, oasis7_node::NodeError::InvalidConfig { reason } if reason.contains("cannot use network node_role_claim"))
+    );
 }
 
 #[test]

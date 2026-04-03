@@ -36,12 +36,9 @@ fn prompt_control_apply_auth_sign_and_verify_roundtrip() {
         private_key.as_str(),
     )
     .expect("sign proof");
-    let verified = verify_prompt_control_apply_auth_proof(
-        PromptControlAuthIntent::Apply,
-        &request,
-        &proof,
-    )
-    .expect("verify proof");
+    let verified =
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &request, &proof)
+            .expect("verify proof");
     assert_eq!(verified.player_id, "player-a");
     assert_eq!(verified.public_key, public_key);
     assert_eq!(verified.nonce, 11);
@@ -73,12 +70,9 @@ fn prompt_control_apply_auth_verify_rejects_tamper() {
 
     let mut tampered = request.clone();
     tampered.system_prompt_override = Some(Some("tampered".to_string()));
-    let err = verify_prompt_control_apply_auth_proof(
-        PromptControlAuthIntent::Apply,
-        &tampered,
-        &proof,
-    )
-    .expect_err("tampered payload must fail");
+    let err =
+        verify_prompt_control_apply_auth_proof(PromptControlAuthIntent::Apply, &tampered, &proof)
+            .expect_err("tampered payload must fail");
     assert!(err.contains("verify auth signature failed"));
 }
 
@@ -169,8 +163,9 @@ fn agent_chat_auth_verify_rejects_player_mismatch() {
         intent_tick: Some(9),
         intent_seq: Some(15),
     };
-    let mut proof = sign_agent_chat_auth_proof(&request, 15, public_key.as_str(), private_key.as_str())
-        .expect("sign proof");
+    let mut proof =
+        sign_agent_chat_auth_proof(&request, 15, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
     proof.player_id = "player-b".to_string();
     let err = verify_agent_chat_auth_proof(&request, &proof).expect_err("player mismatch");
     assert!(err.contains("player_id"));
@@ -188,8 +183,9 @@ fn agent_chat_auth_verify_rejects_invalid_signature_prefix() {
         intent_tick: None,
         intent_seq: Some(16),
     };
-    let mut proof = sign_agent_chat_auth_proof(&request, 16, public_key.as_str(), private_key.as_str())
-        .expect("sign proof");
+    let mut proof =
+        sign_agent_chat_auth_proof(&request, 16, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
     proof.signature = "badprefix:deadbeef".to_string();
     let err = verify_agent_chat_auth_proof(&request, &proof).expect_err("invalid prefix");
     assert!(err.contains("awviewauth:v1"));
@@ -222,13 +218,9 @@ fn gameplay_action_auth_sign_and_verify_roundtrip() {
         public_key: Some(public_key.clone()),
         auth: None,
     };
-    let proof = sign_gameplay_action_auth_proof(
-        &request,
-        21,
-        public_key.as_str(),
-        private_key.as_str(),
-    )
-    .expect("sign proof");
+    let proof =
+        sign_gameplay_action_auth_proof(&request, 21, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
     let verified = verify_gameplay_action_auth_proof(&request, &proof).expect("verify proof");
     assert_eq!(verified.player_id, "player-a");
     assert_eq!(verified.public_key, public_key);
@@ -245,17 +237,12 @@ fn gameplay_action_auth_verify_rejects_tampered_action_id() {
         public_key: Some(public_key.clone()),
         auth: None,
     };
-    let proof = sign_gameplay_action_auth_proof(
-        &request,
-        22,
-        public_key.as_str(),
-        private_key.as_str(),
-    )
-    .expect("sign proof");
+    let proof =
+        sign_gameplay_action_auth_proof(&request, 22, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
     let mut tampered = request.clone();
     tampered.action_id = "schedule_recipe_smelter_iron_ingot".to_string();
-    let err =
-        verify_gameplay_action_auth_proof(&tampered, &proof).expect_err("tamper must fail");
+    let err = verify_gameplay_action_auth_proof(&tampered, &proof).expect_err("tamper must fail");
     assert!(err.contains("verify auth signature failed"));
 }
 
@@ -269,13 +256,9 @@ fn session_register_auth_verify_rejects_tampered_requested_agent_id() {
         requested_agent_id: Some("agent-0".to_string()),
         force_rebind: false,
     };
-    let proof = sign_session_register_auth_proof(
-        &request,
-        31,
-        public_key.as_str(),
-        private_key.as_str(),
-    )
-    .expect("sign proof");
+    let proof =
+        sign_session_register_auth_proof(&request, 31, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
 
     let mut tampered = request.clone();
     tampered.requested_agent_id = Some("agent-1".to_string());
@@ -294,13 +277,9 @@ fn session_register_auth_verify_rejects_tampered_force_rebind() {
         requested_agent_id: Some("agent-0".to_string()),
         force_rebind: false,
     };
-    let proof = sign_session_register_auth_proof(
-        &request,
-        32,
-        public_key.as_str(),
-        private_key.as_str(),
-    )
-    .expect("sign proof");
+    let proof =
+        sign_session_register_auth_proof(&request, 32, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
 
     let mut tampered = request.clone();
     tampered.force_rebind = true;

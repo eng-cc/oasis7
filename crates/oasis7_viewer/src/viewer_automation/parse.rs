@@ -89,9 +89,8 @@ pub(super) fn parse_steps(raw: Option<&str>) -> Vec<ViewerAutomationStep> {
             "layout" | "layout_preset" | "panel_layout" => {
                 parse_layout_preset(value).map(ViewerAutomationStep::ApplyLayoutPreset)
             }
-            "material_variant" | "variant" => {
-                parse_material_variant_step(value).map(|_| ViewerAutomationStep::CycleMaterialVariant)
-            }
+            "material_variant" | "variant" => parse_material_variant_step(value)
+                .map(|_| ViewerAutomationStep::CycleMaterialVariant),
             _ => None,
         };
         if let Some(step) = parsed {

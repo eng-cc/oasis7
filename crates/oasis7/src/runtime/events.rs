@@ -763,7 +763,8 @@ impl Action {
                 operator_agent_id, ..
             } => Some(operator_agent_id.as_str()),
             Action::UpdateRestrictedStarterClaimAdminRegistry {
-                controller_account_id, ..
+                controller_account_id,
+                ..
             } => Some(controller_account_id.as_str()),
             Action::DeclareWar {
                 initiator_agent_id, ..

@@ -398,6 +398,21 @@
     - `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-P2P-044 (PRD-P2P-001) [test_tier_required]: 修复 2026-04-03 p2p required CI 回归，拆分 `libp2p_net` 运行时 command loop / peer-manager runtime helpers 以恢复 Rust 文件体量门禁，并按当前 toolchain 回写 workspace rustfmt 输出，避免 `check-rust-file-size` 解锁后继续卡在 `cargo fmt --all --check`。
+  - 产物文件:
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/dht.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/peer_manager.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests.rs`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_a3a0fb6884bb4837bc8dba5c26838171.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_net`
+    - `./scripts/check-rust-file-size.sh`
+    - `cargo fmt --all -- --check`
+    - `./scripts/ci-tests.sh required`
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`
@@ -432,9 +447,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-02
+- 更新日期: 2026-04-03
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
+- 最新完成: `TASK-P2P-044`（已拆分 `crates/oasis7_net/src/libp2p_net.rs` 中的 command/runtime loop 与 peer-manager runtime helpers，恢复 1200 行门禁；同时按当前 stable rustfmt 回写 workspace 格式，避免 required CI 在 file-size gate 通过后卡死在 `cargo fmt --all --check`。）
 - 最新完成: `TASK-P2P-043`（已完成“主链级非全公网 P2P 覆盖网络架构”专题建档，正式冻结 `public/hybrid/private/relay_only/validator_hidden`、`validator core/sentry/relay/full-storage/observer-light`、`peer record/discovery/reachability/traffic lanes` 与 mixed-topology claims gate。）
 - 最新完成: `TASK-P2P-042`（已恢复 2026-03-27 p2p required 编译/CI 主链路：`cargo check -p oasis7 --bins`、`cargo check -p oasis7_viewer --target wasm32-unknown-unknown`、`cargo test -p oasis7 --bin oasis7_chain_runtime -- --nocapture`、`cargo test -p oasis7 --bin oasis7_game_launcher -- --nocapture` 与 `./scripts/ci-tests.sh required` 全部通过；剩余仅为若干 warning，不再阻断当前任务 landing。）
 - 最新完成: `TASK-P2P-041-F`（已补齐 hosted operator runbook、incident 模板、分享 announcement 模板、对外更正模板与远程 tunnel/reverse-proxy 最低策略，`分享 / 误分享 / 撤销 / 事故通报` 四类 liveops 输出物已具备正式模板与执行边界。）

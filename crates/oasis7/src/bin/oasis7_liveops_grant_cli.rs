@@ -148,9 +148,7 @@ impl CommandReport {
 
 fn main() {
     let raw_args: Vec<String> = env::args().skip(1).collect();
-    if raw_args.is_empty()
-        || raw_args.iter().any(|arg| arg == "--help" || arg == "-h")
-    {
+    if raw_args.is_empty() || raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
         return;
     }
@@ -196,9 +194,7 @@ fn parse_command<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<CliComma
     }
 }
 
-fn parse_issue_command<'a>(
-    args: impl Iterator<Item = &'a str>,
-) -> Result<IssueCommand, String> {
+fn parse_issue_command<'a>(args: impl Iterator<Item = &'a str>) -> Result<IssueCommand, String> {
     let mut world_dir: Option<PathBuf> = None;
     let mut issuer_account_id = DEFAULT_ISSUER_ID.to_string();
     let mut beneficiary_account_id: Option<String> = None;
@@ -254,9 +250,7 @@ fn parse_issue_command<'a>(
     })
 }
 
-fn parse_revoke_command<'a>(
-    args: impl Iterator<Item = &'a str>,
-) -> Result<RevokeCommand, String> {
+fn parse_revoke_command<'a>(args: impl Iterator<Item = &'a str>) -> Result<RevokeCommand, String> {
     let mut world_dir: Option<PathBuf> = None;
     let mut issuer_account_id = DEFAULT_ISSUER_ID.to_string();
     let mut beneficiary_account_id: Option<String> = None;
@@ -294,16 +288,13 @@ fn parse_revoke_command<'a>(
         issuer_account_id,
         beneficiary_account_id: beneficiary_account_id
             .ok_or_else(|| "--beneficiary-account-id is required".to_string())?,
-        revoke_reason: revoke_reason
-            .ok_or_else(|| "--revoke-reason is required".to_string())?,
+        revoke_reason: revoke_reason.ok_or_else(|| "--revoke-reason is required".to_string())?,
         dry_run,
         json,
     })
 }
 
-fn parse_status_command<'a>(
-    args: impl Iterator<Item = &'a str>,
-) -> Result<StatusCommand, String> {
+fn parse_status_command<'a>(args: impl Iterator<Item = &'a str>) -> Result<StatusCommand, String> {
     let mut world_dir: Option<PathBuf> = None;
     let mut issuer_account_id = DEFAULT_ISSUER_ID.to_string();
     let mut beneficiary_account_id: Option<String> = None;
@@ -485,9 +476,10 @@ fn execute_status(command: &StatusCommand) -> Result<StatusReport, String> {
             .controller_signer_policies
             .contains_key(command.issuer_account_id.as_str())
     });
-    let beneficiary_restricted_balance = command.beneficiary_account_id.as_ref().map(|account_id| {
-        world.main_token_restricted_starter_claim_balance(account_id.as_str())
-    });
+    let beneficiary_restricted_balance = command
+        .beneficiary_account_id
+        .as_ref()
+        .map(|account_id| world.main_token_restricted_starter_claim_balance(account_id.as_str()));
     let beneficiary_grant = command
         .beneficiary_account_id
         .as_ref()
@@ -720,7 +712,10 @@ fn render_status_report(report: &StatusReport) -> String {
             "restricted_claim_liveops_treasury_balance: {}",
             report.restricted_claim_liveops_treasury_balance
         ),
-        format!("admin_registry_configured: {}", report.admin_registry_configured),
+        format!(
+            "admin_registry_configured: {}",
+            report.admin_registry_configured
+        ),
         format!(
             "admin_account_ids: {}",
             if report.admin_account_ids.is_empty() {
@@ -816,7 +811,7 @@ mod tests {
                 "msig.ecosystem_governance.v1".to_string(),
             )]),
             restricted_starter_claim_admin_account_ids: BTreeSet::from([
-                DEFAULT_ISSUER_ID.to_string(),
+                DEFAULT_ISSUER_ID.to_string()
             ]),
             controller_signer_policies: BTreeMap::from([
                 (
@@ -910,12 +905,10 @@ mod tests {
         assert!(report.persisted);
         assert_eq!(report.beneficiary_restricted_balance_after, 300);
         assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 300);
-        assert!(
-            report
-                .action_events
-                .iter()
-                .any(|event| event.kind == "restricted_grant_issued")
-        );
+        assert!(report
+            .action_events
+            .iter()
+            .any(|event| event.kind == "restricted_grant_issued"));
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
@@ -952,12 +945,10 @@ mod tests {
         assert!(report.rejection.is_none(), "{report:?}");
         assert!(report.persisted);
         assert_eq!(report.restricted_claim_liveops_treasury_balance_after, 600);
-        assert!(
-            report
-                .action_events
-                .iter()
-                .any(|event| event.kind == "restricted_grant_revoked")
-        );
+        assert!(report
+            .action_events
+            .iter()
+            .any(|event| event.kind == "restricted_grant_revoked"));
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
@@ -993,7 +984,11 @@ mod tests {
         assert!(report.issuer_is_allowlisted_admin);
         assert!(report.issuer_has_signer_policy);
         assert_eq!(report.restricted_claim_liveops_treasury_balance, 300);
-        assert_eq!(report.beneficiary_restricted_balance, Some(300), "{report:?}");
+        assert_eq!(
+            report.beneficiary_restricted_balance,
+            Some(300),
+            "{report:?}"
+        );
         assert_eq!(
             report
                 .beneficiary_grant

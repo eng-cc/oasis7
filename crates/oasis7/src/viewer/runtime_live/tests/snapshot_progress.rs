@@ -260,9 +260,12 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
 
 #[test]
 fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
-    let mut server =
-        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
-            .expect("runtime server");
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
     server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
         action: "step".to_string(),
         stage: "completed_advanced".to_string(),

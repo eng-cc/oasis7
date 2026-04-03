@@ -6,9 +6,7 @@ use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 
 pub use proto_dht::{MembershipDirectorySnapshot, ProviderRecord};
-pub use proto_dht::{
-    PeerDiscoverySource, PeerReachabilityClass, PeerRecord, SignedPeerRecord,
-};
+pub use proto_dht::{PeerDiscoverySource, PeerReachabilityClass, PeerRecord, SignedPeerRecord};
 
 pub trait DistributedDht: proto_dht::DistributedDht<WorldError> {}
 

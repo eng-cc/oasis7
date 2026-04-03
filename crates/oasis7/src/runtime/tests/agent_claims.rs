@@ -94,7 +94,11 @@ fn setup_claim_world_with_treasury(
 }
 
 fn allowlist_restricted_grant_admins(world: &mut World, admin_account_ids: &[&str]) {
-    configure_restricted_grant_registry(world, &["msig.ecosystem_governance.v1"], admin_account_ids);
+    configure_restricted_grant_registry(
+        world,
+        &["msig.ecosystem_governance.v1"],
+        admin_account_ids,
+    );
 }
 
 fn configure_restricted_grant_registry(
@@ -1110,5 +1114,8 @@ fn controller_registry_update_can_enable_restricted_grant_admin_before_issue() {
             .collect::<Vec<_>>(),
         vec!["liveops".to_string()]
     );
-    assert_eq!(world.main_token_restricted_starter_claim_balance("alice"), 325);
+    assert_eq!(
+        world.main_token_restricted_starter_claim_balance("alice"),
+        325
+    );
 }

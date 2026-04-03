@@ -120,7 +120,8 @@ impl World {
                 controller_account_id,
                 next_admin_account_ids,
             } => {
-                let Some(current_registry) = self.governance_main_token_controller_registry() else {
+                let Some(current_registry) = self.governance_main_token_controller_registry()
+                else {
                     return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
                         reason: RejectReason::RuleDenied {

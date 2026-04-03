@@ -121,13 +121,13 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
         .and_then(|slots| slots.get(options.finality_slot_id.as_str()))
         .map(|slot| slot.threshold)
         .unwrap_or(options.default_expected_threshold);
-    let finality_manifest_match = manifest_slots
-        .as_ref()
-        .map(|slots| {
-            slots.get(options.finality_slot_id.as_str()).is_some_and(|slot| {
+    let finality_manifest_match = manifest_slots.as_ref().map(|slots| {
+        slots
+            .get(options.finality_slot_id.as_str())
+            .is_some_and(|slot| {
                 slot.public_keys == finality_keys && slot.threshold == finality_registry.threshold
             })
-        });
+    });
     let finality = audit_row(
         finality_registry.slot_id.as_str(),
         finality_registry.threshold,
@@ -148,14 +148,12 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
                 .and_then(|slots| slots.get(slot_id.as_str()))
                 .map(|slot| slot.threshold)
                 .unwrap_or(options.default_expected_threshold);
-            let manifest_match = manifest_slots
-                .as_ref()
-                .map(|slots| {
-                    slots.get(slot_id.as_str()).is_some_and(|slot| {
-                        slot.public_keys == policy.allowed_public_keys
-                            && slot.threshold == policy.threshold
-                    })
-                });
+            let manifest_match = manifest_slots.as_ref().map(|slots| {
+                slots.get(slot_id.as_str()).is_some_and(|slot| {
+                    slot.public_keys == policy.allowed_public_keys
+                        && slot.threshold == policy.threshold
+                })
+            });
             audit_row(
                 slot_id.as_str(),
                 policy.threshold,
@@ -348,12 +346,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--expected-threshold" => {
                 default_expected_threshold =
                     parse_required_value(&mut iter, "--expected-threshold")?
-                    .parse::<u16>()
-                    .ok()
-                    .filter(|value| *value > 0)
-                    .ok_or_else(|| {
-                        "--expected-threshold requires a positive integer".to_string()
-                    })?;
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|value| *value > 0)
+                        .ok_or_else(|| {
+                            "--expected-threshold requires a positive integer".to_string()
+                        })?;
             }
             "--strict-manifest-match" => {
                 strict_manifest_match = true;
@@ -654,9 +652,7 @@ mod tests {
                         "msig.security_council.v1".to_string(),
                     ),
                 ]),
-                restricted_starter_claim_admin_account_ids: BTreeSet::from([
-                    "liveops".to_string(),
-                ]),
+                restricted_starter_claim_admin_account_ids: BTreeSet::from(["liveops".to_string()]),
                 controller_signer_policies: BTreeMap::from([
                     (
                         "msig.genesis.v1".to_string(),

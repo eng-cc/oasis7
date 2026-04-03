@@ -17,6 +17,17 @@ tasks:
       - wasm_platform_engineer
     status: done
     task_path: .pm/tasks/task_0e8cdcdddb7553a2a007ff14fefd79b5.yaml
+  - task_uid: task_a3a0fb6884bb4837bc8dba5c26838171
+    title: "Split libp2p_net oversized file to restore CI"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/prd.md
+    acceptance:
+      - "check-rust-file-size passes and CI required tier no longer fails on libp2p_net.rs"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_a3a0fb6884bb4837bc8dba5c26838171.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

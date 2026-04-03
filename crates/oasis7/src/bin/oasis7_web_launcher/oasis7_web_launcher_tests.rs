@@ -415,7 +415,9 @@ fn validate_game_config_rejects_no_llm_playability_config() {
         ..LauncherConfig::default()
     };
     let issues = validate_game_config(&config);
-    assert!(issues.iter().any(|item| item.contains("llm must stay enabled")));
+    assert!(issues
+        .iter()
+        .any(|item| item.contains("llm must stay enabled")));
     let _ = fs::remove_dir_all(static_dir);
 }
 

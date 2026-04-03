@@ -35,7 +35,9 @@ impl WorldState {
                 beneficiary,
                 amount,
                 nonce,
-            } => self.apply_main_token_vesting_claimed(bucket_id, beneficiary, *amount, *nonce, now)?,
+            } => {
+                self.apply_main_token_vesting_claimed(bucket_id, beneficiary, *amount, *nonce, now)?
+            }
             DomainEvent::MainTokenTransferred {
                 from_account_id,
                 to_account_id,
@@ -64,12 +66,22 @@ impl WorldState {
                 amount,
                 burn_amount,
                 treasury_amount,
-            } => self.apply_main_token_fee_settled(*fee_kind, *amount, *burn_amount, *treasury_amount)?,
+            } => self.apply_main_token_fee_settled(
+                *fee_kind,
+                *amount,
+                *burn_amount,
+                *treasury_amount,
+            )?,
             DomainEvent::MainTokenPolicyUpdateScheduled {
                 proposal_id,
                 effective_epoch,
                 next,
-            } => self.apply_main_token_policy_update_scheduled(*proposal_id, *effective_epoch, next, now)?,
+            } => self.apply_main_token_policy_update_scheduled(
+                *proposal_id,
+                *effective_epoch,
+                next,
+                now,
+            )?,
             DomainEvent::MainTokenTreasuryDistributed {
                 proposal_id,
                 distribution_id,

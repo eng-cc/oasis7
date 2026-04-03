@@ -33,7 +33,11 @@ impl ViewerRuntimeLiveServer {
         let target_batch_id = request
             .target_batch_id
             .clone()
-            .or_else(|| self.stable_checkpoints.back().map(|entry| entry.batch_id.clone()))
+            .or_else(|| {
+                self.stable_checkpoints
+                    .back()
+                    .map(|entry| entry.batch_id.clone())
+            })
             .ok_or_else(|| {
                 recovery_error(
                     "stable_checkpoint_not_found",

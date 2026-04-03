@@ -972,10 +972,7 @@ pub(super) fn feedback_toast_snapshot(
 }
 
 #[cfg(test)]
-pub(super) fn feedback_toast_detail(
-    feedback: &FeedbackToastState,
-    index: usize,
-) -> Option<String> {
+pub(super) fn feedback_toast_detail(feedback: &FeedbackToastState, index: usize) -> Option<String> {
     egui_right_panel_player_experience_hud::feedback_toast_detail(feedback, index)
 }
 
@@ -1001,10 +998,7 @@ pub(super) fn player_achievement_is_unlocked(
     achievements: &PlayerAchievementState,
     milestone: PlayerAchievementMilestone,
 ) -> bool {
-    egui_right_panel_player_experience_hud::player_achievement_is_unlocked(
-        achievements,
-        milestone,
-    )
+    egui_right_panel_player_experience_hud::player_achievement_is_unlocked(achievements, milestone)
 }
 
 #[cfg(test)]
@@ -1097,9 +1091,7 @@ pub(super) fn build_player_first_session_summary_snapshot(
 }
 
 #[cfg(test)]
-pub(super) fn player_first_session_summary_visible(
-    onboarding: &PlayerOnboardingState,
-) -> bool {
+pub(super) fn player_first_session_summary_visible(onboarding: &PlayerOnboardingState) -> bool {
     egui_right_panel_player_experience_hud::player_first_session_summary_visible(onboarding)
 }
 

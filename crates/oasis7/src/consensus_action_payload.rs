@@ -111,9 +111,7 @@ enum MainTokenActionSigningPayload<'a> {
     ClaimMainTokenVesting(ClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(InitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(DistributeMainTokenTreasurySigningData<'a>),
-    TopUpRestrictedStarterClaimLiveopsPool(
-        TopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>,
-    ),
+    TopUpRestrictedStarterClaimLiveopsPool(TopUpRestrictedStarterClaimLiveopsPoolSigningData<'a>),
     UpdateRestrictedStarterClaimAdminRegistry(
         UpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
     ),
@@ -661,9 +659,9 @@ fn main_token_action_signature_prefix(
         runtime::Action::DistributeMainTokenTreasury { .. } => {
             Ok(MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX)
         }
-        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool { .. } => Ok(
-            MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX,
-        ),
+        runtime::Action::TopUpRestrictedStarterClaimLiveopsPool { .. } => {
+            Ok(MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX)
+        }
         runtime::Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
             Ok(MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX)
         }

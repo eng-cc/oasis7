@@ -3,8 +3,7 @@ use super::{
     chunk_state_name, facility_details_lines, format_element_budget, format_geo_pos,
     format_resource_stock, fragment_budget_totals_g, module_visual_details_summary,
     owner_anchor_pos, owner_label, owner_recent_events, parse_chunk_coord,
-    radiation_visual_metrics, thermal_ratio, thermal_ratio_color, SelectionKind,
-    ViewerSelection,
+    radiation_visual_metrics, thermal_ratio, thermal_ratio_color, SelectionKind, ViewerSelection,
 };
 use crate::ui_text_claims::extend_agent_details_with_claim_lines;
 use oasis7::simulator::{chunk_bounds, AgentDecisionTrace, WorldEvent, WorldSnapshot};

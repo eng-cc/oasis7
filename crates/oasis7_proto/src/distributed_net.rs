@@ -64,9 +64,7 @@ impl NetworkLane {
                 | NetworkLaneOperation::Request => !matches!(role, PeerNodeRole::Relay),
                 NetworkLaneOperation::Serve => matches!(
                     role,
-                    PeerNodeRole::ValidatorCore
-                        | PeerNodeRole::Sentry
-                        | PeerNodeRole::FullStorage
+                    PeerNodeRole::ValidatorCore | PeerNodeRole::Sentry | PeerNodeRole::FullStorage
                 ),
             },
             Self::BlobState => match operation {
@@ -75,9 +73,7 @@ impl NetworkLane {
                 | NetworkLaneOperation::Subscribe
                 | NetworkLaneOperation::Serve => matches!(
                     role,
-                    PeerNodeRole::ValidatorCore
-                        | PeerNodeRole::Sentry
-                        | PeerNodeRole::FullStorage
+                    PeerNodeRole::ValidatorCore | PeerNodeRole::Sentry | PeerNodeRole::FullStorage
                 ),
             },
             Self::Control => true,
@@ -296,22 +292,14 @@ mod tests {
             .allows_role(PeerNodeRole::ValidatorCore, NetworkLaneOperation::Publish));
         assert!(!NetworkLane::ConsensusGossip
             .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Publish));
-        assert!(NetworkLane::Sync.allows_role(
-            PeerNodeRole::ObserverLight,
-            NetworkLaneOperation::Request
-        ));
-        assert!(!NetworkLane::Sync.allows_role(
-            PeerNodeRole::ObserverLight,
-            NetworkLaneOperation::Serve
-        ));
-        assert!(NetworkLane::BlobState.allows_role(
-            PeerNodeRole::ObserverLight,
-            NetworkLaneOperation::Request
-        ));
-        assert!(!NetworkLane::BlobState.allows_role(
-            PeerNodeRole::ObserverLight,
-            NetworkLaneOperation::Serve
-        ));
+        assert!(NetworkLane::Sync
+            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request));
+        assert!(!NetworkLane::Sync
+            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve));
+        assert!(NetworkLane::BlobState
+            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Request));
+        assert!(!NetworkLane::BlobState
+            .allows_role(PeerNodeRole::ObserverLight, NetworkLaneOperation::Serve));
         assert!(NetworkLane::BlobState
             .allows_role(PeerNodeRole::FullStorage, NetworkLaneOperation::Serve));
         assert!(

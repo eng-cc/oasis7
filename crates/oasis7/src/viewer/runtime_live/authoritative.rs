@@ -79,7 +79,10 @@ impl RuntimeAuthoritativeBatchRecord {
         }
     }
 
-    pub(super) fn as_wire(&self, gate: &RuntimeSettlementRankingGate) -> AuthoritativeBatchFinality {
+    pub(super) fn as_wire(
+        &self,
+        gate: &RuntimeSettlementRankingGate,
+    ) -> AuthoritativeBatchFinality {
         AuthoritativeBatchFinality {
             batch_id: self.batch_id.clone(),
             tx_hash: self.tx_hash.clone(),
@@ -117,7 +120,11 @@ impl RuntimeSettlementRankingGate {
         self.ranking_ready_batches.remove(batch_id);
     }
 
-    fn settlement_allowed(&self, batch_id: &str, finality_state: AuthoritativeFinalityState) -> bool {
+    fn settlement_allowed(
+        &self,
+        batch_id: &str,
+        finality_state: AuthoritativeFinalityState,
+    ) -> bool {
         finality_state == AuthoritativeFinalityState::Final
             && self.settlement_ready_batches.contains(batch_id)
     }
@@ -216,7 +223,8 @@ impl ViewerRuntimeLiveServer {
         }
 
         for batch_id in newly_finalized_batch_ids {
-            self.settlement_ranking_gate.promote_final(batch_id.as_str());
+            self.settlement_ranking_gate
+                .promote_final(batch_id.as_str());
             self.capture_stable_checkpoint(batch_id.as_str())?;
         }
 
@@ -493,7 +501,10 @@ impl ViewerRuntimeLiveServer {
                         Some(batch_id.clone()),
                     )
                 })?;
-            if let Some(update) = updates.into_iter().find(|update| update.batch_id == batch_id) {
+            if let Some(update) = updates
+                .into_iter()
+                .find(|update| update.batch_id == batch_id)
+            {
                 batch_wire = update;
             }
         }
