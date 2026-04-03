@@ -23,11 +23,14 @@ Options:
   --agent-id <id>                Target agent id (default: agent-0)
   --chat-message <text>          Chat message override (default: auto-generated)
   --agent-spoke-timeout-ms <ms>  Wait for inbound `agent_spoke` (default: 45000)
+  --immediate-agent-spoke-timeout-ms <ms>
+                                 Wait for inbound `agent_spoke` before any extra step/play
+                                 (default: 4000)
   --require-agent-spoke          Treat missing inbound `agent_spoke` as failure
   --headed                       Open browser in headed mode
   Note: when the script bootstraps its own stack, it enables
   `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` automatically and treats missing
-  inbound `agent_spoke` as a blocking failure.
+  inbound `agent_spoke` before any extra step/play as a blocking failure.
   --headless                     Open browser in headless mode (default)
   -h, --help                     Show this help
 
@@ -236,7 +239,10 @@ payload = {
     "chatAck": sys.argv[12] == "true",
     "outboundHistorySeen": sys.argv[13] == "true",
     "agentSpokeSeen": sys.argv[14] == "true",
-    "requireAgentSpoke": sys.argv[15] == "true",
+    "agentSpokeSeenImmediate": sys.argv[15] == "true",
+    "agentSpokeNeededAdvance": sys.argv[16] == "true",
+    "requireAgentSpoke": sys.argv[17] == "true",
+    "requireImmediateAgentSpoke": sys.argv[18] == "true",
 }
 print(json.dumps(payload, ensure_ascii=False, indent=2))
 PY
@@ -248,6 +254,7 @@ STARTUP_TIMEOUT_SECS=240
 AGENT_ID="agent-0"
 CHAT_MESSAGE=""
 AGENT_SPOKE_TIMEOUT_MS=45000
+IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS=4000
 REQUIRE_AGENT_SPOKE=0
 REQUIRE_AGENT_SPOKE_EXPLICIT=0
 HEADED=0
@@ -279,6 +286,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --agent-spoke-timeout-ms)
       AGENT_SPOKE_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
+    --immediate-agent-spoke-timeout-ms)
+      IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS="${2:-}"
       shift 2
       ;;
     --require-agent-spoke)
@@ -313,6 +324,7 @@ done
 [[ -n "$OUT_ROOT" ]] || { echo "error: --out-dir cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be positive" >&2; exit 2; }
 [[ "$AGENT_SPOKE_TIMEOUT_MS" =~ ^[0-9]+$ ]] && [[ "$AGENT_SPOKE_TIMEOUT_MS" -gt 0 ]] || { echo "error: --agent-spoke-timeout-ms must be positive" >&2; exit 2; }
+[[ "$IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS" =~ ^[0-9]+$ ]] && [[ "$IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS" -gt 0 ]] || { echo "error: --immediate-agent-spoke-timeout-ms must be positive" >&2; exit 2; }
 
 require_cmd python3
 require_cmd rg
@@ -465,10 +477,14 @@ after_chat_ack_state=$(ab_state)
 write_json_file "$after_chat_ack_state" "$after_chat_ack_state_json"
 
 agent_spoke_seen=false
+agent_spoke_seen_immediate=false
+agent_spoke_needed_advance=false
+require_immediate_agent_spoke=0
 agent_spoke_deadline_ms=$((SECONDS * 1000 + AGENT_SPOKE_TIMEOUT_MS))
 agent_spoke_expected_message=""
 if [[ "$BOOTSTRAPPED_STACK" -eq 1 && "$BOOTSTRAP_USES_BUNDLE" -eq 0 ]]; then
   agent_spoke_expected_message="[qa-echo] ${CHAT_MESSAGE}"
+  require_immediate_agent_spoke=1
 fi
 
 agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some((entry) => entry && entry.source === 'event' && entry.agentId === ${AGENT_ID@Q}); })()"
@@ -476,50 +492,67 @@ if [[ -n "$agent_spoke_expected_message" ]]; then
   agent_spoke_match_script="(() => { const h = window.__AW_TEST__?.getState?.()?.chatHistory ?? []; return h.some((entry) => entry && entry.source === 'event' && entry.agentId === ${AGENT_ID@Q} && entry.message === ${agent_spoke_expected_message@Q}); })()"
 fi
 
-for step_batch in 1 2 3 4; do
-  if wait_for_js_true "$agent_spoke_match_script" 500; then
-    agent_spoke_seen=true
-    break
-  fi
+immediate_wait_ms=$AGENT_SPOKE_TIMEOUT_MS
+if (( immediate_wait_ms > IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS )); then
+  immediate_wait_ms=$IMMEDIATE_AGENT_SPOKE_TIMEOUT_MS
+fi
+if wait_for_js_true "$agent_spoke_match_script" "$immediate_wait_ms"; then
+  agent_spoke_seen=true
+  agent_spoke_seen_immediate=true
+fi
 
-  remaining_ms=$((agent_spoke_deadline_ms - SECONDS * 1000))
-  if (( remaining_ms <= 0 )); then
-    break
-  fi
+if [[ "$agent_spoke_seen_immediate" != true && "$require_immediate_agent_spoke" -eq 1 ]]; then
+  echo "error: inbound agent_spoke not observed immediately after chat ack without extra control advance (expected_message=${agent_spoke_expected_message:-<any>})" >&2
+  exit 1
+fi
 
-  batch_state_before=$(ab_state)
-  batch_baseline_logical_time=$(state_logical_time "$batch_state_before")
-  batch_baseline_event_seq=$(state_event_seq "$batch_state_before")
-  log_note "step_batch_${step_batch}"
-  ab_eval "$session" 'window.__AW_TEST__.runSteps(4)' >>"$ab_log" 2>&1 || true
+if [[ "$agent_spoke_seen" != true ]]; then
+  for step_batch in 1 2 3 4; do
+    if wait_for_js_true "$agent_spoke_match_script" 500; then
+      agent_spoke_seen=true
+      break
+    fi
 
-  step_wait_ms=18000
-  if (( remaining_ms < step_wait_ms )); then
-    step_wait_ms=$remaining_ms
-  fi
-  wait_for_js_true "(() => {
-    const snapshot = window.__AW_TEST__?.getState?.();
-    const feedback = snapshot?.lastControlFeedback;
-    const stage = String(feedback?.stage || '');
-    return Number(snapshot?.logicalTime || 0) > ${batch_baseline_logical_time:-0}
-      || Number(snapshot?.eventSeq || 0) > ${batch_baseline_event_seq:-0}
-      || stage === 'completed_advanced'
-      || stage === 'completed_timeout';
-  })()" "$step_wait_ms" >>"$ab_log" 2>&1 || true
+    remaining_ms=$((agent_spoke_deadline_ms - SECONDS * 1000))
+    if (( remaining_ms <= 0 )); then
+      break
+    fi
 
-  remaining_ms=$((agent_spoke_deadline_ms - SECONDS * 1000))
-  if (( remaining_ms <= 0 )); then
-    break
-  fi
-  probe_wait_ms=2000
-  if (( remaining_ms < probe_wait_ms )); then
-    probe_wait_ms=$remaining_ms
-  fi
-  if wait_for_js_true "$agent_spoke_match_script" "$probe_wait_ms"; then
-    agent_spoke_seen=true
-    break
-  fi
-done
+    batch_state_before=$(ab_state)
+    batch_baseline_logical_time=$(state_logical_time "$batch_state_before")
+    batch_baseline_event_seq=$(state_event_seq "$batch_state_before")
+    log_note "step_batch_${step_batch}"
+    ab_eval "$session" 'window.__AW_TEST__.runSteps(4)' >>"$ab_log" 2>&1 || true
+
+    step_wait_ms=18000
+    if (( remaining_ms < step_wait_ms )); then
+      step_wait_ms=$remaining_ms
+    fi
+    wait_for_js_true "(() => {
+      const snapshot = window.__AW_TEST__?.getState?.();
+      const feedback = snapshot?.lastControlFeedback;
+      const stage = String(feedback?.stage || '');
+      return Number(snapshot?.logicalTime || 0) > ${batch_baseline_logical_time:-0}
+        || Number(snapshot?.eventSeq || 0) > ${batch_baseline_event_seq:-0}
+        || stage === 'completed_advanced'
+        || stage === 'completed_timeout';
+    })()" "$step_wait_ms" >>"$ab_log" 2>&1 || true
+
+    remaining_ms=$((agent_spoke_deadline_ms - SECONDS * 1000))
+    if (( remaining_ms <= 0 )); then
+      break
+    fi
+    probe_wait_ms=2000
+    if (( remaining_ms < probe_wait_ms )); then
+      probe_wait_ms=$remaining_ms
+    fi
+    if wait_for_js_true "$agent_spoke_match_script" "$probe_wait_ms"; then
+      agent_spoke_seen=true
+      agent_spoke_needed_advance=true
+      break
+    fi
+  done
+fi
 
 if [[ "$agent_spoke_seen" != true && "$REQUIRE_AGENT_SPOKE" -eq 1 ]]; then
   echo "error: inbound agent_spoke not observed within timeout (bootstrapped_stack=$BOOTSTRAPPED_STACK, bootstrap_uses_bundle=$BOOTSTRAP_USES_BUNDLE, expected_message=${agent_spoke_expected_message:-<any>})" >&2
@@ -539,7 +572,7 @@ summary_raw=$(summary_json \
   "$GAME_URL" \
   "$render_mode" \
   "$auth_ready" \
-  true true true true true "$agent_spoke_seen" "$([[ "$REQUIRE_AGENT_SPOKE" -eq 1 ]] && printf 'true' || printf 'false')")
+  true true true true true "$agent_spoke_seen" "$agent_spoke_seen_immediate" "$agent_spoke_needed_advance" "$([[ "$REQUIRE_AGENT_SPOKE" -eq 1 ]] && printf 'true' || printf 'false')" "$([[ "$require_immediate_agent_spoke" -eq 1 ]] && printf 'true' || printf 'false')")
 printf '%s\n' "$summary_raw" >"$summary_json_path"
 python3 - "$summary_json_path" "$summary_md_path" <<'PY'
 import json
@@ -564,7 +597,10 @@ lines = [
     f"- chatAck: `{data['chatAck']}`",
     f"- outboundHistorySeen: `{data['outboundHistorySeen']}`",
     f"- agentSpokeSeen: `{data['agentSpokeSeen']}`",
+    f"- agentSpokeSeenImmediate: `{data['agentSpokeSeenImmediate']}`",
+    f"- agentSpokeNeededAdvance: `{data['agentSpokeNeededAdvance']}`",
     f"- requireAgentSpoke: `{data['requireAgentSpoke']}`",
+    f"- requireImmediateAgentSpoke: `{data['requireImmediateAgentSpoke']}`",
     f"- gameUrl: `{data['gameUrl']}`",
 ]
 out.write_text("\n".join(lines) + "\n", encoding='utf-8')

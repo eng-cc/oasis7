@@ -124,6 +124,7 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_ce19184e957d4ab5a3027a95a6049d60.yaml
+<<<<<<< HEAD
   - task_uid: task_eceb1ea8964a449683d754632c860cdc
     title: "TASK-README-057 为小红书第十篇补齐 4 页轮播版素材包与资产"
     priority: P2
@@ -162,3 +163,17 @@ tasks:
       - liveops_community
     status: done
     task_path: .pm/tasks/task_dfc0ef35b0114c4589b79c97735122ca.yaml
+  - task_uid: task_8e4fa44427b24006b2ed162c0576b66b
+    title: "Harden software_safe browser regression for immediate QA echo"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "repo-owned software_safe browser regression fails if chat ack succeeds but QA echo does not appear in the same interaction without extra step/play advancement."
+      - "regression output records whether inbound agent_spoke was observed before any extra control input, so runtime_live immediate flush regressions surface at the browser layer."
+      - "project/task tracking records the added browser-level closure after TASK-WORLD_SIMULATOR-292."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_8e4fa44427b24006b2ed162c0576b66b.yaml
