@@ -1,16 +1,4 @@
 version: 1
 role: liveops_community
 status: candidate
-tasks:
-  - task_uid: task_cd0753c5c26c5caebf06f653bef1b435
-    title: "Triage remaining Moltbook follower and DM notifications"
-    priority: P3
-    source_signal: SIG-PM-0005
-    related_prd:
-      - doc/readme/prd.md
-    acceptance:
-      - "Remaining non-comment notifications are classified with action/no-action rationale."
-      - "Execution log records any replies, ignores, or escalation decisions for follower and DM notifications."
-    handoff_to: []
-    status: candidate
-    task_path: .pm/tasks/task_cd0753c5c26c5caebf06f653bef1b435.yaml
+tasks: []
