@@ -1,0 +1,21 @@
+task_uid: task_d454d71480fa432d8d796e80791126a6
+title: "Wire live reachability evidence into P2P auto mode recommender"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-live-reachability-recommender
+execution_log_path: .pm/tasks/task_d454d71480fa432d8d796e80791126a6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "Runtime consumes live relay reservation / hole-punch / active-path evidence for default user-mode recommendation instead of only CLI hints"
+  - "Chain status reports effective user-mode rationale from live detection without misreporting raw policy overrides"
+handoff_to: []
+updated_at: 2026-04-06T23:01:35+08:00
+last_started_at: 2026-04-03T14:47:59+08:00
+last_closed_at: 2026-04-06T23:01:35+08:00

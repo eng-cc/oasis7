@@ -117,7 +117,7 @@ pub(super) fn filter_request_peers_by_health(
         .collect()
 }
 
-fn peer_requires_active_quarantine(
+pub(super) fn peer_requires_active_quarantine(
     peer_id: PeerId,
     peer_healths: &HashMap<PeerId, PeerManagerPeerHealth>,
 ) -> bool {

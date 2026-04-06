@@ -16,7 +16,7 @@ use oasis7_proto::distributed_dht::{
 };
 use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
-use super::{Command, Libp2pNetwork, PeerManagerPeerHealth};
+use super::{snapshot_clone, Command, Libp2pNetwork, Libp2pReachabilitySnapshot, PeerManagerPeerHealth};
 
 impl Libp2pNetwork {
     pub fn peer_id(&self) -> PeerId {
@@ -62,6 +62,10 @@ impl Libp2pNetwork {
             .values()
             .cloned()
             .collect()
+    }
+
+    pub fn reachability_snapshot(&self) -> Libp2pReachabilitySnapshot {
+        snapshot_clone(&self.reachability)
     }
 
     pub(super) fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {

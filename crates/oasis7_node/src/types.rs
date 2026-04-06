@@ -134,8 +134,8 @@ impl Default for NodeReachabilityAutoDetection {
         Self {
             observed_reachability: None,
             hole_punch_viability: NodeHolePunchViability::Unknown,
-            relay_available: true,
-            probe_stable: true,
+            relay_available: false,
+            probe_stable: false,
         }
     }
 }

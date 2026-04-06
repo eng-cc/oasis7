@@ -75,6 +75,7 @@ pub use libp2p_replication_network_wasm::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
+pub use oasis7_net::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
 pub use replication::NodeReplicationConfig;
 pub use types::{
     NodeCommittedActionBatch, NodeConfig, NodeConsensusMode, NodeConsensusSnapshot,

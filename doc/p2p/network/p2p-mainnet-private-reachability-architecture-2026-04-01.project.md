@@ -51,7 +51,7 @@
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
   - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
   - `P2PARCH-8` 已冻结用户层部署抽象：后续产品默认应把正式角色藏在内部，普通用户只看到 `2~3` 个简单模式，且默认由系统自动选择。
-  - `P2PARCH-9` 已落 runtime user-mode recommender slice：reachability evidence 现在会映射到 `auto_join / private_safe / public_entry` 推荐结果，`public_entry` 自动升级必须携带显式确认；chain runtime status payload 与 launcher config 也已带出 requested/recommended/effective user mode，便于后续 viewer UX 继续消费。
+  - `P2PARCH-9` 已继续推进 runtime user-mode recommender：在保留 CLI detection hint 覆盖通道的同时，runtime 现在也会把 live relay reservation、DCUtR 打洞结果与 active transport path kind 合并成默认推荐依据；`public_entry` 自动升级仍必须携带显式确认，chain runtime status payload 会按请求时的 live snapshot 重新计算 requested/recommended/effective user mode。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
   - 后续 workstream 必须优先收敛底层 framework，而不是继续在业务层追加静态 peer / UDP 兜底。
 
@@ -196,8 +196,9 @@
   - `oasis7_node` 新增用户层模式、reachability auto-detection、recommendation/effective-policy contract，并把 `public_entry` 自动升级收口为显式确认门
   - chain runtime CLI/status payload 已能承载 requested/recommended/effective user mode 与探测依据，且在未显式传入原始 `deployment_mode/node_role` 时默认走用户模式推荐
   - game launcher / web launcher / launcher UI schema 已统一透传 `chain_p2p_user_mode` 与 `chain_p2p_accept_public_entry`，为后续 viewer UX 接推荐态与确认态留好接口
+  - runtime status/recommender 现在会在 CLI 未显式覆盖对应字段时，自动吸收 libp2p live relay reservation、DCUtR success/failure 与 active transport path kind，作为 `auto_join / private_safe / public_entry` 默认推荐的 fallback 探测源
 - 遗留:
-  - 当前 recommender 仍消费 CLI 注入的 detection hint；真正把 AutoNAT / relay reservation / hole-punch live evidence 接成默认探测源，仍需后续网络观测面切片补齐
+  - 当前 runtime 已接入 relay / hole-punch / active-path live evidence，但仍未接入完整 AutoNAT / port reachability probe；CLI detection hint 继续保留为显式 override 通道，后续网络观测面仍需补齐真正的公网/NAT 探测源
   - `viewer_engineer` 仍需把 status payload / launcher config 真正渲染成用户可见的推荐说明与 `公网入口` 风险确认交互
 - 完成定义:
   - 系统可在默认启动路径中自动选择用户模式，并给出可审计的探测依据

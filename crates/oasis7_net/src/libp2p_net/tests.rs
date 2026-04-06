@@ -1,6 +1,7 @@
 use super::peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
+use super::runtime_loop::peer_requires_active_quarantine;
 use super::peer_record::{
     build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
@@ -11,6 +12,7 @@ use super::transport_paths::{
 };
 use super::utils::push_bounded_vec;
 use super::*;
+use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
 

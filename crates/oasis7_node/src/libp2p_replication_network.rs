@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
-use oasis7_net::{Libp2pNetwork, Libp2pNetworkConfig};
+use oasis7_net::{
+    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot,
+};
 use oasis7_proto::distributed::ErrorResponse;
 use oasis7_proto::distributed_dht::PeerRecord;
 use oasis7_proto::distributed_net::{
@@ -81,6 +83,10 @@ impl Libp2pReplicationNetwork {
     #[cfg(test)]
     pub fn debug_errors(&self) -> Vec<String> {
         self.inner.debug_errors()
+    }
+
+    pub fn reachability_snapshot(&self) -> Libp2pReachabilitySnapshot {
+        self.inner.reachability_snapshot()
     }
 
     fn local_handler(&self, protocol: &str) -> Option<Handler> {

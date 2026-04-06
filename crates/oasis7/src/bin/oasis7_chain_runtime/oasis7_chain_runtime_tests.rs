@@ -1,15 +1,17 @@
 use super::{
     build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
-    build_default_replication_network_config, build_node_replication_config,
-    derive_node_consensus_signer_keypair, node_keypair_config, parse_options, parse_validator_spec,
-    release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
+    build_default_replication_network_config, build_live_node_network_policy_recommendation,
+    build_node_replication_config, derive_node_consensus_signer_keypair, node_keypair_config,
+    parse_options, parse_validator_spec, release_security_policy_for_storage_profile, CliOptions,
+    DEFAULT_NODE_ID,
     DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
-    NodeConfig, NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
-    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
+    Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind, NodeConfig,
+    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy, NodeReachabilityAutoDetection,
+    NodeRole, NodeSnapshot, NodeUserMode,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
@@ -31,8 +33,12 @@ fn parse_options_defaults() {
         options.p2p_detected_hole_punch_viability,
         NodeHolePunchViability::Unknown
     );
-    assert!(options.p2p_detected_relay_available);
-    assert!(options.p2p_detected_probe_stable);
+    assert!(!options.p2p_detected_relay_available);
+    assert!(!options.p2p_detected_probe_stable);
+    assert!(!options.p2p_detected_reachability_explicit);
+    assert!(!options.p2p_detected_hole_punch_viability_explicit);
+    assert!(!options.p2p_detected_relay_available_explicit);
+    assert!(!options.p2p_detected_probe_stable_explicit);
     assert!(!options.node_auto_attest_all_validators);
     assert!(options.node_validators.is_empty());
     assert!(options.reward_runtime_enabled);
@@ -305,6 +311,116 @@ fn parse_options_reads_user_mode_detection_hints() {
     );
     assert!(!options.p2p_detected_probe_stable);
     assert!(!options.p2p_detected_relay_available);
+    assert!(options.p2p_detected_reachability_explicit);
+    assert!(options.p2p_detected_hole_punch_viability_explicit);
+    assert!(options.p2p_detected_relay_available_explicit);
+    assert!(options.p2p_detected_probe_stable_explicit);
+}
+
+#[test]
+fn live_reachability_snapshot_upgrades_detection_when_cli_hints_are_absent() {
+    let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
+    let (recommendation, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            active_transport_kind: Some(LiveTransportKind::HolePunched),
+            active_direct_path_count: 0,
+            active_hole_punch_path_count: 1,
+            active_relay_path_count: 0,
+            relay_reservation_active: false,
+            hole_punch_state: LiveHolePunchState::Viable,
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(
+        detection.observed_reachability,
+        Some(PeerReachabilityClass::Hybrid)
+    );
+    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Viable);
+    assert!(!detection.relay_available);
+    assert!(detection.probe_stable);
+    assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
+    assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+}
+
+#[test]
+fn relay_reservation_without_active_relay_path_does_not_claim_relay_only_reachability() {
+    let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
+    let (_, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            active_transport_kind: None,
+            active_direct_path_count: 0,
+            active_hole_punch_path_count: 0,
+            active_relay_path_count: 0,
+            relay_reservation_active: true,
+            hole_punch_state: LiveHolePunchState::Unknown,
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(detection.observed_reachability, None);
+    assert!(detection.relay_available);
+    assert!(detection.probe_stable);
+}
+
+#[test]
+fn failed_hole_punch_snapshot_does_not_force_blocked_viability() {
+    let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
+    let (_, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            active_transport_kind: None,
+            active_direct_path_count: 0,
+            active_hole_punch_path_count: 0,
+            active_relay_path_count: 0,
+            relay_reservation_active: false,
+            hole_punch_state: LiveHolePunchState::Unknown,
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Unknown);
+    assert!(!detection.probe_stable);
+}
+
+#[test]
+fn explicit_cli_detection_hints_override_live_snapshot() {
+    let options = parse_options(
+        [
+            "--node-role",
+            "observer",
+            "--p2p-detected-reachability",
+            "private",
+            "--p2p-detected-hole-punch",
+            "blocked",
+            "--p2p-detected-relay-unavailable",
+            "--p2p-detected-probe-unstable",
+        ]
+        .into_iter(),
+    )
+    .expect("parse");
+    let (_, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            active_transport_kind: Some(LiveTransportKind::HolePunched),
+            active_direct_path_count: 0,
+            active_hole_punch_path_count: 1,
+            active_relay_path_count: 1,
+            relay_reservation_active: true,
+            hole_punch_state: LiveHolePunchState::Viable,
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(
+        detection.observed_reachability,
+        Some(PeerReachabilityClass::Private)
+    );
+    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Blocked);
+    assert!(!detection.relay_available);
+    assert!(!detection.probe_stable);
 }
 
 #[test]

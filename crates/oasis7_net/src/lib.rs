@@ -107,8 +107,9 @@ pub use replica_maintenance::{
 
 #[cfg(feature = "libp2p")]
 pub use libp2p_net::{
-    Libp2pNetwork, Libp2pNetworkConfig, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, PeerManagerPolicy,
+    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, LiveHolePunchState,
+    LiveTransportKind, PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth,
+    PeerManagerPolicy,
 };
 
 #[cfg(test)]

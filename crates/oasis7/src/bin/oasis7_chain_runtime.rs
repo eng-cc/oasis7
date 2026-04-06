@@ -44,6 +44,8 @@ mod governance_registry;
 mod module_release_attestation_submit_api;
 #[path = "oasis7_chain_runtime/node_keypair_config.rs"]
 mod node_keypair_config;
+#[path = "oasis7_chain_runtime/p2p_status.rs"]
+mod p2p_status;
 #[path = "oasis7_chain_runtime/reward_runtime_settlement.rs"]
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
@@ -58,8 +60,7 @@ use balances_api::build_chain_balances_payload;
 #[cfg(test)]
 use balances_api::build_chain_balances_payload_from_world;
 use cli::{
-    p2p_auto_detection_from_options, parse_host_port, parse_options, print_help, CliOptions,
-    DEFAULT_REPLICATION_NETWORK_LISTEN,
+    parse_host_port, parse_options, print_help, CliOptions, DEFAULT_REPLICATION_NETWORK_LISTEN,
     DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE, DEFAULT_REWARD_RUNTIME_REPORT_DIR,
     DEFAULT_REWARD_RUNTIME_STATE_FILE, DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE,
 };
@@ -67,6 +68,10 @@ use execution_bridge::NodeRuntimeExecutionDriver;
 use feedback_submit_api::{
     build_feedback_create_request, extract_http_json_body, parse_feedback_submit_request,
     write_feedback_submit_error, ChainFeedbackSubmitResponse, FeedbackSubmitSigner,
+};
+use p2p_status::{
+    build_live_node_network_policy_recommendation, build_node_network_policy,
+    peer_reachability_as_str,
 };
 use reward_runtime_worker::{
     init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
@@ -338,7 +343,8 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .map_err(|err| format!("failed to initialize execution driver: {err}"))?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
-    runtime = attach_default_replication_network(runtime, &options, &keypair)?;
+    let (mut runtime, replication_network) =
+        attach_default_replication_network(runtime, &options, &keypair)?;
 
     runtime
         .start()
@@ -408,21 +414,19 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     )?;
     let feedback_submit_signer = build_feedback_submit_signer(options.node_id.as_str(), &keypair)?;
     let effective_p2p_policy = build_node_network_policy(&options);
-    let p2p_recommendation = build_node_network_policy_recommendation(&options)?;
-    let p2p_detection = p2p_auto_detection_from_options(&options);
     let (status_host, status_port) =
         parse_host_port(options.status_bind.as_str(), "--status-bind")?;
     let mut status_server = start_chain_status_server(
         status_host.as_str(),
         status_port,
         Arc::clone(&runtime),
+        Arc::clone(&replication_network),
+        options.clone(),
         options.node_id.clone(),
         options.world_id.clone(),
         paths.execution_world_dir.clone(),
         release_security_policy,
-        p2p_recommendation,
         effective_p2p_policy,
-        p2p_detection,
         Arc::clone(&reward_runtime_metrics),
         Arc::clone(&storage_metrics),
         feedback_submit_signer,
@@ -556,13 +560,13 @@ fn start_chain_status_server(
     host: &str,
     port: u16,
     runtime: Arc<Mutex<NodeRuntime>>,
+    replication_network: Arc<Libp2pReplicationNetwork>,
+    options: CliOptions,
     node_id: String,
     world_id: String,
     execution_world_dir: PathBuf,
     release_security_policy: ReleaseSecurityPolicy,
-    p2p_recommendation: NodeUserModeRecommendation,
     effective_p2p_policy: NodeNetworkPolicy,
-    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
@@ -581,13 +585,13 @@ fn start_chain_status_server(
             listener,
             stop_rx,
             runtime,
+            replication_network,
+            options,
             node_id,
             world_id,
             execution_world_dir,
             release_security_policy,
-            p2p_recommendation,
             effective_p2p_policy,
-            p2p_detection,
             reward_runtime_metrics,
             storage_metrics,
             feedback_submit_signer,
@@ -607,13 +611,13 @@ fn run_chain_status_server_loop(
     listener: TcpListener,
     stop_rx: Receiver<()>,
     runtime: Arc<Mutex<NodeRuntime>>,
+    replication_network: Arc<Libp2pReplicationNetwork>,
+    options: CliOptions,
     node_id: String,
     world_id: String,
     execution_world_dir: PathBuf,
     release_security_policy: ReleaseSecurityPolicy,
-    p2p_recommendation: NodeUserModeRecommendation,
     effective_p2p_policy: NodeNetworkPolicy,
-    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
@@ -627,13 +631,13 @@ fn run_chain_status_server_loop(
         match listener.accept() {
             Ok((stream, _addr)) => {
                 let runtime = Arc::clone(&runtime);
+                let replication_network = Arc::clone(&replication_network);
+                let options = options.clone();
                 let node_id = node_id.clone();
                 let world_id = world_id.clone();
                 let execution_world_dir = execution_world_dir.clone();
                 let release_security_policy = release_security_policy.clone();
-                let p2p_recommendation = p2p_recommendation.clone();
                 let effective_p2p_policy = effective_p2p_policy.clone();
-                let p2p_detection = p2p_detection;
                 let reward_runtime_metrics = Arc::clone(&reward_runtime_metrics);
                 let storage_metrics = Arc::clone(&storage_metrics);
                 let feedback_submit_signer = feedback_submit_signer.clone();
@@ -641,13 +645,13 @@ fn run_chain_status_server_loop(
                     if let Err(err) = handle_chain_status_connection(
                         stream,
                         runtime,
+                        replication_network,
+                        &options,
                         node_id.as_str(),
                         world_id.as_str(),
                         execution_world_dir.as_path(),
                         &release_security_policy,
-                        &p2p_recommendation,
                         effective_p2p_policy,
-                        p2p_detection,
                         reward_runtime_metrics,
                         storage_metrics,
                         &feedback_submit_signer,
@@ -669,13 +673,13 @@ fn run_chain_status_server_loop(
 fn handle_chain_status_connection(
     mut stream: TcpStream,
     runtime: Arc<Mutex<NodeRuntime>>,
+    replication_network: Arc<Libp2pReplicationNetwork>,
+    options: &CliOptions,
     node_id: &str,
     world_id: &str,
     execution_world_dir: &Path,
     release_security_policy: &ReleaseSecurityPolicy,
-    p2p_recommendation: &NodeUserModeRecommendation,
     effective_p2p_policy: NodeNetworkPolicy,
-    p2p_detection: NodeReachabilityAutoDetection,
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: &FeedbackSubmitSigner,
@@ -804,10 +808,13 @@ fn handle_chain_status_connection(
                 .lock()
                 .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())?
                 .snapshot();
+            let live_snapshot = replication_network.reachability_snapshot();
+            let (p2p_recommendation, p2p_detection) =
+                build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
             let payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
-                p2p_recommendation,
+                &p2p_recommendation,
                 effective_p2p_policy,
                 p2p_detection,
                 release_security_policy.clone(),
@@ -1000,13 +1007,19 @@ fn attach_default_replication_network(
     runtime: NodeRuntime,
     options: &CliOptions,
     root_keypair: &node_keypair_config::NodeKeypairConfig,
-) -> Result<NodeRuntime, String> {
+) -> Result<(NodeRuntime, Arc<Libp2pReplicationNetwork>), String> {
     let mut network_config = build_default_replication_network_config(options, root_keypair)?;
     network_config.allow_local_handler_fallback_when_no_peers = true;
     let network = Arc::new(Libp2pReplicationNetwork::new(network_config));
-    Ok(runtime
-        .with_replication_network(NodeReplicationNetworkHandle::new(network))
-        .with_replication_network_consensus_enabled(false))
+    let handle_network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<oasis7_proto::world_error::WorldError>
+            + Send
+            + Sync,
+    > = network.clone();
+    let runtime = runtime
+        .with_replication_network(NodeReplicationNetworkHandle::new(handle_network))
+        .with_replication_network_consensus_enabled(false);
+    Ok((runtime, network))
 }
 
 fn build_default_replication_network_config(
@@ -1050,42 +1063,6 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
         capability_lanes: network_policy.node_role_claim.default_capability_lanes(),
         published_at_ms: 0,
         ttl_ms: 60 * 60 * 1000,
-    }
-}
-
-fn build_node_network_policy(options: &CliOptions) -> NodeNetworkPolicy {
-    if options.p2p_deployment_mode_explicit || options.p2p_node_role_explicit {
-        return NodeNetworkPolicy {
-            deployment_mode: options.p2p_deployment_mode,
-            node_role_claim: options.p2p_node_role,
-        };
-    }
-    build_node_network_policy_recommendation(options)
-        .expect("user-mode recommendation should satisfy runtime policy constraints")
-        .effective_policy
-}
-
-fn build_node_network_policy_recommendation(
-    options: &CliOptions,
-) -> Result<NodeUserModeRecommendation, String> {
-    NodeNetworkPolicy::recommend_for_user_mode(
-        options.node_role,
-        options.p2p_user_mode,
-        p2p_auto_detection_from_options(options),
-        options.p2p_accept_public_entry,
-    )
-    .map_err(|err| format!("invalid p2p user-mode recommendation: {err}"))
-}
-
-fn peer_reachability_as_str(
-    reachability: oasis7_proto::distributed_dht::PeerReachabilityClass,
-) -> &'static str {
-    match reachability {
-        oasis7_proto::distributed_dht::PeerReachabilityClass::Public => "public",
-        oasis7_proto::distributed_dht::PeerReachabilityClass::Hybrid => "hybrid",
-        oasis7_proto::distributed_dht::PeerReachabilityClass::Private => "private",
-        oasis7_proto::distributed_dht::PeerReachabilityClass::RelayOnly => "relay_only",
-        oasis7_proto::distributed_dht::PeerReachabilityClass::ValidatorHidden => "validator_hidden",
     }
 }
 

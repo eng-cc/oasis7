@@ -65,6 +65,10 @@ pub(super) struct CliOptions {
     pub reward_initial_reserve_power_units: i64,
     pub reward_distfs_probe_config: DistfsProbeRuntimeConfig,
     pub p2p_user_mode_explicit: bool,
+    pub p2p_detected_reachability_explicit: bool,
+    pub p2p_detected_hole_punch_viability_explicit: bool,
+    pub p2p_detected_relay_available_explicit: bool,
+    pub p2p_detected_probe_stable_explicit: bool,
     pub p2p_deployment_mode_explicit: bool,
     pub p2p_node_role_explicit: bool,
 }
@@ -81,8 +85,8 @@ impl Default for CliOptions {
             p2p_accept_public_entry: false,
             p2p_detected_reachability: None,
             p2p_detected_hole_punch_viability: NodeHolePunchViability::Unknown,
-            p2p_detected_relay_available: true,
-            p2p_detected_probe_stable: true,
+            p2p_detected_relay_available: false,
+            p2p_detected_probe_stable: false,
             p2p_deployment_mode: PeerDeploymentMode::Private,
             p2p_node_role: PeerNodeRole::ValidatorCore,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
@@ -109,6 +113,10 @@ impl Default for CliOptions {
             reward_initial_reserve_power_units: DEFAULT_REWARD_RUNTIME_RESERVE_UNITS,
             reward_distfs_probe_config: DistfsProbeRuntimeConfig::default(),
             p2p_user_mode_explicit: false,
+            p2p_detected_reachability_explicit: false,
+            p2p_detected_hole_punch_viability_explicit: false,
+            p2p_detected_relay_available_explicit: false,
+            p2p_detected_probe_stable_explicit: false,
             p2p_deployment_mode_explicit: false,
             p2p_node_role_explicit: false,
         }
@@ -153,25 +161,32 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--p2p-detected-reachability" => {
                 let raw = parse_required_value(&mut iter, "--p2p-detected-reachability")?;
                 options.p2p_detected_reachability = Some(parse_peer_reachability_class(raw.as_str())?);
+                options.p2p_detected_reachability_explicit = true;
             }
             "--p2p-clear-detected-reachability" => {
                 options.p2p_detected_reachability = None;
+                options.p2p_detected_reachability_explicit = false;
             }
             "--p2p-detected-hole-punch" => {
                 let raw = parse_required_value(&mut iter, "--p2p-detected-hole-punch")?;
                 options.p2p_detected_hole_punch_viability = raw.parse::<NodeHolePunchViability>()?;
+                options.p2p_detected_hole_punch_viability_explicit = true;
             }
             "--p2p-detected-relay-available" => {
                 options.p2p_detected_relay_available = true;
+                options.p2p_detected_relay_available_explicit = true;
             }
             "--p2p-detected-relay-unavailable" => {
                 options.p2p_detected_relay_available = false;
+                options.p2p_detected_relay_available_explicit = true;
             }
             "--p2p-detected-probe-stable" => {
                 options.p2p_detected_probe_stable = true;
+                options.p2p_detected_probe_stable_explicit = true;
             }
             "--p2p-detected-probe-unstable" => {
                 options.p2p_detected_probe_stable = false;
+                options.p2p_detected_probe_stable_explicit = true;
             }
             "--p2p-deployment-mode" => {
                 let raw = parse_required_value(&mut iter, "--p2p-deployment-mode")?;

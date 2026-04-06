@@ -8,6 +8,7 @@ mod discovery;
 mod kad_queries;
 mod peer_manager;
 mod peer_record;
+mod reachability;
 mod runtime_loop;
 mod swarm_behaviour;
 mod transport_paths;
@@ -49,6 +50,11 @@ pub use peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
+pub use reachability::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
+use reachability::{
+    note_hole_punch_result, note_relay_reservation_accepted, refresh_active_transport_snapshot,
+    snapshot_clone,
+};
 use runtime_loop::{
     enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
     CommandOutcome, CommandStateRefs,
@@ -122,6 +128,7 @@ pub struct Libp2pNetwork {
     connected_peers: Arc<Mutex<HashSet<PeerId>>>,
     errors: Arc<Mutex<Vec<String>>>,
     peer_healths: Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
+    reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
 }
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
@@ -200,6 +207,7 @@ impl Libp2pNetwork {
         let connected_peers = Arc::new(Mutex::new(HashSet::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
         let peer_healths = Arc::new(Mutex::new(HashMap::<String, PeerManagerPeerHealth>::new()));
+        let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
         let max_published_messages = config.max_published_messages.max(1);
@@ -212,6 +220,7 @@ impl Libp2pNetwork {
         let event_connected_peers = Arc::clone(&connected_peers);
         let event_errors = Arc::clone(&errors);
         let event_peer_healths = Arc::clone(&peer_healths);
+        let event_reachability = Arc::clone(&reachability);
         let config_clone = config.clone();
         let keypair_clone = keypair.clone();
         let local_peer_id = peer_id;
@@ -629,6 +638,7 @@ impl Libp2pNetwork {
                                 SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                                     match event {
                                         relay::client::Event::ReservationReqAccepted { relay_peer_id, renewal, .. } => {
+                                            note_relay_reservation_accepted(&event_reachability);
                                             push_bounded_clone(
                                                 &event_errors,
                                                 format!(
@@ -677,6 +687,7 @@ impl Libp2pNetwork {
                                     }
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::Dcutr(event)) => {
+                                    note_hole_punch_result(&event_reachability, event.result.is_ok());
                                     let outcome = match event.result {
                                         Ok(connection_id) => {
                                             format!(
@@ -943,6 +954,10 @@ impl Libp2pNetwork {
                                         &event_errors,
                                         max_error_messages,
                                     );
+                                    refresh_active_transport_snapshot(
+                                        &event_reachability,
+                                        &active_transport_paths,
+                                    );
                                 }
                                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                     peers.retain(|peer| peer != &peer_id);
@@ -1021,6 +1036,10 @@ impl Libp2pNetwork {
                                         &event_peer_healths,
                                         &event_errors,
                                         max_error_messages,
+                                    );
+                                    refresh_active_transport_snapshot(
+                                        &event_reachability,
+                                        &active_transport_paths,
                                     );
                                 }
                                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -1114,6 +1133,7 @@ impl Libp2pNetwork {
             connected_peers,
             errors,
             peer_healths,
+            reachability,
         }
     }
 }
