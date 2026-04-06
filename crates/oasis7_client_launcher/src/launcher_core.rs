@@ -74,6 +74,22 @@ pub(super) fn validate_agent_provider_mode(raw: &str) -> Result<(), String> {
         })
 }
 
+pub(super) fn canonical_openclaw_execution_mode(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "player_parity" | "player-parity" | "player" => Some("player_parity"),
+        "headless_agent" | "headless-agent" | "headless" => Some("headless_agent"),
+        _ => None,
+    }
+}
+
+pub(super) fn validate_openclaw_execution_mode(raw: &str) -> Result<(), String> {
+    canonical_openclaw_execution_mode(raw)
+        .map(|_| ())
+        .ok_or_else(|| {
+            "openclaw execution mode must be player_parity or headless_agent".to_string()
+        })
+}
+
 pub(super) fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         BUILTIN_LLM_PROVIDER_MODE => Some(BUILTIN_LLM_PROVIDER_MODE),
@@ -183,6 +199,7 @@ pub(super) fn launcher_text_field_mut<'a>(
         "openclaw_base_url" => Some(&mut config.openclaw_base_url),
         "openclaw_auth_token" => Some(&mut config.openclaw_auth_token),
         "openclaw_connect_timeout_ms" => Some(&mut config.openclaw_connect_timeout_ms),
+        "openclaw_execution_mode" => Some(&mut config.openclaw_execution_mode),
         "openclaw_agent_profile" => Some(&mut config.openclaw_agent_profile),
         "chain_status_bind" => Some(&mut config.chain_status_bind),
         "chain_node_id" => Some(&mut config.chain_node_id),
@@ -245,6 +262,9 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         }
         if parse_agent_provider_connect_timeout_ms(config).is_err() {
             issues.push(ConfigIssue::OpenClawConnectTimeoutMsInvalid);
+        }
+        if validate_openclaw_execution_mode(config.openclaw_execution_mode.as_str()).is_err() {
+            issues.push(ConfigIssue::OpenClawExecutionModeInvalid);
         }
         if config.openclaw_agent_profile.trim().is_empty() {
             issues.push(ConfigIssue::OpenClawAgentProfileRequired);
@@ -433,6 +453,15 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
             }
             args.push("--openclaw-connect-timeout-ms".to_string());
             args.push(parse_agent_provider_connect_timeout_ms(config)?.to_string());
+            args.push("--openclaw-execution-mode".to_string());
+            args.push(
+                canonical_openclaw_execution_mode(config.openclaw_execution_mode.as_str())
+                    .ok_or_else(|| {
+                        "openclaw execution mode must be player_parity or headless_agent"
+                            .to_string()
+                    })?
+                    .to_string(),
+            );
             let agent_profile = config.openclaw_agent_profile.trim();
             if agent_profile.is_empty() {
                 return Err("openclaw agent profile cannot be empty".to_string());

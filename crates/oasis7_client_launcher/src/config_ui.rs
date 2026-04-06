@@ -44,6 +44,7 @@ pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
         | ConfigIssue::OpenClawBaseUrlInvalid
         | ConfigIssue::OpenClawBaseUrlLoopbackRequired => &["openclaw_base_url"],
         ConfigIssue::OpenClawConnectTimeoutMsInvalid => &["openclaw_connect_timeout_ms"],
+        ConfigIssue::OpenClawExecutionModeInvalid => &["openclaw_execution_mode"],
         ConfigIssue::OpenClawAgentProfileRequired => &["openclaw_agent_profile"],
         ConfigIssue::LauncherBinRequired | ConfigIssue::LauncherBinMissing => &["launcher_bin"],
         ConfigIssue::ChainRuntimeBinRequired | ConfigIssue::ChainRuntimeBinMissing => {
@@ -82,6 +83,10 @@ impl ClientLauncherApp {
         stack_text_fields: bool,
     ) {
         let label = self.ui_field_label(field);
+        if field.id == "openclaw_execution_mode" {
+            self.render_openclaw_execution_mode_field(ui, label, stack_text_fields);
+            return;
+        }
         match field.kind {
             LauncherUiFieldKind::Text => {
                 if let Some(value) = launcher_text_field_mut(&mut self.config, field.id) {
@@ -122,6 +127,70 @@ impl ClientLauncherApp {
                     }
                 }
             }
+        }
+    }
+
+    fn render_openclaw_execution_mode_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        stack_text_fields: bool,
+    ) {
+        let current = canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
+            .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE);
+        if self.config.openclaw_execution_mode != current {
+            self.config.openclaw_execution_mode = current.to_string();
+            self.config_dirty = true;
+        }
+        let mut selected = current.to_string();
+
+        let render_combo = |ui: &mut egui::Ui, selected: &mut String| {
+            egui::ComboBox::from_id_salt("openclaw_execution_mode")
+                .selected_text(match selected.as_str() {
+                    "headless_agent" => self.tr(
+                        "headless_agent（无 GUI 回归）",
+                        "headless_agent (headless regression)",
+                    ),
+                    _ => self.tr(
+                        "player_parity（GUI 体验对照）",
+                        "player_parity (GUI parity lane)",
+                    ),
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        selected,
+                        "player_parity".to_string(),
+                        self.tr(
+                            "player_parity（GUI 体验对照）",
+                            "player_parity (GUI parity lane)",
+                        ),
+                    );
+                    ui.selectable_value(
+                        selected,
+                        "headless_agent".to_string(),
+                        self.tr(
+                            "headless_agent（无 GUI 回归）",
+                            "headless_agent (headless regression)",
+                        ),
+                    );
+                });
+        };
+
+        if stack_text_fields {
+            ui.vertical(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected);
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected);
+            });
+        }
+
+        if self.config.openclaw_execution_mode != selected {
+            self.config.openclaw_execution_mode = selected;
+            self.config_dirty = true;
         }
     }
 
@@ -510,6 +579,14 @@ impl ClientLauncherApp {
             )),
             Err(err) => ui.small(format!("{}: {err}", self.tr("当前探测地址", "Probe URL"))),
         };
+        ui.small(format!(
+            "{}: {} | {}: {}ms",
+            self.tr("执行 Lane", "Execution Lane"),
+            canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
+                .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE),
+            self.tr("连接超时", "Connect Timeout"),
+            self.config.openclaw_connect_timeout_ms.trim()
+        ));
 
         ui.horizontal_wrapped(|ui| {
             #[cfg(not(target_arch = "wasm32"))]
@@ -597,7 +674,9 @@ impl ClientLauncherApp {
                 let version = snapshot.version.clone();
                 self.openclaw_probe_status = OpenClawProbeStatus::Healthy(snapshot);
                 self.append_log(format!(
-                    "openclaw probe succeeded: provider_id={provider_id} version={version} base_url={base_url}"
+                    "openclaw probe succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms}",
+                    canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
+                        .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE)
                 ));
             }
             Err(OpenClawProbeError::InvalidConfig(detail)) => {

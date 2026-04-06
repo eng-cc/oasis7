@@ -79,7 +79,8 @@ const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
 const DEFAULT_VIEWER_PORT: &str = "4173";
 const DEFAULT_AGENT_PROVIDER_MODE: &str = "builtin_llm";
 const DEFAULT_OPENCLAW_BASE_URL: &str = "http://127.0.0.1:5841";
-const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: &str = "200";
+const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: &str = "15000";
+const DEFAULT_OPENCLAW_EXECUTION_MODE: &str = "player_parity";
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
@@ -363,6 +364,8 @@ struct LaunchConfig {
     openclaw_base_url: String,
     openclaw_auth_token: String,
     openclaw_connect_timeout_ms: String,
+    #[serde(default = "default_openclaw_execution_mode")]
+    openclaw_execution_mode: String,
     openclaw_agent_profile: String,
     llm_enabled: bool,
     openclaw_auto_discover: bool,
@@ -410,6 +413,7 @@ impl Default for LaunchConfig {
             openclaw_base_url: DEFAULT_OPENCLAW_BASE_URL.to_string(),
             openclaw_auth_token: String::new(),
             openclaw_connect_timeout_ms: DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS.to_string(),
+            openclaw_execution_mode: DEFAULT_OPENCLAW_EXECUTION_MODE.to_string(),
             openclaw_agent_profile: DEFAULT_OPENCLAW_AGENT_PROFILE.to_string(),
             llm_enabled: true,
             openclaw_auto_discover: true,
@@ -432,6 +436,10 @@ impl Default for LaunchConfig {
             chain_runtime_bin,
         }
     }
+}
+
+fn default_openclaw_execution_mode() -> String {
+    DEFAULT_OPENCLAW_EXECUTION_MODE.to_string()
 }
 
 #[derive(Debug)]
@@ -802,6 +810,7 @@ enum ConfigIssue {
     OpenClawBaseUrlInvalid,
     OpenClawBaseUrlLoopbackRequired,
     OpenClawConnectTimeoutMsInvalid,
+    OpenClawExecutionModeInvalid,
     OpenClawAgentProfileRequired,
     LauncherBinRequired,
     LauncherBinMissing,
@@ -882,6 +891,12 @@ impl ConfigIssue {
             }
             (Self::OpenClawConnectTimeoutMsInvalid, UiLanguage::EnUs) => {
                 "OpenClaw connect timeout milliseconds must be a positive integer"
+            }
+            (Self::OpenClawExecutionModeInvalid, UiLanguage::ZhCn) => {
+                "OpenClaw execution mode 必须是 player_parity 或 headless_agent"
+            }
+            (Self::OpenClawExecutionModeInvalid, UiLanguage::EnUs) => {
+                "OpenClaw execution mode must be player_parity or headless_agent"
             }
             (Self::OpenClawAgentProfileRequired, UiLanguage::ZhCn) => {
                 "启用 OpenClaw(Local HTTP) 时，OpenClaw Agent Profile 不能为空"

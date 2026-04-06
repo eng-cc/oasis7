@@ -146,6 +146,15 @@ const LAUNCHER_UI_FIELDS: &[LauncherUiField] = &[
         native_visible: true,
     },
     LauncherUiField {
+        id: "openclaw_execution_mode",
+        section: "agent_provider",
+        kind: LauncherUiFieldKind::Text,
+        label_zh: "OpenClaw 执行 Lane",
+        label_en: "OpenClaw Execution Lane",
+        web_visible: true,
+        native_visible: true,
+    },
+    LauncherUiField {
         id: "openclaw_agent_profile",
         section: "agent_provider",
         kind: LauncherUiFieldKind::Text,

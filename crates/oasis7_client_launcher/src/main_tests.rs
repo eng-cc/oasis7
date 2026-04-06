@@ -28,6 +28,7 @@ use super::{
     DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND, OASIS7_CJK_FONT_NAME, OASIS7_CLIENT_LAUNCHER_LANG_ENV,
 };
 use eframe::egui;
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -93,7 +94,8 @@ fn build_launcher_args_accepts_agent_direct_connect_alias() {
         agent_provider_mode: "agent_direct_connect".to_string(),
         openclaw_base_url: "http://127.0.0.1:5841".to_string(),
         openclaw_auth_token: "secret-token".to_string(),
-        openclaw_connect_timeout_ms: "3000".to_string(),
+        openclaw_connect_timeout_ms: "15000".to_string(),
+        openclaw_execution_mode: "headless".to_string(),
         openclaw_agent_profile: "oasis7_p0_low_freq_npc".to_string(),
         ..LaunchConfig::default()
     };
@@ -105,7 +107,9 @@ fn build_launcher_args_accepts_agent_direct_connect_alias() {
     assert!(args.contains(&"--openclaw-auth-token".to_string()));
     assert!(args.contains(&"secret-token".to_string()));
     assert!(args.contains(&"--openclaw-connect-timeout-ms".to_string()));
-    assert!(args.contains(&"3000".to_string()));
+    assert!(args.contains(&"15000".to_string()));
+    assert!(args.contains(&"--openclaw-execution-mode".to_string()));
+    assert!(args.contains(&"headless_agent".to_string()));
     assert!(args.contains(&"--openclaw-agent-profile".to_string()));
     assert!(args.contains(&"oasis7_p0_low_freq_npc".to_string()));
 }
@@ -170,9 +174,35 @@ fn launch_config_defaults_enable_llm() {
     assert!(config.chain_enabled);
     assert_eq!(config.agent_provider_mode, "builtin_llm");
     assert_eq!(config.openclaw_base_url, "http://127.0.0.1:5841");
+    assert_eq!(config.openclaw_connect_timeout_ms, "15000");
+    assert_eq!(config.openclaw_execution_mode, "player_parity");
     assert_eq!(config.openclaw_agent_profile, "oasis7_p0_low_freq_npc");
     assert!(config.openclaw_auto_discover);
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
+}
+
+#[test]
+fn launch_config_deserialize_backfills_missing_openclaw_execution_mode() {
+    let config: LaunchConfig = serde_json::from_value(json!({
+        "agent_provider_mode": "openclaw_local_http",
+        "openclaw_base_url": "http://127.0.0.1:5841",
+        "openclaw_connect_timeout_ms": "15000",
+        "openclaw_agent_profile": "oasis7_p0_low_freq_npc"
+    }))
+    .expect("deserialize launch config");
+    assert_eq!(config.openclaw_execution_mode, "player_parity");
+    let issues = collect_required_config_issues(&config);
+    assert!(!issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
+}
+
+#[test]
+fn collect_required_config_issues_requires_valid_openclaw_execution_mode() {
+    let issues = collect_required_config_issues(&LaunchConfig {
+        agent_provider_mode: "openclaw_local_http".to_string(),
+        openclaw_execution_mode: "gpu_only".to_string(),
+        ..LaunchConfig::default()
+    });
+    assert!(issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
 }
 #[test]
 fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_set() {

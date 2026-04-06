@@ -14,9 +14,10 @@ use super::{
     sanitize_index_html_for_embedded_server, sanitize_relative_request_path,
     viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap, BUILTIN_LLM_PROVIDER_MODE,
     DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_LIVE_BIND,
-    DEFAULT_OPENCLAW_AGENT_PROFILE, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR,
-    GAME_STATIC_DIR_ENV, OPENCLAW_LOCAL_HTTP_PROVIDER_MODE, VIEWER_AUTH_BOOTSTRAP_OBJECT,
-    VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_PLAYER_ID_ENV,
+    DEFAULT_OPENCLAW_AGENT_PROFILE, DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS, DEFAULT_SCENARIO,
+    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, OPENCLAW_LOCAL_HTTP_PROVIDER_MODE,
+    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
+    VIEWER_PLAYER_ID_ENV,
 };
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
@@ -60,6 +61,10 @@ fn parse_options_defaults() {
     assert_eq!(
         options.openclaw_execution_mode,
         ProviderExecutionMode::HeadlessAgent
+    );
+    assert_eq!(
+        options.openclaw_connect_timeout_ms,
+        DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS
     );
     assert!(options.open_browser);
     assert_eq!(options.viewer_static_dir, "web");
