@@ -73,3 +73,15 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_cd0753c5c26c5caebf06f653bef1b435.yaml
+  - task_uid: task_f3cca3d8e0cc45a1bd629808332f3ed5
+    title: "Publish Moltbook trust-repair hot-topic post"
+    priority: P3
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Optimized hot-topic Moltbook post copy is documented with safe boundary and first-comment follow-up."
+      - "Post is published on Moltbook and execution log records post id plus verification result."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_f3cca3d8e0cc45a1bd629808332f3ed5.yaml

@@ -84,6 +84,7 @@
 - PRD-README-034: As a `liveops_community`, I want a reusable Xiaohongshu GUI-retreat post pack from the game-maker perspective, so that we can borrow the current `GUI已死` discussion heat to explain why `oasis7` no longer treats GUI as the primary interaction layer, without sliding into generic industry prophecy, front-end job panic, or unsafe “full automation” claims.
 - PRD-README-035: As a `liveops_community`, I want a reusable Xiaohongshu offer-choice post pack from the mentor / project-owner perspective, so that we can borrow the current `offer 焦虑` discussion heat to explain why fresh graduates in engineering often should prioritize platform, training, mentorship, and engineering fundamentals over a岗位名看起来更像风口的第一份工作, without drifting into anti-AI absolutism, generic career coaching, or recruiting claims.
 - PRD-README-036: As a `liveops_community`, I want a reusable Xiaohongshu offer-choice carousel pack derived from the approved tenth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “冲突题”“优先级判断”“成熟团队会带来什么” and the final comment hook, instead of only one long caption block.
+- PRD-README-037: As a `liveops_community`, I want a reusable Moltbook hot-topic trust-repair post pack aligned to the platform's current `operator / trust / memory authenticity / accountability` discussion wave, so that we can join active channel discourse with native copy while still keeping the `limited playable technical preview` boundary explicit.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -233,6 +234,7 @@
 | PRD-README-034 | TASK-README-053 | `test_tier_required` | 小红书第九篇素材包明确“GUI已死？这次我是认同的”的标题、正文、互动问题、关键词与“GUI 退到二线 / 判断权高于操作权”的表达边界 | 渠道内容从“demo 祛魅”继续推进到“在 `oasis7` 这类游戏里为什么 GUI 不再是主交互层”，把讨论收口到玩家位置、判断权与系统执行分工 |
 | PRD-README-035 | TASK-README-055/056/058 | `test_tier_required` | 小红书第十篇素材包明确“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“对应届生先拿平台 / 训练体系 / 工程基本功 / 优秀同事密度，不是否定 AI 趋势，且传统团队可能很快转向 AI”的表达边界 | 渠道内容从春招焦虑继续推进到第一份工作该优先拿什么能力，把讨论收口到工程训练结构、平台价值、优秀同事密度与趋势判断的先后顺序 |
 | PRD-README-036 | TASK-README-057/058 | `test_tier_required` | 小红书第十篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并以“offer decision memo / 决策档案”视觉语言收口成更适合 feed 滑读的发布形态，同时补上“优秀同事密度”作为成熟团队价值的一部分 | 第十篇从长文版扩展到更适合小红书停留、收藏与评论站队的 4 页轮播版，同时保持“平台优先、不反 AI、趋势会快速扩散”的判断主线 |
+| PRD-README-037 | TASK-README-059 | `test_tier_required` | Moltbook 热点帖素材包明确一个可直接发布的 trust-repair 标题、正文、首评与禁语边界，并完成真实发布与执行记录回写 | 渠道内容借当前 `trust / operator / accountability` 热点切入 `oasis7` 的 shared truth / repair cost 判断，同时保持技术预览口径稳定 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

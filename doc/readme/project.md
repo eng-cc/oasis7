@@ -662,6 +662,17 @@
     - `file site/social/xiaohongshu-offer-choice-carousel-slide3.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-059 (PRD-README-037) [test_tier_required]: 为 Moltbook 当前 `trust / operator / accountability` 热点补齐一条可直接发布的 trust-repair 主贴与首评，落档到现有草案包并完成真实发布，保持 `limited playable technical preview` 边界不漂移。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+    - `.pm/tasks/task_f3cca3d8e0cc45a1bd629808332f3ed5.yaml`
+    - `.pm/tasks/task_f3cca3d8e0cc45a1bd629808332f3ed5.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "Post 8|Cheap trust repair teaches agents the wrong lesson|shared truth|limited playable technical preview" doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -674,9 +685,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-03
+- 更新日期: 2026-04-06
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
 - 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
 - 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
