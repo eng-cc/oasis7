@@ -1,0 +1,22 @@
+task_uid: task_dace9a712ee840cb836d1b2e2c6a00a7
+title: "Align stage blockers and close pending producer signals"
+owner_role: producer_system_designer
+worktree_hint: engineering-producer-stage-signal-closure
+execution_log_path: .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - .pm/stage/current.yaml
+doc_refs:
+  - doc/engineering/prd.md
+related_prd:
+  - doc/engineering/prd.md
+acceptance:
+  - "Stage report explicitly tracks the current software_safe blocker in stage or gate state."
+  - "Producer pending signals that already have settled outcomes are promoted to memory or otherwise resolved from pending state."
+  - "Producer stage memory is reviewed and remains aligned with the current internal playable alpha posture."
+handoff_to: []
+updated_at: 2026-04-06T23:44:27+08:00
+last_started_at: 2026-04-06T23:31:06+08:00
+last_closed_at: 2026-04-06T23:44:27+08:00

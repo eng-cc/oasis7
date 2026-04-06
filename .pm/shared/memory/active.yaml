@@ -17,3 +17,35 @@ records:
     status: active
     confidence: confirmed
     promotion_reason: stage_decision
+  - id: MEM-SHARED-0002
+    role: shared
+    topic: cross_role.workflow.subagent_review_requires_spawn_agent
+    summary: "In Codex, the default pre-commit subagent review flow must be an actual spawn_agent review; codex exec review --uncommitted is only shell self-check and does not satisfy the repository workflow."
+    source_refs:
+      - .pm/tasks/task_5228ebc444f252a89ecdc8bba46db869.execution.md
+      - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+    tags:
+      - workflow
+      - review
+      - spawn_agent
+    effective_at: 2026-04-06T23:33:31+08:00
+    last_reviewed_at: 2026-04-06T23:33:31+08:00
+    status: active
+    confidence: confirmed
+    promotion_reason: policy_boundary
+  - id: MEM-SHARED-0003
+    role: shared
+    topic: cross_role.workflow.task_scoped_working_memory_close_checklist
+    summary: "workflow-report close must count working_memory against the current task; when entry_count is zero, the checklist should point to codex-working-memory bootstrap instead of role-global review/autoflow guidance."
+    source_refs:
+      - .pm/tasks/task_c832e71085c556e3a5ffda32fc73c053.execution.md
+      - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+    tags:
+      - workflow
+      - working_memory
+      - close_phase
+    effective_at: 2026-04-06T23:33:31+08:00
+    last_reviewed_at: 2026-04-06T23:33:31+08:00
+    status: active
+    confidence: confirmed
+    promotion_reason: engineering_constraint

@@ -59,6 +59,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_c679be21f6f74bfe9d6592e153456bcc.yaml
+  - task_uid: task_dace9a712ee840cb836d1b2e2c6a00a7
+    title: "Align stage blockers and close pending producer signals"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+    acceptance:
+      - "Stage report explicitly tracks the current software_safe blocker in stage or gate state."
+      - "Producer pending signals that already have settled outcomes are promoted to memory or otherwise resolved from pending state."
+      - "Producer stage memory is reviewed and remains aligned with the current internal playable alpha posture."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2
