@@ -1,6 +1,6 @@
 # readme 文档索引
 
-审计轮次: 9
+审计轮次: 10
 
 ## 入口
 - PRD: `doc/readme/prd.md`
@@ -34,6 +34,7 @@
   - `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 - material：
+  - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
@@ -65,6 +66,7 @@
 - material / execution：
 - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`
+- `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
 - `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md`
 - `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md`
 - `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md`

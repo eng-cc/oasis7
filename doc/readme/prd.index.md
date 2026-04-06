@@ -1,8 +1,8 @@
 # readme PRD 文件级索引
 
-审计轮次: 9
+审计轮次: 10
 
-更新时间：2026-04-03
+更新时间：2026-04-06
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -67,6 +67,7 @@
 | `doc/readme/governance/readme-xiaohongshu-demo-skepticism-post-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-demo-skepticism-carousel-pack-2026-03-31.md` | `material` | 小红书 demo 祛魅主题轮播图素材包 |
 | `doc/readme/governance/readme-xiaohongshu-gui-death-post-pack-2026-04-01.md` | `material` | 小红书 GUI 退场 / 判断权主题帖素材包 |
+| `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md` | `material` | 小红书开封真人 NPC / 低门槛实景 RPG 主题帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题轮播图素材包 |
 | `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md` | `material` | 小红书 offer 选择 / 平台优先主题帖素材包 |
 

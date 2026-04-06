@@ -1,6 +1,6 @@
 # readme PRD
 
-审计轮次: 8
+审计轮次: 9
 
 ## 目标
 - 建立 readme 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -85,6 +85,7 @@
 - PRD-README-035: As a `liveops_community`, I want a reusable Xiaohongshu offer-choice post pack from the mentor / project-owner perspective, so that we can borrow the current `offer 焦虑` discussion heat to explain why fresh graduates in engineering often should prioritize platform, training, mentorship, and engineering fundamentals over a岗位名看起来更像风口的第一份工作, without drifting into anti-AI absolutism, generic career coaching, or recruiting claims.
 - PRD-README-036: As a `liveops_community`, I want a reusable Xiaohongshu offer-choice carousel pack derived from the approved tenth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “冲突题”“优先级判断”“成熟团队会带来什么” and the final comment hook, instead of only one long caption block.
 - PRD-README-037: As a `liveops_community`, I want a reusable Moltbook hot-topic trust-repair post pack aligned to the platform's current `operator / trust / memory authenticity / accountability` discussion wave, so that we can join active channel discourse with native copy while still keeping the `limited playable technical preview` boundary explicit.
+- PRD-README-038: As a `liveops_community`, I want a reusable Xiaohongshu Kaifeng real-world RPG post pack from the game-maker perspective, so that we can borrow the现场真人 NPC / 沉浸式互动 discussion heat to explain why many people真正上头的不是“看景”而是“被快速拉进剧情”，without drifting into travel-guide framing, generic scenic praise, or unsafe project release claims.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -147,6 +148,7 @@
 - AC-22: 若小红书内容链路进入第九篇，必须补齐“GUI已死？这次我是认同的”素材包，明确标题、正文、互动问题、关键词与“死掉的不是屏幕，而是 GUI 作为主执行入口”边界，并保持人类开发者第一人称、非上线口径与“玩家负责判断、系统负责执行”的项目收束。
 - AC-23: 若小红书内容链路进入第十篇，必须补齐“AI岗和大厂后端怎么选”素材包，明确标题、正文、短版备选、互动问题、关键词与“对应届生先拿平台 / 训练体系 / 工程基本功 / 优秀同事密度，不是否定 AI 趋势，且传统团队的 AI 转向可能比想象中更快”的表达边界，并保持人类开发者第一人称、非招聘口径与非绝对化择业建议。
 - AC-24: 若第十篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用“offer decision memo / 决策档案”方向把讨论收口到“平台 / 训练体系 / 带教 / 工程基本功 / 优秀同事密度优先，不是否定 AI 趋势”，不回退成泛求职鸡汤或科技感海报。
+- AC-25: 若小红书内容链路进入第十一篇，必须补齐“做游戏的人去开封，看见的是一套低门槛实景RPG”素材包，明确标题、正文、封面文案、互动问题、关键词与“最吸引人的不是看景，而是尽快进剧情 / 世界要能快速接住人 / 压低入戏门槛”的表达边界，并保持人类开发者第一人称、非旅游攻略口径与非上线宣称。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
   - 不在 readme PRD 中替代各模块详细设计。
@@ -235,6 +237,7 @@
 | PRD-README-035 | TASK-README-055/056/058 | `test_tier_required` | 小红书第十篇素材包明确“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“对应届生先拿平台 / 训练体系 / 工程基本功 / 优秀同事密度，不是否定 AI 趋势，且传统团队可能很快转向 AI”的表达边界 | 渠道内容从春招焦虑继续推进到第一份工作该优先拿什么能力，把讨论收口到工程训练结构、平台价值、优秀同事密度与趋势判断的先后顺序 |
 | PRD-README-036 | TASK-README-057/058 | `test_tier_required` | 小红书第十篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并以“offer decision memo / 决策档案”视觉语言收口成更适合 feed 滑读的发布形态，同时补上“优秀同事密度”作为成熟团队价值的一部分 | 第十篇从长文版扩展到更适合小红书停留、收藏与评论站队的 4 页轮播版，同时保持“平台优先、不反 AI、趋势会快速扩散”的判断主线 |
 | PRD-README-037 | TASK-README-059 | `test_tier_required` | Moltbook 热点帖素材包明确一个可直接发布的 trust-repair 标题、正文、首评与禁语边界，并完成真实发布与执行记录回写 | 渠道内容借当前 `trust / operator / accountability` 热点切入 `oasis7` 的 shared truth / repair cost 判断，同时保持技术预览口径稳定 |
+| PRD-README-038 | TASK-README-060 | `test_tier_required` | 小红书第十一篇素材包明确“做游戏的人去开封，看见的是一套低门槛实景RPG”的标题、正文、封面文案、互动问题、关键词与 HTML/PNG 封面资产，并把判断收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人 / 入戏门槛越低越容易形成代入” | 渠道内容从求职判断继续切回游戏设计观察，用现实里的真人 NPC 玩法解释为什么一个世界最重要的不是堆多少内容，而是能不能很快把人拉进剧情 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -271,3 +274,4 @@
 | DEC-RM-031 | 第九篇采用“GUI 作为主交互层退场”而不是泛喊“屏幕消失 / UI 行业已死” | 顺着热点做行业预言、岗位焦虑或全自动论战 | 小红书站内 `GUI已死` 讨论已经很挤，真正适合 `oasis7` 的切口不是预测所有软件怎么变，而是讲这款游戏为什么把玩家从操作员抬成判断者。 |
 | DEC-RM-032 | 第十篇采用“应届生第一份 offer 的优先级排序”而不是泛做 `AI岗 vs 非AI岗` 输赢帖 | 直接写成“千万别去 AI”或“必须去风口”的绝对站队；或做泛职业咨询帖 | `offer 焦虑` 的站内热度足够高，但账号主线仍应保持为做项目的人对训练结构、工程成长和趋势判断的真实经验；把重点放在“先拿能把人带起来的系统”，比单纯站队岗位名更稳，也更符合用户真实困惑。 |
 | DEC-RM-033 | 第十篇轮播版采用“4 页 decision memo”而不是把长文硬切成 4 张纯文字截图 | 只发长文版；或把正文机械分成 4-6 页文字卡；或做泛校园招聘海报 | 这一篇真正有传播力的不是岗位名本身，而是“平台 / 训练体系 / 成长结构优先”的判断顺序。做成 4 页决策档案，更适合小红书 feed 停留、收藏和评论区站队。 |
+| DEC-RM-034 | 第十一篇采用“现实观察 + 设计判断”的开封实景 RPG 切口，而不是把帖子写成景区推荐或沉浸式文旅攻略 | 直接做“开封好玩吗 / 值不值得去”的旅游内容；或泛喊“沉浸式就是未来” | 这一篇真正有传播力的不是开封地名本身，而是“最吸引人的不是看景，是被快速拉进剧情”。把现实观察拉回游戏设计判断，才符合账号主线，也更利于把讨论沉到“入戏门槛”和“世界接住人”的设计问题上。 |

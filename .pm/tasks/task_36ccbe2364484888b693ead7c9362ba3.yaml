@@ -1,0 +1,24 @@
+task_uid: task_36ccbe2364484888b693ead7c9362ba3
+title: "Freeze Xiaohongshu Kaifeng real-world RPG post pack and cover asset"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-kaifeng-rpg-post
+execution_log_path: .pm/tasks/task_36ccbe2364484888b693ead7c9362ba3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "The next Xiaohongshu post pack freezes the Kaifeng low-barrier real-world RPG topic with title, body, cover copy, interaction prompt, tags, and boundary notes in the established human game-maker voice."
+  - "A matching cover HTML and exported PNG are added under site/social in the existing Xiaohongshu asset style and traced from readme docs without slipping into travel-guide or release-claim framing."
+handoff_to: []
+updated_at: 2026-04-06T23:27:35+08:00
+last_started_at: 2026-04-06T23:09:08+08:00
+last_closed_at: 2026-04-06T23:27:35+08:00

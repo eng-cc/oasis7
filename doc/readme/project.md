@@ -1,6 +1,6 @@
 # readme PRD Project
 
-审计轮次: 8
+审计轮次: 9
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-README-001 (PRD-README-001) [test_tier_required]: 完成 readme PRD 改写，建立对外口径主控入口。
@@ -671,6 +671,21 @@
     - `.pm/tasks/task_f3cca3d8e0cc45a1bd629808332f3ed5.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "Post 8|Cheap trust repair teaches agents the wrong lesson|shared truth|limited playable technical preview" doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+- [x] TASK-README-060 (PRD-README-038) [test_tier_required]: 为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面资产，采用“最吸引人的不是看景，是进剧情”的判断海报方向，把现实观察收口到“世界要能快速接住人 / 入戏门槛要足够低”的设计判断。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
+    - `site/social/xiaohongshu-kaifeng-rpg-cover.html`
+    - `site/social/xiaohongshu-kaifeng-rpg-cover.png`
+    - `.pm/tasks/task_36ccbe2364484888b693ead7c9362ba3.yaml`
+    - `.pm/tasks/task_36ccbe2364484888b693ead7c9362ba3.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "低门槛实景 RPG|最吸引人的不是看景，是进剧情|入戏门槛|快速接住人" doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md site/social/xiaohongshu-kaifeng-rpg-cover.html`
+    - `file site/social/xiaohongshu-kaifeng-rpg-cover.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 
@@ -689,6 +704,7 @@
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
 - 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
+- 最新完成: `TASK-README-060`（已为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面 HTML/PNG，并把观察收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人”。）
 - 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
 - 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
