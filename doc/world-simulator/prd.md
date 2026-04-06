@@ -55,6 +55,7 @@
   - `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md`（PRD-WORLD_SIMULATOR-038）
   - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-040）
   - `doc/world-simulator/llm/openclaw-agent-dual-mode-contract-2026-03-16.md`（PRD-WORLD_SIMULATOR-040 supporting spec）
+  - `doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md`（PRD-WORLD_SIMULATOR-037/040 formal review）
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-039）
   - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`（PRD-WORLD_SIMULATOR-041）
   - `doc/world-simulator/prd/acceptance/openclaw-agent-parity-scenario-matrix-2026-03-12.md`（PRD-WORLD_SIMULATOR-038）

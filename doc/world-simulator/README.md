@@ -36,6 +36,7 @@
 - `m4/`：M4 专题文档。
 
 ## 近期专题
+- `doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md`
 - `doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
