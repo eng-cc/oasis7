@@ -1,4 +1,17 @@
 version: 1
 role: runtime_engineer
 status: candidate
-tasks: []
+tasks:
+  - task_uid: task_dfe0d5fdffcf4e0cb5b28a28cda917c8
+    title: "Fix software_safe step controls timing out without progress"
+    priority: P1
+    source_signal: SIG-PM-0011
+    related_prd:
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "software_safe Step x1 no longer returns completed_timeout on a fresh connected session when the runtime is healthy."
+      - "QA can replay both fresh-landing step and post-prompt/chat step and observe forward progress or an explicit non-timeout blocked reason."
+      - "The eventual fix adds automated regression coverage or an equivalent deterministic runtime test for the Step x1 no-progress timeout path."
+    handoff_to: []
+    status: candidate
+    task_path: .pm/tasks/task_dfe0d5fdffcf4e0cb5b28a28cda917c8.yaml

@@ -2,6 +2,19 @@ version: 1
 role: qa_engineer
 status: done
 tasks:
+  - task_uid: task_f2e680d768844eff8232de25ba172a29
+    title: "Audit software_safe end-to-end playability with browser screenshots"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "QA can replay the full software_safe browser flow and attach screenshots for each critical stage."
+      - "The audit records concrete playability findings, severity, and minimal repro steps for the current software_safe path."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_f2e680d768844eff8232de25ba172a29.yaml
   - task_uid: task_f5ff387007264254b4cafde421f34e10
     title: "Implement P2PARCH-6 mixed-topology validation matrix"
     priority: P2
