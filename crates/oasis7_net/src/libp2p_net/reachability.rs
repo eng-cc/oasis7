@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use libp2p::PeerId;
+use libp2p::multiaddr::Protocol;
+use libp2p::{Multiaddr, PeerId};
 
 use super::transport_paths::{TransportPath, TransportPathKind};
 
@@ -72,6 +73,15 @@ pub(super) fn note_relay_reservation_accepted(
     }
 }
 
+pub(super) fn sync_relay_reservation_from_listening_addrs(
+    shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    listening_addrs: &[Multiaddr],
+) {
+    let mut snapshot = shared.lock().expect("lock reachability snapshot");
+    snapshot.relay_reservation_active = listening_addrs.iter().any(is_relay_addr);
+    snapshot.active_transport_kind = preferred_transport_kind(&snapshot);
+}
+
 pub(super) fn note_hole_punch_result(
     shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     success: bool,
@@ -107,15 +117,25 @@ pub(super) fn refresh_active_transport_snapshot(
             }
         }
     }
-    snapshot.active_transport_kind = if snapshot.active_hole_punch_path_count > 0 {
+    snapshot.active_transport_kind = preferred_transport_kind(&snapshot);
+}
+
+fn is_relay_addr(addr: &Multiaddr) -> bool {
+    addr.iter().any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+}
+
+fn preferred_transport_kind(
+    snapshot: &Libp2pReachabilitySnapshot,
+) -> Option<LiveTransportKind> {
+    if snapshot.active_hole_punch_path_count > 0 {
         Some(LiveTransportKind::HolePunched)
-    } else if snapshot.active_relay_path_count > 0 {
+    } else if snapshot.active_relay_path_count > 0 || snapshot.relay_reservation_active {
         Some(LiveTransportKind::RelayReserved)
     } else if snapshot.active_direct_path_count > 0 {
         Some(LiveTransportKind::Direct)
     } else {
         None
-    };
+    }
 }
 
 #[cfg(test)]
@@ -179,5 +199,30 @@ mod tests {
             snapshot_clone(&shared).hole_punch_state,
             LiveHolePunchState::Unknown
         );
+    }
+
+    #[test]
+    fn sync_relay_reservation_follows_relay_listen_addrs() {
+        let shared = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let relay_addr: Multiaddr = format!(
+            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+            PeerId::random()
+        )
+        .parse()
+        .expect("relay addr");
+        let direct_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001"
+            .parse()
+            .expect("direct addr");
+
+        sync_relay_reservation_from_listening_addrs(&shared, &[direct_addr.clone(), relay_addr]);
+        assert!(snapshot_clone(&shared).relay_reservation_active);
+        assert_eq!(
+            snapshot_clone(&shared).active_transport_kind,
+            Some(LiveTransportKind::RelayReserved)
+        );
+
+        sync_relay_reservation_from_listening_addrs(&shared, &[direct_addr]);
+        assert!(!snapshot_clone(&shared).relay_reservation_active);
+        assert_eq!(snapshot_clone(&shared).active_transport_kind, None);
     }
 }

@@ -197,6 +197,8 @@
   - chain runtime CLI/status payload 已能承载 requested/recommended/effective user mode 与探测依据，且在未显式传入原始 `deployment_mode/node_role` 时默认走用户模式推荐
   - game launcher / web launcher / launcher UI schema 已统一透传 `chain_p2p_user_mode` 与 `chain_p2p_accept_public_entry`，为后续 viewer UX 接推荐态与确认态留好接口
   - runtime status/recommender 现在会在 CLI 未显式覆盖对应字段时，自动吸收 libp2p live relay reservation、DCUtR success/failure 与 active transport path kind，作为 `auto_join / private_safe / public_entry` 默认推荐的 fallback 探测源
+  - runtime follow-up 已补 stale relay reservation 收口：live snapshot 现在会跟随 relayed listen addr 的 `new/expired` 生命周期重算 `relay_reservation_active`，不再把旧 reservation 证据永久滞留在 status/recommender
+  - chain status 已把“实际运行态”与“当前 live 推荐态”拆开：保留 `effective_user_mode` 表示按实时 reachability snapshot 计算出的当前有效推荐态，并新增 `applied_effective_user_mode` 表示 runtime 在启动时实际应用的用户模式；若节点是通过底层 `deployment_mode/node_role` 显式 override 启动，则继续以 `deployment_mode/node_role_claim` 作为实际运行态真值
 - 遗留:
   - 当前 runtime 已接入 relay / hole-punch / active-path live evidence，但仍未接入完整 AutoNAT / port reachability probe；CLI detection hint 继续保留为显式 override 通道，后续网络观测面仍需补齐真正的公网/NAT 探测源
   - `viewer_engineer` 仍需把 status payload / launcher config 真正渲染成用户可见的推荐说明与 `公网入口` 风险确认交互

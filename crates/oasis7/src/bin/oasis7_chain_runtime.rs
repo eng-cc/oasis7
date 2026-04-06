@@ -70,8 +70,8 @@ use feedback_submit_api::{
     write_feedback_submit_error, ChainFeedbackSubmitResponse, FeedbackSubmitSigner,
 };
 use p2p_status::{
-    build_live_node_network_policy_recommendation, build_node_network_policy,
-    peer_reachability_as_str,
+    applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
+    build_node_network_policy, peer_reachability_as_str,
 };
 use reward_runtime_worker::{
     init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
@@ -192,6 +192,7 @@ struct ChainP2pStatus {
     requested_user_mode: String,
     recommended_user_mode: String,
     effective_user_mode: String,
+    applied_effective_user_mode: Option<String>,
     requires_explicit_public_entry_confirmation: bool,
     detected_reachability: Option<String>,
     hole_punch_viability: String,
@@ -811,10 +812,13 @@ fn handle_chain_status_connection(
             let live_snapshot = replication_network.reachability_snapshot();
             let (p2p_recommendation, p2p_detection) =
                 build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
+            let applied_effective_user_mode =
+                applied_runtime_user_mode_label(options).map(str::to_string);
             let payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
                 &p2p_recommendation,
+                applied_effective_user_mode,
                 effective_p2p_policy,
                 p2p_detection,
                 release_security_policy.clone(),
@@ -845,7 +849,8 @@ fn handle_chain_status_connection(
 fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
-    p2p_recommendation: &NodeUserModeRecommendation,
+    live_p2p_recommendation: &NodeUserModeRecommendation,
+    applied_effective_user_mode: Option<String>,
     effective_p2p_policy: NodeNetworkPolicy,
     p2p_detection: NodeReachabilityAutoDetection,
     release_security_policy: ReleaseSecurityPolicy,
@@ -891,10 +896,17 @@ fn build_chain_status_payload(
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
         p2p: ChainP2pStatus {
-            requested_user_mode: p2p_recommendation.requested_user_mode.as_str().to_string(),
-            recommended_user_mode: p2p_recommendation.recommended_user_mode.as_str().to_string(),
-            effective_user_mode: p2p_recommendation.effective_user_mode.as_str().to_string(),
-            requires_explicit_public_entry_confirmation: p2p_recommendation
+            requested_user_mode: live_p2p_recommendation.requested_user_mode.as_str().to_string(),
+            recommended_user_mode: live_p2p_recommendation
+                .recommended_user_mode
+                .as_str()
+                .to_string(),
+            effective_user_mode: live_p2p_recommendation
+                .effective_user_mode
+                .as_str()
+                .to_string(),
+            applied_effective_user_mode,
+            requires_explicit_public_entry_confirmation: live_p2p_recommendation
                 .requires_explicit_public_entry_confirmation,
             detected_reachability: p2p_detection
                 .observed_reachability
@@ -905,7 +917,7 @@ fn build_chain_status_payload(
             probe_stable: p2p_detection.probe_stable,
             deployment_mode: effective_p2p_policy.deployment_mode.as_str().to_string(),
             node_role_claim: effective_p2p_policy.node_role_claim.as_str().to_string(),
-            rationale: p2p_recommendation.rationale.clone(),
+            rationale: live_p2p_recommendation.rationale.clone(),
         },
         release_security_policy,
         reward_runtime: reward_runtime_metrics,

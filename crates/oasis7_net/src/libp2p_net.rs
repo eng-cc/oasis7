@@ -53,7 +53,7 @@ use peer_record::{publish_configured_peer_record, put_record_query};
 pub use reachability::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
 use reachability::{
     note_hole_punch_result, note_relay_reservation_accepted, refresh_active_transport_snapshot,
-    snapshot_clone,
+    snapshot_clone, sync_relay_reservation_from_listening_addrs,
 };
 use runtime_loop::{
     enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
@@ -785,6 +785,76 @@ impl Libp2pNetwork {
                                         max_listening_addrs,
                                         "lock listening addrs",
                                     );
+                                    let listening_addrs = event_listening_addrs
+                                        .lock()
+                                        .expect("lock listening addrs")
+                                        .clone();
+                                    sync_relay_reservation_from_listening_addrs(
+                                        &event_reachability,
+                                        listening_addrs.as_slice(),
+                                    );
+                                    if let Some(template) = peer_record_template.as_ref() {
+                                        let _ = publish_configured_peer_record(
+                                            &mut swarm,
+                                            &mut pending_dht,
+                                            &keypair_clone,
+                                            template,
+                                            &event_listening_addrs,
+                                            None,
+                                        );
+                                        peer_record_last_published_at_ms = Some(now_ms());
+                                        publish_discovery_provider(
+                                            &mut swarm,
+                                            &mut provider_keys,
+                                            template.world_id.as_str(),
+                                        );
+                                    }
+                                }
+                                SwarmEvent::ExpiredListenAddr { address, .. } => {
+                                    swarm.remove_external_address(&address);
+                                    {
+                                        let mut listening_addrs = event_listening_addrs
+                                            .lock()
+                                            .expect("lock listening addrs");
+                                        listening_addrs.retain(|candidate| candidate != &address);
+                                        sync_relay_reservation_from_listening_addrs(
+                                            &event_reachability,
+                                            listening_addrs.as_slice(),
+                                        );
+                                    }
+                                    if let Some(template) = peer_record_template.as_ref() {
+                                        let _ = publish_configured_peer_record(
+                                            &mut swarm,
+                                            &mut pending_dht,
+                                            &keypair_clone,
+                                            template,
+                                            &event_listening_addrs,
+                                            None,
+                                        );
+                                        peer_record_last_published_at_ms = Some(now_ms());
+                                        publish_discovery_provider(
+                                            &mut swarm,
+                                            &mut provider_keys,
+                                            template.world_id.as_str(),
+                                        );
+                                    }
+                                }
+                                SwarmEvent::ListenerClosed { addresses, .. } => {
+                                    for address in addresses.iter() {
+                                        swarm.remove_external_address(address);
+                                    }
+                                    {
+                                        let mut listening_addrs = event_listening_addrs
+                                            .lock()
+                                            .expect("lock listening addrs");
+                                        listening_addrs.retain(|candidate| {
+                                            !addresses.iter().any(|addr| addr == candidate)
+                                        });
+                                        sync_relay_reservation_from_listening_addrs(
+                                            &event_reachability,
+                                            listening_addrs.as_slice(),
+                                        );
+                                    }
                                     if let Some(template) = peer_record_template.as_ref() {
                                         let _ = publish_configured_peer_record(
                                             &mut swarm,

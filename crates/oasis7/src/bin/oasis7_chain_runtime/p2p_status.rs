@@ -44,6 +44,15 @@ pub(super) fn build_live_node_network_policy_recommendation(
     Ok((recommendation, detection))
 }
 
+pub(super) fn applied_runtime_user_mode_label(options: &CliOptions) -> Option<&'static str> {
+    if options.p2p_deployment_mode_explicit || options.p2p_node_role_explicit {
+        return None;
+    }
+    build_node_network_policy_recommendation(options)
+        .ok()
+        .map(|recommendation| recommendation.effective_user_mode.as_str())
+}
+
 fn merged_p2p_auto_detection(
     options: &CliOptions,
     live_snapshot: Option<&Libp2pReachabilitySnapshot>,

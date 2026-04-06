@@ -480,7 +480,7 @@ fn build_chain_status_payload_includes_storage_metrics() {
         node_id: "node-a".to_string(),
         player_id: "player-a".to_string(),
         world_id: "live-a".to_string(),
-        role: NodeRole::Sequencer,
+        role: NodeRole::Storage,
         running: true,
         tick_count: 42,
         last_tick_unix_ms: Some(1_700_000_000_000),
@@ -545,6 +545,7 @@ fn build_chain_status_payload_includes_storage_metrics() {
             false,
         )
         .expect("recommendation"),
+        Some("private_safe".to_string()),
         NodeNetworkPolicy {
             deployment_mode: PeerDeploymentMode::Private,
             node_role_claim: PeerNodeRole::FullStorage,
@@ -582,6 +583,10 @@ fn build_chain_status_payload_includes_storage_metrics() {
     assert_eq!(payload.p2p.requested_user_mode, "auto_join");
     assert_eq!(payload.p2p.recommended_user_mode, "public_entry");
     assert_eq!(payload.p2p.effective_user_mode, "private_safe");
+    assert_eq!(
+        payload.p2p.applied_effective_user_mode.as_deref(),
+        Some("private_safe")
+    );
     assert!(payload.p2p.requires_explicit_public_entry_confirmation);
     assert_eq!(payload.p2p.detected_reachability.as_deref(), Some("public"));
     assert_eq!(
@@ -651,6 +656,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
             false,
         )
         .expect("recommendation"),
+        Some("private_safe".to_string()),
         NodeNetworkPolicy {
             deployment_mode: PeerDeploymentMode::Private,
             node_role_claim: PeerNodeRole::ValidatorCore,
@@ -666,6 +672,11 @@ fn production_release_policy_status_payload_reports_effective_policy() {
         ReleaseSecurityPolicy::production_hardened()
     );
     assert!(payload.release_security_policy.is_production_hardened());
+    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
+    assert_eq!(
+        payload.p2p.applied_effective_user_mode.as_deref(),
+        Some("private_safe")
+    );
 }
 
 #[test]
@@ -728,6 +739,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
         snapshot,
         Path::new("/tmp/execution-world"),
         &recommendation,
+        None,
         NodeNetworkPolicy {
             deployment_mode: PeerDeploymentMode::Public,
             node_role_claim: PeerNodeRole::Relay,
@@ -740,6 +752,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
 
     assert_eq!(payload.p2p.requested_user_mode, "private_safe");
     assert_eq!(payload.p2p.effective_user_mode, "private_safe");
+    assert_eq!(payload.p2p.applied_effective_user_mode, None);
     assert_eq!(payload.p2p.deployment_mode, "public");
     assert_eq!(payload.p2p.node_role_claim, "relay");
 }
