@@ -87,10 +87,10 @@ fn build_launcher_args_rejects_empty_static_dir() {
 }
 
 #[test]
-fn build_launcher_args_includes_openclaw_profile_flags() {
+fn build_launcher_args_accepts_agent_direct_connect_alias() {
     let config = LaunchConfig {
         llm_enabled: true,
-        agent_provider_mode: "openclaw_local_http".to_string(),
+        agent_provider_mode: "agent_direct_connect".to_string(),
         openclaw_base_url: "http://127.0.0.1:5841".to_string(),
         openclaw_auth_token: "secret-token".to_string(),
         openclaw_connect_timeout_ms: "3000".to_string(),

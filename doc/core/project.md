@@ -237,6 +237,24 @@
 - [x] TASK-CORE-047 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口分流收口，为命名迁移模块 README 增加轻量阅读顺序，并明确 README 与 `nonviewer/` / `checklists/` / `templates/` / `prd.index.md` 的边界。
 - [x] TASK-CORE-048 (PRD-CORE-003/008) [test_tier_required]: 完成 ROUND-010 `qa_engineer` 复审与关轮，冻结 focused scope 的 `aligned/deferred` 终态并回写阻断结论。
 - [x] TASK-CORE-049 (PRD-CORE-009) [test_tier_required]: 按最新产品设定把 `pure_api` 的正式游玩口径收口为“必须启用且可连通 LLM”，同步更新 core 契约、README/testing/manual、game/world-simulator 当前入口与相关启动脚本帮助文本。
+- [x] TASK-CORE-050 (PRD-CORE-009) [test_tier_required]: 将旧“OpenClaw mode”术语收口为“`agent_direct_connect` 接入方式 + `openclaw_local_http` provider implementation + execution lane”三层，并同步对齐 core/world-simulator/testing 文档与 launcher/client launcher 用户文案。
+  - 产物文件:
+    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/core/project.md`
+    - `testing-manual.md`
+    - `doc/world-simulator/prd.md`
+    - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md`
+    - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+    - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
+    - `crates/oasis7_client_launcher/src/{launcher_core.rs,main.rs,main_tests.rs}`
+    - `crates/oasis7_launcher_ui/src/lib.rs`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher parse_options_accepts_agent_direct_connect_alias -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
 
 ## 依赖
 - doc/core/prd.index.md
@@ -251,12 +269,13 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-03-31
+- 更新日期: 2026-04-03
 - 当前状态: completed
 - 下一任务: 无
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
 - 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
+- 最新完成: `TASK-CORE-050`（已将旧“OpenClaw mode”收口为 `agent_direct_connect` 接入方式、`openclaw_local_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）
 - 最新完成: `TASK-CORE-005`（已完成 ROUND-001~ROUND-008 一致性审查链路收口、任务归档与 QA handoff）。
 - 最新完成: `TASK-CORE-016`（已完成下一轮跨模块优先级清单与第一优先级选择）。
 - 最新完成: `TASK-CORE-017`（已完成发布候选 readiness 统一入口定义）。

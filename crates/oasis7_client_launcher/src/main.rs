@@ -854,10 +854,10 @@ impl ConfigIssue {
                 "Viewer static directory does not exist or is not a directory"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::ZhCn) => {
-                "Agent Provider 模式必须是 builtin_llm 或 openclaw_local_http"
+                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 openclaw_local_http"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::EnUs) => {
-                "Agent provider mode must be builtin_llm or openclaw_local_http"
+                "Agent access mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
             }
             (Self::OpenClawBaseUrlRequired, UiLanguage::ZhCn) => {
                 "启用 OpenClaw(Local HTTP) 且关闭自动发现时，必须填写 OpenClaw Base URL"

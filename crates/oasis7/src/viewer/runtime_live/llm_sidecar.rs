@@ -35,6 +35,7 @@ pub(super) struct RuntimeLlmDecision {
 
 const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
 const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
+const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 3_000;
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
@@ -61,6 +62,8 @@ enum RuntimeDecisionRunner {
 fn env_requests_openclaw_provider() -> bool {
     named_env_var(VIEWER_AGENT_PROVIDER_MODE_ENV)
         .map(|value| value.trim().to_string())
+        .as_deref()
+        .and_then(canonical_agent_provider_mode)
         .is_some_and(|value| value == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
 }
 
@@ -71,11 +74,11 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
     if provider_mode.is_empty() || provider_mode == BUILTIN_LLM_PROVIDER_MODE {
         return Ok(None);
     }
-    if provider_mode != OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
+    let Some(_) = canonical_agent_provider_mode(provider_mode) else {
         return Err(format!(
-            "unsupported agent provider mode `{provider_mode}`; expected builtin_llm or openclaw_local_http"
+            "unsupported agent provider mode `{provider_mode}`; expected builtin_llm, agent_direct_connect, or openclaw_local_http"
         ));
-    }
+    };
 
     let base_url = named_env_var(VIEWER_OPENCLAW_BASE_URL_ENV).unwrap_or_default();
     let base_url = base_url.trim();
@@ -134,6 +137,16 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
         agent_profile: agent_profile.to_string(),
         execution_mode,
     }))
+}
+
+fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        BUILTIN_LLM_PROVIDER_MODE => Some(BUILTIN_LLM_PROVIDER_MODE),
+        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
+            Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
+        }
+        _ => None,
+    }
 }
 
 fn named_env_var(env_name: &str) -> Option<String> {

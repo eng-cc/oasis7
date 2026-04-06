@@ -196,6 +196,28 @@ fn parse_options_accepts_chain_disable() {
 }
 
 #[test]
+fn parse_options_accepts_agent_direct_connect_alias() {
+    let options = parse_options(
+        [
+            "--with-llm",
+            "--agent-provider-mode",
+            "agent_direct_connect",
+            "--openclaw-base-url",
+            "http://127.0.0.1:5841",
+            "--openclaw-agent-profile",
+            "oasis7_p0_low_freq_npc",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(
+        options.agent_provider_mode,
+        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+    );
+}
+
+#[test]
 fn parse_options_rejects_unknown_deployment_mode() {
     let err = parse_options(["--deployment-mode", "invalid"].into_iter())
         .expect_err("invalid deployment mode should fail");
@@ -241,6 +263,7 @@ fn parse_options_rejects_unknown_agent_provider_mode() {
     let err = parse_options(["--agent-provider-mode", "wat-provider"].into_iter())
         .expect_err("should fail");
     assert!(err.contains("builtin_llm"));
+    assert!(err.contains("agent_direct_connect"));
     assert!(err.contains("openclaw_local_http"));
 }
 

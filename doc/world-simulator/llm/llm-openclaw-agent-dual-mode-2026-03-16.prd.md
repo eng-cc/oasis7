@@ -1,4 +1,4 @@
-# OpenClaw Agent 双轨模式（player_parity / headless_agent / debug_viewer）（2026-03-16）
+# Agent 直连执行 Lane（OpenClaw provider: player_parity / headless_agent / debug_viewer）（2026-03-16）
 
 - 对应项目管理文档: `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md`
 - 关联专题:
@@ -9,13 +9,13 @@
 审计轮次: 1
 
 ## 目标
-- 建立 OpenClaw Agent 双轨模式（`player_parity` / `headless_agent` / `debug_viewer`）的统一产品口径。
-- 按 `PRD-CORE-009` 明确本专题定义的是 OpenClaw execution lane，而不是新的玩家访问模式；其中 `software_safe` 仅作为相关玩家访问模式引用。
+- 建立 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 的统一执行 lane 口径（`player_parity` / `headless_agent` / `debug_viewer`）。
+- 按 `PRD-CORE-009` 明确本专题定义的是 agent 直连接入下的 execution lane，而不是新的玩家访问模式；其中 `software_safe` 仅作为相关玩家访问模式引用。
 - 明确图形界面是可选观战/调试层，而不是 OpenClaw Agent 主执行闭环的必需依赖。
 - 为后续 `agent_engineer` / `runtime_engineer` / `viewer_engineer` / `qa_engineer` 的 contract、实现与验证任务提供正式 PRD 边界。
 
 ## 范围
-- 覆盖 OpenClaw Agent 双轨模式的目标态、模式边界、统一动作语义、观测口径与验收标准。
+- 覆盖 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 的执行 lane 目标态、模式边界、统一动作语义、观测口径与验收标准。
 - 覆盖 headless 回归、玩家视角对照与 Viewer 旁路调试三类使用场景。
 - 覆盖与 `standard_3d` / `software_safe` / `pure_api` 三种玩家访问模式的衔接约束，但不重定义玩家访问模式 taxonomy。
 - 不覆盖本轮具体 runtime/adapter/viewer 实现细节与逐行代码方案。
@@ -32,19 +32,19 @@
 
 
 ## 1. Executive Summary
-- Problem Statement: 当前 `OpenClaw` 真实试玩与 parity 采证虽然已经回答了“能否接入”“是否接近内置 agent 体验”，但默认工作流仍容易把 agent 可玩性验证与图形界面、GPU/浏览器环境耦合起来，导致自动化回归、低配部署与失败分诊成本偏高。若不把“图形界面是可选调试层而非主执行依赖”写成正式产品要求，后续 OpenClaw 玩法能力会继续被 GUI 环境稳定性绑架。
-- Proposed Solution: 为 `OpenClaw` agent 定义双轨执行模式：`player_parity` 保留受约束、接近玩家的信息视角，用于评估“像不像玩家在玩”；`headless_agent` 提供不依赖图形界面的结构化观测与统一动作接口，用于稳定自动化、回归和低配环境运行；同时保留 `debug_viewer` 作为旁路观战与问题定位层，而不是权威执行依赖。
+- Problem Statement: 当前 `agent_direct_connect`（provider implementation=`openclaw_local_http`）真实试玩与 parity 采证虽然已经回答了“能否接入”“是否接近内置 agent 体验”，但默认工作流仍容易把 agent 可玩性验证与图形界面、GPU/浏览器环境耦合起来，导致自动化回归、低配部署与失败分诊成本偏高。若不把“图形界面是可选调试层而非主执行依赖”写成正式产品要求，后续 agent 直连玩法能力会继续被 GUI 环境稳定性绑架。
+- Proposed Solution: 为 `agent_direct_connect` 定义双轨执行 lane：`player_parity` 保留受约束、接近玩家的信息视角，用于评估“像不像玩家在玩”；`headless_agent` 提供不依赖图形界面的结构化观测与统一动作接口，用于稳定自动化、回归和低配环境运行；同时保留 `debug_viewer` 作为旁路观战与问题定位层，而不是权威执行依赖。
 - Success Criteria:
   - SC-1: 在无 GUI / 无 GPU / 无浏览器环境下，`headless_agent` 能完成首期 `P0` OpenClaw 核心玩法 smoke，成功率不低于 95%。
   - SC-2: 同一 seed / 同一 observation fixture 下，`headless_agent` 模式的关键结果可复现率不低于 99%。
   - SC-3: `player_parity` 与 `headless_agent` 在首期纳入场景中的任务结果偏差保持在专题定义阈值内，不得破坏 `PRD-WORLD_SIMULATOR-038` 的 parity 判定口径。
   - SC-4: Viewer / Web / native 图形链路失败时，Agent 主流程仍可继续执行、回放并输出结构化失败签名，不再出现“GUI 挂了 = 玩法闭环无法验证”的单点阻断。
-  - SC-5: 所有 OpenClaw 模式都必须通过同一 runtime 动作校验与回放链路，禁止出现“headless 走旁路作弊、GUI 走正式规则”的双重标准。
+  - SC-5: 所有 agent 直连 execution lane 都必须通过同一 runtime 动作校验与回放链路，禁止出现“headless 走旁路作弊、GUI 走正式规则”的双重标准。
   - SC-6: `debug_viewer` 关闭时不影响 Agent 主闭环；开启时必须能区分当前运行模式、观测版本与动作版本，便于 QA / producer 审阅。
 
 ## 2. User Experience & Functionality
 - User Personas:
-  - 玩家 / 制作人：希望确认 `OpenClaw` agent 真正在“玩游戏”，而不是只在跑脚本。
+  - 玩家 / 制作人：希望确认 agent 直连 provider 真正在“玩游戏”，而不是只在跑脚本。
   - `agent_engineer`: 需要稳定、低成本、可批量运行的 headless 观测/动作契约，用于训练、回归与 provider 评估。
   - `qa_engineer`: 需要在无图形依赖的环境中复现问题，同时保留一条接近玩家视角的对照模式。
   - `viewer_engineer`: 需要把 Viewer 明确定位为观战/解释层，而不是 Agent 主执行依赖。
@@ -56,7 +56,7 @@
   - 低配开发机 / 无 GPU 服务器：只运行 `headless_agent`，不要求图形界面。
   - 若对外描述玩家入口，必须先标明当前对应的玩家访问模式（通常为 `software_safe` 或 `standard_3d`），再附加本专题 lane。
 - User Stories:
-  - PRD-WORLD_SIMULATOR-040: As a 玩家 / 制作人, I want OpenClaw agents to support both player-parity and headless execution modes, so that we can separately judge “does it feel like playing” and “can it run stably at scale”.
+  - PRD-WORLD_SIMULATOR-040: As a 玩家 / 制作人, I want `agent_direct_connect` agents to support both player-parity and headless execution lanes, so that we can separately judge “does it feel like playing” and “can it run stably at scale”.
   - PRD-WORLD_SIMULATOR-040A: As a `qa_engineer`, I want OpenClaw gameplay regression to stay runnable without GUI dependencies, so that graphics environment failures do not block gameplay validation.
   - PRD-WORLD_SIMULATOR-040B: As an `agent_engineer`, I want a unified observation/action contract across dual modes, so that model training, replay, and debugging do not fork into incompatible paths.
 - Critical User Flows:
@@ -165,7 +165,7 @@
 | DEC-OPENCLAW-DUAL-001 | 采用双轨执行模式：`player_parity` + `headless_agent` | 只保留 GUI / 像素驱动模式 | 产品需要同时满足“像玩家”与“可回归”，单一路径无法兼顾。 |
 | DEC-OPENCLAW-DUAL-002 | 将 Viewer 定位为旁路观战/解释层 | 让 Viewer 继续承担 Agent 主执行依赖 | 观战层不应成为玩法验证的单点阻断。 |
 | DEC-OPENCLAW-DUAL-003 | 所有模式共享动作 contract 与 runtime 权威校验 | 允许 headless 走专用捷径接口 | 若动作语义分叉，会破坏 parity 与 replay 的可比性。 |
-| DEC-OPENCLAW-DUAL-004 | 将“无 GUI 也可运行”设为默认回归能力 | 继续把 OpenClaw 回归绑定在图形环境上 | 当前产品需要低成本、批量、稳定的 agent 验证能力。 |
+| DEC-OPENCLAW-DUAL-004 | 将“无 GUI 也可运行”设为默认回归能力 | 继续把 agent 直连回归绑定在图形环境上 | 当前产品需要低成本、批量、稳定的 agent 验证能力。 |
 
 ## 风险
 - 风险 1：`headless_agent` 若暴露过强真值，会让 Agent 更像“求解器”而不是“玩家”。

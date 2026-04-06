@@ -52,6 +52,7 @@ const OASIS7_VIEWER_LIVE_BIN_ENV: &str = "OASIS7_VIEWER_LIVE_BIN";
 const OASIS7_CHAIN_RUNTIME_BIN_ENV: &str = "OASIS7_CHAIN_RUNTIME_BIN";
 const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
 const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
+const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_OPENCLAW_BASE_URL: &str = "http://127.0.0.1:5841";
 const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 3_000;
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
@@ -987,6 +988,8 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
     DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?;
     validate_agent_provider_mode(options.agent_provider_mode.as_str())?;
+    options.agent_provider_mode =
+        canonical_agent_provider_mode(options.agent_provider_mode.as_str()).to_string();
     if options.agent_provider_mode == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
         if options.openclaw_base_url.trim().is_empty() {
             return Err("--openclaw-base-url requires a non-empty value".to_string());
@@ -1037,8 +1040,23 @@ fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
 
 fn validate_agent_provider_mode(raw: &str) -> Result<(), String> {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE => Ok(()),
-        _ => Err("--agent-provider-mode must be builtin_llm or openclaw_local_http".to_string()),
+        BUILTIN_LLM_PROVIDER_MODE
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
+        _ => Err(
+            "--agent-provider-mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
+                .to_string(),
+        ),
+    }
+}
+
+fn canonical_agent_provider_mode(raw: &str) -> &'static str {
+    match raw.trim() {
+        BUILTIN_LLM_PROVIDER_MODE => BUILTIN_LLM_PROVIDER_MODE,
+        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
+            OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        }
+        _ => BUILTIN_LLM_PROVIDER_MODE,
     }
 }
 
@@ -1212,7 +1230,8 @@ Options:\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
-  --agent-provider-mode <mode> agent provider: builtin_llm|openclaw_local_http\n\
+  --agent-provider-mode <mode> agent access mode: builtin_llm|agent_direct_connect\n\
+                               compatibility alias/provider impl: openclaw_local_http\n\
   --openclaw-base-url <url>    OpenClaw local provider base URL (default: {DEFAULT_OPENCLAW_BASE_URL})\n\
   --openclaw-auth-token <tok>  OpenClaw bearer token\n\
   --openclaw-connect-timeout-ms <ms>\n\

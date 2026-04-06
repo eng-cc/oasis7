@@ -1,4 +1,4 @@
-# OpenClaw 本地 HTTP Provider 接入 world-simulator 首期方案（2026-03-12）项目管理文档
+# Agent 直连接入的 OpenClaw 本地 HTTP Provider 首期方案（2026-03-12）项目管理文档
 
 - 对应设计文档: `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.design.md`
 - 对应需求文档: `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md`
@@ -31,7 +31,7 @@
 - owner: `agent_engineer`
 - 联审: `viewer_engineer`、`runtime_engineer`
 - 发起建模: `producer_system_designer`
-- 备注: `T1/T2` 已完成：launcher 已提供 provider mode/base URL/token/auto-discover/localhost health-check，`oasis7` 已补 mock local HTTP client 与 `/info`、`/health`、`/decision`、`/feedback` contract tests；`T3/T5` 的完成定义继续挂到 `PRD-WORLD_SIMULATOR-038`，真实用户机接入在 parity 未通过前仅能保持 `experimental`。
+- 备注: `T1/T2` 已完成：launcher 已提供 `agent_provider_mode`/base URL/token/auto-discover/localhost health-check，`oasis7` 已补 mock local HTTP client 与 `/info`、`/health`、`/decision`、`/feedback` contract tests；当前产品口径已把 UI/文档层统一称为 `agent_direct_connect`，但内部 canonical provider implementation 仍保持 `openclaw_local_http`；`T3/T5` 的完成定义继续挂到 `PRD-WORLD_SIMULATOR-038`，真实用户机接入在 parity 未通过前仅能保持 `experimental`。
 - 进展备注: `T3` 的实现范围已落地：`OpenClawAdapter` 已完成 mock local HTTP binding、`ProviderBackedAgentBehavior -> runtime -> feedback` 闭环回归，并补齐 `wait` / `wait_ticks` / `move_agent` / `speak_to_nearby` / `inspect_target` / `simple_interact` 六类 phase-1 白名单动作；其中后三者当前以 lightweight event 语义执行。`T3` 的最终签收仍继续挂到 `PRD-WORLD_SIMULATOR-038` parity 通过线，因此项目阶段前移到 `T4`。
 - T4 预热进展: 已在 `oasis7_proto` / `viewer::protocol` 补齐 `AgentSpoke`、`TargetInspected`、`SimpleInteractionPerformed` 事件筛选枚举与匹配测试，为后续 Viewer 侧 provider 最近动作展示预留过滤入口。
 - T4 完成备注: launcher 已补 `OpenClaw(Local HTTP)` 顶栏状态徽标、probe info/health/total 延迟、最近错误与队列深度摘要；viewer 已补 `Provider Debug` 文本卡片，输出最近 provider/model、最近延迟、最近动作/trace 摘要，并提供 `全部 / 仅 OpenClaw / 仅错误` 三档调试筛选入口。required 回归已覆盖 launcher probe 与 viewer provider debug summary。
@@ -48,4 +48,4 @@
 - T5 下载可观测性补充: `oasis7-run.sh download` 现在会输出下载/校验/解压/bundle ready 阶段日志；交互式终端走 `curl --progress-bar`，非 TTY 则改为周期性 heartbeat（默认 10s，可由 `OASIS7_DOWNLOAD_HEARTBEAT_SECS` 覆盖），避免 bundle-first 首次拉包长时间静默。
 - T5 bundle cache 安全补充: 已为 `oasis7-run.sh download` 增加“bundle 检测失败即退出”的硬保护；当解压目录缺少 `run-game.sh` 时，脚本现在会保留失败并拒绝填充 `bundle/`，同时新增 `.agents/skills/oasis7/scripts/oasis7-run-download-test.sh` 负向回归，覆盖“无 extracted `run-game.sh`”路径，防止再次把 `/.` 误拷到缓存。
 - T5 资产口径补充: 由于 `oasis7` 当前 real-play 仍沿用产品默认链启动路径，OpenClaw 试玩也可能加载 chain profile 下的 node key material；skill / references 现已显式要求把 node private key 当高敏资产处理，并建议临时试玩优先使用 disposable profile。
-- 当前边界: runtime live 的 `agent_chat` / `prompt_control` 在 OpenClaw 模式下仍显式报 `unsupported`，避免对外误报“已支持玩家直连操控”。
+- 当前边界: runtime live 的 `agent_chat` / `prompt_control` 在 agent 直连 provider 下仍显式报 `unsupported`，避免对外误报“已支持玩家直连操控”。

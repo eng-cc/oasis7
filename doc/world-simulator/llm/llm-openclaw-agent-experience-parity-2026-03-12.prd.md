@@ -12,7 +12,7 @@
   - SC-1: 对首期纳入范围的场景，`OpenClaw` 与内置 agent 的任务完成率差值不超过 5 个百分点。
   - SC-2: 对首期纳入范围的场景，真实在线 LLM provider 的 parity 时延采用“分层口径”而非单一绝对值硬门禁：行为等价硬门禁看 `relative_wait_gap`（OpenClaw 相对 builtin 的 `median_extra_wait_ms_gap` / `p95_extra_wait_ms_gap`），发布/扩面附加门槛看 `latency_class`。
   - SC-3: `OpenClaw` 的无效动作率、超时率、非法 schema 率均不得高于内置 agent 基线 2 倍以上，且绝对值必须低于阻断线。
-  - SC-4: viewer/QA 对两类 provider 的 trace 可解释性与错误恢复路径保持一致，不出现“OpenClaw 模式下无法定位问题”的观测断层。
+  - SC-4: viewer/QA 对两类 provider 的 trace 可解释性与错误恢复路径保持一致，不出现“agent 直连 lane 下无法定位问题”的观测断层。
   - SC-5: 若行为等价已达标但 `latency_class` 仅达到 `B (experimental)`，则该 provider 只允许保留在 `experimental` 或受限试点，不得默认启用。
   - SC-6: 首期 `P0` parity 样本必须使用固定的 OpenClaw 玩法 profile（当前默认 `oasis7_p0_low_freq_npc`；旧别名 `oasis7_p0_low_freq_npc` 已移除），并在 summary / scorecard 中保留该 profile 标识，避免“同场景不同 skill”造成假性通过。
   - SC-7: 只有当行为等价硬门禁通过且 `latency_class` 达到 `A (default-candidate)` 时，才允许把该 provider 作为默认体验或推进更大范围扩面。
@@ -34,7 +34,7 @@
   1. Flow-PARITY-001（单场景对标）:
      `同一 observation fixture / 场景脚本 -> 内置 agent 运行 -> OpenClaw provider（固定 agent_profile）运行 -> 对比完成率、等待差值、无效动作率、trace 完整度`。
   2. Flow-PARITY-002（玩家试玩盲测）:
-     `制作人或 QA 使用同一场景分别试玩 builtin / OpenClaw 模式 -> 记录主观评分与关键阻断差异 -> 汇总 parity 结论`。
+     `制作人或 QA 使用同一场景分别试玩 builtin / agent_direct_connect -> 记录主观评分与关键阻断差异 -> 汇总 parity 结论`。
   3. Flow-PARITY-003（阻断判定）:
      `行为等价硬门禁未通过 -> 标记为 parity failed -> provider 保持 experimental；行为等价通过但 latency_class=B -> 仅允许受限试点，不进入默认体验`。
   4. Flow-PARITY-004（扩面准入）:

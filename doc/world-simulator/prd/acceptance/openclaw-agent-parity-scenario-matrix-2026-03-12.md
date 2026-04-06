@@ -95,7 +95,7 @@
 
 ### P2 阻断线
 - 任一场景出现会话串线、trace 归因错误或 provider session 交叉污染
-- 并发下出现系统性 timeout 激增，导致玩家明显感知“OpenClaw 模式几乎不可玩”
+- 并发下出现系统性 timeout 激增，导致玩家明显感知“agent 直连路径几乎不可玩”
 - 任一批次 `latency_class = C`
 
 ## 证据要求

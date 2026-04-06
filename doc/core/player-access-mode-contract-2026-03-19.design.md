@@ -3,16 +3,20 @@
 - 对应需求文档: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - 对应项目管理文档: `doc/core/player-access-mode-contract-2026-03-19.project.md`
 
-审计轮次: 6
+审计轮次: 7
 
 ## 1. 设计定位
-将 `standard_3d`、`software_safe`、`pure_api` 三种玩家访问模式提升为 `core` 级 taxonomy，并把 `OpenClaw` 的 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“观战旁路”“无 UI 回归”混成一层概念。
+将 `standard_3d`、`software_safe`、`pure_api` 三种玩家访问模式提升为 `core` 级 taxonomy，并把 `agent_direct_connect` 明确为 Agent 接入方式、把当前实现名 `openclaw_local_http` 收回 provider implementation 层、再把 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“接入方式”“实现名”“观战旁路”混成一层概念。
 
 ## 2. 核心设计决策
 - 保留三种玩家访问模式：
   - `standard_3d`：高保真主画面、视觉验收、截图语义与交互体验主口径。
   - `software_safe`：弱图形/无 GPU 下的 Web 最小玩法闭环与观测兜底。
   - `pure_api`：无 UI、无浏览器、正式 no-LLM 持续游玩入口。
+- 将 `agent_direct_connect` 统一视为 agent 接入方式：
+  - 它描述的是 Agent 决策如何直连到 runtime / bridge / provider；
+  - 当前默认 provider implementation 仍为 `openclaw_local_http`；
+  - 它不能回答“玩家现在走的是哪种产品入口”。
 - 将 `player_parity / headless_agent / debug_viewer` 统一视为 execution lane：
   - 它们描述的是 Agent 如何执行、如何观察、是否只读；
   - 它们不能回答“玩家现在走的是哪种产品入口”。
@@ -44,16 +48,23 @@
 
 ### 3.3 Evidence Layer
 - 所有证据包必须挂一个主 `mode_id`。
+- `agent_access_mode` 与 `provider_impl` 作为附加维度记录，不允许提升为主模式。
 - `execution_lane` 作为附加维度记录，不允许提升为主模式。
 - 同一结论若同时涉及视觉与 no-UI 持续游玩，必须拆成两个 claim。
 
-### 3.4 Downstream Ownership
+### 3.4 Terminology Compatibility Layer
+- 兼容迁移表：
+  - 旧“OpenClaw 模式” -> 新“`agent_direct_connect` 接入方式 + `openclaw_local_http` provider implementation + execution lane”
+  - 旧“Agent Provider Mode=openclaw_local_http” -> 新“CLI 字段仍叫 `agent_provider_mode`；允许 `agent_direct_connect` 作为兼容 alias，内部 canonical provider implementation 仍写 `openclaw_local_http`”
+  - 旧“OpenClaw player mode” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，OpenClaw 相关字段只能作为附加维度”
+
+### 3.5 Downstream Ownership
 - `world-simulator/viewer/*`：
   - 负责 `standard_3d` / `software_safe` 实现与定向验收。
 - `game/*`：
   - 负责 `pure_api` 的 canonical 玩家语义、动作面与 parity。
 - `world-simulator/llm/*`：
-  - 负责 execution lane 与 provider contract。
+  - 负责 `agent_direct_connect` 接入方式、execution lane 与 provider contract。
 - `testing-manual.md`：
   - 负责把脚本、证据与放行结论绑定到正确模式。
 

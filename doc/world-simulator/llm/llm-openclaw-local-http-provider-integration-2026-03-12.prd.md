@@ -1,4 +1,4 @@
-# OpenClaw 本地 HTTP Provider 接入 world-simulator 首期方案（2026-03-12）
+# Agent 直连接入的 OpenClaw 本地 HTTP Provider 首期方案（2026-03-12）
 
 - 对应设计文档: `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.design.md`
 - 对应项目管理文档: `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.project.md`
@@ -18,7 +18,7 @@
 
 ## 2. User Experience & Functionality
 - User Personas:
-  - 玩家 / 制作人：希望在自己电脑上装好 `OpenClaw` 后，能让游戏里的部分 agent 由它驱动，并知道当前是否正常连接。
+  - 玩家 / 制作人：希望在自己电脑上装好 `OpenClaw` 后，能通过 `agent_direct_connect` 让游戏里的部分 agent 由它驱动，并知道当前是否正常连接。
   - `agent_engineer`：需要稳定的本地传输协议与 adapter，避免把 provider 细节泄露进模拟内核。
   - `viewer_engineer`：需要在 launcher / viewer 中展示 provider 发现、连接、版本、延迟与错误状态。
   - `qa_engineer`：需要使用 mock 本地 HTTP 服务验证协议与失败签名。
@@ -27,10 +27,10 @@
   - 日常试玩：用户启动 launcher / game 后，默认自动探测本机 `OpenClaw` 是否在线。
   - 故障恢复：本机服务未启动、token 不匹配、版本过旧时，用户根据 launcher 提示修复后重试。
 - User Stories:
-  - PRD-WORLD_SIMULATOR-037: As a 玩家 / 制作人, I want an `OpenClaw(Local HTTP)` provider mode that runs on my machine and can control low-frequency game agents through localhost, so that I can try external agent-driven gameplay without deploying remote services or weakening runtime authority.
+  - PRD-WORLD_SIMULATOR-037: As a 玩家 / 制作人, I want an `agent_direct_connect` access mode whose current provider implementation is `OpenClaw(Local HTTP)`, so that I can try external agent-driven gameplay through localhost without deploying remote services or weakening runtime authority.
 - Critical User Flows:
   1. Flow-OC-LOCAL-001（首次安装与发现）:
-     `用户安装并启动 OpenClaw 本地服务 -> launcher 探测 localhost provider -> 显示版本/状态 -> 用户选择 OpenClaw(Local HTTP)`。
+     `用户安装并启动 OpenClaw 本地服务 -> launcher 探测 localhost provider -> 显示版本/状态 -> 用户选择 agent_direct_connect（provider impl=OpenClaw(Local HTTP)）`。
   2. Flow-OC-LOCAL-002（玩家绑定与启动）:
      `选择 provider -> 绑定 player_id / agent_id 或 NPC profile -> 启动游戏 -> runtime 为目标 agent 使用 OpenClawAdapter`。
   3. Flow-OC-LOCAL-003（决策闭环）:
@@ -43,7 +43,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Provider 发现 | `provider_id/version/capabilities/health` | launcher 自动探测或手动刷新本机 provider | `offline -> discovered -> ready` | 仅探测 allowlist 端口/路径 | 仅本机回环地址 |
-| Provider 选择 | `provider_mode=openclaw_local_http` | 用户在设置中心选择本地 OpenClaw | `builtin -> openclaw_local_http` | provider 配置按 profile 存储 | 仅本地用户可配 |
+| Provider 选择 | `agent_access_mode=agent_direct_connect`、`agent_provider_mode=openclaw_local_http` | 用户在设置中心选择本地 OpenClaw | `builtin -> agent_direct_connect` | UI/文档使用接入方式术语；内部配置与协议继续按 provider implementation 存储 | 仅本地用户可配 |
 | 决策请求 | `DecisionRequest` | runtime 对目标 agent 发起一次决策请求 | `observed -> requesting -> responded` | 每 tick 每 agent 至多一请求 | 仅本地 runtime 发起 |
 | 结构化决策 | `decision/action_ref/args/diagnostics` | provider 返回 wait/act | `responded -> validated -> executed/rejected` | 动作必须先过 schema | runtime 权威裁定 |
 | 状态反馈 | `FeedbackEnvelope` | runtime 把执行结果回写 provider | `executed/rejected -> feedback_sent` | 顺序跟随 action_id | 仅对应会话可写 |
@@ -100,7 +100,7 @@
 - Discovery & Configuration:
   - 默认探测地址：`127.0.0.1:5841`（可配置）。
   - launcher 设置项：
-    - `provider_mode`：`builtin_llm` / `openclaw_local_http`
+    - `agent_provider_mode`：`builtin_llm` / `agent_direct_connect`（兼容 alias；canonical provider implementation 仍为 `openclaw_local_http`）
     - `openclaw_base_url`
     - `openclaw_auth_token`（可选；若配置则仅本地保存）
     - `openclaw_auto_discover`
@@ -139,7 +139,7 @@
   - `invalid_action_schema`: 直接 `ActionRejected` 并记录到 trace。
   - `unsupported_semantic_action`: 对于不在 phase-1 白名单内、或 target_kind / payload 不满足当前 lightweight 语义约束的 intent，required 路径必须降级为 `Wait` 并记录结构化错误，禁止伪装为已执行成功。
   - `unsupported_agent_profile`: provider 标记为 `misconfigured`，launcher / parity bench 必须提示用户切回 builtin 或修正 profile。
-  - `agent_provider_chat_unsupported` / `agent_provider_prompt_control_unsupported`: 在当前主链路下，OpenClaw 模式尚不支持 runtime live 的 `agent_chat` 与 `prompt_control` 直接注入，必须显式报错而不是伪装成功。
+  - `agent_provider_chat_unsupported` / `agent_provider_prompt_control_unsupported`: 在当前主链路下，agent 直连 provider 尚不支持 runtime live 的 `agent_chat` 与 `prompt_control` 直接注入，必须显式报错而不是伪装成功。
   - `auth_failed`: provider 标记为 `unauthorized`，要求用户更新本地 token。
   - `openclaw_gateway_unreachable`: 本地兼容桥无法通过 `openclaw agent` / Gateway 拿到响应时，provider health 需暴露最近错误，launcher / parity bench 必须明确提示“OpenClaw Gateway 未就绪”。
   - `bundle_cache_path_unexpanded`: `oasis7` 的 bundle-first 下载辅助必须先展开当前用户 `~`，再落缓存与返回 `bundle_dir`；若解析后的 bundle 缺少 `run-game.sh`，`doctor` 必须输出解析后的绝对路径，避免把产物误写到 repo-local `~/...`。
@@ -166,7 +166,7 @@
   - 不向 provider 暴露私钥、完整 auth proof 或内部存储路径。
   - `openclaw_auth_token` 如启用，只存本地配置，不回显在 viewer / logs。
 - 若 OpenClaw 玩法链路沿用产品默认 `oasis7_game_launcher` 启动栈并拉起 `oasis7_chain_runtime`，则所选 chain profile 下的 node private key 必须按高敏资产处理：禁止提交到仓库、回显到诊断日志/截图/issue，并要求操作者优先使用临时 profile 或明确的资产归属 profile。
-  - 用户必须显式开启 `OpenClaw(Local HTTP)` 模式，默认仍使用内置 provider。
+  - 用户必须显式开启 `agent_direct_connect`（当前 provider implementation=`OpenClaw(Local HTTP)`），默认仍使用内置 provider。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:

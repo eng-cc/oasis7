@@ -14,6 +14,7 @@ const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 pub(super) const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
 pub(super) const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
+pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 pub(super) const DEFAULT_OPENCLAW_DISCOVERY_BASE_URL: &str = DEFAULT_OPENCLAW_BASE_URL;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -60,13 +61,26 @@ impl std::fmt::Display for OpenClawProbeError {
 }
 
 pub(super) fn is_openclaw_local_http_mode(config: &LaunchConfig) -> bool {
-    config.agent_provider_mode.trim() == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+    canonical_agent_provider_mode(config.agent_provider_mode.as_str())
+        == Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
 }
 
 pub(super) fn validate_agent_provider_mode(raw: &str) -> Result<(), String> {
+    canonical_agent_provider_mode(raw)
+        .map(|_| ())
+        .ok_or_else(|| {
+            "agent access mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
+                .to_string()
+        })
+}
+
+pub(super) fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE => Ok(()),
-        _ => Err("agent provider mode must be builtin_llm or openclaw_local_http".to_string()),
+        BUILTIN_LLM_PROVIDER_MODE => Some(BUILTIN_LLM_PROVIDER_MODE),
+        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
+            Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
+        }
+        _ => None,
     }
 }
 
@@ -405,7 +419,11 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
     if config.llm_enabled {
         args.push("--with-llm".to_string());
         args.push("--agent-provider-mode".to_string());
-        args.push(config.agent_provider_mode.trim().to_string());
+        args.push(
+            canonical_agent_provider_mode(config.agent_provider_mode.as_str())
+                .unwrap_or(BUILTIN_LLM_PROVIDER_MODE)
+                .to_string(),
+        );
         if is_openclaw_local_http_mode(config) {
             args.push("--openclaw-base-url".to_string());
             args.push(effective_openclaw_base_url(config)?);
