@@ -1,0 +1,20 @@
+task_uid: task_26cb41e1a4914a9eac0ec1728afd2079
+title: "Align non-3D vs software_safe terminology under player-access-mode contract"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-core-mode-term-alignment
+execution_log_path: .pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+doc_refs:
+  - doc/core/project.md
+related_prd:
+  - PRD-CORE-009
+acceptance:
+  - "Cross-module docs distinguish non-3D prioritization language from software_safe mode taxonomy and eliminate misleading same-level wording"
+handoff_to: []
+updated_at: 2026-04-07T16:42:20+08:00
+last_started_at: 2026-04-07T16:32:48+08:00
+last_closed_at: 2026-04-07T16:42:20+08:00

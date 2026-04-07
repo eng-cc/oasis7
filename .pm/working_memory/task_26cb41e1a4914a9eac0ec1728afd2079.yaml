@@ -1,0 +1,27 @@
+version: 1
+task_uid: task_26cb41e1a4914a9eac0ec1728afd2079
+role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-core-mode-term-alignment
+transcript_source: manual_task_close
+entries:
+  - entry_id: WM-0001
+    entry_kind: decision
+    summary: "non-3D / 2D 优先 are delivery-priority or interaction-scope labels, not player access modes; actual player entry must still resolve to standard_3d / software_safe / pure_api."
+    source_refs:
+      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+      - .pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md
+    captured_at: 2026-04-07T16:41:51+08:00
+    expires_at: 2026-04-09T16:41:51+08:00
+    promoted_to: []
+  - entry_id: WM-0002
+    entry_kind: decision
+    summary: "core player-access-mode design had a stale pure_api=no-LLM sentence; this task corrected it so formal pure_api gameplay remains LLM-required across active docs."
+    source_refs:
+      - doc/core/player-access-mode-contract-2026-03-19.design.md
+      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - .pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md
+    captured_at: 2026-04-07T16:41:51+08:00
+    expires_at: 2026-04-09T16:41:51+08:00
+    promoted_to: []

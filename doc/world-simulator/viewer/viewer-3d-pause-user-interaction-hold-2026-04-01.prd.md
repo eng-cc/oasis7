@@ -7,12 +7,12 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前 Viewer 线同时承载 3D scene/camera/rendering 打磨与正式交互闭环，资源被持续摊薄；继续并行推进会直接挤占 `software_safe`、runtime interaction、launcher 与 formal gameplay 所需的主链路收口。
-- Proposed Solution: 自 2026-04-01 起暂停所有新的 3D 可视化相关工作，把当前用户交互分支冻结为“暂存态”参考，不再作为 active delivery 分支；活跃实现路径统一收口到非 3D 交互、`software_safe`、launcher 与 runtime/playability 闭环。
+- Proposed Solution: 自 2026-04-01 起暂停所有新的 3D 可视化相关工作，把当前用户交互分支冻结为“暂存态”参考，不再作为 active delivery 分支；当前活跃实现路径统一收口到非 3D 交互范围，其中弱图形玩家访问模式继续明确写作 `software_safe`，并把 launcher 与 runtime/playability 闭环作为并列主链路。
 - Success Criteria:
   - SC-1: 所有新的 3D scene/camera/render/material/light/post-process 需求都被标记为 `paused`，不再进入 active delivery。
   - SC-2: 当前用户交互分支被定义为 `hold`，仅作为未来恢复时的参考上下文，不再继续承接新实现。
   - SC-3: `world-simulator` 主 PRD / project / index 与本专题文档在 2026-04-01 同步回写，后续协作不再混淆“taxonomy 仍存在”和“工作仍在推进”。
-  - SC-4: 当前 Viewer 主路径明确为非 3D / `software_safe` 优先，允许的维护修改只服务 formal gameplay、QA 闭环或现有链路不腐烂。
+  - SC-4: 当前 Viewer 主路径明确为“非 3D 交互优先”；其中 `software_safe` 仍按玩家访问模式单独命名，允许的维护修改只服务 formal gameplay、QA 闭环或现有链路不腐烂。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -36,7 +36,7 @@
   3. Flow-V3P-003（恢复门禁）:
      `制作人要求恢复 3D -> 复核当前阶段目标、交互主链路稳定性、QA 资源与明确恢复范围 -> 通过后才能把 hold 分支重新转为 active`
   4. Flow-V3P-004（对外口径）:
-     `需要解释当前 Viewer 方向 -> 先说明 3D taxonomy 仍存在但研发暂停 -> 再声明当前正式交互主路径为非 3D / software_safe`
+     `需要解释当前 Viewer 方向 -> 先说明 3D taxonomy 仍存在但研发暂停 -> 再声明当前是“非 3D 交互优先” -> 若要说明真实玩家入口，则显式写 software_safe / standard_3d / pure_api`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -50,7 +50,7 @@
   - AC-3: `world-simulator` 主 PRD / project / index 已同步挂载本专题。
   - AC-4: 文档中明确列出“允许的最小维护范围”和“禁止继续推进的新 3D 需求”边界。
   - AC-5: 恢复 3D workstream 需要显式恢复门禁，不允许通过默认 backlog 或临时需求隐式恢复。
-  - AC-6: 当前正式交互主路径被明确收口到非 3D / `software_safe` / launcher / runtime interaction。
+  - AC-6: 当前正式交互主路径被明确收口到“非 3D 交互优先 + `software_safe` / launcher / runtime interaction”等主链路；`non-3D` 只表示优先级，不替代玩家访问模式命名。
   - AC-7: 活跃 operator 脚本与手册不得继续把“默认切 3D”写成当前真值；`capture-viewer-frame` 等 native fallback 工具默认应保持 2D，纯 3D visual QA 工具需显式标记为 hold-only。
 - Non-Goals:
   - 不删除现有 3D 代码、脚本或历史文档。
@@ -65,7 +65,7 @@
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - Evaluation Strategy:
   - 检查主文档是否已把 3D workstream 标成 `paused`。
-  - 检查当前主路径是否仍然明确指向非 3D / `software_safe`。
+  - 检查当前主路径是否仍然明确指向“非 3D 交互优先”，并把 `software_safe` 保持为单独 mode 名称。
   - 检查是否存在“把 hold 分支误写成 active branch”或“把 taxonomy 当成交付优先级”的漂移表述。
 
 ## 4. Technical Specifications
@@ -114,3 +114,4 @@
 | `DEC-V3P-001` | 暂停新的 3D 可视化推进，优先把资源投到非 3D 正式交互主链路 | 继续并行推进 3D 视觉专题 | 当前阶段最关键的是 formal gameplay 与可验证交互闭环。 |
 | `DEC-V3P-002` | 把当前用户交互分支定义为 `hold` 参考 | 直接删除或继续堆叠新任务 | 删除会丢失恢复上下文，继续堆叠会让暂停策略失效。 |
 | `DEC-V3P-003` | 恢复 3D 必须经过显式恢复门禁 | 允许通过零散任务隐式恢复 | 没有正式 gate，暂停状态无法被稳定执行。 |
+| `DEC-V3P-004` | 将 `non-3D` 限定为当前 Viewer 的 delivery priority / interaction scope，把弱图形玩家入口继续显式命名为 `software_safe` | 继续把 `non-3D` 和 `software_safe` 写成同层主路径标签 | 一个词回答“现在先做什么”，另一个词回答“玩家通过哪种模式进入”；混写会放大 taxonomy 漂移。 |

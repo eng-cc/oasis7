@@ -12,7 +12,11 @@
 - 保留三种玩家访问模式：
   - `standard_3d`：高保真主画面、视觉验收、截图语义与交互体验主口径。
   - `software_safe`：弱图形/无 GPU 下的 Web 最小玩法闭环与观测兜底。
-  - `pure_api`：无 UI、无浏览器、正式 no-LLM 持续游玩入口。
+  - `pure_api`：无 UI、无浏览器、formal gameplay 默认要求 active LLM access 的正式玩家入口。
+- 将 `non-3D` / `2D 优先` 统一视为交付优先级或交互范围描述：
+  - 它描述的是当前阶段先把资源投向哪些链路；
+  - 它可以覆盖 `software_safe`、launcher/runtime interaction，必要时也可涵盖 `pure_api` 相关闭环；
+  - 它不能回答“玩家现在走的是哪种产品入口”。
 - 将 `agent_direct_connect` 统一视为 agent 接入方式：
   - 它描述的是 Agent 决策如何直连到 runtime / bridge / provider；
   - 当前默认 provider implementation 仍为 `openclaw_local_http`；
@@ -41,6 +45,9 @@
   - 视觉与主产品体验 -> `standard_3d`
   - 弱图形 Web 可玩性 -> `software_safe`
   - 无 UI / 自动化 / CLI 长玩 -> `pure_api`
+- 若文档只是在说明阶段优先级：
+  - 可以写 `non-3D` / `2D 优先`
+  - 但必须补一句“这不是 mode_id，只是当前 delivery priority / interaction scope”
 - 再按环境做 fallback：
   - `standard_3d` 在 `auto` 下可显式降到 `software_safe`
   - `software_safe` 不负责替代 `pure_api`
@@ -57,6 +64,7 @@
   - 旧“OpenClaw 模式” -> 新“`agent_direct_connect` 接入方式 + `openclaw_local_http` provider implementation + execution lane”
   - 旧“Agent Provider Mode=openclaw_local_http” -> 新“CLI 字段仍叫 `agent_provider_mode`；允许 `agent_direct_connect` 作为兼容 alias，内部 canonical provider implementation 仍写 `openclaw_local_http`”
   - 旧“OpenClaw player mode” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，OpenClaw 相关字段只能作为附加维度”
+  - 旧“non-3D 模式 / 2D 入口” -> 新“当前 delivery priority 或 interaction scope；若要表达真实玩家入口，必须回到 `standard_3d / software_safe / pure_api`”
 
 ### 3.5 Downstream Ownership
 - `world-simulator/viewer/*`：

@@ -255,6 +255,18 @@
     - `git diff --check`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher parse_options_accepts_agent_direct_connect_alias -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
+- [x] TASK-CORE-051 (PRD-CORE-009) [test_tier_required]: 收口 `non-3D` / `2D 优先` 与 `software_safe` 的术语边界，明确前者只代表当前阶段的 delivery priority / interaction scope，后者才是弱图形玩家访问模式；同步回写 core 契约、`world-simulator` 主 PRD 与 Viewer 3D hold 专题。
+  - 产物文件:
+    - `doc/core/prd.md`
+    - `doc/core/project.md`
+    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/world-simulator/prd.md`
+    - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+    - `.pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/core/prd.index.md
@@ -269,10 +281,11 @@
 - 模块进展补充（2026-03-10 / runtime）: 已向 `runtime_engineer` 发起 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，要求优先补齐候选级 runtime P0 实测证据。
 
 ## 状态
-- 更新日期: 2026-04-03
+- 更新日期: 2026-04-07
 - 当前状态: completed
 - 下一任务: 无
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
+- 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
 - 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
 - 最新完成: `TASK-CORE-050`（已将旧“OpenClaw mode”收口为 `agent_direct_connect` 接入方式、`openclaw_local_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）
