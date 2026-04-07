@@ -71,7 +71,7 @@ fn build_launcher_args_contains_llm_and_no_open_switches() {
     };
     let args = build_launcher_args(&config).expect("args should build");
     assert!(args.contains(&"--with-llm".to_string()));
-    assert!(args.contains(&"--agent-provider-mode".to_string()));
+    assert!(args.contains(&"--agent-decision-source".to_string()));
     assert!(args.contains(&"builtin_llm".to_string()));
     assert!(args.contains(&"--deployment-mode".to_string()));
     assert!(args.contains(&"trusted_local_only".to_string()));
@@ -93,26 +93,32 @@ fn build_launcher_args_rejects_empty_static_dir() {
 fn build_launcher_args_accepts_agent_direct_connect_alias() {
     let config = LaunchConfig {
         llm_enabled: true,
-        agent_provider_mode: "agent_direct_connect".to_string(),
-        openclaw_base_url: "http://127.0.0.1:5841".to_string(),
-        openclaw_auth_token: "secret-token".to_string(),
-        openclaw_connect_timeout_ms: "15000".to_string(),
-        openclaw_execution_mode: "headless".to_string(),
-        openclaw_agent_profile: "oasis7_p0_low_freq_npc".to_string(),
+        agent_decision_source: "agent_direct_connect".to_string(),
+        agent_provider_url: "http://127.0.0.1:5841".to_string(),
+        agent_provider_auth_token: "secret-token".to_string(),
+        agent_provider_connect_timeout_ms: "15000".to_string(),
+        agent_execution_lane: "headless".to_string(),
+        agent_provider_profile: "oasis7_p0_low_freq_npc".to_string(),
         ..LaunchConfig::default()
     };
     let args = build_launcher_args(&config).expect("args should build");
-    assert!(args.contains(&"--agent-provider-mode".to_string()));
-    assert!(args.contains(&"openclaw_local_http".to_string()));
-    assert!(args.contains(&"--openclaw-base-url".to_string()));
+    assert!(args.contains(&"--agent-decision-source".to_string()));
+    assert!(args.contains(&"provider_backed".to_string()));
+    assert!(args.contains(&"--agent-provider-backend".to_string()));
+    assert!(args.contains(&"openclaw".to_string()));
+    assert!(args.contains(&"--agent-provider-contract".to_string()));
+    assert!(args.contains(&"worldsim_provider_v1".to_string()));
+    assert!(args.contains(&"--agent-provider-transport".to_string()));
+    assert!(args.contains(&"loopback_http".to_string()));
+    assert!(args.contains(&"--agent-provider-url".to_string()));
     assert!(args.contains(&"http://127.0.0.1:5841".to_string()));
-    assert!(args.contains(&"--openclaw-auth-token".to_string()));
+    assert!(args.contains(&"--agent-provider-auth-token".to_string()));
     assert!(args.contains(&"secret-token".to_string()));
-    assert!(args.contains(&"--openclaw-connect-timeout-ms".to_string()));
+    assert!(args.contains(&"--agent-provider-connect-timeout-ms".to_string()));
     assert!(args.contains(&"15000".to_string()));
-    assert!(args.contains(&"--openclaw-execution-mode".to_string()));
+    assert!(args.contains(&"--agent-execution-lane".to_string()));
     assert!(args.contains(&"headless_agent".to_string()));
-    assert!(args.contains(&"--openclaw-agent-profile".to_string()));
+    assert!(args.contains(&"--agent-provider-profile".to_string()));
     assert!(args.contains(&"oasis7_p0_low_freq_npc".to_string()));
 }
 
@@ -174,11 +180,14 @@ fn launch_config_defaults_enable_llm() {
     let config = LaunchConfig::default();
     assert!(config.llm_enabled);
     assert!(config.chain_enabled);
-    assert_eq!(config.agent_provider_mode, "builtin_llm");
-    assert_eq!(config.openclaw_base_url, "http://127.0.0.1:5841");
-    assert_eq!(config.openclaw_connect_timeout_ms, "15000");
-    assert_eq!(config.openclaw_execution_mode, "player_parity");
-    assert_eq!(config.openclaw_agent_profile, "oasis7_p0_low_freq_npc");
+    assert_eq!(config.agent_decision_source, "builtin_llm");
+    assert_eq!(config.agent_provider_backend, "openclaw");
+    assert_eq!(config.agent_provider_contract, "worldsim_provider_v1");
+    assert_eq!(config.agent_provider_transport, "loopback_http");
+    assert_eq!(config.agent_provider_url, "http://127.0.0.1:5841");
+    assert_eq!(config.agent_provider_connect_timeout_ms, "15000");
+    assert_eq!(config.agent_execution_lane, "player_parity");
+    assert_eq!(config.agent_provider_profile, "oasis7_p0_low_freq_npc");
     assert!(config.openclaw_auto_discover);
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
     assert_eq!(config.chain_p2p_user_mode, "auto_join");
@@ -194,7 +203,7 @@ fn launch_config_deserialize_backfills_missing_openclaw_execution_mode() {
         "openclaw_agent_profile": "oasis7_p0_low_freq_npc"
     }))
     .expect("deserialize launch config");
-    assert_eq!(config.openclaw_execution_mode, "player_parity");
+    assert_eq!(config.agent_execution_lane, "player_parity");
     let issues = collect_required_config_issues(&config);
     assert!(!issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
 }
@@ -202,8 +211,8 @@ fn launch_config_deserialize_backfills_missing_openclaw_execution_mode() {
 #[test]
 fn collect_required_config_issues_requires_valid_openclaw_execution_mode() {
     let issues = collect_required_config_issues(&LaunchConfig {
-        agent_provider_mode: "openclaw_local_http".to_string(),
-        openclaw_execution_mode: "gpu_only".to_string(),
+        agent_decision_source: "provider_backed".to_string(),
+        agent_execution_lane: "gpu_only".to_string(),
         ..LaunchConfig::default()
     });
     assert!(issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
@@ -973,10 +982,10 @@ fn check_openclaw_local_http_provider_marks_unhealthy_provider_as_degraded() {
 #[test]
 fn collect_required_config_issues_reports_openclaw_specific_fields() {
     let config = LaunchConfig {
-        agent_provider_mode: "openclaw_local_http".to_string(),
-        openclaw_base_url: String::new(),
+        agent_decision_source: "provider_backed".to_string(),
+        agent_provider_url: String::new(),
         openclaw_auto_discover: false,
-        openclaw_connect_timeout_ms: "0".to_string(),
+        agent_provider_connect_timeout_ms: "0".to_string(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);
@@ -998,8 +1007,8 @@ fn collect_required_config_issues_rejects_no_llm_playability_config() {
 #[test]
 fn collect_required_config_issues_rejects_non_loopback_openclaw_base_url() {
     let config = LaunchConfig {
-        agent_provider_mode: "openclaw_local_http".to_string(),
-        openclaw_base_url: "http://192.168.0.5:5841".to_string(),
+        agent_decision_source: "provider_backed".to_string(),
+        agent_provider_url: "http://192.168.0.5:5841".to_string(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);
@@ -1009,8 +1018,8 @@ fn collect_required_config_issues_rejects_non_loopback_openclaw_base_url() {
 #[test]
 fn collect_required_config_issues_requires_openclaw_agent_profile() {
     let config = LaunchConfig {
-        agent_provider_mode: "openclaw_local_http".to_string(),
-        openclaw_agent_profile: String::new(),
+        agent_decision_source: "provider_backed".to_string(),
+        agent_provider_profile: String::new(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);

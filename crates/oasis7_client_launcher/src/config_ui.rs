@@ -39,13 +39,18 @@ pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
         ConfigIssue::ViewerStaticDirRequired | ConfigIssue::ViewerStaticDirMissing => {
             &["viewer_static_dir"]
         }
-        ConfigIssue::AgentProviderModeInvalid => &["agent_provider_mode"],
+        ConfigIssue::AgentProviderModeInvalid => &[
+            "agent_decision_source",
+            "agent_provider_backend",
+            "agent_provider_contract",
+            "agent_provider_transport",
+        ],
         ConfigIssue::OpenClawBaseUrlRequired
         | ConfigIssue::OpenClawBaseUrlInvalid
-        | ConfigIssue::OpenClawBaseUrlLoopbackRequired => &["openclaw_base_url"],
-        ConfigIssue::OpenClawConnectTimeoutMsInvalid => &["openclaw_connect_timeout_ms"],
-        ConfigIssue::OpenClawExecutionModeInvalid => &["openclaw_execution_mode"],
-        ConfigIssue::OpenClawAgentProfileRequired => &["openclaw_agent_profile"],
+        | ConfigIssue::OpenClawBaseUrlLoopbackRequired => &["agent_provider_url"],
+        ConfigIssue::OpenClawConnectTimeoutMsInvalid => &["agent_provider_connect_timeout_ms"],
+        ConfigIssue::OpenClawExecutionModeInvalid => &["agent_execution_lane"],
+        ConfigIssue::OpenClawAgentProfileRequired => &["agent_provider_profile"],
         ConfigIssue::LauncherBinRequired | ConfigIssue::LauncherBinMissing => &["launcher_bin"],
         ConfigIssue::ChainRuntimeBinRequired | ConfigIssue::ChainRuntimeBinMissing => {
             &["chain_runtime_bin"]
@@ -87,7 +92,7 @@ impl ClientLauncherApp {
         stack_text_fields: bool,
     ) {
         let label = self.ui_field_label(field);
-        if field.id == "openclaw_execution_mode" {
+        if field.id == "agent_execution_lane" {
             self.render_openclaw_execution_mode_field(ui, label, stack_text_fields);
             return;
         }
@@ -107,7 +112,7 @@ impl ClientLauncherApp {
                             ui.label(label);
                             let response = ui.add_sized(
                                 [ui.available_width(), 0.0],
-                                if field.id == "openclaw_auth_token" {
+                                if field.id == "agent_provider_auth_token" {
                                     egui::TextEdit::singleline(value).password(true)
                                 } else {
                                     egui::TextEdit::singleline(value)
@@ -120,7 +125,7 @@ impl ClientLauncherApp {
                     } else {
                         ui.horizontal(|ui| {
                             ui.label(label);
-                            let response = if field.id == "openclaw_auth_token" {
+                            let response = if field.id == "agent_provider_auth_token" {
                                 ui.add(egui::TextEdit::singleline(value).password(true))
                             } else {
                                 ui.text_edit_singleline(value)
@@ -149,16 +154,16 @@ impl ClientLauncherApp {
         stack_text_fields: bool,
     ) {
         let current =
-            canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
-                .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE);
-        if self.config.openclaw_execution_mode != current {
-            self.config.openclaw_execution_mode = current.to_string();
+            canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+                .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE);
+        if self.config.agent_execution_lane != current {
+            self.config.agent_execution_lane = current.to_string();
             self.config_dirty = true;
         }
         let mut selected = current.to_string();
 
         let render_combo = |ui: &mut egui::Ui, selected: &mut String| {
-            egui::ComboBox::from_id_salt("openclaw_execution_mode")
+            egui::ComboBox::from_id_salt("agent_execution_lane")
                 .selected_text(match selected.as_str() {
                     "headless_agent" => self.tr(
                         "headless_agent（无 GUI 回归）",
@@ -201,8 +206,8 @@ impl ClientLauncherApp {
             });
         }
 
-        if self.config.openclaw_execution_mode != selected {
-            self.config.openclaw_execution_mode = selected;
+        if self.config.agent_execution_lane != selected {
+            self.config.agent_execution_lane = selected;
             self.config_dirty = true;
         }
     }
@@ -669,8 +674,8 @@ impl ClientLauncherApp {
         ui.separator();
         ui.horizontal_wrapped(|ui| {
             ui.label(self.tr(
-                "OpenClaw(Local HTTP) 兼容检查",
-                "OpenClaw(Local HTTP) Compatibility Check",
+                "OpenClaw Provider 兼容检查",
+                "OpenClaw Provider Compatibility Check",
             ));
             let status = match &self.openclaw_provider_check_status {
                 OpenClawProviderCheckStatus::Disabled => OpenClawProviderCheckStatus::Idle,
@@ -693,10 +698,10 @@ impl ClientLauncherApp {
         ui.small(format!(
             "{}: {} | {}: {}ms",
             self.tr("执行 Lane", "Execution Lane"),
-            canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
-                .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE),
+            canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+                .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE),
             self.tr("连接超时", "Connect Timeout"),
-            self.config.openclaw_connect_timeout_ms.trim()
+            self.config.agent_provider_connect_timeout_ms.trim()
         ));
 
         ui.horizontal_wrapped(|ui| {
@@ -816,12 +821,11 @@ impl ClientLauncherApp {
         };
         match check_openclaw_local_http_provider(
             base_url.as_str(),
-            Some(self.config.openclaw_auth_token.as_str()),
+            Some(self.config.agent_provider_auth_token.as_str()),
             timeout_ms,
         ) {
             Ok(mut snapshot) => {
-                if self.config.agent_provider_mode.trim()
-                    == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
+                if self.config.agent_decision_source.trim() == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
                 {
                     snapshot.fallback_reason = snapshot
                         .fallback_reason
@@ -845,8 +849,8 @@ impl ClientLauncherApp {
                 };
                 self.append_log(format!(
                     "openclaw provider check succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms} compatibility_status={} fallback_reason={}",
-                    canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
-                        .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE),
+                    canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+                        .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE),
                     compatibility_status.as_str(),
                     fallback_reason.as_deref().unwrap_or("none")
                 ));

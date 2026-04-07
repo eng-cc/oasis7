@@ -44,7 +44,7 @@
   - SC-5: 当前阶段优先级（P0/P1/P2）在 core PRD 中有唯一口径，并能映射到对应模块任务与角色 owner。
   - SC-6: 发布前必须先完成玩法微循环、runtime 验收、testing 证据、playability 反馈四条 P0 闭环，缺任一项不得给出 go 结论。
   - SC-7: headless-runtime、自动化稳定性、文档一致性收口具备明确 P1 责任划分与交付标准。
-  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope、mode/lane 分层约束，以及 `pure_api` formal gameplay 的 LLM-required 边界；`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
+  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope、mode/lane 分层约束，以及 `pure_api` formal gameplay 的 LLM-required 边界；`agent_direct_connect` 仅保留为接入方式兼容口径，agent provider 的当前正式配置模型必须拆成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
   - SC-9: core 活跃专题标题、Viewer 活跃手册与实际窗口/Web 标题对齐 `oasis7` 品牌；内部旧品牌兼容命名仅以实现说明形式保留，不得继续冒充公开标题。
   - SC-10: `engineering`、`scripts`、`world-runtime` 的历史专题标题在不改动内部实现标识的前提下完成 `oasis7` 品牌收口，减少 active/historical 入口里的旧品牌混用。
 

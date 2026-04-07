@@ -6,7 +6,7 @@
 审计轮次: 7
 
 ## 1. 设计定位
-将 `standard_3d`、`software_safe`、`pure_api` 三种玩家访问模式提升为 `core` 级 taxonomy，并把 `agent_direct_connect` 明确为 Agent 接入方式、把当前实现名 `openclaw_local_http` 收回 provider implementation 层、再把 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“接入方式”“实现名”“观战旁路”混成一层概念。
+将 `standard_3d`、`software_safe`、`pure_api` 三种玩家访问模式提升为 `core` 级 taxonomy，并把 `agent_direct_connect/openclaw_local_http` 一起降为兼容 alias、把当前 operator-facing provider 模型收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`、再把 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“兼容接入名”“正式配置模型”“观战旁路”混成一层概念。
 
 ## 2. 核心设计决策
 - 保留三种玩家访问模式：
@@ -17,10 +17,10 @@
   - 它描述的是当前阶段先把资源投向哪些链路；
   - 它可以覆盖 `software_safe`、launcher/runtime interaction，必要时也可涵盖 `pure_api` 相关闭环；
   - 它不能回答“玩家现在走的是哪种产品入口”。
-- 将 `agent_direct_connect` 统一视为 agent 接入方式：
-  - 它描述的是 Agent 决策如何直连到 runtime / bridge / provider；
-  - 当前默认 provider implementation 仍为 `openclaw_local_http`；
-  - 它不能回答“玩家现在走的是哪种产品入口”。
+- 将 `agent_direct_connect/openclaw_local_http` 统一视为兼容迁移 alias：
+  - 它们描述的是旧 UI/CLI/operator 曾如何称呼当前 OpenClaw 直连路径；
+  - 当前正式 operator-facing provider 模型必须写成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`；
+  - 它们不能回答“玩家现在走的是哪种产品入口”，也不能继续充当唯一配置模型。
 - 将 `player_parity / headless_agent / debug_viewer` 统一视为 execution lane：
   - 它们描述的是 Agent 如何执行、如何观察、是否只读；
   - 它们不能回答“玩家现在走的是哪种产品入口”。
@@ -55,14 +55,14 @@
 
 ### 3.3 Evidence Layer
 - 所有证据包必须挂一个主 `mode_id`。
-- `agent_access_mode` 与 `provider_impl` 作为附加维度记录，不允许提升为主模式。
+- `compat_access_alias` 与结构化 `agent_provider_*` 维度作为附加记录，不允许提升为主模式。
 - `execution_lane` 作为附加维度记录，不允许提升为主模式。
 - 同一结论若同时涉及视觉与 no-UI 持续游玩，必须拆成两个 claim。
 
 ### 3.4 Terminology Compatibility Layer
 - 兼容迁移表：
-  - 旧“OpenClaw 模式” -> 新“`agent_direct_connect` 接入方式 + `openclaw_local_http` provider implementation + execution lane”
-  - 旧“Agent Provider Mode=openclaw_local_http” -> 新“CLI 字段仍叫 `agent_provider_mode`；允许 `agent_direct_connect` 作为兼容 alias，内部 canonical provider implementation 仍写 `openclaw_local_http`”
+  - 旧“OpenClaw 模式” -> 新“兼容 alias `agent_direct_connect/openclaw_local_http` + 正式 provider 维度 `agent_decision_source + agent_provider_*` + execution lane”
+  - 旧“Agent Provider Mode=openclaw_local_http” -> 新“配置/CLI/env 以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile` 为主；`agent_provider_mode` 仅保留兼容解析”
   - 旧“OpenClaw player mode” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，OpenClaw 相关字段只能作为附加维度”
   - 旧“non-3D 模式 / 2D 入口” -> 新“当前 delivery priority 或 interaction scope；若要表达真实玩家入口，必须回到 `standard_3d / software_safe / pure_api`”
 
@@ -72,7 +72,7 @@
 - `game/*`：
   - 负责 `pure_api` 的 canonical 玩家语义、动作面与 parity。
 - `world-simulator/llm/*`：
-  - 负责 `agent_direct_connect` 接入方式、execution lane 与 provider contract。
+  - 负责 OpenClaw provider-backed 路径、execution lane 与 provider contract；兼容 alias 只保留迁移说明。
 - `testing-manual.md`：
   - 负责把脚本、证据与放行结论绑定到正确模式。
 
@@ -94,6 +94,6 @@
   - 自动收缩到更窄 claim；若无法拆清，直接阻断发布口径
 
 ## 6. 演进计划
-- Phase 1：冻结 mode/lane 双层 taxonomy。
+- Phase 1：冻结 mode/provider/lane 三层 taxonomy，并把旧单字段 provider mode 降为兼容 alias。
 - Phase 2：同步 core 主入口、README、索引与今日 devlog。
 - Phase 3：后续新专题必须按本设计引用模式，不得新增同层别名。

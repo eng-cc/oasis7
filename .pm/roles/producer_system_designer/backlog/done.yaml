@@ -127,6 +127,21 @@ tasks:
       - liveops_community
     status: done
     task_path: .pm/tasks/task_29852e408c314ad58a143a4451e980d3.yaml
+  - task_uid: task_bf477b3a0333411d8fa8bc2a130d1f16
+    title: "彻底重构 agent provider taxonomy 与 OpenClaw 命名模型"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-CORE-009
+      - PRD-WORLD_SIMULATOR-037
+      - PRD-WORLD_SIMULATOR-040
+    acceptance:
+      - "玩家访问模式、决策来源、provider backend/contract/transport 与 execution lane 四层命名在 core/world-simulator/testing/launcher 中保持单义且可追溯"
+      - "launcher/client launcher/runtime 不再把 openclaw_local_http 当作主用户口径或唯一配置模型，旧 alias 仅保留兼容解析"
+      - "targeted docs/tests/gates through doc-governance, diff checks, and targeted cargo tests"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_bf477b3a0333411d8fa8bc2a130d1f16.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2

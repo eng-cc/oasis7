@@ -13,6 +13,7 @@
 - [x] T5 (`PRD-CORE-009`) [test_tier_required]: 将 `pure_api` 的正式游玩口径重定为“必须启用且可连通 LLM”，同步回写 launcher/runtime 行为、README/testing/manual/game/world-simulator 当前入口，并把 `--no-llm` 降级为 observer/debug only。
 - [x] T6 (`PRD-CORE-009`) [test_tier_required]: 将旧“OpenClaw mode”歧义口径收口为“`agent_direct_connect` 接入方式 + `openclaw_local_http` provider implementation + execution lane”，同步回写 core/world-simulator/testing 文档、launcher/client launcher 用户文案与兼容 alias。
 - [x] T7 (`PRD-CORE-009`) [test_tier_required]: 收口 `non-3D` / `2D 优先` 与 `software_safe` 的边界，把阶段优先级话术明确降回 delivery priority / interaction scope，并同步回写 core 契约与 `world-simulator` 的 3D hold 主文档。
+- [x] T8 (`PRD-CORE-009`) [test_tier_required]: 将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，把 `agent_direct_connect/openclaw_local_http` 降为兼容 alias，并同步回写 core/world-simulator/testing 文档与 launcher/runtime 透传口径。
 
 ## 依赖
 - `doc/core/prd.md`
@@ -35,15 +36,17 @@
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_step_control_reports_blocked_without_llm_mode -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher parse_options_accepts_agent_direct_connect_alias -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 openclaw_settings_from_env_parses_profile_and_timeout -- --nocapture`
 
 ## 状态
 - 更新日期: 2026-04-07
 - 当前状态: completed
 - 下一任务: 无
-- 最新完成: `T1/T2/T3/T4/T5/T6/T7`（已完成三模式总契约建模、core 主入口挂载、下游术语回写、`pure_api` 的 LLM-required 正式游玩口径收口、`agent_direct_connect` / `openclaw_local_http` / execution lane 的多层术语收口，以及 `non-3D` / `software_safe` 的 priority-vs-mode 边界澄清）。
+- 最新完成: `T1/T2/T3/T4/T5/T6/T7/T8`（已完成三模式总契约建模、core 主入口挂载、下游术语回写、`pure_api` 的 LLM-required 正式游玩口径收口、`agent_direct_connect/openclaw_local_http` 向兼容 alias 的降级，以及 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy 收口和 `non-3D` / `software_safe` 的 priority-vs-mode 边界澄清。）
 - 备注:
   - 本专题只冻结 taxonomy 与 claim contract，不替代下游专题实现。
   - 后续若新增同层玩家访问模式，必须先更新本专题再更新模块文档。
   - `--no-llm` 仍可作为观战/调试旁路保留，但不能再被写成正式可玩、parity 或发布放行入口。
-  - `agent_provider_mode` CLI / config key 暂不改名；`agent_direct_connect` 只作为向前兼容 alias 暴露，内部 canonical provider implementation 仍保持 `openclaw_local_http`。
+  - 正式 operator-facing 配置、CLI 与 env 口径以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane` 为准；`agent_provider_mode`、`agent_direct_connect` 与 `openclaw_local_http` 只允许作为兼容解析保留。
   - `non-3D` / `2D 优先` 只允许描述阶段优先级或交互范围；若要表达玩家入口，必须显式写回 `standard_3d / software_safe / pure_api`。

@@ -50,14 +50,28 @@ const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 const GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 const OASIS7_VIEWER_LIVE_BIN_ENV: &str = "OASIS7_VIEWER_LIVE_BIN";
 const OASIS7_CHAIN_RUNTIME_BIN_ENV: &str = "OASIS7_CHAIN_RUNTIME_BIN";
-const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
+const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
+const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
+const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
+const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
+const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
-const DEFAULT_OPENCLAW_BASE_URL: &str = "http://127.0.0.1:5841";
-const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 15_000;
-const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
+const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 10_000;
 const LLM_TIMEOUT_MS_ENV: &str = "OASIS7_LLM_TIMEOUT_MS";
+const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
+const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
+const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
+const VIEWER_AGENT_PROVIDER_TRANSPORT_ENV: &str = "OASIS7_AGENT_PROVIDER_TRANSPORT";
+const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_URL";
+const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
+const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
+    "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
+const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
+const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
 const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
@@ -110,12 +124,15 @@ struct CliOptions {
     viewer_port: u16,
     viewer_static_dir: String,
     with_llm: bool,
-    agent_provider_mode: String,
-    openclaw_base_url: String,
-    openclaw_auth_token: String,
-    openclaw_connect_timeout_ms: u64,
-    openclaw_agent_profile: String,
-    openclaw_execution_mode: ProviderExecutionMode,
+    agent_decision_source: String,
+    agent_provider_backend: String,
+    agent_provider_contract: String,
+    agent_provider_transport: String,
+    agent_provider_url: String,
+    agent_provider_auth_token: String,
+    agent_provider_connect_timeout_ms: u64,
+    agent_provider_profile: String,
+    agent_execution_lane: ProviderExecutionMode,
     open_browser: bool,
     chain_enabled: bool,
     chain_status_bind: String,
@@ -146,12 +163,15 @@ impl Default for CliOptions {
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
-            agent_provider_mode: BUILTIN_LLM_PROVIDER_MODE.to_string(),
-            openclaw_base_url: DEFAULT_OPENCLAW_BASE_URL.to_string(),
-            openclaw_auth_token: String::new(),
-            openclaw_connect_timeout_ms: DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS,
-            openclaw_agent_profile: DEFAULT_OPENCLAW_AGENT_PROFILE.to_string(),
-            openclaw_execution_mode: ProviderExecutionMode::HeadlessAgent,
+            agent_decision_source: BUILTIN_LLM_DECISION_SOURCE.to_string(),
+            agent_provider_backend: OPENCLAW_PROVIDER_BACKEND.to_string(),
+            agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),
+            agent_provider_transport: LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string(),
+            agent_provider_url: DEFAULT_AGENT_PROVIDER_URL.to_string(),
+            agent_provider_auth_token: String::new(),
+            agent_provider_connect_timeout_ms: DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
+            agent_provider_profile: DEFAULT_AGENT_PROVIDER_PROFILE.to_string(),
+            agent_execution_lane: ProviderExecutionMode::HeadlessAgent,
             open_browser: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
@@ -347,6 +367,15 @@ fn apply_viewer_live_env_overrides(
     parent_has_llm_timeout_ms: bool,
 ) {
     for env_name in [
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         VIEWER_OPENCLAW_BASE_URL_ENV,
         VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
@@ -357,32 +386,41 @@ fn apply_viewer_live_env_overrides(
         command.env_remove(env_name);
     }
 
-    if options.agent_provider_mode == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
+    if uses_openclaw_provider(options) {
         command.env(
-            VIEWER_AGENT_PROVIDER_MODE_ENV,
-            OPENCLAW_LOCAL_HTTP_PROVIDER_MODE,
+            VIEWER_AGENT_DECISION_SOURCE_ENV,
+            PROVIDER_BACKED_DECISION_SOURCE,
+        );
+        command.env(VIEWER_AGENT_PROVIDER_BACKEND_ENV, OPENCLAW_PROVIDER_BACKEND);
+        command.env(
+            VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+            WORLDSIM_PROVIDER_CONTRACT,
         );
         command.env(
-            VIEWER_OPENCLAW_BASE_URL_ENV,
-            options.openclaw_base_url.as_str(),
+            VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+            LOOPBACK_HTTP_PROVIDER_TRANSPORT,
         );
-        if !options.openclaw_auth_token.trim().is_empty() {
+        command.env(
+            VIEWER_AGENT_PROVIDER_URL_ENV,
+            options.agent_provider_url.as_str(),
+        );
+        if !options.agent_provider_auth_token.trim().is_empty() {
             command.env(
-                VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
-                options.openclaw_auth_token.as_str(),
+                VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+                options.agent_provider_auth_token.as_str(),
             );
         }
         command.env(
-            VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
-            options.openclaw_connect_timeout_ms.to_string(),
+            VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+            options.agent_provider_connect_timeout_ms.to_string(),
         );
         command.env(
-            VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
-            options.openclaw_agent_profile.as_str(),
+            VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+            options.agent_provider_profile.as_str(),
         );
         command.env(
-            VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
-            options.openclaw_execution_mode.as_str(),
+            VIEWER_AGENT_EXECUTION_LANE_ENV,
+            options.agent_execution_lane.as_str(),
         );
         return;
     }
@@ -873,35 +911,85 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--with-llm" => {
                 options.with_llm = true;
             }
+            "--agent-decision-source" => {
+                options.agent_decision_source =
+                    parse_required_value(&mut iter, "--agent-decision-source")?;
+            }
+            "--agent-provider-backend" => {
+                options.agent_provider_backend =
+                    parse_required_value(&mut iter, "--agent-provider-backend")?;
+            }
+            "--agent-provider-contract" => {
+                options.agent_provider_contract =
+                    parse_required_value(&mut iter, "--agent-provider-contract")?;
+            }
+            "--agent-provider-transport" => {
+                options.agent_provider_transport =
+                    parse_required_value(&mut iter, "--agent-provider-transport")?;
+            }
+            "--agent-provider-url" => {
+                options.agent_provider_url =
+                    parse_required_value(&mut iter, "--agent-provider-url")?;
+            }
+            "--agent-provider-auth-token" => {
+                options.agent_provider_auth_token =
+                    parse_required_value(&mut iter, "--agent-provider-auth-token")?;
+            }
+            "--agent-provider-connect-timeout-ms" => {
+                let raw = parse_required_value(&mut iter, "--agent-provider-connect-timeout-ms")?;
+                options.agent_provider_connect_timeout_ms = raw.parse::<u64>().map_err(|_| {
+                    format!("--agent-provider-connect-timeout-ms must be a positive integer, got `{raw}`")
+                })?;
+                if options.agent_provider_connect_timeout_ms == 0 {
+                    return Err(
+                        "--agent-provider-connect-timeout-ms must be a positive integer"
+                            .to_string(),
+                    );
+                }
+            }
+            "--agent-provider-profile" => {
+                options.agent_provider_profile =
+                    parse_required_value(&mut iter, "--agent-provider-profile")?;
+            }
+            "--agent-execution-lane" => {
+                let raw = parse_required_value(&mut iter, "--agent-execution-lane")?;
+                options.agent_execution_lane = ProviderExecutionMode::parse(raw.as_str())
+                    .ok_or_else(|| {
+                        format!(
+                            "--agent-execution-lane must be one of player_parity or headless_agent, got `{raw}`"
+                        )
+                    })?;
+            }
             "--agent-provider-mode" => {
-                options.agent_provider_mode =
+                options.agent_decision_source =
                     parse_required_value(&mut iter, "--agent-provider-mode")?;
             }
             "--openclaw-base-url" => {
-                options.openclaw_base_url = parse_required_value(&mut iter, "--openclaw-base-url")?;
+                options.agent_provider_url =
+                    parse_required_value(&mut iter, "--openclaw-base-url")?;
             }
             "--openclaw-auth-token" => {
-                options.openclaw_auth_token =
+                options.agent_provider_auth_token =
                     parse_required_value(&mut iter, "--openclaw-auth-token")?;
             }
             "--openclaw-connect-timeout-ms" => {
                 let raw = parse_required_value(&mut iter, "--openclaw-connect-timeout-ms")?;
-                options.openclaw_connect_timeout_ms = raw.parse::<u64>().map_err(|_| {
+                options.agent_provider_connect_timeout_ms = raw.parse::<u64>().map_err(|_| {
                     format!("--openclaw-connect-timeout-ms must be a positive integer, got `{raw}`")
                 })?;
-                if options.openclaw_connect_timeout_ms == 0 {
+                if options.agent_provider_connect_timeout_ms == 0 {
                     return Err(
                         "--openclaw-connect-timeout-ms must be a positive integer".to_string()
                     );
                 }
             }
             "--openclaw-agent-profile" => {
-                options.openclaw_agent_profile =
+                options.agent_provider_profile =
                     parse_required_value(&mut iter, "--openclaw-agent-profile")?;
             }
             "--openclaw-execution-mode" => {
                 let raw = parse_required_value(&mut iter, "--openclaw-execution-mode")?;
-                options.openclaw_execution_mode = ProviderExecutionMode::parse(raw.as_str())
+                options.agent_execution_lane = ProviderExecutionMode::parse(raw.as_str())
                     .ok_or_else(|| {
                         format!(
                             "--openclaw-execution-mode must be one of player_parity or headless_agent, got `{raw}`"
@@ -1016,15 +1104,26 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
     DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?;
-    validate_agent_provider_mode(options.agent_provider_mode.as_str())?;
-    options.agent_provider_mode =
-        canonical_agent_provider_mode(options.agent_provider_mode.as_str()).to_string();
-    if options.agent_provider_mode == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
-        if options.openclaw_base_url.trim().is_empty() {
-            return Err("--openclaw-base-url requires a non-empty value".to_string());
+    validate_agent_decision_source(options.agent_decision_source.as_str())?;
+    options.agent_decision_source =
+        canonical_agent_decision_source(options.agent_decision_source.as_str()).to_string();
+    if options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE {
+        validate_agent_provider_backend(options.agent_provider_backend.as_str())?;
+        validate_agent_provider_contract(options.agent_provider_contract.as_str())?;
+        validate_agent_provider_transport(options.agent_provider_transport.as_str())?;
+        options.agent_provider_backend =
+            canonical_agent_provider_backend(options.agent_provider_backend.as_str()).to_string();
+        options.agent_provider_contract =
+            canonical_agent_provider_contract(options.agent_provider_contract.as_str()).to_string();
+        options.agent_provider_transport = canonical_agent_provider_transport(
+            options.agent_provider_transport.as_str(),
+        )
+        .to_string();
+        if options.agent_provider_url.trim().is_empty() {
+            return Err("--agent-provider-url requires a non-empty value".to_string());
         }
-        if options.openclaw_agent_profile.trim().is_empty() {
-            return Err("--openclaw-agent-profile requires a non-empty value".to_string());
+        if options.agent_provider_profile.trim().is_empty() {
+            return Err("--agent-provider-profile requires a non-empty value".to_string());
         }
     }
     normalize_http_target(
@@ -1067,25 +1166,86 @@ fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
         .unwrap_or(DeploymentMode::TrustedLocalOnly)
 }
 
-fn validate_agent_provider_mode(raw: &str) -> Result<(), String> {
+fn uses_openclaw_provider(options: &CliOptions) -> bool {
+    options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE
+        && options.agent_provider_backend == OPENCLAW_PROVIDER_BACKEND
+        && options.agent_provider_contract == WORLDSIM_PROVIDER_CONTRACT
+        && options.agent_provider_transport == LOOPBACK_HTTP_PROVIDER_TRANSPORT
+}
+
+fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE
+        BUILTIN_LLM_DECISION_SOURCE
+        | PROVIDER_BACKED_DECISION_SOURCE
         | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
         _ => Err(
-            "--agent-provider-mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
-                .to_string(),
+            "--agent-decision-source must be builtin_llm or provider_backed".to_string(),
         ),
     }
 }
 
-fn canonical_agent_provider_mode(raw: &str) -> &'static str {
+fn canonical_agent_decision_source(raw: &str) -> &'static str {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE => BUILTIN_LLM_PROVIDER_MODE,
-        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
-            OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
-        }
-        _ => BUILTIN_LLM_PROVIDER_MODE,
+        BUILTIN_LLM_DECISION_SOURCE => BUILTIN_LLM_DECISION_SOURCE,
+        PROVIDER_BACKED_DECISION_SOURCE
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => PROVIDER_BACKED_DECISION_SOURCE,
+        _ => BUILTIN_LLM_DECISION_SOURCE,
+    }
+}
+
+fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
+    match raw.trim() {
+        OPENCLAW_PROVIDER_BACKEND
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
+        _ => Err("--agent-provider-backend must be openclaw".to_string()),
+    }
+}
+
+fn canonical_agent_provider_backend(raw: &str) -> &'static str {
+    match raw.trim() {
+        OPENCLAW_PROVIDER_BACKEND
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => OPENCLAW_PROVIDER_BACKEND,
+        _ => OPENCLAW_PROVIDER_BACKEND,
+    }
+}
+
+fn validate_agent_provider_contract(raw: &str) -> Result<(), String> {
+    match raw.trim() {
+        WORLDSIM_PROVIDER_CONTRACT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
+        _ => Err("--agent-provider-contract must be worldsim_provider_v1".to_string()),
+    }
+}
+
+fn canonical_agent_provider_contract(raw: &str) -> &'static str {
+    match raw.trim() {
+        WORLDSIM_PROVIDER_CONTRACT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => WORLDSIM_PROVIDER_CONTRACT,
+        _ => WORLDSIM_PROVIDER_CONTRACT,
+    }
+}
+
+fn validate_agent_provider_transport(raw: &str) -> Result<(), String> {
+    match raw.trim() {
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
+        _ => Err("--agent-provider-transport must be loopback_http".to_string()),
+    }
+}
+
+fn canonical_agent_provider_transport(raw: &str) -> &'static str {
+    match raw.trim() {
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+        _ => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     }
 }
 
@@ -1259,16 +1419,32 @@ Options:\n\
                                oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
-  --agent-provider-mode <mode> agent access mode: builtin_llm|agent_direct_connect\n\
-                               compatibility alias/provider impl: openclaw_local_http\n\
-  --openclaw-base-url <url>    OpenClaw local provider base URL (default: {DEFAULT_OPENCLAW_BASE_URL})\n\
-  --openclaw-auth-token <tok>  OpenClaw bearer token\n\
+  --agent-decision-source <src>\n\
+                               agent decision source: builtin_llm|provider_backed\n\
+  --agent-provider-backend <id>\n\
+                               provider backend: openclaw (default when provider_backed)\n\
+  --agent-provider-contract <id>\n\
+                               provider contract: worldsim_provider_v1 (default when provider_backed)\n\
+  --agent-provider-transport <id>\n\
+                               provider transport: loopback_http (default when provider_backed)\n\
+  --agent-provider-url <url>   provider URL (default: {DEFAULT_AGENT_PROVIDER_URL})\n\
+  --agent-provider-auth-token <tok>\n\
+                               provider bearer token\n\
+  --agent-provider-connect-timeout-ms <ms>\n\
+                               provider connect timeout ms (default: {DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS})\n\
+  --agent-provider-profile <id>\n\
+                               provider profile (default: {DEFAULT_AGENT_PROVIDER_PROFILE})\n\
+  --agent-execution-lane <mode>\n\
+                               execution lane: player_parity|headless_agent (default: headless_agent)\n\
+  --agent-provider-mode <mode> legacy alias for --agent-decision-source; accepts agent_direct_connect/openclaw_local_http\n\
+  --openclaw-base-url <url>    legacy alias for --agent-provider-url\n\
+  --openclaw-auth-token <tok>  legacy alias for --agent-provider-auth-token\n\
   --openclaw-connect-timeout-ms <ms>\n\
-                               OpenClaw connect timeout ms (default: {DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS})\n\
+                               legacy alias for --agent-provider-connect-timeout-ms\n\
   --openclaw-agent-profile <id>\n\
-                               OpenClaw agent profile (default: {DEFAULT_OPENCLAW_AGENT_PROFILE})\n\
+                               legacy alias for --agent-provider-profile\n\
   --openclaw-execution-mode <mode>\n\
-                               OpenClaw execution mode: player_parity|headless_agent (default: headless_agent)\n\
+                               legacy alias for --agent-execution-lane\n\
   --no-open-browser            do not auto open browser\n\
   -h, --help                   show help\n\n\
 Env:\n\

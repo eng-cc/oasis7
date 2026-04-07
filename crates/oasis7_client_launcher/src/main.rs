@@ -78,11 +78,14 @@ const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
 const DEFAULT_VIEWER_PORT: &str = "4173";
-const DEFAULT_AGENT_PROVIDER_MODE: &str = "builtin_llm";
-const DEFAULT_OPENCLAW_BASE_URL: &str = "http://127.0.0.1:5841";
-const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: &str = "15000";
-const DEFAULT_OPENCLAW_EXECUTION_MODE: &str = "player_parity";
-const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_AGENT_DECISION_SOURCE: &str = "builtin_llm";
+const DEFAULT_AGENT_PROVIDER_BACKEND: &str = "openclaw";
+const DEFAULT_AGENT_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
+const DEFAULT_AGENT_PROVIDER_TRANSPORT: &str = "loopback_http";
+const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
+const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: &str = "15000";
+const DEFAULT_AGENT_EXECUTION_LANE: &str = "player_parity";
+const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
@@ -362,13 +365,24 @@ struct LaunchConfig {
     viewer_host: String,
     viewer_port: String,
     viewer_static_dir: String,
-    agent_provider_mode: String,
-    openclaw_base_url: String,
-    openclaw_auth_token: String,
-    openclaw_connect_timeout_ms: String,
-    #[serde(default = "default_openclaw_execution_mode")]
-    openclaw_execution_mode: String,
-    openclaw_agent_profile: String,
+    #[serde(alias = "agent_provider_mode")]
+    agent_decision_source: String,
+    #[serde(default = "default_agent_provider_backend")]
+    agent_provider_backend: String,
+    #[serde(default = "default_agent_provider_contract")]
+    agent_provider_contract: String,
+    #[serde(default = "default_agent_provider_transport")]
+    agent_provider_transport: String,
+    #[serde(alias = "openclaw_base_url")]
+    agent_provider_url: String,
+    #[serde(alias = "openclaw_auth_token")]
+    agent_provider_auth_token: String,
+    #[serde(alias = "openclaw_connect_timeout_ms")]
+    agent_provider_connect_timeout_ms: String,
+    #[serde(default = "default_agent_execution_lane", alias = "openclaw_execution_mode")]
+    agent_execution_lane: String,
+    #[serde(alias = "openclaw_agent_profile")]
+    agent_provider_profile: String,
     llm_enabled: bool,
     openclaw_auto_discover: bool,
     chain_enabled: bool,
@@ -413,12 +427,16 @@ impl Default for LaunchConfig {
             viewer_host: DEFAULT_VIEWER_HOST.to_string(),
             viewer_port: DEFAULT_VIEWER_PORT.to_string(),
             viewer_static_dir,
-            agent_provider_mode: DEFAULT_AGENT_PROVIDER_MODE.to_string(),
-            openclaw_base_url: DEFAULT_OPENCLAW_BASE_URL.to_string(),
-            openclaw_auth_token: String::new(),
-            openclaw_connect_timeout_ms: DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS.to_string(),
-            openclaw_execution_mode: DEFAULT_OPENCLAW_EXECUTION_MODE.to_string(),
-            openclaw_agent_profile: DEFAULT_OPENCLAW_AGENT_PROFILE.to_string(),
+            agent_decision_source: DEFAULT_AGENT_DECISION_SOURCE.to_string(),
+            agent_provider_backend: DEFAULT_AGENT_PROVIDER_BACKEND.to_string(),
+            agent_provider_contract: DEFAULT_AGENT_PROVIDER_CONTRACT.to_string(),
+            agent_provider_transport: DEFAULT_AGENT_PROVIDER_TRANSPORT.to_string(),
+            agent_provider_url: DEFAULT_AGENT_PROVIDER_URL.to_string(),
+            agent_provider_auth_token: String::new(),
+            agent_provider_connect_timeout_ms: DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS
+                .to_string(),
+            agent_execution_lane: DEFAULT_AGENT_EXECUTION_LANE.to_string(),
+            agent_provider_profile: DEFAULT_AGENT_PROVIDER_PROFILE.to_string(),
             llm_enabled: true,
             openclaw_auto_discover: true,
             chain_enabled: true,
@@ -444,8 +462,20 @@ impl Default for LaunchConfig {
     }
 }
 
-fn default_openclaw_execution_mode() -> String {
-    DEFAULT_OPENCLAW_EXECUTION_MODE.to_string()
+fn default_agent_provider_backend() -> String {
+    DEFAULT_AGENT_PROVIDER_BACKEND.to_string()
+}
+
+fn default_agent_provider_contract() -> String {
+    DEFAULT_AGENT_PROVIDER_CONTRACT.to_string()
+}
+
+fn default_agent_provider_transport() -> String {
+    DEFAULT_AGENT_PROVIDER_TRANSPORT.to_string()
+}
+
+fn default_agent_execution_lane() -> String {
+    DEFAULT_AGENT_EXECUTION_LANE.to_string()
 }
 
 #[derive(Debug)]

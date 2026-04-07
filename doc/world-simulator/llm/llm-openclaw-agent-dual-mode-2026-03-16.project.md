@@ -42,7 +42,7 @@
 - owner: `qa_engineer`
 - 联审: `agent_engineer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 发起建模: `producer_system_designer`
-- 备注: 本专题的目标态没有变化，仍然是为 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 收口“双轨 lane”的产品目标与执行边界。2026-04-06 formal review 提出的 launcher 可达性、dual-mode observation、provider handshake 与 fallback 审计链缺口，现已在 `TASK-WORLD_SIMULATOR-295~298` 中完成 remediation 与真实复采证；2026-04-07 复签结论见 `doc/world-simulator/llm/openclaw-agent-dual-mode-recertification-2026-04-07.md`。
+- 备注: 本专题的目标态没有变化，仍然是为当前 provider-backed OpenClaw 组合（兼容 alias=`agent_direct_connect/openclaw_local_http`）收口“双轨 lane”的产品目标与执行边界。2026-04-06 formal review 提出的 launcher 可达性、dual-mode observation、provider handshake 与 fallback 审计链缺口，现已在 `TASK-WORLD_SIMULATOR-295~298` 中完成 remediation 与真实复采证；2026-04-07 复签结论见 `doc/world-simulator/llm/openclaw-agent-dual-mode-recertification-2026-04-07.md`。
 - 备注补充: runtime live / viewer debug context 当前新增的 `capabilities`、`supported_action_sets` 与 compatibility status 表达的是本地执行 lane 期望遵守的 phase-1 contract 与 fallback 审计结果，不等价于 provider 实际 `/v1/provider/info` handshake 原样回显；真实 provider 兼容性真值仍以 launcher provider compatibility check 与 parity summary/raw 为准。
 - 当前阻断:
   - 无。本专题已恢复 `completed`。

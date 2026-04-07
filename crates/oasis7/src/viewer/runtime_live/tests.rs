@@ -16,6 +16,16 @@ mod authoritative;
 mod prompt_control;
 mod snapshot_progress;
 
+const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
+const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
+const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
+const VIEWER_AGENT_PROVIDER_TRANSPORT_ENV: &str = "OASIS7_AGENT_PROVIDER_TRANSPORT";
+const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_URL";
+const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
+const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
+    "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
+const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
+const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
 const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
@@ -48,6 +58,15 @@ fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
 
 fn clear_runtime_openclaw_env() {
     let removed_old_brand_envs = [
+        removed_old_brand_runtime_live_env("AGENT_DECISION_SOURCE"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_BACKEND"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONTRACT"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_TRANSPORT"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_URL"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_AUTH_TOKEN"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONNECT_TIMEOUT_MS"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_PROFILE"),
+        removed_old_brand_runtime_live_env("AGENT_EXECUTION_LANE"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
         removed_old_brand_runtime_live_env("OPENCLAW_BASE_URL"),
         removed_old_brand_runtime_live_env("OPENCLAW_AUTH_TOKEN"),
@@ -57,6 +76,15 @@ fn clear_runtime_openclaw_env() {
         removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
     ];
     for env_name in [
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         VIEWER_OPENCLAW_BASE_URL_ENV,
         VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
@@ -531,25 +559,25 @@ fn openclaw_settings_from_env_defaults_to_none() {
 fn openclaw_settings_from_env_parses_profile_and_timeout() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV, "4200");
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
-    std::env::set_var(VIEWER_OPENCLAW_AUTH_TOKEN_ENV, "secret-token");
+    std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "openclaw");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV, "4200");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, "secret-token");
     let settings = super::control_plane::runtime_openclaw_settings_from_env()
         .expect("settings parse")
         .expect("openclaw settings");
-    assert_eq!(settings.requested_provider_mode, "agent_direct_connect");
+    assert_eq!(settings.requested_provider_mode, "provider_backed");
     assert_eq!(settings.base_url, "http://127.0.0.1:5841");
     assert_eq!(settings.connect_timeout_ms, 4200);
     assert_eq!(settings.agent_profile, "oasis7_p0_low_freq_npc");
     assert_eq!(settings.execution_mode, ProviderExecutionMode::PlayerParity);
     assert_eq!(settings.auth_token.as_deref(), Some("secret-token"));
-    assert_eq!(
-        settings.fallback_reason.as_deref(),
-        Some("provider_mode_alias:agent_direct_connect")
-    );
+    assert_eq!(settings.fallback_reason, None);
     clear_runtime_openclaw_env();
 }
 

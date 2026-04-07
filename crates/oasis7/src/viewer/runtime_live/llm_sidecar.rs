@@ -33,11 +33,25 @@ pub(super) struct RuntimeLlmDecision {
     pub(super) decision_trace: Option<AgentDecisionTrace>,
 }
 
-const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
+const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
+const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
+const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
+const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
+const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 3_000;
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
+const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
+const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
+const VIEWER_AGENT_PROVIDER_TRANSPORT_ENV: &str = "OASIS7_AGENT_PROVIDER_TRANSPORT";
+const VIEWER_AGENT_PROVIDER_URL_ENV: &str = "OASIS7_AGENT_PROVIDER_URL";
+const VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV: &str = "OASIS7_AGENT_PROVIDER_AUTH_TOKEN";
+const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
+    "OASIS7_AGENT_PROVIDER_CONNECT_TIMEOUT_MS";
+const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
+const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
 const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
@@ -62,70 +76,115 @@ enum RuntimeDecisionRunner {
 }
 
 fn env_requests_openclaw_provider() -> bool {
-    named_env_var(VIEWER_AGENT_PROVIDER_MODE_ENV)
+    named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
         .map(|value| value.trim().to_string())
         .as_deref()
-        .and_then(canonical_agent_provider_mode)
-        .is_some_and(|value| value == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
+        .and_then(canonical_agent_decision_source)
+        .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
 }
 
 pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
 ) -> Result<Option<OpenClawDecisionSettings>, String> {
-    let provider_mode = named_env_var(VIEWER_AGENT_PROVIDER_MODE_ENV).unwrap_or_default();
-    let provider_mode = provider_mode.trim();
-    if provider_mode.is_empty() || provider_mode == BUILTIN_LLM_PROVIDER_MODE {
+    let decision_source =
+        named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
+            .unwrap_or_default();
+    let decision_source = decision_source.trim();
+    if decision_source.is_empty() || decision_source == BUILTIN_LLM_DECISION_SOURCE {
         return Ok(None);
     }
-    let Some(_) = canonical_agent_provider_mode(provider_mode) else {
+    let Some(_) = canonical_agent_decision_source(decision_source) else {
         return Err(format!(
-            "unsupported agent provider mode `{provider_mode}`; expected builtin_llm, agent_direct_connect, or openclaw_local_http"
+            "unsupported agent decision source `{decision_source}`; expected builtin_llm or provider_backed"
         ));
     };
 
-    let base_url = named_env_var(VIEWER_OPENCLAW_BASE_URL_ENV).unwrap_or_default();
+    let backend =
+        named_env_var_any(&[VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
+            .unwrap_or_else(|| OPENCLAW_PROVIDER_BACKEND.to_string());
+    let Some(_) = canonical_agent_provider_backend(backend.as_str()) else {
+        return Err(format!(
+            "unsupported agent provider backend `{backend}`; expected openclaw"
+        ));
+    };
+    let contract = named_env_var_any(&[
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ])
+    .unwrap_or_else(|| WORLDSIM_PROVIDER_CONTRACT.to_string());
+    let Some(_) = canonical_agent_provider_contract(contract.as_str()) else {
+        return Err(format!(
+            "unsupported agent provider contract `{contract}`; expected worldsim_provider_v1"
+        ));
+    };
+    let transport = named_env_var_any(&[
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ])
+    .unwrap_or_else(|| LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
+    let Some(_) = canonical_agent_provider_transport(transport.as_str()) else {
+        return Err(format!(
+            "unsupported agent provider transport `{transport}`; expected loopback_http"
+        ));
+    };
+
+    let base_url =
+        named_env_var_any(&[VIEWER_AGENT_PROVIDER_URL_ENV, VIEWER_OPENCLAW_BASE_URL_ENV])
+            .unwrap_or_default();
     let base_url = base_url.trim();
     if base_url.is_empty() {
         return Err(format!(
-            "{VIEWER_OPENCLAW_BASE_URL_ENV} is required for openclaw_local_http"
+            "{VIEWER_AGENT_PROVIDER_URL_ENV} is required for provider_backed/openclaw"
         ));
     }
 
-    let connect_timeout_ms = named_env_var(VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV)
+    let connect_timeout_ms = named_env_var_any(&[
+        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+        VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
+    ])
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .map(|value| {
             value.parse::<u64>().map_err(|err| {
-                format!("invalid {VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV} value `{value}`: {err}")
+                format!(
+                    "invalid {VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV} value `{value}`: {err}"
+                )
             })
         })
         .transpose()?
         .unwrap_or(DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS);
     if connect_timeout_ms == 0 {
         return Err(format!(
-            "{VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV} must be greater than zero"
+            "{VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV} must be greater than zero"
         ));
     }
 
-    let agent_profile = named_env_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV)
+    let agent_profile =
+        named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV, VIEWER_OPENCLAW_AGENT_PROFILE_ENV])
         .unwrap_or_else(|| DEFAULT_OPENCLAW_AGENT_PROFILE.to_string());
     let agent_profile = agent_profile.trim();
     if agent_profile.is_empty() {
         return Err(format!(
-            "{VIEWER_OPENCLAW_AGENT_PROFILE_ENV} cannot be empty for openclaw_local_http"
+            "{VIEWER_AGENT_PROVIDER_PROFILE_ENV} cannot be empty for provider_backed/openclaw"
         ));
     }
 
-    let auth_token = named_env_var(VIEWER_OPENCLAW_AUTH_TOKEN_ENV)
+    let auth_token = named_env_var_any(&[
+        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+        VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
+    ])
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let execution_mode = named_env_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV)
+    let execution_mode = named_env_var_any(&[
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
+    ])
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .map(|value| {
             ProviderExecutionMode::parse(value.as_str()).ok_or_else(|| {
                 format!(
-                    "invalid {VIEWER_OPENCLAW_EXECUTION_MODE_ENV} value `{value}`: expected player_parity or headless_agent"
+                    "invalid {VIEWER_AGENT_EXECUTION_LANE_ENV} value `{value}`: expected player_parity or headless_agent"
                 )
             })
         })
@@ -133,28 +192,55 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
         .unwrap_or(ProviderExecutionMode::HeadlessAgent);
 
     Ok(Some(OpenClawDecisionSettings {
-        requested_provider_mode: provider_mode.to_string(),
+        requested_provider_mode: decision_source.to_string(),
         base_url: base_url.to_string(),
         auth_token,
         connect_timeout_ms,
         agent_profile: agent_profile.to_string(),
         execution_mode,
-        fallback_reason: provider_mode_fallback_reason(provider_mode),
+        fallback_reason: provider_mode_fallback_reason(decision_source),
     }))
 }
 
-fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
+fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE => Some(BUILTIN_LLM_PROVIDER_MODE),
-        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
-            Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
-        }
+        BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
+        PROVIDER_BACKED_DECISION_SOURCE
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),
         _ => None,
     }
 }
 
-fn named_env_var(env_name: &str) -> Option<String> {
-    env::var(env_name).ok()
+fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        OPENCLAW_PROVIDER_BACKEND
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(OPENCLAW_PROVIDER_BACKEND),
+        _ => None,
+    }
+}
+
+fn canonical_agent_provider_contract(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        WORLDSIM_PROVIDER_CONTRACT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(WORLDSIM_PROVIDER_CONTRACT),
+        _ => None,
+    }
+}
+
+fn canonical_agent_provider_transport(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
+        _ => None,
+    }
+}
+
+fn named_env_var_any(env_names: &[&str]) -> Option<String> {
+    env_names.iter().find_map(|env_name| env::var(env_name).ok())
 }
 
 fn provider_mode_fallback_reason(provider_mode: &str) -> Option<String> {

@@ -267,6 +267,27 @@
     - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-CORE-052 (PRD-CORE-009) [test_tier_required]: 将 `agent_direct_connect/openclaw_local_http` 从用户主配置模型降为兼容 alias，把 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，并同步回写 core/world-simulator/testing 文档与 launcher/client launcher 透传口径。
+  - 产物文件:
+    - `doc/core/prd.md`
+    - `doc/core/project.md`
+    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/world-simulator/prd.md`
+    - `doc/world-simulator/project.md`
+    - `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.{prd,project}.md`
+    - `testing-manual.md`
+    - `crates/oasis7_client_launcher/src/{main.rs,launcher_core.rs,config_ui.rs,feedback_window.rs,main_tests.rs}`
+    - `crates/oasis7_launcher_ui/src/lib.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
+    - `crates/oasis7/src/viewer/runtime_live/{llm_sidecar.rs,tests.rs}`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 openclaw_settings_from_env_parses_profile_and_timeout -- --nocapture`
 
 ## 依赖
 - doc/core/prd.index.md
@@ -286,6 +307,7 @@
 - 下一任务: 无
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
+- 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/openclaw_local_http` 降为兼容 alias。）
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
 - 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
 - 最新完成: `TASK-CORE-050`（已将旧“OpenClaw mode”收口为 `agent_direct_connect` 接入方式、`openclaw_local_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）

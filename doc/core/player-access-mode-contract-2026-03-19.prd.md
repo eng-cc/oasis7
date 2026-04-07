@@ -7,14 +7,14 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前仓内已经形成 `standard_3d`、`software_safe` 与 `pure_api` 三条实际可用路径，但模式定义仍分散在 `world-simulator`、`game`、testing 与 evidence 文档中，容易把“玩家入口模式”“弱图形兜底模式”“无 UI 长玩模式”“`non-3D`/`2D` 研发优先级描述”与 `OpenClaw` 的执行 lane 混为一谈；同时 `pure_api` 是否要求 active LLM access 的口径在代码、脚本与文档之间也已漂移。
-- Proposed Solution: 在 `core` 建立一份跨模块三模式总契约，统一三种玩家访问模式的命名、默认用途、fallback 规则、证据门禁、允许宣称项与禁止宣称项；同时补齐“`agent_direct_connect` 是 agent 直连接入方式、`openclaw_local_http` 是当前 provider 实现、`player_parity / headless_agent / debug_viewer` 是 execution lane、`non-3D`/`2D 优先` 只属于交付优先级或交互 scope 描述”这层中间 taxonomy，避免继续把实现名、接入方式、阶段优先级与玩家入口混写。
+- Proposed Solution: 在 `core` 建立一份跨模块三模式总契约，统一三种玩家访问模式的命名、默认用途、fallback 规则、证据门禁、允许宣称项与禁止宣称项；同时补齐“`agent_direct_connect` 只保留为接入方式兼容口径、agent provider 当前正式配置拆为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`、`player_parity / headless_agent / debug_viewer` 是 execution lane、`non-3D`/`2D 优先` 只属于交付优先级或交互 scope 描述”这层中间 taxonomy，避免继续把实现名、接入方式、配置字段、阶段优先级与玩家入口混写。
 - Success Criteria:
   - SC-1: `standard_3d`、`software_safe`、`pure_api` 三种模式在 `core` 中具备唯一命名、默认用途、放行边界与禁宣称项。
   - SC-2: 发布、QA、playability 与 testing 相关文档在引用三模式时不再混用 `execution lane` 语义。
   - SC-3: 任何视觉质量或截图语义结论都必须显式绑定 `standard_3d`，不得借 `software_safe` 或 `pure_api` 代签。
   - SC-4: 任何“无 GPU 可玩”结论都必须显式绑定 `software_safe`，不得误写成标准 3D 兼容。
   - SC-5: 任何“无 UI 持续游玩 / canonical 玩家语义 / formal pure_api gameplay”结论都必须显式绑定 `pure_api`，并声明 active LLM access 为正式游玩前置；不得外推到视觉等价、no-LLM playability 或 LLM 专属动作豁免。
-  - SC-6: `agent_direct_connect`（当前 provider 实现为 `openclaw_local_http`）与 `player_parity / headless_agent / debug_viewer` 和三模式的关系在同一入口中可追溯，且不会再被操作者误解为新的玩家入口。
+  - SC-6: `agent_direct_connect/openclaw_local_http` 在当前产品中只能作为兼容 alias；正式 operator-facing 口径必须回写为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，且与三种玩家访问模式的关系在同一入口中可追溯，不会再被误解为新的玩家入口或唯一配置模型。
   - SC-7: `non-3D`、`2D 优先`、`弱图形优先` 等阶段性优先级或交互范围描述，不得再被写成与 `standard_3d / software_safe / pure_api` 同层的玩家访问模式别名。
 
 ## 2. User Experience & Functionality
@@ -42,7 +42,7 @@
   3. Flow-PCM-003（证据归档）:
      `执行测试或人工试玩 -> 证据包记录 mode_id / claim_scope / blocked_by -> 输出仅属于该模式的结论`
   4. Flow-PCM-004（agent 直连接入对齐）:
-     `涉及 agent 直连 -> 先判定玩家访问模式 -> 再标记 agent_access_mode=agent_direct_connect / provider_impl=openclaw_local_http -> 最后附加 player_parity / headless_agent / debug_viewer 执行 lane -> 禁止任一层反向冒充玩家模式`
+     `涉及 agent 直连 -> 先判定玩家访问模式 -> 再记录 compat_access_alias=agent_direct_connect/openclaw_local_http（如适用）与正式 provider 维度 agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile -> 最后附加 player_parity / headless_agent / debug_viewer 执行 lane -> 禁止任一层反向冒充玩家模式`
   5. Flow-PCM-005（对外宣称）:
      `准备 release/playability 口径 -> 读取 mode claim envelope -> 仅输出该模式允许承诺的内容 -> 超出范围则降级或补证据`
   6. Flow-PCM-006（优先级话术归类）:
@@ -54,7 +54,7 @@
 | 默认路由策略 | `entry_intent`、`graphics_env`、`ui_required`、`llm_required`、`fallback_allowed` | 根据目标选择模式，不得“先跑了再事后解释” | `unclassified -> classified -> executed -> evidenced` | 先按用户目标分流，再按环境约束分流；若目标冲突，以更窄 claim 为准 | QA / release 记录人必须显式写入 |
 | 证据标签 | `mode_id`、`claim_scope`、`blocked_by`、`environment_class`、`execution_lane` | 生成证据时必须记录模式与阻断类别 | `captured -> reviewed -> accepted/rejected` | 任一证据包只能有一个主 `mode_id`；lane 可附加但不能替代 mode | 所有证据维护者可写，`qa_engineer` 复核 |
 | claim envelope | `allowed_claims`、`forbidden_claims`、`requires_hardware_gpu`、`requires_browser`、`requires_canonical_player_gameplay` | 发布/评审前按模式检查允许与禁止宣称项 | `proposed -> bounded -> published` | 若证据跨模式冲突，取 claim 更窄的一侧；未标模式不得发布 | `producer_system_designer` / `liveops_community` 共同使用 |
-| agent 直连接入映射 | `agent_access_mode`、`provider_impl`、`provider_config_ref`、`compat_aliases` | 将 `agent_direct_connect` 记录为接入方式，并把当前 provider 实现绑定到 `openclaw_local_http` | `undefined -> mapped -> documented` | 接入方式回答“Agent 怎么接到 runtime”，provider 实现回答“底层走哪条协议/桥接实现”；两者都不能替代玩家访问模式 | `agent_engineer` / `producer_system_designer` 联审 |
+| agent provider 映射 | `agent_decision_source`、`agent_provider_backend`、`agent_provider_contract`、`agent_provider_transport`、`agent_provider_url`、`agent_provider_auth_token_ref`、`agent_provider_connect_timeout_ms`、`agent_provider_profile`、`compat_aliases` | 将当前 provider-backed OpenClaw 路径记录为结构化 provider 维度；仅在兼容迁移场景保留 `agent_direct_connect/openclaw_local_http` alias | `undefined -> mapped -> documented` | 接入 alias 只回答“历史上怎么叫”；正式 provider 维度回答“当前通过哪类决策源、后端、契约、传输与配置接到 runtime” | `agent_engineer` / `producer_system_designer` 联审 |
 | execution lane 映射 | `execution_lane`、`lane_scope`、`player_mode_binding`、`observer_only` | 将 `player_parity/headless_agent/debug_viewer` 作为执行 lane 附加到模式上，而非替代模式 | `unbound -> bound -> audited` | lane 只回答“怎么执行/怎么观战”，不回答“这是哪种玩家入口” | `agent_engineer` / `viewer_engineer` / `runtime_engineer` 联审 |
 | fallback 与阻断语义 | `fallback_reason`、`blocked_reason`、`degraded_to`、`recovery_hint` | 环境失败时给出显式降级或阻断，不允许静默改口径 | `normal -> degraded -> blocked/recovered` | `standard_3d` 失败可降到 `software_safe`；`pure_api` 不因浏览器问题而被判失败 | QA 记录；模块 owner 回写 |
 | 优先级/范围兼容语义 | `priority_label`、`interaction_scope`、`bound_mode_ids`、`forbidden_mode_aliases` | 文档若使用 `non-3D`/`2D 优先`，必须显式说明它只是阶段优先级或交互范围 | `implicit -> clarified -> audited` | 优先级词汇只能描述“当前先做什么”，不能替代 `mode_id`；若要谈真实玩家入口，必须回到三模式注册表 | `producer_system_designer` 冻结；模块 owner 回写 |
@@ -80,7 +80,7 @@
   - 文档治理检查脚本 `./scripts/doc-governance-check.sh`
   - `testing-manual.md`、`world-simulator` 与 `game` 相关 PRD/evidence 作为下游事实源
   - `OpenClaw` 双轨模式 supporting spec 作为 execution lane 参考
-  - `OpenClaw(Local HTTP)` provider integration spec 作为 `agent_direct_connect -> openclaw_local_http` 映射参考
+  - `OpenClaw(Local HTTP)` provider integration spec 作为 `provider_backed + openclaw + worldsim_provider_v1 + loopback_http` 当前组合映射参考
 - Evaluation Strategy:
   - 检查三模式是否具备唯一命名与无歧义 claim envelope。
   - 抽样核对 `software_safe`、`pure_api`、`OpenClaw dual-mode`、testing evidence 是否仍使用一致术语。
@@ -92,7 +92,7 @@
   - 本专题位于 `core`，负责冻结项目级玩家访问模式 taxonomy。
   - `world-simulator` 继续拥有 `standard_3d` 与 `software_safe` 的实现与具体验收。
   - `game` 继续拥有 `pure_api` 的 canonical 玩家语义、正式动作面、LLM-required gameplay gate 与 parity 验收。
-  - `world-simulator/llm` 继续拥有 `agent_direct_connect` 接入方式、`openclaw_local_http` provider 实现与 `player_parity / headless_agent / debug_viewer` execution lane contract，但必须服从本专题的 mode/access/provider/lane 分层。
+  - `world-simulator/llm` 继续拥有 OpenClaw provider-backed 路径与 `player_parity / headless_agent / debug_viewer` execution lane contract，但必须服从本专题的 mode/access/provider/lane 分层；`agent_direct_connect/openclaw_local_http` 仅能作为兼容 alias 保留。
 - Integration Points:
   - `testing-manual.md`
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -144,5 +144,5 @@
 | `DEC-PCM-001` | 将 `standard_3d / software_safe / pure_api` 定义为唯一三种玩家访问模式 | 继续让各模块专题各自定义模式，不做总契约 | 当前冲突已跨越模块边界，必须在 `core` 收口。 |
 | `DEC-PCM-002` | 将 `player_parity / headless_agent / debug_viewer` 明确定义为 execution lane | 把它们直接并列为第四、第五种玩家模式 | 这些字段回答的是执行/观测方式，不是玩家访问面。 |
 | `DEC-PCM-003` | 采用 claim-first 约束：先定义每种模式“能承诺什么”，再让证据归档 | 先跑出证据再事后解释模式 | 没有 claim envelope，QA 与对外口径会持续漂移。 |
-| `DEC-PCM-004` | 将 `agent_direct_connect` 定义为 agent 直连接入方式，并把 `openclaw_local_http` 降到当前 provider 实现层 | 继续把 `OpenClaw` 当作产品模式名，或直接把实现名当对外入口 | 接入方式、实现名与玩家访问面属于三层不同抽象；混写会让文档、CLI 与 QA 口径继续漂移。 |
+| `DEC-PCM-004` | 将 `agent_direct_connect/openclaw_local_http` 一起降为兼容 alias，并把正式 operator 配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` | 继续把 `OpenClaw` 当作产品模式名，或把旧单字段 provider mode 继续当对外主入口 | 接入 alias、结构化 provider 维度与玩家访问面属于三层不同抽象；继续混写会让文档、CLI、env 与 QA 口径持续漂移。 |
 | `DEC-PCM-005` | 将 `non-3D` / `2D 优先` 明确定义为交付优先级或交互范围描述，要求真实玩家入口继续回写到 `standard_3d / software_safe / pure_api` | 允许把阶段优先级话术当成 `software_safe` 同义 mode 或新的同层入口 | `non-3D` 回答的是“当前先做什么”，不是“玩家正在走哪种访问模式”；两者混写会破坏 taxonomy 与 stage 治理。 |

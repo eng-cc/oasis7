@@ -8,7 +8,7 @@ fn sanitized_launch_config_snapshot(config: &LaunchConfig) -> Result<serde_json:
     let mut value =
         serde_json::to_value(config).map_err(|err| format!("config serialization error: {err}"))?;
     if let Some(object) = value.as_object_mut() {
-        if let Some(token) = object.get_mut("openclaw_auth_token") {
+        if let Some(token) = object.get_mut("agent_provider_auth_token") {
             if !token.as_str().unwrap_or_default().is_empty() {
                 *token = serde_json::Value::String("<redacted>".to_string());
             }
@@ -245,13 +245,13 @@ mod tests {
     #[test]
     fn sanitized_launch_config_snapshot_redacts_openclaw_auth_token() {
         let config = LaunchConfig {
-            openclaw_auth_token: "secret-token".to_string(),
+            agent_provider_auth_token: "secret-token".to_string(),
             ..LaunchConfig::default()
         };
         let snapshot = sanitized_launch_config_snapshot(&config).expect("snapshot");
         assert_eq!(
             snapshot
-                .get("openclaw_auth_token")
+                .get("agent_provider_auth_token")
                 .and_then(|value| value.as_str()),
             Some("<redacted>")
         );

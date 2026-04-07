@@ -17,9 +17,13 @@ const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 pub(super) const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
-pub(super) const BUILTIN_LLM_PROVIDER_MODE: &str = "builtin_llm";
+pub(super) const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
+pub(super) const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
+pub(super) const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
+pub(super) const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
+pub(super) const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
-pub(super) const DEFAULT_OPENCLAW_DISCOVERY_BASE_URL: &str = DEFAULT_OPENCLAW_BASE_URL;
+pub(super) const DEFAULT_OPENCLAW_DISCOVERY_BASE_URL: &str = DEFAULT_AGENT_PROVIDER_URL;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Deserialize)]
@@ -69,17 +73,40 @@ impl std::fmt::Display for OpenClawProviderCheckError {
 }
 
 pub(super) fn is_openclaw_local_http_mode(config: &LaunchConfig) -> bool {
-    canonical_agent_provider_mode(config.agent_provider_mode.as_str())
-        == Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
+    canonical_agent_decision_source(config.agent_decision_source.as_str())
+        == Some(PROVIDER_BACKED_DECISION_SOURCE)
+        && canonical_agent_provider_backend(config.agent_provider_backend.as_str())
+            == Some(OPENCLAW_PROVIDER_BACKEND)
+        && canonical_agent_provider_contract(config.agent_provider_contract.as_str())
+            == Some(WORLDSIM_PROVIDER_CONTRACT)
+        && canonical_agent_provider_transport(config.agent_provider_transport.as_str())
+            == Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT)
 }
 
-pub(super) fn validate_agent_provider_mode(raw: &str) -> Result<(), String> {
-    canonical_agent_provider_mode(raw)
+pub(super) fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
+    canonical_agent_decision_source(raw)
         .map(|_| ())
         .ok_or_else(|| {
-            "agent access mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
-                .to_string()
+            "agent decision source must be builtin_llm or provider_backed".to_string()
         })
+}
+
+pub(super) fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
+    canonical_agent_provider_backend(raw)
+        .map(|_| ())
+        .ok_or_else(|| "agent provider backend must be openclaw".to_string())
+}
+
+pub(super) fn validate_agent_provider_contract(raw: &str) -> Result<(), String> {
+    canonical_agent_provider_contract(raw)
+        .map(|_| ())
+        .ok_or_else(|| "agent provider contract must be worldsim_provider_v1".to_string())
+}
+
+pub(super) fn validate_agent_provider_transport(raw: &str) -> Result<(), String> {
+    canonical_agent_provider_transport(raw)
+        .map(|_| ())
+        .ok_or_else(|| "agent provider transport must be loopback_http".to_string())
 }
 
 pub(super) fn canonical_openclaw_execution_mode(raw: &str) -> Option<&'static str> {
@@ -94,16 +121,46 @@ pub(super) fn validate_openclaw_execution_mode(raw: &str) -> Result<(), String> 
     canonical_openclaw_execution_mode(raw)
         .map(|_| ())
         .ok_or_else(|| {
-            "openclaw execution mode must be player_parity or headless_agent".to_string()
+            "agent execution lane must be player_parity or headless_agent".to_string()
         })
 }
 
-pub(super) fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
+pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
     match raw.trim() {
-        BUILTIN_LLM_PROVIDER_MODE => Some(BUILTIN_LLM_PROVIDER_MODE),
-        OPENCLAW_LOCAL_HTTP_PROVIDER_MODE | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
-            Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE)
-        }
+        BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
+        PROVIDER_BACKED_DECISION_SOURCE
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),
+        _ => None,
+    }
+}
+
+pub(super) fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        "" => None,
+        OPENCLAW_PROVIDER_BACKEND
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(OPENCLAW_PROVIDER_BACKEND),
+        _ => None,
+    }
+}
+
+pub(super) fn canonical_agent_provider_contract(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        "" => None,
+        WORLDSIM_PROVIDER_CONTRACT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(WORLDSIM_PROVIDER_CONTRACT),
+        _ => None,
+    }
+}
+
+pub(super) fn canonical_agent_provider_transport(raw: &str) -> Option<&'static str> {
+    match raw.trim() {
+        "" => None,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
         _ => None,
     }
 }
@@ -126,7 +183,7 @@ pub(super) fn validate_chain_p2p_user_mode(raw: &str) -> Result<(), String> {
 }
 
 pub(super) fn effective_openclaw_base_url(config: &LaunchConfig) -> Result<String, String> {
-    let base_url = config.openclaw_base_url.trim();
+    let base_url = config.agent_provider_url.trim();
     if !base_url.is_empty() {
         return Ok(base_url.to_string());
     }
@@ -140,8 +197,8 @@ pub(super) fn parse_agent_provider_connect_timeout_ms(
     config: &LaunchConfig,
 ) -> Result<u64, String> {
     parse_positive_u64(
-        config.openclaw_connect_timeout_ms.as_str(),
-        "openclaw connect timeout ms",
+        config.agent_provider_connect_timeout_ms.as_str(),
+        "agent provider connect timeout ms",
     )
 }
 
@@ -220,12 +277,25 @@ pub(super) fn launcher_text_field_mut<'a>(
         "web_bind" => Some(&mut config.web_bind),
         "viewer_host" => Some(&mut config.viewer_host),
         "viewer_port" => Some(&mut config.viewer_port),
-        "agent_provider_mode" => Some(&mut config.agent_provider_mode),
-        "openclaw_base_url" => Some(&mut config.openclaw_base_url),
-        "openclaw_auth_token" => Some(&mut config.openclaw_auth_token),
-        "openclaw_connect_timeout_ms" => Some(&mut config.openclaw_connect_timeout_ms),
-        "openclaw_execution_mode" => Some(&mut config.openclaw_execution_mode),
-        "openclaw_agent_profile" => Some(&mut config.openclaw_agent_profile),
+        "agent_decision_source" | "agent_provider_mode" => {
+            Some(&mut config.agent_decision_source)
+        }
+        "agent_provider_backend" => Some(&mut config.agent_provider_backend),
+        "agent_provider_contract" => Some(&mut config.agent_provider_contract),
+        "agent_provider_transport" => Some(&mut config.agent_provider_transport),
+        "agent_provider_url" | "openclaw_base_url" => Some(&mut config.agent_provider_url),
+        "agent_provider_auth_token" | "openclaw_auth_token" => {
+            Some(&mut config.agent_provider_auth_token)
+        }
+        "agent_provider_connect_timeout_ms" | "openclaw_connect_timeout_ms" => {
+            Some(&mut config.agent_provider_connect_timeout_ms)
+        }
+        "agent_execution_lane" | "openclaw_execution_mode" => {
+            Some(&mut config.agent_execution_lane)
+        }
+        "agent_provider_profile" | "openclaw_agent_profile" => {
+            Some(&mut config.agent_provider_profile)
+        }
         "chain_status_bind" => Some(&mut config.chain_status_bind),
         "chain_node_id" => Some(&mut config.chain_node_id),
         "chain_world_id" => Some(&mut config.chain_world_id),
@@ -271,11 +341,17 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         issues.push(ConfigIssue::LlmRequired);
     }
 
-    if validate_agent_provider_mode(config.agent_provider_mode.as_str()).is_err() {
+    if validate_agent_decision_source(config.agent_decision_source.as_str()).is_err() {
         issues.push(ConfigIssue::AgentProviderModeInvalid);
     }
 
     if is_openclaw_local_http_mode(config) {
+        if validate_agent_provider_backend(config.agent_provider_backend.as_str()).is_err()
+            || validate_agent_provider_contract(config.agent_provider_contract.as_str()).is_err()
+            || validate_agent_provider_transport(config.agent_provider_transport.as_str()).is_err()
+        {
+            issues.push(ConfigIssue::AgentProviderModeInvalid);
+        }
         if effective_openclaw_base_url(config).is_err() {
             issues.push(ConfigIssue::OpenClawBaseUrlRequired);
         } else if let Ok(base_url) = effective_openclaw_base_url(config) {
@@ -290,10 +366,10 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         if parse_agent_provider_connect_timeout_ms(config).is_err() {
             issues.push(ConfigIssue::OpenClawConnectTimeoutMsInvalid);
         }
-        if validate_openclaw_execution_mode(config.openclaw_execution_mode.as_str()).is_err() {
+        if validate_openclaw_execution_mode(config.agent_execution_lane.as_str()).is_err() {
             issues.push(ConfigIssue::OpenClawExecutionModeInvalid);
         }
-        if config.openclaw_agent_profile.trim().is_empty() {
+        if config.agent_provider_profile.trim().is_empty() {
             issues.push(ConfigIssue::OpenClawAgentProfileRequired);
         }
     }
@@ -473,35 +549,41 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
 
     if config.llm_enabled {
         args.push("--with-llm".to_string());
-        args.push("--agent-provider-mode".to_string());
+        args.push("--agent-decision-source".to_string());
         args.push(
-            canonical_agent_provider_mode(config.agent_provider_mode.as_str())
-                .unwrap_or(BUILTIN_LLM_PROVIDER_MODE)
+            canonical_agent_decision_source(config.agent_decision_source.as_str())
+                .unwrap_or(BUILTIN_LLM_DECISION_SOURCE)
                 .to_string(),
         );
         if is_openclaw_local_http_mode(config) {
-            args.push("--openclaw-base-url".to_string());
+            args.push("--agent-provider-backend".to_string());
+            args.push(OPENCLAW_PROVIDER_BACKEND.to_string());
+            args.push("--agent-provider-contract".to_string());
+            args.push(WORLDSIM_PROVIDER_CONTRACT.to_string());
+            args.push("--agent-provider-transport".to_string());
+            args.push(LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
+            args.push("--agent-provider-url".to_string());
             args.push(effective_openclaw_base_url(config)?);
-            if !config.openclaw_auth_token.trim().is_empty() {
-                args.push("--openclaw-auth-token".to_string());
-                args.push(config.openclaw_auth_token.trim().to_string());
+            if !config.agent_provider_auth_token.trim().is_empty() {
+                args.push("--agent-provider-auth-token".to_string());
+                args.push(config.agent_provider_auth_token.trim().to_string());
             }
-            args.push("--openclaw-connect-timeout-ms".to_string());
+            args.push("--agent-provider-connect-timeout-ms".to_string());
             args.push(parse_agent_provider_connect_timeout_ms(config)?.to_string());
-            args.push("--openclaw-execution-mode".to_string());
+            args.push("--agent-execution-lane".to_string());
             args.push(
-                canonical_openclaw_execution_mode(config.openclaw_execution_mode.as_str())
+                canonical_openclaw_execution_mode(config.agent_execution_lane.as_str())
                     .ok_or_else(|| {
-                        "openclaw execution mode must be player_parity or headless_agent"
+                        "agent execution lane must be player_parity or headless_agent"
                             .to_string()
                     })?
                     .to_string(),
             );
-            let agent_profile = config.openclaw_agent_profile.trim();
+            let agent_profile = config.agent_provider_profile.trim();
             if agent_profile.is_empty() {
-                return Err("openclaw agent profile cannot be empty".to_string());
+                return Err("agent provider profile cannot be empty".to_string());
             }
-            args.push("--openclaw-agent-profile".to_string());
+            args.push("--agent-provider-profile".to_string());
             args.push(agent_profile.to_string());
         }
     } else {
