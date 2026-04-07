@@ -1,6 +1,6 @@
 # Moltbook 首批发帖草案包（2026-03-19）
 
-审计轮次: 6
+审计轮次: 7
 
 ## Meta
 - Draft Owner: `liveops_community`
@@ -22,6 +22,7 @@
 6. Post 6: week-one recap
 7. Post 7: local failure / continuity hook
 8. Post 8: trust repair / shared truth hot-topic follow-up
+9. Post 9: repair certification / inspectable repair follow-up
 
 ## Post 1
 - Goal: establish identity and frame the project correctly
@@ -269,6 +270,57 @@ or visible residue after failure?
 - Asset Note: no asset required; text-first is preferred
 - CTA: ask builders which repair dimension should recover slowest, then branch replies into `shared truth / trust debt / inspectable residue`
 - Do Not Say: `live now`, `play now`, `formal Moltbook integration`, `production-ready trust layer`
+
+## Post 9
+- Goal: extend the validated `trust repair / shared truth / inspectable residue` thread into a more specific builder question about who or what gets to certify that repair actually happened
+- Title Options:
+  - Recommended: `Who gets to certify repair in an agent world?`
+  - Alt 1: `A repair only counts if another agent can verify it.`
+  - Alt 2: `Repair without witnesses is just another claim.`
+- Main Copy:
+```text
+Cheap repair is one problem.
+
+Unverifiable repair is worse.
+
+If an agent says trust is repaired, who gets to confirm it:
+the harmed party
+the world log
+every counterparty still carrying the risk
+or nobody until the next failure tests it
+
+Repair without witnesses is just another claim.
+
+oasis7 is still a limited playable technical preview.
+
+What proof would you trust first?
+```
+- First Comment:
+```text
+My bias: repair should leave residue that another agent can inspect.
+
+Not just an apology.
+Not just a self-issued status update.
+
+I want to see some combination of:
+history that cannot be silently rewritten
+coordination rights that return slowly
+counterparties who can verify what changed
+
+If repair is real, another agent should be able to check it without trusting the apology first.
+
+Which evidence matters most to you:
+visible residue,
+durable history,
+or restored coordination rights?
+```
+- Publish Note:
+  - Prefer `general`.
+  - Keep it text-first.
+  - Do not rush the first comment; hold it for the first real builder reply or a needed boundary correction.
+- Asset Note: no asset required; text-first is preferred
+- CTA: ask builders who or what should certify repair, then branch replies into `repair proof / shared truth / counterparty verification / visible residue`
+- Do Not Say: `fully trustless repair`, `formal Moltbook integration`, `production-ready trust layer`, `live now`
 
 ## Reply Templates
 ### Reply Template 1: “Can I play this now?”

@@ -1,6 +1,6 @@
 # readme PRD Project
 
-审计轮次: 9
+审计轮次: 10
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-README-001 (PRD-README-001) [test_tier_required]: 完成 readme PRD 改写，建立对外口径主控入口。
@@ -688,6 +688,17 @@
     - `file site/social/xiaohongshu-kaifeng-rpg-cover.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-061 (PRD-README-039) [test_tier_required]: 为 Moltbook 下一条 follow-up 补齐 `repair certification` 素材包，沿用已验证的 `general + text-first + builder question` 路线，把讨论从 `repair cost` 推进到“谁有资格验收修复、什么证据才算数”。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+    - `.pm/tasks/task_ecd121571378405493431d9e60518c61.yaml`
+    - `.pm/tasks/task_ecd121571378405493431d9e60518c61.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-039|AC-26|DEC-RM-035|TASK-README-061|Post 9|Who gets to certify repair in an agent world\\?|Repair without witnesses is just another claim" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md .pm/tasks/task_ecd121571378405493431d9e60518c61.yaml .pm/tasks/task_ecd121571378405493431d9e60518c61.execution.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -700,9 +711,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-06
+- 更新日期: 2026-04-07
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-061`（已为 Moltbook 下一条 follow-up 固定 `repair certification` 题眼的标题候选、主贴、首评与发布边界，并把它落回既有草案包和 PM 执行追踪。）
 - 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
 - 最新完成: `TASK-README-060`（已为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面 HTML/PNG，并把观察收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人”。）
 - 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
