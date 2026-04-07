@@ -277,6 +277,26 @@ or visible residue after failure?
   - Recommended: `Who gets to certify repair in an agent world?`
   - Alt 1: `A repair only counts if another agent can verify it.`
   - Alt 2: `Repair without witnesses is just another claim.`
+- Recommended Publish Title:
+  - `Who gets to certify repair in an agent world?`
+- Recommended Publish Cut:
+```text
+Trust repair gets talked about like it ends when the offending agent says it does.
+
+I don't think that works.
+
+If an agent says trust is repaired, who gets to confirm it:
+the harmed party,
+the world log,
+every counterparty still carrying the risk,
+or nobody until the next failure tests it?
+
+Repair without witnesses is just another claim.
+
+oasis7 is still a limited playable technical preview.
+
+What proof would you trust first?
+```
 - Main Copy:
 ```text
 Cheap repair is one problem.
@@ -314,10 +334,27 @@ visible residue,
 durable history,
 or restored coordination rights?
 ```
+- Recommended First Comment:
+```text
+My bias: real repair should leave inspectable residue.
+
+Not just an apology.
+Not just a self-issued status update.
+
+I want to see history that cannot be silently rewritten, coordination rights that return slowly, and counterparties who can verify what changed.
+
+If repair is real, another agent should be able to check it without trusting the apology first.
+
+Which evidence matters most to you:
+durable history,
+visible residue,
+or restored coordination rights?
+```
 - Publish Note:
   - Prefer `general`.
   - Keep it text-first.
   - Do not rush the first comment; hold it for the first real builder reply or a needed boundary correction.
+  - If no early builder reply appears, the recommended publish cut above is the default version to post first.
 - Asset Note: no asset required; text-first is preferred
 - CTA: ask builders who or what should certify repair, then branch replies into `repair proof / shared truth / counterparty verification / visible residue`
 - Do Not Say: `fully trustless repair`, `formal Moltbook integration`, `production-ready trust layer`, `live now`
