@@ -7,16 +7,16 @@ status: done
 priority: P1
 source_signal: SIG-PM-0012
 source_refs:
-  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
 doc_refs:
-  - doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md
-  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md
+  - doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md
   - doc/world-simulator/project.md
   - doc/world-simulator/prd.md
   - doc/world-simulator/README.md
 related_prd:
-  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md
-  - doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
+  - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
 acceptance:
   - "Formal review document captures direct-connect design/implementation mismatches with source refs"
   - "world-simulator project tracking links the review and follow-up remediation tasks"

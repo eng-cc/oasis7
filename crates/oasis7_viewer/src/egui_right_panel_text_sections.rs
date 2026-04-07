@@ -133,11 +133,11 @@ pub(super) fn render_text_sections(
         );
         ui.selectable_value(
             provider_debug_filter,
-            ProviderDebugFilter::OpenClawOnly,
+            ProviderDebugFilter::LoopbackProviderOnly,
             if locale.is_zh() {
-                "仅 OpenClaw"
+                "仅 local provider"
             } else {
-                "OpenClaw Only"
+                "local provider Only"
             },
         );
         ui.selectable_value(

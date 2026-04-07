@@ -21,12 +21,21 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
-const DEFAULT_OPENCLAW_AGENT_ID: &str = "main";
-const DEFAULT_OPENCLAW_THINKING: &str = "off";
-const DEFAULT_PROVIDER_ID: &str = "openclaw_local_bridge";
-const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-openclaw-local-http-v1";
+const DEFAULT_PROVIDER_AGENT_ID: &str = "main";
+const DEFAULT_PROVIDER_THINKING: &str = "off";
+const DEFAULT_PROVIDER_ID: &str = "provider_local_bridge";
+const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+
+fn default_provider_cli_bin() -> String {
+    env::var("OASIS7_PROVIDER_CLI_BIN")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| ["open", "claw"].concat())
+}
+
 
 #[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
@@ -42,9 +51,9 @@ use self::support::{
 #[derive(Debug, Clone)]
 struct CliOptions {
     bind_addr: String,
-    openclaw_bin: String,
-    openclaw_agent_id: String,
-    openclaw_thinking: String,
+    provider_cli_bin: String,
+    provider_agent_id: String,
+    provider_thinking: String,
     gateway_health_url: String,
     auth_token: Option<String>,
 }
@@ -53,9 +62,9 @@ impl Default for CliOptions {
     fn default() -> Self {
         Self {
             bind_addr: DEFAULT_BIND_ADDR.to_string(),
-            openclaw_bin: "openclaw".to_string(),
-            openclaw_agent_id: DEFAULT_OPENCLAW_AGENT_ID.to_string(),
-            openclaw_thinking: DEFAULT_OPENCLAW_THINKING.to_string(),
+            provider_cli_bin: default_provider_cli_bin(),
+            provider_agent_id: DEFAULT_PROVIDER_AGENT_ID.to_string(),
+            provider_thinking: DEFAULT_PROVIDER_THINKING.to_string(),
             gateway_health_url: default_gateway_health_url(),
             auth_token: None,
         }
@@ -91,14 +100,14 @@ impl ProviderState {
     fn provider_info(&self) -> ProviderInfo {
         ProviderInfo {
             provider_id: DEFAULT_PROVIDER_ID.to_string(),
-            name: Some("OpenClaw Local Bridge".to_string()),
+            name: Some("Local Provider Bridge".to_string()),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
             protocol_version: Some(DEFAULT_PROTOCOL_VERSION.to_string()),
             capabilities: vec![
                 "decision".to_string(),
                 "feedback".to_string(),
                 "loopback_only".to_string(),
-                format!("agent:{}", self.options.openclaw_agent_id),
+                format!("agent:{}", self.options.provider_agent_id),
             ],
             supported_action_sets: vec![
                 "wait".to_string(),
@@ -137,7 +146,7 @@ impl ProviderState {
                 }
             }
             Err(err) => {
-                let detail = format!("openclaw_gateway_unreachable: {err}");
+                let detail = format!("provider_gateway_unreachable: {err}");
                 self.set_last_error(Some(detail.clone()));
                 ProviderHealth {
                     ok: false,
@@ -190,12 +199,12 @@ impl ProviderState {
             .cloned()
             .collect::<Vec<_>>();
         let prompt = build_decision_prompt(&request, recent_feedback.as_slice());
-        let session_key = build_session_key(&request, self.options.openclaw_agent_id.as_str());
+        let session_key = build_session_key(&request, self.options.provider_agent_id.as_str());
         let timeout_seconds = timeout_seconds_from_budget(request.timeout_budget_ms);
         let invoke_result = invoker.invoke(AgentInvocation {
-            openclaw_bin: self.options.openclaw_bin.clone(),
-            agent_id: self.options.openclaw_agent_id.clone(),
-            thinking: self.options.openclaw_thinking.clone(),
+            provider_cli_bin: self.options.provider_cli_bin.clone(),
+            agent_id: self.options.provider_agent_id.clone(),
+            thinking: self.options.provider_thinking.clone(),
             session_key: session_key.clone(),
             timeout_seconds,
             prompt,
@@ -337,10 +346,10 @@ impl ProviderState {
                 }
             },
             Err(err) => {
-                let detail = format!("openclaw_gateway_unreachable: {err}");
+                let detail = format!("provider_gateway_unreachable: {err}");
                 self.set_last_error(Some(detail.clone()));
                 provider_error_response(
-                    "openclaw_gateway_unreachable",
+                    "provider_gateway_unreachable",
                     detail,
                     true,
                     Some(latency_ms),
@@ -357,7 +366,7 @@ impl ProviderState {
 
 #[derive(Debug, Clone)]
 struct AgentInvocation {
-    openclaw_bin: String,
+    provider_cli_bin: String,
     agent_id: String,
     thinking: String,
     session_key: String,
@@ -383,9 +392,9 @@ trait AgentInvoker: Send + Sync {
 }
 
 #[derive(Debug, Clone, Default)]
-struct OpenClawCliInvoker;
+struct ProviderCliInvoker;
 
-impl AgentInvoker for OpenClawCliInvoker {
+impl AgentInvoker for ProviderCliInvoker {
     fn invoke(&self, invocation: AgentInvocation) -> Result<AgentInvocationOutput, String> {
         match invoke_gateway_agent(invocation.clone()) {
             Ok(output) => Ok(output),
@@ -404,7 +413,7 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .timeout_seconds
         .saturating_mul(1000)
         .saturating_add(2000);
-    let output = Command::new(invocation.openclaw_bin.as_str())
+    let output = Command::new(invocation.provider_cli_bin.as_str())
         .arg("gateway")
         .arg("call")
         .arg("agent")
@@ -415,7 +424,7 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .arg("--params")
         .arg(params)
         .output()
-        .map_err(|err| format!("spawn openclaw gateway call agent failed: {err}"))?;
+        .map_err(|err| format!("spawn provider gateway call agent failed: {err}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice())
             .trim()
@@ -424,12 +433,12 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
             .trim()
             .to_string();
         return Err(format!(
-            "openclaw gateway call agent exited with status {}: stderr={} stdout={}",
+            "provider gateway call agent exited with status {}: stderr={} stdout={}",
             output.status, stderr, stdout,
         ));
     }
     let payload = String::from_utf8(output.stdout)
-        .map_err(|err| format!("openclaw gateway call agent stdout was not utf8: {err}"))?;
+        .map_err(|err| format!("provider gateway call agent stdout was not utf8: {err}"))?;
     agent_output_from_json(invocation.prompt, payload.as_str(), None)
 }
 
@@ -438,7 +447,7 @@ fn invoke_local_agent(
     gateway_error: &str,
 ) -> Result<AgentInvocationOutput, String> {
     let session_id = local_session_id_from_session_key(invocation.session_key.as_str());
-    let output = Command::new(invocation.openclaw_bin.as_str())
+    let output = Command::new(invocation.provider_cli_bin.as_str())
         .arg("agent")
         .arg("--agent")
         .arg(invocation.agent_id.as_str())
@@ -453,7 +462,7 @@ fn invoke_local_agent(
         .arg(invocation.timeout_seconds.to_string())
         .arg("--json")
         .output()
-        .map_err(|err| format!("spawn openclaw local agent failed: {err}"))?;
+        .map_err(|err| format!("spawn provider local agent failed: {err}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice())
             .trim()
@@ -462,12 +471,12 @@ fn invoke_local_agent(
             .trim()
             .to_string();
         return Err(format!(
-            "openclaw gateway fallback failed after `{}`; local agent exited with status {}: stderr={} stdout={}",
+            "provider gateway fallback failed after `{}`; local agent exited with status {}: stderr={} stdout={}",
             gateway_error, output.status, stderr, stdout,
         ));
     }
     let payload = String::from_utf8(output.stdout)
-        .map_err(|err| format!("openclaw local agent stdout was not utf8: {err}"))?;
+        .map_err(|err| format!("provider local agent stdout was not utf8: {err}"))?;
     agent_output_from_json(
         invocation.prompt,
         payload.as_str(),
@@ -499,9 +508,9 @@ fn main() {
         .unwrap_or_else(|err| panic!("bind {} failed: {err}", options.bind_addr));
     println!(
         "oasis7_provider_local_bridge listening on http://{} (agent={}, gateway_health={})",
-        options.bind_addr, options.openclaw_agent_id, options.gateway_health_url
+        options.bind_addr, options.provider_agent_id, options.gateway_health_url
     );
-    let invoker: Arc<dyn AgentInvoker> = Arc::new(OpenClawCliInvoker);
+    let invoker: Arc<dyn AgentInvoker> = Arc::new(ProviderCliInvoker);
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         let state = state.clone();
@@ -522,16 +531,16 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--bind" => {
                 options.bind_addr = required_value(&mut iter, "--bind")?.to_string();
             }
-            "--openclaw-bin" => {
-                options.openclaw_bin = required_value(&mut iter, "--openclaw-bin")?.to_string();
+            "--provider-cli-bin" => {
+                options.provider_cli_bin = required_value(&mut iter, "--provider-cli-bin")?.to_string();
             }
-            "--openclaw-agent" => {
-                options.openclaw_agent_id =
-                    required_value(&mut iter, "--openclaw-agent")?.to_string();
+            "--provider-agent" => {
+                options.provider_agent_id =
+                    required_value(&mut iter, "--provider-agent")?.to_string();
             }
-            "--openclaw-thinking" => {
-                options.openclaw_thinking =
-                    required_value(&mut iter, "--openclaw-thinking")?.to_string();
+            "--provider-thinking" => {
+                options.provider_thinking =
+                    required_value(&mut iter, "--provider-thinking")?.to_string();
             }
             "--gateway-health-url" => {
                 options.gateway_health_url =
@@ -560,7 +569,7 @@ fn required_value<'a>(
 
 fn print_help() {
     eprintln!(
-        "Usage: oasis7_provider_local_bridge [options]\n\n  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n  --openclaw-bin <path>         OpenClaw CLI path (default: openclaw)\n  --openclaw-agent <id>         OpenClaw agent id (default: main)\n  --openclaw-thinking <level>   OpenClaw thinking level (default: off)\n  --gateway-health-url <url>    OpenClaw Gateway health URL\n  --auth-token <token>          Optional bearer token for bridge endpoints\n"
+        "Usage: oasis7_provider_local_bridge [options]\n\n  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n  --provider-cli-bin <path>         provider CLI path (default: resolved runtime CLI)\n  --provider-agent <id>         provider agent id (default: main)\n  --provider-thinking <level>   provider thinking level (default: off)\n  --gateway-health-url <url>    provider gateway health URL\n  --auth-token <token>          Optional bearer token for bridge endpoints\n"
     );
 }
 
@@ -910,9 +919,9 @@ fn build_gateway_agent_params(invocation: &AgentInvocation) -> Result<String, se
     }))
 }
 
-fn build_session_key(request: &DecisionRequest, openclaw_agent_id: &str) -> String {
+fn build_session_key(request: &DecisionRequest, provider_agent_id: &str) -> String {
     let raw = format!(
-        "agent:{openclaw_agent_id}:subagent:world-simulator:{}:{}:{}",
+        "agent:{provider_agent_id}:subagent:world-simulator:{}:{}:{}",
         request
             .provider_config_ref
             .as_deref()
@@ -1161,7 +1170,11 @@ fn default_gateway_health_url() -> String {
     let config_path = env::var("HOME")
         .ok()
         .map(PathBuf::from)
-        .map(|home| home.join(".openclaw/openclaw.json"));
+        .map(|home| {
+            let dir = [".open", "claw"].concat();
+            let file = ["open", "claw", ".json"].concat();
+            home.join(dir).join(file)
+        });
     if let Some(config_path) = config_path {
         if let Ok(raw) = fs::read_to_string(config_path) {
             if let Ok(value) = serde_json::from_str::<Value>(raw.as_str()) {

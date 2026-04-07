@@ -1,13 +1,13 @@
 task_uid: task_dae20e4880a04a4388aac47cf888c85b
-title: "Rename OpenClaw probe/check terminology to compatibility-aware provider check"
+title: "Rename legacy provider probe/check terminology to compatibility-aware provider check"
 owner_role: viewer_engineer
-worktree_hint: /home/scc/worktrees/oasis7-world-simulator-openclaw-provider-check-naming
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-provider-check-naming
 execution_log_path: .pm/tasks/task_dae20e4880a04a4388aac47cf888c85b.execution.md
 status: done
 priority: P1
 source_signal: null
 source_refs:
-  - doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md
+  - doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md
 doc_refs:
   - doc/world-simulator/project.md
 related_prd:

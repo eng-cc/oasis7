@@ -11,7 +11,7 @@
 - [x] T3 (`PRD-CORE-009`) [test_tier_required]: 回写 `doc/devlog/2026-03-19.md`，记录 owner、完成内容、验证方式与后续使用约束。
 - [x] T4 (`PRD-CORE-009`) [test_tier_required]: 对齐 `testing-manual`、`doc/world-simulator/**`、`doc/game/**` 与 `doc/testing/**` 的下游术语，要求结论先绑定玩家访问模式，再附加 execution lane。
 - [x] T5 (`PRD-CORE-009`) [test_tier_required]: 将 `pure_api` 的正式游玩口径重定为“必须启用且可连通 LLM”，同步回写 launcher/runtime 行为、README/testing/manual/game/world-simulator 当前入口，并把 `--no-llm` 降级为 observer/debug only。
-- [x] T6 (`PRD-CORE-009`) [test_tier_required]: 将旧“OpenClaw mode”歧义口径收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”，同步回写 core/world-simulator/testing 文档、launcher/client launcher 用户文案与兼容 alias。
+- [x] T6 (`PRD-CORE-009`) [test_tier_required]: 将旧单字段 provider mode 歧义口径收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”，同步回写 core/world-simulator/testing 文档、launcher/client launcher 用户文案与兼容 alias。
 - [x] T7 (`PRD-CORE-009`) [test_tier_required]: 收口 `non-3D` / `2D 优先` 与 `software_safe` 的边界，把阶段优先级话术明确降回 delivery priority / interaction scope，并同步回写 core 契约与 `world-simulator` 的 3D hold 主文档。
 - [x] T8 (`PRD-CORE-009`) [test_tier_required]: 将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias，并同步回写 core/world-simulator/testing 文档与 launcher/runtime 透传口径。
 - [x] T9 (`PRD-CORE-009`) [test_tier_required]: 按最新产品设定重写三模式 claim envelope，把 `software_safe` 升格为主要正式 Web 入口、把 `standard_3d` 收口为 opt-in visual QA 模式、并保留 `pure_api` 的一等公民 no-UI 定位；同步回写本专题 PRD / design / project 与模块级 project 状态。
@@ -26,9 +26,9 @@
 - `doc/world-simulator/prd.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
-- `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md`
+- `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
-- `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md`
+- `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
 
 ## 验证
 - `./scripts/doc-governance-check.sh`
@@ -40,7 +40,7 @@
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_step_control_reports_blocked_without_llm_mode -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher parse_options_accepts_agent_direct_connect_alias -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
-- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_settings_from_env_parses_profile_and_timeout -- --nocapture`
 
 ## 状态

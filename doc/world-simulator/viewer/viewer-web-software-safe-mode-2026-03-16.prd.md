@@ -131,7 +131,7 @@
 - AC-5: `oasis7` 与 testing/manual 口径必须把 `software_safe` 写成浏览器正式主路径，把 `standard` 写成 visual QA/screenshot 路径，而不是相反。
 - AC-6: `standard` 在硬件可用时仍可独立验证高保真画面，但其 PASS 不得替代 `software_safe` 的 formal Web gameplay PASS。
 - AC-7: `software_safe` 若未暴露 `main_token_transfer` 等专门动作，页面必须显式说明该动作未在此 surface 暴露，并给出 handoff 指引；不得让用户误以为这是 bug 或隐式权限失败。
-- AC-8: 当 runtime live 使用 `OpenClaw(Local HTTP)` 驱动 Agent 时，software-safe 页面必须显式标识自身处于 `debug_viewer` 旁路订阅层，并展示选中 Agent 的 `mode/schema/environment/fallback` 摘要；此时 prompt/chat 控制面需要明确提示 observer-only 边界。
+- AC-8: 当 runtime live 使用 `Local Provider(Local HTTP)` 驱动 Agent 时，software-safe 页面必须显式标识自身处于 `debug_viewer` 旁路订阅层，并展示选中 Agent 的 `mode/schema/environment/fallback` 摘要；此时 prompt/chat 控制面需要明确提示 observer-only 边界。
 
 ## 6. Non-Functional Requirements
 - NFR-1: `software_safe` 模式不得依赖硬件 GPU；在 software renderer / 无 WebGL / 受限 WebGL 环境下仍可启动。

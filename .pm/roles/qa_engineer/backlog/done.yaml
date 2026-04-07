@@ -16,14 +16,14 @@ tasks:
     status: done
     task_path: .pm/tasks/task_f2e680d768844eff8232de25ba172a29.yaml
   - task_uid: task_1851a5bec0014b97b8bc994520bfede0
-    title: "Re-run OpenClaw dual-mode real evidence and recertify PRD-WORLD_SIMULATOR-040"
+    title: "Re-run provider dual-mode real evidence and recertify PRD-WORLD_SIMULATOR-040"
     priority: P1
     source_signal: null
     related_prd:
       - PRD-WORLD_SIMULATOR-040
       - PRD-WORLD_SIMULATOR-038
     acceptance:
-      - "QA reruns real OpenClaw evidence for both player_parity and headless_agent after TASK-WORLD_SIMULATOR-295~297 and records the observed launcher/provider/parity behavior."
+      - "QA reruns real provider evidence for both player_parity and headless_agent after TASK-WORLD_SIMULATOR-295~297 and records the observed launcher/provider/parity behavior."
       - "The task documents whether PRD-WORLD_SIMULATOR-040 can return to completed and whether the existing parity stance with PRD-WORLD_SIMULATOR-038 still holds."
     handoff_to:
       - producer_system_designer

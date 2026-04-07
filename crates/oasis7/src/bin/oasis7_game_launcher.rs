@@ -28,17 +28,19 @@ mod url_encoding;
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use hosted_player_session::HostedPlayerSessionIssuer;
 use runtime_paths::{
-    resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary,
-    resolve_viewer_static_dir, resolve_viewer_static_dir_with_override, viewer_dev_dist_candidates,
+    resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary, resolve_viewer_static_dir,
 };
+#[cfg(test)]
+use runtime_paths::{resolve_viewer_static_dir_with_override, viewer_dev_dist_candidates};
 #[cfg(test)]
 use runtime_presence::query_runtime_bound_players;
 use runtime_presence::run_runtime_presence_monitor;
+use static_http::handle_http_connection;
+#[cfg(test)]
 use static_http::{
-    build_viewer_auth_bootstrap_script, content_type_for_path, handle_http_connection,
-    resolve_static_asset_path, resolve_viewer_auth_bootstrap_for_embedded_server,
-    resolve_viewer_auth_bootstrap_from_path, sanitize_index_html_for_embedded_server,
-    sanitize_relative_request_path,
+    build_viewer_auth_bootstrap_script, content_type_for_path, resolve_static_asset_path,
+    resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
+    sanitize_index_html_for_embedded_server, sanitize_relative_request_path,
 };
 use url_encoding::encoded_query_pair;
 const DEFAULT_SCENARIO: &str = "llm_bootstrap";
@@ -53,8 +55,7 @@ const OASIS7_CHAIN_RUNTIME_BIN_ENV: &str = "OASIS7_CHAIN_RUNTIME_BIN";
 const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
 const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
-const OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS: &str = "openclaw_local_http";
-const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
+const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
@@ -74,11 +75,6 @@ const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
 const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
-const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
-const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
-const VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV: &str = "OASIS7_OPENCLAW_CONNECT_TIMEOUT_MS";
-const VIEWER_OPENCLAW_AGENT_PROFILE_ENV: &str = "OASIS7_OPENCLAW_AGENT_PROFILE";
-const VIEWER_OPENCLAW_EXECUTION_MODE_ENV: &str = "OASIS7_OPENCLAW_EXECUTION_MODE";
 const DEFAULT_VIEWER_PLAYER_ID: &str = "viewer-player";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
@@ -165,7 +161,7 @@ impl Default for CliOptions {
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
             agent_decision_source: BUILTIN_LLM_DECISION_SOURCE.to_string(),
-            agent_provider_backend: OPENCLAW_PROVIDER_BACKEND.to_string(),
+            agent_provider_backend: LOCAL_BRIDGE_PROVIDER_BACKEND.to_string(),
             agent_provider_contract: WORLDSIM_PROVIDER_CONTRACT.to_string(),
             agent_provider_transport: LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string(),
             agent_provider_url: DEFAULT_AGENT_PROVIDER_URL.to_string(),
@@ -378,21 +374,16 @@ fn apply_viewer_live_env_overrides(
         VIEWER_AGENT_PROVIDER_PROFILE_ENV,
         VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
-        VIEWER_OPENCLAW_BASE_URL_ENV,
-        VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
-        VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
-        VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
-        VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
     ] {
         command.env_remove(env_name);
     }
 
-    if uses_openclaw_provider(options) {
+    if uses_loopback_provider(options) {
         command.env(
             VIEWER_AGENT_DECISION_SOURCE_ENV,
             PROVIDER_BACKED_DECISION_SOURCE,
         );
-        command.env(VIEWER_AGENT_PROVIDER_BACKEND_ENV, OPENCLAW_PROVIDER_BACKEND);
+        command.env(VIEWER_AGENT_PROVIDER_BACKEND_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND);
         command.env(
             VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
             WORLDSIM_PROVIDER_CONTRACT,
@@ -965,40 +956,7 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--agent-provider-mode" => {
                 options.agent_decision_source =
                     parse_required_value(&mut iter, "--agent-provider-mode")?;
-            }
-            "--openclaw-base-url" => {
-                options.agent_provider_url =
-                    parse_required_value(&mut iter, "--openclaw-base-url")?;
-            }
-            "--openclaw-auth-token" => {
-                options.agent_provider_auth_token =
-                    parse_required_value(&mut iter, "--openclaw-auth-token")?;
-            }
-            "--openclaw-connect-timeout-ms" => {
-                let raw = parse_required_value(&mut iter, "--openclaw-connect-timeout-ms")?;
-                options.agent_provider_connect_timeout_ms = raw.parse::<u64>().map_err(|_| {
-                    format!("--openclaw-connect-timeout-ms must be a positive integer, got `{raw}`")
-                })?;
-                if options.agent_provider_connect_timeout_ms == 0 {
-                    return Err(
-                        "--openclaw-connect-timeout-ms must be a positive integer".to_string()
-                    );
-                }
-            }
-            "--openclaw-agent-profile" => {
-                options.agent_provider_profile =
-                    parse_required_value(&mut iter, "--openclaw-agent-profile")?;
-            }
-            "--openclaw-execution-mode" => {
-                let raw = parse_required_value(&mut iter, "--openclaw-execution-mode")?;
-                options.agent_execution_lane = ProviderExecutionMode::parse(raw.as_str())
-                    .ok_or_else(|| {
-                        format!(
-                            "--openclaw-execution-mode must be one of player_parity or headless_agent, got `{raw}`"
-                        )
-                    })?;
-            }
-            "--no-open-browser" => {
+            }            "--no-open-browser" => {
                 options.open_browser = false;
             }
             "--chain-enable" => {
@@ -1168,9 +1126,9 @@ fn deployment_mode_from_options(options: &CliOptions) -> DeploymentMode {
         .unwrap_or(DeploymentMode::TrustedLocalOnly)
 }
 
-fn uses_openclaw_provider(options: &CliOptions) -> bool {
+fn uses_loopback_provider(options: &CliOptions) -> bool {
     options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE
-        && options.agent_provider_backend == OPENCLAW_PROVIDER_BACKEND
+        && options.agent_provider_backend == LOCAL_BRIDGE_PROVIDER_BACKEND
         && options.agent_provider_contract == WORLDSIM_PROVIDER_CONTRACT
         && options.agent_provider_transport == LOOPBACK_HTTP_PROVIDER_TRANSPORT
 }
@@ -1180,7 +1138,6 @@ fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
         BUILTIN_LLM_DECISION_SOURCE
         | PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
         _ => Err(
             "--agent-decision-source must be builtin_llm or provider_backed".to_string(),
@@ -1193,7 +1150,6 @@ fn canonical_agent_decision_source(raw: &str) -> &'static str {
         BUILTIN_LLM_DECISION_SOURCE => BUILTIN_LLM_DECISION_SOURCE,
         PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => PROVIDER_BACKED_DECISION_SOURCE,
         _ => BUILTIN_LLM_DECISION_SOURCE,
     }
@@ -1201,21 +1157,19 @@ fn canonical_agent_decision_source(raw: &str) -> &'static str {
 
 fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
     match raw.trim() {
-        OPENCLAW_PROVIDER_BACKEND
+        LOCAL_BRIDGE_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
-        _ => Err("--agent-provider-backend must be openclaw".to_string()),
+        _ => Err("--agent-provider-backend must be provider_local_bridge".to_string()),
     }
 }
 
 fn canonical_agent_provider_backend(raw: &str) -> &'static str {
     match raw.trim() {
-        OPENCLAW_PROVIDER_BACKEND
+        LOCAL_BRIDGE_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
-        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => OPENCLAW_PROVIDER_BACKEND,
-        _ => OPENCLAW_PROVIDER_BACKEND,
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => LOCAL_BRIDGE_PROVIDER_BACKEND,
+        _ => LOCAL_BRIDGE_PROVIDER_BACKEND,
     }
 }
 
@@ -1223,7 +1177,6 @@ fn validate_agent_provider_contract(raw: &str) -> Result<(), String> {
     match raw.trim() {
         WORLDSIM_PROVIDER_CONTRACT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
         _ => Err("--agent-provider-contract must be worldsim_provider_v1".to_string()),
     }
@@ -1233,7 +1186,6 @@ fn canonical_agent_provider_contract(raw: &str) -> &'static str {
     match raw.trim() {
         WORLDSIM_PROVIDER_CONTRACT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => WORLDSIM_PROVIDER_CONTRACT,
         _ => WORLDSIM_PROVIDER_CONTRACT,
     }
@@ -1243,7 +1195,6 @@ fn validate_agent_provider_transport(raw: &str) -> Result<(), String> {
     match raw.trim() {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
         _ => Err("--agent-provider-transport must be loopback_http".to_string()),
     }
@@ -1253,7 +1204,6 @@ fn canonical_agent_provider_transport(raw: &str) -> &'static str {
     match raw.trim() {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
         _ => LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     }
@@ -1432,7 +1382,7 @@ Options:\n\
   --agent-decision-source <src>\n\
                                agent decision source: builtin_llm|provider_backed\n\
   --agent-provider-backend <id>\n\
-                               provider backend: openclaw (default when provider_backed)\n\
+                               provider backend: provider_local_bridge (default when provider_backed)\n\
   --agent-provider-contract <id>\n\
                                provider contract: worldsim_provider_v1 (default when provider_backed)\n\
   --agent-provider-transport <id>\n\
@@ -1446,15 +1396,7 @@ Options:\n\
                                provider profile (default: {DEFAULT_AGENT_PROVIDER_PROFILE})\n\
   --agent-execution-lane <mode>\n\
                                execution lane: player_parity|headless_agent (default: headless_agent)\n\
-  --agent-provider-mode <mode> legacy alias for --agent-decision-source; accepts agent_direct_connect/provider_loopback_http/openclaw_local_http\n\
-  --openclaw-base-url <url>    legacy alias for --agent-provider-url\n\
-  --openclaw-auth-token <tok>  legacy alias for --agent-provider-auth-token\n\
-  --openclaw-connect-timeout-ms <ms>\n\
-                               legacy alias for --agent-provider-connect-timeout-ms\n\
-  --openclaw-agent-profile <id>\n\
-                               legacy alias for --agent-provider-profile\n\
-  --openclaw-execution-mode <mode>\n\
-                               legacy alias for --agent-execution-lane\n\
+  --agent-provider-mode <mode> legacy alias for --agent-decision-source; accepts agent_direct_connect/provider_loopback_http\n\\
   --no-open-browser            do not auto open browser\n\
   -h, --help                   show help\n\n\
 Env:\n\

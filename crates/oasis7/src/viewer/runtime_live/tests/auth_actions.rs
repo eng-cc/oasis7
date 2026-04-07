@@ -132,8 +132,8 @@ fn runtime_step_control_reports_blocked_without_llm_mode() {
 
 #[test]
 fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
     std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
     std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
@@ -178,8 +178,8 @@ fn runtime_step_control_reports_llm_init_failed_when_provider_unavailable() {
 
 #[test]
 fn runtime_background_play_stops_when_llm_access_is_unavailable() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
     std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
     std::env::remove_var(crate::simulator::ENV_LLM_API_KEY);
@@ -289,9 +289,9 @@ struct MockHttpResponse {
 }
 
 #[test]
-fn runtime_step_control_requests_llm_decision_and_advances_with_openclaw_provider() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+fn runtime_step_control_requests_llm_decision_and_advances_with_provider_backed_loopback() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let base_url = spawn_runtime_live_mock_http_server(1, {
         let recorded = Arc::clone(&recorded);
@@ -332,9 +332,9 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_openclaw_provide
         }
     });
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, base_url);
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -383,7 +383,7 @@ fn runtime_step_control_requests_llm_decision_and_advances_with_openclaw_provide
         recorded[0].headers.get("content-type").map(String::as_str),
         Some("application/json")
     );
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]
@@ -732,12 +732,12 @@ fn runtime_gameplay_action_can_reach_first_capability_milestone_without_ui() {
 }
 
 #[test]
-fn runtime_agent_chat_openclaw_mode_reports_unsupported() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+fn runtime_agent_chat_provider_mode_reports_unsupported() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -761,9 +761,9 @@ fn runtime_agent_chat_openclaw_mode_reports_unsupported() {
             intent_tick: None,
             intent_seq: None,
         })
-        .expect_err("openclaw mode should reject chat");
+        .expect_err("provider mode should reject chat");
     assert_eq!(err.code, "agent_provider_chat_unsupported");
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]
@@ -895,8 +895,8 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
 
 #[test]
 fn runtime_agent_chat_echo_env_accepts_chat_without_llm_runner_config() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
     std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
     std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);

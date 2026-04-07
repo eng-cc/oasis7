@@ -66,7 +66,7 @@
   - PRD-GAME-009: As a 制作人与阶段评审 owner, I want a unified closed-beta admission gate, so that stage upgrades and external claims are evidence-driven instead of topic-by-topic guesses.
   - PRD-GAME-010: As a 制作人与 limited preview owner, I want one controlled external execution loop, so that the new claim envelope is validated with real feedback instead of internal assumptions.
   - PRD-GAME-011: As a 中循环玩家与玩法 owner, I want agent claims to keep a non-zero main-token-denominated cost and require upkeep, while allowing a restricted starter claim balance for `slot-1`, so that agent control reflects sustained commitment without forcing limited preview users to hold transferable assets.
-- 模式分层说明：按 `PRD-CORE-009`，`PRD-GAME-008` 所承接的是玩家访问模式 `pure_api`，而不是 OpenClaw `headless_agent` 一类 execution lane。
+- 模式分层说明：按 `PRD-CORE-009`，`PRD-GAME-008` 所承接的是玩家访问模式 `pure_api`，而不是 provider-backed `headless_agent` 一类 execution lane。
 - 正式游玩前置：按最新 `PRD-CORE-009` 口径，`PRD-GAME-008` 的 `pure_api` 正式游玩与 headed Web/UI 一样，要求 active LLM access；`--no-llm` 仅保留 observer/debug，不再计入正式可玩性与 parity 放行。
 - Critical User Flows:
   1. Flow-GAME-001: `玩法需求提出 -> 规则层建模 -> 映射实现边界 -> 进入开发`

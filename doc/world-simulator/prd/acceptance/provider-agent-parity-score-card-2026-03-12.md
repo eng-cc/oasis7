@@ -1,4 +1,4 @@
-# OpenClaw vs 内置 Agent parity 评分卡模板（2026-03-12）
+# Local Provider vs 内置 Agent parity 评分卡模板（2026-03-12）
 
 审计轮次: 2
 
@@ -26,16 +26,16 @@
 
 ## 三、自动指标汇总
 - builtin completion rate:
-- OpenClaw completion rate:
+- Local Provider completion rate:
 - completion rate gap(pp):
 - builtin invalid action rate:
-- OpenClaw invalid action rate:
+- Local Provider invalid action rate:
 - timeout rate:
 - builtin median extra wait(ms):
-- OpenClaw median extra wait(ms):
+- Local Provider median extra wait(ms):
 - median extra wait gap(ms):
 - builtin p95 extra wait(ms):
-- OpenClaw p95 extra wait(ms):
+- Local Provider p95 extra wait(ms):
 - p95 extra wait gap(ms):
 - latency class: [ ]A(default-candidate) [ ]B(experimental-only) [ ]C(blocked)
 - trace completeness(%):

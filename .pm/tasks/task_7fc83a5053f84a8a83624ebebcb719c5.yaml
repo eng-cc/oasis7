@@ -1,14 +1,14 @@
 task_uid: task_7fc83a5053f84a8a83624ebebcb719c5
-title: "彻底清理 OpenClaw public/structural naming 残留"
+title: "彻底清理旧 provider public/structural naming 残留"
 owner_role: producer_system_designer
-worktree_hint: /home/scc/worktrees/oasis7-core-openclaw-name-purge
+worktree_hint: /home/scc/worktrees/oasis7-core-provider-name-purge
 execution_log_path: .pm/tasks/task_7fc83a5053f84a8a83624ebebcb719c5.execution.md
 status: done
 priority: P1
 source_signal: null
 source_refs:
   - doc/core/player-access-mode-contract-2026-03-19.design.md
-  - doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md
+  - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
 doc_refs:
   - doc/core/prd.md
   - doc/world-simulator/prd.md
@@ -17,8 +17,8 @@ related_prd:
   - PRD-WORLD_SIMULATOR-037
   - PRD-WORLD_SIMULATOR-040
 acceptance:
-  - "public-facing docs/help/examples stop using openclaw_local_http and --openclaw-* as primary naming"
-  - "internal module/bin/script naming no longer retains openclaw_* where the semantics are generic provider bridge/runtime/parity"
+  - "public-facing docs/help/examples stop using retired provider flags or aliases as primary naming"
+  - "internal module/bin/script naming no longer retains retired provider-specific prefixes where the semantics are generic provider bridge/runtime/parity"
   - "compatibility parsing remains available where required, with docs/tests updated accordingly"
 handoff_to: []
 updated_at: 2026-04-07T18:01:51+08:00

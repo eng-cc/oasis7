@@ -77,7 +77,7 @@ fn handle_decision_surfaces_gateway_failure_as_provider_error() {
             .as_ref()
             .expect("provider_error")
             .code,
-        "openclaw_gateway_unreachable"
+        "provider_gateway_unreachable"
     );
 }
 
@@ -91,9 +91,9 @@ fn build_decision_prompt_embeds_preferred_visible_move_hint() {
 #[test]
 fn build_session_key_uses_provider_config_ref_to_avoid_cross_talk() {
     let mut request = sample_request();
-    request.provider_config_ref = Some("openclaw://local-http/parity/run-a/agent-0".to_string());
+    request.provider_config_ref = Some("provider://loopback-http/parity/run-a/agent-0".to_string());
     let session_a = build_session_key(&request, "main");
-    request.provider_config_ref = Some("openclaw://local-http/parity/run-b/agent-0".to_string());
+    request.provider_config_ref = Some("provider://loopback-http/parity/run-b/agent-0".to_string());
     let session_b = build_session_key(&request, "main");
     assert_ne!(session_a, session_b);
     assert!(session_a.contains("run-a"));
@@ -101,7 +101,7 @@ fn build_session_key_uses_provider_config_ref_to_avoid_cross_talk() {
 }
 
 #[test]
-fn parse_openclaw_agent_command_output_accepts_local_shape() {
+fn parse_provider_agent_command_output_accepts_local_shape() {
     let parsed = agent_output_from_json(
         "prompt".to_string(),
         r#"{"payloads":[{"text":"{\"decision\":\"wait\"}"}],"meta":{"durationMs":2484,"agentMeta":{"provider":"custom-right-codes","model":"gpt-5.4","promptTokens":9885,"usage":{"output":9,"total":9894}}}}"#,
@@ -134,15 +134,15 @@ fn local_session_id_from_session_key_hashes_invalid_chars() {
 #[test]
 fn should_fallback_to_local_agent_matches_gateway_timeout() {
     assert!(should_fallback_to_local_agent(
-        "openclaw gateway call agent exited with status 1: stderr=Gateway call failed: Error: gateway timeout after 17000ms stdout="
+        "provider-cli gateway call agent exited with status 1: stderr=Gateway call failed: Error: gateway timeout after 17000ms stdout="
     ));
-    assert!(!should_fallback_to_local_agent("openclaw agent not found"));
+    assert!(!should_fallback_to_local_agent("provider agent not found"));
 }
 
 #[test]
 fn build_gateway_agent_params_uses_session_key_and_timeout() {
     let invocation = AgentInvocation {
-        openclaw_bin: "openclaw".to_string(),
+        provider_cli_bin: "provider-cli".to_string(),
         agent_id: "main".to_string(),
         thinking: "off".to_string(),
         session_key: "agent:main:subagent:world-simulator:test".to_string(),
@@ -271,7 +271,7 @@ fn sample_request() -> DecisionRequest {
             mode: ProviderExecutionMode::HeadlessAgent,
             observation_schema_version: DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
             action_schema_version: DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string(),
-            environment_class: Some("openclaw_local_bridge".to_string()),
+            environment_class: Some("provider_local_bridge".to_string()),
             fallback_reason: None,
             observation: ProviderObservation {
                 self_state: ProviderSelfState {
@@ -342,7 +342,7 @@ fn sample_request() -> DecisionRequest {
             ],
             timeout_budget_ms: 7000,
         },
-        provider_config_ref: Some("openclaw://local-bridge".to_string()),
+        provider_config_ref: Some("provider://local-bridge".to_string()),
         agent_profile: Some(DEFAULT_PROVIDER_AGENT_PROFILE.to_string()),
         fixture_id: None,
         replay_id: None,

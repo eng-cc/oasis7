@@ -61,11 +61,11 @@
 | `doc/world-simulator/llm/llm-async-openai-responses.prd.md` | `doc/world-simulator/llm/llm-async-openai-responses.design.md` | `doc/world-simulator/llm/llm-async-openai-responses.project.md` |
 | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.design.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md` |
 | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md` | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.design.md` | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md` |
-| `doc/world-simulator/llm/llm-decision-provider-standard-openclaw-feasibility-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-decision-provider-standard-openclaw-feasibility-2026-03-12.design.md` | `doc/world-simulator/llm/llm-decision-provider-standard-openclaw-feasibility-2026-03-12.project.md` |
+| `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.design.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.project.md` |
 | `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.design.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md` |
-| `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.design.md` | `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.project.md` |
-| `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.design.md` | `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.project.md` |
-| `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md` | `—` | `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md` |
+| `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.design.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md` |
+| `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.design.md` | `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md` |
+| `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md` | `—` | `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` |
 | `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md` | `doc/world-simulator/llm/llm-factory-strategy-optimization.project.md` |
 | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.prd.md` | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.design.md` | `doc/world-simulator/llm/llm-industrial-mining-debug-tools.project.md` |
 | `doc/world-simulator/llm/llm-lmso29-stability.prd.md` | `doc/world-simulator/llm/llm-lmso29-stability.design.md` | `doc/world-simulator/llm/llm-lmso29-stability.project.md` |
@@ -199,7 +199,7 @@
 - ROUND-002 物理合并（live event-driven）：`viewer-live-full-event-driven-phase10-2026-02-27` 为主文档，`phase8/9` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 
 ## 补充验收模板
-- `doc/world-simulator/prd/acceptance/openclaw-agent-parity-scenario-matrix-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/openclaw-agent-parity-score-card-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/openclaw-agent-parity-benchmark-protocol-2026-03-12.md`
-- `doc/world-simulator/prd/acceptance/openclaw-agent-parity-aggregation-template-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-scenario-matrix-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-benchmark-protocol-2026-03-12.md`
+- `doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template-2026-03-12.md`

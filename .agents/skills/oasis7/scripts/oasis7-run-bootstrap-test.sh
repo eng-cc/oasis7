@@ -43,21 +43,21 @@ esac
 CURL
 chmod +x "$fake_bin/curl"
 
-cat > "$fake_bin/openclaw" <<'OPENCLAW'
+cat > "$fake_bin/provider-runtime" <<'PROVIDERCLI'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$#" -ge 3 && "$1" == "agents" && "$2" == "list" && "$3" == "--json" ]]; then
   printf '[{"id":"oasis7_provider_agent","workspace":"fake-workspace","model":"fake-model"}]\n'
   exit 0
 fi
-echo "unexpected openclaw invocation: $*" >&2
+echo "unexpected provider runtime invocation: $*" >&2
 exit 1
-OPENCLAW
-chmod +x "$fake_bin/openclaw"
+PROVIDERCLI
+chmod +x "$fake_bin/provider-runtime"
 
 sanitized_path="$fake_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-doctor_json="$(cd "$repo_root" && PATH="$sanitized_path" bash "$script_path" doctor --json --bundle-dir "$bundle_dir" --reuse-bridge --skip-agent-setup)"
+doctor_json="$(cd "$repo_root" && PATH="$sanitized_path" OASIS7_PROVIDER_CLI_BIN=provider-runtime bash "$script_path" doctor --json --bundle-dir "$bundle_dir" --reuse-bridge --skip-agent-setup)"
 DOCTOR_JSON="$doctor_json" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['DOCTOR_JSON'])
@@ -69,7 +69,7 @@ assert ('bundle-play', 'OK') in checks and '--reuse-bridge --skip-agent-setup' i
 PY
 
 play_stderr="$tmp_dir/play.stderr"
-if (cd "$repo_root" && PATH="$sanitized_path" bash "$script_path" play --bundle-dir "$bundle_dir" --skip-agent-setup --no-open-browser > /dev/null 2>"$play_stderr"); then
+if (cd "$repo_root" && PATH="$sanitized_path" OASIS7_PROVIDER_CLI_BIN=provider-runtime bash "$script_path" play --bundle-dir "$bundle_dir" --skip-agent-setup --no-open-browser > /dev/null 2>"$play_stderr"); then
   echo "expected play command without cargo to fail" >&2
   exit 1
 fi

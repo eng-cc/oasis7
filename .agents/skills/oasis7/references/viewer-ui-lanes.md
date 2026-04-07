@@ -1,18 +1,18 @@
-# Viewer / UI Lanes For OpenClaw Real-Play
+# Viewer / UI Lanes For Local Provider Real-Play
 
 This page covers the UI-facing side of `oasis7`.
-It is intentionally split out from the main skill so the default operator path stays focused on “how to run OpenClaw real play”.
+It is intentionally split out from the main skill so the default operator path stays focused on “how to run Local Provider real play”.
 
 ## Viewer Contract
 
 Read the real-play path in two layers:
 
-- OpenClaw execution layer: `headless_agent` or `player_parity`
+- Local Provider execution layer: `headless_agent` or `player_parity`
 - human observation layer: `debug_viewer`, with `software_safe` as the weak-graphics fallback
 
 Operator rule:
 
-- OpenClaw real-play does not require a Viewer to keep running
+- Local Provider real-play does not require a Viewer to keep running
 - `headless_agent` is the default regression/server lane
 - `player_parity` is the lane to use when a human is judging player feel
 - the Viewer is an observer/debug surface, not the authority execution path
@@ -78,9 +78,9 @@ What `software_safe` is not:
 
 - not the primary player-experience mode
 - not the visual-quality signoff path
-- not the authority execution lane for OpenClaw
+- not the authority execution lane for Local Provider
 
-## Current OpenClaw UI Boundary
+## Current Local Provider UI Boundary
 
 - in current `runtime live + provider_loopback_http` real-play, `agent_chat` and `prompt_control` should be treated as observer/debug surfaces, not an end-to-end supported player-authority path
 - for QA-specific software-safe prompt/chat evidence, prefer `./scripts/viewer-software-safe-chat-regression.sh`

@@ -299,7 +299,7 @@ fn update_ui_populates_agent_selection_details_with_claim_state() {
 }
 
 #[test]
-fn provider_debug_summary_filters_openclaw_and_errors() {
+fn provider_debug_summary_filters_loopback_provider_and_errors() {
     let state = ViewerState {
         status: ConnectionStatus::Connected,
         snapshot: None,
@@ -319,7 +319,7 @@ fn provider_debug_summary_filters_openclaw_and_errors() {
                 llm_error: None,
                 parse_error: None,
                 llm_diagnostics: Some(oasis7::simulator::LlmDecisionDiagnostics {
-                    model: Some("openclaw-local".to_string()),
+                    model: Some("provider-local".to_string()),
                     latency_ms: Some(87),
                     prompt_tokens: None,
                     completion_tokens: None,
@@ -358,14 +358,14 @@ fn provider_debug_summary_filters_openclaw_and_errors() {
         metrics: None,
     };
 
-    let openclaw_text = super::tests_ui_text::build_provider_debug_text(
+    let provider_text = super::tests_ui_text::build_provider_debug_text(
         &state,
-        crate::ui_text::ProviderDebugFilter::OpenClawOnly,
+        crate::ui_text::ProviderDebugFilter::LoopbackProviderOnly,
     );
-    assert!(openclaw_text.contains("filter=openclaw_only"));
-    assert!(openclaw_text.contains("provider=openclaw-local"));
-    assert!(openclaw_text.contains("move_agent -> loc-2"));
-    assert!(openclaw_text.contains("Recent Latency: t12=87ms"));
+    assert!(provider_text.contains("filter=loopback_provider_only"));
+    assert!(provider_text.contains("provider=provider-local"));
+    assert!(provider_text.contains("move_agent -> loc-2"));
+    assert!(provider_text.contains("Recent Latency: t12=87ms"));
 
     let error_text = super::tests_ui_text::build_provider_debug_text(
         &state,

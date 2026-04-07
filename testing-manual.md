@@ -328,7 +328,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 模式总口径（`PRD-CORE-009`）：
   - `standard_3d` / `software_safe` / `pure_api` 是玩家访问模式，分别对应标准 3D 视觉入口、弱图形安全入口和纯接口正式入口。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
-  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 OpenClaw provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=openclaw + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
+  - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 或 `debug_viewer` 直接当成“第四种入口”。
 - `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=software_safe` 且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
 - 若只需要回归 `software_safe` 最小闭环（加载 -> 连接 -> 选择目标 -> `step` -> DOM/`lastControlFeedback` 反馈），优先执行 `./scripts/viewer-software-safe-step-regression.sh`。
@@ -352,7 +352,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 若需要为 `#46 PostOnboarding` 补无 UI / 非浏览器验证，执行 `./scripts/viewer-post-onboarding-headless-smoke.sh`。
   - 该脚本只验证 live TCP 协议、快照推进、控制完成 ack 与 runtime event feed；不替代 headed Web/UI 截图复核。
 - 若需要直接以纯 API 客户端操作 live 会话，可使用 `cargo run -q -p oasis7 --bin oasis7_pure_api_client -- ...`。
-  - 该链路属于 `pure_api` 玩家访问模式；若同时牵涉 OpenClaw provider-backed 路径，应额外标注 `agent_decision_source + agent_provider_backend/contract/transport` 与实际 execution lane；`agent_direct_connect/provider_loopback_http` 只在兼容迁移说明里保留。
+  - 该链路属于 `pure_api` 玩家访问模式；若同时牵涉 Local Provider provider-backed 路径，应额外标注 `agent_decision_source + agent_provider_backend/contract/transport` 与实际 execution lane；`agent_direct_connect/provider_loopback_http` 只在兼容迁移说明里保留。
   - 推荐最小链路：
 ```bash
 cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 snapshot --player-gameplay-only
@@ -362,7 +362,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ```
   - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；当前产品设定下，只要 LLM 不可用，`gameplay_action / agent_chat / prompt_control` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，而 `step / play` 会返回 `ControlCompletionAck { status: Blocked, error_code, error_message }`。
 - 若需要执行 pure API required/full 回归，优先运行 `./scripts/oasis7-pure-api-parity-smoke.sh`。
-  - 该回归验证的是 `pure_api` 玩家访问模式在 active LLM access 下的正式可玩性，不等同于 OpenClaw `headless_agent` 回归。
+  - 该回归验证的是 `pure_api` 玩家访问模式在 active LLM access 下的正式可玩性，不等同于 Local Provider `headless_agent` 回归。
   - required-tier 推荐 bundle 口径：
 ```bash
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local

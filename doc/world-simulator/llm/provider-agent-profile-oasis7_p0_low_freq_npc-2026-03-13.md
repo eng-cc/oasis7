@@ -1,12 +1,12 @@
-# OpenClaw 专用玩法 Profile：`oasis7_p0_low_freq_npc`（2026-03-13）
+# Local Provider 专用玩法 Profile：`oasis7_p0_low_freq_npc`（2026-03-13）
 
 - 关联 PRD: `PRD-WORLD_SIMULATOR-037`、`PRD-WORLD_SIMULATOR-038`
 - owner: `agent_engineer`
 - 联审: `producer_system_designer`、`qa_engineer`
-- 适用范围: `OpenClaw(Local HTTP)` 首期 `P0` 单低频 NPC parity、mock regression、experimental 试点
+- 适用范围: `Local Provider(Local HTTP)` 首期 `P0` 单低频 NPC parity、mock regression、experimental 试点
 
 ## 1. 定义
-- `oasis7_p0_low_freq_npc` 是当前默认发给 `OpenClaw` 的 provider-side 玩法 profile / skill 标识；旧 `oasis7_p0_low_freq_npc` 已移除，不再作为兼容别名保留。
+- `oasis7_p0_low_freq_npc` 是当前默认发给 `Local Provider` 的 provider-side 玩法 profile / skill 标识；旧 `oasis7_p0_low_freq_npc` 已移除，不再作为兼容别名保留。
 - provider 收到该标识后，应加载与 `oasis7` 首期 `P0` 低频 NPC 相匹配的系统提示、动作偏好、恢复策略与禁行动作约束。
 - 首期通过 `DecisionRequest.agent_profile` 传输；若 provider 不识别该 profile，必须返回结构化失败，而不是静默退回通用 profile。
 
@@ -37,6 +37,6 @@
 - 若连续多个 tick 无法推进，应在 trace 中明确标记“当前 profile 被阻塞/信息不足”，供 parity 采证统计 `completion gap`。
 
 ## 6. 对标口径
-- `scripts/openclaw-parity-p0.sh` 与 `oasis7_openclaw_parity_bench` 默认使用该 profile，确保 `P0` 对标样本具备可重复的玩法口径。
+- `scripts/provider-parity-p0.sh` 与 `oasis7_provider_parity_bench` 默认使用该 profile，确保 `P0` 对标样本具备可重复的玩法口径。
 - mock / required regression 也必须显式透传该 profile，防止 provider 侧因 profile 漏配导致“看似通了、实则玩法漂移”。
 - 若后续进入 `P1`/`P2`，应新增新的 profile 标识或版本，而不是复用本 profile 覆盖更高复杂度场景。

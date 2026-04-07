@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-$(printf %s "open""claw")}"
 usage() {
   cat <<'USAGE'
 Usage:
@@ -18,10 +19,10 @@ Options:
   --release-repo <owner/repo>     GitHub repo slug for release download (default: eng-cc/oasis7)
   --download-dir <path>           Release cache/output root (default: ~/.cache/oasis7/releases)
   --force-download                Redownload bundle even if cached bundle already exists
-  --base-url <url>                OpenClaw local provider base url (default: http://127.0.0.1:5841)
-  --agent-id <id>                 OpenClaw runtime agent id (default: oasis7_provider_agent)
-  --agent-profile <profile>       OpenClaw agent profile (default: oasis7_p0_low_freq_npc)
-  --execution-mode <mode>         OpenClaw execution mode (default: headless_agent)
+  --base-url <url>                local provider base url (default: http://127.0.0.1:5841)
+  --agent-id <id>                 local provider runtime agent id (default: oasis7_provider_agent)
+  --agent-profile <profile>       local provider agent profile (default: oasis7_p0_low_freq_npc)
+  --execution-mode <mode>         local provider execution mode (default: headless_agent)
   --scenario <name>               Gameplay scenario (default: llm_bootstrap)
   --timeout-ms <ms>               Smoke timeout budget (default: 15000)
   --connect-timeout-ms <ms>       Provider connect timeout (default: 15000)
@@ -576,10 +577,10 @@ run_doctor() {
     print_doctor_status INFO bundle-dir "not configured"
   fi
 
-  if command -v openclaw >/dev/null 2>&1; then
-    print_doctor_status OK command "openclaw=$(command -v openclaw)"
+  if command -v "$provider_cli_bin" >/dev/null 2>&1; then
+    print_doctor_status OK command "provider-cli=$(command -v "$provider_cli_bin")"
   else
-    print_doctor_status FAIL command "openclaw not found"
+    print_doctor_status FAIL command "provider runtime CLI not found"
     failures=$((failures + 1))
   fi
 
@@ -597,7 +598,7 @@ run_doctor() {
     failures=$((failures + 1))
   fi
 
-  if agents_json="$(openclaw agents list --json 2>/dev/null)"; then
+  if agents_json="$("$provider_cli_bin" agents list --json 2>/dev/null)"; then
     if AGENTS_JSON="$agents_json" AGENT_ID="$agent_id" python - <<'PY' >/dev/null
 import json, os, sys
 agent_id = os.environ['AGENT_ID']
@@ -622,14 +623,14 @@ PY
       print_doctor_status OK runtime-agent "$agent_summary"
     else
       if [[ -n "$resolved_repo_root" ]]; then
-        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; run $resolved_repo_root/scripts/setup-provider-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; run $resolved_repo_root/scripts/setup-provider-oasis7-runtime.sh $agent_id"
       else
-        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; provide --repo-root and run scripts/setup-provider-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; provide --repo-root and run scripts/setup-provider-oasis7-runtime.sh $agent_id"
       fi
       failures=$((failures + 1))
     fi
   else
-    print_doctor_status FAIL runtime-agent "failed to query 'openclaw agents list --json'"
+    print_doctor_status FAIL runtime-agent "failed to query provider runtime agent inventory"
     failures=$((failures + 1))
   fi
 
@@ -892,7 +893,7 @@ fi
 
 repo_required="0"
 need_cargo="0"
-need_openclaw="0"
+need_provider_cli="0"
 use_bundle_play="0"
 
 if [[ "$execution_mode" != "headless_agent" && "$execution_mode" != "player_parity" ]]; then
@@ -916,7 +917,7 @@ case "$mode" in
     fi
     if [[ "$skip_agent_setup" != "1" ]]; then
       repo_required="1"
-      need_openclaw="1"
+      need_provider_cli="1"
     fi
     if [[ "$reuse_bridge" != "1" ]]; then
       repo_required="1"
@@ -932,7 +933,7 @@ case "$mode" in
     repo_required="1"
     need_cargo="1"
     if [[ "$skip_agent_setup" != "1" ]]; then
-      need_openclaw="1"
+      need_provider_cli="1"
     fi
     require_cmd curl
     ;;
@@ -959,8 +960,8 @@ fi
 bridge_log="$(resolve_bridge_log_default "$repo_root")"
 mkdir -p "$(dirname "$bridge_log")"
 
-if [[ "$need_openclaw" == "1" ]]; then
-  require_cmd openclaw
+if [[ "$need_provider_cli" == "1" ]]; then
+  require_cmd "$provider_cli_bin"
 fi
 if [[ "$need_cargo" == "1" ]]; then
   if ! command -v cargo >/dev/null 2>&1; then
@@ -997,7 +998,7 @@ if [[ "$reuse_bridge" != "1" ]]; then
   wait_for_http "http://127.0.0.1:18789/health" 20 0.5
   (
     cd "$repo_root"
-    exec env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --openclaw-agent "$agent_id"
+    exec env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent "$agent_id"
   ) >"$bridge_log" 2>&1 &
   cleanup_bridge_pid="$!"
 fi
@@ -1011,10 +1012,10 @@ case "$mode" in
         --scenario "$scenario"
         --with-llm
         --agent-provider-mode provider_loopback_http
-        --openclaw-base-url "$base_url"
-        --openclaw-connect-timeout-ms "$connect_timeout_ms"
-        --openclaw-agent-profile "$agent_profile"
-        --openclaw-execution-mode "$execution_mode")
+        --agent-provider-url "$base_url"
+        --agent-provider-connect-timeout-ms "$connect_timeout_ms"
+        --agent-provider-profile "$agent_profile"
+        --agent-execution-lane "$execution_mode")
     else
       viewer_static_out_dir="$repo_root/output/oasis7/viewer-static-$(date +%Y%m%d-%H%M%S)"
       resolved_viewer_static_dir="$(resolve_source_tree_viewer_static_dir "$repo_root" "$viewer_static_out_dir")"
@@ -1023,10 +1024,10 @@ case "$mode" in
         --scenario "$scenario"
         --with-llm
         --agent-provider-mode provider_loopback_http
-        --openclaw-base-url "$base_url"
-        --openclaw-connect-timeout-ms "$connect_timeout_ms"
-        --openclaw-agent-profile "$agent_profile"
-        --openclaw-execution-mode "$execution_mode"
+        --agent-provider-url "$base_url"
+        --agent-provider-connect-timeout-ms "$connect_timeout_ms"
+        --agent-provider-profile "$agent_profile"
+        --agent-execution-lane "$execution_mode"
         --viewer-static-dir "$resolved_viewer_static_dir")
     fi
     if [[ "$open_browser" != "1" ]]; then
@@ -1054,13 +1055,13 @@ case "$mode" in
   smoke)
     cd "$repo_root"
     cmd=(bash scripts/provider-parity-p0.sh
-      --openclaw-only
+      --provider-only
       --samples "$samples"
       --ticks "$ticks"
       --timeout-ms "$timeout_ms"
-      --openclaw-base-url "$base_url"
-      --openclaw-connect-timeout-ms "$connect_timeout_ms"
-      --openclaw-agent-profile "$agent_profile"
+      --agent-provider-url "$base_url"
+      --agent-provider-connect-timeout-ms "$connect_timeout_ms"
+      --agent-provider-profile "$agent_profile"
       --execution-mode "$execution_mode")
     printf 'Running: %q ' "${cmd[@]}"
     printf '\n'

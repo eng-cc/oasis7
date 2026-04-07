@@ -42,13 +42,13 @@ impl eframe::App for ClientLauncherApp {
                 }
                 if is_provider_loopback_http_mode(&self.config) {
                     ui.separator();
-                    let provider_status = match &self.openclaw_provider_check_status {
+                    let provider_status = match &self.provider_check_status {
                         ProviderCheckStatus::Disabled => ProviderCheckStatus::Idle,
                         other => other.clone(),
                     };
                     let provider_label = format!(
                         "{}: {}",
-                        self.tr("OpenClaw", "OpenClaw"),
+                        self.tr("Local Provider", "Local Provider"),
                         provider_status.text(self.ui_language)
                     );
                     let response =

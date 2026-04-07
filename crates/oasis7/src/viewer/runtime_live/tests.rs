@@ -27,11 +27,6 @@ const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
 const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
-const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
-const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
-const VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV: &str = "OASIS7_OPENCLAW_CONNECT_TIMEOUT_MS";
-const VIEWER_OPENCLAW_AGENT_PROFILE_ENV: &str = "OASIS7_OPENCLAW_AGENT_PROFILE";
-const VIEWER_OPENCLAW_EXECUTION_MODE_ENV: &str = "OASIS7_OPENCLAW_EXECUTION_MODE";
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
 const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 
@@ -45,8 +40,8 @@ fn test_signer(seed: u8) -> (String, String) {
 }
 
 fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
-    let guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(crate::simulator::ENV_LLM_MODEL, "gpt-4o-mini");
     std::env::set_var(
         crate::simulator::ENV_LLM_BASE_URL,
@@ -56,23 +51,13 @@ fn lock_test_llm_env() -> std::sync::MutexGuard<'static, ()> {
     guard
 }
 
-fn clear_runtime_openclaw_env() {
+fn clear_runtime_provider_env() {
     let removed_old_brand_envs = [
         removed_old_brand_runtime_live_env("AGENT_DECISION_SOURCE"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_BACKEND"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONTRACT"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_TRANSPORT"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_URL"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_AUTH_TOKEN"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONNECT_TIMEOUT_MS"),
-        removed_old_brand_runtime_live_env("AGENT_PROVIDER_PROFILE"),
-        removed_old_brand_runtime_live_env("AGENT_EXECUTION_LANE"),
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
-        removed_old_brand_runtime_live_env("OPENCLAW_BASE_URL"),
-        removed_old_brand_runtime_live_env("OPENCLAW_AUTH_TOKEN"),
-        removed_old_brand_runtime_live_env("OPENCLAW_CONNECT_TIMEOUT_MS"),
-        removed_old_brand_runtime_live_env("OPENCLAW_AGENT_PROFILE"),
-        removed_old_brand_runtime_live_env("OPENCLAW_EXECUTION_MODE"),
         removed_old_brand_runtime_live_env("RUNTIME_AGENT_CHAT_ECHO"),
     ];
     for env_name in [
@@ -80,17 +65,7 @@ fn clear_runtime_openclaw_env() {
         VIEWER_AGENT_PROVIDER_BACKEND_ENV,
         VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
         VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-        VIEWER_AGENT_PROVIDER_URL_ENV,
-        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
-        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
-        VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
-        VIEWER_OPENCLAW_BASE_URL_ENV,
-        VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
-        VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
-        VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
-        VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
         RUNTIME_AGENT_CHAT_ECHO_ENV,
     ] {
         std::env::remove_var(env_name);
@@ -100,7 +75,7 @@ fn clear_runtime_openclaw_env() {
     }
 }
 
-fn runtime_openclaw_env_lock() -> &'static Mutex<()> {
+fn runtime_provider_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
 }
@@ -413,8 +388,8 @@ fn runtime_live_run_accepts_probe_while_viewer_session_is_open() {
 
 #[test]
 fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "1");
     std::env::remove_var(crate::simulator::ENV_LLM_MODEL);
     std::env::remove_var(crate::simulator::ENV_LLM_BASE_URL);
@@ -548,8 +523,8 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
 
 #[test]
 fn provider_settings_from_env_defaults_to_none() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     let settings =
         super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
     assert_eq!(settings, None);
@@ -557,10 +532,10 @@ fn provider_settings_from_env_defaults_to_none() {
 
 #[test]
 fn provider_settings_from_env_parses_profile_and_timeout() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "openclaw");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
     std::env::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
     std::env::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
     std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
@@ -570,7 +545,7 @@ fn provider_settings_from_env_parses_profile_and_timeout() {
     std::env::set_var(VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, "secret-token");
     let settings = super::control_plane::runtime_provider_settings_from_env()
         .expect("settings parse")
-        .expect("openclaw settings");
+        .expect("provider settings");
     assert_eq!(settings.requested_provider_mode, "provider_backed");
     assert_eq!(settings.base_url, "http://127.0.0.1:5841");
     assert_eq!(settings.connect_timeout_ms, 4200);
@@ -578,42 +553,42 @@ fn provider_settings_from_env_parses_profile_and_timeout() {
     assert_eq!(settings.execution_mode, ProviderExecutionMode::PlayerParity);
     assert_eq!(settings.auth_token.as_deref(), Some("secret-token"));
     assert_eq!(settings.fallback_reason, None);
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]
 fn provider_settings_from_env_rejects_removed_old_brand_prefix() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
         "provider_loopback_http",
     );
     std::env::set_var(
-        removed_old_brand_runtime_live_env("OPENCLAW_BASE_URL"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_URL"),
         "http://127.0.0.1:5842",
     );
     std::env::set_var(
-        removed_old_brand_runtime_live_env("OPENCLAW_CONNECT_TIMEOUT_MS"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_CONNECT_TIMEOUT_MS"),
         "4300",
     );
     std::env::set_var(
-        removed_old_brand_runtime_live_env("OPENCLAW_AGENT_PROFILE"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_PROFILE"),
         "oasis7_p0_low_freq_npc",
     );
     std::env::set_var(
-        removed_old_brand_runtime_live_env("OPENCLAW_EXECUTION_MODE"),
+        removed_old_brand_runtime_live_env("AGENT_EXECUTION_LANE"),
         "player_parity",
     );
     std::env::set_var(
-        removed_old_brand_runtime_live_env("OPENCLAW_AUTH_TOKEN"),
+        removed_old_brand_runtime_live_env("AGENT_PROVIDER_AUTH_TOKEN"),
         "removed-old-brand-token",
     );
 
     let settings =
         super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
     assert_eq!(settings, None);
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]

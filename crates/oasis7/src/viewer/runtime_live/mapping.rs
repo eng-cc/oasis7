@@ -92,7 +92,7 @@ fn collect_agent_execution_debug_contexts(
                         .collect(),
                     fallback_reason,
                     provider_config_ref: Some(format!(
-                        "openclaw://local-http/runtime-live/{}",
+                        "provider://loopback-http/runtime-live/{}",
                         agent_id
                     )),
                     agent_profile: Some(settings.agent_profile.clone()),

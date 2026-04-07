@@ -211,7 +211,7 @@
     - `git diff --check`
 - [x] TASK-TESTING-063 (PRD-TESTING-004) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Web UI 闭环补 canonical `*.manual.md` 操作手册，并同步主手册、模块入口与 PRD/project 职责边界。
 
-- 当前阻断摘要：`doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
+- 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 
 ## 依赖
 - 模块设计总览：`doc/testing/design.md`

@@ -81,13 +81,13 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
         },
         provider_error: None,
         diagnostics: ProviderDiagnostics {
-            provider_id: Some("mock-openclaw".to_string()),
+            provider_id: Some("mock-provider-local-bridge".to_string()),
             provider_version: Some("v0".to_string()),
             latency_ms: Some(42),
             retry_count: 0,
         },
         trace_payload: ProviderTraceEnvelope {
-            provider_id: Some("mock-openclaw".to_string()),
+            provider_id: Some("mock-provider-local-bridge".to_string()),
             input_summary: Some("fixture=golden.move.visible_location.v1".to_string()),
             output_summary: Some("decision=move_agent(to=loc-2)".to_string()),
             latency_ms: Some(42),
@@ -106,11 +106,13 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
         },
         memory_write_intents: vec![],
     };
-    let provider =
-        MockDecisionProvider::with_scripted_responses("mock-openclaw", vec![Ok(response)]);
+    let provider = MockDecisionProvider::with_scripted_responses(
+        "mock-provider-local-bridge",
+        vec![Ok(response)],
+    );
     let shared_state = provider.shared_state();
     let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog())
-        .with_provider_config_ref("mock://openclaw-local-http")
+        .with_provider_config_ref("mock://provider-loopback-http")
         .with_agent_profile("oasis7_p0_low_freq_npc")
         .with_execution_mode(ProviderExecutionMode::PlayerParity)
         .with_environment_class("unit_test")
@@ -150,7 +152,7 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
     assert!(snapshot.recorded_feedback[0].success);
     assert_eq!(
         snapshot.recorded_requests[0].provider_config_ref.as_deref(),
-        Some("mock://openclaw-local-http")
+        Some("mock://provider-loopback-http")
     );
     assert_eq!(
         snapshot.recorded_requests[0].agent_profile.as_deref(),
@@ -205,7 +207,7 @@ fn provider_backed_agent_behavior_executes_mocked_move_and_records_feedback() {
 fn provider_backed_agent_behavior_downgrades_provider_error_to_wait() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let provider = MockDecisionProvider::with_scripted_responses(
-        "mock-openclaw",
+        "mock-provider-local-bridge",
         vec![Err(DecisionProviderError::new(
             "provider_timeout",
             "request exceeded 3000ms budget",
@@ -241,20 +243,22 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
         },
         provider_error: None,
         diagnostics: ProviderDiagnostics {
-            provider_id: Some("mock-openclaw".to_string()),
+            provider_id: Some("mock-provider-local-bridge".to_string()),
             provider_version: None,
             latency_ms: Some(10),
             retry_count: 0,
         },
         trace_payload: ProviderTraceEnvelope {
-            provider_id: Some("mock-openclaw".to_string()),
+            provider_id: Some("mock-provider-local-bridge".to_string()),
             output_summary: Some("decision=unknown_action".to_string()),
             ..ProviderTraceEnvelope::default()
         },
         memory_write_intents: vec![],
     };
-    let provider =
-        MockDecisionProvider::with_scripted_responses("mock-openclaw", vec![Ok(response)]);
+    let provider = MockDecisionProvider::with_scripted_responses(
+        "mock-provider-local-bridge",
+        vec![Ok(response)],
+    );
     let behavior = ProviderBackedAgentBehavior::new("agent-1", provider, provider_action_catalog());
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
         AgentRunner::new();
@@ -275,8 +279,8 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
 fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payloads() {
     let mut parity_kernel = setup_kernel_with_provider_agent("agent-1");
     let parity_provider = MockDecisionProvider::with_scripted_responses(
-        "mock-openclaw",
-        vec![Ok(DecisionResponse::wait("mock-openclaw"))],
+        "mock-provider-local-bridge",
+        vec![Ok(DecisionResponse::wait("mock-provider-local-bridge"))],
     );
     let parity_state = parity_provider.shared_state();
     let parity_behavior =
@@ -290,8 +294,8 @@ fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payload
 
     let mut headless_kernel = setup_kernel_with_provider_agent("agent-1");
     let headless_provider = MockDecisionProvider::with_scripted_responses(
-        "mock-openclaw",
-        vec![Ok(DecisionResponse::wait("mock-openclaw"))],
+        "mock-provider-local-bridge",
+        vec![Ok(DecisionResponse::wait("mock-provider-local-bridge"))],
     );
     let headless_state = headless_provider.shared_state();
     let headless_behavior =

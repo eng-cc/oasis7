@@ -1,7 +1,7 @@
 task_uid: task_7790ac86a31a4c509e9f6debba2f96b4
-title: "Implement OpenClaw compatibility and fallback audit chain"
+title: "Implement provider compatibility and fallback audit chain"
 owner_role: viewer_engineer
-worktree_hint: /home/scc/worktrees/oasis7-world-simulator-openclaw-compatibility-fallback-audit-chain
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-provider-compatibility-fallback-audit-chain
 execution_log_path: .pm/tasks/task_7790ac86a31a4c509e9f6debba2f96b4.execution.md
 status: done
 priority: P1
@@ -9,8 +9,8 @@ source_signal: null
 source_refs:
   - doc/world-simulator/project.md
 doc_refs:
-  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md
-  - doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md
+  - doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md
 related_prd:
   - PRD-WORLD_SIMULATOR-037
   - PRD-WORLD_SIMULATOR-040

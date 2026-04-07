@@ -12,13 +12,13 @@ SAMPLES=3
 TICKS=20
 TIMEOUT_MS=15000
 OUT_DIR=""
-OPENCLAW_BASE_URL="http://127.0.0.1:5841"
-OPENCLAW_AUTH_TOKEN=""
-OPENCLAW_CONNECT_TIMEOUT_MS=15000
-OPENCLAW_AGENT_PROFILE="oasis7_p0_low_freq_npc"
-OPENCLAW_EXECUTION_MODE="headless_agent"
+PROVIDER_BASE_URL="http://127.0.0.1:5841"
+PROVIDER_AUTH_TOKEN=""
+AGENT_PROVIDER_CONNECT_TIMEOUT_MS=15000
+AGENT_PROVIDER_PROFILE="oasis7_p0_low_freq_npc"
+PROVIDER_EXECUTION_MODE="headless_agent"
 RUN_BUILTIN=1
-RUN_OPENCLAW=1
+RUN_PROVIDER=1
 
 usage() {
   cat <<'USAGE'
@@ -36,18 +36,18 @@ Options:
   --ticks <n>                           Ticks per sample (default: 20)
   --timeout-ms <n>                      Timeout budget per sample (default: 15000)
   --out-dir <path>                      Artifact root (default: output/provider_parity/<run_id>)
-  --openclaw-base-url <url>             OpenClaw local HTTP base URL
-  --openclaw-auth-token <token>         OpenClaw bearer token
-  --openclaw-connect-timeout-ms <n>     OpenClaw connect timeout (default: 15000)
-  --openclaw-agent-profile <id>          OpenClaw gameplay profile/skill id
-  --execution-mode <mode>                OpenClaw execution mode (default: headless_agent)
+  --agent-provider-url <url>             local provider local HTTP base URL
+  --agent-provider-auth-token <token>         local provider bearer token
+  --agent-provider-connect-timeout-ms <n>     local provider connect timeout (default: 15000)
+  --agent-provider-profile <id>          local provider gameplay profile/skill id
+  --execution-mode <mode>                local provider execution mode (default: headless_agent)
   --builtin-only                        Run only builtin provider
-  --openclaw-only                       Run only the OpenClaw-backed loopback provider
+  --provider-only                       Run only the local provider-backed loopback provider
   -h, --help                            Show help
 
 Notes:
   - builtin runs require the usual builtin LLM env (for example OPENAI_API_KEY).
-  - openclaw runs require a real local provider exposing /v1/provider/info, /health,
+  - provider runs require a real local provider exposing /v1/provider/info, /health,
     /world-simulator/decision and /feedback.
   - This script prepares T4/T5 parity evidence; it does not auto-sign QA/producer scorecards.
 USAGE
@@ -87,34 +87,34 @@ while [[ $# -gt 0 ]]; do
       OUT_DIR="${2:-}"
       shift 2
       ;;
-    --openclaw-base-url)
-      OPENCLAW_BASE_URL="${2:-}"
+    --agent-provider-url)
+      PROVIDER_BASE_URL="${2:-}"
       shift 2
       ;;
-    --openclaw-auth-token)
-      OPENCLAW_AUTH_TOKEN="${2:-}"
+    --agent-provider-auth-token)
+      PROVIDER_AUTH_TOKEN="${2:-}"
       shift 2
       ;;
-    --openclaw-connect-timeout-ms)
-      OPENCLAW_CONNECT_TIMEOUT_MS="${2:-}"
+    --agent-provider-connect-timeout-ms)
+      AGENT_PROVIDER_CONNECT_TIMEOUT_MS="${2:-}"
       shift 2
       ;;
-    --openclaw-agent-profile)
-      OPENCLAW_AGENT_PROFILE="${2:-}"
+    --agent-provider-profile)
+      AGENT_PROVIDER_PROFILE="${2:-}"
       shift 2
       ;;
     --execution-mode)
-      OPENCLAW_EXECUTION_MODE="${2:-}"
+      PROVIDER_EXECUTION_MODE="${2:-}"
       shift 2
       ;;
     --builtin-only)
       RUN_BUILTIN=1
-      RUN_OPENCLAW=0
+      RUN_PROVIDER=0
       shift
       ;;
-    --openclaw-only)
+    --provider-only)
       RUN_BUILTIN=0
-      RUN_OPENCLAW=1
+      RUN_PROVIDER=1
       shift
       ;;
     -h|--help)
@@ -133,9 +133,9 @@ done
 [[ "$SAMPLES" =~ ^[0-9]+$ ]] || { echo "error: --samples must be numeric" >&2; exit 1; }
 [[ "$TICKS" =~ ^[0-9]+$ ]] || { echo "error: --ticks must be numeric" >&2; exit 1; }
 [[ "$TIMEOUT_MS" =~ ^[0-9]+$ ]] || { echo "error: --timeout-ms must be numeric" >&2; exit 1; }
-[[ "$OPENCLAW_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || { echo "error: --openclaw-connect-timeout-ms must be numeric" >&2; exit 1; }
-[[ -n "$OPENCLAW_AGENT_PROFILE" ]] || { echo "error: --openclaw-agent-profile cannot be empty" >&2; exit 1; }
-[[ "$OPENCLAW_EXECUTION_MODE" == "headless_agent" || "$OPENCLAW_EXECUTION_MODE" == "player_parity" ]] || { echo "error: --execution-mode must be headless_agent or player_parity" >&2; exit 1; }
+[[ "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" =~ ^[0-9]+$ ]] || { echo "error: --agent-provider-connect-timeout-ms must be numeric" >&2; exit 1; }
+[[ -n "$AGENT_PROVIDER_PROFILE" ]] || { echo "error: --agent-provider-profile cannot be empty" >&2; exit 1; }
+[[ "$PROVIDER_EXECUTION_MODE" == "headless_agent" || "$PROVIDER_EXECUTION_MODE" == "player_parity" ]] || { echo "error: --execution-mode must be headless_agent or player_parity" >&2; exit 1; }
 
 if [[ -z "$OUT_DIR" ]]; then
   OUT_DIR="output/provider_parity/$RUN_ID"
@@ -160,13 +160,13 @@ run_sample() {
     --out-dir "$sample_dir")
 
   if [[ "$provider" == "provider_loopback_http" ]]; then
-    cmd+=(--openclaw-base-url "$OPENCLAW_BASE_URL")
-    if [[ -n "$OPENCLAW_AUTH_TOKEN" ]]; then
-      cmd+=(--openclaw-auth-token "$OPENCLAW_AUTH_TOKEN")
+    cmd+=(--agent-provider-url "$PROVIDER_BASE_URL")
+    if [[ -n "$PROVIDER_AUTH_TOKEN" ]]; then
+      cmd+=(--agent-provider-auth-token "$PROVIDER_AUTH_TOKEN")
     fi
-    cmd+=(--openclaw-connect-timeout-ms "$OPENCLAW_CONNECT_TIMEOUT_MS")
-    cmd+=(--openclaw-agent-profile "$OPENCLAW_AGENT_PROFILE")
-    cmd+=(--execution-mode "$OPENCLAW_EXECUTION_MODE")
+    cmd+=(--agent-provider-connect-timeout-ms "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS")
+    cmd+=(--agent-provider-profile "$AGENT_PROVIDER_PROFILE")
+    cmd+=(--execution-mode "$PROVIDER_EXECUTION_MODE")
   fi
 
   echo "+ ${cmd[*]}"
@@ -179,13 +179,13 @@ if (( RUN_BUILTIN )); then
   done
 fi
 
-if (( RUN_OPENCLAW )); then
+if (( RUN_PROVIDER )); then
   for sample_index in $(seq 1 "$SAMPLES"); do
     run_sample provider_loopback_http "$sample_index"
   done
 fi
 
-python3 - "$OUT_DIR" "$RUN_ID" "$SCENARIO_ID" "$PARITY_TIER" "$SAMPLES" "$RUN_BUILTIN" "$RUN_OPENCLAW" <<'PY'
+python3 - "$OUT_DIR" "$RUN_ID" "$SCENARIO_ID" "$PARITY_TIER" "$SAMPLES" "$RUN_BUILTIN" "$RUN_PROVIDER" <<'PY'
 import csv
 import json
 import math
@@ -199,12 +199,12 @@ scenario_id = sys.argv[3]
 parity_tier = sys.argv[4]
 requested_samples = int(sys.argv[5])
 run_builtin = int(sys.argv[6])
-run_openclaw = int(sys.argv[7])
+run_provider = int(sys.argv[7])
 
 providers = []
 if run_builtin:
     providers.append("builtin")
-if run_openclaw:
+if run_provider:
     providers.append("provider_loopback_http")
 
 summary_dir = out_dir / "summary"
@@ -289,10 +289,10 @@ with combined_csv.open("w", newline="") as handle:
       "benchmark_status",
     ]
     builtin = aggregate.get("builtin", {})
-    openclaw = aggregate.get("provider_loopback_http", {})
+    provider_summary = aggregate.get("provider_loopback_http", {})
     for metric in metrics:
         left = builtin.get(metric, "")
-        right = openclaw.get(metric, "")
+        right = provider_summary.get(metric, "")
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             gap = right - left
         else:
@@ -315,8 +315,8 @@ with failures_md.open("w") as handle:
 scorecard_links = out_dir / "scorecard-links.md"
 with scorecard_links.open("w") as handle:
     handle.write(f"# Scorecard Links for {run_id}\n\n")
-    handle.write("- QA 评分卡路径: doc/world-simulator/prd/acceptance/openclaw-agent-parity-score-card-2026-03-12.md\n")
-    handle.write("- Producer 评分卡路径: doc/world-simulator/prd/acceptance/openclaw-agent-parity-score-card-2026-03-12.md\n")
+    handle.write("- QA 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md\n")
+    handle.write("- Producer 评分卡路径: doc/world-simulator/prd/acceptance/provider-agent-parity-score-card-2026-03-12.md\n")
     handle.write(f"- 自动 benchmark 证据路径: {summary_dir}\n")
     handle.write(f"- 样本输出根目录: {out_dir / 'samples'}\n")
 PY

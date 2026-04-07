@@ -1,7 +1,7 @@
-# OpenClaw 双轨模式 Observation / Action Contract 冻结（2026-03-16）
+# Local Provider 双轨模式 Observation / Action Contract 冻结（2026-03-16）
 
 - 关联 PRD: `PRD-WORLD_SIMULATOR-040`
-- 关联项目: `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md`
+- 关联项目: `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
 - owner: `agent_engineer`
 - 联审: `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 执行任务: `TASK-WORLD_SIMULATOR-149`
@@ -126,7 +126,7 @@
   - `confidence?`
 
 ### 5.2 首期允许动作
-首期双轨模式冻结为与 OpenClaw `P0` 对齐的低频动作白名单：
+首期双轨模式冻结为与 Local Provider `P0` 对齐的低频动作白名单：
 - `wait`
 - `wait_ticks`
 - `move_agent`

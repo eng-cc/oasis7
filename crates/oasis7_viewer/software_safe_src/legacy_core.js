@@ -563,7 +563,7 @@ function buildSemanticCapability(actionId) {
       enabled: false,
       code: "observer_only",
       reason:
-        "selected agent runs through the OpenClaw-backed loopback provider; software_safe stays observer-only for prompt/chat on this lane",
+        "selected agent runs through the provider-backed loopback bridge; software_safe stays observer-only for prompt/chat on this lane",
     };
   }
   if (policy) {
@@ -3256,7 +3256,7 @@ function renderInteractionPanel() {
        </div>`
     : "";
   const authNotice = debugContext?.provider_mode === "provider_loopback_http"
-    ? `<div class="empty">Selected agent currently runs through the OpenClaw-backed loopback provider in ${escapeHtml(debugContext?.execution_mode || "headless_agent")}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.</div>`
+    ? `<div class="empty">Selected agent currently runs through the provider-backed loopback bridge in ${escapeHtml(debugContext?.execution_mode || "headless_agent")}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.</div>`
     : interactionEnabled
       ? `<div class="badge-row"><span class="badge badge--good">${escapeHtml(authSurface.currentTier)}</span><span class="badge">player=${escapeHtml(state.auth.playerId)}</span><span class="badge">source=${escapeHtml(authSurface.source)}</span></div>
          <div class="empty">${escapeHtml(promptCapability.reason)}</div>`

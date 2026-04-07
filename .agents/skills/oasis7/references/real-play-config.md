@@ -2,32 +2,32 @@
 
 ## Required Settings
 
-Use these exact values for a real local OpenClaw gameplay run:
+Use these exact values for a real local Local Provider gameplay run:
 
 - `agent_provider_mode=provider_loopback_http`
-- `openclaw_base_url=http://127.0.0.1:5841`
-- `openclaw_connect_timeout_ms=15000`
-- `openclaw_agent_profile=oasis7_p0_low_freq_npc`
+- `agent_provider_url=http://127.0.0.1:5841`
+- `agent_provider_connect_timeout_ms=15000`
+- `agent_provider_profile=oasis7_p0_low_freq_npc`
 
 Compatibility note:
 
-- `openclaw_local_http` remains accepted as a legacy alias for `agent_provider_mode`
+- `provider_loopback_http` remains accepted as a legacy alias for `agent_provider_mode`
 
 ## Process Ownership
 
-- `127.0.0.1:18789`: OpenClaw Gateway
+- `127.0.0.1:18789`: Local Provider Gateway
 - `127.0.0.1:5841`: oasis7 local bridge
 
 ## Execution Modes And Viewer Contract
 
 Read the real-play path in two layers:
 
-- OpenClaw execution layer: `headless_agent` or `player_parity`
+- Local Provider execution layer: `headless_agent` or `player_parity`
 - optional observation layer: Viewer / `debug_viewer`
 
 Operator rule:
 
-- OpenClaw real-play does not require a Viewer to keep running
+- Local Provider real-play does not require a Viewer to keep running
 - `headless_agent` is the default regression/server lane
 - `player_parity` is the lane to use when a human is judging player feel
 - detailed Viewer / `software_safe` / observer-only UI guidance lives in `references/viewer-ui-lanes.md`
@@ -66,7 +66,7 @@ bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
 
 ## Chain Default and Node Key Safety
 
-Current default: the `run-game.sh` / `oasis7_game_launcher` product path still starts `oasis7_chain_runtime` unless you explicitly pass `--chain-disable`. So even in OpenClaw mode, the selected chain profile may load node key material.
+Current default: the `run-game.sh` / `oasis7_game_launcher` product path still starts `oasis7_chain_runtime` unless you explicitly pass `--chain-disable`. So even in Local Provider mode, the selected chain profile may load node key material.
 
 Operator rules:
 
@@ -74,11 +74,11 @@ Operator rules:
 - `node public key`: shareable when needed, but still treat it as environment-specific node identity metadata
 - local real-play / debugging should prefer disposable `chain storage profile` data when you do not need a persistent on-chain identity
 - if you intentionally reuse a persistent profile, treat it like a wallet/validator identity and confirm backup + rotation ownership before recording or screen sharing
-- if you only want OpenClaw NPC behavior and do not need chain state, add `--chain-disable` when launching outside the current `oasis7-run.sh play` helper
+- if you only want Local Provider NPC behavior and do not need chain state, add `--chain-disable` when launching outside the current `oasis7-run.sh play` helper
 
 ## Bundle-First Entry
 
-For a real试玩，先下载 GitHub Release 的游戏包，再把 OpenClaw provider 配到 bundle：
+For a real试玩，先下载 GitHub Release 的游戏包，再把 Local Provider provider 配到 bundle：
 
 - latest Linux bundle: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.tar.gz`
 - latest macOS bundle: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.tar.gz`
@@ -112,9 +112,9 @@ Prefer the repo-owned lightweight runtime agent:
   --scenario llm_bootstrap \
   --with-llm \
   --agent-provider-mode provider_loopback_http \
-  --openclaw-base-url http://127.0.0.1:5841 \
-  --openclaw-connect-timeout-ms 15000 \
-  --openclaw-agent-profile oasis7_p0_low_freq_npc
+  --agent-provider-url http://127.0.0.1:5841 \
+  --agent-provider-connect-timeout-ms 15000 \
+  --agent-provider-profile oasis7_p0_low_freq_npc
 ```
 
 ### Repo source path
@@ -124,9 +124,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
   --scenario llm_bootstrap \
   --with-llm \
   --agent-provider-mode provider_loopback_http \
-  --openclaw-base-url http://127.0.0.1:5841 \
-  --openclaw-connect-timeout-ms 15000 \
-  --openclaw-agent-profile oasis7_p0_low_freq_npc
+  --agent-provider-url http://127.0.0.1:5841 \
+  --agent-provider-connect-timeout-ms 15000 \
+  --agent-provider-profile oasis7_p0_low_freq_npc
 ```
 
 ### Bundle + wrapper path
@@ -154,13 +154,13 @@ So a downloaded game bundle is enough for real play. If bridge and runtime agent
 
 ```bash
 bash scripts/provider-parity-p0.sh \
-  --openclaw-only \
+  --provider-only \
   --samples 1 \
   --ticks 4 \
   --timeout-ms 15000 \
-  --openclaw-base-url http://127.0.0.1:5841 \
-  --openclaw-connect-timeout-ms 15000 \
-  --openclaw-agent-profile oasis7_p0_low_freq_npc
+  --agent-provider-url http://127.0.0.1:5841 \
+  --agent-provider-connect-timeout-ms 15000 \
+  --agent-provider-profile oasis7_p0_low_freq_npc
 ```
 
 ## Doctor Contract

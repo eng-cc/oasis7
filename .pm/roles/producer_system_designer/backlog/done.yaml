@@ -63,8 +63,8 @@ tasks:
     priority: P1
     source_signal: SIG-PM-0012
     related_prd:
-      - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md
-      - doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md
+      - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
+      - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
     acceptance:
       - "Formal review document captures direct-connect design/implementation mismatches with source refs"
       - "world-simulator project tracking links the review and follow-up remediation tasks"
@@ -141,7 +141,7 @@ tasks:
     status: done
     task_path: .pm/tasks/task_29852e408c314ad58a143a4451e980d3.yaml
   - task_uid: task_bf477b3a0333411d8fa8bc2a130d1f16
-    title: "彻底重构 agent provider taxonomy 与 OpenClaw 命名模型"
+    title: "彻底重构 agent provider taxonomy 与旧 provider brand 命名模型"
     priority: P1
     source_signal: null
     related_prd:
@@ -150,13 +150,13 @@ tasks:
       - PRD-WORLD_SIMULATOR-040
     acceptance:
       - "玩家访问模式、决策来源、provider backend/contract/transport 与 execution lane 四层命名在 core/world-simulator/testing/launcher 中保持单义且可追溯"
-      - "launcher/client launcher/runtime 不再把 openclaw_local_http 当作主用户口径或唯一配置模型，旧 alias 仅保留兼容解析"
+      - "launcher/client launcher/runtime 不再把 provider_loopback_http 当作主用户口径或唯一配置模型，旧 alias 仅保留兼容解析"
       - "targeted docs/tests/gates through doc-governance, diff checks, and targeted cargo tests"
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_bf477b3a0333411d8fa8bc2a130d1f16.yaml
   - task_uid: task_7fc83a5053f84a8a83624ebebcb719c5
-    title: "彻底清理 OpenClaw public/structural naming 残留"
+    title: "彻底清理旧 provider public/structural naming 残留"
     priority: P1
     source_signal: null
     related_prd:
@@ -164,8 +164,8 @@ tasks:
       - PRD-WORLD_SIMULATOR-037
       - PRD-WORLD_SIMULATOR-040
     acceptance:
-      - "public-facing docs/help/examples stop using openclaw_local_http and --openclaw-* as primary naming"
-      - "internal module/bin/script naming no longer retains openclaw_* where the semantics are generic provider bridge/runtime/parity"
+      - "public-facing docs/help/examples stop using retired provider flags or aliases as primary naming"
+      - "internal module/bin/script naming no longer retains retired provider-specific prefixes where the semantics are generic provider bridge/runtime/parity"
       - "compatibility parsing remains available where required, with docs/tests updated accordingly"
     handoff_to: []
     status: done
@@ -186,6 +186,21 @@ tasks:
       - liveops_community
     status: done
     task_path: .pm/tasks/task_7d1450a5350f4772b49769da68d68316.yaml
+  - task_uid: task_d35fcf0504a6400ca75d6891f4b5a24f
+    title: "全仓彻底清理旧 provider 直连命名残留"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-CORE-009
+      - PRD-WORLD_SIMULATOR-037
+      - PRD-WORLD_SIMULATOR-040
+    acceptance:
+      - "repository active/docs/code/scripts/operator paths no longer retain retired provider branding"
+      - "historical/current docs are reconciled with final canonical naming or explicitly rewritten"
+      - "compatibility behavior is either removed or renamed consistently with migration intent"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_d35fcf0504a6400ca75d6891f4b5a24f.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2
@@ -397,14 +412,14 @@ tasks:
     status: done
     task_path: .pm/tasks/task_7ebfc181e1a04649b1ffcf5671955660.yaml
   - task_uid: task_41e1aad0d5b54a20839d92b0bd58fbec
-    title: "收口 agent 直连接入方式 taxonomy，替换 OpenClaw mode 歧义口径"
+    title: "收口 agent 直连接入方式 taxonomy，替换 legacy provider mode 歧义口径"
     priority: P2
     source_signal: null
     related_prd:
       - doc/core/player-access-mode-contract-2026-03-19.prd.md
     acceptance:
       - "core 契约明确区分玩家访问模式、agent 接入方式、provider 实现与 execution lane"
-      - "下游 world-simulator/testing/manual 等活跃文档不再把 OpenClaw mode 当产品模式使用"
+      - "下游 world-simulator/testing/manual 等活跃文档不再把 legacy provider mode 当产品模式使用"
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_41e1aad0d5b54a20839d92b0bd58fbec.yaml

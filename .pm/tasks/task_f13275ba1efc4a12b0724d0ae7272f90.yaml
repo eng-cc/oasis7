@@ -9,8 +9,8 @@ source_signal: null
 source_refs:
   - doc/world-simulator/project.md
 doc_refs:
-  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md
-  - doc/world-simulator/llm/openclaw-agent-dual-mode-contract-2026-03-16.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md
+  - doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md
 related_prd:
   - PRD-WORLD_SIMULATOR-040
 acceptance:

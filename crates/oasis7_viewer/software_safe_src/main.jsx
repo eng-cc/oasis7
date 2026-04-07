@@ -684,7 +684,7 @@ function InteractionPanel() {
       </div>
       <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
         <EmptyState>
-          {`Selected agent currently runs through the OpenClaw-backed loopback provider in ${
+          {`Selected agent currently runs through the provider-backed loopback bridge in ${
             debugContext()?.execution_mode || "headless_agent"
           }; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`}
         </EmptyState>

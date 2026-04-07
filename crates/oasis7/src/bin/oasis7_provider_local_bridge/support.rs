@@ -15,12 +15,12 @@ pub(super) fn agent_output_from_json(
     payload: &str,
     route_note: Option<String>,
 ) -> Result<AgentInvocationOutput, String> {
-    let parsed = parse_openclaw_agent_command_output(payload)?;
+    let parsed = parse_provider_agent_command_output(payload)?;
     let text = parsed
         .payloads
         .into_iter()
         .find_map(|entry| entry.text)
-        .ok_or_else(|| "openclaw agent json did not contain payloads[].text".to_string())?;
+        .ok_or_else(|| "provider agent json did not contain payloads[].text".to_string())?;
     Ok(AgentInvocationOutput {
         prompt,
         text,
@@ -59,48 +59,48 @@ pub(super) fn agent_output_from_json(
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentCliOutput {
-    result: OpenClawAgentCliResult,
+struct ProviderAgentCliOutput {
+    result: ProviderAgentCliResult,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum OpenClawAgentCommandOutput {
-    Gateway(OpenClawAgentCliOutput),
-    Local(OpenClawAgentCliResult),
+enum ProviderAgentCommandOutput {
+    Gateway(ProviderAgentCliOutput),
+    Local(ProviderAgentCliResult),
 }
 
-fn parse_openclaw_agent_command_output(payload: &str) -> Result<OpenClawAgentCliResult, String> {
-    match serde_json::from_str::<OpenClawAgentCommandOutput>(payload) {
-        Ok(OpenClawAgentCommandOutput::Gateway(output)) => Ok(output.result),
-        Ok(OpenClawAgentCommandOutput::Local(result)) => Ok(result),
-        Err(err) => Err(format!("parse openclaw agent json failed: {err}")),
+fn parse_provider_agent_command_output(payload: &str) -> Result<ProviderAgentCliResult, String> {
+    match serde_json::from_str::<ProviderAgentCommandOutput>(payload) {
+        Ok(ProviderAgentCommandOutput::Gateway(output)) => Ok(output.result),
+        Ok(ProviderAgentCommandOutput::Local(result)) => Ok(result),
+        Err(err) => Err(format!("parse provider agent json failed: {err}")),
     }
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentCliResult {
-    payloads: Vec<OpenClawAgentPayload>,
+struct ProviderAgentCliResult {
+    payloads: Vec<ProviderAgentPayload>,
     #[serde(default)]
-    meta: Option<OpenClawAgentMeta>,
+    meta: Option<ProviderAgentMeta>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentPayload {
+struct ProviderAgentPayload {
     #[serde(default)]
     text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentMeta {
+struct ProviderAgentMeta {
     #[serde(rename = "durationMs", default)]
     duration_ms: Option<u64>,
     #[serde(rename = "agentMeta", default)]
-    agent_meta: Option<OpenClawAgentMetaDetails>,
+    agent_meta: Option<ProviderAgentMetaDetails>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentMetaDetails {
+struct ProviderAgentMetaDetails {
     #[serde(default)]
     provider: Option<String>,
     #[serde(default)]
@@ -108,11 +108,11 @@ struct OpenClawAgentMetaDetails {
     #[serde(rename = "promptTokens", default)]
     prompt_tokens: Option<u64>,
     #[serde(default)]
-    usage: Option<OpenClawAgentUsage>,
+    usage: Option<ProviderAgentUsage>,
 }
 
 #[derive(Debug, Deserialize)]
-struct OpenClawAgentUsage {
+struct ProviderAgentUsage {
     #[serde(default)]
     output: Option<u64>,
     #[serde(default)]

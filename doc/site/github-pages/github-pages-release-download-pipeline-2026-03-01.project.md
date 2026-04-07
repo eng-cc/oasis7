@@ -149,8 +149,8 @@
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否终于全绿并让 aggregate `release_gate` 进入后续打包链路。
 
 ### T3T Release gate runtime agent chat env 串味修复（2026-03-14）
-- [x] 复盘 `Release Packages` run `23082322519`，确认 `release-gate-runtime` 唯一阻断为 `viewer::runtime_live::tests::runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_chat`；失败签名显示预期 `session_revoked`，实际收到 `agent_provider_chat_unsupported`，说明并行单测期间 OpenClaw provider 环境变量串入了本应跑 LLM chat 路径的测试。
-- [x] 调整 `crates/oasis7/src/viewer/runtime_live/tests.rs`：新增 `lock_test_llm_env()`，复用 `runtime_openclaw_env_lock()` 与 `clear_runtime_openclaw_env()`，让 3 个 LLM agent chat / authoritative recovery 测试在设置 LLM env 前统一拿锁并清理 OpenClaw env，避免全局环境变量并发串味。
+- [x] 复盘 `Release Packages` run `23082322519`，确认 `release-gate-runtime` 唯一阻断为 `viewer::runtime_live::tests::runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_chat`；失败签名显示预期 `session_revoked`，实际收到 `agent_provider_chat_unsupported`，说明并行单测期间 provider 环境变量串入了本应跑 LLM chat 路径的测试。
+- [x] 调整 `crates/oasis7/src/viewer/runtime_live/tests.rs`：新增 `lock_test_llm_env()`，复用 `runtime_provider_env_lock()` 与 `clear_runtime_provider_env()`，让 3 个 LLM agent chat / authoritative recovery 测试在设置 LLM env 前统一拿锁并清理 provider env，避免全局环境变量并发串味。
 - [x] 本地定向回归 `viewer::runtime_live::tests::runtime_agent_chat_replay_returns_idempotent_ack`、`viewer::runtime_live::tests::runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change`、`viewer::runtime_live::tests::runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_chat`，均已通过。
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-runtime` 是否绿，并让 aggregate `release_gate` 真正放行到打包阶段。
 

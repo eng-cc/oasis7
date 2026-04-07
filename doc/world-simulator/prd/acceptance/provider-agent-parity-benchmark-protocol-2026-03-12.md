@@ -1,9 +1,9 @@
-# OpenClaw vs 内置 Agent parity benchmark 协议（2026-03-12）
+# Local Provider vs 内置 Agent parity benchmark 协议（2026-03-12）
 
 审计轮次: 1
 
 ## 目标
-- 为 `PRD-WORLD_SIMULATOR-038` 冻结 builtin 与 `OpenClaw(Local HTTP)` 的统一 fixture benchmark 协议，避免不同 provider 使用不同输入条件导致结果不可比。
+- 为 `PRD-WORLD_SIMULATOR-038` 冻结 builtin 与 `Local Provider(Local HTTP)` 的统一 fixture benchmark 协议，避免不同 provider 使用不同输入条件导致结果不可比。
 - 定义 benchmark 运行时所需的固定字段、trace 收集要求、输出产物与失败签名分类。
 - 为后续自动脚本实现提供稳定契约，使 `test_tier_required` 可以在 mock provider 与 builtin provider 上离线复用。
 
@@ -15,7 +15,7 @@
   - 错误码分类与 benchmark 结果状态。
 - Out of Scope:
   - 不直接定义最终脚本实现语言或 CLI 细节。
-  - 不包含真实 `OpenClaw` 服务端实现。
+  - 不包含真实 `Local Provider` 服务端实现。
 
 ## Benchmark 输入协议
 
@@ -24,7 +24,7 @@
 - `parity_tier`: `P0` / `P1` / `P2`。
 - `scenario_id`: 取自 parity 场景矩阵。
 - `fixture_id`: 固定 observation/seed 样本 ID。
-- `provider_kind`: `builtin` / `openclaw_local_http` / `mock_openclaw`。
+- `provider_kind`: `builtin` / `provider_loopback_http` / `mock_provider`。
 - `provider_version`: provider 自报版本。
 - `adapter_version`: adapter 自报版本。
 - `protocol_version`: benchmark 协议版本。
@@ -41,7 +41,7 @@
 - `memory_fixture_ref`: 预置短期/长期记忆样本引用（如适用）。
 
 ### 3. Provider 执行约束
-- builtin 与 OpenClaw 必须使用同一 `fixture_id`、`seed`、`timeout_ms`、`max_steps`。
+- builtin 与 Local Provider 必须使用同一 `fixture_id`、`seed`、`timeout_ms`、`max_steps`。
 - 若任一输入引用缺失，则该样本直接标记 `invalid_fixture`，不得进入正式对比结果。
 - provider 不得绕过 benchmark 提供的动作白名单或额外读取未声明上下文。
 
@@ -96,7 +96,7 @@
 ## 产物结构
 - `artifacts/<run_id>/raw/*.jsonl`: 每步 trace 原始记录。
 - `artifacts/<run_id>/summary/<scenario_id>.<provider>.json`: 单场景聚合结果。
-- `artifacts/<run_id>/summary/combined.csv`: builtin 与 OpenClaw 并排对比表。
+- `artifacts/<run_id>/summary/combined.csv`: builtin 与 Local Provider 并排对比表。
 - `artifacts/<run_id>/summary/failures.md`: 失败签名与阻断项摘要。
 - `artifacts/<run_id>/scorecard-links.md`: 对应主观评分卡和截图/trace 链接。
 
@@ -124,5 +124,5 @@
 
 ## 风险与约束
 - 若 `trace_present` 仅记录布尔值而缺具体 trace 字段计数，后续会难以追根因。
-- 若 combined.csv 不并排输出 builtin/OpenClaw，同层对比会增加误读风险。
+- 若 combined.csv 不并排输出 builtin/Local Provider，同层对比会增加误读风险。
 - 若错误码粒度过粗，失败签名会失去行动指导意义。

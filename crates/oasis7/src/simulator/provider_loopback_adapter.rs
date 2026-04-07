@@ -136,9 +136,9 @@ impl ProviderLoopbackAdapter {
             } => DecisionProviderError::new(
                 format!("provider_http_{status_code}"),
                 if body.is_empty() {
-                    format!("OpenClaw returned HTTP {status_code}")
+                    format!("provider loopback bridge returned HTTP {status_code}")
                 } else {
-                    format!("OpenClaw returned HTTP {status_code}: {body}")
+                    format!("provider loopback bridge returned HTTP {status_code}: {body}")
                 },
                 status_code >= 500,
             ),
@@ -156,7 +156,7 @@ impl ProviderLoopbackAdapter {
             ack.error_code
                 .unwrap_or_else(|| "feedback_rejected".to_string()),
             ack.error
-                .unwrap_or_else(|| "OpenClaw feedback endpoint rejected payload".to_string()),
+                .unwrap_or_else(|| "provider feedback endpoint rejected payload".to_string()),
             false,
         ))
     }

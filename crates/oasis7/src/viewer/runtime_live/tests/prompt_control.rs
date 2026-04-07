@@ -416,12 +416,12 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
 }
 
 #[test]
-fn runtime_prompt_control_openclaw_mode_reports_unsupported() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+fn runtime_prompt_control_provider_mode_reports_unsupported() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -456,9 +456,9 @@ fn runtime_prompt_control_openclaw_mode_reports_unsupported() {
     );
     let err = server
         .handle_prompt_control(crate::viewer::PromptControlCommand::Apply { request })
-        .expect_err("openclaw mode should reject prompt control");
+        .expect_err("provider mode should reject prompt control");
     assert_eq!(err.code, "agent_provider_prompt_control_unsupported");
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]

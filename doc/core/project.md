@@ -237,15 +237,15 @@
 - [x] TASK-CORE-047 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-010 `headless-runtime` 入口分流收口，为命名迁移模块 README 增加轻量阅读顺序，并明确 README 与 `nonviewer/` / `checklists/` / `templates/` / `prd.index.md` 的边界。
 - [x] TASK-CORE-048 (PRD-CORE-003/008) [test_tier_required]: 完成 ROUND-010 `qa_engineer` 复审与关轮，冻结 focused scope 的 `aligned/deferred` 终态并回写阻断结论。
 - [x] TASK-CORE-049 (PRD-CORE-009) [test_tier_required]: 按最新产品设定把 `pure_api` 的正式游玩口径收口为“必须启用且可连通 LLM”，同步更新 core 契约、README/testing/manual、game/world-simulator 当前入口与相关启动脚本帮助文本。
-- [x] TASK-CORE-050 (PRD-CORE-009) [test_tier_required]: 将旧“OpenClaw mode”术语收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”三层，并同步对齐 core/world-simulator/testing 文档与 launcher/client launcher 用户文案。
+- [x] TASK-CORE-050 (PRD-CORE-009) [test_tier_required]: 将旧单字段 provider mode 术语收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”三层，并同步对齐 core/world-simulator/testing 文档与 launcher/client launcher 用户文案。
   - 产物文件:
     - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/core/project.md`
     - `testing-manual.md`
     - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md`
+    - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
     - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
     - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
     - `crates/oasis7_client_launcher/src/{launcher_core.rs,main.rs,main_tests.rs}`
@@ -274,8 +274,8 @@
     - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
-    - `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.{prd,project}.md`
-    - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.{prd,project}.md`
+    - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md`
     - `testing-manual.md`
     - `crates/oasis7_client_launcher/src/{main.rs,launcher_core.rs,config_ui.rs,feedback_window.rs,main_tests.rs}`
     - `crates/oasis7_launcher_ui/src/lib.rs`
@@ -286,11 +286,11 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 provider_settings_from_env_parses_profile_and_timeout -- --nocapture`
 - [x] TASK-CORE-053 (PRD-CORE-009) [test_tier_required]: 按最新产品设定重写三模式总契约，把 `software_safe` 升格为主要正式 Web 入口、把 `standard_3d` 收口为 opt-in visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 定位；同步回写 core/world-simulator 相关 topic project 状态，但不提前改写仍描述“当前实现”的 public entry 文案。
 - [ ] TASK-CORE-054 (PRD-CORE-009) [test_tier_required]: 在 `software_safe` 默认主入口实现与 QA 证据完成后，再统一更新 README/testing/manual/current-entry 文案，避免设计目标与已上线行为混写。
-- [x] TASK-CORE-055 (PRD-CORE-009) [test_tier_required]: 继续清理 OpenClaw naming 在活跃结构层的残留，把 canonical implementation 收口为 `provider_loopback_http`，并将 bridge/parity/script/workspace 的默认 operator 路径切到 generic provider 命名，仅保留 `openclaw_local_http` 为兼容 alias、`openclaw` 为 backend 真值。
+- [x] TASK-CORE-055 (PRD-CORE-009) [test_tier_required]: 继续清理旧 provider branding 在活跃结构层的残留，把 canonical implementation 收口为 `provider_loopback_http`，并将 bridge/parity/script/workspace 的默认 operator 路径切到 generic provider 命名，不再把退役 alias 或旧 backend brand 作为当前真值。
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/project.md`
@@ -331,11 +331,11 @@
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 最新完成: `TASK-CORE-053`（已将 `software_safe` 重写为主要正式 Web 入口，将 `standard_3d` 收口为 visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 角色。）
 - 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
-- 最新完成: `TASK-CORE-055`（已将活跃结构层的 OpenClaw naming 继续收口到 `provider_loopback_http` / `oasis7_provider_*` / `oasis7_provider_agent`，旧 `openclaw_local_http` 仅保留兼容解析，`openclaw` 只保留 backend 真值。）
+- 最新完成: `TASK-CORE-055`（已将活跃结构层的旧 provider branding 继续收口到 `provider_loopback_http` / `oasis7_provider_*` / `oasis7_provider_agent`，退役 alias 不再作为当前 operator-facing 真值。）
 - 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。
 - 最新完成: `TASK-CORE-049`（已将 `pure_api` 从 no-LLM 可玩口径回收为 LLM-required formal gameplay，并同步 core/README/testing/manual/game/world-simulator 当前入口与脚本帮助文本。）
-- 最新完成: `TASK-CORE-050`（已将旧“OpenClaw mode”收口为 `agent_direct_connect` 接入方式、`provider_loopback_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）
+- 最新完成: `TASK-CORE-050`（已将旧单字段 provider mode 收口为 `agent_direct_connect` 接入方式、`provider_loopback_http` provider implementation 与 execution lane 三层，并同步 core/world-simulator/testing 文档和 launcher/client launcher 用户文案。）
 - 最新完成: `TASK-CORE-005`（已完成 ROUND-001~ROUND-008 一致性审查链路收口、任务归档与 QA handoff）。
 - 最新完成: `TASK-CORE-016`（已完成下一轮跨模块优先级清单与第一优先级选择）。
 - 最新完成: `TASK-CORE-017`（已完成发布候选 readiness 统一入口定义）。

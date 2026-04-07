@@ -22,7 +22,7 @@
   - 它可以覆盖 `software_safe`、launcher/runtime interaction，必要时也可涵盖 `pure_api` 相关闭环；
   - 它不能回答“玩家现在走的是哪种产品入口”。
 - 将 `agent_direct_connect/provider_loopback_http` 统一视为兼容迁移 alias：
-  - 它们描述的是旧 UI/CLI/operator 曾如何称呼当前 OpenClaw 直连路径；
+  - 它们描述的是旧 UI/CLI/operator 曾如何称呼当前 provider 直连路径；
   - 当前正式 operator-facing provider 模型必须写成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`；
   - 它们不能回答“玩家现在走的是哪种产品入口”，也不能继续充当唯一配置模型。
 - 将 `player_parity / headless_agent / debug_viewer` 统一视为 execution lane：
@@ -66,9 +66,9 @@
 
 ### 3.4 Terminology Compatibility Layer
 - 兼容迁移表：
-  - 旧“OpenClaw 模式” -> 新“兼容 alias `agent_direct_connect/provider_loopback_http` + 正式 provider 维度 `agent_decision_source + agent_provider_*` + execution lane”
+  - 旧“单字段 provider 模式” -> 新“兼容 alias `agent_direct_connect/provider_loopback_http` + 正式 provider 维度 `agent_decision_source + agent_provider_*` + execution lane”
   - 旧“Agent Provider Mode=provider_loopback_http” -> 新“配置/CLI/env 以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile` 为主；`agent_provider_mode` 仅保留兼容解析”
-  - 旧“OpenClaw player mode” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，OpenClaw 相关字段只能作为附加维度”
+  - 旧“把 provider 直连当玩家模式的口径” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，provider 相关字段只能作为附加维度”
   - 旧“non-3D 模式 / 2D 入口” -> 新“当前 delivery priority 或 interaction scope；若要表达真实玩家入口，必须回到 `standard_3d / software_safe / pure_api`”
 
 ### 3.5 Downstream Ownership
@@ -77,7 +77,7 @@
 - `game/*`：
   - 负责 `pure_api` 的 canonical 玩家语义、动作面与 parity。
 - `world-simulator/llm/*`：
-  - 负责 OpenClaw provider-backed 路径、execution lane 与 provider contract；兼容 alias 只保留迁移说明。
+  - 负责 provider-backed 路径、execution lane 与 provider contract；兼容 alias 只保留迁移说明。
 - `testing-manual.md`：
   - 负责把脚本、证据与放行结论绑定到正确模式。
 
@@ -94,7 +94,7 @@
 - `standard_3d` 命中 software renderer：
   - 若显式 `render_mode=standard` -> `blocked_by=graphics_env`
   - 不得自动把视觉 QA 结论转写成 `software_safe` PASS
-- `software_safe` 命中 OpenClaw observer-only：
+- `software_safe` 命中 provider observer-only：
   - 结论是“主 Web UI 与旁路观战链路可用”，不是“Viewer 是主执行依赖”
 - `software_safe` 缺少未纳入其 envelope 的动作：
   - 必须记 `not_exposed_on_software_safe` 并给出 handoff surface

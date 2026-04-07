@@ -16,7 +16,7 @@
 - [x] T8 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` 为 `software_safe` 补 prompt/chat/rollback/message-flow 回归方案与专用 agent-browser 脚本，沉淀 `agent_spoke` 缺失的失败签名。
 - [x] T9 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `runtime_engineer` / `viewer_engineer` 补齐 `agent_chat -> AgentSpoke` 的测试态稳定触发链路，并修正 software-safe 对 runtime 事件形状的兼容解析。
 - [x] T10 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 source-tree Viewer Web 入口补齐 dist freshness gate，确保 `oasis7-run.sh play` / Web 闭环在 `index.html`、`software_safe.*` 或静态资源漂移时优先重建 fresh dist，而不是继续消费 stale `crates/oasis7_viewer/dist`。
-- [x] T11 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 重构 `oasis7` operator 口径，明确 `headless_agent` 是 OpenClaw 主执行/回归 lane，Viewer 仅承担 `player_parity` / `debug_viewer` / `software_safe` 的体验、观战与弱图形观察职责，并写清当前 OpenClaw real-play 下 `prompt/chat` 的 observer-only 边界。
+- [x] T11 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 重构 `oasis7` operator 口径，明确 `headless_agent` 是 Local Provider 主执行/回归 lane，Viewer 仅承担 `player_parity` / `debug_viewer` / `software_safe` 的体验、观战与弱图形观察职责，并写清当前 Local Provider real-play 下 `prompt/chat` 的 observer-only 边界。
 - [x] T12 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 将 `oasis7` 主入口中的 UI/observer 细节拆到独立 reference，保持主 skill 聚焦执行闭环，仅保留最小 UI 结论与跳转关系。
 - [x] T13 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复标准模式 bootstrap loading overlay 在 wasm 已启动后仍残留并压缩左侧视口的问题，补齐 cleanup 生命周期与最小回归验证。
 - [x] T14 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` UI 渲染层迁到 SolidJS 组件架构，保留既有 `software_safe.js` 产物/协议契约，并把 freshness gate 扩到 Solid 构建输入。
@@ -45,7 +45,7 @@
 - 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
 - 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
 - 当前阶段：T18~T20 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地；剩余 `T21` 负责按新 contract 重跑 formal gameplay vs visual QA 证据。
-- 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 OpenClaw runtime live 下的 observer-only 提示。
+- 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 provider runtime live 下的 observer-only 提示。
 - 最近更新：2026-04-07（`viewer_engineer` 已将默认 Web / launcher / bootstrap 改为以 `software_safe` 为正式主入口，并在页面顶层补齐 canonical gameplay summary 与显式 handoff surface；下一步只剩 `qa_engineer` / `producer_system_designer` 重跑新 contract 证据。）
 - 阻塞项：`T21` formal gameplay vs visual QA 证据尚未重跑，README / current-entry / release claim 仍不得先于证据把该改向表述成“已完成上线行为”。
 

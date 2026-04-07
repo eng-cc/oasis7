@@ -24,7 +24,7 @@
     - `rg -n "先看技术预览路径|See Preview Verification Path|优先级：预览体验入口优先|Priority: preview experience first" site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SITE-012 (PRD-SITE-003) [test_tier_required]: 为 completed 状态的 `doc/site/project.md` 补齐“最新完成”摘要，保持模块项目状态栏格式一致。
-- [x] TASK-SITE-013 (PRD-SITE-007) [test_tier_required]: 同步中英首页的预览访问面口径，明确 `standard_3d / software_safe / pure_api` 是当前技术验证访问面，`LLM/script` 与 OpenClaw lane 只属于执行方式而非额外公开模式。
+- [x] TASK-SITE-013 (PRD-SITE-007) [test_tier_required]: 同步中英首页的预览访问面口径，明确 `standard_3d / software_safe / pure_api` 是当前技术验证访问面，`LLM/script` 与 provider-backed lane 只属于执行方式而非额外公开模式。
 - [x] TASK-SITE-014 (PRD-SITE-003) [test_tier_required]: 修复 `scripts/site-manual-sync-check.sh` 的 viewer manual 基线命令，追平 `test_api=1` 新入口，解除 Pages `Site Quality Gates` 的假失败。
 - [x] TASK-SITE-015 (PRD-SITE-008) [test_tier_required]: 统一 `site/**`、GitHub Release 下载入口、站点检查脚本与 release workflow 的公开品牌为 `oasis7`，并同步 `eng-cc/oasis7` 仓库路径与 `oasis7-*` 资产名。
 - [x] TASK-SITE-016 (PRD-SITE-008) [test_tier_required]: 对 `doc/site/github-pages/**` 的仍可读历史专题执行 title-only cleanup，将首行 `oasis7*` 公开标题统一切到 `oasis7*`，保留正文历史证据原文不动。

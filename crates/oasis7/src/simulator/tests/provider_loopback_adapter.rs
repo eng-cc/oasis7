@@ -39,13 +39,13 @@ fn provider_loopback_adapter_decides_and_pushes_feedback_via_local_http() {
         decision: fixture.expected_decision,
         provider_error: None,
         diagnostics: ProviderDiagnostics {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             provider_version: Some("0.1.0".to_string()),
             latency_ms: Some(37),
             retry_count: 0,
         },
         trace_payload: ProviderTraceEnvelope {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             output_summary: Some("decision=move_agent(to=loc-2)".to_string()),
             latency_ms: Some(37),
             ..ProviderTraceEnvelope::default()
@@ -185,7 +185,7 @@ fn setup_kernel_with_provider_agent(agent_id: &str) -> WorldKernel {
     kernel
 }
 
-fn openclaw_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
+fn provider_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
     vec![
         ActionCatalogEntry::new("wait", "Skip this tick"),
         ActionCatalogEntry::new("wait_ticks", "Pause for fixed ticks"),
@@ -212,13 +212,13 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_
         },
         provider_error: None,
         diagnostics: ProviderDiagnostics {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             provider_version: Some("0.1.0".to_string()),
             latency_ms: Some(33),
             retry_count: 0,
         },
         trace_payload: ProviderTraceEnvelope {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             output_summary: Some("decision=move_agent(to=loc-2)".to_string()),
             latency_ms: Some(33),
             ..ProviderTraceEnvelope::default()
@@ -272,8 +272,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog())
-            .with_provider_config_ref("openclaw://local-http")
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog())
+            .with_provider_config_ref("provider://loopback-http")
             .with_agent_profile("oasis7_p0_low_freq_npc")
             .with_environment_class("adapter_test")
             .with_fixture_id("fixture.adapter.move")
@@ -339,7 +339,7 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_speak_action() {
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
@@ -388,7 +388,7 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_inspect_action() 
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
@@ -438,7 +438,7 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_simple_interact_a
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
@@ -474,7 +474,7 @@ fn provider_backed_behavior_downgrades_provider_loopback_adapter_unsupported_sem
 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
-        ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
+        ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
     let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 

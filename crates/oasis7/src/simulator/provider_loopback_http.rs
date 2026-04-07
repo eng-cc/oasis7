@@ -229,23 +229,22 @@ pub enum ProviderLoopbackHttpError {
 impl fmt::Display for ProviderLoopbackHttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidBaseUrl(detail) => write!(f, "invalid openclaw base url: {detail}"),
+            Self::InvalidBaseUrl(detail) => {
+                write!(f, "invalid provider loopback base url: {detail}")
+            }
             Self::RequestFailed { path, detail } => {
-                write!(f, "openclaw request {path} failed: {detail}")
+                write!(f, "provider request {path} failed: {detail}")
             }
             Self::Unauthorized { path, detail } => {
-                write!(f, "openclaw request {path} unauthorized: {detail}")
+                write!(f, "provider request {path} unauthorized: {detail}")
             }
             Self::UnexpectedStatus {
                 path,
                 status_code,
                 body,
-            } => write!(
-                f,
-                "openclaw request {path} returned HTTP {status_code}: {body}"
-            ),
+            } => write!(f, "provider request {path} returned HTTP {status_code}: {body}"),
             Self::DecodeFailed { path, detail } => {
-                write!(f, "decode openclaw response {path} failed: {detail}")
+                write!(f, "decode provider response {path} failed: {detail}")
             }
         }
     }

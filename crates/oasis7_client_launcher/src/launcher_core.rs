@@ -17,10 +17,9 @@ const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
 pub(super) const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
-pub(super) const OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS: &str = "openclaw_local_http";
 pub(super) const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 pub(super) const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
-pub(super) const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
+pub(super) const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
 pub(super) const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 pub(super) const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
@@ -77,7 +76,7 @@ pub(super) fn is_provider_loopback_http_mode(config: &LaunchConfig) -> bool {
     canonical_agent_decision_source(config.agent_decision_source.as_str())
         == Some(PROVIDER_BACKED_DECISION_SOURCE)
         && canonical_agent_provider_backend(config.agent_provider_backend.as_str())
-            == Some(OPENCLAW_PROVIDER_BACKEND)
+            == Some(LOCAL_BRIDGE_PROVIDER_BACKEND)
         && canonical_agent_provider_contract(config.agent_provider_contract.as_str())
             == Some(WORLDSIM_PROVIDER_CONTRACT)
         && canonical_agent_provider_transport(config.agent_provider_transport.as_str())
@@ -95,7 +94,7 @@ pub(super) fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
 pub(super) fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
     canonical_agent_provider_backend(raw)
         .map(|_| ())
-        .ok_or_else(|| "agent provider backend must be openclaw".to_string())
+        .ok_or_else(|| "agent provider backend must be provider_local_bridge".to_string())
 }
 
 pub(super) fn validate_agent_provider_contract(raw: &str) -> Result<(), String> {
@@ -131,7 +130,6 @@ pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str>
         BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
         PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),
         _ => None,
     }
@@ -140,10 +138,9 @@ pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str>
 pub(super) fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         "" => None,
-        OPENCLAW_PROVIDER_BACKEND
+        LOCAL_BRIDGE_PROVIDER_BACKEND
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
-        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(OPENCLAW_PROVIDER_BACKEND),
+        | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOCAL_BRIDGE_PROVIDER_BACKEND),
         _ => None,
     }
 }
@@ -153,7 +150,6 @@ pub(super) fn canonical_agent_provider_contract(raw: &str) -> Option<&'static st
         "" => None,
         WORLDSIM_PROVIDER_CONTRACT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(WORLDSIM_PROVIDER_CONTRACT),
         _ => None,
     }
@@ -164,7 +160,6 @@ pub(super) fn canonical_agent_provider_transport(raw: &str) -> Option<&'static s
         "" => None,
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
-        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
         _ => None,
     }
@@ -187,15 +182,15 @@ pub(super) fn validate_chain_p2p_user_mode(raw: &str) -> Result<(), String> {
         })
 }
 
-pub(super) fn effective_openclaw_base_url(config: &LaunchConfig) -> Result<String, String> {
+pub(super) fn effective_provider_base_url(config: &LaunchConfig) -> Result<String, String> {
     let base_url = config.agent_provider_url.trim();
     if !base_url.is_empty() {
         return Ok(base_url.to_string());
     }
-    if config.openclaw_auto_discover {
+    if config.provider_auto_discover {
         return Ok(DEFAULT_PROVIDER_DISCOVERY_BASE_URL.to_string());
     }
-    Err("openclaw base url is required when auto-discover is disabled".to_string())
+    Err("provider base url is required when auto-discover is disabled".to_string())
 }
 
 pub(super) fn parse_agent_provider_connect_timeout_ms(
@@ -207,11 +202,11 @@ pub(super) fn parse_agent_provider_connect_timeout_ms(
     )
 }
 
-pub(super) fn validate_openclaw_base_url(base_url: &str) -> Result<(String, u16), String> {
-    let (host, port) = parse_http_base_url(base_url, "openclaw base url")?;
+pub(super) fn validate_provider_base_url(base_url: &str) -> Result<(String, u16), String> {
+    let (host, port) = parse_http_base_url(base_url, "provider base url")?;
     if !is_loopback_host(host.as_str()) {
         return Err(
-            "openclaw base url must use a loopback host (127.0.0.1 / localhost / ::1)".to_string(),
+            "provider base url must use a loopback host (127.0.0.1 / localhost / ::1)".to_string(),
         );
     }
     Ok((host, port))
@@ -288,17 +283,17 @@ pub(super) fn launcher_text_field_mut<'a>(
         "agent_provider_backend" => Some(&mut config.agent_provider_backend),
         "agent_provider_contract" => Some(&mut config.agent_provider_contract),
         "agent_provider_transport" => Some(&mut config.agent_provider_transport),
-        "agent_provider_url" | "openclaw_base_url" => Some(&mut config.agent_provider_url),
-        "agent_provider_auth_token" | "openclaw_auth_token" => {
+        "agent_provider_url" => Some(&mut config.agent_provider_url),
+        "agent_provider_auth_token" => {
             Some(&mut config.agent_provider_auth_token)
         }
-        "agent_provider_connect_timeout_ms" | "openclaw_connect_timeout_ms" => {
+        "agent_provider_connect_timeout_ms" => {
             Some(&mut config.agent_provider_connect_timeout_ms)
         }
-        "agent_execution_lane" | "openclaw_execution_mode" => {
+        "agent_execution_lane" => {
             Some(&mut config.agent_execution_lane)
         }
-        "agent_provider_profile" | "openclaw_agent_profile" => {
+        "agent_provider_profile" => {
             Some(&mut config.agent_provider_profile)
         }
         "chain_status_bind" => Some(&mut config.chain_status_bind),
@@ -328,7 +323,7 @@ pub(super) fn launcher_checkbox_field_mut<'a>(
 ) -> Option<&'a mut bool> {
     match field_id {
         "llm_enabled" => Some(&mut config.llm_enabled),
-        "openclaw_auto_discover" => Some(&mut config.openclaw_auto_discover),
+        "provider_auto_discover" => Some(&mut config.provider_auto_discover),
         "chain_enabled" => Some(&mut config.chain_enabled),
         "chain_p2p_accept_public_entry" => Some(&mut config.chain_p2p_accept_public_entry),
         "chain_pos_adaptive_tick_scheduler_enabled" => {
@@ -357,25 +352,25 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         {
             issues.push(ConfigIssue::AgentProviderModeInvalid);
         }
-        if effective_openclaw_base_url(config).is_err() {
-            issues.push(ConfigIssue::OpenClawBaseUrlRequired);
-        } else if let Ok(base_url) = effective_openclaw_base_url(config) {
-            match validate_openclaw_base_url(base_url.as_str()) {
+        if effective_provider_base_url(config).is_err() {
+            issues.push(ConfigIssue::ProviderBaseUrlRequired);
+        } else if let Ok(base_url) = effective_provider_base_url(config) {
+            match validate_provider_base_url(base_url.as_str()) {
                 Ok(_) => {}
                 Err(err) if err.contains("loopback") => {
-                    issues.push(ConfigIssue::OpenClawBaseUrlLoopbackRequired);
+                    issues.push(ConfigIssue::ProviderBaseUrlLoopbackRequired);
                 }
-                Err(_) => issues.push(ConfigIssue::OpenClawBaseUrlInvalid),
+                Err(_) => issues.push(ConfigIssue::ProviderBaseUrlInvalid),
             }
         }
         if parse_agent_provider_connect_timeout_ms(config).is_err() {
-            issues.push(ConfigIssue::OpenClawConnectTimeoutMsInvalid);
+            issues.push(ConfigIssue::ProviderConnectTimeoutMsInvalid);
         }
         if validate_provider_execution_mode(config.agent_execution_lane.as_str()).is_err() {
-            issues.push(ConfigIssue::OpenClawExecutionModeInvalid);
+            issues.push(ConfigIssue::ProviderExecutionModeInvalid);
         }
         if config.agent_provider_profile.trim().is_empty() {
-            issues.push(ConfigIssue::OpenClawAgentProfileRequired);
+            issues.push(ConfigIssue::ProviderProfileRequired);
         }
     }
 
@@ -562,13 +557,13 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
         );
         if is_provider_loopback_http_mode(config) {
             args.push("--agent-provider-backend".to_string());
-            args.push(OPENCLAW_PROVIDER_BACKEND.to_string());
+            args.push(LOCAL_BRIDGE_PROVIDER_BACKEND.to_string());
             args.push("--agent-provider-contract".to_string());
             args.push(WORLDSIM_PROVIDER_CONTRACT.to_string());
             args.push("--agent-provider-transport".to_string());
             args.push(LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string());
             args.push("--agent-provider-url".to_string());
-            args.push(effective_openclaw_base_url(config)?);
+            args.push(effective_provider_base_url(config)?);
             if !config.agent_provider_auth_token.trim().is_empty() {
                 args.push("--agent-provider-auth-token".to_string());
                 args.push(config.agent_provider_auth_token.trim().to_string());
@@ -860,7 +855,7 @@ pub(super) fn check_provider_loopback_http_provider(
     auth_token: Option<&str>,
     timeout_ms: u64,
 ) -> Result<ProviderSnapshot, ProviderCheckError> {
-    validate_openclaw_base_url(base_url).map_err(ProviderCheckError::InvalidConfig)?;
+    validate_provider_base_url(base_url).map_err(ProviderCheckError::InvalidConfig)?;
     let info_started_at = Instant::now();
     let info: ProviderInfoResponse =
         http_json_request_with_timeout(base_url, "/v1/provider/info", auth_token, timeout_ms)?;
@@ -891,7 +886,7 @@ pub(super) fn check_provider_loopback_http_provider(
         evaluate_provider_compatibility(&provider_info, Some(&provider_health));
     Ok(ProviderSnapshot {
         provider_id: provider_info.provider_id,
-        name: provider_info.name.unwrap_or_else(|| "OpenClaw".to_string()),
+        name: provider_info.name.unwrap_or_else(|| "Local Provider".to_string()),
         version: provider_info
             .version
             .unwrap_or_else(|| "unknown".to_string()),
@@ -983,18 +978,18 @@ fn http_json_request_with_timeout<T: DeserializeOwned>(
         http_request_with_timeout(base_url, path, auth_token, timeout_ms)?;
     if status_code == 401 {
         return Err(ProviderCheckError::Unauthorized(format!(
-            "openclaw provider check returned HTTP 401 for {path}"
+            "provider check returned HTTP 401 for {path}"
         )));
     }
     if !(200..=299).contains(&status_code) {
         let body_text = String::from_utf8_lossy(response_body.as_slice());
         return Err(ProviderCheckError::Unreachable(format!(
-            "openclaw provider check {path} failed with HTTP {status_code}: {body_text}"
+            "provider check {path} failed with HTTP {status_code}: {body_text}"
         )));
     }
     serde_json::from_slice(response_body.as_slice()).map_err(|err| {
         ProviderCheckError::Unreachable(format!(
-            "decode openclaw provider check {path} response failed: {err}"
+            "decode provider check {path} response failed: {err}"
         ))
     })
 }
@@ -1006,27 +1001,27 @@ fn http_request_with_timeout(
     auth_token: Option<&str>,
     timeout_ms: u64,
 ) -> Result<(u16, Vec<u8>), ProviderCheckError> {
-    let (host, port) = parse_http_base_url(base_url, "openclaw base url")
+    let (host, port) = parse_http_base_url(base_url, "provider base url")
         .map_err(ProviderCheckError::InvalidConfig)?;
     let connect_host = normalize_host_for_connect(host.as_str());
     let socket_addr = (connect_host.as_str(), port)
         .to_socket_addrs()
         .map_err(|err| {
             ProviderCheckError::Unreachable(format!(
-                "resolve openclaw provider failed: {err}"
+                "resolve provider failed: {err}"
             ))
         })?
         .next()
         .ok_or_else(|| {
             ProviderCheckError::Unreachable(
-                "resolve openclaw provider failed: no socket address".to_string(),
+                "resolve provider failed: no socket address".to_string(),
             )
         })?;
     let mut stream =
         TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms.max(1)))
             .map_err(|err| {
                 ProviderCheckError::Unreachable(format!(
-                    "connect openclaw provider failed: {err}"
+                    "connect provider failed: {err}"
                 ))
             })?;
     let timeout = Some(Duration::from_millis(timeout_ms.max(1)));
@@ -1042,13 +1037,13 @@ fn http_request_with_timeout(
     request.push_str("\r\n");
     stream.write_all(request.as_bytes()).map_err(|err| {
         ProviderCheckError::Unreachable(format!(
-            "write openclaw provider check failed: {err}"
+            "write provider check failed: {err}"
         ))
     })?;
     let mut response_bytes = Vec::new();
     stream.read_to_end(&mut response_bytes).map_err(|err| {
         ProviderCheckError::Unreachable(format!(
-            "read openclaw provider check failed: {err}"
+            "read provider check failed: {err}"
         ))
     })?;
     parse_http_response(response_bytes.as_slice())

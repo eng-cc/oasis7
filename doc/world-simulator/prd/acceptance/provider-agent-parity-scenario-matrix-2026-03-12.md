@@ -1,9 +1,9 @@
-# OpenClaw vs 内置 Agent parity 场景矩阵（2026-03-12）
+# Local Provider vs 内置 Agent parity 场景矩阵（2026-03-12）
 
 审计轮次: 2
 
 ## 目标
-- 冻结 `OpenClaw` 与内置 agent 的 parity 场景层级、样本选择与通过顺序，避免后续评估随意挑样。
+- 冻结 `Local Provider` 与内置 agent 的 parity 场景层级、样本选择与通过顺序，避免后续评估随意挑样。
 - 为 `PRD-WORLD_SIMULATOR-038` 提供统一场景输入基线，使自动 benchmark 与主观试玩评分复用同一组任务目标。
 - 定义 `P0/P1/P2` 的扩面门槛：只有当前层行为等价硬门禁通过，才允许进入下一层；只有达到 `latency_class A`，才允许默认启用。
 
@@ -19,11 +19,11 @@
   - 不纳入高频战斗、经济关键路径或上百 agent 压测场景。
 
 ## 执行原则
-1. builtin 与 OpenClaw 必须使用同一 scenario fixture、相同 seed、相同 timeout budget。
+1. builtin 与 Local Provider 必须使用同一 scenario fixture、相同 seed、相同 timeout budget。
 2. 任一场景若输入条件不一致，则该轮样本作废并重跑。
 3. 每层场景必须全部达成行为等价硬门禁，才允许判定该层 `passed`。
 4. 任一阻断条件触发，则整层直接判定 `failed` 或 `blocked`。
-5. 真实在线 LLM provider 的等待时延分两层治理：先看 `relative_wait_gap` 是否满足行为等价，再看 OpenClaw 绝对等待是否仅能归为 `latency_class B` 或已达到 `latency_class A`。
+5. 真实在线 LLM provider 的等待时延分两层治理：先看 `relative_wait_gap` 是否满足行为等价，再看 Local Provider 绝对等待是否仅能归为 `latency_class B` 或已达到 `latency_class A`。
 
 ## P0：低频单 NPC（首轮上线门槛）
 
@@ -45,8 +45,8 @@
 - `recoverable_error_resolution_rate >= 90%`
 
 ### P0 发布 / 默认启用附加门槛
-- `latency_class A (default-candidate)`: OpenClaw `median_extra_wait_ms <= 500ms` 且 `p95_extra_wait_ms <= 1500ms`
-- `latency_class B (experimental-only)`: OpenClaw `median_extra_wait_ms <= 15000ms` 且 `p95_extra_wait_ms <= 20000ms`
+- `latency_class A (default-candidate)`: Local Provider `median_extra_wait_ms <= 500ms` 且 `p95_extra_wait_ms <= 1500ms`
+- `latency_class B (experimental-only)`: Local Provider `median_extra_wait_ms <= 15000ms` 且 `p95_extra_wait_ms <= 20000ms`
 - `latency_class C (blocked)`: 超出 `B` 上限
 
 ### P0 阻断线
@@ -106,7 +106,7 @@
 
 ## PRD-ID 映射
 - `PRD-WORLD_SIMULATOR-038`: `P0/P1/P2` parity 场景层级、行为等价门禁与 rollout latency class。
-- `PRD-WORLD_SIMULATOR-037`: `P0` 场景中的用户机 `OpenClaw(Local HTTP)` 接入闭环。
+- `PRD-WORLD_SIMULATOR-037`: `P0` 场景中的用户机 `Local Provider(Local HTTP)` 接入闭环。
 - `PRD-WORLD_SIMULATOR-036`: `Decision Provider` 标准层的 fixture/trace/feedback 契约复用。
 
 ## 风险与约束

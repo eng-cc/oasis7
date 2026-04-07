@@ -79,7 +79,7 @@ const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
 const DEFAULT_VIEWER_PORT: &str = "4173";
 const DEFAULT_AGENT_DECISION_SOURCE: &str = "builtin_llm";
-const DEFAULT_AGENT_PROVIDER_BACKEND: &str = "openclaw";
+const DEFAULT_AGENT_PROVIDER_BACKEND: &str = "provider_local_bridge";
 const DEFAULT_AGENT_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const DEFAULT_AGENT_PROVIDER_TRANSPORT: &str = "loopback_http";
 const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
@@ -373,18 +373,14 @@ struct LaunchConfig {
     agent_provider_contract: String,
     #[serde(default = "default_agent_provider_transport")]
     agent_provider_transport: String,
-    #[serde(alias = "openclaw_base_url")]
-    agent_provider_url: String,
-    #[serde(alias = "openclaw_auth_token")]
-    agent_provider_auth_token: String,
-    #[serde(alias = "openclaw_connect_timeout_ms")]
-    agent_provider_connect_timeout_ms: String,
-    #[serde(default = "default_agent_execution_lane", alias = "openclaw_execution_mode")]
+        agent_provider_url: String,
+        agent_provider_auth_token: String,
+        agent_provider_connect_timeout_ms: String,
+    #[serde(default = "default_agent_execution_lane")]
     agent_execution_lane: String,
-    #[serde(alias = "openclaw_agent_profile")]
-    agent_provider_profile: String,
+        agent_provider_profile: String,
     llm_enabled: bool,
-    openclaw_auto_discover: bool,
+    provider_auto_discover: bool,
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
@@ -438,7 +434,7 @@ impl Default for LaunchConfig {
             agent_execution_lane: DEFAULT_AGENT_EXECUTION_LANE.to_string(),
             agent_provider_profile: DEFAULT_AGENT_PROVIDER_PROFILE.to_string(),
             llm_enabled: true,
-            openclaw_auto_discover: true,
+            provider_auto_discover: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
@@ -883,12 +879,12 @@ enum ConfigIssue {
     ViewerStaticDirRequired,
     ViewerStaticDirMissing,
     AgentProviderModeInvalid,
-    OpenClawBaseUrlRequired,
-    OpenClawBaseUrlInvalid,
-    OpenClawBaseUrlLoopbackRequired,
-    OpenClawConnectTimeoutMsInvalid,
-    OpenClawExecutionModeInvalid,
-    OpenClawAgentProfileRequired,
+    ProviderBaseUrlRequired,
+    ProviderBaseUrlInvalid,
+    ProviderBaseUrlLoopbackRequired,
+    ProviderConnectTimeoutMsInvalid,
+    ProviderExecutionModeInvalid,
+    ProviderProfileRequired,
     LauncherBinRequired,
     LauncherBinMissing,
     ChainRuntimeBinRequired,
@@ -947,41 +943,41 @@ impl ConfigIssue {
             (Self::AgentProviderModeInvalid, UiLanguage::EnUs) => {
                 "Agent access mode must be builtin_llm, agent_direct_connect, or provider_loopback_http"
             }
-            (Self::OpenClawBaseUrlRequired, UiLanguage::ZhCn) => {
-                "启用 ProviderBacked(Local HTTP) 且关闭自动发现时，必须填写 OpenClaw Base URL"
+            (Self::ProviderBaseUrlRequired, UiLanguage::ZhCn) => {
+                "启用 ProviderBacked(Local HTTP) 且关闭自动发现时，必须填写 Local Provider Base URL"
             }
-            (Self::OpenClawBaseUrlRequired, UiLanguage::EnUs) => {
-                "OpenClaw base URL is required when auto-discover is disabled"
+            (Self::ProviderBaseUrlRequired, UiLanguage::EnUs) => {
+                "Local Provider base URL is required when auto-discover is disabled"
             }
-            (Self::OpenClawBaseUrlInvalid, UiLanguage::ZhCn) => {
-                "OpenClaw Base URL 必须是有效的 http://<host>:<port>"
+            (Self::ProviderBaseUrlInvalid, UiLanguage::ZhCn) => {
+                "Local Provider Base URL 必须是有效的 http://<host>:<port>"
             }
-            (Self::OpenClawBaseUrlInvalid, UiLanguage::EnUs) => {
-                "OpenClaw base URL must be a valid http://<host>:<port>"
+            (Self::ProviderBaseUrlInvalid, UiLanguage::EnUs) => {
+                "Local Provider base URL must be a valid http://<host>:<port>"
             }
-            (Self::OpenClawBaseUrlLoopbackRequired, UiLanguage::ZhCn) => {
-                "OpenClaw Base URL 仅允许使用 loopback 地址（127.0.0.1 / localhost / ::1）"
+            (Self::ProviderBaseUrlLoopbackRequired, UiLanguage::ZhCn) => {
+                "Local Provider Base URL 仅允许使用 loopback 地址（127.0.0.1 / localhost / ::1）"
             }
-            (Self::OpenClawBaseUrlLoopbackRequired, UiLanguage::EnUs) => {
-                "OpenClaw base URL must use a loopback host (127.0.0.1 / localhost / ::1)"
+            (Self::ProviderBaseUrlLoopbackRequired, UiLanguage::EnUs) => {
+                "Local Provider base URL must use a loopback host (127.0.0.1 / localhost / ::1)"
             }
-            (Self::OpenClawConnectTimeoutMsInvalid, UiLanguage::ZhCn) => {
-                "OpenClaw 连接超时毫秒必须是正整数"
+            (Self::ProviderConnectTimeoutMsInvalid, UiLanguage::ZhCn) => {
+                "Local Provider 连接超时毫秒必须是正整数"
             }
-            (Self::OpenClawConnectTimeoutMsInvalid, UiLanguage::EnUs) => {
-                "OpenClaw connect timeout milliseconds must be a positive integer"
+            (Self::ProviderConnectTimeoutMsInvalid, UiLanguage::EnUs) => {
+                "Local Provider connect timeout milliseconds must be a positive integer"
             }
-            (Self::OpenClawExecutionModeInvalid, UiLanguage::ZhCn) => {
-                "OpenClaw execution mode 必须是 player_parity 或 headless_agent"
+            (Self::ProviderExecutionModeInvalid, UiLanguage::ZhCn) => {
+                "Local Provider execution mode 必须是 player_parity 或 headless_agent"
             }
-            (Self::OpenClawExecutionModeInvalid, UiLanguage::EnUs) => {
-                "OpenClaw execution mode must be player_parity or headless_agent"
+            (Self::ProviderExecutionModeInvalid, UiLanguage::EnUs) => {
+                "Local Provider execution mode must be player_parity or headless_agent"
             }
-            (Self::OpenClawAgentProfileRequired, UiLanguage::ZhCn) => {
-                "启用 ProviderBacked(Local HTTP) 时，OpenClaw Agent Profile 不能为空"
+            (Self::ProviderProfileRequired, UiLanguage::ZhCn) => {
+                "启用 ProviderBacked(Local HTTP) 时，Local Provider Agent Profile 不能为空"
             }
-            (Self::OpenClawAgentProfileRequired, UiLanguage::EnUs) => {
-                "OpenClaw agent profile is required when ProviderBacked(Local HTTP) is enabled"
+            (Self::ProviderProfileRequired, UiLanguage::EnUs) => {
+                "Local Provider agent profile is required when ProviderBacked(Local HTTP) is enabled"
             }
             (Self::LauncherBinRequired, UiLanguage::ZhCn) => {
                 "启动器二进制路径（launcher bin）是必填项"
@@ -1150,7 +1146,7 @@ enum TransferSubmitState {
 struct ClientLauncherApp {
     config: LaunchConfig,
     config_dirty: bool,
-    openclaw_provider_check_status: ProviderCheckStatus,
+    provider_check_status: ProviderCheckStatus,
     llm_settings_panel: LlmSettingsPanel,
     ui_language: UiLanguage,
     status: LauncherStatus,
@@ -1210,7 +1206,7 @@ impl Default for ClientLauncherApp {
         Self {
             config,
             config_dirty: false,
-            openclaw_provider_check_status: ProviderCheckStatus::Disabled,
+            provider_check_status: ProviderCheckStatus::Disabled,
             llm_settings_panel: LlmSettingsPanel::new(LlmSettingsPanel::default_path()),
             ui_language: UiLanguage::detect_from_env(),
             status: LauncherStatus::Idle,

@@ -40,13 +40,13 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
         decision: fixture.expected_decision,
         provider_error: None,
         diagnostics: ProviderDiagnostics {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             provider_version: Some("0.1.0".to_string()),
             latency_ms: Some(41),
             retry_count: 0,
         },
         trace_payload: ProviderTraceEnvelope {
-            provider_id: Some("openclaw-local".to_string()),
+            provider_id: Some("provider_local_bridge".to_string()),
             input_summary: Some("fixture=golden.move.visible_location.v1".to_string()),
             output_summary: Some("decision=move_agent(to=loc-2)".to_string()),
             latency_ms: Some(41),
@@ -88,10 +88,10 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
                 ("GET", "/v1/provider/info") => MockHttpResponse {
                     status_code: 200,
                     body: serde_json::json!({
-                        "provider_id": "openclaw-local",
-                        "name": "OpenClaw",
+                        "provider_id": "provider_local_bridge",
+                        "name": "Provider Local Bridge",
                         "version": "0.1.0",
-                        "protocol_version": "v1",
+                        "protocol_version": "world-simulator-provider-loopback-http-v1",
                         "capabilities": ["decision", "feedback"],
                         "supported_action_sets": ["phase1_low_frequency"]
                     })
@@ -138,7 +138,7 @@ fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback()
     let client = ProviderLoopbackHttpClient::new(base_url.as_str(), Some("secret-token"), 200)
         .expect("build client");
     let info = client.provider_info().expect("info");
-    assert_eq!(info.provider_id, "openclaw-local");
+    assert_eq!(info.provider_id, "provider_local_bridge");
     assert_eq!(info.version.as_deref(), Some("0.1.0"));
     assert_eq!(
         info.supported_action_sets,

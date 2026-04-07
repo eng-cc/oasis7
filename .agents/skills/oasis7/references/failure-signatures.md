@@ -22,25 +22,25 @@ Check:
 
 1. `curl -sS http://127.0.0.1:5841/v1/provider/health`
 2. bridge process is still running
-3. `openclaw_base_url` is loopback and correct
+3. `agent_provider_url` is loopback and correct
 
-## `openclaw_gateway_unreachable`
+## `provider_gateway_unreachable`
 
 Meaning:
 
-- bridge could not get a valid response from `openclaw` / Gateway
+- bridge could not get a valid response from `provider` / Gateway
 
 Check:
 
 1. `curl -sS http://127.0.0.1:18789/health`
-2. `openclaw --version`
+2. `${OASIS7_PROVIDER_CLI_BIN:-openclaw} --version`
 3. bridge stderr / log file
 
 ## `bridge_model_output_invalid`
 
 Meaning:
 
-- OpenClaw returned malformed or non-whitelisted JSON for the world action
+- Local Provider returned malformed or non-whitelisted JSON for the world action
 
 Current behavior:
 
@@ -66,7 +66,7 @@ Meaning:
 Check:
 
 1. lightweight runtime agent is installed and used
-2. bridge is started with `--openclaw-agent oasis7_provider_agent`
+2. bridge is started with `--provider-agent oasis7_provider_agent`
 3. parity artifact raw trace under `output/provider_parity/*`
 4. latency may still be too high even when correctness is fine
 
@@ -74,13 +74,13 @@ Check:
 
 Meaning:
 
-- this is expected in current OpenClaw mode
+- this is expected in current Local Provider mode
 
 Current boundary:
 
 - real NPC autoplay path is supported
 - direct player-side hot control is not yet supported
-- treat current software-safe prompt/chat surfaces as observer/debug-only for OpenClaw real-play, not as a supported player-authority lane
+- treat current software-safe prompt/chat surfaces as observer/debug-only for Local Provider real-play, not as a supported player-authority lane
 
 ## `repo_bootstrap_unavailable`
 
@@ -113,7 +113,7 @@ If you still suspect leftovers:
 
 ## `doctor` mode
 
-Use this first when the local OpenClaw path is not obviously healthy:
+Use this first when the local Local Provider path is not obviously healthy:
 
 ```bash
 .agents/skills/oasis7/scripts/oasis7-run.sh doctor
@@ -122,7 +122,7 @@ Use this first when the local OpenClaw path is not obviously healthy:
 
 It reports:
 
-- whether `openclaw` is available
+- whether `provider` is available
 - whether `cargo` is available for repo-backed bootstrap
 - whether Gateway responds on `127.0.0.1:18789`
 - whether the configured runtime agent exists

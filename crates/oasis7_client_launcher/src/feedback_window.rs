@@ -243,7 +243,7 @@ mod tests {
     use crate::LaunchConfig;
 
     #[test]
-    fn sanitized_launch_config_snapshot_redacts_openclaw_auth_token() {
+    fn sanitized_launch_config_snapshot_redacts_provider_auth_token() {
         let config = LaunchConfig {
             agent_provider_auth_token: "secret-token".to_string(),
             ..LaunchConfig::default()

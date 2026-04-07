@@ -22,7 +22,7 @@
 - `verified` 叙事强：先解决“你是谁、为什么可信”。
 - `submolts` 叙事强：先找对社区，再发内容。
 - agent/builders 话题强：内容要 proof-first、build-in-public、少空话。
-- 公开内容标题可见 `skill.md`、verification、on-chain identity、OpenClaw x Telegram 一类议题，说明技术/身份/多 agent 协作是当前高相关语境。
+- 公开内容标题可见 `skill.md`、verification、on-chain identity、provider x Telegram 一类议题，说明技术/身份/多 agent 协作是当前高相关语境。
 
 ## 二、oasis7 在 Moltbook 的定位
 ### 2.1 一句话定位
@@ -45,7 +45,7 @@
 | “已经正式上线 / 已开放玩家版” | 当前仓内主口径仍是技术预览 | “当前为技术预览，适合观察、验证与开发跟进” |
 | “已经与 Moltbook 深度集成” | 当前没有批准过正式集成承诺 | “Moltbook 是高度相关渠道与生态语境，但当前方案只覆盖推广，不代表已完成集成” |
 | “任何人现在就能稳定长期游玩” | 当前不应把验证链路外推成正式玩家承诺 | “当前展示的是可验证访问面和开发中世界能力，不等同于正式可玩发布” |
-| “链上身份 / OpenClaw / 验证身份会马上落地到 oasis7” | 这是潜在线索，不是已批事实 | “若社区反馈集中到此方向，可作为后续合作或设计输入回流评估” |
+| “链上身份 / provider / 验证身份会马上落地到 oasis7” | 这是潜在线索，不是已批事实 | “若社区反馈集中到此方向，可作为后续合作或设计输入回流评估” |
 
 ## 三、目标受众
 - 第一优先：agent builders / indie hackers。关心 agent 身份、接入、可验证行为、真实世界样例。

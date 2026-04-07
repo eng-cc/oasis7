@@ -391,7 +391,7 @@ Because a world that only makes sense through one UI is harder to inspect and ha
 `pure_api` gives us a way to observe and validate world behavior without depending on a graphical path.
 ```
 
-### Reply Template 5: “Are you doing identity / onchain / OpenClaw next?”
+### Reply Template 5: “Are you doing identity / onchain / provider next?”
 ```text
 Nothing new is being promised in this thread.
 

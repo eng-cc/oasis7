@@ -105,7 +105,7 @@ fn build_launcher_args_accepts_agent_direct_connect_alias() {
     assert!(args.contains(&"--agent-decision-source".to_string()));
     assert!(args.contains(&"provider_backed".to_string()));
     assert!(args.contains(&"--agent-provider-backend".to_string()));
-    assert!(args.contains(&"openclaw".to_string()));
+    assert!(args.contains(&"provider_local_bridge".to_string()));
     assert!(args.contains(&"--agent-provider-contract".to_string()));
     assert!(args.contains(&"worldsim_provider_v1".to_string()));
     assert!(args.contains(&"--agent-provider-transport".to_string()));
@@ -181,41 +181,41 @@ fn launch_config_defaults_enable_llm() {
     assert!(config.llm_enabled);
     assert!(config.chain_enabled);
     assert_eq!(config.agent_decision_source, "builtin_llm");
-    assert_eq!(config.agent_provider_backend, "openclaw");
+    assert_eq!(config.agent_provider_backend, "provider_local_bridge");
     assert_eq!(config.agent_provider_contract, "worldsim_provider_v1");
     assert_eq!(config.agent_provider_transport, "loopback_http");
     assert_eq!(config.agent_provider_url, "http://127.0.0.1:5841");
     assert_eq!(config.agent_provider_connect_timeout_ms, "15000");
     assert_eq!(config.agent_execution_lane, "player_parity");
     assert_eq!(config.agent_provider_profile, "oasis7_p0_low_freq_npc");
-    assert!(config.openclaw_auto_discover);
+    assert!(config.provider_auto_discover);
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
     assert_eq!(config.chain_p2p_user_mode, "auto_join");
     assert!(!config.chain_p2p_accept_public_entry);
 }
 
 #[test]
-fn launch_config_deserialize_backfills_missing_openclaw_execution_mode() {
+fn launch_config_deserialize_backfills_missing_provider_execution_lane() {
     let config: LaunchConfig = serde_json::from_value(json!({
         "agent_provider_mode": "provider_loopback_http",
-        "openclaw_base_url": "http://127.0.0.1:5841",
-        "openclaw_connect_timeout_ms": "15000",
-        "openclaw_agent_profile": "oasis7_p0_low_freq_npc"
+        "agent_provider_url": "http://127.0.0.1:5841",
+        "agent_provider_connect_timeout_ms": "15000",
+        "agent_provider_profile": "oasis7_p0_low_freq_npc"
     }))
     .expect("deserialize launch config");
     assert_eq!(config.agent_execution_lane, "player_parity");
     let issues = collect_required_config_issues(&config);
-    assert!(!issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
+    assert!(!issues.contains(&ConfigIssue::ProviderExecutionModeInvalid));
 }
 
 #[test]
-fn collect_required_config_issues_requires_valid_openclaw_execution_mode() {
+fn collect_required_config_issues_requires_valid_provider_execution_lane() {
     let issues = collect_required_config_issues(&LaunchConfig {
         agent_decision_source: "provider_backed".to_string(),
         agent_execution_lane: "gpu_only".to_string(),
         ..LaunchConfig::default()
     });
-    assert!(issues.contains(&ConfigIssue::OpenClawExecutionModeInvalid));
+    assert!(issues.contains(&ConfigIssue::ProviderExecutionModeInvalid));
 }
 #[test]
 fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_set() {
@@ -862,7 +862,7 @@ fn check_provider_loopback_http_provider_accepts_info_and_health_responses() {
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -878,8 +878,8 @@ fn check_provider_loopback_http_provider_accepts_info_and_health_responses() {
     let snapshot =
         check_provider_loopback_http_provider(format!("http://{}", bind).as_str(), None, 200)
             .expect("provider check should pass");
-    assert_eq!(snapshot.provider_id, "openclaw-local");
-    assert_eq!(snapshot.name, "OpenClaw");
+    assert_eq!(snapshot.provider_id, "provider-local");
+    assert_eq!(snapshot.name, "Local Provider");
     assert_eq!(snapshot.version, "0.1.0");
     assert_eq!(snapshot.protocol_version, "v1");
     assert_eq!(
@@ -914,7 +914,7 @@ fn check_provider_loopback_http_provider_reports_incompatible_supported_actions(
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -952,7 +952,7 @@ fn check_provider_loopback_http_provider_marks_unhealthy_provider_as_degraded() 
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
+                r#"{"provider_id":"provider-local","name":"Local Provider","version":"0.1.0","protocol_version":"v1","capabilities":["decision","feedback"],"supported_action_sets":["phase1_low_frequency"]}"#
             } else {
                 r#"{"ok":false,"status":null,"uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -980,18 +980,18 @@ fn check_provider_loopback_http_provider_marks_unhealthy_provider_as_degraded() 
 }
 
 #[test]
-fn collect_required_config_issues_reports_openclaw_specific_fields() {
+fn collect_required_config_issues_reports_provider_specific_fields() {
     let config = LaunchConfig {
         agent_decision_source: "provider_backed".to_string(),
         agent_provider_url: String::new(),
-        openclaw_auto_discover: false,
+        provider_auto_discover: false,
         agent_provider_connect_timeout_ms: "0".to_string(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);
-    assert!(issues.contains(&ConfigIssue::OpenClawBaseUrlRequired));
-    assert!(issues.contains(&ConfigIssue::OpenClawConnectTimeoutMsInvalid));
-    assert!(!issues.contains(&ConfigIssue::OpenClawAgentProfileRequired));
+    assert!(issues.contains(&ConfigIssue::ProviderBaseUrlRequired));
+    assert!(issues.contains(&ConfigIssue::ProviderConnectTimeoutMsInvalid));
+    assert!(!issues.contains(&ConfigIssue::ProviderProfileRequired));
 }
 
 #[test]
@@ -1005,25 +1005,25 @@ fn collect_required_config_issues_rejects_no_llm_playability_config() {
 }
 
 #[test]
-fn collect_required_config_issues_rejects_non_loopback_openclaw_base_url() {
+fn collect_required_config_issues_rejects_non_loopback_provider_base_url() {
     let config = LaunchConfig {
         agent_decision_source: "provider_backed".to_string(),
         agent_provider_url: "http://192.168.0.5:5841".to_string(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);
-    assert!(issues.contains(&ConfigIssue::OpenClawBaseUrlLoopbackRequired));
+    assert!(issues.contains(&ConfigIssue::ProviderBaseUrlLoopbackRequired));
 }
 
 #[test]
-fn collect_required_config_issues_requires_openclaw_agent_profile() {
+fn collect_required_config_issues_requires_provider_profile() {
     let config = LaunchConfig {
         agent_decision_source: "provider_backed".to_string(),
         agent_provider_profile: String::new(),
         ..LaunchConfig::default()
     };
     let issues = collect_required_config_issues(&config);
-    assert!(issues.contains(&ConfigIssue::OpenClawAgentProfileRequired));
+    assert!(issues.contains(&ConfigIssue::ProviderProfileRequired));
 }
 #[test]
 fn collect_required_config_issues_reports_missing_required_fields() {

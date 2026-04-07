@@ -1,10 +1,10 @@
-# OpenClaw 与内置 Agent 体验等价（parity）验收方案（2026-03-12）设计
+# Local Provider 与内置 Agent 体验等价（parity）验收方案（2026-03-12）设计
 
-- 对应需求文档: `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md`
-- 对应项目管理文档: `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.project.md`
+- 对应需求文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.prd.md`
+- 对应项目管理文档: `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md`
 
 ## 1. 设计定位
-定义 `OpenClaw` provider 与内置 agent 的体验等价验收框架，使“是否可默认启用/是否可扩大覆盖范围”由标准化 parity 结果驱动，而不是由单次 PoC 或主观印象驱动。
+定义 `Local Provider` provider 与内置 agent 的体验等价验收框架，使“是否可默认启用/是否可扩大覆盖范围”由标准化 parity 结果驱动，而不是由单次 PoC 或主观印象驱动。
 
 ## 2. 设计结构
 - 场景层：按 `P0 低频单 NPC`、`P1 多轮记忆`、`P2 多 agent 并发` 分层。
@@ -15,7 +15,7 @@
 
 ## 3. 关键接口 / 入口
 - parity 场景列表与评分卡
-- builtin vs OpenClaw 对照结果汇总
+- builtin vs Local Provider 对照结果汇总
 - `Decision Provider` trace 与 diagnostics
 - launcher / viewer provider 状态展示
 
@@ -28,5 +28,5 @@
 ## 5. 设计演进计划
 - 先冻结 P0/P1/P2 场景和指标阈值。
 - 再补自动 benchmark 与评分卡。
-- 再执行真实 `OpenClaw(Local HTTP)` 对标试玩。
+- 再执行真实 `Local Provider(Local HTTP)` 对标试玩。
 - 最后基于 parity 结论决定是否进入默认体验。

@@ -18,12 +18,11 @@ use oasis7::simulator::{
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_PROTOCOL_VERSION: &str = "2026-03-12";
-const DEFAULT_ADAPTER_VERSION: &str = "openclaw_phase1_adapter_v1";
+const DEFAULT_ADAPTER_VERSION: &str = "provider_phase1_adapter_v1";
 const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_TICKS: u64 = 20;
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
-const OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS: &str = "openclaw_local_http";
 const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,7 +36,7 @@ impl BenchProviderKind {
     fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "builtin" => Some(Self::Builtin),
-            "provider_loopback_http" | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS | "openclaw" => {
+            "provider_loopback_http" | "provider_local_bridge" => {
                 Some(Self::ProviderLoopbackHttp)
             }
             _ => None,
@@ -69,10 +68,10 @@ struct CliOptions {
     ticks: u64,
     timeout_ms: u64,
     out_dir: PathBuf,
-    openclaw_base_url: Option<String>,
-    openclaw_auth_token: Option<String>,
-    openclaw_connect_timeout_ms: u64,
-    openclaw_agent_profile: String,
+    provider_base_url: Option<String>,
+    provider_auth_token: Option<String>,
+    agent_provider_connect_timeout_ms: u64,
+    agent_provider_profile: String,
     execution_mode: ProviderExecutionMode,
 }
 
@@ -90,10 +89,10 @@ impl Default for CliOptions {
             ticks: DEFAULT_TICKS,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             out_dir: PathBuf::from("output/provider_parity/manual"),
-            openclaw_base_url: None,
-            openclaw_auth_token: None,
-            openclaw_connect_timeout_ms: DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS,
-            openclaw_agent_profile: DEFAULT_PROVIDER_AGENT_PROFILE.to_string(),
+            provider_base_url: None,
+            provider_auth_token: None,
+            agent_provider_connect_timeout_ms: DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS,
+            agent_provider_profile: DEFAULT_PROVIDER_AGENT_PROFILE.to_string(),
             execution_mode: ProviderExecutionMode::HeadlessAgent,
         }
     }
@@ -642,7 +641,7 @@ fn main() {
                 options.scenario.as_str()
             ),
             goal_definition: format!("parity://{}/{}", options.parity_tier, options.scenario_id),
-            action_catalog_ref: "catalog://openclaw/phase1".to_string(),
+            action_catalog_ref: "catalog://provider/phase1".to_string(),
             player_context_ref: "player://default".to_string(),
             memory_fixture_ref: "memory://default".to_string(),
         },
@@ -714,13 +713,13 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             agent_profile: None,
         }),
         BenchProviderKind::ProviderLoopbackHttp => {
-            let base_url = options.openclaw_base_url.as_deref().ok_or_else(|| {
-                "--openclaw-base-url is required for provider_loopback_http".to_string()
+            let base_url = options.provider_base_url.as_deref().ok_or_else(|| {
+                "--agent-provider-url is required for provider_loopback_http".to_string()
             })?;
             let client = ProviderLoopbackHttpClient::new(
                 base_url,
-                options.openclaw_auth_token.as_deref(),
-                options.openclaw_connect_timeout_ms,
+                options.provider_auth_token.as_deref(),
+                options.agent_provider_connect_timeout_ms,
             )
             .map_err(|err| err.to_string())?;
             let info = client.provider_info().map_err(|err| err.to_string())?;
@@ -740,7 +739,7 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
                 provider_status: health.status,
                 provider_last_error: health.last_error,
                 provider_queue_depth: health.queue_depth,
-                agent_profile: Some(options.openclaw_agent_profile.clone()),
+                agent_profile: Some(options.agent_provider_profile.clone()),
             })
         }
     }
@@ -772,13 +771,13 @@ fn build_behavior(
             }))
         }
         BenchProviderKind::ProviderLoopbackHttp => {
-            let base_url = options.openclaw_base_url.as_deref().ok_or_else(|| {
-                "--openclaw-base-url is required for provider_loopback_http".to_string()
+            let base_url = options.provider_base_url.as_deref().ok_or_else(|| {
+                "--agent-provider-url is required for provider_loopback_http".to_string()
             })?;
             let adapter = ProviderLoopbackAdapter::new(
                 base_url,
-                options.openclaw_auth_token.as_deref(),
-                options.openclaw_connect_timeout_ms,
+                options.provider_auth_token.as_deref(),
+                options.agent_provider_connect_timeout_ms,
             )
             .map_err(|err| err.to_string())?;
             let mut behavior = oasis7::simulator::ProviderBackedAgentBehavior::new(
@@ -787,10 +786,10 @@ fn build_behavior(
                 phase1_action_catalog(),
             )
             .with_provider_config_ref(format!(
-                "openclaw://local-http/parity/{}/{}",
+                "provider://loopback-http/parity/{}/{}",
                 options.benchmark_run_id, agent_id
             ))
-            .with_agent_profile(options.openclaw_agent_profile.clone())
+            .with_agent_profile(options.agent_provider_profile.clone())
             .with_execution_mode(options.execution_mode)
             .with_environment_class(execution_environment_class(options.execution_mode))
             .with_fixture_id(fixture_id)
@@ -1085,32 +1084,32 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                         .ok_or_else(|| "--out-dir requires a value".to_string())?,
                 );
             }
-            "--openclaw-base-url" => {
-                options.openclaw_base_url = Some(
+            "--agent-provider-url" => {
+                options.provider_base_url = Some(
                     iter.next()
-                        .ok_or_else(|| "--openclaw-base-url requires a value".to_string())?
+                        .ok_or_else(|| "--agent-provider-url requires a value".to_string())?
                         .to_string(),
                 );
             }
-            "--openclaw-auth-token" => {
-                options.openclaw_auth_token = Some(
+            "--agent-provider-auth-token" => {
+                options.provider_auth_token = Some(
                     iter.next()
-                        .ok_or_else(|| "--openclaw-auth-token requires a value".to_string())?
+                        .ok_or_else(|| "--agent-provider-auth-token requires a value".to_string())?
                         .to_string(),
                 );
             }
-            "--openclaw-connect-timeout-ms" => {
-                options.openclaw_connect_timeout_ms = parse_u64(
+            "--agent-provider-connect-timeout-ms" => {
+                options.agent_provider_connect_timeout_ms = parse_u64(
                     iter.next().ok_or_else(|| {
-                        "--openclaw-connect-timeout-ms requires a value".to_string()
+                        "--agent-provider-connect-timeout-ms requires a value".to_string()
                     })?,
-                    "--openclaw-connect-timeout-ms",
+                    "--agent-provider-connect-timeout-ms",
                 )?;
             }
-            "--openclaw-agent-profile" => {
-                options.openclaw_agent_profile = iter
+            "--agent-provider-profile" => {
+                options.agent_provider_profile = iter
                     .next()
-                    .ok_or_else(|| "--openclaw-agent-profile requires a value".to_string())?
+                    .ok_or_else(|| "--agent-provider-profile requires a value".to_string())?
                     .to_string();
             }
             "--execution-mode" => {
@@ -1145,16 +1144,16 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     }
     if options.provider == BenchProviderKind::ProviderLoopbackHttp
         && options
-            .openclaw_base_url
+            .provider_base_url
             .as_deref()
             .is_none_or(|value| value.trim().is_empty())
     {
-        return Err("--openclaw-base-url is required for provider_loopback_http".to_string());
+        return Err("--agent-provider-url is required for provider_loopback_http".to_string());
     }
     if options.provider == BenchProviderKind::ProviderLoopbackHttp
-        && options.openclaw_agent_profile.trim().is_empty()
+        && options.agent_provider_profile.trim().is_empty()
     {
-        return Err("--openclaw-agent-profile cannot be empty".to_string());
+        return Err("--agent-provider-profile cannot be empty".to_string());
     }
     if options.provider == BenchProviderKind::Builtin
         && options.execution_mode != ProviderExecutionMode::HeadlessAgent
@@ -1179,7 +1178,7 @@ Run one parity benchmark sample for builtin or the loopback provider and emit\n\
 raw jsonl + single-sample summary json following the parity benchmark contract.\n\n\
 Options:\n\
   --provider <builtin|provider_loopback_http>\n\
-                               compatibility aliases: openclaw_local_http, openclaw\n\
+                               supports provider_loopback_http and provider_local_bridge\n\
   --scenario <name>\n\
   --scenario-id <id>\n\
   --parity-tier <P0|P1|P2>\n\
@@ -1188,10 +1187,10 @@ Options:\n\
   --ticks <n>\n\
   --timeout-ms <n>\n\
   --out-dir <path>\n\
-  --openclaw-base-url <url>\n\
-  --openclaw-auth-token <token>\n\
-  --openclaw-connect-timeout-ms <n>\n\
-  --openclaw-agent-profile <id>\n\
+  --agent-provider-url <url>\n\
+  --agent-provider-auth-token <token>\n\
+  --agent-provider-connect-timeout-ms <n>\n\
+  --agent-provider-profile <id>\n\
   --execution-mode <player_parity|headless_agent>\n\
   --protocol-version <str>\n\
   --adapter-version <str>\n\

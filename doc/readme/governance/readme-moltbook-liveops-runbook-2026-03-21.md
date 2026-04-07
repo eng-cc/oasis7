@@ -86,7 +86,7 @@
 
 ### P1: 合作 / 集成 / 路线图追问
 - 典型问题：
-  - “什么时候做 identity / onchain / OpenClaw？”
+  - “什么时候做 identity / onchain / provider？”
   - “能不能一起做某个合作？”
 - 动作：
   - 可以礼貌确认“这是有价值信号”。

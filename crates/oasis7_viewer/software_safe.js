@@ -1224,7 +1224,7 @@ function buildSemanticCapability(actionId) {
       actionId,
       enabled: false,
       code: "observer_only",
-      reason: "selected agent runs through the OpenClaw-backed loopback provider; software_safe stays observer-only for prompt/chat on this lane"
+      reason: "selected agent runs through the provider-backed loopback provider; software_safe stays observer-only for prompt/chat on this lane"
     };
   }
   if (policy) {
@@ -4619,7 +4619,7 @@ function InteractionPanel() {
       get children() {
         return createComponent(EmptyState, {
           get children() {
-            return `Selected agent currently runs through the OpenClaw-backed loopback provider in ${debugContext()?.execution_mode || "headless_agent"}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`;
+            return `Selected agent currently runs through the provider-backed loopback provider in ${debugContext()?.execution_mode || "headless_agent"}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`;
           }
         });
       }

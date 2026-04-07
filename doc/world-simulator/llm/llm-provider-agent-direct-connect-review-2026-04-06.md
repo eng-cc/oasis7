@@ -3,8 +3,8 @@
 - owner: `producer_system_designer`
 - 协作角色: `agent_engineer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 关联 PRD:
-  - `doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md`
-  - `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md`
+  - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
+  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
   - `doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - 关联任务:
   - `TASK-WORLD_SIMULATOR-119/120/121/124/125/126/128/160/283`
@@ -16,9 +16,9 @@
 - 为后续修正建立统一排序、owner 分工与重新验收门槛。
 
 ## 2. 范围
-- 覆盖 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 的产品主链路：
+- 覆盖 `agent_direct_connect` 当前 provider implementation=`provider_loopback_http` 的产品主链路：
   - `oasis7_client_launcher -> oasis7_game_launcher -> oasis7_viewer_live/runtime_live`
-  - `DecisionProvider / OpenClawAdapter / local HTTP provider`
+  - `DecisionProvider / Local ProviderAdapter / local HTTP provider`
   - `player_parity / headless_agent / debug_viewer`
 - 覆盖设计、实现、测试和对外口径之间的已确认偏差。
 - 不在本文直接修改产品目标；PRD 目标态仍以现有 `PRD-WORLD_SIMULATOR-037/040` 为准。
@@ -35,15 +35,15 @@
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7_client_launcher/src/launcher_core.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-  - `doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
+  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 设计目标:
   - `player_parity` lane 已贯通 runtime live / `oasis7_game_launcher` / `oasis7` / launcher 主链路。
 - 当前实现:
   - `oasis7_client_launcher` 的 `LaunchConfig` 没有 execution mode 字段。
-  - `build_launcher_args()` 仅透传 `agent_provider_mode/openclaw_base_url/openclaw_auth_token/openclaw_connect_timeout_ms/openclaw_agent_profile`，没有 `--openclaw-execution-mode`。
-  - `oasis7_game_launcher` 虽支持 `--openclaw-execution-mode`，但 client launcher 无法把该参数送进去。
+  - `build_launcher_args()` 仅透传 `agent_provider_mode/agent_provider_url/agent_provider_auth_token/agent_provider_connect_timeout_ms/agent_provider_profile`，没有 `--agent-execution-lane`。
+  - `oasis7_game_launcher` 虽支持 `--agent-execution-lane`，但 client launcher 无法把该参数送进去。
 - 影响:
-  - 从 client launcher 触发的 OpenClaw 直连实际会静默落回默认 `headless_agent`。
+  - 从 client launcher 触发的 Local Provider 直连实际会静默落回默认 `headless_agent`。
   - 文档中“launcher 已支持真实 `player_parity` lane”的说法对 GUI 主链路并不成立。
 - 修正要求:
   - client launcher 必须显式暴露并透传 execution mode。
@@ -54,7 +54,7 @@
   - `crates/oasis7/src/simulator/decision_provider.rs`
   - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
   - `crates/oasis7/src/viewer/runtime_live/mapping.rs`
-  - `doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
+  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 设计目标:
   - 双轨模式共享动作 contract，但观测表达必须分层；`player_parity` 只能拿玩家可感知压缩视图，`headless_agent` 可拿结构化局部拓扑与提示信息。
 - 当前实现:
@@ -67,20 +67,20 @@
   - 必须引入显式 observation adapter 或等价分层机制。
   - 必须补 fixture diff / schema review / negative tests，证明 `player_parity` 不泄露 headless-only 真值。
 
-### Gap-3：launcher 默认 timeout 基线与真实 OpenClaw 延迟不一致
+### Gap-3：launcher 默认 timeout 基线与真实 Local Provider 延迟不一致
 - Source refs:
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-  - `crates/oasis7/src/bin/oasis7_openclaw_parity_bench.rs`
-  - `doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
+  - `crates/oasis7/src/bin/oasis7_provider_parity_bench.rs`
+  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 - 设计目标:
   - local HTTP provider 错误应可恢复，不得因默认参数过于保守而稳定制造假超时。
 - 当前实现:
-  - client launcher 默认 `openclaw_connect_timeout_ms=200`。
+  - client launcher 默认 `agent_provider_connect_timeout_ms=200`。
   - game launcher 默认 `3000`。
   - 已有真实 smoke 证据中的 `median_latency_ms` 明显高于上述 GUI 默认值。
 - 影响:
-  - GUI 主链路容易把“OpenClaw 可用但较慢”误判成 `timeout` / `provider_unreachable`。
+  - GUI 主链路容易把“Local Provider 可用但较慢”误判成 `timeout` / `provider_unreachable`。
   - launcher、`oasis7` operator、parity bench 三条入口对同一 provider 的成功基线不一致。
 - 修正要求:
   - 冻结统一 timeout policy，至少区分 `probe timeout` 与 `decision timeout`。
@@ -90,8 +90,8 @@
 - Source refs:
   - `crates/oasis7_client_launcher/src/launcher_core.rs`
   - `crates/oasis7_client_launcher/src/main.rs`
-  - `crates/oasis7/src/simulator/openclaw_local_http.rs`
-  - `crates/oasis7/src/bin/oasis7_openclaw_local_bridge.rs`
+  - `crates/oasis7/src/simulator/provider_loopback_http.rs`
+  - `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
 - 设计目标:
   - `/v1/provider/info` 的 `protocol_version/capabilities/supported_action_sets` 应用于启用前兼容性判断。
   - 错误类型需能区分 `version_mismatch`、`unsupported_agent_profile`、`health degraded` 等。
@@ -101,7 +101,7 @@
   - 没有在启用前做“当前 provider 是否满足 world-simulator phase-1 contract”的产品级判定。
 - 影响:
   - 用户可能在 compatibility check 成功后仍进入不可用 provider。
-  - `OpenClaw Gateway 在线` 与 `当前 world-simulator provider contract 可用` 被混成同一层状态。
+  - `Local Provider Gateway 在线` 与 `当前 world-simulator provider contract 可用` 被混成同一层状态。
 - 修正要求:
   - launcher provider compatibility check / config 校验必须补 contract-aware gating。
   - UI 文案必须区分“服务在线”“协议兼容”“profile 可用”“当前处于 degraded”四种状态。
@@ -110,7 +110,7 @@
 - Source refs:
   - `crates/oasis7/src/simulator/decision_provider.rs`
   - `crates/oasis7/src/viewer/runtime_live/mapping.rs`
-  - `crates/oasis7/src/bin/oasis7_openclaw_parity_bench.rs`
+  - `crates/oasis7/src/bin/oasis7_provider_parity_bench.rs`
   - `crates/oasis7/src/simulator/tests/decision_provider.rs`
 - 设计目标:
   - 当模式降级、环境受限或改走 observer-only 路径时，runtime live / viewer / parity summary 都应保留明确 `fallback_reason`。
@@ -126,7 +126,7 @@
   - QA summary 与 viewer 调试面必须能直接看到该字段。
 
 ## 5. 不判为正式缺口的事项
-- `agent_direct_connect` / `openclaw_local_http` / execution lane 的 taxonomy 分层本身没有发现新的设计错误；当前问题集中在落地不完整，而不是方向错误。
+- `agent_direct_connect` / `provider_loopback_http` / execution lane 的 taxonomy 分层本身没有发现新的设计错误；当前问题集中在落地不完整，而不是方向错误。
 - local bridge 的 `sessionKey` 作用域、`unsupported_agent_profile` 与 `schema_repair_count` 等保护项已有基础实现，不属于本轮最高优先级缺口。
 - `debug_viewer` 的 observer-only 定位总体成立；当前主要问题在于执行 lane 真值和 fallback 真值还不够完整。
 
@@ -137,7 +137,7 @@
   - `viewer_engineer`
   - 联审：`agent_engineer`
 - 范围:
-  - client launcher 增加 OpenClaw execution mode 配置与透传。
+  - client launcher 增加 Local Provider execution mode 配置与透传。
   - 统一 launcher / `oasis7` operator / parity bench 的 timeout 基线与文案。
 - 通过条件:
   - 从 client launcher 启动的 runtime live 能稳定区分并到达 `player_parity` / `headless_agent`。
@@ -178,7 +178,7 @@
   - QA / producer 能重新签署“本专题已按目标态落地”。
 
 ## 7. 文档口径更新要求
-- `doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md` 不应继续保持“completed / none”而不提 remediation。
+- `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 不应继续保持“completed / none”而不提 remediation。
 - `doc/world-simulator/project.md` 需要新增 follow-up task，避免本轮结论只停留在 review 文本。
 - 若后续修正改变了 `PRD-WORLD_SIMULATOR-037/040` 的边界或 acceptance，必须先回写对应 PRD，再推进实现。
 
@@ -189,7 +189,7 @@
   - launcher provider compatibility probe tests
   - runtime live / viewer snapshot / parity summary 的 `fallback_reason` 透传测试
 - `test_tier_full`
-  - 真实 OpenClaw dual-mode 重采证
+  - 真实 Local Provider dual-mode 重采证
   - `player_parity` 与 `headless_agent` 同 seed / 同场景对照
   - 修正后再评估是否允许重新把该专题标为 completed
 

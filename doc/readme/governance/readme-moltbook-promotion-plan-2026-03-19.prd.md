@@ -71,7 +71,7 @@
   - Moltbook 平台机制变化快：方案必须标注日期，后续执行前先复核主页 / developers / help 页面。
   - 若无法确认平台是否支持某一内容格式：优先退回“原生短帖 + 评论补充链接”的保守打法。
   - 若评论把 oasis7 误解为“已经可玩的正式游戏”：统一回到“技术预览（尚不可玩）”主口径。
-  - 若出现对 Moltbook identity / OpenClaw / on-chain 的合作追问：除非内部已批准，不得直接承诺，只记录为合作线索并升级。
+  - 若出现对 Moltbook identity / provider / on-chain 的合作追问：除非内部已批准，不得直接承诺，只记录为合作线索并升级。
 - Non-Functional Requirements:
   - NFR-MOLT-1: 方案必须在 10 分钟内可被运营同学读完并执行。
   - NFR-MOLT-2: 所有外部 claim 都必须能回链到仓内当前公开文档。
@@ -87,7 +87,7 @@
 - Technical Risks:
   - 风险-1: 若把 Moltbook 当普通社媒处理，会错过其 agent-first 叙事窗口。
   - 风险-2: 若把当前技术预览说成正式可玩，会直接损害对外可信度。
-  - 风险-3: 若过早承诺 Moltbook identity / on-chain / OpenClaw 联动，会形成产品和工程债务。
+  - 风险-3: 若过早承诺 Moltbook identity / on-chain / provider 联动，会形成产品和工程债务。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

@@ -111,7 +111,7 @@ doc/testing/design.md
 doc/testing/prd.index.md
 doc/testing/prd.md
 doc/testing/project.md
-doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md
+doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md
 doc/ui_review_result/README.md
 doc/ui_review_result/card_2026_03_06_11_50_29.md
 doc/ui_review_result/ui_review_list.md
@@ -129,4 +129,4 @@ doc/world-simulator/design.md
 doc/world-simulator/prd.index.md
 doc/world-simulator/prd.md
 doc/world-simulator/project.md
-doc/testing/openclaw-agent-parity-p0-t4-closure-2026-03-17.md
+doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md

@@ -11,7 +11,7 @@
 ### 0.1 目标
 
 - 将“纯 API 客户端”从调试/探针通道提升为正式玩家入口，而不是只能验证协议是否活着。
-- 按 `PRD-CORE-009`，本专题承接的正式玩家入口名为 `pure_api`，不与 OpenClaw `headless_agent` execution lane 混用。
+- 按 `PRD-CORE-009`，本专题承接的正式玩家入口名为 `pure_api`，不与 provider-backed `headless_agent` execution lane 混用。
 - 明确 `pure_api` 的 formal gameplay 与 headed Web/UI 一样要求 active LLM access；无 LLM 时只能保留 observer/debug，不再构成正式可玩或 parity 结论。
 - 保证纯 API 客户端与 Web/UI 客户端共用同一套世界状态、可执行动作、阶段目标和持续游玩能力。
 - 允许展示形式不同，但不允许信息粒度降级或能力缺失，确保玩家可仅通过 API 长期游玩。

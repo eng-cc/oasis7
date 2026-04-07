@@ -1,4 +1,4 @@
-# OpenClaw vs 内置 Agent parity 聚合结论模板（2026-03-12）
+# Local Provider vs 内置 Agent parity 聚合结论模板（2026-03-12）
 
 审计轮次: 2
 
@@ -20,10 +20,10 @@
 | Scenario-ID | provider | sample_count | valid_samples | invalid_fixture | benchmark_status |
 | --- | --- | --- | --- | --- | --- |
 | P0-001 | builtin |  |  |  |  |
-| P0-001 | openclaw_local_http |  |  |  |  |
+| P0-001 | provider_loopback_http |  |  |  |  |
 
 ## 三、核心指标并排对比
-| 指标 | builtin | OpenClaw | gap / 备注 | 是否达标 |
+| 指标 | builtin | Local Provider | gap / 备注 | 是否达标 |
 | --- | --- | --- | --- | --- |
 | completion_rate |  |  |  | [ ] |
 | invalid_action_rate |  |  |  | [ ] |
@@ -38,7 +38,7 @@
 | context_drift_count |  |  |  | [ ] |
 
 ## 四、失败签名汇总
-| error_code | builtin count | OpenClaw count | 是否阻断 | 备注 |
+| error_code | builtin count | Local Provider count | 是否阻断 | 备注 |
 | --- | --- | --- | --- | --- |
 | provider_unreachable |  |  | [ ] |  |
 | timeout |  |  | [ ] |  |

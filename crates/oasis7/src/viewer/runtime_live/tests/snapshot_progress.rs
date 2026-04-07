@@ -1,13 +1,13 @@
 use super::*;
 
 #[test]
-fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-    std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -63,16 +63,16 @@ fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
         context.agent_profile.as_deref(),
         Some("oasis7_p0_low_freq_npc")
     );
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]
-fn runtime_openclaw_compat_snapshot_tracks_alias_fallback_reason() {
-    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
-    clear_runtime_openclaw_env();
+fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
-    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
-    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
@@ -98,7 +98,7 @@ fn runtime_openclaw_compat_snapshot_tracks_alias_fallback_reason() {
         context.fallback_reason.as_deref(),
         Some("provider_mode_alias:agent_direct_connect")
     );
-    clear_runtime_openclaw_env();
+    clear_runtime_provider_env();
 }
 
 #[test]

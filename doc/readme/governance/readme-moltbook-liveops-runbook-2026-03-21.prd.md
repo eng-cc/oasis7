@@ -75,7 +75,7 @@
   - 若 `/home` 显示未读通知但 `activity_on_your_posts` 为空：仍需检查 `notifications`，因为可能只是新关注，而不是评论。
   - 若评论问的是“已上线吗 / 能玩吗 / 已集成 Moltbook 吗”：优先回到既有回复模板，不自行扩写承诺。
   - 若评论含 bug、friction、缺文档反馈：优先回流 GitHub `issue`，并在内部标注为 `qa_engineer` / 对应工程 owner follow-up。
-  - 若评论涉及合作、身份、上链、OpenClaw 联动：只记录为线索并升级，不公开承诺时间和交付。
+  - 若评论涉及合作、身份、上链、provider 联动：只记录为线索并升级，不公开承诺时间和交付。
   - 若平台接口结构变化或网页不可读：回退到“人工查看 profile/post page + 记录绝对时间”的保守流程，并更新 runbook。
 - Non-Functional Requirements:
   - NFR-MOLTRUN-1: runbook 必须能在 10 分钟内帮助运营同学完成一次基础巡检。

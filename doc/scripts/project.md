@@ -51,7 +51,7 @@
     - `rg -n "oasis7_viewer|OASIS7_VIEWER_" doc/scripts/viewer-tools/capture-viewer-frame.prd.md doc/scripts/viewer-tools/capture-viewer-frame.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] TASK-SCRIPTS-011 (PRD-SCRIPTS-001) [test_tier_required]: 收口 repo-owned OpenClaw real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径，统一使用 `oasis7` / `crates/oasis7*` 口径。
+- [x] TASK-SCRIPTS-011 (PRD-SCRIPTS-001) [test_tier_required]: 收口 repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径，统一使用 `oasis7` / `crates/oasis7*` 口径。
   - 验收命令 (`test_tier_required`):
     - `rg -n "cargo run -p oasis7|crates/oasis7/src/bin/" .agents/skills/oasis7/SKILL.md .agents/skills/oasis7/references/real-play-config.md .agents/skills/oasis7/scripts/oasis7-run.sh`
     - `./scripts/doc-governance-check.sh`
@@ -233,7 +233,7 @@
 - 最新完成: `TASK-SCRIPTS-014`（新增 worktree-isolated harness 主入口，收口 `run-game-test.sh` / `run-producer-playtest.sh` 的 worktree 隔离契约，并同步 scripts/testing 文档。）
 - 最新完成: `TASK-SCRIPTS-013`（`doc/scripts/wasm/**` 活跃手册中遗漏的 builtin wasm artifact 当前路径已统一切到 `crates/oasis7/...`。）
 - 最新完成: `TASK-SCRIPTS-012`（texture-inspector 活跃专题中遗漏的 viewer crate、环境变量与运行命令口径已统一切到 `oasis7_viewer` / `OASIS7_VIEWER_*`。）
-- 最新完成: `TASK-SCRIPTS-011`（repo-owned OpenClaw real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径已统一切到 `oasis7` / `crates/oasis7*` 当前口径。）
+- 最新完成: `TASK-SCRIPTS-011`（repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径已统一切到 `oasis7` / `crates/oasis7*` 当前口径。）
 - 最新完成: `TASK-SCRIPTS-010`（`capture-viewer-frame` 活跃 fallback 文档中的 viewer crate 与环境变量命名已统一切到 `oasis7_viewer` / `OASIS7_VIEWER_*` 当前口径）。
 - 最新完成: `TASK-SCRIPTS-009`（pre-commit 活跃文档中的 viewer wasm 编译门禁与依赖说明已统一切到 `oasis7_viewer` 当前口径）。
 - 最新完成: `TASK-SCRIPTS-006`（scripts 模块 README 入口索引同步）。

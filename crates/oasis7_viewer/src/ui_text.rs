@@ -146,7 +146,7 @@ pub(super) fn events_summary(events: &[WorldEvent], focus_tick: Option<u64>) -> 
 pub(super) enum ProviderDebugFilter {
     #[default]
     All,
-    OpenClawOnly,
+    LoopbackProviderOnly,
     ErrorsOnly,
 }
 
@@ -154,7 +154,7 @@ impl ProviderDebugFilter {
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::All => "all",
-            Self::OpenClawOnly => "openclaw_only",
+            Self::LoopbackProviderOnly => "loopback_provider_only",
             Self::ErrorsOnly => "errors_only",
         }
     }
@@ -601,15 +601,15 @@ fn module_visual_recent_events(
 fn provider_trace_matches(filter: ProviderDebugFilter, trace: &AgentDecisionTrace) -> bool {
     match filter {
         ProviderDebugFilter::All => true,
-        ProviderDebugFilter::OpenClawOnly => is_openclaw_trace(trace),
+        ProviderDebugFilter::LoopbackProviderOnly => is_loopback_provider_trace(trace),
         ProviderDebugFilter::ErrorsOnly => trace.llm_error.is_some() || trace.parse_error.is_some(),
     }
 }
 
-fn is_openclaw_trace(trace: &AgentDecisionTrace) -> bool {
+fn is_loopback_provider_trace(trace: &AgentDecisionTrace) -> bool {
     provider_label_for_trace(trace)
         .to_ascii_lowercase()
-        .contains("openclaw")
+        .contains("provider")
 }
 
 fn provider_label_for_trace(trace: &AgentDecisionTrace) -> String {

@@ -16,14 +16,14 @@ tasks:
     status: done
     task_path: .pm/tasks/task_a2a5c83cb80f4a6f9deb3dfcb5ca8377.yaml
   - task_uid: task_96b9784a063d4922a235dbc1e5ff2304
-    title: "Implement OpenClaw execution mode passthrough and timeout policy for client launcher"
+    title: "Implement provider execution lane passthrough and timeout policy for client launcher"
     priority: P1
     source_signal: null
     related_prd:
-      - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.prd.md
-      - doc/world-simulator/llm/llm-openclaw-local-http-provider-integration-2026-03-12.prd.md
+      - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
+      - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
     acceptance:
-      - "Client launcher exposes and persists OpenClaw execution mode so GUI launches can request player_parity or headless_agent explicitly"
+      - "Client launcher exposes and persists provider execution lane so GUI launches can request player_parity or headless_agent explicitly"
       - "Launcher args and timeout defaults align with game launcher/operator policy and avoid 200ms false timeouts"
       - "Targeted tests and world-simulator tracking docs cover the new launcher execution-mode/timeout behavior"
     handoff_to: []
@@ -43,7 +43,7 @@ tasks:
     status: done
     task_path: .pm/tasks/task_bea05ddfe00d480f9b0134e838a6523b.yaml
   - task_uid: task_7790ac86a31a4c509e9f6debba2f96b4
-    title: "Implement OpenClaw compatibility and fallback audit chain"
+    title: "Implement provider compatibility and fallback audit chain"
     priority: P1
     source_signal: null
     related_prd:
@@ -56,7 +56,7 @@ tasks:
     status: done
     task_path: .pm/tasks/task_7790ac86a31a4c509e9f6debba2f96b4.yaml
   - task_uid: task_dae20e4880a04a4388aac47cf888c85b
-    title: "Rename OpenClaw probe/check terminology to compatibility-aware provider check"
+    title: "Rename legacy provider probe/check terminology to compatibility-aware provider check"
     priority: P1
     source_signal: null
     related_prd:

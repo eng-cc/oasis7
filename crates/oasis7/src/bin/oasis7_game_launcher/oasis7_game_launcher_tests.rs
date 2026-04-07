@@ -19,7 +19,7 @@ use super::{
     DEFAULT_CHAIN_STATUS_BIND,
     DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_LIVE_BIND,
     DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
-    LOOPBACK_HTTP_PROVIDER_TRANSPORT, OPENCLAW_PROVIDER_BACKEND,
+    LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
     PROVIDER_BACKED_DECISION_SOURCE,
     VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_EXECUTION_LANE_ENV,
     VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, VIEWER_AGENT_PROVIDER_BACKEND_ENV,
@@ -27,9 +27,7 @@ use super::{
     VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
     VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
     VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
-    VIEWER_OPENCLAW_AGENT_PROFILE_ENV, VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
-    VIEWER_OPENCLAW_BASE_URL_ENV, VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
-    VIEWER_OPENCLAW_EXECUTION_MODE_ENV, VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
+    VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
 };
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
@@ -73,7 +71,7 @@ fn parse_options_defaults() {
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
     assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, OPENCLAW_PROVIDER_BACKEND);
+    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
     assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
     assert_eq!(options.agent_provider_url, DEFAULT_AGENT_PROVIDER_URL);
@@ -153,7 +151,7 @@ fn parse_options_accepts_overrides() {
             "--agent-decision-source",
             "provider_backed",
             "--agent-provider-backend",
-            "openclaw",
+            "provider_local_bridge",
             "--agent-provider-contract",
             "worldsim_provider_v1",
             "--agent-provider-transport",
@@ -204,7 +202,7 @@ fn parse_options_accepts_overrides() {
     );
     assert!(options.with_llm);
     assert_eq!(options.agent_decision_source, PROVIDER_BACKED_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, OPENCLAW_PROVIDER_BACKEND);
+    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
     assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
     assert_eq!(options.agent_provider_url, "http://127.0.0.1:5841");
@@ -228,9 +226,9 @@ fn parse_options_accepts_agent_direct_connect_alias() {
             "--with-llm",
             "--agent-provider-mode",
             "agent_direct_connect",
-            "--openclaw-base-url",
+            "--agent-provider-url",
             "http://127.0.0.1:5841",
-            "--openclaw-agent-profile",
+            "--agent-provider-profile",
             "oasis7_p0_low_freq_npc",
         ]
         .into_iter(),
@@ -238,7 +236,7 @@ fn parse_options_accepts_agent_direct_connect_alias() {
     .expect("parse should succeed");
 
     assert_eq!(options.agent_decision_source, PROVIDER_BACKED_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, OPENCLAW_PROVIDER_BACKEND);
+    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
     assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
 }
@@ -271,10 +269,10 @@ fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
 }
 
 #[test]
-fn openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout() {
+fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout() {
     let mut options = CliOptions::default();
     options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
-    options.agent_provider_backend = OPENCLAW_PROVIDER_BACKEND.to_string();
+    options.agent_provider_backend = LOCAL_BRIDGE_PROVIDER_BACKEND.to_string();
     options.agent_provider_contract = WORLDSIM_PROVIDER_CONTRACT.to_string();
     options.agent_provider_transport = LOOPBACK_HTTP_PROVIDER_TRANSPORT.to_string();
     options.agent_provider_url = "http://127.0.0.1:5841".to_string();
@@ -293,7 +291,7 @@ fn openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm
     );
     assert_eq!(
         command_env_value(&command, VIEWER_AGENT_PROVIDER_BACKEND_ENV),
-        Some(Some(OPENCLAW_PROVIDER_BACKEND.to_string()))
+        Some(Some(LOCAL_BRIDGE_PROVIDER_BACKEND.to_string()))
     );
     assert_eq!(
         command_env_value(&command, VIEWER_AGENT_PROVIDER_CONTRACT_ENV),
@@ -326,20 +324,6 @@ fn openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm
         ))
     );
     assert_eq!(command_env_value(&command, VIEWER_AGENT_PROVIDER_MODE_ENV), Some(None));
-    assert_eq!(command_env_value(&command, VIEWER_OPENCLAW_BASE_URL_ENV), Some(None));
-    assert_eq!(command_env_value(&command, VIEWER_OPENCLAW_AUTH_TOKEN_ENV), Some(None));
-    assert_eq!(
-        command_env_value(&command, VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV),
-        Some(None)
-    );
-    assert_eq!(
-        command_env_value(&command, VIEWER_OPENCLAW_AGENT_PROFILE_ENV),
-        Some(None)
-    );
-    assert_eq!(
-        command_env_value(&command, VIEWER_OPENCLAW_EXECUTION_MODE_ENV),
-        Some(None)
-    );
 }
 
 #[test]
@@ -408,7 +392,7 @@ fn parse_options_rejects_unknown_agent_provider_mode() {
 }
 
 #[test]
-fn parse_options_rejects_invalid_openclaw_execution_mode() {
+fn parse_options_rejects_invalid_provider_execution_lane() {
     let err = parse_options(
         [
             "--with-llm",

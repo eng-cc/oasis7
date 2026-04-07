@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 #[test]
-fn parse_options_accepts_openclaw_provider() {
+fn parse_options_accepts_provider_loopback_http() {
     let options = parse_options(
         [
             "--provider",
@@ -12,7 +12,7 @@ fn parse_options_accepts_openclaw_provider() {
             "P0-002",
             "--benchmark-run-id",
             "run-1",
-            "--openclaw-base-url",
+            "--agent-provider-url",
             "http://127.0.0.1:5841",
             "--out-dir",
             ".tmp/parity",
@@ -24,17 +24,14 @@ fn parse_options_accepts_openclaw_provider() {
     assert_eq!(options.scenario_id, "P0-002");
     assert_eq!(options.benchmark_run_id, "run-1");
     assert_eq!(
-        options.openclaw_base_url.as_deref(),
+        options.provider_base_url.as_deref(),
         Some("http://127.0.0.1:5841")
     );
-    assert_eq!(
-        options.openclaw_agent_profile,
-        DEFAULT_PROVIDER_AGENT_PROFILE
-    );
+    assert_eq!(options.agent_provider_profile, DEFAULT_PROVIDER_AGENT_PROFILE);
 }
 
 #[test]
-fn parse_options_rejects_openclaw_without_base_url() {
+fn parse_options_rejects_provider_loopback_http_without_base_url() {
     let err = parse_options(
         [
             "--provider",
@@ -45,26 +42,26 @@ fn parse_options_rejects_openclaw_without_base_url() {
         .into_iter(),
     )
     .expect_err("missing base url should fail");
-    assert!(err.contains("--openclaw-base-url"));
+    assert!(err.contains("--agent-provider-url"));
 }
 
 #[test]
-fn parse_options_accepts_custom_openclaw_agent_profile() {
+fn parse_options_accepts_custom_provider_agent_profile() {
     let options = parse_options(
         [
             "--provider",
             "provider_loopback_http",
             "--benchmark-run-id",
             "run-2",
-            "--openclaw-base-url",
+            "--agent-provider-url",
             "http://127.0.0.1:5841",
-            "--openclaw-agent-profile",
+            "--agent-provider-profile",
             "oasis7_p1_memory_loop",
         ]
         .into_iter(),
     )
     .expect("parse custom profile");
-    assert_eq!(options.openclaw_agent_profile, "oasis7_p1_memory_loop");
+    assert_eq!(options.agent_provider_profile, "oasis7_p1_memory_loop");
 }
 
 #[test]
@@ -72,7 +69,7 @@ fn parse_options_defaults_use_real_provider_timeout_budget() {
     let options =
         parse_options(["--benchmark-run-id", "run-defaults"].into_iter()).expect("parse defaults");
     assert_eq!(options.timeout_ms, 15_000);
-    assert_eq!(options.openclaw_connect_timeout_ms, 15_000);
+    assert_eq!(options.agent_provider_connect_timeout_ms, 15_000);
 }
 
 #[test]
@@ -180,14 +177,14 @@ fn builtin_parity_guardrail_keeps_valid_move_agent_decision() {
 }
 
 #[test]
-fn parse_options_accepts_openclaw_player_parity_execution_mode() {
+fn parse_options_accepts_provider_player_parity_execution_mode() {
     let options = parse_options(
         [
             "--provider",
             "provider_loopback_http",
             "--benchmark-run-id",
             "run-3",
-            "--openclaw-base-url",
+            "--agent-provider-url",
             "http://127.0.0.1:5841",
             "--execution-mode",
             "player_parity",
@@ -266,7 +263,7 @@ fn classify_trace_error_detects_timeout() {
 }
 
 #[test]
-fn prepare_provider_info_captures_openclaw_compatibility_status() {
+fn prepare_provider_info_captures_provider_compatibility_status() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -276,7 +273,7 @@ fn prepare_provider_info_captures_openclaw_compatibility_status() {
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"world-simulator-openclaw-local-http-v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
+                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -291,7 +288,7 @@ fn prepare_provider_info_captures_openclaw_compatibility_status() {
 
     let options = CliOptions {
         provider: BenchProviderKind::ProviderLoopbackHttp,
-        openclaw_base_url: Some(format!("http://{bind}")),
+        provider_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };
     let provider = prepare_provider_info(&options).expect("prepare provider");
@@ -316,7 +313,7 @@ fn prepare_provider_info_marks_incompatible_supported_actions() {
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"world-simulator-openclaw-local-http-v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
+                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","move_agent"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -331,7 +328,7 @@ fn prepare_provider_info_marks_incompatible_supported_actions() {
 
     let options = CliOptions {
         provider: BenchProviderKind::ProviderLoopbackHttp,
-        openclaw_base_url: Some(format!("http://{bind}")),
+        provider_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };
     let provider = prepare_provider_info(&options).expect("prepare provider");
@@ -354,7 +351,7 @@ fn prepare_provider_info_marks_missing_capabilities_as_incompatible() {
             let bytes = stream.read(&mut request).expect("read request");
             let request_text = String::from_utf8_lossy(&request[..bytes]);
             let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"openclaw-local","name":"OpenClaw","version":"0.1.0","protocol_version":"world-simulator-openclaw-local-http-v1","capabilities":["decision"],"supported_action_sets":["phase1_low_frequency"]}"#
+                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","capabilities":["decision"],"supported_action_sets":["phase1_low_frequency"]}"#
             } else {
                 r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
             };
@@ -369,7 +366,7 @@ fn prepare_provider_info_marks_missing_capabilities_as_incompatible() {
 
     let options = CliOptions {
         provider: BenchProviderKind::ProviderLoopbackHttp,
-        openclaw_base_url: Some(format!("http://{bind}")),
+        provider_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };
     let provider = prepare_provider_info(&options).expect("prepare provider");

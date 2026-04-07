@@ -1,4 +1,4 @@
 interface:
   display_name: "Oasis7"
-  short_description: "Run real OpenClaw gameplay and parity"
-  default_prompt: "Use $oasis7 to configure, launch, and validate a real local OpenClaw gameplay run for oasis7."
+  short_description: "Run real Local Provider gameplay and parity"
+  default_prompt: "Use $oasis7 to configure, launch, and validate a real local Local Provider gameplay run for oasis7."

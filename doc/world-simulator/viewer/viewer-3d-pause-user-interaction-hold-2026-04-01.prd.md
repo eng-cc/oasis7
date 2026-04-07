@@ -55,7 +55,7 @@
 - Non-Goals:
   - 不删除现有 3D 代码、脚本或历史文档。
   - 不把 `standard_3d` 从玩家访问模式 taxonomy 中移除。
-  - 不在本专题中直接重排 runtime / launcher / OpenClaw 的其它优先级细节。
+  - 不在本专题中直接重排 runtime / launcher / Local Provider 的其它优先级细节。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements:
