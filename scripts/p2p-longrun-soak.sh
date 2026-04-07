@@ -1621,6 +1621,7 @@ run_topology() {
   local -a node_runtime_ids=()
   local -a node_gossip_addrs=()
   local -a node_status_binds=()
+  local -a node_replication_listens=()
   local -a validator_specs=()
   local case_base_port=$((base_port + index * 100))
   local topology_slug
@@ -1633,9 +1634,11 @@ run_topology() {
     local runtime_id="soak-${topology_slug}-${timestamp}-${label}"
     local gossip_addr="$bind_host:$((case_base_port + i + 1))"
     local status_bind="$bind_host:$((case_base_port + i + 21))"
+    local replication_listen="/ip4/${bind_host}/tcp/$((case_base_port + i + 41))"
     node_runtime_ids+=("$runtime_id")
     node_gossip_addrs+=("$gossip_addr")
     node_status_binds+=("$status_bind")
+    node_replication_listens+=("$replication_listen")
     validator_specs+=("${runtime_id}:${node_stakes[$i]}")
   done
 
@@ -1660,6 +1663,7 @@ run_topology() {
         --reward-runtime-epoch-duration-secs "$reward_runtime_epoch_duration_secs"
         --reward-points-per-credit "$reward_points_per_credit"
         --node-gossip-bind "$gossip_addr"
+        --replication-network-listen "${node_replication_listens[$i]}"
       )
       if [[ "$pos_adaptive_tick_scheduler_enabled" -eq 1 ]]; then
         cmd+=(--pos-adaptive-tick-scheduler)
@@ -1684,6 +1688,7 @@ run_topology() {
           continue
         fi
         cmd+=(--node-gossip-peer "${node_gossip_addrs[$peer_idx]}")
+        cmd+=(--replication-network-peer "${node_replication_listens[$peer_idx]}")
       done
 
       local node_dir="$topology_dir/nodes/$label"
@@ -1770,6 +1775,7 @@ run_topology() {
       --reward-runtime-epoch-duration-secs "$reward_runtime_epoch_duration_secs"
       --reward-points-per-credit "$reward_points_per_credit"
       --node-gossip-bind "$gossip_addr"
+      --replication-network-listen "${node_replication_listens[$i]}"
     )
     if [[ "$pos_adaptive_tick_scheduler_enabled" -eq 1 ]]; then
       cmd+=(--pos-adaptive-tick-scheduler)
@@ -1797,6 +1803,7 @@ run_topology() {
         continue
       fi
       cmd+=(--node-gossip-peer "${node_gossip_addrs[$peer_idx]}")
+      cmd+=(--replication-network-peer "${node_replication_listens[$peer_idx]}")
     done
 
     launch_node "$topology_dir" "$label" "$status_url" "$balances_url" "$runtime_id" "${cmd[@]}"

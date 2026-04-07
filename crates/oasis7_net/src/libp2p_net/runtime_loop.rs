@@ -452,8 +452,32 @@ pub(super) fn handle_command(
             pending.insert(request_id, response);
             CommandOutcome::Continue
         }
-        Some(Command::RegisterHandler { protocol, handler }) => {
+        Some(Command::RequestToPeer {
+            protocol,
+            payload,
+            peer,
+            response,
+        }) => {
+            if !peers.contains(&peer) {
+                let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
+                    protocol: format!("peer {peer} is not connected for protocol {protocol}"),
+                }));
+                return CommandOutcome::Continue;
+            }
+            let request_id = swarm
+                .behaviour_mut()
+                .request_response
+                .send_request(&peer, NetworkRequest { protocol, payload });
+            pending.insert(request_id, response);
+            CommandOutcome::Continue
+        }
+        Some(Command::RegisterHandler {
+            protocol,
+            handler,
+            response,
+        }) => {
             handlers.insert(protocol, handler);
+            let _ = response.send(Ok(()));
             CommandOutcome::Continue
         }
         Some(Command::PublishProvider { key, response }) => {

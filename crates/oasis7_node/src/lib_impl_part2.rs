@@ -105,6 +105,7 @@ impl PosNodeEngine {
             ),
         })?;
         replication_runtime.apply_remote_message(node_id, world_id, &message)?;
+        endpoint.publish_local_content_provider(world_id, message.record.content_hash.as_str())?;
         let persisted = replication_runtime.load_commit_message_by_height(world_id, height)?;
         if persisted
             .as_ref()

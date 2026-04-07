@@ -405,6 +405,273 @@ fn runtime_replication_storage_challenge_gate_allows_when_network_matches_reach_
 }
 
 #[test]
+fn runtime_replication_storage_challenge_gate_prefers_dht_blob_providers() {
+    let dir = temp_dir("challenge-gate-provider-selection");
+    let network_impl = Arc::new(ProviderAwareTestNetwork::new(
+        dir.clone(),
+        "storage-provider-1",
+    ));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "storage-provider-1",
+        "storage-provider-1",
+    ));
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 93)],
+    );
+    let config = NodeConfig::new(
+        "node-a",
+        "world-challenge-provider-selection",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_tick_interval(Duration::from_millis(10))
+    .expect("tick")
+    .with_pos_config(pos_config)
+    .expect("pos config")
+    .with_auto_attest_all_validators(true)
+    .with_replication(signed_replication_config(dir.clone(), 93));
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network))
+            .with_dht(dht)
+            .with_local_provider_id("node-a"),
+    );
+
+    runtime.start().expect("start runtime");
+    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
+        runtime.snapshot().consensus.committed_height >= 4
+    });
+    let snapshot = runtime.snapshot();
+    let attempts = network_impl.provider_attempts();
+    assert!(
+        advanced,
+        "runtime did not continue committing when provider-aware fetch-blob was available: committed_height={} network_committed_height={} last_error={:?} attempts={attempts:?}",
+        snapshot.consensus.committed_height,
+        snapshot.consensus.network_committed_height,
+        snapshot.last_error
+    );
+
+    assert!(
+        attempts.iter().any(|providers| {
+            providers
+                .iter()
+                .any(|provider| provider == "storage-provider-1")
+        }),
+        "expected storage challenge gate to request fetch-blob with DHT providers, attempts={attempts:?}"
+    );
+
+    assert!(
+        !snapshot
+            .last_error
+            .as_deref()
+            .map(|reason| reason.contains("storage challenge gate"))
+            .unwrap_or(false),
+        "runtime should not report storage challenge gate failure when provider-aware fetch-blob succeeds: {:?}",
+        snapshot.last_error
+    );
+
+    runtime.stop().expect("stop runtime");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_local_replication_publishes_blob_provider_to_dht() {
+    let dir = temp_dir("publish-local-provider");
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let dht = Arc::new(TestReplicaMaintenanceDht::new("peer-local", "peer-local"));
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 94)],
+    );
+    let config = NodeConfig::new("node-a", "world-publish-local-provider", NodeRole::Sequencer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 94));
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network))
+            .with_dht(dht.clone())
+            .with_local_provider_id("peer-local"),
+    );
+
+    runtime.start().expect("start runtime");
+    let published = wait_until(Instant::now() + Duration::from_secs(2), || {
+        !dht.published_records().is_empty()
+    });
+    assert!(published, "expected local commit to publish blob provider");
+
+    let published_records = dht.published_records();
+    assert!(
+        published_records
+            .iter()
+            .any(|(_, _, provider_id)| provider_id == "peer-local"),
+        "expected published provider id peer-local, got {published_records:?}"
+    );
+
+    runtime.stop().expect("stop runtime");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_replication_storage_challenge_gate_falls_back_after_provider_route_unavailable() {
+    let dir = temp_dir("challenge-gate-provider-fallback");
+    let network_impl = Arc::new(ProviderFallbackTestNetwork::new(dir.clone()));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network_impl.clone();
+    let dht = Arc::new(TestReplicaMaintenanceDht::new(
+        "storage-provider-1",
+        "node-a",
+    ));
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", 97)],
+    );
+    let config = NodeConfig::new(
+        "node-a",
+        "world-challenge-provider-fallback",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_tick_interval(Duration::from_millis(10))
+    .expect("tick")
+    .with_pos_config(pos_config)
+    .expect("pos config")
+    .with_auto_attest_all_validators(true)
+    .with_replication(signed_replication_config(dir.clone(), 97));
+    let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network))
+            .with_dht(dht)
+            .with_local_provider_id("node-a"),
+    );
+
+    runtime.start().expect("start runtime");
+    let advanced = wait_until(Instant::now() + Duration::from_secs(2), || {
+        runtime.snapshot().consensus.committed_height >= 4
+    });
+    let snapshot = runtime.snapshot();
+    let provider_attempts = network_impl.provider_attempts();
+    let generic_attempts = network_impl.generic_attempts();
+    assert!(
+        advanced,
+        "runtime did not continue committing after provider-route fallback: committed_height={} network_committed_height={} last_error={:?} provider_attempts={provider_attempts:?} generic_attempts={generic_attempts}",
+        snapshot.consensus.committed_height,
+        snapshot.consensus.network_committed_height,
+        snapshot.last_error
+    );
+    assert!(
+        provider_attempts.iter().any(|providers| {
+            providers
+                .iter()
+                .any(|provider| provider == "storage-provider-1")
+        }),
+        "expected storage challenge gate to try DHT-selected provider before fallback: {provider_attempts:?}"
+    );
+    assert!(
+        generic_attempts > 0,
+        "expected storage challenge gate to fall back to generic lane request"
+    );
+    assert!(
+        !snapshot
+            .last_error
+            .as_deref()
+            .map(|reason| reason.contains("storage challenge gate"))
+            .unwrap_or(false),
+        "runtime should not report storage challenge gate failure when generic fallback succeeds: {:?}",
+        snapshot.last_error
+    );
+
+    runtime.stop().expect("stop runtime");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn runtime_remote_replication_ingest_publishes_blob_provider_to_dht() {
+    let dir_a = temp_dir("publish-remote-provider-a");
+    let dir_b = temp_dir("publish-remote-provider-b");
+    let dht = Arc::new(TestReplicaMaintenanceDht::new("peer-seq", "peer-store"));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![
+            PosValidator {
+                validator_id: "node-a".to_string(),
+                stake: 60,
+            },
+            PosValidator {
+                validator_id: "node-b".to_string(),
+                stake: 40,
+            },
+        ],
+        &[("node-a", 95), ("node-b", 96)],
+    );
+    let config_a = NodeConfig::new("node-a", "world-publish-remote-provider", NodeRole::Sequencer)
+        .expect("config a")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir_a.clone(), 95));
+    let config_b = NodeConfig::new("node-b", "world-publish-remote-provider", NodeRole::Storage)
+        .expect("config b")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(signed_replication_config(dir_b.clone(), 96));
+
+    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
+        .with_replication_network(
+            NodeReplicationNetworkHandle::new(Arc::clone(&network))
+                .with_dht(dht.clone())
+                .with_local_provider_id("peer-seq"),
+        );
+    let mut runtime_b = NodeRuntime::new(config_b).with_replication_network(
+        NodeReplicationNetworkHandle::new(Arc::clone(&network))
+            .with_dht(dht.clone())
+            .with_local_provider_id("peer-store"),
+    );
+
+    runtime_a.start().expect("start a");
+    runtime_b.start().expect("start b");
+
+    let published = wait_until(Instant::now() + Duration::from_secs(3), || {
+        dht.published_records()
+            .iter()
+            .any(|(_, _, provider_id)| provider_id == "peer-store")
+    });
+    assert!(
+        published,
+        "expected storage ingest path to publish peer-store provider, got {:?}",
+        dht.published_records()
+    );
+
+    runtime_a.stop().expect("stop a");
+    runtime_b.stop().expect("stop b");
+    let _ = fs::remove_dir_all(&dir_a);
+    let _ = fs::remove_dir_all(&dir_b);
+}
+
+#[test]
 fn replication_network_handle_rejects_empty_topic() {
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,

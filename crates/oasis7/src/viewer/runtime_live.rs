@@ -623,10 +623,7 @@ impl ViewerRuntimeLiveServer {
                     Ok(updates) => updates,
                     Err(error) => {
                         let (delta_logical_time, delta_event_seq) = self
-                            .control_completion_delta(
-                                baseline_logical_time,
-                                baseline_event_seq,
-                            );
+                            .control_completion_delta(baseline_logical_time, baseline_event_seq);
                         return self.block_runtime_control(
                             session,
                             writer,
@@ -939,9 +936,7 @@ impl ViewerRuntimeLiveServer {
         emit_snapshot: bool,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let (error_code, error_message, hint) = runtime_control_error_details(&error);
-        eprintln!(
-            "viewer runtime live: control {action} failed: {error_message} ({error:?})"
-        );
+        eprintln!("viewer runtime live: control {action} failed: {error_message} ({error:?})");
         session.playing = false;
         session.next_play_step_at = None;
         self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
@@ -992,9 +987,7 @@ fn control_mode_for_action(action: &str, step_count: usize) -> ViewerControl {
     }
 }
 
-fn runtime_control_error_details(
-    error: &ViewerRuntimeLiveServerError,
-) -> (String, String, String) {
+fn runtime_control_error_details(error: &ViewerRuntimeLiveServerError) -> (String, String, String) {
     match error {
         ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::AgentNotFound { agent_id }) => (
             "agent_not_found".to_string(),

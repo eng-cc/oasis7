@@ -249,6 +249,65 @@ impl TestInMemoryNetwork {
 }
 
 #[derive(Clone)]
+struct ProviderAwareTestNetwork {
+    inner: TestInMemoryNetwork,
+    storage_root: PathBuf,
+    required_provider_id: String,
+    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+}
+
+impl ProviderAwareTestNetwork {
+    fn new(storage_root: PathBuf, required_provider_id: impl Into<String>) -> Self {
+        Self {
+            inner: TestInMemoryNetwork::default(),
+            storage_root,
+            required_provider_id: required_provider_id.into(),
+            provider_attempts: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn provider_attempts(&self) -> Vec<Vec<String>> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .clone()
+    }
+}
+
+#[derive(Clone)]
+struct ProviderFallbackTestNetwork {
+    inner: TestInMemoryNetwork,
+    storage_root: PathBuf,
+    provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+    generic_attempts: Arc<Mutex<usize>>,
+}
+
+impl ProviderFallbackTestNetwork {
+    fn new(storage_root: PathBuf) -> Self {
+        Self {
+            inner: TestInMemoryNetwork::default(),
+            storage_root,
+            provider_attempts: Arc::new(Mutex::new(Vec::new())),
+            generic_attempts: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    fn provider_attempts(&self) -> Vec<Vec<String>> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .clone()
+    }
+
+    fn generic_attempts(&self) -> usize {
+        *self
+            .generic_attempts
+            .lock()
+            .expect("lock generic attempts")
+    }
+}
+
+#[derive(Clone)]
 struct TestReplicaMaintenanceDht {
     source_provider_id: String,
     local_provider_id: String,
@@ -442,6 +501,136 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TestInMem
             .expect("lock handlers")
             .insert(protocol.to_string(), Arc::from(handler));
         Ok(())
+    }
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderAwareTestNetwork {
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        self.request_with_providers(protocol, payload, &[])
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .push(providers.to_vec());
+        if protocol != super::replication::REPLICATION_FETCH_BLOB_PROTOCOL {
+            return self.inner.request_with_providers(protocol, payload, providers);
+        }
+        if !providers
+            .iter()
+            .any(|provider_id| provider_id == &self.required_provider_id)
+        {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: format!(
+                    "provider selection missing required provider {}",
+                    self.required_provider_id
+                ),
+            });
+        }
+        let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("decode fetch blob request failed: {err}"),
+            })?;
+        let blob = super::replication::load_blob_from_root(
+            self.storage_root.as_path(),
+            request.content_hash.as_str(),
+        )
+        .map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("load local blob failed: {err}"),
+        })?;
+        let response = super::replication::FetchBlobResponse {
+            found: blob.is_some(),
+            blob,
+        };
+        serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode fetch blob response failed: {err}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderFallbackTestNetwork {
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        self.request_with_providers(protocol, payload, &[])
+    }
+
+    fn request_with_providers(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+    ) -> Result<Vec<u8>, WorldError> {
+        if protocol != super::replication::REPLICATION_FETCH_BLOB_PROTOCOL {
+            return self.inner.request_with_providers(protocol, payload, providers);
+        }
+        if !providers.is_empty() {
+            self.provider_attempts
+                .lock()
+                .expect("lock provider attempts")
+                .push(providers.to_vec());
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: "simulated provider route unavailable".to_string(),
+            });
+        }
+        *self
+            .generic_attempts
+            .lock()
+            .expect("lock generic attempts") += 1;
+        let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+            .map_err(|err| WorldError::DistributedValidationFailed {
+                reason: format!("decode fetch blob request failed: {err}"),
+            })?;
+        let blob = super::replication::load_blob_from_root(
+            self.storage_root.as_path(),
+            request.content_hash.as_str(),
+        )
+        .map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("load local blob failed: {err}"),
+        })?;
+        let response = super::replication::FetchBlobResponse {
+            found: blob.is_some(),
+            blob,
+        };
+        serde_json::to_vec(&response).map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode fetch blob response failed: {err}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
     }
 }
 

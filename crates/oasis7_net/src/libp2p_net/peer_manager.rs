@@ -230,7 +230,7 @@ fn exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool
 
 fn ipv4_subnet_bucket(path: &TransportPath) -> Option<String> {
     path.addr.iter().find_map(|protocol| match protocol {
-        Protocol::Ip4(ip) => Some(ipv4_bucket(ip)),
+        Protocol::Ip4(ip) if !ip.is_loopback() => Some(ipv4_bucket(ip)),
         _ => None,
     })
 }
@@ -429,6 +429,65 @@ mod tests {
             PeerManagerHealthIssue::Ipv4SubnetConcentration { subnet, .. } if subnet == "192.168.10"
         )));
         assert_eq!(healths[&peer_c].status, PeerManagerHealthStatus::Active);
+    }
+
+    #[test]
+    fn recompute_ignores_loopback_subnet_concentration() {
+        let peer_a = PeerId::random();
+        let peer_b = PeerId::random();
+        let discovered = HashMap::from([
+            (
+                peer_a,
+                sample_record(
+                    peer_a,
+                    vec![
+                        PeerDiscoverySource::StaticBootstrap,
+                        PeerDiscoverySource::Dht,
+                    ],
+                ),
+            ),
+            (
+                peer_b,
+                sample_record(
+                    peer_b,
+                    vec![
+                        PeerDiscoverySource::StaticBootstrap,
+                        PeerDiscoverySource::Dht,
+                    ],
+                ),
+            ),
+        ]);
+        let active = HashMap::from([
+            (
+                peer_a,
+                transport_path(
+                    peer_a,
+                    "/ip4/127.0.0.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_b,
+                transport_path(
+                    peer_b,
+                    "/ip4/127.0.0.1/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        for peer in [peer_a, peer_b] {
+            assert!(
+                !healths[&peer].issues.iter().any(|issue| matches!(
+                    issue,
+                    PeerManagerHealthIssue::Ipv4SubnetConcentration { .. }
+                )),
+                "loopback peers should not trip ipv4 subnet concentration: {:?}",
+                healths[&peer].issues
+            );
+        }
     }
 
     #[test]

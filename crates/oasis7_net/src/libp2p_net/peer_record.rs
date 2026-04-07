@@ -141,7 +141,7 @@ fn materialize_peer_record(
 ) -> PeerRecord {
     let mut record = template.clone();
     let listening_addrs = listening_addrs.lock().expect("lock listening addrs");
-    if record.direct_addrs.is_empty() {
+    if record.direct_addrs.is_empty() && peer_record_allows_direct_addrs(&record) {
         record.direct_addrs = listening_addrs
             .iter()
             .filter(|addr| !is_relayed_addr(addr))
@@ -157,6 +157,21 @@ fn materialize_peer_record(
     }
     record.published_at_ms = super::now_ms();
     record
+}
+
+fn peer_record_allows_direct_addrs(record: &PeerRecord) -> bool {
+    let Ok(node_role) = record.parsed_node_role() else {
+        return false;
+    };
+    !matches!(
+        record.deployment_mode,
+        oasis7_proto::distributed_dht::PeerDeploymentMode::Private
+            | oasis7_proto::distributed_dht::PeerDeploymentMode::RelayOnly
+            | oasis7_proto::distributed_dht::PeerDeploymentMode::ValidatorHidden
+    ) && !matches!(
+        node_role,
+        oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore
+    )
 }
 
 fn is_relayed_addr(addr: &Multiaddr) -> bool {

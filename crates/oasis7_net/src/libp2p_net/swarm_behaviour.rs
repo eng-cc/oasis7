@@ -10,6 +10,7 @@ use libp2p::noise;
 use libp2p::relay;
 use libp2p::rendezvous::{client as rendezvous_client, server as rendezvous_server};
 use libp2p::request_response::{self, ProtocolSupport};
+use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::{NetworkBehaviour, Swarm};
 use libp2p::{Multiaddr, PeerId, StreamProtocol, Transport as _};
 
@@ -17,15 +18,18 @@ use oasis7_proto::distributed::RR_PROTOCOL_PREFIX;
 use oasis7_proto::distributed_net::{NetworkRequest, NetworkResponse};
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "BehaviourEvent")]
+#[behaviour(
+    out_event = "BehaviourEvent",
+    prelude = "libp2p::swarm::derive_prelude"
+)]
 pub(super) struct Behaviour {
     pub(super) gossipsub: gossipsub::Behaviour,
     pub(super) request_response: request_response::cbor::Behaviour<NetworkRequest, NetworkResponse>,
     pub(super) kademlia: kad::Behaviour<MemoryStore>,
     pub(super) relay_client: relay::client::Behaviour,
     pub(super) dcutr: dcutr::Behaviour,
-    pub(super) rendezvous_client: rendezvous_client::Behaviour,
-    pub(super) rendezvous_server: rendezvous_server::Behaviour,
+    pub(super) rendezvous_client: Toggle<rendezvous_client::Behaviour>,
+    pub(super) rendezvous_server: Toggle<rendezvous_server::Behaviour>,
 }
 
 #[derive(Debug)]
@@ -81,7 +85,7 @@ impl From<rendezvous_server::Event> for BehaviourEvent {
     }
 }
 
-pub(super) fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
+pub(super) fn build_swarm(keypair: &Keypair, enable_rendezvous: bool) -> Swarm<Behaviour> {
     let swarm_config = libp2p::swarm::Config::with_async_std_executor()
         .with_idle_connection_timeout(std::time::Duration::from_secs(30));
 
@@ -109,8 +113,12 @@ pub(super) fn build_swarm(keypair: &Keypair) -> Swarm<Behaviour> {
         kademlia,
         relay_client,
         dcutr: dcutr::Behaviour::new(peer_id),
-        rendezvous_client: rendezvous_client::Behaviour::new(keypair.clone()),
-        rendezvous_server: rendezvous_server::Behaviour::new(Default::default()),
+        rendezvous_client: Toggle::from(
+            enable_rendezvous.then(|| rendezvous_client::Behaviour::new(keypair.clone())),
+        ),
+        rendezvous_server: Toggle::from(
+            enable_rendezvous.then(|| rendezvous_server::Behaviour::new(Default::default())),
+        ),
     };
 
     let quic_transport =

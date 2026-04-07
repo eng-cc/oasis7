@@ -1,3 +1,4 @@
+use super::discovery::peer_record_enables_rendezvous;
 use super::peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
@@ -213,6 +214,82 @@ fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
     assert_eq!(signed.record.relay_addrs.len(), 1);
     assert!(signed.record.direct_addrs[0].contains("/quic-v1"));
     assert!(signed.record.relay_addrs[0].contains("/p2p-circuit"));
+}
+
+#[test]
+fn build_configured_peer_record_keeps_private_validator_without_direct_addrs() {
+    let keypair = Keypair::generate_ed25519();
+    let listening_addrs = Arc::new(Mutex::new(vec![
+        "/ip4/127.0.0.1/tcp/4202"
+            .parse()
+            .expect("direct listen addr"),
+        format!(
+            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+            PeerId::random()
+        )
+        .parse()
+        .expect("relay listen addr"),
+    ]));
+    let signed = build_configured_peer_record(
+        &keypair,
+        &PeerRecord {
+            peer_id: String::new(),
+            node_id: "node-private-validator".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Private,
+            reachability_class: crate::dht::PeerReachabilityClass::Private,
+            direct_addrs: Vec::new(),
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![
+                crate::dht::PeerDiscoverySource::StaticBootstrap,
+                crate::dht::PeerDiscoverySource::Dht,
+            ],
+            capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
+            published_at_ms: 0,
+            ttl_ms: 60_000,
+        },
+        &listening_addrs,
+    )
+    .expect("build private validator peer record");
+
+    assert!(signed.record.direct_addrs.is_empty());
+    assert_eq!(signed.record.relay_addrs.len(), 1);
+}
+
+#[test]
+fn peer_record_enables_rendezvous_only_when_source_is_declared() {
+    let without_rendezvous = PeerRecord {
+        peer_id: String::new(),
+        node_id: "node-no-rendezvous".to_string(),
+        world_id: "world-a".to_string(),
+        network_id: "network-a".to_string(),
+        node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+        deployment_mode: PeerDeploymentMode::Private,
+        reachability_class: crate::dht::PeerReachabilityClass::Private,
+        direct_addrs: Vec::new(),
+        hole_punch_addrs: Vec::new(),
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::StaticBootstrap,
+            crate::dht::PeerDiscoverySource::Dht,
+        ],
+        capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+        published_at_ms: 0,
+        ttl_ms: 60_000,
+    };
+    assert!(!peer_record_enables_rendezvous(&without_rendezvous));
+
+    let with_rendezvous = PeerRecord {
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::StaticBootstrap,
+            crate::dht::PeerDiscoverySource::Rendezvous,
+        ],
+        ..without_rendezvous
+    };
+    assert!(peer_record_enables_rendezvous(&with_rendezvous));
 }
 
 #[test]
@@ -656,7 +733,7 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
 
 #[test]
 fn process_discovered_peer_record_dials_candidate_peer() {
-    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519());
+    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
     let peer_key = Keypair::generate_ed25519();
     let record = signed_discovery_peer_record(
         &peer_key,
@@ -696,7 +773,7 @@ fn process_discovered_peer_record_dials_candidate_peer() {
 
 #[test]
 fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer() {
-    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519());
+    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
     let peer_key = Keypair::generate_ed25519();
     let peer_id = PeerId::from(peer_key.public());
     let suspect_record =

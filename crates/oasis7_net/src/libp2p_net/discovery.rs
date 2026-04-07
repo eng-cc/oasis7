@@ -14,7 +14,7 @@ use oasis7_proto::distributed::{
     dht_peer_discovery_key, dht_peer_record_key,
     rendezvous_namespace as distributed_rendezvous_namespace, DistributedErrorCode, ErrorResponse,
 };
-use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
+use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord, SignedPeerRecord};
 use oasis7_proto::distributed_net::NetworkRequest;
 
 use super::kad_queries::PendingDhtQuery;
@@ -80,6 +80,9 @@ pub(super) fn maybe_register_rendezvous_namespace(
     local_peer_id: PeerId,
     template: &PeerRecord,
 ) -> Result<bool, WorldError> {
+    if !peer_record_enables_rendezvous(template) {
+        return Ok(false);
+    }
     if peer_id == local_peer_id
         || pending_rendezvous_registers.contains(&peer_id)
         || registered_rendezvous_nodes.contains(&peer_id)
@@ -90,6 +93,8 @@ pub(super) fn maybe_register_rendezvous_namespace(
     swarm
         .behaviour_mut()
         .rendezvous_client
+        .as_mut()
+        .expect("rendezvous client enabled when peer record opts in")
         .register(namespace, peer_id, None)
         .map_err(|err| WorldError::NetworkProtocolUnavailable {
             protocol: format!("rendezvous register failed: {err}"),
@@ -106,6 +111,9 @@ pub(super) fn maybe_discover_rendezvous_namespace(
     local_peer_id: PeerId,
     template: &PeerRecord,
 ) -> Result<bool, WorldError> {
+    if !peer_record_enables_rendezvous(template) {
+        return Ok(false);
+    }
     if peer_id == local_peer_id || pending_rendezvous_discovers.contains(&peer_id) {
         return Ok(false);
     }
@@ -114,9 +122,18 @@ pub(super) fn maybe_discover_rendezvous_namespace(
     swarm
         .behaviour_mut()
         .rendezvous_client
+        .as_mut()
+        .expect("rendezvous client enabled when peer record opts in")
         .discover(Some(namespace), cookie, None, peer_id);
     pending_rendezvous_discovers.insert(peer_id);
     Ok(true)
+}
+
+pub(super) fn peer_record_enables_rendezvous(template: &PeerRecord) -> bool {
+    template
+        .discovery_sources
+        .iter()
+        .any(|source| matches!(source, PeerDiscoverySource::Rendezvous))
 }
 
 pub(super) fn maybe_queue_discovery_peer_record(

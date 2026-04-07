@@ -1033,15 +1033,26 @@ fn attach_default_replication_network(
     root_keypair: &node_keypair_config::NodeKeypairConfig,
 ) -> Result<(NodeRuntime, Arc<Libp2pReplicationNetwork>), String> {
     let mut network_config = build_default_replication_network_config(options, root_keypair)?;
-    network_config.allow_local_handler_fallback_when_no_peers = true;
+    network_config.allow_local_handler_fallback_when_no_peers =
+        network_config.bootstrap_peers.is_empty();
     let network = Arc::new(Libp2pReplicationNetwork::new(network_config));
     let handle_network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<oasis7_proto::world_error::WorldError>
             + Send
             + Sync,
     > = network.clone();
+    let handle_dht: Arc<
+        dyn oasis7_proto::distributed_dht::DistributedDht<oasis7_proto::world_error::WorldError>
+            + Send
+            + Sync,
+    > = network.clone();
     let runtime = runtime
-        .with_replication_network(NodeReplicationNetworkHandle::new(handle_network))
+        .with_replication_network(
+            NodeReplicationNetworkHandle::new(handle_network)
+                .with_dht(handle_dht.clone())
+                .with_local_provider_id(network.peer_id().to_string()),
+        )
+        .with_replica_maintenance_dht(handle_dht)
         .with_replication_network_consensus_enabled(false);
     Ok((runtime, network))
 }
@@ -1051,19 +1062,40 @@ fn build_default_replication_network_config(
     root_keypair: &node_keypair_config::NodeKeypairConfig,
 ) -> Result<Libp2pReplicationNetworkConfig, String> {
     let mut config = Libp2pReplicationNetworkConfig::default();
+    let libp2p_identity_keypair =
+        derive_node_libp2p_identity_keypair_config(options.node_id.as_str(), root_keypair)?;
     config.keypair = Some(
-        derive_libp2p_identity_keypair(root_keypair.private_key_hex.as_str())
+        derive_libp2p_identity_keypair(libp2p_identity_keypair.private_key_hex.as_str())
             .map_err(|err| format!("failed to derive libp2p identity keypair: {err:?}"))?,
     );
     config.peer_record = Some(build_default_peer_record(options));
-    config
-        .listen_addrs
-        .push(DEFAULT_REPLICATION_NETWORK_LISTEN.parse().map_err(|err| {
-            format!(
-                "failed to parse default replication listen address {}: {err}",
-                DEFAULT_REPLICATION_NETWORK_LISTEN
-            )
-        })?);
+    if options.replication_network_listen_addrs.is_empty() {
+        config
+            .listen_addrs
+            .push(DEFAULT_REPLICATION_NETWORK_LISTEN.parse().map_err(|err| {
+                format!(
+                    "failed to parse default replication listen address {}: {err}",
+                    DEFAULT_REPLICATION_NETWORK_LISTEN
+                )
+            })?);
+    } else {
+        config.listen_addrs = options
+            .replication_network_listen_addrs
+            .iter()
+            .map(|raw| {
+                raw.parse()
+                    .map_err(|err| format!("invalid --replication-network-listen {raw}: {err}"))
+            })
+            .collect::<Result<_, _>>()?;
+    }
+    config.bootstrap_peers = options
+        .replication_network_bootstrap_peers
+        .iter()
+        .map(|raw| {
+            raw.parse()
+                .map_err(|err| format!("invalid --replication-network-peer {raw}: {err}"))
+        })
+        .collect::<Result<_, _>>()?;
     Ok(config)
 }
 
@@ -1106,9 +1138,35 @@ fn derive_node_consensus_signer_keypair(
     node_id: &str,
     root_keypair: &node_keypair_config::NodeKeypairConfig,
 ) -> Result<node_keypair_config::NodeKeypairConfig, String> {
+    derive_node_scoped_keypair(
+        node_id,
+        root_keypair,
+        b"oasis7-node-consensus-signer-v1",
+        "node consensus signer",
+    )
+}
+
+fn derive_node_libp2p_identity_keypair_config(
+    node_id: &str,
+    root_keypair: &node_keypair_config::NodeKeypairConfig,
+) -> Result<node_keypair_config::NodeKeypairConfig, String> {
+    derive_node_scoped_keypair(
+        node_id,
+        root_keypair,
+        b"oasis7-node-libp2p-identity-v1",
+        "node libp2p identity",
+    )
+}
+
+fn derive_node_scoped_keypair(
+    node_id: &str,
+    root_keypair: &node_keypair_config::NodeKeypairConfig,
+    namespace: &[u8],
+    label: &str,
+) -> Result<node_keypair_config::NodeKeypairConfig, String> {
     let node_id = node_id.trim();
     if node_id.is_empty() {
-        return Err("node consensus signer derivation requires non-empty node_id".to_string());
+        return Err(format!("{label} derivation requires non-empty node_id"));
     }
     let root_private_bytes = hex::decode(root_keypair.private_key_hex.as_str())
         .map_err(|_| "root node.private_key must be valid hex".to_string())?;
@@ -1117,7 +1175,7 @@ fn derive_node_consensus_signer_keypair(
         .map_err(|_| "root node.private_key must be 32-byte hex".to_string())?;
 
     let mut hasher = Sha256::new();
-    hasher.update(b"oasis7-node-consensus-signer-v1");
+    hasher.update(namespace);
     hasher.update(root_private);
     hasher.update(b"|");
     hasher.update(node_id.as_bytes());

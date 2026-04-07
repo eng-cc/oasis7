@@ -54,6 +54,8 @@ pub(super) struct CliOptions {
     pub node_validators: Vec<PosValidator>,
     pub node_gossip_bind: Option<SocketAddr>,
     pub node_gossip_peers: Vec<SocketAddr>,
+    pub replication_network_listen_addrs: Vec<String>,
+    pub replication_network_bootstrap_peers: Vec<String>,
     pub config_path: String,
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
@@ -102,6 +104,8 @@ impl Default for CliOptions {
             node_validators: Vec::new(),
             node_gossip_bind: None,
             node_gossip_peers: Vec::new(),
+            replication_network_listen_addrs: Vec::new(),
+            replication_network_bootstrap_peers: Vec::new(),
             config_path: DEFAULT_CONFIG_FILE.to_string(),
             execution_bridge_state_path: None,
             execution_world_dir: None,
@@ -271,6 +275,14 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options
                     .node_gossip_peers
                     .push(parse_socket_addr(raw.as_str(), "--node-gossip-peer")?);
+            }
+            "--replication-network-listen" => {
+                let raw = parse_required_value(&mut iter, "--replication-network-listen")?;
+                options.replication_network_listen_addrs.push(raw);
+            }
+            "--replication-network-peer" => {
+                let raw = parse_required_value(&mut iter, "--replication-network-peer")?;
+                options.replication_network_bootstrap_peers.push(raw);
             }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
             "--execution-bridge-state" => {
@@ -485,6 +497,10 @@ Options:\n\
   --node-no-auto-attest-all         disable auto attesting validators (default)\n\
   --node-gossip-bind <addr:port>    UDP gossip bind\n\
   --node-gossip-peer <addr:port>    UDP gossip peer (repeatable, requires --node-gossip-bind)\n\
+  --replication-network-listen <multiaddr>\n\
+                                    libp2p replication listen addr (repeatable, default: {DEFAULT_REPLICATION_NETWORK_LISTEN})\n\
+  --replication-network-peer <multiaddr>\n\
+                                    libp2p replication bootstrap peer (repeatable)\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\

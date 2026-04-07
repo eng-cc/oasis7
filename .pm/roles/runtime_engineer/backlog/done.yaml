@@ -41,6 +41,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_dfe0d5fdffcf4e0cb5b28a28cda917c8.yaml
+  - task_uid: task_382f3d2cc062445ca2f07294f17daf0e
+    title: "Resolve P2PARCH-6 proxy failure signatures"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "Latest P2PARCH-6 proxy failure signatures are reduced or reclassified with truthful runtime/evidence updates."
+      - "Runtime/soak changes and evidence remain traceable to P2PARCH-6 blocker closure."
+      - "PM task, execution log, and validation artifacts are updated in the new worktree."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_382f3d2cc062445ca2f07294f17daf0e.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

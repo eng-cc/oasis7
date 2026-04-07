@@ -41,8 +41,9 @@ use discovery::{
     handle_request_response_request, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
-    maybe_request_connected_peer_record, process_discovered_peer_record,
-    publish_discovery_provider, start_peer_discovery_query, PendingPeerRecordRequest,
+    maybe_request_connected_peer_record, peer_record_enables_rendezvous,
+    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
+    PendingPeerRecordRequest,
 };
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
 use peer_manager::recompute_peer_manager_healths;
@@ -79,6 +80,7 @@ const DEFAULT_COMMAND_BUFFER_CAPACITY: usize = 2048;
 const DEFAULT_MAX_PUBLISHED_MESSAGES: usize = 4096;
 const DEFAULT_MAX_ERROR_MESSAGES: usize = 4096;
 const DEFAULT_MAX_LISTENING_ADDRS: usize = 128;
+const DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS: i64 = 1_000;
 const DEFAULT_DISCOVERY_QUERY_INTERVAL_MS: i64 = 15_000;
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
@@ -88,8 +90,10 @@ const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_p
 pub struct Libp2pNetworkConfig {
     pub keypair: Option<Keypair>,
     pub peer_record: Option<PeerRecord>,
+    pub enable_rendezvous: bool,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
+    pub bootstrap_redial_interval_ms: i64,
     pub republish_interval_ms: i64,
     pub discovery_query_interval_ms: i64,
     pub command_buffer_capacity: usize,
@@ -104,8 +108,10 @@ impl Default for Libp2pNetworkConfig {
         Self {
             keypair: None,
             peer_record: None,
+            enable_rendezvous: false,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
+            bootstrap_redial_interval_ms: DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS,
             republish_interval_ms: 5 * 60 * 1000,
             discovery_query_interval_ms: DEFAULT_DISCOVERY_QUERY_INTERVAL_MS,
             command_buffer_capacity: DEFAULT_COMMAND_BUFFER_CAPACITY,
@@ -150,9 +156,16 @@ enum Command {
         providers: Vec<String>,
         response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
     },
+    RequestToPeer {
+        protocol: String,
+        payload: Vec<u8>,
+        peer: PeerId,
+        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+    },
     RegisterHandler {
         protocol: String,
         handler: Handler,
+        response: oneshot::Sender<Result<(), WorldError>>,
     },
     PublishProvider {
         key: String,
@@ -226,11 +239,18 @@ impl Libp2pNetwork {
         let local_peer_id = peer_id;
         let republish_tx = command_tx.clone();
         let discovery_tx = command_tx.clone();
+        let bootstrap_redial_tx = command_tx.clone();
         let bootstrap_peers = config.bootstrap_peers.clone();
+        let bootstrap_redial_peers = bootstrap_peers.clone();
         let peer_record_template = config.peer_record.clone();
+        let enable_rendezvous = config.enable_rendezvous
+            || peer_record_template
+                .as_ref()
+                .map(peer_record_enables_rendezvous)
+                .unwrap_or(false);
 
         std::thread::spawn(move || {
-            let mut swarm = build_swarm(&keypair_clone);
+            let mut swarm = build_swarm(&keypair_clone, enable_rendezvous);
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
@@ -265,6 +285,7 @@ impl Libp2pNetwork {
             let mut rendezvous_cookies: HashMap<PeerId, rendezvous::Cookie> = HashMap::new();
             let mut dialed_discovery_addrs: HashSet<String> = HashSet::new();
             let mut peer_record_last_published_at_ms = None;
+            let bootstrap_redial_interval_ms = config_clone.bootstrap_redial_interval_ms;
             let republish_interval_ms = config_clone.republish_interval_ms;
             let discovery_query_interval_ms = config_clone.discovery_query_interval_ms;
 
@@ -304,6 +325,25 @@ impl Libp2pNetwork {
                             Ok(()) => {}
                             Err(err) if err.is_full() => {}
                             Err(_) => break,
+                        }
+                    }
+                });
+            }
+
+            if bootstrap_redial_interval_ms > 0 && !bootstrap_redial_peers.is_empty() {
+                std::thread::spawn(move || {
+                    let mut bootstrap_redial_tx = bootstrap_redial_tx;
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            bootstrap_redial_interval_ms as u64,
+                        ));
+                        for addr in &bootstrap_redial_peers {
+                            match bootstrap_redial_tx.try_send(Command::Dial { addr: addr.clone() })
+                            {
+                                Ok(()) => {}
+                                Err(err) if err.is_full() => break,
+                                Err(_) => return,
+                            }
                         }
                     }
                 });

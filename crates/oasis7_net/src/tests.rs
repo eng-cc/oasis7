@@ -125,6 +125,33 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     use std::time::{Duration, Instant};
 
     use libp2p::Multiaddr;
+    use oasis7_proto::distributed_dht::{
+        PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass, PeerRecord,
+    };
+
+    let peer_manager_policy = PeerManagerPolicy {
+        min_active_discovery_sources: 0,
+        min_peer_discovery_sources: 0,
+        max_ipv4_subnet_share_per_mille: 1_000,
+        max_relay_domain_share_per_mille: 1_000,
+        max_relayed_active_peer_share_per_mille: 1_000,
+    };
+    let peer_record = PeerRecord {
+        peer_id: String::new(),
+        node_id: "smoke-node".to_string(),
+        world_id: "smoke-world".to_string(),
+        network_id: "smoke-network".to_string(),
+        node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+        deployment_mode: PeerDeploymentMode::Private,
+        reachability_class: PeerReachabilityClass::Private,
+        direct_addrs: Vec::new(),
+        hole_punch_addrs: Vec::new(),
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![PeerDiscoverySource::Dht],
+        capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+        published_at_ms: 1,
+        ttl_ms: 60_000,
+    };
 
     fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
         while Instant::now() < deadline {
@@ -139,6 +166,8 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     let listen_addr: Multiaddr = "/ip4/127.0.0.1/tcp/0".parse().expect("multiaddr");
     let net1 = Libp2pNetwork::new(Libp2pNetworkConfig {
         listen_addrs: vec![listen_addr],
+        peer_record: Some(peer_record.clone()),
+        peer_manager_policy: peer_manager_policy.clone(),
         ..Libp2pNetworkConfig::default()
     });
 
@@ -166,6 +195,8 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     let net2 = Libp2pNetwork::new(Libp2pNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
         bootstrap_peers: vec![dial_addr],
+        peer_record: Some(peer_record),
+        peer_manager_policy,
         ..Libp2pNetworkConfig::default()
     });
 
@@ -186,13 +217,32 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
     }
 
     let deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("request/response", deadline, || {
+    let mut last_reply = None;
+    let mut last_error = None;
+    while Instant::now() < deadline {
         match net2.request("/aw/rr/1.0.0/ping", b"ping") {
-            Ok(reply) => reply == b"ping-ok".to_vec(),
-            Err(WorldError::NetworkProtocolUnavailable { .. }) => false,
+            Ok(reply) => {
+                if reply == b"ping-ok".to_vec() {
+                    last_reply = Some(reply);
+                    break;
+                }
+                last_reply = Some(reply);
+                last_error = None;
+            }
+            Err(WorldError::NetworkProtocolUnavailable { .. }) => {
+                last_error = Some("NetworkProtocolUnavailable".to_string());
+            }
             Err(err) => panic!("unexpected request error: {err:?}"),
         }
-    });
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        last_reply,
+        Some(b"ping-ok".to_vec()),
+        "request/response did not converge; last_error={last_error:?}; net2_errors={:?}; net1_errors={:?}",
+        net2.debug_errors(),
+        net1.debug_errors(),
+    );
 
     let sub2 = net2.subscribe("aw.smoke").expect("sub2");
     let _sub1 = net1.subscribe("aw.smoke").expect("sub1");
@@ -249,6 +299,7 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
     }
 
     let bootstrap = Libp2pNetwork::new(Libp2pNetworkConfig {
+        enable_rendezvous: true,
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
         ..Libp2pNetworkConfig::default()
     });

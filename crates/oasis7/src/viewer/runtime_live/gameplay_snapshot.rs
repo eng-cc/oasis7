@@ -44,11 +44,9 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
         ),
         ControlCompletionStatus::Blocked => (
             "blocked".to_string(),
-            Some(
-                ack.error_message.clone().unwrap_or_else(|| {
-                    "latest live control was blocked before runtime advance".to_string()
-                }),
-            ),
+            Some(ack.error_message.clone().unwrap_or_else(|| {
+                "latest live control was blocked before runtime advance".to_string()
+            })),
             Some(blocked_control_hint(ack.error_code.as_deref())),
         ),
     };

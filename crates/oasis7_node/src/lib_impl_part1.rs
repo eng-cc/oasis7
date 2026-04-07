@@ -766,6 +766,10 @@ impl PosNodeEngine {
             execution_state_root,
         )? {
             if let Some(endpoint) = network_endpoint {
+                endpoint.publish_local_content_provider(
+                    world_id,
+                    message.record.content_hash.as_str(),
+                )?;
                 endpoint.publish_replication(&message)?;
             } else if let Some(endpoint) = gossip_endpoint {
                 endpoint.broadcast_replication(&message)?;
@@ -818,10 +822,51 @@ impl PosNodeEngine {
                 }
             };
             let fetch_blob_request = replication.build_fetch_blob_request(content_hash.as_str())?;
-            let response = match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-                REPLICATION_FETCH_BLOB_PROTOCOL,
-                &fetch_blob_request,
-            ) {
+            let provider_lookup =
+                match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash.as_str())
+                {
+                    Ok(provider_ids) => provider_ids,
+                    Err(err) => {
+                        failure_reasons.push(format!(
+                            "storage challenge gate provider lookup failed for hash {}: {:?}",
+                            content_hash, err
+                        ));
+                        continue;
+                    }
+                };
+            let response = match if let Some(provider_ids) = provider_lookup.as_ref() {
+                if provider_ids.is_empty() {
+                    endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                        REPLICATION_FETCH_BLOB_PROTOCOL,
+                        &fetch_blob_request,
+                    )
+                } else {
+                    match endpoint.request_json_with_providers::<
+                        FetchBlobRequest,
+                        FetchBlobResponse,
+                    >(
+                        REPLICATION_FETCH_BLOB_PROTOCOL,
+                        &fetch_blob_request,
+                        provider_ids.as_slice(),
+                    ) {
+                        Ok(response) => Ok(response),
+                        Err(err)
+                            if should_fallback_storage_challenge_provider_request(&err) =>
+                        {
+                            endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                                REPLICATION_FETCH_BLOB_PROTOCOL,
+                                &fetch_blob_request,
+                            )
+                        }
+                        Err(err) => Err(err),
+                    }
+                }
+            } else {
+                endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                    &fetch_blob_request,
+                )
+            } {
                 Ok(response) => response,
                 Err(err) => {
                     failure_reasons.push(format!(
@@ -935,6 +980,10 @@ impl PosNodeEngine {
             }
             match replication_runtime.apply_remote_message(node_id, world_id, &message) {
                 Ok(()) => {
+                    endpoint.publish_local_content_provider(
+                        world_id,
+                        message.record.content_hash.as_str(),
+                    )?;
                     if let Some(payload) = payload_view {
                         if payload.height == committed_successor
                             && replication_runtime
@@ -1061,4 +1110,15 @@ impl PosNodeEngine {
         }
         Ok(())
     }
+}
+
+fn should_fallback_storage_challenge_provider_request(err: &NodeError) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    reason.contains("NetworkProtocolUnavailable")
+        || reason.contains("libp2p-replication no connected providers for protocol")
+        || reason.contains("libp2p-replication no connected peers for protocol")
+        || (reason.contains("NetworkRequestFailed")
+            && reason.contains("NetworkProtocolUnavailable"))
 }

@@ -57,6 +57,26 @@ impl Libp2pNetwork {
         self.errors.lock().expect("lock errors").clone()
     }
 
+    pub fn request_to_peer(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        peer: PeerId,
+    ) -> Result<Vec<u8>, WorldError> {
+        let (sender, receiver) = oneshot::channel();
+        self.enqueue_command(Command::RequestToPeer {
+            protocol: protocol.to_string(),
+            payload: payload.to_vec(),
+            peer,
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })?
+    }
+
     pub fn debug_peer_healths(&self) -> Vec<PeerManagerPeerHealth> {
         self.peer_healths
             .lock()
@@ -122,10 +142,17 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
         protocol: &str,
         handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
     ) -> Result<(), WorldError> {
+        let (sender, receiver) = oneshot::channel();
         self.enqueue_command(Command::RegisterHandler {
             protocol: protocol.to_string(),
             handler: Arc::from(handler),
-        })
+            response: sender,
+        })?;
+        futures::executor::block_on(receiver).map_err(|_| {
+            WorldError::NetworkProtocolUnavailable {
+                protocol: "libp2p".to_string(),
+            }
+        })?
     }
 }
 

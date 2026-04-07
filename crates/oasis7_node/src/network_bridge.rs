@@ -1,6 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
+use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
     classify_network_protocol, DistributedNetwork, NetworkLane, NetworkLaneOperation,
     NetworkSubscription,
@@ -84,6 +85,8 @@ fn validate_lane_access(
 #[derive(Clone)]
 pub struct NodeReplicationNetworkHandle {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
+    dht: Option<Arc<dyn proto_dht::DistributedDht<WorldError> + Send + Sync>>,
+    local_provider_id: Option<String>,
     topic: Option<String>,
 }
 
@@ -99,8 +102,27 @@ impl NodeReplicationNetworkHandle {
     pub fn new(network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>) -> Self {
         Self {
             network,
+            dht: None,
+            local_provider_id: None,
             topic: None,
         }
+    }
+
+    pub fn with_dht(
+        mut self,
+        dht: Arc<dyn proto_dht::DistributedDht<WorldError> + Send + Sync>,
+    ) -> Self {
+        self.dht = Some(dht);
+        self
+    }
+
+    pub fn with_local_provider_id(mut self, provider_id: impl Into<String>) -> Self {
+        let provider_id = provider_id.into();
+        let provider_id = provider_id.trim();
+        if !provider_id.is_empty() {
+            self.local_provider_id = Some(provider_id.to_string());
+        }
+        self
     }
 
     pub fn with_topic(mut self, topic: impl Into<String>) -> Result<Self, NodeError> {
@@ -131,6 +153,8 @@ impl NodeReplicationNetworkHandle {
 
 pub(crate) struct ReplicationNetworkEndpoint {
     network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
+    dht: Option<Arc<dyn proto_dht::DistributedDht<WorldError> + Send + Sync>>,
+    local_provider_id: Option<String>,
     network_policy: NodeNetworkPolicy,
     topic: String,
     subscription: Option<NetworkSubscription>,
@@ -163,6 +187,8 @@ impl ReplicationNetworkEndpoint {
         };
         Ok(Self {
             network: Arc::clone(&handle.network),
+            dht: handle.dht.clone(),
+            local_provider_id: handle.local_provider_id.clone(),
             network_policy: network_policy.clone(),
             topic,
             subscription,
@@ -259,6 +285,61 @@ impl ReplicationNetworkEndpoint {
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })
+    }
+
+    pub(crate) fn lookup_provider_ids_for_content_hash(
+        &self,
+        world_id: &str,
+        content_hash: &str,
+    ) -> Result<Option<Vec<String>>, NodeError> {
+        let Some(dht) = self.dht.as_ref() else {
+            return Ok(None);
+        };
+        let mut providers = dht
+            .get_providers(world_id, content_hash)
+            .map_err(network_err)?;
+        providers.sort_by(|left, right| {
+            right
+                .last_seen_ms
+                .cmp(&left.last_seen_ms)
+                .then_with(|| left.provider_id.cmp(&right.provider_id))
+        });
+        let mut provider_ids = Vec::with_capacity(providers.len());
+        for provider in providers {
+            let provider_id = provider.provider_id.trim();
+            if provider_id.is_empty() {
+                continue;
+            }
+            if self.local_provider_id.as_deref() == Some(provider_id) {
+                continue;
+            }
+            if provider_ids.iter().any(|existing| existing == provider_id) {
+                continue;
+            }
+            provider_ids.push(provider_id.to_string());
+        }
+        Ok(Some(provider_ids))
+    }
+
+    pub(crate) fn publish_local_content_provider(
+        &self,
+        world_id: &str,
+        content_hash: &str,
+    ) -> Result<(), NodeError> {
+        let Some(dht) = self.dht.as_ref() else {
+            return Ok(());
+        };
+        let Some(local_provider_id) = self.local_provider_id.as_deref() else {
+            return Ok(());
+        };
+        if !self
+            .network_policy
+            .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
+        {
+            return Ok(());
+        }
+        dht.publish_provider(world_id, content_hash, local_provider_id)
+            .map_err(network_err)
     }
 }
 

@@ -1,9 +1,10 @@
 use super::{
     build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
-    build_node_replication_config, derive_node_consensus_signer_keypair, node_keypair_config,
-    parse_options, parse_validator_spec, release_security_policy_for_storage_profile, CliOptions,
-    DEFAULT_NODE_ID, DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
+    build_node_replication_config, derive_node_consensus_signer_keypair,
+    derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
+    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
+    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
@@ -48,6 +49,8 @@ fn parse_options_defaults() {
     assert!(!options.pos_adaptive_tick_scheduler_enabled);
     assert!(options.pos_slot_clock_genesis_unix_ms.is_none());
     assert_eq!(options.pos_max_past_slot_lag, 256);
+    assert!(options.replication_network_listen_addrs.is_empty());
+    assert!(options.replication_network_bootstrap_peers.is_empty());
 }
 
 #[test]
@@ -140,6 +143,47 @@ fn parse_options_rejects_peer_without_bind() {
     let err = parse_options(["--node-gossip-peer", "127.0.0.1:9001"].into_iter())
         .expect_err("should reject peer without bind");
     assert!(err.contains("requires --node-gossip-bind"));
+}
+
+#[test]
+fn parse_options_reads_replication_network_addresses() {
+    let options = parse_options(
+        [
+            "--replication-network-listen",
+            "/ip4/127.0.0.1/tcp/19641",
+            "--replication-network-listen",
+            "/ip4/127.0.0.1/udp/19642/quic-v1",
+            "--replication-network-peer",
+            "/ip4/127.0.0.1/tcp/19651",
+            "--replication-network-peer",
+            "/ip4/127.0.0.1/udp/19652/quic-v1",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(
+        options
+            .replication_network_listen_addrs
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<_>>(),
+        vec![
+            "/ip4/127.0.0.1/tcp/19641".to_string(),
+            "/ip4/127.0.0.1/udp/19642/quic-v1".to_string(),
+        ]
+    );
+    assert_eq!(
+        options
+            .replication_network_bootstrap_peers
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<_>>(),
+        vec![
+            "/ip4/127.0.0.1/tcp/19651".to_string(),
+            "/ip4/127.0.0.1/udp/19652/quic-v1".to_string(),
+        ]
+    );
 }
 
 #[test]
@@ -236,6 +280,49 @@ fn default_replication_network_config_uses_loopback_ephemeral_listen() {
         vec![
             PeerDiscoverySource::StaticBootstrap,
             PeerDiscoverySource::Dht
+        ]
+    );
+}
+
+#[test]
+fn default_replication_network_config_uses_explicit_topology_addrs() {
+    let signing_key = SigningKey::from_bytes(&[10_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+    let options = parse_options(
+        [
+            "--replication-network-listen",
+            "/ip4/127.0.0.1/tcp/19741",
+            "--replication-network-peer",
+            "/ip4/127.0.0.1/tcp/19742",
+            "--replication-network-peer",
+            "/ip4/127.0.0.1/tcp/19743",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+    let config = build_default_replication_network_config(&options, &keypair)
+        .expect("explicit replication network config should build");
+
+    assert_eq!(
+        config
+            .listen_addrs
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<_>>(),
+        vec!["/ip4/127.0.0.1/tcp/19741".to_string()]
+    );
+    assert_eq!(
+        config
+            .bootstrap_peers
+            .iter()
+            .map(|addr| addr.to_string())
+            .collect::<Vec<_>>(),
+        vec![
+            "/ip4/127.0.0.1/tcp/19742".to_string(),
+            "/ip4/127.0.0.1/tcp/19743".to_string(),
         ]
     );
 }
@@ -486,6 +573,38 @@ fn derive_node_consensus_signer_keypair_is_deterministic_for_oasis7_namespace() 
     assert_eq!(signer_a.private_key_hex, signer_a_repeat.private_key_hex);
     assert_eq!(signer_a.public_key_hex, signer_a_repeat.public_key_hex);
     assert_ne!(signer_a.public_key_hex, signer_b.public_key_hex);
+}
+
+#[test]
+fn derive_node_libp2p_identity_keypair_is_deterministic_and_node_scoped() {
+    let signing_key = SigningKey::from_bytes(&[11_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+
+    let identity_a = derive_node_libp2p_identity_keypair_config("node-a", &keypair)
+        .expect("derive libp2p identity a");
+    let identity_a_repeat = derive_node_libp2p_identity_keypair_config("node-a", &keypair)
+        .expect("derive libp2p identity a repeat");
+    let identity_b = derive_node_libp2p_identity_keypair_config("node-b", &keypair)
+        .expect("derive libp2p identity b");
+
+    assert_eq!(
+        identity_a.private_key_hex,
+        identity_a_repeat.private_key_hex
+    );
+    assert_eq!(identity_a.public_key_hex, identity_a_repeat.public_key_hex);
+    assert_ne!(identity_a.public_key_hex, identity_b.public_key_hex);
+
+    let libp2p_a = oasis7_node::derive_libp2p_identity_keypair(identity_a.private_key_hex.as_str())
+        .expect("libp2p keypair a");
+    let libp2p_b = oasis7_node::derive_libp2p_identity_keypair(identity_b.private_key_hex.as_str())
+        .expect("libp2p keypair b");
+    assert_ne!(
+        libp2p_a.public().to_peer_id(),
+        libp2p_b.public().to_peer_id()
+    );
 }
 
 #[test]

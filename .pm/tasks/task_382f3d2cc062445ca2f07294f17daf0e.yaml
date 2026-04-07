@@ -1,0 +1,23 @@
+task_uid: task_382f3d2cc062445ca2f07294f17daf0e
+title: "Resolve P2PARCH-6 proxy failure signatures"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-6-proxy-failure-signatures
+execution_log_path: .pm/tasks/task_382f3d2cc062445ca2f07294f17daf0e.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - testing-manual.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "Latest P2PARCH-6 proxy failure signatures are reduced or reclassified with truthful runtime/evidence updates."
+  - "Runtime/soak changes and evidence remain traceable to P2PARCH-6 blocker closure."
+  - "PM task, execution log, and validation artifacts are updated in the new worktree."
+handoff_to: []
+updated_at: 2026-04-07T15:56:24+08:00
+last_started_at: 2026-04-07T13:08:55+08:00
+last_closed_at: 2026-04-07T15:55:04+08:00
