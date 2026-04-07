@@ -17,6 +17,7 @@ use feedback_entry::FeedbackDraft;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 use llm_settings::LlmSettingsPanel;
+use oasis7::simulator::OpenClawProviderCompatibilityStatus;
 use platform_ops::open_browser;
 use platform_ops::resolve_static_dir_path;
 #[cfg(not(target_arch = "wasm32"))]
@@ -641,9 +642,13 @@ struct OpenClawProviderSnapshot {
     name: String,
     version: String,
     protocol_version: String,
+    capabilities: Vec<String>,
+    supported_action_sets: Vec<String>,
+    compatibility_status: OpenClawProviderCompatibilityStatus,
     status: String,
     queue_depth: Option<u64>,
     last_error: Option<String>,
+    fallback_reason: Option<String>,
     info_latency_ms: u64,
     health_latency_ms: u64,
     total_latency_ms: u64,
@@ -655,7 +660,9 @@ enum OpenClawProbeStatus {
     Disabled,
     Idle,
     Probing,
-    Healthy(OpenClawProviderSnapshot),
+    Ready(OpenClawProviderSnapshot),
+    Degraded(OpenClawProviderSnapshot),
+    Incompatible(OpenClawProviderSnapshot),
     Unsupported(String),
     InvalidConfig(String),
     Unreachable(String),
@@ -671,8 +678,12 @@ impl OpenClawProbeStatus {
             (Self::Idle, UiLanguage::EnUs) => "Idle".to_string(),
             (Self::Probing, UiLanguage::ZhCn) => "探测中".to_string(),
             (Self::Probing, UiLanguage::EnUs) => "Probing".to_string(),
-            (Self::Healthy(_), UiLanguage::ZhCn) => "已就绪".to_string(),
-            (Self::Healthy(_), UiLanguage::EnUs) => "Healthy".to_string(),
+            (Self::Ready(_), UiLanguage::ZhCn) => "已就绪".to_string(),
+            (Self::Ready(_), UiLanguage::EnUs) => "Ready".to_string(),
+            (Self::Degraded(_), UiLanguage::ZhCn) => "已降级".to_string(),
+            (Self::Degraded(_), UiLanguage::EnUs) => "Degraded".to_string(),
+            (Self::Incompatible(_), UiLanguage::ZhCn) => "不兼容".to_string(),
+            (Self::Incompatible(_), UiLanguage::EnUs) => "Incompatible".to_string(),
             (Self::Unsupported(_), UiLanguage::ZhCn) => "当前端不支持".to_string(),
             (Self::Unsupported(_), UiLanguage::EnUs) => "Unsupported".to_string(),
             (Self::InvalidConfig(_), UiLanguage::ZhCn) => "配置错误".to_string(),
@@ -688,7 +699,9 @@ impl OpenClawProbeStatus {
         match self {
             Self::Disabled | Self::Idle => egui::Color32::from_rgb(130, 130, 130),
             Self::Probing => egui::Color32::from_rgb(201, 146, 44),
-            Self::Healthy(_) => egui::Color32::from_rgb(62, 152, 92),
+            Self::Ready(_) => egui::Color32::from_rgb(62, 152, 92),
+            Self::Degraded(_) => egui::Color32::from_rgb(201, 146, 44),
+            Self::Incompatible(_) => egui::Color32::from_rgb(196, 84, 84),
             Self::Unsupported(_) => egui::Color32::from_rgb(130, 130, 130),
             Self::InvalidConfig(_) | Self::Unreachable(_) | Self::Unauthorized(_) => {
                 egui::Color32::from_rgb(196, 84, 84)
@@ -698,21 +711,33 @@ impl OpenClawProbeStatus {
 
     fn detail(&self) -> Option<String> {
         match self {
-            Self::Healthy(snapshot) => Some(format!(
-                "provider_id={} name={} version={} protocol={} status={} queue_depth={} probe_latency_ms={{info:{}, health:{}, total:{}}} last_error={}",
+            Self::Ready(snapshot) | Self::Degraded(snapshot) | Self::Incompatible(snapshot) => Some(format!(
+                "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} probe_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
                 snapshot.provider_id,
                 snapshot.name,
                 snapshot.version,
                 snapshot.protocol_version,
+                snapshot.compatibility_status.as_str(),
                 snapshot.status,
                 snapshot
                     .queue_depth
                     .map(|value| value.to_string())
                     .unwrap_or_else(|| "n/a".to_string()),
+                if snapshot.capabilities.is_empty() {
+                    "none".to_string()
+                } else {
+                    snapshot.capabilities.join(",")
+                },
+                if snapshot.supported_action_sets.is_empty() {
+                    "none".to_string()
+                } else {
+                    snapshot.supported_action_sets.join(",")
+                },
                 snapshot.info_latency_ms,
                 snapshot.health_latency_ms,
                 snapshot.total_latency_ms,
-                snapshot.last_error.as_deref().unwrap_or("none")
+                snapshot.last_error.as_deref().unwrap_or("none"),
+                snapshot.fallback_reason.as_deref().unwrap_or("none")
             )),
             Self::Unsupported(detail)
             | Self::InvalidConfig(detail)

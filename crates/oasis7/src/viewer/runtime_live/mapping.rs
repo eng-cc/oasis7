@@ -7,9 +7,10 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    Agent, AgentExecutionDebugContext, Location, RejectReason as SimulatorRejectReason,
-    ResourceOwner, WorldConfig, WorldEvent, WorldEventKind, WorldModel,
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    openclaw_phase1_required_actions, openclaw_phase1_required_capabilities, Agent,
+    AgentExecutionDebugContext, Location, RejectReason as SimulatorRejectReason, ResourceOwner,
+    WorldConfig, WorldEvent, WorldEventKind, WorldModel, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 
 use super::control_plane::{runtime_openclaw_settings_from_env, RuntimeLlmSidecar};
@@ -65,17 +66,31 @@ fn collect_agent_execution_debug_contexts(
         .agents
         .keys()
         .map(|agent_id| {
+            let fallback_reason = settings.fallback_reason.clone();
             (
                 agent_id.clone(),
                 AgentExecutionDebugContext {
                     provider_mode: Some("openclaw_local_http".to_string()),
+                    compatibility_status: Some(if fallback_reason.is_some() {
+                        "degraded".to_string()
+                    } else {
+                        "ready".to_string()
+                    }),
                     execution_mode: Some(settings.execution_mode.as_str().to_string()),
                     observation_schema_version: Some(
                         DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
                     ),
                     action_schema_version: Some(DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string()),
                     environment_class: Some("runtime_live".to_string()),
-                    fallback_reason: None,
+                    capabilities: openclaw_phase1_required_capabilities()
+                        .iter()
+                        .map(|value| (*value).to_string())
+                        .collect(),
+                    supported_action_sets: openclaw_phase1_required_actions()
+                        .iter()
+                        .map(|value| (*value).to_string())
+                        .collect(),
+                    fallback_reason,
                     provider_config_ref: Some(format!(
                         "openclaw://local-http/runtime-live/{}",
                         agent_id

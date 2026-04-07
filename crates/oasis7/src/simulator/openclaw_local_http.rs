@@ -10,6 +10,16 @@ use serde::{Deserialize, Serialize};
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
 const DEFAULT_OPENCLAW_LOCAL_HTTP_PROVIDER_ID: &str = "openclaw_local_http";
+pub const OPENCLAW_PHASE1_ACTION_SET_ALIAS: &str = "phase1_low_frequency";
+const OPENCLAW_PHASE1_REQUIRED_CAPABILITIES: &[&str] = &["decision", "feedback"];
+const OPENCLAW_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
+    "wait",
+    "wait_ticks",
+    "move_agent",
+    "speak_to_nearby",
+    "inspect_target",
+    "simple_interact",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct OpenClawProviderInfo {
@@ -34,6 +44,142 @@ impl OpenClawProviderInfo {
             self.provider_id.as_str()
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenClawProviderCompatibilityStatus {
+    #[default]
+    Ready,
+    Degraded,
+    Incompatible,
+}
+
+impl OpenClawProviderCompatibilityStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Degraded => "degraded",
+            Self::Incompatible => "incompatible",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct OpenClawProviderCompatibilityReport {
+    pub status: OpenClawProviderCompatibilityStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_supported_actions: Vec<String>,
+}
+
+pub fn openclaw_phase1_required_capabilities() -> &'static [&'static str] {
+    OPENCLAW_PHASE1_REQUIRED_CAPABILITIES
+}
+
+pub fn openclaw_phase1_required_actions() -> &'static [&'static str] {
+    OPENCLAW_PHASE1_REQUIRED_ACTIONS
+}
+
+pub fn evaluate_openclaw_provider_compatibility(
+    info: &OpenClawProviderInfo,
+    health: Option<&OpenClawProviderHealth>,
+) -> OpenClawProviderCompatibilityReport {
+    let missing_capabilities = OPENCLAW_PHASE1_REQUIRED_CAPABILITIES
+        .iter()
+        .filter(|required| !contains_trimmed_value(info.capabilities.as_slice(), required))
+        .map(|required| (*required).to_string())
+        .collect::<Vec<_>>();
+    if !missing_capabilities.is_empty() {
+        return OpenClawProviderCompatibilityReport {
+            status: OpenClawProviderCompatibilityStatus::Incompatible,
+            fallback_reason: Some(format!(
+                "missing_provider_capabilities:{}",
+                missing_capabilities.join(",")
+            )),
+            missing_capabilities,
+            missing_supported_actions: Vec::new(),
+        };
+    }
+
+    let missing_supported_actions = if contains_trimmed_value(
+        info.supported_action_sets.as_slice(),
+        OPENCLAW_PHASE1_ACTION_SET_ALIAS,
+    ) {
+        Vec::new()
+    } else {
+        OPENCLAW_PHASE1_REQUIRED_ACTIONS
+            .iter()
+            .filter(|required| {
+                !contains_trimmed_value(info.supported_action_sets.as_slice(), required)
+            })
+            .map(|required| (*required).to_string())
+            .collect::<Vec<_>>()
+    };
+    if !missing_supported_actions.is_empty() {
+        return OpenClawProviderCompatibilityReport {
+            status: OpenClawProviderCompatibilityStatus::Incompatible,
+            fallback_reason: Some(format!(
+                "missing_supported_actions:{}",
+                missing_supported_actions.join(",")
+            )),
+            missing_capabilities: Vec::new(),
+            missing_supported_actions,
+        };
+    }
+
+    let Some(health) = health else {
+        return OpenClawProviderCompatibilityReport::default();
+    };
+
+    let raw_status = health
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let status = raw_status.unwrap_or("ok");
+    let has_last_error = health
+        .last_error
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    let lowered_status = status.to_ascii_lowercase();
+    let healthy_status = matches!(lowered_status.as_str(), "ok" | "ready");
+    if health.ok && healthy_status && !has_last_error {
+        return OpenClawProviderCompatibilityReport::default();
+    }
+
+    let fallback_reason = health
+        .last_error
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            Some(if health.ok {
+                format!("provider_health_status:{lowered_status}")
+            } else {
+                format!(
+                    "provider_health_unhealthy:{}",
+                    raw_status.unwrap_or("not_ok").to_ascii_lowercase()
+                )
+            })
+        });
+    OpenClawProviderCompatibilityReport {
+        status: OpenClawProviderCompatibilityStatus::Degraded,
+        fallback_reason,
+        missing_capabilities: Vec::new(),
+        missing_supported_actions: Vec::new(),
+    }
+}
+
+fn contains_trimmed_value(values: &[String], expected: &str) -> bool {
+    values
+        .iter()
+        .any(|value| value.trim().eq_ignore_ascii_case(expected))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

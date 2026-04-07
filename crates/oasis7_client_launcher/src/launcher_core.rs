@@ -1,5 +1,9 @@
 use super::*;
 #[cfg(not(target_arch = "wasm32"))]
+use oasis7::simulator::{
+    evaluate_openclaw_provider_compatibility, OpenClawProviderHealth, OpenClawProviderInfo,
+};
+#[cfg(not(target_arch = "wasm32"))]
 use serde::de::DeserializeOwned;
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::{Read, Write};
@@ -27,6 +31,10 @@ struct OpenClawProviderInfoResponse {
     version: Option<String>,
     #[serde(default)]
     protocol_version: Option<String>,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    supported_action_sets: Vec<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -765,8 +773,7 @@ pub(super) fn probe_openclaw_local_http(
     auth_token: Option<&str>,
     timeout_ms: u64,
 ) -> Result<OpenClawProviderSnapshot, OpenClawProbeError> {
-    let (host, _) =
-        validate_openclaw_base_url(base_url).map_err(OpenClawProbeError::InvalidConfig)?;
+    validate_openclaw_base_url(base_url).map_err(OpenClawProbeError::InvalidConfig)?;
     let info_started_at = Instant::now();
     let info: OpenClawProviderInfoResponse =
         http_json_request_with_timeout(base_url, "/v1/provider/info", auth_token, timeout_ms)?;
@@ -778,23 +785,45 @@ pub(super) fn probe_openclaw_local_http(
         .elapsed()
         .as_millis()
         .min(u64::MAX as u128) as u64;
-    if !health.ok {
-        return Err(OpenClawProbeError::Unreachable(
-            health
-                .last_error
-                .unwrap_or_else(|| format!("openclaw provider on {host} is not healthy")),
-        ));
-    }
-    Ok(OpenClawProviderSnapshot {
+    let provider_info = OpenClawProviderInfo {
         provider_id: info.provider_id,
-        name: info.name.unwrap_or_else(|| "OpenClaw".to_string()),
-        version: info.version.unwrap_or_else(|| "unknown".to_string()),
-        protocol_version: info
+        name: info.name,
+        version: info.version,
+        protocol_version: info.protocol_version,
+        capabilities: info.capabilities,
+        supported_action_sets: info.supported_action_sets,
+    };
+    let provider_health = OpenClawProviderHealth {
+        ok: health.ok,
+        status: health.status,
+        uptime_ms: None,
+        last_error: health.last_error,
+        queue_depth: health.queue_depth,
+    };
+    let compatibility =
+        evaluate_openclaw_provider_compatibility(&provider_info, Some(&provider_health));
+    Ok(OpenClawProviderSnapshot {
+        provider_id: provider_info.provider_id,
+        name: provider_info.name.unwrap_or_else(|| "OpenClaw".to_string()),
+        version: provider_info
+            .version
+            .unwrap_or_else(|| "unknown".to_string()),
+        protocol_version: provider_info
             .protocol_version
             .unwrap_or_else(|| "unknown".to_string()),
-        status: health.status.unwrap_or_else(|| "ok".to_string()),
-        queue_depth: health.queue_depth,
-        last_error: health.last_error,
+        capabilities: provider_info.capabilities,
+        supported_action_sets: provider_info.supported_action_sets,
+        compatibility_status: compatibility.status,
+        status: provider_health.status.unwrap_or_else(|| {
+            if provider_health.ok {
+                "ok".to_string()
+            } else {
+                "not_ok".to_string()
+            }
+        }),
+        queue_depth: provider_health.queue_depth,
+        last_error: provider_health.last_error,
+        fallback_reason: compatibility.fallback_reason,
         info_latency_ms,
         health_latency_ms,
         total_latency_ms: info_latency_ms.saturating_add(health_latency_ms),

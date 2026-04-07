@@ -47,11 +47,13 @@ const VIEWER_OPENCLAW_EXECUTION_MODE_ENV: &str = "OASIS7_OPENCLAW_EXECUTION_MODE
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::viewer::runtime_live) struct OpenClawDecisionSettings {
+    pub(in crate::viewer::runtime_live) requested_provider_mode: String,
     pub(in crate::viewer::runtime_live) base_url: String,
     pub(in crate::viewer::runtime_live) auth_token: Option<String>,
     pub(in crate::viewer::runtime_live) connect_timeout_ms: u64,
     pub(in crate::viewer::runtime_live) agent_profile: String,
     pub(in crate::viewer::runtime_live) execution_mode: ProviderExecutionMode,
+    pub(in crate::viewer::runtime_live) fallback_reason: Option<String>,
 }
 
 enum RuntimeDecisionRunner {
@@ -131,11 +133,13 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
         .unwrap_or(ProviderExecutionMode::HeadlessAgent);
 
     Ok(Some(OpenClawDecisionSettings {
+        requested_provider_mode: provider_mode.to_string(),
         base_url: base_url.to_string(),
         auth_token,
         connect_timeout_ms,
         agent_profile: agent_profile.to_string(),
         execution_mode,
+        fallback_reason: provider_mode_fallback_reason(provider_mode),
     }))
 }
 
@@ -151,6 +155,14 @@ fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
 
 fn named_env_var(env_name: &str) -> Option<String> {
     env::var(env_name).ok()
+}
+
+fn provider_mode_fallback_reason(provider_mode: &str) -> Option<String> {
+    if provider_mode.trim() == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS {
+        Some("provider_mode_alias:agent_direct_connect".to_string())
+    } else {
+        None
+    }
 }
 
 fn openclaw_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
@@ -775,6 +787,12 @@ impl RuntimeLlmSidecar {
                     .with_agent_profile(settings.agent_profile.clone())
                     .with_execution_mode(settings.execution_mode)
                     .with_environment_class("runtime_live");
+                    let behavior =
+                        if let Some(fallback_reason) = settings.fallback_reason.as_deref() {
+                            behavior.with_fallback_reason(fallback_reason)
+                        } else {
+                            behavior
+                        };
                     runner.register(behavior);
                 }
             }

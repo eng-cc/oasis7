@@ -102,8 +102,11 @@ pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
 pub use openclaw_adapter::OpenClawAdapter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use openclaw_local_http::{
-    validate_openclaw_local_http_base_url, OpenClawFeedbackAck, OpenClawLocalHttpClient,
-    OpenClawLocalHttpError, OpenClawProviderHealth, OpenClawProviderInfo,
+    evaluate_openclaw_provider_compatibility, openclaw_phase1_required_actions,
+    openclaw_phase1_required_capabilities, validate_openclaw_local_http_base_url,
+    OpenClawFeedbackAck, OpenClawLocalHttpClient, OpenClawLocalHttpError,
+    OpenClawProviderCompatibilityReport, OpenClawProviderCompatibilityStatus,
+    OpenClawProviderHealth, OpenClawProviderInfo, OPENCLAW_PHASE1_ACTION_SET_ALIAS,
 };
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,

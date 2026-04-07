@@ -540,11 +540,16 @@ fn openclaw_settings_from_env_parses_profile_and_timeout() {
     let settings = super::control_plane::runtime_openclaw_settings_from_env()
         .expect("settings parse")
         .expect("openclaw settings");
+    assert_eq!(settings.requested_provider_mode, "agent_direct_connect");
     assert_eq!(settings.base_url, "http://127.0.0.1:5841");
     assert_eq!(settings.connect_timeout_ms, 4200);
     assert_eq!(settings.agent_profile, "oasis7_p0_low_freq_npc");
     assert_eq!(settings.execution_mode, ProviderExecutionMode::PlayerParity);
     assert_eq!(settings.auth_token.as_deref(), Some("secret-token"));
+    assert_eq!(
+        settings.fallback_reason.as_deref(),
+        Some("provider_mode_alias:agent_direct_connect")
+    );
     clear_runtime_openclaw_env();
 }
 

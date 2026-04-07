@@ -7,11 +7,13 @@ use std::process;
 use std::time::Instant;
 
 use oasis7::simulator::{
-    initialize_kernel, Action, ActionCatalogEntry, ActionResult, AgentBehavior, AgentDecision,
-    AgentDecisionTrace, AgentRunner, LlmAgentBehavior, Observation, OpenAiChatCompletionClient,
-    OpenClawAdapter, OpenClawLocalHttpClient, ProviderExecutionMode, RuntimePerfSnapshot,
-    WorldConfig, WorldEvent, WorldInitConfig, WorldScenario,
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    evaluate_openclaw_provider_compatibility, initialize_kernel, openclaw_phase1_required_actions,
+    openclaw_phase1_required_capabilities, Action, ActionCatalogEntry, ActionResult, AgentBehavior,
+    AgentDecision, AgentDecisionTrace, AgentRunner, LlmAgentBehavior, Observation,
+    OpenAiChatCompletionClient, OpenClawAdapter, OpenClawLocalHttpClient,
+    OpenClawProviderCompatibilityStatus, ProviderExecutionMode, RuntimePerfSnapshot, WorldConfig,
+    WorldEvent, WorldInitConfig, WorldScenario, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,6 +102,13 @@ struct ProviderRunInfo {
     provider_version: String,
     adapter_version: String,
     protocol_version: String,
+    compatibility_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fallback_reason: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    capabilities: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    supported_action_sets: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     provider_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -441,13 +450,14 @@ fn main() {
     }
 
     for agent_id in &agent_ids {
-        let behavior = match build_behavior(agent_id.as_str(), &options, fixture_id.as_str()) {
-            Ok(value) => value,
-            Err(err) => {
-                eprintln!("failed to build behavior for {agent_id}: {err}");
-                process::exit(1);
-            }
-        };
+        let behavior =
+            match build_behavior(agent_id.as_str(), &options, fixture_id.as_str(), &provider) {
+                Ok(value) => value,
+                Err(err) => {
+                    eprintln!("failed to build behavior for {agent_id}: {err}");
+                    process::exit(1);
+                }
+            };
         runner.register(behavior);
     }
 
@@ -545,7 +555,7 @@ fn main() {
             observation_schema_version: DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
             action_schema_version: DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string(),
             environment_class: execution_environment_class(options.execution_mode).to_string(),
-            fallback_reason: None,
+            fallback_reason: provider.fallback_reason.clone(),
             parity_tier: options.parity_tier.clone(),
             scenario_id: options.scenario_id.clone(),
             fixture_id: fixture_id.clone(),
@@ -595,7 +605,7 @@ fn main() {
         observation_schema_version: DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
         action_schema_version: DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string(),
         environment_class: execution_environment_class(options.execution_mode).to_string(),
-        fallback_reason: None,
+        fallback_reason: provider.fallback_reason.clone(),
         parity_tier: options.parity_tier.clone(),
         scenario_id: options.scenario_id.clone(),
         fixture_id,
@@ -683,6 +693,18 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             provider_version: "builtin_llm_env".to_string(),
             adapter_version: options.adapter_version.clone(),
             protocol_version: options.protocol_version.clone(),
+            compatibility_status: OpenClawProviderCompatibilityStatus::Ready
+                .as_str()
+                .to_string(),
+            fallback_reason: None,
+            capabilities: openclaw_phase1_required_capabilities()
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            supported_action_sets: openclaw_phase1_required_actions()
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
             provider_status: None,
             provider_last_error: None,
             provider_queue_depth: None,
@@ -700,6 +722,7 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             .map_err(|err| err.to_string())?;
             let info = client.provider_info().map_err(|err| err.to_string())?;
             let health = client.provider_health().map_err(|err| err.to_string())?;
+            let compatibility = evaluate_openclaw_provider_compatibility(&info, Some(&health));
             Ok(ProviderRunInfo {
                 provider_kind: options.provider.as_str().to_string(),
                 provider_version: info.version.unwrap_or_else(|| "unknown".to_string()),
@@ -707,6 +730,10 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
                 protocol_version: info
                     .protocol_version
                     .unwrap_or_else(|| options.protocol_version.clone()),
+                compatibility_status: compatibility.status.as_str().to_string(),
+                fallback_reason: compatibility.fallback_reason,
+                capabilities: info.capabilities,
+                supported_action_sets: info.supported_action_sets,
                 provider_status: health.status,
                 provider_last_error: health.last_error,
                 provider_queue_depth: health.queue_depth,
@@ -720,6 +747,7 @@ fn build_behavior(
     agent_id: &str,
     options: &CliOptions,
     fixture_id: &str,
+    provider: &ProviderRunInfo,
 ) -> Result<BenchBehavior, String> {
     match options.provider {
         BenchProviderKind::Builtin => {
@@ -764,6 +792,9 @@ fn build_behavior(
             .with_environment_class(execution_environment_class(options.execution_mode))
             .with_fixture_id(fixture_id)
             .with_replay_id(format!("{}:{}", options.benchmark_run_id, fixture_id));
+            if let Some(fallback_reason) = provider.fallback_reason.as_deref() {
+                behavior = behavior.with_fallback_reason(fallback_reason);
+            }
             if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
                 behavior = behavior.with_memory_summary(memory_summary);
             }

@@ -716,7 +716,12 @@ impl ClientLauncherApp {
             }
         });
 
-        if let OpenClawProbeStatus::Healthy(snapshot) = &self.openclaw_probe_status {
+        if let Some(snapshot) = match &self.openclaw_probe_status {
+            OpenClawProbeStatus::Ready(snapshot)
+            | OpenClawProbeStatus::Degraded(snapshot)
+            | OpenClawProbeStatus::Incompatible(snapshot) => Some(snapshot),
+            _ => None,
+        } {
             ui.small(format!(
                 "{}: {} / {} / {}",
                 self.tr("Provider", "Provider"),
@@ -735,12 +740,44 @@ impl ClientLauncherApp {
                     .unwrap_or_else(|| "n/a".to_string())
             ));
             ui.small(format!(
+                "{}: {}",
+                self.tr("兼容状态", "Compatibility"),
+                snapshot.compatibility_status.as_str()
+            ));
+            ui.small(format!(
+                "{}: {}",
+                self.tr("能力", "Capabilities"),
+                if snapshot.capabilities.is_empty() {
+                    "none".to_string()
+                } else {
+                    snapshot.capabilities.join(", ")
+                }
+            ));
+            ui.small(format!(
+                "{}: {}",
+                self.tr("动作集", "Supported Actions"),
+                if snapshot.supported_action_sets.is_empty() {
+                    "none".to_string()
+                } else {
+                    snapshot.supported_action_sets.join(", ")
+                }
+            ));
+            ui.small(format!(
                 "{}: info={}ms health={}ms total={}ms",
                 self.tr("探测延迟", "Probe Latency"),
                 snapshot.info_latency_ms,
                 snapshot.health_latency_ms,
                 snapshot.total_latency_ms,
             ));
+            if let Some(fallback_reason) = snapshot.fallback_reason.as_deref() {
+                if !fallback_reason.trim().is_empty() {
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("降级原因", "Fallback Reason"),
+                        fallback_reason
+                    ));
+                }
+            }
             if let Some(last_error) = snapshot.last_error.as_deref() {
                 if !last_error.trim().is_empty() {
                     ui.small(format!(
@@ -777,14 +814,36 @@ impl ClientLauncherApp {
             Some(self.config.openclaw_auth_token.as_str()),
             timeout_ms,
         ) {
-            Ok(snapshot) => {
+            Ok(mut snapshot) => {
+                if self.config.agent_provider_mode.trim()
+                    == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
+                {
+                    snapshot.fallback_reason = snapshot
+                        .fallback_reason
+                        .take()
+                        .or_else(|| Some("provider_mode_alias:agent_direct_connect".to_string()));
+                }
                 let provider_id = snapshot.provider_id.clone();
                 let version = snapshot.version.clone();
-                self.openclaw_probe_status = OpenClawProbeStatus::Healthy(snapshot);
+                let compatibility_status = snapshot.compatibility_status;
+                let fallback_reason = snapshot.fallback_reason.clone();
+                self.openclaw_probe_status = match compatibility_status {
+                    OpenClawProviderCompatibilityStatus::Ready => {
+                        OpenClawProbeStatus::Ready(snapshot)
+                    }
+                    OpenClawProviderCompatibilityStatus::Degraded => {
+                        OpenClawProbeStatus::Degraded(snapshot)
+                    }
+                    OpenClawProviderCompatibilityStatus::Incompatible => {
+                        OpenClawProbeStatus::Incompatible(snapshot)
+                    }
+                };
                 self.append_log(format!(
-                    "openclaw probe succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms}",
+                    "openclaw probe succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms} compatibility_status={} fallback_reason={}",
                     canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
-                        .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE)
+                        .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE),
+                    compatibility_status.as_str(),
+                    fallback_reason.as_deref().unwrap_or("none")
                 ));
             }
             Err(OpenClawProbeError::InvalidConfig(detail)) => {

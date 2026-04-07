@@ -32,6 +32,7 @@ fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
         context.provider_mode.as_deref(),
         Some("openclaw_local_http")
     );
+    assert_eq!(context.compatibility_status.as_deref(), Some("ready"));
     assert_eq!(context.execution_mode.as_deref(), Some("player_parity"));
     assert_eq!(
         context.observation_schema_version.as_deref(),
@@ -43,8 +44,59 @@ fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
     );
     assert_eq!(context.environment_class.as_deref(), Some("runtime_live"));
     assert_eq!(
+        context.capabilities,
+        vec!["decision".to_string(), "feedback".to_string()]
+    );
+    assert_eq!(
+        context.supported_action_sets,
+        vec![
+            "wait".to_string(),
+            "wait_ticks".to_string(),
+            "move_agent".to_string(),
+            "speak_to_nearby".to_string(),
+            "inspect_target".to_string(),
+            "simple_interact".to_string(),
+        ]
+    );
+    assert_eq!(context.fallback_reason, None);
+    assert_eq!(
         context.agent_profile.as_deref(),
         Some("oasis7_p0_low_freq_npc")
+    );
+    clear_runtime_openclaw_env();
+}
+
+#[test]
+fn runtime_openclaw_compat_snapshot_tracks_alias_fallback_reason() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
+    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let snapshot = server.compat_snapshot();
+    let context = snapshot
+        .model
+        .agent_execution_debug_contexts
+        .get(agent_id.as_str())
+        .expect("debug context in snapshot");
+    assert_eq!(context.compatibility_status.as_deref(), Some("degraded"));
+    assert_eq!(
+        context.fallback_reason.as_deref(),
+        Some("provider_mode_alias:agent_direct_connect")
     );
     clear_runtime_openclaw_env();
 }

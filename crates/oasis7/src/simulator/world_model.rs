@@ -89,6 +89,8 @@ pub struct AgentExecutionDebugContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observation_schema_version: Option<String>,
@@ -96,6 +98,10 @@ pub struct AgentExecutionDebugContext {
     pub action_schema_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supported_action_sets: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
