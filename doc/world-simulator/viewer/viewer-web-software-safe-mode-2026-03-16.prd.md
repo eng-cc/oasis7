@@ -205,6 +205,7 @@
     - rollback 反馈明确区分当前生效版本、恢复来源版本与下一次 rollback target；
     - prompt/chat/control 默认展示可扫描的 summary/detail，raw payload 仍保留在可展开 diagnostics；
     - 对 `llm_init_failed`、rollback target 缺失、rollback noop 等已知错误给出面向 QA/operator 的产品级解释。
+  - 将上述 feedback 语义 contract 以 repo-owned、无 npm 前置的 deterministic Node regression 纳入正式 required automation，避免只剩专题文档里的手动命令。
 - Functional Constraints:
   - 不改变 runtime `PromptControlAck/PromptControlError/AgentChatAck/AgentChatError` 协议字段，不改 `__AW_TEST__` 现有反馈对象的核心键名。
   - 不移除 raw diagnostics；QA/开发仍需能直接读取 ack/error payload。
@@ -213,3 +214,4 @@
   - AC-15: rollback ack 后，页面必须同时可读地表达当前生效 prompt 版本与被恢复的历史版本，且 rollback 输入框文案不再让用户误以为它显示的是刚恢复的版本。
   - AC-16: prompt/chat/control 主反馈区默认展示 concise summary/detail，raw JSON 仅通过折叠 diagnostics 查看。
   - AC-17: 当 `llm_init_failed` 或同类配置失败出现时，页面首要错误摘要必须说明“当前栈缺少可用 LLM 配置/能力”，而不是直接把 `missing env variable ...` 作为唯一主要文案。
+  - AC-18: `software_safe` feedback summary/detail/rollback 语义 contract 必须由 repo-owned deterministic regression 覆盖，且该回归纳入 `./scripts/ci-tests.sh required`，不依赖额外 npm install。

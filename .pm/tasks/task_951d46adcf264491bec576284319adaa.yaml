@@ -1,0 +1,26 @@
+task_uid: task_951d46adcf264491bec576284319adaa
+title: "Formalize software_safe feedback contract regression in required automation"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-software-safe-feedback-contract-automation
+execution_log_path: .pm/tasks/task_951d46adcf264491bec576284319adaa.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
+  - scripts/ci-tests.sh
+doc_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "software_safe feedback contract regression runs from repo-owned formal automation instead of only ad hoc manual commands."
+  - "testing-manual and module/project docs point to the same canonical regression entry."
+  - "required gate remains deterministic and runnable without npm dependency bootstrapping."
+handoff_to: []
+updated_at: 2026-04-07T15:16:19+08:00
+last_started_at: 2026-04-07T15:07:39+08:00
+last_closed_at: 2026-04-07T15:16:19+08:00

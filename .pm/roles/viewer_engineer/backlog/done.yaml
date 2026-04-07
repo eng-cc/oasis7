@@ -241,3 +241,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_f9831651453f4645928797242d6b1099.yaml
+  - task_uid: task_951d46adcf264491bec576284319adaa
+    title: "Formalize software_safe feedback contract regression in required automation"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "software_safe feedback contract regression runs from repo-owned formal automation instead of only ad hoc manual commands."
+      - "testing-manual and module/project docs point to the same canonical regression entry."
+      - "required gate remains deterministic and runnable without npm dependency bootstrapping."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_951d46adcf264491bec576284319adaa.yaml

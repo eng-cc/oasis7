@@ -106,6 +106,10 @@ run_oasis7_viewer_tests() {
   run_cargo test -p oasis7_viewer
 }
 
+run_oasis7_viewer_software_safe_feedback_contract_tests() {
+  run node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
+}
+
 run_oasis7_viewer_wasm_check() {
   run_cargo check -p oasis7_viewer --target wasm32-unknown-unknown
 }
@@ -129,6 +133,7 @@ run_full_support_tier_tests() {
   run_oasis7_net_libp2p_tests
   run_oasis7_llm_baseline_fixture_smoke
   run_oasis7_viewer_tests
+  run_oasis7_viewer_software_safe_feedback_contract_tests
   run_oasis7_viewer_wasm_check
   run_cargo test -p oasis7 --features wasmtime --lib --bins
 }
@@ -141,6 +146,7 @@ case "$tier" in
     run_oasis7_consensus_tests
     run_oasis7_distfs_tests
     run_oasis7_viewer_tests
+    run_oasis7_viewer_software_safe_feedback_contract_tests
     run_oasis7_viewer_wasm_check
     ;;
   full)

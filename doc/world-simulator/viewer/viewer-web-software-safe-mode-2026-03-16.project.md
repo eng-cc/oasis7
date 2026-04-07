@@ -22,7 +22,7 @@
 - [x] T14 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` UI 渲染层迁到 SolidJS 组件架构，保留既有 `software_safe.js` 产物/协议契约，并把 freshness gate 扩到 Solid 构建输入。
 - [x] T15 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建改为“临时 bundle 输出 + finalize 回写 `software_safe.js`”正式流程，消除当前 Vite `outDir` 警告，并把 finalize 脚本纳入 freshness source scope。
 - [x] T16 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 新增 repo-owned `software_safe` 最小浏览器回归脚本，稳定验证“加载 -> 连接 -> 选择目标 -> `step` -> DOM/`lastControlFeedback` 反馈”闭环，并把入口写回 testing/manual。
-- [ ] T17 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 收口 `software_safe` prompt/chat/rollback/control 反馈可读性，明确 rollback 版本语义、将 raw diagnostics 折叠展示，并为 `llm_init_failed` 等配置失败补产品级摘要与 contract test。
+- [x] T17 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 收口 `software_safe` prompt/chat/rollback/control 反馈可读性，明确 rollback 版本语义、将 raw diagnostics 折叠展示，并为 `llm_init_failed` 等配置失败补产品级摘要与 contract test；随后把该 contract test 纳入 repo-owned required automation，固定 canonical entry 为 `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`。
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -39,9 +39,9 @@
 - 当前阶段：T0~T14 已完成，`software_safe` 已迁到 SolidJS 组件化渲染层，同时保留既有 product contract，并把 source-tree freshness gate 扩到框架构建输入。
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
 - 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
-- 当前阶段：T17 进行中，当前重做任务正把 prompt/chat/rollback/control 反馈从 raw payload 主视图收口为 summary/detail + diagnostics，并补 rollback 版本语义与配置错误摘要 contract。
+- 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
 - 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 OpenClaw runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-07（`viewer_engineer` 正重做 `software_safe` feedback UX 收口，目标是把 rollback 当前版本/恢复来源/下一目标拆开表达，并让 prompt/chat/control 默认先展示可扫描 summary/detail。）
+- 最近更新：2026-04-07（`viewer_engineer` 已完成 `software_safe` feedback UX 收口，并将 feedback contract regression 接入 `./scripts/ci-tests.sh required` 正式入口。）
 - 阻塞项：无；后续仅保留交互体验扩展与更多自动化覆盖。
 
 ## 备注
