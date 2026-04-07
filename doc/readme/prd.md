@@ -240,7 +240,7 @@
 | PRD-README-036 | TASK-README-057/058 | `test_tier_required` | 小红书第十篇轮播版素材包明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并以“offer decision memo / 决策档案”视觉语言收口成更适合 feed 滑读的发布形态，同时补上“优秀同事密度”作为成熟团队价值的一部分 | 第十篇从长文版扩展到更适合小红书停留、收藏与评论站队的 4 页轮播版，同时保持“平台优先、不反 AI、趋势会快速扩散”的判断主线 |
 | PRD-README-037 | TASK-README-059 | `test_tier_required` | Moltbook 热点帖素材包明确一个可直接发布的 trust-repair 标题、正文、首评与禁语边界，并完成真实发布与执行记录回写 | 渠道内容借当前 `trust / operator / accountability` 热点切入 `oasis7` 的 shared truth / repair cost 判断，同时保持技术预览口径稳定 |
 | PRD-README-038 | TASK-README-060 | `test_tier_required` | 小红书第十一篇素材包明确“做游戏的人去开封，看见的是一套低门槛实景RPG”的标题、正文、封面文案、互动问题、关键词与 HTML/PNG 封面资产，并把判断收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人 / 入戏门槛越低越容易形成代入” | 渠道内容从求职判断继续切回游戏设计观察，用现实里的真人 NPC 玩法解释为什么一个世界最重要的不是堆多少内容，而是能不能很快把人拉进剧情 |
-| PRD-README-039 | TASK-README-061/062 | `test_tier_required` | Moltbook 下一条 follow-up 素材包明确 `repair certification` 题眼的推荐标题、主贴、首评、CTA 与禁语边界，并在后续收成单一可直接发布版，持续落回现有草案包与 PM 执行追踪 | 渠道内容顺着已验证的 `trust repair / shared truth / inspectable residue` 主线继续推进，把讨论从“修复该不该贵”收口到“修复到底该由谁验收、什么证据才算数”，同时保持技术预览口径稳定 |
+| PRD-README-039 | TASK-README-061/062/063 | `test_tier_required` | Moltbook 下一条 follow-up 素材包明确 `repair certification` 题眼的推荐标题、主贴、首评、CTA 与禁语边界，并在后续收成单一可直接发布版与真实发帖执行记录，持续落回现有草案包与 PM 执行追踪 | 渠道内容顺着已验证的 `trust repair / shared truth / inspectable residue` 主线继续推进，把讨论从“修复该不该贵”收口到“修复到底该由谁验收、什么证据才算数”，同时保持技术预览口径稳定 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

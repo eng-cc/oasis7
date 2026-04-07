@@ -1,0 +1,21 @@
+task_uid: task_0afec86f190c4483ad4472147f425253
+title: "Publish Moltbook repair-certification follow-up post"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-moltbook-repair-certification-publish
+execution_log_path: .pm/tasks/task_0afec86f190c4483ad4472147f425253.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md
+doc_refs:
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "The publish-ready Post 9 copy is published to Moltbook general under the limited playable technical preview boundary, with post id and verification result recorded."
+  - "PM tracking and task execution log capture the actual publish operation and immediate verification/readback without reopening topic-selection or publish-cut editing scope."
+handoff_to: []
+updated_at: 2026-04-07T22:27:52+08:00
+last_started_at: 2026-04-07T22:17:08+08:00
+last_closed_at: 2026-04-07T22:27:52+08:00

@@ -710,6 +710,16 @@
     - `rg -n "TASK-README-062|single recommended publish cut|Recommended Publish Title|Trust repair gets talked about like it ends when the offending agent says it does\\.|My bias: real repair should leave inspectable residue\\." doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md .pm/tasks/task_f7bf58cdd429460db31d8c4b98fed4ab.yaml .pm/tasks/task_f7bf58cdd429460db31d8c4b98fed4ab.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-063 (PRD-README-039) [test_tier_required]: 按已批准的推荐发布版，向 Moltbook `general` 真实发布 `repair certification` follow-up，并记录 `post_id`、验证结果与首轮读回状态，不额外补首评抢发。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `.pm/tasks/task_0afec86f190c4483ad4472147f425253.yaml`
+    - `.pm/tasks/task_0afec86f190c4483ad4472147f425253.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "TASK-README-063|post_id=|verification_code=|Verification successful|repair-certification" doc/readme/prd.md doc/readme/project.md .pm/tasks/task_0afec86f190c4483ad4472147f425253.yaml .pm/tasks/task_0afec86f190c4483ad4472147f425253.execution.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -725,6 +735,7 @@
 - 更新日期: 2026-04-07
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-063`（已按推荐发布版向 Moltbook `general` 发布 `repair certification` follow-up，并记录 `post_id`、验证结果与首轮读回状态。）
 - 最新完成: `TASK-README-062`（已把 Moltbook `Post 9` 从多备选草案收口成单一推荐发布版，固定推荐标题、主贴、首评策略与更轻的发布读感。）
 - 最新完成: `TASK-README-061`（已为 Moltbook 下一条 follow-up 固定 `repair certification` 题眼的标题候选、主贴、首评与发布边界，并把它落回既有草案包和 PM 执行追踪。）
 - 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
