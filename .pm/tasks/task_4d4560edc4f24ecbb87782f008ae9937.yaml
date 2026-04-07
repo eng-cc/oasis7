@@ -1,0 +1,20 @@
+task_uid: task_4d4560edc4f24ecbb87782f008ae9937
+title: "Add repo-local Codex full access config"
+owner_role: producer_system_designer
+worktree_hint: oasis7-engineering-codex-full-access
+execution_log_path: .pm/tasks/task_4d4560edc4f24ecbb87782f008ae9937.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - doc/engineering/prd.md
+acceptance:
+  - ".codex/config.toml exists in the repo and sets sandbox_mode to danger-full-access for this worktree by default"
+handoff_to: []
+updated_at: 2026-04-07T20:49:33+08:00
+last_started_at: 2026-04-07T20:13:06+08:00
+last_closed_at: 2026-04-07T20:49:33+08:00

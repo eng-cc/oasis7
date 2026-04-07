@@ -408,3 +408,14 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_41e1aad0d5b54a20839d92b0bd58fbec.yaml
+  - task_uid: task_4d4560edc4f24ecbb87782f008ae9937
+    title: "Add repo-local Codex full access config"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+    acceptance:
+      - ".codex/config.toml exists in the repo and sets sandbox_mode to danger-full-access for this worktree by default"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_4d4560edc4f24ecbb87782f008ae9937.yaml

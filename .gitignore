@@ -26,6 +26,7 @@ output/
 
 # Local runtime config
 config.toml
+!.codex/config.toml
 
 # Legacy local env file (deprecated)
 .env

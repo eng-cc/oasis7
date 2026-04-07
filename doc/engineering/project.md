@@ -106,6 +106,7 @@
 - [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-021) [test_tier_required]: 将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
 - [x] TASK-ENGINEERING-099 (PRD-ENGINEERING-021/023) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐迁移脚本、lint/smoke 与正式文档收口。
 - [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-021) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 source_ref 的残留口径，补齐 stage/signal/task/memory 门禁、source_ref 校验与正式文档回写。
+- [x] TASK-ENGINEERING-101 (PRD-ENGINEERING-021) [test_tier_required]: 新增 repo-local `.codex/config.toml`，默认 `sandbox_mode = "danger-full-access"`，并补齐 `.gitignore` 精确例外、engineering PRD/project 与 task execution log 追踪。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -147,12 +148,13 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-03
+- 更新日期: 2026-04-07
 - 当前状态: active
 - 下一任务: 回到 `TASK-ENGINEERING-089/090`，继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-099/100` 已分别完成 task identity 单一真值迁移与 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-101`（已新增 repo-local `.codex/config.toml` 并默认 `danger-full-access`，同时补齐 `.gitignore` 精确例外、engineering 主 PRD/project 与 task execution log 追踪。）
 - 最新完成: `TASK-ENGINEERING-097`（已收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并补齐运行环境阻断边界。）
 - 最新完成: `TASK-ENGINEERING-098`（已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。）
 - 最新完成: `TASK-ENGINEERING-099`（已将 `.pm` task identity 收敛为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并完成 lint/smoke 与正式文档迁移收口。）
