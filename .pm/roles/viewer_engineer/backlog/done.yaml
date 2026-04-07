@@ -227,3 +227,17 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_fe853f282152419eae1f5898c3116b85.yaml
+  - task_uid: task_f9831651453f4645928797242d6b1099
+    title: "Polish software_safe feedback semantics and operator-facing error UX (redo)"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "software_safe rollback feedback exposes one unambiguous current/restored/next-target version state after rollback ack."
+      - "software_safe feedback surfaces concise status/error summaries ahead of raw diagnostics so QA can scan outcomes quickly."
+      - "chat/config failures no longer dump raw env-missing internals as the primary user-facing message."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_f9831651453f4645928797242d6b1099.yaml

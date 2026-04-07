@@ -15,6 +15,40 @@ function JsonBlock(props) {
   return <pre class="json">{JSON.stringify(props.value, null, 2)}</pre>;
 }
 
+function DiagnosticDetails(props) {
+  return (
+    <details class="diagnostic">
+      <summary>{props.label ?? "Raw diagnostics"}</summary>
+      <div class="stack" style="margin-top:10px;">
+        <Show when={props.note}>
+          <div class="feedback-detail">{props.note}</div>
+        </Show>
+        <JsonBlock value={props.value} />
+      </div>
+    </details>
+  );
+}
+
+function FeedbackCard(props) {
+  return (
+    <div class="feedback-card">
+      <div class="badge-row">
+        <Badge class={props.display.badgeClass}>{props.display.label}</Badge>
+        <Show when={props.display.code}>
+          <Badge>{`code=${props.display.code}`}</Badge>
+        </Show>
+      </div>
+      <div class="feedback-summary">{props.display.summary}</div>
+      <Show when={props.display.detail}>
+        <div class="feedback-detail">{props.display.detail}</div>
+      </Show>
+      <Show when={props.feedback}>
+        <DiagnosticDetails value={props.feedback} />
+      </Show>
+    </div>
+  );
+}
+
 function MetricCard(props) {
   return (
     <div class="metric">
@@ -139,6 +173,8 @@ function WorldSummaryPanel() {
   const controlFeedback = () => core.snapshotControlFeedback(state.lastControlFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
+  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback());
+  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback());
   const authSurface = () => core.buildAuthSurfaceModel();
   const hostedActionMatrixView = () => core.buildHostedActionMatrixView();
   const hostedRecoveryHint = () => core.buildHostedRecoveryHint();
@@ -394,16 +430,16 @@ function WorldSummaryPanel() {
       <PlaybackControls controlFeedback={controlFeedback()} />
       <div class="summary-grid">
         <MetricCard label="Prompt Feedback" value={promptFeedback()?.stage || "idle"}>
-          <Show when={promptFeedback()}>
-            <Badge class={core.feedbackBadgeClass(promptFeedback())}>
-              {promptFeedback()?.effect || promptFeedback()?.reason || "ready"}
+          <Show when={promptFeedbackDisplay()}>
+            <Badge class={promptFeedbackDisplay().badgeClass}>
+              {promptFeedbackDisplay().label}
             </Badge>
           </Show>
         </MetricCard>
         <MetricCard label="Chat Feedback" value={chatFeedback()?.stage || "idle"}>
-          <Show when={chatFeedback()}>
-            <Badge class={core.feedbackBadgeClass(chatFeedback())}>
-              {chatFeedback()?.effect || chatFeedback()?.reason || "ready"}
+          <Show when={chatFeedbackDisplay()}>
+            <Badge class={chatFeedbackDisplay().badgeClass}>
+              {chatFeedbackDisplay().label}
             </Badge>
           </Show>
         </MetricCard>
@@ -473,7 +509,10 @@ function PlaybackControls(props) {
               <Badge>{`Δtick=${feedback().deltaLogicalTime}`}</Badge>
               <Badge>{`Δevent=${feedback().deltaEventSeq}`}</Badge>
             </div>
-            <JsonBlock value={feedback()} />
+            <div class="feedback-summary">
+              {feedback().effect || feedback().reason || "Control feedback updated."}
+            </div>
+            <DiagnosticDetails value={feedback()} />
           </>
         )}
       </Show>
@@ -492,6 +531,9 @@ function InteractionPanel() {
   const debugContext = () => core.selectedAgentExecutionDebugContext();
   const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback());
+  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback());
+  const promptVersionState = () => core.describePromptVersionState(promptFeedback());
   const chatHistory = () =>
     core.state.chatHistory
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
@@ -515,7 +557,11 @@ function InteractionPanel() {
       <div class="badge-row">
         <Badge class="badge badge--accent">Agent Interaction</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
-        <Badge>{`promptVersion=${Number(core.state.promptDraft.currentVersion || 0)}`}</Badge>
+        <Badge>{`activePrompt=${`v${promptVersionState().currentVersion}`}`}</Badge>
+        <Badge>{`nextRollback=${`v${promptVersionState().nextRollbackTargetVersion}`}`}</Badge>
+        <Show when={promptVersionState().restoredFromVersion != null}>
+          <Badge>{`restoredFrom=${`v${promptVersionState().restoredFromVersion}`}`}</Badge>
+        </Show>
       </div>
       <Show when={debugContext()?.provider_mode === "openclaw_local_http"}>
         <EmptyState>
@@ -552,6 +598,8 @@ function InteractionPanel() {
       </div>
       <EmptyState>{assetLaneDetail()}</EmptyState>
       <PanelSection title="Prompt Overrides">
+        <div class="feedback-detail">{promptVersionState().summary}</div>
+        <div class="feedback-detail">{promptVersionState().detail}</div>
         <Show
           when={
             authSurface().capabilities.prompt_control.enabled
@@ -628,7 +676,7 @@ function InteractionPanel() {
         </div>
         <div class="toolbar">
           <div class="field" style="margin:0; min-width:180px; flex:1;">
-            <label for="prompt-rollback-version">Rollback Target Version</label>
+            <label for="prompt-rollback-version">Next Rollback Target Version</label>
             <input
               id="prompt-rollback-version"
               type="number"
@@ -639,6 +687,7 @@ function InteractionPanel() {
               onInput={(event) => {
                 const nextValue = Number(event.currentTarget.value || 0);
                 core.state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
+                core.requestRender();
               }}
             />
           </div>
@@ -655,14 +704,7 @@ function InteractionPanel() {
           </button>
         </div>
         <Show when={promptFeedback()} fallback={<EmptyState>No prompt feedback yet.</EmptyState>}>
-          {(feedback) => (
-            <>
-              <div class="badge-row">
-                <Badge class={core.feedbackBadgeClass(feedback())}>{feedback().stage}</Badge>
-              </div>
-              <JsonBlock value={feedback()} />
-            </>
-          )}
+          {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
         </Show>
         <Show when={core.state.strongAuth.lastGrantActionId}>
           <EmptyState>
@@ -717,14 +759,7 @@ function InteractionPanel() {
           </button>
         </div>
         <Show when={chatFeedback()} fallback={<EmptyState>No chat feedback yet.</EmptyState>}>
-          {(feedback) => (
-            <>
-              <div class="badge-row">
-                <Badge class={core.feedbackBadgeClass(feedback())}>{feedback().stage}</Badge>
-              </div>
-              <JsonBlock value={feedback()} />
-            </>
-          )}
+          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
         </Show>
         <div>
           <div class="panel__title" style="margin-bottom:10px;">Message Flow</div>

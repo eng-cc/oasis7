@@ -195,3 +195,21 @@
   - AC-12: `software_safe` UI 组件化后，真实 Web smoke 仍能完成“加载 -> 连接 -> 选择目标 -> `step` -> 看到 control feedback”最小闭环。
   - AC-13: `__AW_TEST__.getState()`、auth/bootstrap surface、observer/debug 标识与现有 `software_safe` 页面按钮/字段 contract 不得回退。
   - AC-14: Viewer Web freshness gate 必须把 `package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/` 与 `software_safe_src/` 作为 software-safe bundle 的正式输入。
+
+## 增量需求（2026-04-07）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - QA 实走 `software_safe` prompt/chat/rollback 流程后，当前页面虽然功能链路可用，但反馈语义仍不够清晰：rollback 后“当前版本 / 恢复来源 / 下一次 target”容易混淆，prompt/chat/control 主反馈被大段 raw JSON 淹没，而 `llm_init_failed` 之类配置错误会直接把底层 env 缺失暴露成首要用户文案。
+- Proposed Solution:
+  - 在 `software_safe` SolidJS 前端里为 prompt/chat/rollback/control 反馈补一层结构化摘要：
+    - rollback 反馈明确区分当前生效版本、恢复来源版本与下一次 rollback target；
+    - prompt/chat/control 默认展示可扫描的 summary/detail，raw payload 仍保留在可展开 diagnostics；
+    - 对 `llm_init_failed`、rollback target 缺失、rollback noop 等已知错误给出面向 QA/operator 的产品级解释。
+- Functional Constraints:
+  - 不改变 runtime `PromptControlAck/PromptControlError/AgentChatAck/AgentChatError` 协议字段，不改 `__AW_TEST__` 现有反馈对象的核心键名。
+  - 不移除 raw diagnostics；QA/开发仍需能直接读取 ack/error payload。
+  - 不把 rollback 后当前版本误写成历史 target；页面必须如实表达 rollback 会生成新的保存版本。
+- Acceptance Criteria:
+  - AC-15: rollback ack 后，页面必须同时可读地表达当前生效 prompt 版本与被恢复的历史版本，且 rollback 输入框文案不再让用户误以为它显示的是刚恢复的版本。
+  - AC-16: prompt/chat/control 主反馈区默认展示 concise summary/detail，raw JSON 仅通过折叠 diagnostics 查看。
+  - AC-17: 当 `llm_init_failed` 或同类配置失败出现时，页面首要错误摘要必须说明“当前栈缺少可用 LLM 配置/能力”，而不是直接把 `missing env variable ...` 作为唯一主要文案。

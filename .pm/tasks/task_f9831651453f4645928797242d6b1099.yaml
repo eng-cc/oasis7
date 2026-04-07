@@ -1,0 +1,26 @@
+task_uid: task_f9831651453f4645928797242d6b1099
+title: "Polish software_safe feedback semantics and operator-facing error UX (redo)"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-software-safe-feedback-ux-redo
+execution_log_path: .pm/tasks/task_f9831651453f4645928797242d6b1099.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_viewer/software_safe_src/main.jsx
+  - crates/oasis7_viewer/software_safe_src/legacy_core.js
+doc_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "software_safe rollback feedback exposes one unambiguous current/restored/next-target version state after rollback ack."
+  - "software_safe feedback surfaces concise status/error summaries ahead of raw diagnostics so QA can scan outcomes quickly."
+  - "chat/config failures no longer dump raw env-missing internals as the primary user-facing message."
+handoff_to: []
+updated_at: 2026-04-07T14:30:05+08:00
+last_started_at: 2026-04-07T14:17:24+08:00
+last_closed_at: 2026-04-07T14:29:54+08:00

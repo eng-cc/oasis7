@@ -831,6 +831,180 @@ function snapshotSemanticFeedback(feedback) {
   };
 }
 
+function semanticFeedbackCode(feedback) {
+  if (feedback?.stage !== "error") {
+    return null;
+  }
+  const responseCode = String(feedback?.response?.code || "").trim();
+  if (responseCode) {
+    return responseCode;
+  }
+  const effectCode = String(feedback?.effect || "").trim();
+  return effectCode || null;
+}
+
+function semanticFeedbackMessage(feedback) {
+  const responseMessage = String(feedback?.response?.message || "").trim();
+  if (responseMessage) {
+    return responseMessage;
+  }
+  const reason = String(feedback?.reason || "").trim();
+  return reason || null;
+}
+
+function formatPromptVersionLabel(value) {
+  return `v${Math.max(0, Math.floor(Number(value || 0)))}`;
+}
+
+function humanizePromptField(field) {
+  return String(field || "")
+    .trim()
+    .replaceAll("_", " ");
+}
+
+function summarizeAppliedFields(feedback) {
+  const fields = Array.isArray(feedback?.response?.applied_fields)
+    ? feedback.response.applied_fields
+        .map(humanizePromptField)
+        .filter(Boolean)
+    : [];
+  if (!fields.length) {
+    return null;
+  }
+  return fields.join(", ");
+}
+
+function describeSemanticFeedback(feedback) {
+  if (!feedback) {
+    return null;
+  }
+  const code = semanticFeedbackCode(feedback);
+  const diagnostics = semanticFeedbackMessage(feedback);
+  const description = {
+    label: feedback.stage || "idle",
+    summary: feedback.effect || diagnostics || "Feedback updated.",
+    detail: null,
+    code,
+    diagnostics,
+    badgeClass: feedbackBadgeClass(feedback),
+  };
+
+  if (feedback.stage === "error") {
+    if (code === "llm_init_failed") {
+      description.label = "LLM unavailable";
+      description.summary = "Chat cannot start because this stack has no usable LLM configuration.";
+      description.detail =
+        "Add model, base URL, and API key to the active config.toml or OASIS7_LLM_* env, then restart the launcher stack.";
+      return description;
+    }
+    if (code === "target_version_not_found") {
+      description.label = "Rollback target missing";
+      description.summary = "The selected rollback version is not available for this agent.";
+      description.detail = "Refresh prompt state or choose an existing saved version before retrying.";
+      return description;
+    }
+    if (code === "rollback_noop") {
+      description.label = "Rollback noop";
+      description.summary = "That rollback target would not change the current prompt.";
+      description.detail = "Pick an older version only when you need to restore different prompt content.";
+      return description;
+    }
+    if (feedback.kind === "prompt") {
+      description.label = "Prompt failed";
+      description.summary = "Prompt control did not complete.";
+      description.detail = "Open diagnostics for the exact backend rejection.";
+      return description;
+    }
+    if (feedback.kind === "chat") {
+      description.label = "Chat failed";
+      description.summary = "Agent chat did not complete.";
+      description.detail = "Open diagnostics for the exact backend rejection.";
+      return description;
+    }
+    description.label = code || "Request failed";
+    description.summary = diagnostics || "The request failed.";
+    description.detail = "Open diagnostics for the raw backend payload.";
+    return description;
+  }
+
+  if (feedback.kind === "prompt") {
+    const version = Number(feedback?.response?.version || 0);
+    const appliedFields = summarizeAppliedFields(feedback);
+    if (feedback.stage === "preview_ack") {
+      description.label = "Preview ready";
+      description.summary = `Prompt preview is ready from ${formatPromptVersionLabel(version)}.`;
+      description.detail = "Review the returned digest or prompt fields before applying.";
+      return description;
+    }
+    if (feedback.stage === "apply_ack") {
+      description.label = "Prompt saved";
+      description.summary = `Prompt changes are now saved as ${formatPromptVersionLabel(version)}.`;
+      description.detail = appliedFields
+        ? `Applied fields: ${appliedFields}.`
+        : "Prompt changes were accepted and persisted.";
+      return description;
+    }
+    if (feedback.stage === "rollback_ack") {
+      const restoredVersion = Number(feedback?.response?.rolled_back_to_version || 0);
+      description.label = "Rollback applied";
+      description.summary =
+        `Active prompt is now saved as ${formatPromptVersionLabel(version)} after restoring content from ${formatPromptVersionLabel(restoredVersion)}.`;
+      description.detail =
+        "Rollback creates a new saved version; the rollback input below points to the next target, not the version that was just restored.";
+      return description;
+    }
+    description.label = "Prompt in progress";
+    description.summary = feedback.effect || "Prompt request is in flight.";
+    description.detail = "Wait for ack/error before issuing another prompt action.";
+    return description;
+  }
+
+  if (feedback.kind === "chat") {
+    if (feedback.stage === "ack") {
+      const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
+      description.label = "Chat accepted";
+      description.summary = `Message entered the runtime queue at tick ${acceptedAtTick}.`;
+      description.detail = "Watch Message Flow for the outbound player message and any inbound agent reply.";
+      return description;
+    }
+    description.label = "Chat in progress";
+    description.summary = feedback.effect || "Chat request is in flight.";
+    description.detail = "Wait for ack/error before sending another message.";
+    return description;
+  }
+
+  return description;
+}
+
+function describePromptVersionState(feedback = state.lastPromptFeedback) {
+  const currentVersion = Math.max(0, Math.floor(Number(state.promptDraft.currentVersion || 0)));
+  const nextRollbackTargetVersion = Math.max(
+    0,
+    Math.floor(Number(state.promptDraft.rollbackTargetVersion || 0)),
+  );
+  const responseVersion = Number(feedback?.response?.version);
+  const ackVersion = Number.isFinite(responseVersion) ? Math.max(0, Math.floor(responseVersion)) : currentVersion;
+  const responseRollbackVersion = Number(feedback?.response?.rolled_back_to_version);
+  const restoredFromVersion =
+    feedback?.stage === "rollback_ack" && Number.isFinite(responseRollbackVersion)
+      ? Math.max(0, Math.floor(responseRollbackVersion))
+      : null;
+  const summary = restoredFromVersion == null
+    ? `Active prompt version is ${formatPromptVersionLabel(currentVersion)}.`
+    : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}; content was restored from ${formatPromptVersionLabel(restoredFromVersion)}.`;
+  const detail = restoredFromVersion == null
+    ? `The rollback input defaults to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}.`
+    : `The rollback created a new saved version ${formatPromptVersionLabel(ackVersion)}. The input below now points to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}, not the restored version.`;
+  return {
+    currentVersion,
+    nextRollbackTargetVersion,
+    ackVersion,
+    restoredFromVersion,
+    summary,
+    detail,
+  };
+}
+
 function getState() {
   const authSurface = buildAuthSurfaceModel();
   const hostedActionMatrixView = buildHostedActionMatrixView();
@@ -3306,6 +3480,10 @@ function render() {
   renderHook();
 }
 
+function requestRender() {
+  render();
+}
+
 function setStrongAuthApprovalCode(value) {
   state.strongAuth.approvalCode = String(value || "");
   render();
@@ -3392,6 +3570,8 @@ export {
   clone,
   connectionBadgeClass,
   describeControls,
+  describePromptVersionState,
+  describeSemanticFeedback,
   entityCollections,
   feedbackBadgeClass,
   fillControlExample,
@@ -3400,6 +3580,7 @@ export {
   hostedActionPolicy,
   modelLists,
   refreshHostedAdmissionState,
+  requestRender,
   renderInteractionPanel,
   renderLists,
   renderSummary,
