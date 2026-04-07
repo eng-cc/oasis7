@@ -71,7 +71,7 @@
         const loadingOverlaySelector = ".viewer-loading";
 
         const params = new URLSearchParams(window.location.search);
-        const requestedMode = String(params.get("render_mode") || "auto")
+        const requestedMode = String(params.get("render_mode") || "")
           .trim()
           .toLowerCase();
 
@@ -152,6 +152,38 @@
           return result;
         };
 
+        const redirectToSoftwareSafe = (reason) => {
+          const url = new URL(window.location.href);
+          url.pathname = url.pathname.replace(/[^/]*$/, "software_safe.html");
+          url.searchParams.set("render_mode", SOFTWARE_SAFE_RENDER_MODE);
+          if (reason) {
+            url.searchParams.set("software_safe_reason", reason);
+          }
+          window.location.replace(url.toString());
+        };
+
+        if (!requestedMode) {
+          redirectToSoftwareSafe("primary_web_entry");
+          return;
+        }
+
+        if (requestedMode === "auto") {
+          redirectToSoftwareSafe("auto_primary_web_entry");
+          return;
+        }
+
+        if (requestedMode === SOFTWARE_SAFE_RENDER_MODE) {
+          redirectToSoftwareSafe(
+            params.get("software_safe_reason") || "explicit_software_safe"
+          );
+          return;
+        }
+
+        if (requestedMode !== STANDARD_RENDER_MODE) {
+          redirectToSoftwareSafe("unsupported_render_mode");
+          return;
+        }
+
         const renderMeta = {
           renderMode: STANDARD_RENDER_MODE,
           rendererClass: "hardware",
@@ -164,29 +196,6 @@
         renderMeta.vendor = detection.vendor;
         renderMeta.webglVersion = detection.webglVersion;
         renderMeta.softwareSafeReason = detection.softwareSafeReason;
-
-        const redirectToSoftwareSafe = (reason) => {
-          const url = new URL(window.location.href);
-          url.pathname = url.pathname.replace(/[^/]*$/, "software_safe.html");
-          url.searchParams.set("render_mode", SOFTWARE_SAFE_RENDER_MODE);
-          if (reason) {
-            url.searchParams.set("software_safe_reason", reason);
-          }
-          window.location.replace(url.toString());
-        };
-
-        if (requestedMode === SOFTWARE_SAFE_RENDER_MODE) {
-          redirectToSoftwareSafe(params.get("software_safe_reason") || "forced_query");
-          return;
-        }
-
-        if (
-          requestedMode !== STANDARD_RENDER_MODE &&
-          detection.rendererClass !== "hardware"
-        ) {
-          redirectToSoftwareSafe(detection.softwareSafeReason || "software_renderer_detected");
-          return;
-        }
 
         renderMeta.renderMode = STANDARD_RENDER_MODE;
         window[metaKey] = Object.freeze({ ...renderMeta });
@@ -244,8 +253,8 @@
   </head>
   <body>
     <div class="viewer-loading" aria-live="polite">
-      <div class="viewer-loading__title">Loading standard viewer…</div>
-      <div>If hardware WebGL is unavailable, bootstrap will switch to software-safe mode.</div>
+      <div class="viewer-loading__title">Opening standard visual QA viewer…</div>
+      <div>Primary formal Web play uses software_safe; this route is only for explicit standard inspection.</div>
     </div>
   </body>
 </html>

@@ -91,6 +91,14 @@ function PanelSection(props) {
   );
 }
 
+function gameplayStatusBadgeClass(status) {
+  return status === "blocked"
+    ? "badge badge--warn"
+    : status === "branch_ready"
+      ? "badge badge--good"
+      : "badge badge--accent";
+}
+
 function renderResourceSummary(resources) {
   return core.resourceSummary(resources);
 }
@@ -170,6 +178,7 @@ function TargetsPanel() {
 
 function WorldSummaryPanel() {
   const state = core.state;
+  const gameplaySummary = () => core.buildGameplaySummary();
   const controlFeedback = () => core.snapshotControlFeedback(state.lastControlFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
@@ -195,11 +204,121 @@ function WorldSummaryPanel() {
     <div class="stack">
       <div class="badge-row">
         <Badge class="badge badge--accent">software_safe</Badge>
+        <Badge class="badge badge--accent">formal_web_entry</Badge>
         <Badge class={core.connectionBadgeClass()}>{state.connectionStatus}</Badge>
         <Badge>{`debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`}</Badge>
         <Badge>{`rendererClass=${state.rendererClass}`}</Badge>
         <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
       </div>
+      <PanelSection title="Formal Gameplay Summary">
+        <Show
+          when={gameplaySummary()}
+          fallback={<EmptyState>Waiting for the first canonical gameplay snapshot…</EmptyState>}
+        >
+          {(gameplay) => (
+            <>
+              <div class="badge-row">
+                <Badge class={gameplayStatusBadgeClass(gameplay().stageStatus)}>
+                  {`stage=${gameplay().stageStatus || "-"}`}
+                </Badge>
+                <Badge>{`stageId=${gameplay().stageId || "-"}`}</Badge>
+                <Badge>{`goal=${gameplay().goalId || "-"}`}</Badge>
+                <Show when={gameplay().goalKind}>
+                  <Badge>{`goalKind=${gameplay().goalKind}`}</Badge>
+                </Show>
+                <Badge>
+                  {`progress=${
+                    gameplay().progressPercent == null ? "-" : `${gameplay().progressPercent}%`
+                  }`}
+                </Badge>
+              </div>
+              <EventCard
+                title={gameplay().goalTitle || "Current Goal"}
+                badge={gameplay().progressPercent == null ? "n/a" : `${gameplay().progressPercent}%`}
+                badgeClass="badge badge--accent"
+                meta={gameplay().objective || "No objective text yet."}
+              >
+                <Show when={gameplay().progressDetail}>
+                  <div class="feedback-detail">{gameplay().progressDetail}</div>
+                </Show>
+              </EventCard>
+              <EventCard title="Next Step" badge={gameplay().stageStatus || "-"}>
+                <div class="feedback-summary">
+                  {gameplay().nextStepHint || "Wait for the next runtime guidance update."}
+                </div>
+                <Show when={gameplay().branchHint}>
+                  <div class="feedback-detail">{gameplay().branchHint}</div>
+                </Show>
+              </EventCard>
+              <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
+                <EventCard
+                  title="Blocked / Handoff"
+                  badge={gameplay().blockerKind || "blocked"}
+                  badgeClass="badge badge--warn"
+                >
+                  <div class="feedback-summary">
+                    {gameplay().blockerDetail || "Gameplay is blocked and needs explicit recovery."}
+                  </div>
+                  <div class="feedback-detail">{gameplay().assetGovernanceHandoff}</div>
+                </EventCard>
+              </Show>
+              <Show when={gameplay().recentFeedback}>
+                {(feedback) => (
+                  <EventCard
+                    title="Recent Gameplay Feedback"
+                    badge={feedback().stage || "-"}
+                    badgeClass={
+                      feedback().stage === "blocked" ? "badge badge--warn" : "badge badge--good"
+                    }
+                    meta={`action=${feedback().action || "-"} · Δtick=${feedback().deltaLogicalTime} · Δevent=${feedback().deltaEventSeq}`}
+                  >
+                    <div class="feedback-summary">
+                      {feedback().effect || feedback().reason || "Gameplay feedback updated."}
+                    </div>
+                    <Show when={feedback().reason}>
+                      <div class="feedback-detail">{feedback().reason}</div>
+                    </Show>
+                    <Show when={feedback().hint}>
+                      <div class="feedback-detail">{feedback().hint}</div>
+                    </Show>
+                  </EventCard>
+                )}
+              </Show>
+              <div>
+                <div class="panel__title" style="margin-bottom:10px;">Available Gameplay Actions</div>
+                <div class="event-list">
+                  <Show
+                    when={gameplay().availableActions.length > 0}
+                    fallback={<EmptyState>No canonical gameplay actions published yet.</EmptyState>}
+                  >
+                    <For each={gameplay().availableActions}>
+                      {(action) => (
+                        <EventCard
+                          title={action.label || action.actionId || "unknown_action"}
+                          badge={action.disabledReason ? "handoff" : "ready"}
+                          badgeClass={action.disabledReason ? "badge badge--warn" : "badge badge--good"}
+                          meta={`protocol=${action.protocolAction || "-"} · target=${action.targetAgentId || "-"}`}
+                        >
+                          <div class="feedback-detail">
+                            {action.disabledReason
+                              || "Playable from the formal Web entry without opening the visual QA viewer."}
+                          </div>
+                        </EventCard>
+                      )}
+                    </For>
+                  </Show>
+                </div>
+              </div>
+              <EventCard title="Missing Action Handoff" badge="explicit" badgeClass="badge badge--warn">
+                <div class="feedback-summary">{gameplay().assetGovernanceHandoff}</div>
+                <div class="feedback-detail">
+                  Use the Asset / Governance Lane below for policy visibility. This page intentionally keeps transfer forms out of the primary Web entry.
+                </div>
+              </EventCard>
+            </>
+          )}
+        </Show>
+      </PanelSection>
       <div class="summary-grid">
         <MetricCard label="Logical Time" value={state.logicalTime} />
         <MetricCard label="Event Seq" value={state.eventSeq} />
@@ -208,7 +327,7 @@ function WorldSummaryPanel() {
       </div>
       <div class="badge-row">
         <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
-        <Badge>{`reason=${state.softwareSafeReason || "-"}`}</Badge>
+        <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
         <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
       </div>
       <PanelSection title="Execution Lanes">
@@ -216,7 +335,7 @@ function WorldSummaryPanel() {
           <Badge class="badge badge--accent">debug_viewer</Badge>
           <Badge>{`status=${state.debugViewerStatus}`}</Badge>
           <Badge>{`renderMode=${state.renderMode}`}</Badge>
-          <Badge>{`fallback=${state.softwareSafeReason || "-"}`}</Badge>
+          <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
         </div>
         <EmptyState style="margin-top:-2px;">
           debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer
@@ -243,7 +362,7 @@ function WorldSummaryPanel() {
                 <Badge>{`obs=${debug().observation_schema_version || "-"}`}</Badge>
                 <Badge>{`act=${debug().action_schema_version || "-"}`}</Badge>
                 <Badge>{`agentProfile=${debug().agent_profile || "-"}`}</Badge>
-                <Badge>{`fallback=${debug().fallback_reason || "-"}`}</Badge>
+                <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
               </div>
               <JsonBlock value={debug()} />
             </>

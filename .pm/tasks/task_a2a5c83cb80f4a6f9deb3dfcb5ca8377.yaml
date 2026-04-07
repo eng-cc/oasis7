@@ -1,0 +1,22 @@
+task_uid: task_a2a5c83cb80f4a6f9deb3dfcb5ca8377
+title: "Make software_safe the default formal Web entry"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-software-safe-primary-web-default
+execution_log_path: .pm/tasks/task_a2a5c83cb80f4a6f9deb3dfcb5ca8377.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+acceptance:
+  - "default browser product entry and render_mode/launcher/bootstrap semantics route formal Web gameplay to software_safe unless visual intent explicitly requests standard"
+  - "software_safe exposes canonical gameplay summary plus blocked/not_exposed/handoff surface for specialized actions without implying main_token_transfer support"
+handoff_to: []
+updated_at: 2026-04-07T21:53:50+08:00
+last_started_at: 2026-04-07T19:45:51+08:00
+last_closed_at: 2026-04-07T21:53:50+08:00

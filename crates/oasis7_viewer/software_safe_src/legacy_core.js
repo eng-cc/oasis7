@@ -164,7 +164,7 @@ function detectRendererMeta() {
   const meta = {
     renderMode: SOFTWARE_SAFE_RENDER_MODE,
     rendererClass: "none",
-    softwareSafeReason: reasonFromQuery || "forced_fallback",
+    softwareSafeReason: reasonFromQuery || "direct_software_safe_entry",
     renderer: null,
     vendor: null,
     webglVersion: null,
@@ -187,14 +187,11 @@ function detectRendererMeta() {
     const rendererText = String(meta.renderer || "").toLowerCase();
     if (SOFTWARE_RENDERER_MARKERS.some((marker) => rendererText.includes(marker))) {
       meta.rendererClass = "software";
-      meta.softwareSafeReason = reasonFromQuery || "software_renderer_detected";
     } else {
       meta.rendererClass = "unknown";
-      meta.softwareSafeReason = reasonFromQuery || "forced_query";
     }
   } catch (error) {
     meta.rendererClass = "none";
-    meta.softwareSafeReason = reasonFromQuery || "webgl_probe_failed";
     meta.renderer = String(error);
   }
   return meta;
@@ -1005,10 +1002,63 @@ function describePromptVersionState(feedback = state.lastPromptFeedback) {
   };
 }
 
+function buildGameplaySummary() {
+  const gameplay = state.snapshot?.player_gameplay;
+  if (!gameplay || typeof gameplay !== "object") {
+    return null;
+  }
+
+  const progressRaw = Number(gameplay.progress_percent);
+  const progressPercent = Number.isFinite(progressRaw)
+    ? Math.max(0, Math.min(100, Math.floor(progressRaw)))
+    : null;
+  const availableActions = Array.isArray(gameplay.available_actions)
+    ? gameplay.available_actions.map((action) => ({
+        actionId: action?.action_id || null,
+        label: action?.label || null,
+        protocolAction: action?.protocol_action || null,
+        targetAgentId: action?.target_agent_id || null,
+        disabledReason: action?.disabled_reason || null,
+      }))
+    : [];
+  const recentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
+    ? {
+        action: gameplay.recent_feedback.action || null,
+        stage: gameplay.recent_feedback.stage || null,
+        effect: gameplay.recent_feedback.effect || null,
+        reason: gameplay.recent_feedback.reason || null,
+        hint: gameplay.recent_feedback.hint || null,
+        deltaLogicalTime: Number(gameplay.recent_feedback.delta_logical_time || 0),
+        deltaEventSeq: Number(gameplay.recent_feedback.delta_event_seq || 0),
+      }
+    : null;
+
+  return {
+    stageId: gameplay.stage_id || null,
+    stageStatus: gameplay.stage_status || null,
+    goalId: gameplay.goal_id || null,
+    goalKind: gameplay.goal_kind || null,
+    goalTitle: gameplay.goal_title || null,
+    objective: gameplay.objective || null,
+    progressDetail: gameplay.progress_detail || null,
+    progressPercent,
+    blockerKind: gameplay.blocker_kind || null,
+    blockerDetail: gameplay.blocker_detail || null,
+    nextStepHint: gameplay.next_step_hint || null,
+    branchHint: gameplay.branch_hint || null,
+    availableActions,
+    recentFeedback,
+    agentClaim: clone(gameplay.agent_claim),
+    assetGovernanceHandoff:
+      "Asset/governance actions remain a separate lane. software_safe exposes no main token transfer form here.",
+  };
+}
+
 function getState() {
   const authSurface = buildAuthSurfaceModel();
   const hostedActionMatrixView = buildHostedActionMatrixView();
   const hostedRecoveryHint = buildHostedRecoveryHint();
+  const gameplaySummary = buildGameplaySummary();
   return {
     connectionStatus: state.connectionStatus,
     logicalTime: state.logicalTime,
@@ -1061,6 +1111,7 @@ function getState() {
     hostedAccess: clone(state.hostedAccess),
     hostedActionMatrix: clone(hostedActionMatrixView),
     hostedAdmission: clone(state.hostedAdmission),
+    gameplaySummary: clone(gameplaySummary),
     strongAuthApprovalCodeConfigured: !!String(state.strongAuth.approvalCode || "").trim(),
     strongAuthLastGrantActionId: state.strongAuth.lastGrantActionId,
     strongAuthLastGrantExpiresAtUnixMs: state.strongAuth.lastGrantExpiresAtUnixMs,
@@ -2967,7 +3018,7 @@ function renderSummary() {
       </div>
       <div class="badge-row">
         <span class="badge">ws=${escapeHtml(state.wsUrl || "-")}</span>
-        <span class="badge">reason=${escapeHtml(state.softwareSafeReason || "-")}</span>
+        <span class="badge">entryReason=${escapeHtml(state.softwareSafeReason || "-")}</span>
         <span class="badge">renderer=${escapeHtml(state.renderer || "n/a")}</span>
       </div>
       <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
@@ -2977,7 +3028,7 @@ function renderSummary() {
             <span class="badge badge--accent">debug_viewer</span>
             <span class="badge">status=${escapeHtml(state.debugViewerStatus)}</span>
             <span class="badge">renderMode=${escapeHtml(state.renderMode)}</span>
-            <span class="badge">fallback=${escapeHtml(state.softwareSafeReason || "-")}</span>
+            <span class="badge">entryReason=${escapeHtml(state.softwareSafeReason || "-")}</span>
           </div>
           <div class="empty" style="margin-top:-2px;">debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.</div>
           ${selectedDebug
@@ -2991,7 +3042,7 @@ function renderSummary() {
                 <span class="badge">obs=${escapeHtml(selectedDebug.observation_schema_version || "-")}</span>
                 <span class="badge">act=${escapeHtml(selectedDebug.action_schema_version || "-")}</span>
                 <span class="badge">agentProfile=${escapeHtml(selectedDebug.agent_profile || "-")}</span>
-                <span class="badge">fallback=${escapeHtml(selectedDebug.fallback_reason || "-")}</span>
+                <span class="badge">providerFallback=${escapeHtml(selectedDebug.fallback_reason || "-")}</span>
               </div>
               <pre class="json">${escapeHtml(JSON.stringify(selectedDebug, null, 2))}</pre>`
             : '<div class="empty">Select an agent to compare the headless execution lane against this debug_viewer observer lane.</div>'}
@@ -3565,6 +3616,7 @@ export {
   applySelection,
   bindEvents,
   buildAuthSurfaceModel,
+  buildGameplaySummary,
   buildHostedActionMatrixView,
   buildHostedRecoveryHint,
   clone,
