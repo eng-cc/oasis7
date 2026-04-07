@@ -1,7 +1,8 @@
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args, chain_runtime_status_from_web,
-    collect_chain_required_config_issues, collect_required_config_issues,
+    check_openclaw_local_http_provider, collect_chain_required_config_issues,
+    collect_required_config_issues,
     config_ui::{issue_field_ids, StartupGuideTarget},
     encode_query_value, encoded_query_pair,
     explorer_window::{
@@ -9,8 +10,8 @@ use super::{
         WebExplorerOverviewResponse,
     },
     install_cjk_font, normalize_host_for_url, parse_chain_role, parse_chain_validators,
-    parse_host_port, parse_port, probe_chain_status_endpoint, probe_openclaw_local_http,
-    read_named_env_value_with, resolve_control_plane_env_with,
+    parse_host_port, parse_port, probe_chain_status_endpoint, read_named_env_value_with,
+    resolve_control_plane_env_with,
     self_guided::{
         resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
         ConfigGuideTargetHint, DemoModePhase, DisabledActionCta, NextTaskHint, OnboardingStep,
@@ -842,7 +843,7 @@ fn probe_chain_status_endpoint_reports_connect_failure() {
 }
 
 #[test]
-fn probe_openclaw_local_http_accepts_info_and_health_responses() {
+fn check_openclaw_local_http_provider_accepts_info_and_health_responses() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -865,8 +866,9 @@ fn probe_openclaw_local_http_accepts_info_and_health_responses() {
         }
     });
 
-    let snapshot = probe_openclaw_local_http(format!("http://{}", bind).as_str(), None, 200)
-        .expect("probe should pass");
+    let snapshot =
+        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+            .expect("provider check should pass");
     assert_eq!(snapshot.provider_id, "openclaw-local");
     assert_eq!(snapshot.name, "OpenClaw");
     assert_eq!(snapshot.version, "0.1.0");
@@ -893,7 +895,7 @@ fn probe_openclaw_local_http_accepts_info_and_health_responses() {
 }
 
 #[test]
-fn probe_openclaw_local_http_reports_incompatible_supported_actions() {
+fn check_openclaw_local_http_provider_reports_incompatible_supported_actions() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -916,8 +918,9 @@ fn probe_openclaw_local_http_reports_incompatible_supported_actions() {
         }
     });
 
-    let snapshot = probe_openclaw_local_http(format!("http://{}", bind).as_str(), None, 200)
-        .expect("probe should still return snapshot");
+    let snapshot =
+        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+            .expect("provider check should still return snapshot");
     assert_eq!(
         snapshot.compatibility_status,
         OpenClawProviderCompatibilityStatus::Incompatible
@@ -930,7 +933,7 @@ fn probe_openclaw_local_http_reports_incompatible_supported_actions() {
 }
 
 #[test]
-fn probe_openclaw_local_http_marks_unhealthy_provider_as_degraded() {
+fn check_openclaw_local_http_provider_marks_unhealthy_provider_as_degraded() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -953,8 +956,9 @@ fn probe_openclaw_local_http_marks_unhealthy_provider_as_degraded() {
         }
     });
 
-    let snapshot = probe_openclaw_local_http(format!("http://{}", bind).as_str(), None, 200)
-        .expect("probe should still return degraded snapshot");
+    let snapshot =
+        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+            .expect("provider check should still return degraded snapshot");
     assert_eq!(
         snapshot.compatibility_status,
         OpenClawProviderCompatibilityStatus::Degraded

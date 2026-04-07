@@ -96,14 +96,14 @@
   - `/v1/provider/info` 的 `protocol_version/capabilities/supported_action_sets` 应用于启用前兼容性判断。
   - 错误类型需能区分 `version_mismatch`、`unsupported_agent_profile`、`health degraded` 等。
 - 当前实现:
-  - launcher probe 只读取 `provider_id/name/version/protocol_version` 与 `health.ok/status/queue_depth`。
+  - launcher provider compatibility check 只读取 `provider_id/name/version/protocol_version` 与 `health.ok/status/queue_depth`。
   - 没有基于 `capabilities/supported_action_sets` 的显式 gating。
   - 没有在启用前做“当前 provider 是否满足 world-simulator phase-1 contract”的产品级判定。
 - 影响:
-  - 用户可能在 probe 成功后仍进入不可用 provider。
+  - 用户可能在 compatibility check 成功后仍进入不可用 provider。
   - `OpenClaw Gateway 在线` 与 `当前 world-simulator provider contract 可用` 被混成同一层状态。
 - 修正要求:
-  - launcher probe / config 校验必须补 contract-aware gating。
+  - launcher provider compatibility check / config 校验必须补 contract-aware gating。
   - UI 文案必须区分“服务在线”“协议兼容”“profile 可用”“当前处于 degraded”四种状态。
 
 ### Gap-5：`fallback_reason` 审计链尚未落地到真实运行产物
@@ -159,7 +159,7 @@
   - `viewer_engineer`
   - 联审：`agent_engineer`、`runtime_engineer`
 - 范围:
-  - launcher probe 增加 `capabilities/supported_action_sets/profile compatibility` 判断。
+  - launcher provider compatibility check 增加 `capabilities/supported_action_sets/profile compatibility` 判断。
   - runtime live / parity bench / viewer snapshot 全链路透传 `fallback_reason`。
 - 通过条件:
   - UI 能明确区分 incompatible / degraded / ready。

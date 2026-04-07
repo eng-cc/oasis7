@@ -51,14 +51,14 @@ struct OpenClawProviderHealthResponse {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum OpenClawProbeError {
+pub(super) enum OpenClawProviderCheckError {
     InvalidConfig(String),
     Unauthorized(String),
     Unreachable(String),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl std::fmt::Display for OpenClawProbeError {
+impl std::fmt::Display for OpenClawProviderCheckError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidConfig(detail)
@@ -768,12 +768,12 @@ pub(super) fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn probe_openclaw_local_http(
+pub(super) fn check_openclaw_local_http_provider(
     base_url: &str,
     auth_token: Option<&str>,
     timeout_ms: u64,
-) -> Result<OpenClawProviderSnapshot, OpenClawProbeError> {
-    validate_openclaw_base_url(base_url).map_err(OpenClawProbeError::InvalidConfig)?;
+) -> Result<OpenClawProviderSnapshot, OpenClawProviderCheckError> {
+    validate_openclaw_base_url(base_url).map_err(OpenClawProviderCheckError::InvalidConfig)?;
     let info_started_at = Instant::now();
     let info: OpenClawProviderInfoResponse =
         http_json_request_with_timeout(base_url, "/v1/provider/info", auth_token, timeout_ms)?;
@@ -891,23 +891,23 @@ fn http_json_request_with_timeout<T: DeserializeOwned>(
     path: &str,
     auth_token: Option<&str>,
     timeout_ms: u64,
-) -> Result<T, OpenClawProbeError> {
+) -> Result<T, OpenClawProviderCheckError> {
     let (status_code, response_body) =
         http_request_with_timeout(base_url, path, auth_token, timeout_ms)?;
     if status_code == 401 {
-        return Err(OpenClawProbeError::Unauthorized(format!(
-            "openclaw probe returned HTTP 401 for {path}"
+        return Err(OpenClawProviderCheckError::Unauthorized(format!(
+            "openclaw provider check returned HTTP 401 for {path}"
         )));
     }
     if !(200..=299).contains(&status_code) {
         let body_text = String::from_utf8_lossy(response_body.as_slice());
-        return Err(OpenClawProbeError::Unreachable(format!(
-            "openclaw probe {path} failed with HTTP {status_code}: {body_text}"
+        return Err(OpenClawProviderCheckError::Unreachable(format!(
+            "openclaw provider check {path} failed with HTTP {status_code}: {body_text}"
         )));
     }
     serde_json::from_slice(response_body.as_slice()).map_err(|err| {
-        OpenClawProbeError::Unreachable(format!(
-            "decode openclaw probe {path} response failed: {err}"
+        OpenClawProviderCheckError::Unreachable(format!(
+            "decode openclaw provider check {path} response failed: {err}"
         ))
     })
 }
@@ -918,25 +918,29 @@ fn http_request_with_timeout(
     path: &str,
     auth_token: Option<&str>,
     timeout_ms: u64,
-) -> Result<(u16, Vec<u8>), OpenClawProbeError> {
+) -> Result<(u16, Vec<u8>), OpenClawProviderCheckError> {
     let (host, port) = parse_http_base_url(base_url, "openclaw base url")
-        .map_err(OpenClawProbeError::InvalidConfig)?;
+        .map_err(OpenClawProviderCheckError::InvalidConfig)?;
     let connect_host = normalize_host_for_connect(host.as_str());
     let socket_addr = (connect_host.as_str(), port)
         .to_socket_addrs()
         .map_err(|err| {
-            OpenClawProbeError::Unreachable(format!("resolve openclaw provider failed: {err}"))
+            OpenClawProviderCheckError::Unreachable(format!(
+                "resolve openclaw provider failed: {err}"
+            ))
         })?
         .next()
         .ok_or_else(|| {
-            OpenClawProbeError::Unreachable(
+            OpenClawProviderCheckError::Unreachable(
                 "resolve openclaw provider failed: no socket address".to_string(),
             )
         })?;
     let mut stream =
         TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms.max(1)))
             .map_err(|err| {
-                OpenClawProbeError::Unreachable(format!("connect openclaw provider failed: {err}"))
+                OpenClawProviderCheckError::Unreachable(format!(
+                    "connect openclaw provider failed: {err}"
+                ))
             })?;
     let timeout = Some(Duration::from_millis(timeout_ms.max(1)));
     let _ = stream.set_read_timeout(timeout);
@@ -950,28 +954,34 @@ fn http_request_with_timeout(
     }
     request.push_str("\r\n");
     stream.write_all(request.as_bytes()).map_err(|err| {
-        OpenClawProbeError::Unreachable(format!("write openclaw probe failed: {err}"))
+        OpenClawProviderCheckError::Unreachable(format!(
+            "write openclaw provider check failed: {err}"
+        ))
     })?;
     let mut response_bytes = Vec::new();
     stream.read_to_end(&mut response_bytes).map_err(|err| {
-        OpenClawProbeError::Unreachable(format!("read openclaw probe failed: {err}"))
+        OpenClawProviderCheckError::Unreachable(format!(
+            "read openclaw provider check failed: {err}"
+        ))
     })?;
     parse_http_response(response_bytes.as_slice())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), OpenClawProbeError> {
+fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), OpenClawProviderCheckError> {
     let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return Err(OpenClawProbeError::Unreachable(
+        return Err(OpenClawProviderCheckError::Unreachable(
             "invalid HTTP response: missing header terminator".to_string(),
         ));
     };
     let header = std::str::from_utf8(&bytes[..boundary]).map_err(|_| {
-        OpenClawProbeError::Unreachable("invalid HTTP response: header is not UTF-8".to_string())
+        OpenClawProviderCheckError::Unreachable(
+            "invalid HTTP response: header is not UTF-8".to_string(),
+        )
     })?;
     let body = bytes[(boundary + 4)..].to_vec();
     let Some(status_line) = header.lines().next() else {
-        return Err(OpenClawProbeError::Unreachable(
+        return Err(OpenClawProviderCheckError::Unreachable(
             "invalid HTTP response: missing status line".to_string(),
         ));
     };
@@ -980,7 +990,7 @@ fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), OpenClawProbeErro
         .nth(1)
         .and_then(|token| token.parse::<u16>().ok())
     else {
-        return Err(OpenClawProbeError::Unreachable(format!(
+        return Err(OpenClawProviderCheckError::Unreachable(format!(
             "invalid HTTP response status line: {status_line}"
         )));
     };

@@ -656,10 +656,10 @@ struct OpenClawProviderSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
-enum OpenClawProbeStatus {
+enum OpenClawProviderCheckStatus {
     Disabled,
     Idle,
-    Probing,
+    Checking,
     Ready(OpenClawProviderSnapshot),
     Degraded(OpenClawProviderSnapshot),
     Incompatible(OpenClawProviderSnapshot),
@@ -669,15 +669,15 @@ enum OpenClawProbeStatus {
     Unauthorized(String),
 }
 
-impl OpenClawProbeStatus {
+impl OpenClawProviderCheckStatus {
     fn text(&self, language: UiLanguage) -> String {
         match (self, language) {
             (Self::Disabled, UiLanguage::ZhCn) => "未启用".to_string(),
             (Self::Disabled, UiLanguage::EnUs) => "Disabled".to_string(),
-            (Self::Idle, UiLanguage::ZhCn) => "待探测".to_string(),
+            (Self::Idle, UiLanguage::ZhCn) => "待检查".to_string(),
             (Self::Idle, UiLanguage::EnUs) => "Idle".to_string(),
-            (Self::Probing, UiLanguage::ZhCn) => "探测中".to_string(),
-            (Self::Probing, UiLanguage::EnUs) => "Probing".to_string(),
+            (Self::Checking, UiLanguage::ZhCn) => "检查中".to_string(),
+            (Self::Checking, UiLanguage::EnUs) => "Checking".to_string(),
             (Self::Ready(_), UiLanguage::ZhCn) => "已就绪".to_string(),
             (Self::Ready(_), UiLanguage::EnUs) => "Ready".to_string(),
             (Self::Degraded(_), UiLanguage::ZhCn) => "已降级".to_string(),
@@ -698,7 +698,7 @@ impl OpenClawProbeStatus {
     fn color(&self) -> egui::Color32 {
         match self {
             Self::Disabled | Self::Idle => egui::Color32::from_rgb(130, 130, 130),
-            Self::Probing => egui::Color32::from_rgb(201, 146, 44),
+            Self::Checking => egui::Color32::from_rgb(201, 146, 44),
             Self::Ready(_) => egui::Color32::from_rgb(62, 152, 92),
             Self::Degraded(_) => egui::Color32::from_rgb(201, 146, 44),
             Self::Incompatible(_) => egui::Color32::from_rgb(196, 84, 84),
@@ -712,7 +712,7 @@ impl OpenClawProbeStatus {
     fn detail(&self) -> Option<String> {
         match self {
             Self::Ready(snapshot) | Self::Degraded(snapshot) | Self::Incompatible(snapshot) => Some(format!(
-                "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} probe_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
+                "provider_id={} name={} version={} protocol={} compatibility_status={} status={} queue_depth={} capabilities={} supported_action_sets={} check_latency_ms={{info:{}, health:{}, total:{}}} last_error={} fallback_reason={}",
                 snapshot.provider_id,
                 snapshot.name,
                 snapshot.version,
@@ -743,7 +743,7 @@ impl OpenClawProbeStatus {
             | Self::InvalidConfig(detail)
             | Self::Unreachable(detail)
             | Self::Unauthorized(detail) => Some(detail.clone()),
-            Self::Disabled | Self::Idle | Self::Probing => None,
+            Self::Disabled | Self::Idle | Self::Checking => None,
         }
     }
 }
@@ -1120,7 +1120,7 @@ enum TransferSubmitState {
 struct ClientLauncherApp {
     config: LaunchConfig,
     config_dirty: bool,
-    openclaw_probe_status: OpenClawProbeStatus,
+    openclaw_provider_check_status: OpenClawProviderCheckStatus,
     llm_settings_panel: LlmSettingsPanel,
     ui_language: UiLanguage,
     status: LauncherStatus,
@@ -1180,7 +1180,7 @@ impl Default for ClientLauncherApp {
         Self {
             config,
             config_dirty: false,
-            openclaw_probe_status: OpenClawProbeStatus::Disabled,
+            openclaw_provider_check_status: OpenClawProviderCheckStatus::Disabled,
             llm_settings_panel: LlmSettingsPanel::new(LlmSettingsPanel::default_path()),
             ui_language: UiLanguage::detect_from_env(),
             status: LauncherStatus::Idle,

@@ -128,6 +128,13 @@ tasks:
     priority: P1
     source_signal: null
     updated_at: 2026-04-07T15:56:24+08:00
+  - task_uid: task_dae20e4880a04a4388aac47cf888c85b
+    owner_role: viewer_engineer
+    task_path: .pm/tasks/task_dae20e4880a04a4388aac47cf888c85b.yaml
+    status: done
+    priority: P1
+    source_signal: null
+    updated_at: 2026-04-07T15:58:13+08:00
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     owner_role: producer_system_designer
     task_path: .pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.yaml

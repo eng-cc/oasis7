@@ -42,8 +42,8 @@ impl eframe::App for ClientLauncherApp {
                 }
                 if is_openclaw_local_http_mode(&self.config) {
                     ui.separator();
-                    let provider_status = match &self.openclaw_probe_status {
-                        OpenClawProbeStatus::Disabled => OpenClawProbeStatus::Idle,
+                    let provider_status = match &self.openclaw_provider_check_status {
+                        OpenClawProviderCheckStatus::Disabled => OpenClawProviderCheckStatus::Idle,
                         other => other.clone(),
                     };
                     let provider_label = format!(

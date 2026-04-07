@@ -668,9 +668,12 @@ impl ClientLauncherApp {
 
         ui.separator();
         ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr("OpenClaw(Local HTTP) 探测", "OpenClaw(Local HTTP) Probe"));
-            let status = match &self.openclaw_probe_status {
-                OpenClawProbeStatus::Disabled => OpenClawProbeStatus::Idle,
+            ui.label(self.tr(
+                "OpenClaw(Local HTTP) 兼容检查",
+                "OpenClaw(Local HTTP) Compatibility Check",
+            ));
+            let status = match &self.openclaw_provider_check_status {
+                OpenClawProviderCheckStatus::Disabled => OpenClawProviderCheckStatus::Idle,
                 other => other.clone(),
             };
             ui.colored_label(status.color(), status.text(self.ui_language));
@@ -682,10 +685,10 @@ impl ClientLauncherApp {
         match effective_openclaw_base_url(&self.config) {
             Ok(base_url) => ui.small(format!(
                 "{}: {}",
-                self.tr("当前探测地址", "Probe URL"),
+                self.tr("当前检查地址", "Check URL"),
                 base_url
             )),
-            Err(err) => ui.small(format!("{}: {err}", self.tr("当前探测地址", "Probe URL"))),
+            Err(err) => ui.small(format!("{}: {err}", self.tr("当前检查地址", "Check URL"))),
         };
         ui.small(format!(
             "{}: {} | {}: {}ms",
@@ -699,27 +702,27 @@ impl ClientLauncherApp {
         ui.horizontal_wrapped(|ui| {
             #[cfg(not(target_arch = "wasm32"))]
             {
-                if ui.button(self.tr("探测 OpenClaw", "Probe OpenClaw")).clicked() {
-                    self.probe_openclaw_local_provider();
+                if ui.button(self.tr("检查 OpenClaw", "Check OpenClaw")).clicked() {
+                    self.check_openclaw_local_provider();
                 }
             }
             #[cfg(target_arch = "wasm32")]
             {
                 ui.add_enabled(
                     false,
-                    egui::Button::new(self.tr("探测 OpenClaw", "Probe OpenClaw")),
+                    egui::Button::new(self.tr("检查 OpenClaw", "Check OpenClaw")),
                 );
                 ui.small(self.tr(
-                    "Web 启动器暂不执行本地 TCP health-check，请使用 native launcher。",
-                    "Web launcher does not run local TCP health-check yet; use the native launcher.",
+                    "Web 启动器暂不执行本地 OpenClaw 兼容检查，请使用 native launcher。",
+                    "Web launcher does not run the local OpenClaw compatibility check yet; use the native launcher.",
                 ));
             }
         });
 
-        if let Some(snapshot) = match &self.openclaw_probe_status {
-            OpenClawProbeStatus::Ready(snapshot)
-            | OpenClawProbeStatus::Degraded(snapshot)
-            | OpenClawProbeStatus::Incompatible(snapshot) => Some(snapshot),
+        if let Some(snapshot) = match &self.openclaw_provider_check_status {
+            OpenClawProviderCheckStatus::Ready(snapshot)
+            | OpenClawProviderCheckStatus::Degraded(snapshot)
+            | OpenClawProviderCheckStatus::Incompatible(snapshot) => Some(snapshot),
             _ => None,
         } {
             ui.small(format!(
@@ -764,7 +767,7 @@ impl ClientLauncherApp {
             ));
             ui.small(format!(
                 "{}: info={}ms health={}ms total={}ms",
-                self.tr("探测延迟", "Probe Latency"),
+                self.tr("检查延迟", "Check Latency"),
                 snapshot.info_latency_ms,
                 snapshot.health_latency_ms,
                 snapshot.total_latency_ms,
@@ -791,25 +794,27 @@ impl ClientLauncherApp {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn probe_openclaw_local_provider(&mut self) {
-        self.openclaw_probe_status = OpenClawProbeStatus::Probing;
+    fn check_openclaw_local_provider(&mut self) {
+        self.openclaw_provider_check_status = OpenClawProviderCheckStatus::Checking;
         let base_url = match effective_openclaw_base_url(&self.config) {
             Ok(value) => value,
             Err(err) => {
-                self.openclaw_probe_status = OpenClawProbeStatus::InvalidConfig(err.clone());
-                self.append_log(format!("openclaw probe invalid config: {err}"));
+                self.openclaw_provider_check_status =
+                    OpenClawProviderCheckStatus::InvalidConfig(err.clone());
+                self.append_log(format!("openclaw provider check invalid config: {err}"));
                 return;
             }
         };
         let timeout_ms = match parse_agent_provider_connect_timeout_ms(&self.config) {
             Ok(value) => value,
             Err(err) => {
-                self.openclaw_probe_status = OpenClawProbeStatus::InvalidConfig(err.clone());
-                self.append_log(format!("openclaw probe invalid timeout: {err}"));
+                self.openclaw_provider_check_status =
+                    OpenClawProviderCheckStatus::InvalidConfig(err.clone());
+                self.append_log(format!("openclaw provider check invalid timeout: {err}"));
                 return;
             }
         };
-        match probe_openclaw_local_http(
+        match check_openclaw_local_http_provider(
             base_url.as_str(),
             Some(self.config.openclaw_auth_token.as_str()),
             timeout_ms,
@@ -827,44 +832,48 @@ impl ClientLauncherApp {
                 let version = snapshot.version.clone();
                 let compatibility_status = snapshot.compatibility_status;
                 let fallback_reason = snapshot.fallback_reason.clone();
-                self.openclaw_probe_status = match compatibility_status {
+                self.openclaw_provider_check_status = match compatibility_status {
                     OpenClawProviderCompatibilityStatus::Ready => {
-                        OpenClawProbeStatus::Ready(snapshot)
+                        OpenClawProviderCheckStatus::Ready(snapshot)
                     }
                     OpenClawProviderCompatibilityStatus::Degraded => {
-                        OpenClawProbeStatus::Degraded(snapshot)
+                        OpenClawProviderCheckStatus::Degraded(snapshot)
                     }
                     OpenClawProviderCompatibilityStatus::Incompatible => {
-                        OpenClawProbeStatus::Incompatible(snapshot)
+                        OpenClawProviderCheckStatus::Incompatible(snapshot)
                     }
                 };
                 self.append_log(format!(
-                    "openclaw probe succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms} compatibility_status={} fallback_reason={}",
+                    "openclaw provider check succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms} compatibility_status={} fallback_reason={}",
                     canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
                         .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE),
                     compatibility_status.as_str(),
                     fallback_reason.as_deref().unwrap_or("none")
                 ));
             }
-            Err(OpenClawProbeError::InvalidConfig(detail)) => {
-                self.openclaw_probe_status = OpenClawProbeStatus::InvalidConfig(detail.clone());
-                self.append_log(format!("openclaw probe invalid config: {detail}"));
+            Err(OpenClawProviderCheckError::InvalidConfig(detail)) => {
+                self.openclaw_provider_check_status =
+                    OpenClawProviderCheckStatus::InvalidConfig(detail.clone());
+                self.append_log(format!("openclaw provider check invalid config: {detail}"));
             }
-            Err(OpenClawProbeError::Unauthorized(detail)) => {
-                self.openclaw_probe_status = OpenClawProbeStatus::Unauthorized(detail.clone());
-                self.append_log(format!("openclaw probe unauthorized: {base_url}"));
+            Err(OpenClawProviderCheckError::Unauthorized(detail)) => {
+                self.openclaw_provider_check_status =
+                    OpenClawProviderCheckStatus::Unauthorized(detail.clone());
+                self.append_log(format!("openclaw provider check unauthorized: {base_url}"));
             }
-            Err(OpenClawProbeError::Unreachable(detail)) => {
-                self.openclaw_probe_status = OpenClawProbeStatus::Unreachable(detail.clone());
-                self.append_log(format!("openclaw probe failed: {detail}"));
+            Err(OpenClawProviderCheckError::Unreachable(detail)) => {
+                self.openclaw_provider_check_status =
+                    OpenClawProviderCheckStatus::Unreachable(detail.clone());
+                self.append_log(format!("openclaw provider check failed: {detail}"));
             }
         }
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn probe_openclaw_local_provider(&mut self) {
-        self.openclaw_probe_status = OpenClawProbeStatus::Unsupported(
-            "web launcher does not support native localhost TCP probe".to_string(),
+    fn check_openclaw_local_provider(&mut self) {
+        self.openclaw_provider_check_status = OpenClawProviderCheckStatus::Unsupported(
+            "web launcher does not support the native localhost OpenClaw compatibility check"
+                .to_string(),
         );
     }
 
