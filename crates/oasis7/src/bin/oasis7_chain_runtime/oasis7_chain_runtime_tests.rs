@@ -1,17 +1,20 @@
 use super::{
     build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
-    build_node_replication_config, derive_node_consensus_signer_keypair,
-    derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
-    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
+    build_node_replication_config, build_replication_remote_writer_allowlist,
+    build_validator_signer_public_keys,
+    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
+    node_keypair_config, parse_options, parse_validator_spec,
+    release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
     DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
+use super::cli::parse_validator_signer_public_key_spec;
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind, NodeConfig,
     NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
-    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
+    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosValidator,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
@@ -51,6 +54,7 @@ fn parse_options_defaults() {
     assert_eq!(options.pos_max_past_slot_lag, 256);
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
+    assert!(options.replication_remote_writer_public_keys.is_empty());
 }
 
 #[test]
@@ -117,6 +121,7 @@ fn parse_options_reads_custom_values() {
     );
     assert_eq!(options.pos_max_past_slot_lag, 32);
     assert_eq!(options.node_validators.len(), 2);
+    assert!(options.node_validator_signer_public_keys.is_empty());
     assert!(options.node_auto_attest_all_validators);
     assert_eq!(options.reward_runtime_epoch_duration_secs, Some(60));
     assert_eq!(options.reward_points_per_credit, 100);
@@ -143,6 +148,35 @@ fn parse_options_rejects_peer_without_bind() {
     let err = parse_options(["--node-gossip-peer", "127.0.0.1:9001"].into_iter())
         .expect_err("should reject peer without bind");
     assert!(err.contains("requires --node-gossip-bind"));
+}
+
+#[test]
+fn parse_options_reads_validator_signer_public_key_overrides() {
+    let options = parse_options(
+        [
+            "--node-validator",
+            "node-a:55",
+            "--node-validator-signer-public-key",
+            "node-a:deadbeef",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(
+        options
+            .node_validator_signer_public_keys
+            .get("node-a")
+            .map(String::as_str),
+        Some("deadbeef")
+    );
+}
+
+#[test]
+fn parse_validator_signer_public_key_spec_rejects_missing_public_key() {
+    let err = parse_validator_signer_public_key_spec("node-a:")
+        .expect_err("missing signer public key must fail");
+    assert!(err.contains("public_key_hex cannot be empty"));
 }
 
 #[test]
@@ -183,6 +217,25 @@ fn parse_options_reads_replication_network_addresses() {
             "/ip4/127.0.0.1/tcp/19651".to_string(),
             "/ip4/127.0.0.1/udp/19652/quic-v1".to_string(),
         ]
+    );
+}
+
+#[test]
+fn parse_options_reads_replication_remote_writer_public_keys() {
+    let options = parse_options(
+        [
+            "--replication-remote-writer-public-key",
+            "deadbeef",
+            "--replication-remote-writer-public-key",
+            "cafebabe",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(
+        options.replication_remote_writer_public_keys,
+        vec!["deadbeef".to_string(), "cafebabe".to_string()]
     );
 }
 
@@ -546,12 +599,30 @@ fn build_node_replication_config_uses_storage_profile_budget() {
         public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
     };
     let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
-    let config = build_node_replication_config("node-a", &keypair, &storage_profile)
+    let config = build_node_replication_config("node-a", &keypair, &storage_profile, &[])
         .expect("replication config should build");
 
     assert_eq!(
         config.max_hot_commit_messages(),
         storage_profile.replication_max_hot_commit_messages
+    );
+}
+
+#[test]
+fn build_replication_remote_writer_allowlist_combines_validator_and_explicit_keys() {
+    let validator_signers = [
+        "bbbb".to_string(),
+        "aaaa".to_string(),
+        "bbbb".to_string(),
+    ];
+    let explicit = vec!["cccc".to_string(), "aaaa".to_string()];
+
+    let allowlist =
+        build_replication_remote_writer_allowlist(validator_signers.iter(), explicit.as_slice());
+
+    assert_eq!(
+        allowlist,
+        vec!["aaaa".to_string(), "bbbb".to_string(), "cccc".to_string()]
     );
 }
 
@@ -573,6 +644,34 @@ fn derive_node_consensus_signer_keypair_is_deterministic_for_oasis7_namespace() 
     assert_eq!(signer_a.private_key_hex, signer_a_repeat.private_key_hex);
     assert_eq!(signer_a.public_key_hex, signer_a_repeat.public_key_hex);
     assert_ne!(signer_a.public_key_hex, signer_b.public_key_hex);
+}
+
+#[test]
+fn build_validator_signer_public_keys_prefers_explicit_overrides() {
+    let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 60,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 40,
+        },
+    ];
+    let mut overrides = BTreeMap::new();
+    overrides.insert("node-b".to_string(), "deadbeef".to_string());
+
+    let bindings =
+        build_validator_signer_public_keys(validators.as_slice(), &keypair, &overrides)
+            .expect("bindings should build");
+
+    assert_eq!(bindings.get("node-b").map(String::as_str), Some("deadbeef"));
+    assert_ne!(bindings.get("node-a"), bindings.get("node-b"));
 }
 
 #[test]

@@ -1093,6 +1093,7 @@ struct PosNodeEngine {
     missed_slot_count: u64,
     local_validator_id: String,
     node_player_id: String,
+    gossip_reverse_path_seeding_enabled: bool,
     require_execution_on_commit: bool,
     next_height: u64,
     next_slot: u64,

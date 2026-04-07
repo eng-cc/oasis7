@@ -373,6 +373,7 @@ impl PosNodeEngine {
         let messages = endpoint.drain_messages()?;
         for message in messages {
             match message {
+                GossipMessage::Hello(_) => {}
                 GossipMessage::Commit(commit) => {
                     if commit.version != 1 || commit.world_id != world_id {
                         continue;
@@ -488,6 +489,13 @@ impl PosNodeEngine {
         for received in messages {
             let from = received.from;
             match received.message {
+                GossipMessage::Hello(hello) => {
+                    if hello.version != 1 || hello.world_id != world_id || hello.node_id == node_id
+                    {
+                        continue;
+                    }
+                    endpoint.remember_peer(from)?;
+                }
                 GossipMessage::Commit(commit) => {
                     if commit.version != 1 || commit.world_id != world_id {
                         continue;

@@ -16,10 +16,19 @@ use crate::{NodeError, NodeGossipConfig};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum GossipMessage {
+    Hello(GossipHelloMessage),
     Commit(GossipCommitMessage),
     Proposal(GossipProposalMessage),
     Attestation(GossipAttestationMessage),
     Replication(GossipReplicationMessage),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GossipHelloMessage {
+    pub version: u8,
+    pub world_id: String,
+    pub node_id: String,
+    pub sent_at_ms: i64,
 }
 
 #[derive(Debug)]
@@ -38,6 +47,10 @@ pub(crate) struct ReceivedGossipMessage {
 }
 
 impl GossipEndpoint {
+    pub(crate) fn broadcast_hello(&self, message: &GossipHelloMessage) -> Result<(), NodeError> {
+        self.broadcast_message(GossipMessage::Hello(message.clone()))
+    }
+
     pub(crate) fn bind(config: &NodeGossipConfig) -> Result<Self, NodeError> {
         let socket = UdpSocket::bind(config.bind_addr).map_err(|err| NodeError::Gossip {
             reason: format!("bind {} failed: {}", config.bind_addr, err),

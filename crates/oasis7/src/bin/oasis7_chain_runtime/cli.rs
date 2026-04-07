@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
@@ -54,10 +55,12 @@ pub(super) struct CliOptions {
     pub pos_max_past_slot_lag: u64,
     pub node_auto_attest_all_validators: bool,
     pub node_validators: Vec<PosValidator>,
+    pub node_validator_signer_public_keys: BTreeMap<String, String>,
     pub node_gossip_bind: Option<SocketAddr>,
     pub node_gossip_peers: Vec<SocketAddr>,
     pub replication_network_listen_addrs: Vec<String>,
     pub replication_network_bootstrap_peers: Vec<String>,
+    pub replication_remote_writer_public_keys: Vec<String>,
     pub config_path: String,
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
@@ -106,10 +109,12 @@ impl Default for CliOptions {
             pos_max_past_slot_lag: DEFAULT_POS_MAX_PAST_SLOT_LAG,
             node_auto_attest_all_validators: false,
             node_validators: Vec::new(),
+            node_validator_signer_public_keys: BTreeMap::new(),
             node_gossip_bind: None,
             node_gossip_peers: Vec::new(),
             replication_network_listen_addrs: Vec::new(),
             replication_network_bootstrap_peers: Vec::new(),
+            replication_remote_writer_public_keys: Vec::new(),
             config_path: DEFAULT_CONFIG_FILE.to_string(),
             execution_bridge_state_path: None,
             execution_world_dir: None,
@@ -277,6 +282,15 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     .node_validators
                     .push(parse_validator_spec(raw.as_str())?);
             }
+            "--node-validator-signer-public-key" => {
+                let raw =
+                    parse_required_value(&mut iter, "--node-validator-signer-public-key")?;
+                let (validator_id, public_key_hex) =
+                    parse_validator_signer_public_key_spec(raw.as_str())?;
+                options
+                    .node_validator_signer_public_keys
+                    .insert(validator_id, public_key_hex);
+            }
             "--node-auto-attest-all" => options.node_auto_attest_all_validators = true,
             "--node-no-auto-attest-all" => options.node_auto_attest_all_validators = false,
             "--node-gossip-bind" => {
@@ -297,6 +311,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--replication-network-peer" => {
                 let raw = parse_required_value(&mut iter, "--replication-network-peer")?;
                 options.replication_network_bootstrap_peers.push(raw);
+            }
+            "--replication-remote-writer-public-key" => {
+                let raw =
+                    parse_required_value(&mut iter, "--replication-remote-writer-public-key")?;
+                options.replication_remote_writer_public_keys.push(raw);
             }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
             "--execution-bridge-state" => {
@@ -483,6 +502,25 @@ pub(super) fn parse_validator_spec(raw: &str) -> Result<PosValidator, String> {
     })
 }
 
+pub(super) fn parse_validator_signer_public_key_spec(
+    raw: &str,
+) -> Result<(String, String), String> {
+    let (validator_id, public_key_hex) = raw.rsplit_once(':').ok_or_else(|| {
+        "--node-validator-signer-public-key requires <validator_id:public_key_hex>".to_string()
+    })?;
+    let validator_id = validator_id.trim();
+    if validator_id.is_empty() {
+        return Err("--node-validator-signer-public-key validator_id cannot be empty".to_string());
+    }
+    let public_key_hex = public_key_hex.trim();
+    if public_key_hex.is_empty() {
+        return Err(
+            "--node-validator-signer-public-key public_key_hex cannot be empty".to_string(),
+        );
+    }
+    Ok((validator_id.to_string(), public_key_hex.to_string()))
+}
+
 pub(super) fn print_help() {
     println!(
         "Usage: oasis7_chain_runtime [options]\n\n\
@@ -517,6 +555,8 @@ Options:\n\
                                     fixed slot clock genesis unix ms (default: auto)\n\
   --pos-max-past-slot-lag <n>       max accepted inbound stale slot lag (default: {DEFAULT_POS_MAX_PAST_SLOT_LAG})\n\
   --node-validator <id:stake>       add validator stake (repeatable)\n\
+  --node-validator-signer-public-key <id:public_key_hex>\n\
+                                    override validator signer public key (repeatable)\n\
   --node-auto-attest-all            enable auto attesting validators\n\
   --node-no-auto-attest-all         disable auto attesting validators (default)\n\
   --node-gossip-bind <addr:port>    UDP gossip bind\n\
@@ -525,6 +565,8 @@ Options:\n\
                                     libp2p replication listen addr (repeatable, default: {DEFAULT_REPLICATION_NETWORK_LISTEN})\n\
   --replication-network-peer <multiaddr>\n\
                                     libp2p replication bootstrap peer (repeatable)\n\
+  --replication-remote-writer-public-key <public_key_hex>\n\
+                                    extra authorized replication fetch requester (repeatable)\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\

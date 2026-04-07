@@ -69,6 +69,19 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/task_220a5c7e570344d284beeb2ba75d4c5f.yaml
+  - task_uid: task_c0fa78756f6e4105abdd0d7f5f96de2d
+    title: "Seed reverse UDP gossip path for private observer triad"
+    priority: P1
+    source_signal: SIG-PM-0018
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "Asymmetric UDP gossip topology with observer-only outbound static peers learns reverse peer path in automated tests"
+      - "Shared-devnet real triad observer reaches known_peer_heads>=1 and network_committed_height>0 after redeploy"
+      - "Project/evidence/task execution log document the private-observer reverse-path constraint and fix"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_c0fa78756f6e4105abdd0d7f5f96de2d.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

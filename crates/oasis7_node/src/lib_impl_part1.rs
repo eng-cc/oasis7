@@ -97,6 +97,7 @@ impl PosNodeEngine {
             missed_slot_count: 0,
             local_validator_id: config.node_id.clone(),
             node_player_id: config.player_id.clone(),
+            gossip_reverse_path_seeding_enabled: matches!(config.role, NodeRole::Observer),
             require_execution_on_commit: config.require_execution_on_commit,
             next_height: 1,
             next_slot: 0,
@@ -151,6 +152,9 @@ impl PosNodeEngine {
         let observed_tick = self.observe_wall_clock_tick(now_ms)?;
         let current_slot = observed_tick.slot;
 
+        if let Some(endpoint) = gossip.as_ref() {
+            self.seed_reverse_gossip_path(endpoint, node_id, world_id, now_ms)?;
+        }
         if let Some(endpoint) = gossip.as_ref() {
             self.ingest_peer_messages(
                 endpoint,
@@ -630,6 +634,24 @@ impl PosNodeEngine {
             last_execution_block_hash: self.last_execution_block_hash.clone(),
             last_execution_state_root: self.last_execution_state_root.clone(),
         }
+    }
+
+    fn seed_reverse_gossip_path(
+        &self,
+        endpoint: &GossipEndpoint,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+    ) -> Result<(), NodeError> {
+        if !self.gossip_reverse_path_seeding_enabled {
+            return Ok(());
+        }
+        endpoint.broadcast_hello(&crate::gossip_udp::GossipHelloMessage {
+            version: 1,
+            world_id: world_id.to_string(),
+            node_id: node_id.to_string(),
+            sent_at_ms: now_ms,
+        })
     }
 
     fn commit_execution_binding_for_height(

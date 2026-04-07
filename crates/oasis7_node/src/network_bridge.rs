@@ -475,6 +475,7 @@ fn decode_consensus_message(payload: &[u8]) -> Option<GossipMessage> {
             GossipMessage::Proposal(_)
             | GossipMessage::Attestation(_)
             | GossipMessage::Commit(_) => return Some(message),
+            GossipMessage::Hello(_) => {}
             GossipMessage::Replication(_) => {}
         }
     }

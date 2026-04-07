@@ -289,8 +289,15 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     } else {
         options.node_validators.clone()
     };
-    let validator_signer_bindings =
-        build_validator_signer_public_keys(validators.as_slice(), &keypair)?;
+    let validator_signer_bindings = build_validator_signer_public_keys(
+        validators.as_slice(),
+        &keypair,
+        &options.node_validator_signer_public_keys,
+    )?;
+    let replication_remote_writer_allowlist = build_replication_remote_writer_allowlist(
+        validator_signer_bindings.values(),
+        &options.replication_remote_writer_public_keys,
+    );
     let mut pos_config = NodePosConfig::ethereum_like(validators.clone())
         .with_validator_signer_public_keys(validator_signer_bindings.clone())
         .map_err(|err| format!("failed to apply validator signer bindings: {err:?}"))?;
@@ -323,6 +330,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.node_id.as_str(),
         &keypair,
         &storage_profile_config,
+        replication_remote_writer_allowlist.as_slice(),
     )?);
     if let Some(feedback_p2p_config) = feedback_p2p_config_for_role(options.node_role) {
         config = config
@@ -1011,6 +1019,7 @@ fn build_node_replication_config(
     node_id: &str,
     keypair: &node_keypair_config::NodeKeypairConfig,
     storage_profile: &StorageProfileConfig,
+    remote_writer_allowlist: &[String],
 ) -> Result<NodeReplicationConfig, String> {
     let signer_keypair = derive_node_consensus_signer_keypair(node_id, keypair)?;
     let replication_root = Path::new("output").join("node-distfs").join(node_id);
@@ -1024,7 +1033,25 @@ fn build_node_replication_config(
                 signer_keypair.public_key_hex,
             )
         })
+        .and_then(|cfg| {
+            if remote_writer_allowlist.is_empty() {
+                Ok(cfg)
+            } else {
+                cfg.with_remote_writer_allowlist(remote_writer_allowlist.to_vec())
+            }
+        })
         .map_err(|err| format!("failed to build node replication config: {err:?}"))
+}
+
+fn build_replication_remote_writer_allowlist<'a>(
+    validator_signer_public_keys: impl IntoIterator<Item = &'a String>,
+    explicit_remote_writer_public_keys: &[String],
+) -> Vec<String> {
+    let mut allowlist: Vec<String> = validator_signer_public_keys.into_iter().cloned().collect();
+    allowlist.extend(explicit_remote_writer_public_keys.iter().cloned());
+    allowlist.sort();
+    allowlist.dedup();
+    allowlist
 }
 
 fn attach_default_replication_network(
@@ -1195,6 +1222,7 @@ fn derive_node_scoped_keypair(
 fn build_validator_signer_public_keys(
     validators: &[PosValidator],
     root_keypair: &node_keypair_config::NodeKeypairConfig,
+    explicit_bindings: &BTreeMap<String, String>,
 ) -> Result<BTreeMap<String, String>, String> {
     let mut bindings = BTreeMap::new();
     for validator in validators {
@@ -1202,8 +1230,22 @@ fn build_validator_signer_public_keys(
         if validator_id.is_empty() {
             return Err("validator_id cannot be empty when deriving signer bindings".to_string());
         }
+        if let Some(public_key_hex) = explicit_bindings.get(validator_id) {
+            bindings.insert(validator_id.to_string(), public_key_hex.clone());
+            continue;
+        }
         let keypair = derive_node_consensus_signer_keypair(validator_id, root_keypair)?;
         bindings.insert(validator_id.to_string(), keypair.public_key_hex);
+    }
+    for validator_id in explicit_bindings.keys() {
+        if !validators
+            .iter()
+            .any(|validator| validator.validator_id.trim() == validator_id)
+        {
+            return Err(format!(
+                "validator signer override references unknown validator: {validator_id}"
+            ));
+        }
     }
     Ok(bindings)
 }
