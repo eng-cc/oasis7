@@ -1,4 +1,7 @@
 use super::*;
+use std::collections::BTreeMap;
+use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 #[test]
 fn runtime_agent_chat_script_mode_requires_llm_mode() {
@@ -217,6 +220,173 @@ fn runtime_background_play_stops_when_llm_access_is_unavailable() {
 }
 
 #[test]
+fn runtime_step_control_surfaces_runtime_failure_as_blocked_ack() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let missing_agent = "missing-agent".to_string();
+
+    let (mut writer, client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+
+    server
+        .block_runtime_control(
+            &mut session,
+            &mut writer,
+            "step",
+            "runtime step aborted because world advance failed",
+            ViewerRuntimeLiveServerError::Runtime(crate::runtime::WorldError::AgentNotFound {
+                agent_id: missing_agent.clone(),
+            }),
+            Some(19),
+            1,
+            0,
+            true,
+        )
+        .expect("control handled");
+    writer.flush().expect("flush response");
+
+    let ack =
+        read_control_completion_ack(&client, Duration::from_millis(250)).expect("blocked step ack");
+    assert_eq!(ack.status, ControlCompletionStatus::Blocked);
+    assert_eq!(ack.error_code.as_deref(), Some("agent_not_found"));
+    assert_eq!(ack.delta_logical_time, 1);
+    assert!(ack
+        .error_message
+        .as_deref()
+        .is_some_and(|message| message.contains(missing_agent.as_str())));
+
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("blocked feedback recorded");
+    assert_eq!(feedback.stage, "blocked");
+    assert_eq!(feedback.delta_logical_time, 1);
+    assert!(feedback
+        .reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains(missing_agent.as_str())));
+    assert!(feedback
+        .hint
+        .as_deref()
+        .is_some_and(|hint| hint.contains("restore the missing agent")));
+}
+
+#[derive(Debug, Clone)]
+struct RecordedHttpRequest {
+    method: String,
+    path: String,
+    headers: BTreeMap<String, String>,
+    body: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct MockHttpResponse {
+    status_code: u16,
+    body: String,
+}
+
+#[test]
+fn runtime_step_control_requests_llm_decision_and_advances_with_openclaw_provider() {
+    let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
+    clear_runtime_openclaw_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let base_url = spawn_runtime_live_mock_http_server(1, {
+        let recorded = Arc::clone(&recorded);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            match (request.method.as_str(), request.path.as_str()) {
+                ("POST", "/v1/world-simulator/decision") => {
+                    let decoded: crate::simulator::DecisionRequest =
+                        serde_json::from_slice(request.body.as_slice())
+                            .expect("decode decision request");
+                    let response = crate::simulator::DecisionResponse {
+                        decision: crate::simulator::ProviderDecision::Act {
+                            action_ref: "speak_to_nearby".to_string(),
+                            action: crate::simulator::Action::SpeakToNearby {
+                                agent_id: decoded.observation.agent_id,
+                                message: "runtime-live step ok".to_string(),
+                                target_agent_id: None,
+                            },
+                        },
+                        provider_error: None,
+                        diagnostics: crate::simulator::ProviderDiagnostics::default(),
+                        trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
+                        memory_write_intents: Vec::new(),
+                    };
+                    MockHttpResponse {
+                        status_code: 200,
+                        body: serde_json::to_string(&response).expect("encode decision response"),
+                    }
+                }
+                _ => MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                },
+            }
+        }
+    });
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "openclaw_local_http");
+    std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, base_url);
+    std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let baseline_time = server.world.state().time;
+    let (mut writer, client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+
+    server
+        .apply_control_mode(
+            ViewerControl::Step { count: 1 },
+            Some(9),
+            &mut session,
+            &mut writer,
+        )
+        .expect("control handled");
+    writer.flush().expect("flush response");
+
+    let ack = read_control_completion_ack(&client, Duration::from_millis(500))
+        .expect("step should advance with provider-backed decision");
+    assert_eq!(ack.status, ControlCompletionStatus::Advanced);
+    assert!(
+        ack.delta_logical_time > 0 || ack.delta_event_seq > 0,
+        "step should report logical or event progress"
+    );
+    assert!(
+        server.world.state().time > baseline_time,
+        "step should advance runtime time after requesting provider decision"
+    );
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("recent feedback recorded");
+    assert_eq!(feedback.stage, "completed_advanced");
+
+    let recorded = recorded.lock().expect("recorded lock");
+    assert_eq!(
+        recorded.len(),
+        1,
+        "step should request one provider decision"
+    );
+    assert_eq!(recorded[0].path, "/v1/world-simulator/decision");
+    assert_eq!(
+        recorded[0].headers.get("content-type").map(String::as_str),
+        Some("application/json")
+    );
+    clear_runtime_openclaw_env();
+}
+
+#[test]
 fn runtime_agent_chat_requires_explicit_session_registration() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
@@ -251,6 +421,111 @@ fn runtime_agent_chat_requires_explicit_session_registration() {
         .handle_agent_chat(request)
         .expect_err("session register should be required before agent chat");
     assert_eq!(err.code, "session_not_found");
+}
+
+fn spawn_runtime_live_mock_http_server<F>(expected_connections: usize, handler: F) -> String
+where
+    F: Fn(RecordedHttpRequest) -> MockHttpResponse + Send + Sync + 'static,
+{
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock http server");
+    let bind = listener.local_addr().expect("listener addr");
+    let handler = Arc::new(handler);
+    std::thread::spawn(move || {
+        for _ in 0..expected_connections {
+            let (mut stream, _) = listener.accept().expect("accept mock request");
+            let request = read_runtime_live_http_request(&mut stream);
+            let response = handler(request);
+            write_runtime_live_json_response(
+                &mut stream,
+                response.status_code,
+                response.body.as_str(),
+            );
+        }
+    });
+    format!("http://{}", bind)
+}
+
+fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> RecordedHttpRequest {
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    let mut header_end = None;
+    let mut content_length = 0_usize;
+
+    loop {
+        let bytes = stream.read(&mut chunk).expect("read request bytes");
+        if bytes == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..bytes]);
+        if header_end.is_none() {
+            header_end = find_runtime_live_header_terminator(buffer.as_slice());
+            if let Some(boundary) = header_end {
+                let header = std::str::from_utf8(&buffer[..boundary]).expect("utf8 header");
+                content_length = header
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        if name.eq_ignore_ascii_case("content-length") {
+                            value.trim().parse::<usize>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0);
+            }
+        }
+        if let Some(boundary) = header_end {
+            if buffer.len() >= boundary + 4 + content_length {
+                break;
+            }
+        }
+    }
+
+    let boundary = header_end.expect("header boundary");
+    let header = std::str::from_utf8(&buffer[..boundary]).expect("utf8 header");
+    let mut lines = header.lines();
+    let request_line = lines.next().expect("request line");
+    let mut request_line_parts = request_line.split_whitespace();
+    let method = request_line_parts.next().expect("method").to_string();
+    let path = request_line_parts.next().expect("path").to_string();
+    let mut headers = BTreeMap::new();
+    for line in lines {
+        if let Some((name, value)) = line.split_once(':') {
+            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    let body = buffer[(boundary + 4)..(boundary + 4 + content_length)].to_vec();
+
+    RecordedHttpRequest {
+        method,
+        path,
+        headers,
+        body,
+    }
+}
+
+fn find_runtime_live_header_terminator(buffer: &[u8]) -> Option<usize> {
+    buffer.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+fn write_runtime_live_json_response(
+    stream: &mut std::net::TcpStream,
+    status_code: u16,
+    body: &str,
+) {
+    let status_text = match status_code {
+        200 => "OK",
+        404 => "Not Found",
+        _ => "Error",
+    };
+    let response = format!(
+        "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    stream
+        .write_all(response.as_bytes())
+        .expect("write mock response");
 }
 
 #[test]

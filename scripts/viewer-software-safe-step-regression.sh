@@ -494,7 +494,9 @@ if [[ "$(state_connection "$after_step_state")" != "connected" ]]; then
   exit 1
 fi
 fail_category=null
-if [[ "$logical_time_advanced" != true && "$event_seq_advanced" != true && "$feedback_stage" != "completed_advanced" && "$feedback_stage" != "completed_timeout" && "$feedback_stage" != "completed_no_progress" && "$feedback_stage" != "blocked" ]]; then
+if [[ "$logical_time_advanced" != true && "$event_seq_advanced" != true && "$feedback_stage" != "completed_advanced" ]]; then
+  fail_category="no_progress_after_step"
+elif [[ "$feedback_stage" != "completed_advanced" && "$feedback_stage" != "completed_timeout" && "$feedback_stage" != "completed_no_progress" && "$feedback_stage" != "blocked" ]]; then
   fail_category="missing_terminal_feedback"
 fi
 
@@ -539,5 +541,10 @@ lines = [
 ]
 out.write_text("\n".join(lines) + "\n", encoding='utf-8')
 PY
+
+if [[ "$fail_category" != "null" ]]; then
+  echo "error: software_safe step did not produce playable advancement (failCategory=${fail_category}, feedbackStage=${feedback_stage:-null}, logicalTimeAdvanced=${logical_time_advanced}, eventSeqAdvanced=${event_seq_advanced})" >&2
+  exit 1
+fi
 
 printf 'ok: artifacts written to %s\n' "$out_dir"

@@ -741,8 +741,6 @@ pub struct LlmCompletionResult {
 pub struct OpenAiChatCompletionClient {
     client: AsyncOpenAiClient<OpenAIConfig>,
     request_timeout_ms: u64,
-    timeout_retry_client: Option<AsyncOpenAiClient<OpenAIConfig>>,
-    timeout_retry_ms: Option<u64>,
 }
 
 impl OpenAiChatCompletionClient {
@@ -754,26 +752,10 @@ impl OpenAiChatCompletionClient {
             config.api_key.as_str(),
             request_timeout_ms,
         )?;
-        let (timeout_retry_client, timeout_retry_ms) =
-            if request_timeout_ms < DEFAULT_LLM_TIMEOUT_MS {
-                let retry_timeout_ms = DEFAULT_LLM_TIMEOUT_MS;
-                (
-                    Some(Self::build_client(
-                        api_base.as_str(),
-                        config.api_key.as_str(),
-                        retry_timeout_ms,
-                    )?),
-                    Some(retry_timeout_ms),
-                )
-            } else {
-                (None, None)
-            };
 
         Ok(Self {
             client,
             request_timeout_ms,
-            timeout_retry_client,
-            timeout_retry_ms,
         })
     }
 
@@ -908,41 +890,12 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
                 });
             }
             Err(OpenAiRequestError::Timeout(err)) => {
-                if let (Some(retry_client), Some(retry_timeout_ms)) =
-                    (&self.timeout_retry_client, self.timeout_retry_ms)
-                {
-                    match self.send_responses_request(retry_client, payload) {
-                        Ok(response) => return completion_result_from_sdk_response(response),
-                        Err(OpenAiRequestError::ParseBody(raw_body)) => {
-                            return Err(LlmClientError::DecodeResponse {
-                                message: format!(
-                                    "responses sdk decode failed (retry request): {}",
-                                    summarize_trace_text(raw_body.as_str(), 320)
-                                ),
-                            });
-                        }
-                        Err(retry_err) => {
-                            let retry_message = match retry_err {
-                                OpenAiRequestError::Timeout(message) => message,
-                                OpenAiRequestError::ParseBody(message) => message,
-                                OpenAiRequestError::Other(message) => message,
-                            };
-                            return Err(LlmClientError::Http {
-                                message: format!(
-                                    "request timed out after {}ms; retry with {}ms failed: {}",
-                                    self.request_timeout_ms, retry_timeout_ms, retry_message
-                                ),
-                            });
-                        }
-                    }
-                } else {
-                    return Err(LlmClientError::Http {
-                        message: format!(
-                            "request timed out after {}ms: {}",
-                            self.request_timeout_ms, err
-                        ),
-                    });
-                }
+                return Err(LlmClientError::Http {
+                    message: format!(
+                        "request timed out after {}ms: {}",
+                        self.request_timeout_ms, err
+                    ),
+                });
             }
             Err(OpenAiRequestError::Other(err)) => {
                 return Err(LlmClientError::Http { message: err });

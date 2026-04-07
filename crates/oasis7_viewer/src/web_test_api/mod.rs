@@ -464,6 +464,19 @@ fn control_action_hint(
 }
 
 #[cfg(target_arch = "wasm32")]
+fn blocked_completion_ack_hint(error_code: Option<&str>) -> String {
+    match error_code {
+        Some("llm_mode_required" | "llm_init_failed") => {
+            "Next: restore active LLM access, then retry step/play".to_string()
+        }
+        _ => {
+            "Next: inspect the runtime failure, repair the broken world/module state, then retry control"
+                .to_string()
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 fn current_web_test_api_control_profile() -> Option<ViewerControlProfile> {
     WEB_TEST_API_STATE_SNAPSHOT.with(|slot| slot.borrow().control_profile)
 }

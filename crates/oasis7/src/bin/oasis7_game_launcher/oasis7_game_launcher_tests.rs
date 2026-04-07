@@ -3,20 +3,25 @@ use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{
-    build_game_url, build_oasis7_chain_runtime_args, build_viewer_auth_bootstrap_script,
-    content_type_for_path, parse_host_port, parse_options, query_runtime_bound_players,
-    resolve_static_asset_path, resolve_viewer_auth_bootstrap_for_embedded_server,
-    resolve_viewer_auth_bootstrap_from_path, resolve_viewer_static_dir_with_override,
-    sanitize_index_html_for_embedded_server, sanitize_relative_request_path,
-    viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap, BUILTIN_LLM_PROVIDER_MODE,
-    DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_LIVE_BIND,
+    apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
+    build_oasis7_viewer_live_command, build_viewer_auth_bootstrap_script, content_type_for_path,
+    parse_host_port, parse_options, query_runtime_bound_players, resolve_static_asset_path,
+    resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
+    resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
+    sanitize_relative_request_path, viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap,
+    BUILTIN_LLM_PROVIDER_MODE, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND,
+    DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_LIVE_BIND,
     DEFAULT_OPENCLAW_AGENT_PROFILE, DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS, DEFAULT_SCENARIO,
-    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, OPENCLAW_LOCAL_HTTP_PROVIDER_MODE,
-    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
+    DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
+    OPENCLAW_LOCAL_HTTP_PROVIDER_MODE, VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AUTH_BOOTSTRAP_OBJECT,
+    VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
+    VIEWER_OPENCLAW_AUTH_TOKEN_ENV, VIEWER_OPENCLAW_BASE_URL_ENV,
+    VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV, VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
     VIEWER_PLAYER_ID_ENV,
 };
 use oasis7::simulator::ProviderExecutionMode;
@@ -44,6 +49,13 @@ fn removed_old_brand_viewer_auth_env_keys() -> [String; 3] {
         ["AGENT", "WORLD", "VIEWER", "AUTH", "PUBLIC", "KEY"].join("_"),
         ["AGENT", "WORLD", "VIEWER", "AUTH", "PRIVATE", "KEY"].join("_"),
     ]
+}
+
+fn command_env_value(command: &Command, key: &str) -> Option<Option<String>> {
+    command
+        .get_envs()
+        .find(|(env_key, _)| env_key.to_string_lossy() == key)
+        .map(|(_, value)| value.map(|value| value.to_string_lossy().into_owned()))
 }
 
 #[test]
@@ -219,6 +231,89 @@ fn parse_options_accepts_agent_direct_connect_alias() {
     assert_eq!(
         options.agent_provider_mode,
         OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+    );
+}
+
+#[test]
+fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
+    let options = CliOptions::default();
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, false);
+
+    assert_eq!(
+        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
+        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_MODE_ENV),
+        Some(None)
+    );
+}
+
+#[test]
+fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
+    let options = CliOptions::default();
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, true);
+
+    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
+}
+
+#[test]
+fn openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout() {
+    let mut options = CliOptions::default();
+    options.agent_provider_mode = OPENCLAW_LOCAL_HTTP_PROVIDER_MODE.to_string();
+    options.openclaw_base_url = "http://127.0.0.1:5841".to_string();
+    options.openclaw_auth_token = "secret-token".to_string();
+    options.openclaw_connect_timeout_ms = 3000;
+    options.openclaw_agent_profile = "oasis7_p0_low_freq_npc".to_string();
+    options.openclaw_execution_mode = ProviderExecutionMode::PlayerParity;
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, false);
+
+    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_MODE_ENV),
+        Some(Some(OPENCLAW_LOCAL_HTTP_PROVIDER_MODE.to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_OPENCLAW_BASE_URL_ENV),
+        Some(Some("http://127.0.0.1:5841".to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_OPENCLAW_AUTH_TOKEN_ENV),
+        Some(Some("secret-token".to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV),
+        Some(Some("3000".to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_OPENCLAW_AGENT_PROFILE_ENV),
+        Some(Some("oasis7_p0_low_freq_npc".to_string()))
+    );
+    assert_eq!(
+        command_env_value(&command, VIEWER_OPENCLAW_EXECUTION_MODE_ENV),
+        Some(Some(ProviderExecutionMode::PlayerParity.as_str().to_string()))
+    );
+}
+
+#[test]
+fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
+    let options = CliOptions::default();
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+
+    assert!(args.contains(&"--llm".to_string()));
+    assert_eq!(
+        command_env_value(&command, LLM_TIMEOUT_MS_ENV),
+        Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
     );
 }
 

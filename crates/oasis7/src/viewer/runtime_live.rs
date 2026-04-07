@@ -72,6 +72,8 @@ const MAX_AUTHORITATIVE_CHALLENGE_HISTORY: usize = 512;
 const MAX_AUTHORITATIVE_STABLE_CHECKPOINTS: usize = 64;
 const LLM_GAMEPLAY_REQUIRED_HINT: &str =
     "enable --llm and configure a reachable LLM provider before retrying gameplay controls";
+const RUNTIME_CONTROL_REQUIRED_HINT: &str =
+    "inspect the reported runtime failure, repair the broken world/module state, then retry the control";
 
 #[derive(Debug, Clone)]
 pub struct ViewerRuntimeLiveServerConfig {
@@ -531,40 +533,61 @@ impl ViewerRuntimeLiveServer {
             let mut decision_trace: Option<AgentDecisionTrace> = None;
             match self.config.decision_mode {
                 ViewerLiveDecisionMode::Script => self.script.enqueue(&mut self.world),
-                ViewerLiveDecisionMode::Llm => match self.enqueue_llm_action_from_sidecar() {
-                    Ok(trace) => {
-                        decision_trace = trace;
-                    }
-                    Err(trace) => {
-                        if session.subscribed.contains(&ViewerStream::Events) {
-                            send_response(
-                                writer,
-                                &ViewerResponse::DecisionTrace {
-                                    trace: trace.clone(),
-                                },
-                            )?;
+                ViewerLiveDecisionMode::Llm => {
+                    self.llm_sidecar.request_decision();
+                    match self.enqueue_llm_action_from_sidecar() {
+                        Ok(trace) => {
+                            decision_trace = trace;
                         }
-                        let (delta_logical_time, delta_event_seq) = self
-                            .control_completion_delta(baseline_logical_time, baseline_event_seq);
-                        let reason = trace.llm_error.clone().unwrap_or_else(|| {
-                            "gameplay requires a configured and reachable LLM provider".to_string()
-                        });
-                        return self.block_gameplay_control(
-                            session,
-                            writer,
-                            action,
-                            "runtime play loop stopped because the LLM decision provider failed",
-                            reason,
-                            request_id,
-                            delta_logical_time,
-                            delta_event_seq,
-                            true,
-                        );
+                        Err(trace) => {
+                            if session.subscribed.contains(&ViewerStream::Events) {
+                                send_response(
+                                    writer,
+                                    &ViewerResponse::DecisionTrace {
+                                        trace: trace.clone(),
+                                    },
+                                )?;
+                            }
+                            let (delta_logical_time, delta_event_seq) = self
+                                .control_completion_delta(
+                                    baseline_logical_time,
+                                    baseline_event_seq,
+                                );
+                            let reason = trace.llm_error.clone().unwrap_or_else(|| {
+                                "gameplay requires a configured and reachable LLM provider"
+                                    .to_string()
+                            });
+                            return self.block_gameplay_control(
+                                session,
+                                writer,
+                                action,
+                                "runtime play loop stopped because the LLM decision provider failed",
+                                reason,
+                                request_id,
+                                delta_logical_time,
+                                delta_event_seq,
+                                true,
+                            );
+                        }
                     }
-                },
+                }
             }
             let journal_start = self.world.journal().events.len();
-            self.world.step()?;
+            if let Err(error) = self.world.step() {
+                let (delta_logical_time, delta_event_seq) =
+                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                return self.block_runtime_control(
+                    session,
+                    writer,
+                    action,
+                    "runtime step aborted because world advance failed",
+                    ViewerRuntimeLiveServerError::Runtime(error),
+                    request_id,
+                    delta_logical_time,
+                    delta_event_seq,
+                    true,
+                );
+            }
 
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
             let mut mapped_events = Vec::new();
@@ -577,9 +600,46 @@ impl ViewerRuntimeLiveServer {
                 mapped_events.push(event);
             }
             mapped_events.extend(self.pending_virtual_events.drain(..));
-            let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
+            let pending_batch = match self.register_authoritative_batch(mapped_events.as_slice()) {
+                Ok(batch) => batch,
+                Err(error) => {
+                    let (delta_logical_time, delta_event_seq) =
+                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                    return self.block_runtime_control(
+                        session,
+                        writer,
+                        action,
+                        "runtime step aborted because authoritative batch registration failed",
+                        error,
+                        request_id,
+                        delta_logical_time,
+                        delta_event_seq,
+                        true,
+                    );
+                }
+            };
             let batch_finality_updates =
-                self.advance_authoritative_batch_finality(self.world.state().time)?;
+                match self.advance_authoritative_batch_finality(self.world.state().time) {
+                    Ok(updates) => updates,
+                    Err(error) => {
+                        let (delta_logical_time, delta_event_seq) = self
+                            .control_completion_delta(
+                                baseline_logical_time,
+                                baseline_event_seq,
+                            );
+                        return self.block_runtime_control(
+                            session,
+                            writer,
+                            action,
+                            "runtime step aborted because authoritative finality update failed",
+                            error,
+                            request_id,
+                            delta_logical_time,
+                            delta_event_seq,
+                            true,
+                        );
+                    }
+                };
 
             if let Some(trace) = decision_trace {
                 if session.subscribed.contains(&ViewerStream::Events) {
@@ -865,6 +925,51 @@ impl ViewerRuntimeLiveServer {
         }
         Ok(())
     }
+
+    fn block_runtime_control(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+        action: &str,
+        effect: &str,
+        error: ViewerRuntimeLiveServerError,
+        request_id: Option<u64>,
+        delta_logical_time: u64,
+        delta_event_seq: u64,
+        emit_snapshot: bool,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        let (error_code, error_message, hint) = runtime_control_error_details(&error);
+        eprintln!(
+            "viewer runtime live: control {action} failed: {error_message} ({error:?})"
+        );
+        session.playing = false;
+        session.next_play_step_at = None;
+        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+            action: action.to_string(),
+            stage: "blocked".to_string(),
+            effect: effect.to_string(),
+            reason: Some(error_message.clone()),
+            hint: Some(hint),
+            delta_logical_time,
+            delta_event_seq,
+        });
+        if let Some(request_id) = request_id {
+            let ack = ControlCompletionAck {
+                request_id,
+                status: ControlCompletionStatus::Blocked,
+                delta_logical_time,
+                delta_event_seq,
+                error_code: Some(error_code),
+                error_message: Some(error_message),
+            };
+            send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
+        }
+        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
+            let snapshot = self.compat_snapshot();
+            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+        }
+        Ok(())
+    }
 }
 
 fn control_mode_label(mode: &ViewerControl) -> &'static str {
@@ -884,5 +989,99 @@ fn control_mode_for_action(action: &str, step_count: usize) -> ViewerControl {
         _ => ViewerControl::Step {
             count: step_count.max(1),
         },
+    }
+}
+
+fn runtime_control_error_details(
+    error: &ViewerRuntimeLiveServerError,
+) -> (String, String, String) {
+    match error {
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::AgentNotFound { agent_id }) => (
+            "agent_not_found".to_string(),
+            format!("runtime step failed because agent `{agent_id}` is missing"),
+            "restore the missing agent or clear the stale action before stepping again"
+                .to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::PolicyDenied {
+            intent_id,
+            reason,
+        }) => (
+            "policy_denied".to_string(),
+            format!("runtime step failed because policy denied `{intent_id}`: {reason}"),
+            "inspect the policy gate or update the blocked action before stepping again"
+                .to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::ResourceBalanceInvalid {
+            reason,
+        }) => (
+            "resource_balance_invalid".to_string(),
+            format!("runtime step failed because resource balance became invalid: {reason}"),
+            "repair the broken resource ledger or roll back the stale action before stepping again"
+                .to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::ModuleCallFailed {
+            module_id,
+            trace_id,
+            detail,
+            ..
+        }) => (
+            "module_call_failed".to_string(),
+            format!(
+                "runtime step failed because module `{module_id}` call `{trace_id}` failed: {detail}"
+            ),
+            "inspect the failing module call and its inputs before stepping again".to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::NetworkProtocolUnavailable {
+            protocol,
+        }) => (
+            "network_protocol_unavailable".to_string(),
+            format!("runtime step failed because protocol `{protocol}` is unavailable"),
+            "restore the required runtime network protocol before stepping again".to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::NetworkRequestFailed {
+            message,
+            ..
+        }) => (
+            "network_request_failed".to_string(),
+            format!("runtime step failed because a network request failed: {message}"),
+            "restore the runtime network dependency before stepping again".to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::DistributedValidationFailed {
+            reason,
+        }) => (
+            "distributed_validation_failed".to_string(),
+            format!("runtime step failed because distributed validation failed: {reason}"),
+            "repair the invalid distributed/runtime state before stepping again".to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::Io(message)) => (
+            "runtime_io_failed".to_string(),
+            format!("runtime step failed because an I/O operation failed: {message}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::Serde(message)) => (
+            "runtime_serde_failed".to_string(),
+            format!("runtime step failed because serialization failed: {message}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Init(message) => (
+            "runtime_init_failed".to_string(),
+            format!("runtime step failed because initialization state is invalid: {message}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Io(error) => (
+            "runtime_io_failed".to_string(),
+            format!("runtime step failed because an I/O operation failed: {error}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Serde(message) => (
+            "runtime_serde_failed".to_string(),
+            format!("runtime step failed because serialization failed: {message}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
+        ViewerRuntimeLiveServerError::Runtime(error) => (
+            "runtime_step_failed".to_string(),
+            format!("runtime step failed: {error:?}"),
+            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
+        ),
     }
 }

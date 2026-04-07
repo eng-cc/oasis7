@@ -525,10 +525,8 @@ pub(super) fn publish_web_test_api_state(
                                         .as_ref()
                                         .map(|code| format!("Cause: completion ack blocked ({code})"))
                                 });
-                                feedback.hint = Some(
-                                    "Next: restore active LLM access, then retry step/play"
-                                        .to_string(),
-                                );
+                                feedback.hint =
+                                    Some(blocked_completion_ack_hint(ack.error_code.as_deref()));
                                 feedback.effect = format!(
                                     "completion ack: blocked before runtime advance completed (logicalTime +{}, eventSeq +{})",
                                     ack.delta_logical_time, ack.delta_event_seq

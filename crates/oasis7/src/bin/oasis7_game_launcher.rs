@@ -56,6 +56,8 @@ const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
 const DEFAULT_OPENCLAW_BASE_URL: &str = "http://127.0.0.1:5841";
 const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS: u64 = 10_000;
+const LLM_TIMEOUT_MS_ENV: &str = "OASIS7_LLM_TIMEOUT_MS";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const VIEWER_OPENCLAW_BASE_URL_ENV: &str = "OASIS7_OPENCLAW_BASE_URL";
 const VIEWER_OPENCLAW_AUTH_TOKEN_ENV: &str = "OASIS7_OPENCLAW_AUTH_TOKEN";
@@ -306,6 +308,21 @@ fn install_signal_handler() -> Result<(), String> {
 }
 
 fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, String> {
+    let mut command =
+        build_oasis7_viewer_live_command(path, options, env::var_os(LLM_TIMEOUT_MS_ENV).is_some());
+    command.spawn().map_err(|err| {
+        format!(
+            "failed to start oasis7_viewer_live from `{}`: {err}",
+            path.display()
+        )
+    })
+}
+
+fn build_oasis7_viewer_live_command(
+    path: &Path,
+    options: &CliOptions,
+    parent_has_llm_timeout_ms: bool,
+) -> Command {
     let mut command = Command::new(path);
     command
         .arg(options.scenario.as_str())
@@ -315,6 +332,20 @@ fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, 
         .arg(options.web_bind.as_str())
         .arg("--deployment-mode")
         .arg(options.deployment_mode.as_str());
+    if options.with_llm {
+        command.arg("--llm");
+        apply_viewer_live_env_overrides(&mut command, options, parent_has_llm_timeout_ms);
+    } else {
+        command.arg("--no-llm");
+    }
+    command
+}
+
+fn apply_viewer_live_env_overrides(
+    command: &mut Command,
+    options: &CliOptions,
+    parent_has_llm_timeout_ms: bool,
+) {
     for env_name in [
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         VIEWER_OPENCLAW_BASE_URL_ENV,
@@ -325,45 +356,43 @@ fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, 
     ] {
         command.env_remove(env_name);
     }
-    if options.with_llm {
-        command.arg("--llm");
-        if options.agent_provider_mode == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
+
+    if options.agent_provider_mode == OPENCLAW_LOCAL_HTTP_PROVIDER_MODE {
+        command.env(
+            VIEWER_AGENT_PROVIDER_MODE_ENV,
+            OPENCLAW_LOCAL_HTTP_PROVIDER_MODE,
+        );
+        command.env(
+            VIEWER_OPENCLAW_BASE_URL_ENV,
+            options.openclaw_base_url.as_str(),
+        );
+        if !options.openclaw_auth_token.trim().is_empty() {
             command.env(
-                VIEWER_AGENT_PROVIDER_MODE_ENV,
-                OPENCLAW_LOCAL_HTTP_PROVIDER_MODE,
-            );
-            command.env(
-                VIEWER_OPENCLAW_BASE_URL_ENV,
-                options.openclaw_base_url.as_str(),
-            );
-            if !options.openclaw_auth_token.trim().is_empty() {
-                command.env(
-                    VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
-                    options.openclaw_auth_token.as_str(),
-                );
-            }
-            command.env(
-                VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
-                options.openclaw_connect_timeout_ms.to_string(),
-            );
-            command.env(
-                VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
-                options.openclaw_agent_profile.as_str(),
-            );
-            command.env(
-                VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
-                options.openclaw_execution_mode.as_str(),
+                VIEWER_OPENCLAW_AUTH_TOKEN_ENV,
+                options.openclaw_auth_token.as_str(),
             );
         }
-    } else {
-        command.arg("--no-llm");
+        command.env(
+            VIEWER_OPENCLAW_CONNECT_TIMEOUT_MS_ENV,
+            options.openclaw_connect_timeout_ms.to_string(),
+        );
+        command.env(
+            VIEWER_OPENCLAW_AGENT_PROFILE_ENV,
+            options.openclaw_agent_profile.as_str(),
+        );
+        command.env(
+            VIEWER_OPENCLAW_EXECUTION_MODE_ENV,
+            options.openclaw_execution_mode.as_str(),
+        );
+        return;
     }
-    command.spawn().map_err(|err| {
-        format!(
-            "failed to start oasis7_viewer_live from `{}`: {err}",
-            path.display()
-        )
-    })
+
+    if !parent_has_llm_timeout_ms {
+        command.env(
+            LLM_TIMEOUT_MS_ENV,
+            DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string(),
+        );
+    }
 }
 
 fn spawn_oasis7_chain_runtime(path: &Path, options: &CliOptions) -> Result<Child, String> {

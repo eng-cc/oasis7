@@ -497,7 +497,7 @@ impl RuntimeLlmSidecar {
             .insert(profile.agent_id.clone(), profile);
     }
 
-    pub(super) fn request_decision(&mut self) {
+    pub(in crate::viewer::runtime_live) fn request_decision(&mut self) {
         if self.is_llm_mode() {
             self.llm_decision_mailbox = self.llm_decision_mailbox.saturating_add(1);
         }

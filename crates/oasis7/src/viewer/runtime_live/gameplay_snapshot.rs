@@ -8,6 +8,19 @@ use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl
 
 use super::player_gameplay::extend_available_actions;
 
+fn blocked_control_hint(error_code: Option<&str>) -> String {
+    match error_code {
+        Some("llm_mode_required" | "llm_init_failed") => {
+            "enable --llm and configure a reachable LLM provider before retrying gameplay controls"
+                .to_string()
+        }
+        _ => {
+            "inspect the runtime failure, repair the broken world/module state, then retry the control"
+                .to_string()
+        }
+    }
+}
+
 pub(super) fn player_gameplay_feedback_from_control_ack(
     mode: &ViewerControl,
     ack: &ControlCompletionAck,
@@ -36,10 +49,7 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
                     "latest live control was blocked before runtime advance".to_string()
                 }),
             ),
-            Some(
-                "enable --llm and configure a reachable LLM provider before retrying gameplay controls"
-                    .to_string(),
-            ),
+            Some(blocked_control_hint(ack.error_code.as_deref())),
         ),
     };
     let effect = match ack.status {

@@ -8,10 +8,14 @@ use crate::simulator::{
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
+use std::io::Read;
+use std::io::Write;
+use std::net::TcpListener;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Default, Clone)]
 struct MockClient {
@@ -841,14 +845,65 @@ fn normalize_openai_api_base_url_handles_suffix_variants() {
 }
 
 #[test]
-fn openai_client_enables_timeout_retry_when_timeout_below_default() {
+fn openai_client_respects_configured_timeout_without_hidden_retry() {
     let mut config = base_config();
-    config.timeout_ms = 8000;
+    config.timeout_ms = 200;
+    config.base_url = spawn_slow_openai_like_server(Duration::from_millis(600));
     let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
+    let request = LlmCompletionRequest {
+        model: config.model.clone(),
+        system_prompt: config.system_prompt.clone(),
+        user_prompt: "return wait".to_string(),
+        debug_mode: false,
+    };
+    let started_at = Instant::now();
+    let error = client.complete(&request).expect_err("request should time out");
 
-    assert_eq!(client.request_timeout_ms, 8000);
-    assert_eq!(client.timeout_retry_ms, Some(DEFAULT_LLM_TIMEOUT_MS));
-    assert!(client.timeout_retry_client.is_some());
+    assert_eq!(client.request_timeout_ms, 200);
+    assert!(
+        started_at.elapsed() < Duration::from_secs(2),
+        "client should fail fast near the configured timeout instead of retrying with a long fallback"
+    );
+    match error {
+        LlmClientError::Http { message } => {
+            assert!(
+                message.contains("request timed out after 200ms"),
+                "unexpected timeout message: {message}"
+            );
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+fn spawn_slow_openai_like_server(response_delay: Duration) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind slow openai server");
+    let bind = listener.local_addr().expect("listener addr");
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+        let mut buffer = [0_u8; 4096];
+        let _ = stream.read(&mut buffer);
+        thread::sleep(response_delay);
+        let body = serde_json::json!({
+            "id": "resp_test",
+            "object": "response",
+            "model": "gpt-test",
+            "output": [],
+            "usage": {
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "total_tokens": 2
+            }
+        })
+        .to_string();
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(response.as_bytes());
+    });
+    format!("http://127.0.0.1:{}/v1", bind.port())
 }
 
 #[test]
