@@ -1,0 +1,23 @@
+task_uid: task_176c0cf78fef462a9275ac66b991e5c5
+title: "Advance P2PARCH-6 full mixed-topology evidence"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-6-full-evidence-next
+execution_log_path: .pm/tasks/task_176c0cf78fef462a9275ac66b991e5c5.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - testing-manual.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "P2PARCH-6 full-tier path advances beyond dry-run with executable evidence or stronger blocking semantics for remaining mixed-topology gaps."
+  - "testing-manual, evidence docs, and project status truthfully reflect the next achievable mixed-topology full evidence boundary."
+  - "PM task, execution log, scripts, and validation remain traceable to P2PARCH-6."
+handoff_to: []
+updated_at: 2026-04-07T12:26:41+08:00
+last_started_at: 2026-04-07T11:52:20+08:00
+last_closed_at: 2026-04-07T12:24:46+08:00

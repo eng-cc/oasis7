@@ -21,17 +21,19 @@
 ## Mixed-Topology Inputs
 - `baseline_evidence_ref`:
   - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md`
+  - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`
 - `same_window_shared_evidence_ref`:
   - `doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md`
   - `doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md`
 - `proxy_drill_ref`:
   - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md`
+  - `doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`
 
 ## Validation
 - `validated_by`:
   - `qa_engineer + producer_system_designer`
 - `validated_at`:
-  - `2026-04-07 10:30:00 CST`
+  - `2026-04-07 12:22:00 CST`
 - `validation_expectations`:
   - `baseline candidate_id and role boundary still match current shared-devnet bundle truth`
   - `same-window shared-devnet evidence is explicitly linked even when the lane stays partial`
@@ -41,7 +43,7 @@
 - `lane_result`:
   - `partial`
 - `reason`:
-  - `P2PARCH-6` matrix baseline and same-window shared-devnet rehearsal evidence are now pinned together, but the current mixed-topology truth still relies on proxy drills and has not crossed the dedicated shared-window pass bar.
+  - `P2PARCH-6` matrix baseline and same-window shared-devnet rehearsal evidence are now pinned together, but the latest 2026-04-07 full proxy execution still fails with audited consensus/recovery signatures and has not crossed the dedicated shared-window pass bar.
 
 ## Notes
 - This document upgrades the lane from an implicit missing scaffold to an explicit audited `partial` evidence packet.

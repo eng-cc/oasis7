@@ -17,7 +17,7 @@
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
   进行中第二个切片：在首个 peer-manager substrate 基础上，`oasis7_net` 现在开始把 `suspect` 与已验证的 hard-`blocked` 升级成 active-set quarantine enforcement。已连接 peer 一旦因 source diversity、subnet、relay-domain 或 relay budget 规则进入 quarantine，runtime 会主动断连，并在 `ConnectionClosed` / `OutgoingConnectionError` 路径抑制 failover / retry，避免 quarantined peer 立刻被本地 transport 状态机拉回；同轮 health 统计也会剔除未准入 active peer，避免瞬时污染其他健康 peer。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
-  已落首个 executable mixed-topology matrix slice：`scripts/p2p-mixed-topology-matrix.sh` 会把 `private/validator_hidden/relay_only` role boundary、bootstrap poisoning、relay-budget detection 与 path failover 收成 `required` exact cases，并把 triad/triad_distributed 的 disconnect/restart/release-chaos 收成 `full` proxy cases；matrix 明确输出 `summary.json/md` 与 per-case command/log 目录，并显式标注当前 `proxy` case 只是 sentry-loss / mixed-topology live recovery 的近似 drill，不等价于 dedicated sentry/NAT lab。`full` live evidence 仍待后续继续执行。
+  已把 full-tier 从 dry-run 推进到真实 proxy execution：`scripts/p2p-mixed-topology-matrix.sh` 现在会把 shared-window / dedicated-lab / pass-uplift 外部证据与 blocker 语义写入 `summary.json/md`，proxy case 也不再依赖预编译 binary 或默认 561x 端口段。2026-04-07 latest full run（`doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`）确认 7 个 exact case 全通过，same-window shared refs 已接入 summary，但 2 个 proxy longrun 仍以 `consensus_hash_divergence`、`committed_height_not_monotonic nodes=sequencer`、`known_peer_heads_zero_samples`、`http_failure_samples` 失败，因此当前仍停留在 `required_exact_ready=true / full_proxy_ready=false` 的 audited `partial`。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
   已把 mixed-topology lane 升级为 shared-network required gate：`shared-network-track-gate.sh` 现在要求 `shared_devnet/mixed_topology_baseline`、`staging/mixed_topology_rehearsal`、`canary/mixed_topology_claim_review` 三条显式 lane；`shared-devnet-rehearsal.sh` 也会自动生成 mixed-topology gate note，并默认把仅有 `P2PARCH-6` matrix baseline 的窗口保持在 `partial`。
   当前已把 `mixed_topology_baseline` 从“缺草稿”推进成正式 `partial` evidence：`doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md` 现在显式钉住 `P2PARCH-6` baseline、same-window shared-devnet follow-up/short-window 证据与 proxy 边界；`shared-devnet-blocker-packet.sh` 继续负责生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份 blocker 文档，方便后续把 same-window mixed-topology 证据继续回填到 shared-devnet gate，而不冒充已 `pass`。若要正式升到 `pass`，除 same-window evidence 外还必须固定 producer/QA 审计通过的 pass-uplift decision ref。
@@ -49,7 +49,8 @@
   - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer。
   - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
-  - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
+- `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
+- `P2PARCH-6` 已把 latest full-tier 真跑到 proxy soak：matrix summary 现在会额外钉住 `required_exact_ready/full_proxy_ready/shared_network_pass_blockers` 等字段；latest live run 虽未通过 proxy gate，但已把 full-tier blocker 从“只停留在 dry-run”推进成“有实际 failure signatures 的 audited partial”。
   - `P2PARCH-8` 已冻结用户层部署抽象：后续产品默认应把正式角色藏在内部，普通用户只看到 `2~3` 个简单模式，且默认由系统自动选择。
   - `P2PARCH-9` 已继续推进 runtime user-mode recommender：在保留 CLI detection hint 覆盖通道的同时，runtime 现在也会把 live relay reservation、DCUtR 打洞结果与 active transport path kind 合并成默认推荐依据；`public_entry` 自动升级仍必须携带显式确认，chain runtime status payload 会按请求时的 live snapshot 重新计算 requested/recommended/effective user mode。
   - 当前实现仍未达到统一 substrate；triad 验证暴露的问题证明 topology 是真实 blocker，不再归类为单点部署细节。
@@ -156,7 +157,9 @@
 - 本轮已交付:
   - `scripts/p2p-mixed-topology-matrix.sh`：统一输出 `required` exact + `full` proxy 两档 matrix summary
   - `scripts/p2p-mixed-topology-matrix-smoke.sh`：对 matrix case 装配与 summary 结构做快速 smoke
-  - `testing-manual.md` S9B：补 mixed-topology 推荐命令、通过标准、产物路径与 `proxy` 边界口径
+  - `testing-manual.md` S9B：补 mixed-topology 推荐命令、通过标准、产物路径、`proxy` 边界口径，以及 `evidence_contract/external_evidence` 机器可读字段
+  - latest full-tier evidence：`doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md` 已固化 7 个 exact case 全通过、2 个 proxy case 真实执行但失败的当前 blocker
+  - matrix/runtime follow-up：proxy case 不再依赖预编译 binary 或默认 561x 端口段；`oasis7_chain_runtime` 也不再对 `observer` 无条件启用 `feedback_p2p`，避免与 `P2PARCH-4` lane gate 冲突
 - 完成定义:
   - 家宽 / NAT / CGNAT / cloud mixed topology 均有 required/full 套件
 
@@ -230,6 +233,6 @@
 
 ## 状态
 - 当前状态: active
-- 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence；当前 lane 已有正式 `partial` 证据，后续需决定现有 proxy/shared-window 证据是否足以升到 `same-window pass`，否则再落 dedicated sentry/NAT lab 来替换当前 proxy live drills。
-- 下一步: 若后续要把 shared-devnet mixed-topology lane 提升为 `pass`，除 same-window evidence 外还必须固定 producer/QA 审计通过的 pass-uplift decision ref；在此之前继续保持 `partial`，不口头升级。
+- 下一步: 先消化 `P2PARCH-6` latest full proxy failure signatures；当前 real run 已把 blocker 收敛到 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples`，在这些签名修平前继续保持 `full_proxy_ready=false`。
+- 下一步: `P2PARCH-7` 继续保持 `partial`；same-window refs 已可作为 matrix 输入，但若要把 shared-devnet mixed-topology lane 提升为 `pass`，除修平 proxy failure signatures外还必须固定 producer/QA 审计通过的 pass-uplift decision ref。
 - 最近更新: 2026-04-07

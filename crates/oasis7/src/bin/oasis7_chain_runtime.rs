@@ -324,9 +324,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &keypair,
         &storage_profile_config,
     )?);
-    config = config
-        .with_feedback_p2p(NodeFeedbackP2pConfig::default())
-        .map_err(|err| format!("failed to enable node feedback p2p: {err:?}"))?;
+    if let Some(feedback_p2p_config) = feedback_p2p_config_for_role(options.node_role) {
+        config = config
+            .with_feedback_p2p(feedback_p2p_config)
+            .map_err(|err| format!("failed to enable node feedback p2p: {err:?}"))?;
+    }
     config = governance_registry::apply_world_governance_registry_overrides(
         config,
         paths.execution_world_dir.as_path(),
@@ -508,6 +510,13 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         }
 
         thread::sleep(Duration::from_millis(300));
+    }
+}
+
+fn feedback_p2p_config_for_role(node_role: NodeRole) -> Option<NodeFeedbackP2pConfig> {
+    match node_role {
+        NodeRole::Observer => None,
+        NodeRole::Sequencer | NodeRole::Storage => Some(NodeFeedbackP2pConfig::default()),
     }
 }
 

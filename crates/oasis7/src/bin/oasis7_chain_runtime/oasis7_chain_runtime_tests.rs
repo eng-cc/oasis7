@@ -770,3 +770,10 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
     assert_eq!(payload.p2p.deployment_mode, "public");
     assert_eq!(payload.p2p.node_role_claim, "relay");
 }
+
+#[test]
+fn feedback_p2p_is_disabled_for_observer_role() {
+    assert!(super::feedback_p2p_config_for_role(NodeRole::Observer).is_none());
+    assert!(super::feedback_p2p_config_for_role(NodeRole::Sequencer).is_some());
+    assert!(super::feedback_p2p_config_for_role(NodeRole::Storage).is_some());
+}
