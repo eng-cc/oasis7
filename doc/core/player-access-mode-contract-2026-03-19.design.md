@@ -6,7 +6,7 @@
 审计轮次: 7
 
 ## 1. 设计定位
-将 `software_safe`、`standard_3d`、`pure_api` 三种玩家访问模式继续提升为 `core` 级 taxonomy，并重新分工为“`software_safe` = 主要正式 Web 入口、`standard_3d` = opt-in 高保真视觉/截图/QA 入口、`pure_api` = 一等公民的无 UI/自动化/长稳入口”；同时把 `agent_direct_connect/openclaw_local_http` 降为兼容 alias，把当前 operator-facing provider 模型收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`，再把 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“兼容接入名”“正式配置模型”“观战旁路”混成一层概念。
+将 `software_safe`、`standard_3d`、`pure_api` 三种玩家访问模式继续提升为 `core` 级 taxonomy，并重新分工为“`software_safe` = 主要正式 Web 入口、`standard_3d` = opt-in 高保真视觉/截图/QA 入口、`pure_api` = 一等公民的无 UI/自动化/长稳入口”；同时把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias，把当前 operator-facing provider 模型收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`，再把 `player_parity / headless_agent / debug_viewer` 降维到 execution lane，避免项目继续把“玩家入口”“兼容接入名”“正式配置模型”“观战旁路”混成一层概念。
 
 ## 2. 核心设计决策
 - 保留三种玩家访问模式：
@@ -21,7 +21,7 @@
   - 它描述的是当前阶段先把资源投向哪些链路；
   - 它可以覆盖 `software_safe`、launcher/runtime interaction，必要时也可涵盖 `pure_api` 相关闭环；
   - 它不能回答“玩家现在走的是哪种产品入口”。
-- 将 `agent_direct_connect/openclaw_local_http` 统一视为兼容迁移 alias：
+- 将 `agent_direct_connect/provider_loopback_http` 统一视为兼容迁移 alias：
   - 它们描述的是旧 UI/CLI/operator 曾如何称呼当前 OpenClaw 直连路径；
   - 当前正式 operator-facing provider 模型必须写成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile`；
   - 它们不能回答“玩家现在走的是哪种产品入口”，也不能继续充当唯一配置模型。
@@ -66,8 +66,8 @@
 
 ### 3.4 Terminology Compatibility Layer
 - 兼容迁移表：
-  - 旧“OpenClaw 模式” -> 新“兼容 alias `agent_direct_connect/openclaw_local_http` + 正式 provider 维度 `agent_decision_source + agent_provider_*` + execution lane”
-  - 旧“Agent Provider Mode=openclaw_local_http” -> 新“配置/CLI/env 以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile` 为主；`agent_provider_mode` 仅保留兼容解析”
+  - 旧“OpenClaw 模式” -> 新“兼容 alias `agent_direct_connect/provider_loopback_http` + 正式 provider 维度 `agent_decision_source + agent_provider_*` + execution lane”
+  - 旧“Agent Provider Mode=provider_loopback_http” -> 新“配置/CLI/env 以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile` 为主；`agent_provider_mode` 仅保留兼容解析”
   - 旧“OpenClaw player mode” -> 新“玩家访问模式仍是 `standard_3d / software_safe / pure_api`，OpenClaw 相关字段只能作为附加维度”
   - 旧“non-3D 模式 / 2D 入口” -> 新“当前 delivery priority 或 interaction scope；若要表达真实玩家入口，必须回到 `standard_3d / software_safe / pure_api`”
 

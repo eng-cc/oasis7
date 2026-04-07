@@ -69,9 +69,9 @@ mod module_lifecycle;
 mod module_visual;
 mod monotonicity;
 #[cfg(not(target_arch = "wasm32"))]
-mod openclaw_adapter;
+mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
-mod openclaw_local_http;
+mod provider_loopback_http;
 mod persist;
 mod physics_parameters;
 mod power;

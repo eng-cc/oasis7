@@ -10,7 +10,7 @@ use crate::runtime::{
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
     AgentPromptProfile, AgentRunner, ChunkRuntimeConfig, LlmAgentBehavior,
-    OpenAiChatCompletionClient, OpenClawAdapter, ProviderBackedAgentBehavior,
+    OpenAiChatCompletionClient, ProviderLoopbackAdapter, ProviderBackedAgentBehavior,
     ProviderExecutionMode, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind, WorldJournal,
     WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
 };
@@ -35,13 +35,14 @@ pub(super) struct RuntimeLlmDecision {
 
 const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
 const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
-const OPENCLAW_LOCAL_HTTP_PROVIDER_MODE: &str = "openclaw_local_http";
+const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
+const OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS: &str = "openclaw_local_http";
 const OPENCLAW_PROVIDER_BACKEND: &str = "openclaw";
 const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
 const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
 const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
-const DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS: u64 = 3_000;
-const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 3_000;
+const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const VIEWER_AGENT_DECISION_SOURCE_ENV: &str = "OASIS7_AGENT_DECISION_SOURCE";
 const VIEWER_AGENT_PROVIDER_BACKEND_ENV: &str = "OASIS7_AGENT_PROVIDER_BACKEND";
 const VIEWER_AGENT_PROVIDER_CONTRACT_ENV: &str = "OASIS7_AGENT_PROVIDER_CONTRACT";
@@ -60,7 +61,7 @@ const VIEWER_OPENCLAW_AGENT_PROFILE_ENV: &str = "OASIS7_OPENCLAW_AGENT_PROFILE";
 const VIEWER_OPENCLAW_EXECUTION_MODE_ENV: &str = "OASIS7_OPENCLAW_EXECUTION_MODE";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(in crate::viewer::runtime_live) struct OpenClawDecisionSettings {
+pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
     pub(in crate::viewer::runtime_live) requested_provider_mode: String,
     pub(in crate::viewer::runtime_live) base_url: String,
     pub(in crate::viewer::runtime_live) auth_token: Option<String>,
@@ -72,10 +73,10 @@ pub(in crate::viewer::runtime_live) struct OpenClawDecisionSettings {
 
 enum RuntimeDecisionRunner {
     Builtin(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),
-    OpenClaw(AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>>),
+    ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
 }
 
-fn env_requests_openclaw_provider() -> bool {
+fn env_requests_provider_backend() -> bool {
     named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
         .map(|value| value.trim().to_string())
         .as_deref()
@@ -83,8 +84,8 @@ fn env_requests_openclaw_provider() -> bool {
         .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
 }
 
-pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
-) -> Result<Option<OpenClawDecisionSettings>, String> {
+pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
+) -> Result<Option<ProviderDecisionSettings>, String> {
     let decision_source =
         named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
             .unwrap_or_default();
@@ -151,7 +152,7 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
             })
         })
         .transpose()?
-        .unwrap_or(DEFAULT_OPENCLAW_CONNECT_TIMEOUT_MS);
+        .unwrap_or(DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS);
     if connect_timeout_ms == 0 {
         return Err(format!(
             "{VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV} must be greater than zero"
@@ -160,7 +161,7 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
 
     let agent_profile =
         named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV, VIEWER_OPENCLAW_AGENT_PROFILE_ENV])
-        .unwrap_or_else(|| DEFAULT_OPENCLAW_AGENT_PROFILE.to_string());
+        .unwrap_or_else(|| DEFAULT_PROVIDER_AGENT_PROFILE.to_string());
     let agent_profile = agent_profile.trim();
     if agent_profile.is_empty() {
         return Err(format!(
@@ -191,7 +192,7 @@ pub(in crate::viewer::runtime_live) fn openclaw_settings_from_env(
         .transpose()?
         .unwrap_or(ProviderExecutionMode::HeadlessAgent);
 
-    Ok(Some(OpenClawDecisionSettings {
+    Ok(Some(ProviderDecisionSettings {
         requested_provider_mode: decision_source.to_string(),
         base_url: base_url.to_string(),
         auth_token,
@@ -206,7 +207,8 @@ fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         BUILTIN_LLM_DECISION_SOURCE => Some(BUILTIN_LLM_DECISION_SOURCE),
         PROVIDER_BACKED_DECISION_SOURCE
-        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
+        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(PROVIDER_BACKED_DECISION_SOURCE),
         _ => None,
     }
@@ -215,7 +217,8 @@ fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
 fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         OPENCLAW_PROVIDER_BACKEND
-        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
+        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(OPENCLAW_PROVIDER_BACKEND),
         _ => None,
     }
@@ -224,7 +227,8 @@ fn canonical_agent_provider_backend(raw: &str) -> Option<&'static str> {
 fn canonical_agent_provider_contract(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         WORLDSIM_PROVIDER_CONTRACT
-        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
+        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(WORLDSIM_PROVIDER_CONTRACT),
         _ => None,
     }
@@ -233,7 +237,8 @@ fn canonical_agent_provider_contract(raw: &str) -> Option<&'static str> {
 fn canonical_agent_provider_transport(raw: &str) -> Option<&'static str> {
     match raw.trim() {
         LOOPBACK_HTTP_PROVIDER_TRANSPORT
-        | OPENCLAW_LOCAL_HTTP_PROVIDER_MODE
+        | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
+        | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT),
         _ => None,
     }
@@ -244,10 +249,14 @@ fn named_env_var_any(env_names: &[&str]) -> Option<String> {
 }
 
 fn provider_mode_fallback_reason(provider_mode: &str) -> Option<String> {
-    if provider_mode.trim() == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS {
-        Some("provider_mode_alias:agent_direct_connect".to_string())
-    } else {
-        None
+    match provider_mode.trim() {
+        AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => {
+            Some("provider_mode_alias:agent_direct_connect".to_string())
+        }
+        OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS => {
+            Some("provider_mode_alias:openclaw_local_http".to_string())
+        }
+        _ => None,
     }
 }
 
@@ -347,11 +356,11 @@ impl RuntimeLlmSidecar {
     }
 
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
-        !env_requests_openclaw_provider()
+        !env_requests_provider_backend()
     }
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
-        !env_requests_openclaw_provider()
+        !env_requests_provider_backend()
     }
 
     pub(in crate::viewer::runtime_live) fn ensure_gameplay_ready(
@@ -648,7 +657,7 @@ impl RuntimeLlmSidecar {
             return Err(AgentChatError {
                 code: "agent_provider_chat_unsupported".to_string(),
                 message:
-                    "agent chat is not yet supported when runtime live uses OpenClaw(Local HTTP)"
+                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
                         .to_string(),
                 agent_id: Some(agent_id.to_string()),
             });
@@ -713,7 +722,7 @@ impl RuntimeLlmSidecar {
                 sync_llm_runner_long_term_memory(kernel, runner);
                 result
             }
-            RuntimeDecisionRunner::OpenClaw(runner) => runner.tick_decide_only(kernel),
+            RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(kernel),
         };
         result.map(|tick| RuntimeLlmDecision {
             agent_id: tick.agent_id,
@@ -753,7 +762,7 @@ impl RuntimeLlmSidecar {
                 RuntimeDecisionRunner::Builtin(runner) => {
                     let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
                 }
-                RuntimeDecisionRunner::OpenClaw(runner) => {
+                RuntimeDecisionRunner::ProviderBacked(runner) => {
                     let _ = runner.notify_action_result(pending.agent_id.as_str(), &action_result);
                 }
             }
@@ -812,10 +821,10 @@ impl RuntimeLlmSidecar {
             .shadow_kernel
             .as_ref()
             .ok_or_else(|| "shadow kernel not initialized".to_string())?;
-        let openclaw_settings = openclaw_settings_from_env()?;
+        let openclaw_settings = provider_settings_from_env()?;
         if self.runner.is_none() {
             self.runner = Some(match openclaw_settings.as_ref() {
-                Some(_) => RuntimeDecisionRunner::OpenClaw(AgentRunner::new()),
+                Some(_) => RuntimeDecisionRunner::ProviderBacked(AgentRunner::new()),
                 None => RuntimeDecisionRunner::Builtin(AgentRunner::new()),
             });
         }
@@ -847,14 +856,14 @@ impl RuntimeLlmSidecar {
                     );
                     runner.register(behavior);
                 }
-                RuntimeDecisionRunner::OpenClaw(runner) => {
+                RuntimeDecisionRunner::ProviderBacked(runner) => {
                     if runner.get(agent_id.as_str()).is_some() {
                         continue;
                     }
                     let settings = openclaw_settings.as_ref().ok_or_else(|| {
                         "openclaw runner selected without resolved settings".to_string()
                     })?;
-                    let adapter = OpenClawAdapter::new(
+                    let adapter = ProviderLoopbackAdapter::new(
                         settings.base_url.as_str(),
                         settings.auth_token.as_deref(),
                         settings.connect_timeout_ms,

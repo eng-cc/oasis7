@@ -26,9 +26,9 @@ const RUNTIME_AGENT_CHAT_ECHO_PREFIX: &str = "[qa-echo]";
 const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 
 #[allow(dead_code)]
-pub(in crate::viewer::runtime_live) fn runtime_openclaw_settings_from_env(
-) -> Result<Option<llm_sidecar::OpenClawDecisionSettings>, String> {
-    llm_sidecar::openclaw_settings_from_env()
+pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env(
+) -> Result<Option<llm_sidecar::ProviderDecisionSettings>, String> {
+    llm_sidecar::provider_settings_from_env()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,7 +127,7 @@ impl ViewerRuntimeLiveServer {
             return Err(PromptControlError {
                 code: "agent_provider_prompt_control_unsupported".to_string(),
                 message:
-                    "prompt_control is not yet supported when runtime live uses OpenClaw(Local HTTP)"
+                    "prompt_control is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
                         .to_string(),
                 agent_id: Some(agent_id),
                 current_version,
@@ -373,7 +373,7 @@ impl ViewerRuntimeLiveServer {
             return Err(AgentChatError {
                 code: "agent_provider_chat_unsupported".to_string(),
                 message:
-                    "agent chat is not yet supported when runtime live uses OpenClaw(Local HTTP)"
+                    "agent chat is not yet supported when runtime live uses ProviderBacked(Local HTTP)"
                         .to_string(),
                 agent_id: Some(agent_id),
             });

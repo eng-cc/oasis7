@@ -4,10 +4,14 @@
 
 Use these exact values for a real local OpenClaw gameplay run:
 
-- `agent_provider_mode=openclaw_local_http`
+- `agent_provider_mode=provider_loopback_http`
 - `openclaw_base_url=http://127.0.0.1:5841`
 - `openclaw_connect_timeout_ms=15000`
 - `openclaw_agent_profile=oasis7_p0_low_freq_npc`
+
+Compatibility note:
+
+- `openclaw_local_http` remains accepted as a legacy alias for `agent_provider_mode`
 
 ## Process Ownership
 
@@ -95,9 +99,9 @@ If you use `--download-dir ~/.cache/oasis7/releases`, the helper expands the cur
 
 Prefer the repo-owned lightweight runtime agent:
 
-- agent id: `oasis7_openclaw_agent`
-- installer: `scripts/setup-openclaw-oasis7-runtime.sh`
-- workspace: `tools/openclaw/oasis7_openclaw_workspace`
+- agent id: `oasis7_provider_agent`
+- installer: `scripts/setup-provider-oasis7-runtime.sh`
+- workspace: `tools/provider/oasis7_provider_workspace`
 
 ## Product Launch Command
 
@@ -107,7 +111,7 @@ Prefer the repo-owned lightweight runtime agent:
 ./run-game.sh \
   --scenario llm_bootstrap \
   --with-llm \
-  --agent-provider-mode openclaw_local_http \
+  --agent-provider-mode provider_loopback_http \
   --openclaw-base-url http://127.0.0.1:5841 \
   --openclaw-connect-timeout-ms 15000 \
   --openclaw-agent-profile oasis7_p0_low_freq_npc
@@ -119,7 +123,7 @@ Prefer the repo-owned lightweight runtime agent:
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
   --scenario llm_bootstrap \
   --with-llm \
-  --agent-provider-mode openclaw_local_http \
+  --agent-provider-mode provider_loopback_http \
   --openclaw-base-url http://127.0.0.1:5841 \
   --openclaw-connect-timeout-ms 15000 \
   --openclaw-agent-profile oasis7_p0_low_freq_npc
@@ -140,16 +144,16 @@ bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
 
 Current boundary:
 
-- runtime agent installer is repo-backed: `scripts/setup-openclaw-oasis7-runtime.sh`
-- local bridge is repo-backed: `oasis7_openclaw_local_bridge`
-- parity smoke is repo-backed: `scripts/openclaw-parity-p0.sh`
+- runtime agent installer is repo-backed: `scripts/setup-provider-oasis7-runtime.sh`
+- local bridge is repo-backed: `oasis7_provider_local_bridge`
+- parity smoke is repo-backed: `scripts/provider-parity-p0.sh`
 
 So a downloaded game bundle is enough for real play. If bridge and runtime agent are already running, prefer `--reuse-bridge --skip-agent-setup` as the no-`cargo` path; only auto bridge bootstrap, runtime-agent install, source-tree launch, and `smoke` still need repo access + `cargo`.
 
 ## Fast Smoke Command
 
 ```bash
-bash scripts/openclaw-parity-p0.sh \
+bash scripts/provider-parity-p0.sh \
   --openclaw-only \
   --samples 1 \
   --ticks 4 \

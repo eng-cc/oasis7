@@ -122,7 +122,7 @@ fn parse_openclaw_agent_command_output_accepts_local_shape() {
 #[test]
 fn local_session_id_from_session_key_hashes_invalid_chars() {
     let session_id = local_session_id_from_session_key(
-        "agent:oasis7_openclaw_agent:subagent:world-simulator:manual:agent-1",
+        "agent:oasis7_provider_agent:subagent:world-simulator:manual:agent-1",
     );
     assert!(session_id.starts_with("ws-"));
     assert!(session_id
@@ -194,11 +194,11 @@ fn apply_profile_guardrails_reroutes_patrol_wait_to_move() {
 
 #[test]
 fn validate_profile_accepts_oasis7_and_rejects_removed_profile_alias() {
-    assert_eq!(validate_profile(Some(DEFAULT_OPENCLAW_AGENT_PROFILE)), None);
+    assert_eq!(validate_profile(Some(DEFAULT_PROVIDER_AGENT_PROFILE)), None);
     assert_eq!(
         validate_profile(Some("legacy_p0_low_freq_npc")),
         Some(format!(
-            "unsupported agent_profile `legacy_p0_low_freq_npc`; expected {DEFAULT_OPENCLAW_AGENT_PROFILE}"
+            "unsupported agent_profile `legacy_p0_low_freq_npc`; expected {DEFAULT_PROVIDER_AGENT_PROFILE}"
         ))
     );
 }
@@ -343,7 +343,7 @@ fn sample_request() -> DecisionRequest {
             timeout_budget_ms: 7000,
         },
         provider_config_ref: Some("openclaw://local-bridge".to_string()),
-        agent_profile: Some(DEFAULT_OPENCLAW_AGENT_PROFILE.to_string()),
+        agent_profile: Some(DEFAULT_PROVIDER_AGENT_PROFILE.to_string()),
         fixture_id: None,
         replay_id: None,
         timeout_budget_ms: 7000,

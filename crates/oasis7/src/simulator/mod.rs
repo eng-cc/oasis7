@@ -25,9 +25,9 @@ mod llm_defaults;
 mod memory;
 mod module_visual;
 #[cfg(not(target_arch = "wasm32"))]
-mod openclaw_adapter;
+mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
-mod openclaw_local_http;
+mod provider_loopback_http;
 pub(crate) mod persist;
 mod power;
 mod runner;
@@ -99,14 +99,14 @@ pub use memory::{
 };
 pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
 #[cfg(not(target_arch = "wasm32"))]
-pub use openclaw_adapter::OpenClawAdapter;
+pub use provider_loopback_adapter::ProviderLoopbackAdapter;
 #[cfg(not(target_arch = "wasm32"))]
-pub use openclaw_local_http::{
-    evaluate_openclaw_provider_compatibility, openclaw_phase1_required_actions,
-    openclaw_phase1_required_capabilities, validate_openclaw_local_http_base_url,
-    OpenClawFeedbackAck, OpenClawLocalHttpClient, OpenClawLocalHttpError,
-    OpenClawProviderCompatibilityReport, OpenClawProviderCompatibilityStatus,
-    OpenClawProviderHealth, OpenClawProviderInfo, OPENCLAW_PHASE1_ACTION_SET_ALIAS,
+pub use provider_loopback_http::{
+    evaluate_provider_compatibility, provider_phase1_required_actions,
+    provider_phase1_required_capabilities, validate_provider_loopback_http_base_url,
+    ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
+    ProviderCompatibilityReport, ProviderCompatibilityStatus,
+    ProviderHealth, ProviderInfo, PROVIDER_PHASE1_ACTION_SET_ALIAS,
 };
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,

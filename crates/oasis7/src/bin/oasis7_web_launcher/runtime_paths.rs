@@ -169,7 +169,7 @@ mod tests {
             .expect("time")
             .as_nanos();
         path.push(format!(
-            "oasis7_openclaw_agent_paths_{label}_{}_{}",
+            "oasis7_provider_agent_paths_{label}_{}_{}",
             std::process::id(),
             stamp
         ));

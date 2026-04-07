@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
-const DEFAULT_OPENCLAW_LOCAL_HTTP_PROVIDER_ID: &str = "openclaw_local_http";
-pub const OPENCLAW_PHASE1_ACTION_SET_ALIAS: &str = "phase1_low_frequency";
-const OPENCLAW_PHASE1_REQUIRED_CAPABILITIES: &[&str] = &["decision", "feedback"];
-const OPENCLAW_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
+const DEFAULT_PROVIDER_LOOPBACK_HTTP_PROVIDER_ID: &str = "provider_loopback_http";
+pub const PROVIDER_PHASE1_ACTION_SET_ALIAS: &str = "phase1_low_frequency";
+const PROVIDER_PHASE1_REQUIRED_CAPABILITIES: &[&str] = &["decision", "feedback"];
+const PROVIDER_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
     "wait",
     "wait_ticks",
     "move_agent",
@@ -22,7 +22,7 @@ const OPENCLAW_PHASE1_REQUIRED_ACTIONS: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct OpenClawProviderInfo {
+pub struct ProviderInfo {
     pub provider_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -36,10 +36,10 @@ pub struct OpenClawProviderInfo {
     pub supported_action_sets: Vec<String>,
 }
 
-impl OpenClawProviderInfo {
+impl ProviderInfo {
     pub fn resolved_provider_id(&self) -> &str {
         if self.provider_id.trim().is_empty() {
-            DEFAULT_OPENCLAW_LOCAL_HTTP_PROVIDER_ID
+            DEFAULT_PROVIDER_LOOPBACK_HTTP_PROVIDER_ID
         } else {
             self.provider_id.as_str()
         }
@@ -48,14 +48,14 @@ impl OpenClawProviderInfo {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum OpenClawProviderCompatibilityStatus {
+pub enum ProviderCompatibilityStatus {
     #[default]
     Ready,
     Degraded,
     Incompatible,
 }
 
-impl OpenClawProviderCompatibilityStatus {
+impl ProviderCompatibilityStatus {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ready => "ready",
@@ -66,8 +66,8 @@ impl OpenClawProviderCompatibilityStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct OpenClawProviderCompatibilityReport {
-    pub status: OpenClawProviderCompatibilityStatus,
+pub struct ProviderCompatibilityReport {
+    pub status: ProviderCompatibilityStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -76,26 +76,26 @@ pub struct OpenClawProviderCompatibilityReport {
     pub missing_supported_actions: Vec<String>,
 }
 
-pub fn openclaw_phase1_required_capabilities() -> &'static [&'static str] {
-    OPENCLAW_PHASE1_REQUIRED_CAPABILITIES
+pub fn provider_phase1_required_capabilities() -> &'static [&'static str] {
+    PROVIDER_PHASE1_REQUIRED_CAPABILITIES
 }
 
-pub fn openclaw_phase1_required_actions() -> &'static [&'static str] {
-    OPENCLAW_PHASE1_REQUIRED_ACTIONS
+pub fn provider_phase1_required_actions() -> &'static [&'static str] {
+    PROVIDER_PHASE1_REQUIRED_ACTIONS
 }
 
-pub fn evaluate_openclaw_provider_compatibility(
-    info: &OpenClawProviderInfo,
-    health: Option<&OpenClawProviderHealth>,
-) -> OpenClawProviderCompatibilityReport {
-    let missing_capabilities = OPENCLAW_PHASE1_REQUIRED_CAPABILITIES
+pub fn evaluate_provider_compatibility(
+    info: &ProviderInfo,
+    health: Option<&ProviderHealth>,
+) -> ProviderCompatibilityReport {
+    let missing_capabilities = PROVIDER_PHASE1_REQUIRED_CAPABILITIES
         .iter()
         .filter(|required| !contains_trimmed_value(info.capabilities.as_slice(), required))
         .map(|required| (*required).to_string())
         .collect::<Vec<_>>();
     if !missing_capabilities.is_empty() {
-        return OpenClawProviderCompatibilityReport {
-            status: OpenClawProviderCompatibilityStatus::Incompatible,
+        return ProviderCompatibilityReport {
+            status: ProviderCompatibilityStatus::Incompatible,
             fallback_reason: Some(format!(
                 "missing_provider_capabilities:{}",
                 missing_capabilities.join(",")
@@ -107,11 +107,11 @@ pub fn evaluate_openclaw_provider_compatibility(
 
     let missing_supported_actions = if contains_trimmed_value(
         info.supported_action_sets.as_slice(),
-        OPENCLAW_PHASE1_ACTION_SET_ALIAS,
+        PROVIDER_PHASE1_ACTION_SET_ALIAS,
     ) {
         Vec::new()
     } else {
-        OPENCLAW_PHASE1_REQUIRED_ACTIONS
+        PROVIDER_PHASE1_REQUIRED_ACTIONS
             .iter()
             .filter(|required| {
                 !contains_trimmed_value(info.supported_action_sets.as_slice(), required)
@@ -120,8 +120,8 @@ pub fn evaluate_openclaw_provider_compatibility(
             .collect::<Vec<_>>()
     };
     if !missing_supported_actions.is_empty() {
-        return OpenClawProviderCompatibilityReport {
-            status: OpenClawProviderCompatibilityStatus::Incompatible,
+        return ProviderCompatibilityReport {
+            status: ProviderCompatibilityStatus::Incompatible,
             fallback_reason: Some(format!(
                 "missing_supported_actions:{}",
                 missing_supported_actions.join(",")
@@ -132,7 +132,7 @@ pub fn evaluate_openclaw_provider_compatibility(
     }
 
     let Some(health) = health else {
-        return OpenClawProviderCompatibilityReport::default();
+        return ProviderCompatibilityReport::default();
     };
 
     let raw_status = health
@@ -149,7 +149,7 @@ pub fn evaluate_openclaw_provider_compatibility(
     let lowered_status = status.to_ascii_lowercase();
     let healthy_status = matches!(lowered_status.as_str(), "ok" | "ready");
     if health.ok && healthy_status && !has_last_error {
-        return OpenClawProviderCompatibilityReport::default();
+        return ProviderCompatibilityReport::default();
     }
 
     let fallback_reason = health
@@ -168,8 +168,8 @@ pub fn evaluate_openclaw_provider_compatibility(
                 )
             })
         });
-    OpenClawProviderCompatibilityReport {
-        status: OpenClawProviderCompatibilityStatus::Degraded,
+    ProviderCompatibilityReport {
+        status: ProviderCompatibilityStatus::Degraded,
         fallback_reason,
         missing_capabilities: Vec::new(),
         missing_supported_actions: Vec::new(),
@@ -183,7 +183,7 @@ fn contains_trimmed_value(values: &[String], expected: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct OpenClawProviderHealth {
+pub struct ProviderHealth {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
@@ -196,7 +196,7 @@ pub struct OpenClawProviderHealth {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct OpenClawFeedbackAck {
+pub struct ProviderFeedbackAck {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
@@ -205,7 +205,7 @@ pub struct OpenClawFeedbackAck {
 }
 
 #[derive(Debug)]
-pub enum OpenClawLocalHttpError {
+pub enum ProviderLoopbackHttpError {
     InvalidBaseUrl(String),
     RequestFailed {
         path: String,
@@ -226,7 +226,7 @@ pub enum OpenClawLocalHttpError {
     },
 }
 
-impl fmt::Display for OpenClawLocalHttpError {
+impl fmt::Display for ProviderLoopbackHttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidBaseUrl(detail) => write!(f, "invalid openclaw base url: {detail}"),
@@ -251,26 +251,26 @@ impl fmt::Display for OpenClawLocalHttpError {
     }
 }
 
-impl Error for OpenClawLocalHttpError {}
+impl Error for ProviderLoopbackHttpError {}
 
 #[derive(Debug)]
-pub struct OpenClawLocalHttpClient {
+pub struct ProviderLoopbackHttpClient {
     base_url: Url,
     auth_token: Option<String>,
     http: Client,
 }
 
-impl OpenClawLocalHttpClient {
+impl ProviderLoopbackHttpClient {
     pub fn new(
         base_url: &str,
         auth_token: Option<&str>,
         timeout_ms: u64,
-    ) -> Result<Self, OpenClawLocalHttpError> {
-        let base_url = validate_openclaw_local_http_base_url(base_url)?;
+    ) -> Result<Self, ProviderLoopbackHttpError> {
+        let base_url = validate_provider_loopback_http_base_url(base_url)?;
         let http = Client::builder()
             .timeout(Duration::from_millis(timeout_ms.max(1)))
             .build()
-            .map_err(|err| OpenClawLocalHttpError::RequestFailed {
+            .map_err(|err| ProviderLoopbackHttpError::RequestFailed {
                 path: "<client>".to_string(),
                 detail: err.to_string(),
             })?;
@@ -284,29 +284,29 @@ impl OpenClawLocalHttpClient {
         })
     }
 
-    pub fn provider_info(&self) -> Result<OpenClawProviderInfo, OpenClawLocalHttpError> {
+    pub fn provider_info(&self) -> Result<ProviderInfo, ProviderLoopbackHttpError> {
         self.get_json("/v1/provider/info")
     }
 
-    pub fn provider_health(&self) -> Result<OpenClawProviderHealth, OpenClawLocalHttpError> {
+    pub fn provider_health(&self) -> Result<ProviderHealth, ProviderLoopbackHttpError> {
         self.get_json("/v1/provider/health")
     }
 
     pub fn request_decision(
         &self,
         request: &DecisionRequest,
-    ) -> Result<DecisionResponse, OpenClawLocalHttpError> {
+    ) -> Result<DecisionResponse, ProviderLoopbackHttpError> {
         self.post_json("/v1/world-simulator/decision", request)
     }
 
     pub fn submit_feedback(
         &self,
         feedback: &FeedbackEnvelope,
-    ) -> Result<OpenClawFeedbackAck, OpenClawLocalHttpError> {
+    ) -> Result<ProviderFeedbackAck, ProviderLoopbackHttpError> {
         self.post_json("/v1/world-simulator/feedback", feedback)
     }
 
-    fn get_json<Response>(&self, path: &str) -> Result<Response, OpenClawLocalHttpError>
+    fn get_json<Response>(&self, path: &str) -> Result<Response, ProviderLoopbackHttpError>
     where
         Response: DeserializeOwned,
     {
@@ -318,7 +318,7 @@ impl OpenClawLocalHttpClient {
         &self,
         path: &str,
         payload: &Request,
-    ) -> Result<Response, OpenClawLocalHttpError>
+    ) -> Result<Response, ProviderLoopbackHttpError>
     where
         Request: Serialize + ?Sized,
         Response: DeserializeOwned,
@@ -331,11 +331,11 @@ impl OpenClawLocalHttpClient {
         &self,
         method: Method,
         path: &str,
-    ) -> Result<RequestBuilder, OpenClawLocalHttpError> {
+    ) -> Result<RequestBuilder, ProviderLoopbackHttpError> {
         let url = self
             .base_url
             .join(path.trim_start_matches('/'))
-            .map_err(|err| OpenClawLocalHttpError::InvalidBaseUrl(err.to_string()))?;
+            .map_err(|err| ProviderLoopbackHttpError::InvalidBaseUrl(err.to_string()))?;
         let mut request = self.http.request(method, url);
         if let Some(token) = &self.auth_token {
             request = request.bearer_auth(token);
@@ -347,26 +347,26 @@ impl OpenClawLocalHttpClient {
         &self,
         request: RequestBuilder,
         path: &str,
-    ) -> Result<Response, OpenClawLocalHttpError>
+    ) -> Result<Response, ProviderLoopbackHttpError>
     where
         Response: DeserializeOwned,
     {
         let response = request
             .send()
-            .map_err(|err| OpenClawLocalHttpError::RequestFailed {
+            .map_err(|err| ProviderLoopbackHttpError::RequestFailed {
                 path: path.to_string(),
                 detail: err.to_string(),
             })?;
         let status = response.status();
         let body = response
             .bytes()
-            .map_err(|err| OpenClawLocalHttpError::RequestFailed {
+            .map_err(|err| ProviderLoopbackHttpError::RequestFailed {
                 path: path.to_string(),
                 detail: err.to_string(),
             })?;
         if status == StatusCode::UNAUTHORIZED {
             let detail = String::from_utf8_lossy(body.as_ref()).trim().to_string();
-            return Err(OpenClawLocalHttpError::Unauthorized {
+            return Err(ProviderLoopbackHttpError::Unauthorized {
                 path: path.to_string(),
                 detail: if detail.is_empty() {
                     "HTTP 401".to_string()
@@ -376,42 +376,42 @@ impl OpenClawLocalHttpClient {
             });
         }
         if !status.is_success() {
-            return Err(OpenClawLocalHttpError::UnexpectedStatus {
+            return Err(ProviderLoopbackHttpError::UnexpectedStatus {
                 path: path.to_string(),
                 status_code: status.as_u16(),
                 body: String::from_utf8_lossy(body.as_ref()).trim().to_string(),
             });
         }
-        serde_json::from_slice(body.as_ref()).map_err(|err| OpenClawLocalHttpError::DecodeFailed {
+        serde_json::from_slice(body.as_ref()).map_err(|err| ProviderLoopbackHttpError::DecodeFailed {
             path: path.to_string(),
             detail: err.to_string(),
         })
     }
 }
 
-pub fn validate_openclaw_local_http_base_url(
+pub fn validate_provider_loopback_http_base_url(
     base_url: &str,
-) -> Result<Url, OpenClawLocalHttpError> {
+) -> Result<Url, ProviderLoopbackHttpError> {
     let trimmed = base_url.trim();
     if trimmed.is_empty() {
-        return Err(OpenClawLocalHttpError::InvalidBaseUrl(
+        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
             "base url cannot be empty".to_string(),
         ));
     }
     let url = Url::parse(trimmed)
-        .map_err(|err| OpenClawLocalHttpError::InvalidBaseUrl(err.to_string()))?;
+        .map_err(|err| ProviderLoopbackHttpError::InvalidBaseUrl(err.to_string()))?;
     if url.scheme() != "http" {
-        return Err(OpenClawLocalHttpError::InvalidBaseUrl(
+        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
             "scheme must be http for localhost provider".to_string(),
         ));
     }
     let Some(host) = url.host_str() else {
-        return Err(OpenClawLocalHttpError::InvalidBaseUrl(
+        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
             "host is required".to_string(),
         ));
     };
     if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
-        return Err(OpenClawLocalHttpError::InvalidBaseUrl(
+        return Err(ProviderLoopbackHttpError::InvalidBaseUrl(
             "host must be loopback (127.0.0.1 / localhost / ::1)".to_string(),
         ));
     }

@@ -1,6 +1,6 @@
 ---
 name: oasis7
-description: OpenClaw real-play and parity workflow for oasis7. Use when the user wants to configure, start, validate, or debug a real local OpenClaw gameplay path, including downloading a GitHub Release game bundle, installing the lightweight runtime agent, starting the local bridge, launching `oasis7_game_launcher`, probing `openclaw_local_http`, or running parity smoke for OpenClaw NPC behavior.
+description: OpenClaw real-play and parity workflow for oasis7. Use when the user wants to configure, start, validate, or debug a real local OpenClaw gameplay path, including downloading a GitHub Release game bundle, installing the lightweight runtime agent, starting the local bridge, launching `oasis7_game_launcher`, probing `provider_loopback_http`, or running parity smoke for OpenClaw NPC behavior.
 ---
 
 # Oasis7
@@ -8,7 +8,7 @@ description: OpenClaw real-play and parity workflow for oasis7. Use when the use
 ## Overview
 
 `oasis7` is the repo-local workflow for running a real OpenClaw-backed oasis7 NPC.
-Use it for “能不能真跑起来”, “怎么配 OpenClaw 试玩”, “起 bridge / launcher / parity”, and first-line debugging of the local `openclaw_local_http` path.
+Use it for “能不能真跑起来”, “怎么配 OpenClaw 试玩”, “起 bridge / launcher / parity”, and first-line debugging of the local `provider_loopback_http` path.
 
 默认推荐 `bundle-first`：先下载 GitHub Release 的游戏包，再把 OpenClaw provider 配到该 bundle 的 `run-game.sh`，避免把试玩路径绑死在 repo 内的相对目录结构上。
 当 bundle 已就绪且本地 bridge 已在运行时，`play --bundle-dir ... --reuse-bridge --skip-agent-setup` 是一条一等公民的无 `cargo` real-play 路径；`doctor` 也会把这条路径与 repo-backed bridge/bootstrap readiness 分开报告。
@@ -22,8 +22,8 @@ Use this skill when the task involves any of these:
 - Configure a real OpenClaw gameplay run instead of mock provider tests
 - Download a playable oasis7 bundle from GitHub Release
 - Install or refresh the lightweight OpenClaw runtime agent
-- Start or debug `oasis7_openclaw_local_bridge`
-- Launch the product path with `oasis7_game_launcher` in `openclaw_local_http` mode
+- Start or debug `oasis7_provider_local_bridge`
+- Launch the product path with `oasis7_game_launcher` in `provider_loopback_http` mode
 - Run `P0-001` parity smoke or inspect OpenClaw latency / wait-only failures
 - Explain which OpenClaw settings are required for a real local试玩
 
@@ -91,13 +91,13 @@ Useful overrides:
 For real gameplay or parity, prefer the repo-owned lightweight agent instead of the user’s default OpenClaw workspace.
 
 ```bash
-scripts/setup-openclaw-oasis7-runtime.sh
+scripts/setup-provider-oasis7-runtime.sh
 ```
 
 Defaults:
 
-- agent id: `oasis7_openclaw_agent`
-- workspace: `tools/openclaw/oasis7_openclaw_workspace`
+- agent id: `oasis7_provider_agent`
+- workspace: `tools/provider/oasis7_provider_workspace`
 - model: `custom-right-codes/gpt-5.4`
 
 The runtime workspace is intentionally slim and is not meant for daily chat.
@@ -107,7 +107,7 @@ The runtime workspace is intentionally slim and is not meant for daily chat.
 Run the local bridge that exposes world-simulator provider endpoints:
 
 ```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_openclaw_local_bridge -- --openclaw-agent oasis7_openclaw_agent
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --openclaw-agent oasis7_provider_agent
 ```
 
 Expected local provider URL:
@@ -131,7 +131,7 @@ Repo source path:
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
   --scenario llm_bootstrap \
   --with-llm \
-  --agent-provider-mode openclaw_local_http \
+  --agent-provider-mode provider_loopback_http \
   --openclaw-base-url http://127.0.0.1:5841 \
   --openclaw-connect-timeout-ms 15000 \
   --openclaw-agent-profile oasis7_p0_low_freq_npc
@@ -143,7 +143,7 @@ Release bundle path:
 ./run-game.sh \
   --scenario llm_bootstrap \
   --with-llm \
-  --agent-provider-mode openclaw_local_http \
+  --agent-provider-mode provider_loopback_http \
   --openclaw-base-url http://127.0.0.1:5841 \
   --openclaw-connect-timeout-ms 15000 \
   --openclaw-agent-profile oasis7_p0_low_freq_npc
@@ -151,7 +151,7 @@ Release bundle path:
 
 Required real-play settings:
 
-- `agent_provider_mode=openclaw_local_http`
+- `agent_provider_mode=provider_loopback_http`
 - `openclaw_base_url=http://127.0.0.1:5841`
 - `openclaw_connect_timeout_ms=15000`
 - `openclaw_agent_profile=oasis7_p0_low_freq_npc`
@@ -206,7 +206,7 @@ If you need Viewer / `software_safe` behavior, fallback rules, or current observ
 Use this as the fastest real verification path:
 
 ```bash
-bash scripts/openclaw-parity-p0.sh \
+bash scripts/provider-parity-p0.sh \
   --openclaw-only \
   --samples 1 \
   --ticks 4 \
@@ -267,8 +267,8 @@ What it does:
 
 - `download`: downloads and extracts the GitHub Release bundle, then prints the usable bundle directory
 - `doctor`: checks command availability, Gateway health, bridge health, provider info, runtime agent presence, and optional `--bundle-dir` validity; add `--json` for machine-readable output
-- `play`: bootstrap `oasis7_openclaw_agent` unless you disable it, verify Gateway health, start the local bridge unless you pass `--reuse-bridge`, then run launcher from the bundle or source tree
-- `smoke`: remains repo-backed because the parity harness lives under `scripts/openclaw-parity-p0.sh`
+- `play`: bootstrap `oasis7_provider_agent` unless you disable it, verify Gateway health, start the local bridge unless you pass `--reuse-bridge`, then run launcher from the bundle or source tree
+- `smoke`: remains repo-backed because the parity harness lives under `scripts/provider-parity-p0.sh`
 
 ## Debug Checklist
 
@@ -295,10 +295,10 @@ Current known reality:
 
 Use these files as the source of truth:
 
-- Bridge entry: `crates/oasis7/src/bin/oasis7_openclaw_local_bridge.rs`
+- Bridge entry: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
 - Launcher entry: `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-- Runtime workspace installer: `scripts/setup-openclaw-oasis7-runtime.sh`
-- Runtime workspace policy: `tools/openclaw/oasis7_openclaw_workspace/AGENTS.md`
+- Runtime workspace installer: `scripts/setup-provider-oasis7-runtime.sh`
+- Runtime workspace policy: `tools/provider/oasis7_provider_workspace/AGENTS.md`
 - Module tracker: `doc/world-simulator/project.md`
 - Dual-mode verdict: `doc/testing/openclaw-dual-mode-t4-blocker-2026-03-16.md`
 - Parity rollout verdict: `doc/testing/openclaw-agent-parity-p0-t4-closure-2026-03-17.md`

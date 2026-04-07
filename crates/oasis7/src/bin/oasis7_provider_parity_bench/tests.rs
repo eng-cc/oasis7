@@ -7,7 +7,7 @@ fn parse_options_accepts_openclaw_provider() {
     let options = parse_options(
         [
             "--provider",
-            "openclaw_local_http",
+            "provider_loopback_http",
             "--scenario-id",
             "P0-002",
             "--benchmark-run-id",
@@ -20,7 +20,7 @@ fn parse_options_accepts_openclaw_provider() {
         .into_iter(),
     )
     .expect("parse options");
-    assert_eq!(options.provider, BenchProviderKind::OpenclawLocalHttp);
+    assert_eq!(options.provider, BenchProviderKind::ProviderLoopbackHttp);
     assert_eq!(options.scenario_id, "P0-002");
     assert_eq!(options.benchmark_run_id, "run-1");
     assert_eq!(
@@ -29,7 +29,7 @@ fn parse_options_accepts_openclaw_provider() {
     );
     assert_eq!(
         options.openclaw_agent_profile,
-        DEFAULT_OPENCLAW_AGENT_PROFILE
+        DEFAULT_PROVIDER_AGENT_PROFILE
     );
 }
 
@@ -38,7 +38,7 @@ fn parse_options_rejects_openclaw_without_base_url() {
     let err = parse_options(
         [
             "--provider",
-            "openclaw_local_http",
+            "provider_loopback_http",
             "--benchmark-run-id",
             "run-1",
         ]
@@ -53,7 +53,7 @@ fn parse_options_accepts_custom_openclaw_agent_profile() {
     let options = parse_options(
         [
             "--provider",
-            "openclaw_local_http",
+            "provider_loopback_http",
             "--benchmark-run-id",
             "run-2",
             "--openclaw-base-url",
@@ -184,7 +184,7 @@ fn parse_options_accepts_openclaw_player_parity_execution_mode() {
     let options = parse_options(
         [
             "--provider",
-            "openclaw_local_http",
+            "provider_loopback_http",
             "--benchmark-run-id",
             "run-3",
             "--openclaw-base-url",
@@ -212,7 +212,7 @@ fn parse_options_rejects_builtin_player_parity_execution_mode() {
         .into_iter(),
     )
     .expect_err("builtin parity mode should fail");
-    assert!(err.contains("openclaw_local_http"));
+    assert!(err.contains("provider_loopback_http"));
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn prepare_provider_info_captures_openclaw_compatibility_status() {
     });
 
     let options = CliOptions {
-        provider: BenchProviderKind::OpenclawLocalHttp,
+        provider: BenchProviderKind::ProviderLoopbackHttp,
         openclaw_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };
@@ -330,7 +330,7 @@ fn prepare_provider_info_marks_incompatible_supported_actions() {
     });
 
     let options = CliOptions {
-        provider: BenchProviderKind::OpenclawLocalHttp,
+        provider: BenchProviderKind::ProviderLoopbackHttp,
         openclaw_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };
@@ -368,7 +368,7 @@ fn prepare_provider_info_marks_missing_capabilities_as_incompatible() {
     });
 
     let options = CliOptions {
-        provider: BenchProviderKind::OpenclawLocalHttp,
+        provider: BenchProviderKind::ProviderLoopbackHttp,
         openclaw_base_url: Some(format!("http://{bind}")),
         ..CliOptions::default()
     };

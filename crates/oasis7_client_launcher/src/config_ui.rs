@@ -154,7 +154,7 @@ impl ClientLauncherApp {
         stack_text_fields: bool,
     ) {
         let current =
-            canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+            canonical_provider_execution_mode(self.config.agent_execution_lane.as_str())
                 .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE);
         if self.config.agent_execution_lane != current {
             self.config.agent_execution_lane = current.to_string();
@@ -667,7 +667,7 @@ impl ClientLauncherApp {
     }
 
     fn render_openclaw_provider_summary(&mut self, ui: &mut egui::Ui) {
-        if !is_openclaw_local_http_mode(&self.config) {
+        if !is_provider_loopback_http_mode(&self.config) {
             return;
         }
 
@@ -678,7 +678,7 @@ impl ClientLauncherApp {
                 "OpenClaw Provider Compatibility Check",
             ));
             let status = match &self.openclaw_provider_check_status {
-                OpenClawProviderCheckStatus::Disabled => OpenClawProviderCheckStatus::Idle,
+                ProviderCheckStatus::Disabled => ProviderCheckStatus::Idle,
                 other => other.clone(),
             };
             ui.colored_label(status.color(), status.text(self.ui_language));
@@ -698,7 +698,7 @@ impl ClientLauncherApp {
         ui.small(format!(
             "{}: {} | {}: {}ms",
             self.tr("执行 Lane", "Execution Lane"),
-            canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+            canonical_provider_execution_mode(self.config.agent_execution_lane.as_str())
                 .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE),
             self.tr("连接超时", "Connect Timeout"),
             self.config.agent_provider_connect_timeout_ms.trim()
@@ -725,9 +725,9 @@ impl ClientLauncherApp {
         });
 
         if let Some(snapshot) = match &self.openclaw_provider_check_status {
-            OpenClawProviderCheckStatus::Ready(snapshot)
-            | OpenClawProviderCheckStatus::Degraded(snapshot)
-            | OpenClawProviderCheckStatus::Incompatible(snapshot) => Some(snapshot),
+            ProviderCheckStatus::Ready(snapshot)
+            | ProviderCheckStatus::Degraded(snapshot)
+            | ProviderCheckStatus::Incompatible(snapshot) => Some(snapshot),
             _ => None,
         } {
             ui.small(format!(
@@ -800,12 +800,12 @@ impl ClientLauncherApp {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn check_openclaw_local_provider(&mut self) {
-        self.openclaw_provider_check_status = OpenClawProviderCheckStatus::Checking;
+        self.openclaw_provider_check_status = ProviderCheckStatus::Checking;
         let base_url = match effective_openclaw_base_url(&self.config) {
             Ok(value) => value,
             Err(err) => {
                 self.openclaw_provider_check_status =
-                    OpenClawProviderCheckStatus::InvalidConfig(err.clone());
+                    ProviderCheckStatus::InvalidConfig(err.clone());
                 self.append_log(format!("openclaw provider check invalid config: {err}"));
                 return;
             }
@@ -814,12 +814,12 @@ impl ClientLauncherApp {
             Ok(value) => value,
             Err(err) => {
                 self.openclaw_provider_check_status =
-                    OpenClawProviderCheckStatus::InvalidConfig(err.clone());
+                    ProviderCheckStatus::InvalidConfig(err.clone());
                 self.append_log(format!("openclaw provider check invalid timeout: {err}"));
                 return;
             }
         };
-        match check_openclaw_local_http_provider(
+        match check_provider_loopback_http_provider(
             base_url.as_str(),
             Some(self.config.agent_provider_auth_token.as_str()),
             timeout_ms,
@@ -837,37 +837,37 @@ impl ClientLauncherApp {
                 let compatibility_status = snapshot.compatibility_status;
                 let fallback_reason = snapshot.fallback_reason.clone();
                 self.openclaw_provider_check_status = match compatibility_status {
-                    OpenClawProviderCompatibilityStatus::Ready => {
-                        OpenClawProviderCheckStatus::Ready(snapshot)
+                    ProviderCompatibilityStatus::Ready => {
+                        ProviderCheckStatus::Ready(snapshot)
                     }
-                    OpenClawProviderCompatibilityStatus::Degraded => {
-                        OpenClawProviderCheckStatus::Degraded(snapshot)
+                    ProviderCompatibilityStatus::Degraded => {
+                        ProviderCheckStatus::Degraded(snapshot)
                     }
-                    OpenClawProviderCompatibilityStatus::Incompatible => {
-                        OpenClawProviderCheckStatus::Incompatible(snapshot)
+                    ProviderCompatibilityStatus::Incompatible => {
+                        ProviderCheckStatus::Incompatible(snapshot)
                     }
                 };
                 self.append_log(format!(
                     "openclaw provider check succeeded: provider_id={provider_id} version={version} base_url={base_url} execution_mode={} timeout_ms={timeout_ms} compatibility_status={} fallback_reason={}",
-                    canonical_openclaw_execution_mode(self.config.agent_execution_lane.as_str())
+                    canonical_provider_execution_mode(self.config.agent_execution_lane.as_str())
                         .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE),
                     compatibility_status.as_str(),
                     fallback_reason.as_deref().unwrap_or("none")
                 ));
             }
-            Err(OpenClawProviderCheckError::InvalidConfig(detail)) => {
+            Err(ProviderCheckError::InvalidConfig(detail)) => {
                 self.openclaw_provider_check_status =
-                    OpenClawProviderCheckStatus::InvalidConfig(detail.clone());
+                    ProviderCheckStatus::InvalidConfig(detail.clone());
                 self.append_log(format!("openclaw provider check invalid config: {detail}"));
             }
-            Err(OpenClawProviderCheckError::Unauthorized(detail)) => {
+            Err(ProviderCheckError::Unauthorized(detail)) => {
                 self.openclaw_provider_check_status =
-                    OpenClawProviderCheckStatus::Unauthorized(detail.clone());
+                    ProviderCheckStatus::Unauthorized(detail.clone());
                 self.append_log(format!("openclaw provider check unauthorized: {base_url}"));
             }
-            Err(OpenClawProviderCheckError::Unreachable(detail)) => {
+            Err(ProviderCheckError::Unreachable(detail)) => {
                 self.openclaw_provider_check_status =
-                    OpenClawProviderCheckStatus::Unreachable(detail.clone());
+                    ProviderCheckStatus::Unreachable(detail.clone());
                 self.append_log(format!("openclaw provider check failed: {detail}"));
             }
         }
@@ -875,7 +875,7 @@ impl ClientLauncherApp {
 
     #[cfg(target_arch = "wasm32")]
     fn check_openclaw_local_provider(&mut self) {
-        self.openclaw_provider_check_status = OpenClawProviderCheckStatus::Unsupported(
+        self.openclaw_provider_check_status = ProviderCheckStatus::Unsupported(
             "web launcher does not support the native localhost OpenClaw compatibility check"
                 .to_string(),
         );

@@ -82,6 +82,6 @@ What `software_safe` is not:
 
 ## Current OpenClaw UI Boundary
 
-- in current `runtime live + openclaw_local_http` real-play, `agent_chat` and `prompt_control` should be treated as observer/debug surfaces, not an end-to-end supported player-authority path
+- in current `runtime live + provider_loopback_http` real-play, `agent_chat` and `prompt_control` should be treated as observer/debug surfaces, not an end-to-end supported player-authority path
 - for QA-specific software-safe prompt/chat evidence, prefer `./scripts/viewer-software-safe-chat-regression.sh`
 - for deeper Viewer/testing guidance, see `testing-manual.md` and the Viewer manual

@@ -1227,7 +1227,7 @@ function buildSemanticCapability(actionId) {
       actionId,
       enabled: false,
       code: "observer_only",
-      reason: "selected agent runs through OpenClaw(Local HTTP); software_safe stays observer-only for prompt/chat on this lane"
+      reason: "selected agent runs through the OpenClaw-backed loopback provider; software_safe stays observer-only for prompt/chat on this lane"
     };
   }
   if (policy) {
@@ -1741,7 +1741,7 @@ function selectedAgentExecutionDebugContext() {
 }
 function selectedAgentInteractionMode() {
   const debugContext = selectedAgentExecutionDebugContext();
-  if (debugContext?.provider_mode === "openclaw_local_http") {
+  if (debugContext?.provider_mode === "provider_loopback_http") {
     return "observer_only";
   }
   return "interactive";
@@ -1870,7 +1870,7 @@ function describeControls() {
     usage: "Use fillControlExample(action), sendControl(action), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
       "software_safe acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
-      "when selectedAgentDebug.provider_mode=openclaw_local_http, prompt/chat stay observer-only in runtime live",
+      "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
       "without viewer auth bootstrap the browser stays guest_session only; hosted public join player-session issuance is still pending"
     ]
   };
@@ -4352,19 +4352,19 @@ function InteractionPanel() {
     }), null);
     insert(_el$80, createComponent(Show, {
       get when() {
-        return debugContext()?.provider_mode === "openclaw_local_http";
+        return debugContext()?.provider_mode === "provider_loopback_http";
       },
       get children() {
         return createComponent(EmptyState, {
           get children() {
-            return `Selected agent currently runs through OpenClaw(Local HTTP) in ${debugContext()?.execution_mode || "headless_agent"}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`;
+            return `Selected agent currently runs through the OpenClaw-backed loopback provider in ${debugContext()?.execution_mode || "headless_agent"}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`;
           }
         });
       }
     }), _el$83);
     insert(_el$80, createComponent(Show, {
       get when() {
-        return debugContext()?.provider_mode !== "openclaw_local_http";
+        return debugContext()?.provider_mode !== "provider_loopback_http";
       },
       get children() {
         return createComponent(Show, {

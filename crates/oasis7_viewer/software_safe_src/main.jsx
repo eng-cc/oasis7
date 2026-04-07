@@ -563,14 +563,14 @@ function InteractionPanel() {
           <Badge>{`restoredFrom=${`v${promptVersionState().restoredFromVersion}`}`}</Badge>
         </Show>
       </div>
-      <Show when={debugContext()?.provider_mode === "openclaw_local_http"}>
+      <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
         <EmptyState>
-          {`Selected agent currently runs through OpenClaw(Local HTTP) in ${
+          {`Selected agent currently runs through the OpenClaw-backed loopback provider in ${
             debugContext()?.execution_mode || "headless_agent"
           }; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`}
         </EmptyState>
       </Show>
-      <Show when={debugContext()?.provider_mode !== "openclaw_local_http"}>
+      <Show when={debugContext()?.provider_mode !== "provider_loopback_http"}>
         <Show
           when={interactionEnabled()}
           fallback={<EmptyState>{promptCapability().reason}</EmptyState>}

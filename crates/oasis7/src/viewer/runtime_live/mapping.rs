@@ -7,13 +7,13 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    openclaw_phase1_required_actions, openclaw_phase1_required_capabilities, Agent,
+    provider_phase1_required_actions, provider_phase1_required_capabilities, Agent,
     AgentExecutionDebugContext, Location, RejectReason as SimulatorRejectReason, ResourceOwner,
     WorldConfig, WorldEvent, WorldEventKind, WorldModel, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 
-use super::control_plane::{runtime_openclaw_settings_from_env, RuntimeLlmSidecar};
+use super::control_plane::{runtime_provider_settings_from_env, RuntimeLlmSidecar};
 use super::location_id_for_pos;
 use super::ViewerLiveDecisionMode;
 
@@ -58,7 +58,7 @@ fn collect_agent_execution_debug_contexts(
         return BTreeMap::new();
     }
 
-    let Ok(Some(settings)) = runtime_openclaw_settings_from_env() else {
+    let Ok(Some(settings)) = runtime_provider_settings_from_env() else {
         return BTreeMap::new();
     };
 
@@ -70,7 +70,7 @@ fn collect_agent_execution_debug_contexts(
             (
                 agent_id.clone(),
                 AgentExecutionDebugContext {
-                    provider_mode: Some("openclaw_local_http".to_string()),
+                    provider_mode: Some("provider_loopback_http".to_string()),
                     compatibility_status: Some(if fallback_reason.is_some() {
                         "degraded".to_string()
                     } else {
@@ -82,11 +82,11 @@ fn collect_agent_execution_debug_contexts(
                     ),
                     action_schema_version: Some(DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string()),
                     environment_class: Some("runtime_live".to_string()),
-                    capabilities: openclaw_phase1_required_capabilities()
+                    capabilities: provider_phase1_required_capabilities()
                         .iter()
                         .map(|value| (*value).to_string())
                         .collect(),
-                    supported_action_sets: openclaw_phase1_required_actions()
+                    supported_action_sets: provider_phase1_required_actions()
                         .iter()
                         .map(|value| (*value).to_string())
                         .collect(),

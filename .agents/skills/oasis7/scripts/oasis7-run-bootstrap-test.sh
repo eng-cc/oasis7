@@ -33,7 +33,7 @@ case "$url" in
     printf '{"status":"ok"}\n'
     ;;
   http://127.0.0.1:5841/v1/provider/info)
-    printf '{"provider_id":"openclaw_local_http","provider_version":"test","protocol_version":"v1"}\n'
+    printf '{"provider_id":"provider_loopback_http","provider_version":"test","protocol_version":"v1"}\n'
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -47,7 +47,7 @@ cat > "$fake_bin/openclaw" <<'OPENCLAW'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$#" -ge 3 && "$1" == "agents" && "$2" == "list" && "$3" == "--json" ]]; then
-  printf '[{"id":"oasis7_openclaw_agent","workspace":"fake-workspace","model":"fake-model"}]\n'
+  printf '[{"id":"oasis7_provider_agent","workspace":"fake-workspace","model":"fake-model"}]\n'
   exit 0
 fi
 echo "unexpected openclaw invocation: $*" >&2

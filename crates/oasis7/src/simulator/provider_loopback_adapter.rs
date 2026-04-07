@@ -1,10 +1,10 @@
 use super::{
     Action, DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse,
-    FeedbackEnvelope, OpenClawFeedbackAck, OpenClawLocalHttpClient, OpenClawLocalHttpError,
+    FeedbackEnvelope, ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
     ProviderDecision,
 };
 
-const DEFAULT_OPENCLAW_ADAPTER_PROVIDER_ID: &str = "openclaw_local_http";
+const DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID: &str = "provider_loopback_http";
 const PHASE1_ALLOWED_ACTION_REFS: &[&str] = &[
     "wait",
     "wait_ticks",
@@ -15,29 +15,29 @@ const PHASE1_ALLOWED_ACTION_REFS: &[&str] = &[
 ];
 
 #[derive(Debug)]
-pub struct OpenClawAdapter {
+pub struct ProviderLoopbackAdapter {
     provider_id: String,
-    client: OpenClawLocalHttpClient,
+    client: ProviderLoopbackHttpClient,
 }
 
-impl OpenClawAdapter {
+impl ProviderLoopbackAdapter {
     pub fn new(
         base_url: &str,
         auth_token: Option<&str>,
         timeout_ms: u64,
-    ) -> Result<Self, OpenClawLocalHttpError> {
-        let client = OpenClawLocalHttpClient::new(base_url, auth_token, timeout_ms)?;
+    ) -> Result<Self, ProviderLoopbackHttpError> {
+        let client = ProviderLoopbackHttpClient::new(base_url, auth_token, timeout_ms)?;
         Ok(Self::with_client(
-            DEFAULT_OPENCLAW_ADAPTER_PROVIDER_ID,
+            DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID,
             client,
         ))
     }
 
-    pub fn with_client(provider_id: impl Into<String>, client: OpenClawLocalHttpClient) -> Self {
+    pub fn with_client(provider_id: impl Into<String>, client: ProviderLoopbackHttpClient) -> Self {
         let provider_id = provider_id.into();
         Self {
             provider_id: if provider_id.trim().is_empty() {
-                DEFAULT_OPENCLAW_ADAPTER_PROVIDER_ID.to_string()
+                DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID.to_string()
             } else {
                 provider_id
             },
@@ -69,7 +69,7 @@ impl OpenClawAdapter {
                 } else {
                     Err(DecisionProviderError::new(
                         "action_ref_not_allowed",
-                        "OpenClawAdapter phase-1 whitelist does not permit wait_ticks",
+                        "ProviderLoopbackAdapter phase-1 whitelist does not permit wait_ticks",
                         false,
                     ))
                 }
@@ -95,7 +95,7 @@ impl OpenClawAdapter {
                 {
                     return Err(DecisionProviderError::new(
                         "action_ref_not_allowed",
-                        format!("action_ref `{action_ref}` is outside OpenClawAdapter phase-1 whitelist"),
+                        format!("action_ref `{action_ref}` is outside ProviderLoopbackAdapter phase-1 whitelist"),
                         false,
                     ));
                 }
@@ -111,7 +111,7 @@ impl OpenClawAdapter {
                     None => Err(DecisionProviderError::new(
                         "action_kind_not_supported",
                         format!(
-                            "action_ref `{action_ref}` is phase-1 allowed but its Action variant is not yet supported by OpenClawAdapter"
+                            "action_ref `{action_ref}` is phase-1 allowed but its Action variant is not yet supported by ProviderLoopbackAdapter"
                         ),
                         false,
                     )),
@@ -120,18 +120,18 @@ impl OpenClawAdapter {
         }
     }
 
-    fn map_http_error(error: OpenClawLocalHttpError) -> DecisionProviderError {
+    fn map_http_error(error: ProviderLoopbackHttpError) -> DecisionProviderError {
         match error {
-            OpenClawLocalHttpError::InvalidBaseUrl(detail) => {
+            ProviderLoopbackHttpError::InvalidBaseUrl(detail) => {
                 DecisionProviderError::new("provider_config_invalid", detail, false)
             }
-            OpenClawLocalHttpError::RequestFailed { detail, .. } => {
+            ProviderLoopbackHttpError::RequestFailed { detail, .. } => {
                 DecisionProviderError::new("provider_unreachable", detail, true)
             }
-            OpenClawLocalHttpError::Unauthorized { detail, .. } => {
+            ProviderLoopbackHttpError::Unauthorized { detail, .. } => {
                 DecisionProviderError::new("provider_unauthorized", detail, false)
             }
-            OpenClawLocalHttpError::UnexpectedStatus {
+            ProviderLoopbackHttpError::UnexpectedStatus {
                 status_code, body, ..
             } => DecisionProviderError::new(
                 format!("provider_http_{status_code}"),
@@ -142,13 +142,13 @@ impl OpenClawAdapter {
                 },
                 status_code >= 500,
             ),
-            OpenClawLocalHttpError::DecodeFailed { detail, .. } => {
+            ProviderLoopbackHttpError::DecodeFailed { detail, .. } => {
                 DecisionProviderError::new("provider_payload_invalid", detail, false)
             }
         }
     }
 
-    fn map_feedback_ack_error(ack: OpenClawFeedbackAck) -> Result<(), DecisionProviderError> {
+    fn map_feedback_ack_error(ack: ProviderFeedbackAck) -> Result<(), DecisionProviderError> {
         if ack.ok {
             return Ok(());
         }
@@ -162,7 +162,7 @@ impl OpenClawAdapter {
     }
 }
 
-impl DecisionProvider for OpenClawAdapter {
+impl DecisionProvider for ProviderLoopbackAdapter {
     fn provider_id(&self) -> &str {
         self.provider_id.as_str()
     }

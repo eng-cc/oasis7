@@ -21,7 +21,7 @@ struct MockHttpResponse {
 }
 
 #[test]
-fn openclaw_local_http_client_round_trips_info_health_decision_and_feedback() {
+fn provider_loopback_http_client_round_trips_info_health_decision_and_feedback() {
     let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
     let fixture = golden_decision_provider_fixtures()
         .into_iter()
@@ -72,7 +72,7 @@ fn openclaw_local_http_client_round_trips_info_health_decision_and_feedback() {
     let expected_request_for_server = expected_request.clone();
     let expected_feedback_for_server = expected_feedback.clone();
     let response_clone = expected_response.clone();
-    let feedback_ack = OpenClawFeedbackAck {
+    let feedback_ack = ProviderFeedbackAck {
         ok: true,
         error_code: None,
         error: None,
@@ -135,7 +135,7 @@ fn openclaw_local_http_client_round_trips_info_health_decision_and_feedback() {
         }
     });
 
-    let client = OpenClawLocalHttpClient::new(base_url.as_str(), Some("secret-token"), 200)
+    let client = ProviderLoopbackHttpClient::new(base_url.as_str(), Some("secret-token"), 200)
         .expect("build client");
     let info = client.provider_info().expect("info");
     assert_eq!(info.provider_id, "openclaw-local");
@@ -174,19 +174,19 @@ fn openclaw_local_http_client_round_trips_info_health_decision_and_feedback() {
 }
 
 #[test]
-fn openclaw_local_http_client_rejects_non_loopback_base_url() {
-    let err = OpenClawLocalHttpClient::new("http://192.168.0.5:5841", None, 200)
+fn provider_loopback_http_client_rejects_non_loopback_base_url() {
+    let err = ProviderLoopbackHttpClient::new("http://192.168.0.5:5841", None, 200)
         .expect_err("non-loopback should fail");
     assert!(err.to_string().contains("loopback"));
 }
 
 #[test]
-fn openclaw_local_http_client_surfaces_http_401_on_decision() {
+fn provider_loopback_http_client_surfaces_http_401_on_decision() {
     let base_url = spawn_mock_http_server(1, |_| MockHttpResponse {
         status_code: 401,
         body: "unauthorized".to_string(),
     });
-    let client = OpenClawLocalHttpClient::new(base_url.as_str(), Some("bad-token"), 200)
+    let client = ProviderLoopbackHttpClient::new(base_url.as_str(), Some("bad-token"), 200)
         .expect("build client");
     let request = golden_decision_provider_fixtures()
         .into_iter()
@@ -197,7 +197,7 @@ fn openclaw_local_http_client_surfaces_http_401_on_decision() {
     let err = client
         .request_decision(&request)
         .expect_err("401 should surface");
-    assert!(matches!(err, OpenClawLocalHttpError::Unauthorized { .. }));
+    assert!(matches!(err, ProviderLoopbackHttpError::Unauthorized { .. }));
     assert!(err.to_string().contains("unauthorized"));
 }
 

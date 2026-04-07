@@ -17,7 +17,7 @@ use feedback_entry::FeedbackDraft;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 use llm_settings::LlmSettingsPanel;
-use oasis7::simulator::OpenClawProviderCompatibilityStatus;
+use oasis7::simulator::ProviderCompatibilityStatus;
 use platform_ops::open_browser;
 use platform_ops::resolve_static_dir_path;
 #[cfg(not(target_arch = "wasm32"))]
@@ -667,14 +667,14 @@ enum ChainRuntimeStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct OpenClawProviderSnapshot {
+struct ProviderSnapshot {
     provider_id: String,
     name: String,
     version: String,
     protocol_version: String,
     capabilities: Vec<String>,
     supported_action_sets: Vec<String>,
-    compatibility_status: OpenClawProviderCompatibilityStatus,
+    compatibility_status: ProviderCompatibilityStatus,
     status: String,
     queue_depth: Option<u64>,
     last_error: Option<String>,
@@ -686,20 +686,20 @@ struct OpenClawProviderSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
-enum OpenClawProviderCheckStatus {
+enum ProviderCheckStatus {
     Disabled,
     Idle,
     Checking,
-    Ready(OpenClawProviderSnapshot),
-    Degraded(OpenClawProviderSnapshot),
-    Incompatible(OpenClawProviderSnapshot),
+    Ready(ProviderSnapshot),
+    Degraded(ProviderSnapshot),
+    Incompatible(ProviderSnapshot),
     Unsupported(String),
     InvalidConfig(String),
     Unreachable(String),
     Unauthorized(String),
 }
 
-impl OpenClawProviderCheckStatus {
+impl ProviderCheckStatus {
     fn text(&self, language: UiLanguage) -> String {
         match (self, language) {
             (Self::Disabled, UiLanguage::ZhCn) => "未启用".to_string(),
@@ -942,13 +942,13 @@ impl ConfigIssue {
                 "Viewer static directory does not exist or is not a directory"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::ZhCn) => {
-                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 openclaw_local_http"
+                "Agent 接入方式必须是 builtin_llm、agent_direct_connect 或 provider_loopback_http"
             }
             (Self::AgentProviderModeInvalid, UiLanguage::EnUs) => {
-                "Agent access mode must be builtin_llm, agent_direct_connect, or openclaw_local_http"
+                "Agent access mode must be builtin_llm, agent_direct_connect, or provider_loopback_http"
             }
             (Self::OpenClawBaseUrlRequired, UiLanguage::ZhCn) => {
-                "启用 OpenClaw(Local HTTP) 且关闭自动发现时，必须填写 OpenClaw Base URL"
+                "启用 ProviderBacked(Local HTTP) 且关闭自动发现时，必须填写 OpenClaw Base URL"
             }
             (Self::OpenClawBaseUrlRequired, UiLanguage::EnUs) => {
                 "OpenClaw base URL is required when auto-discover is disabled"
@@ -978,10 +978,10 @@ impl ConfigIssue {
                 "OpenClaw execution mode must be player_parity or headless_agent"
             }
             (Self::OpenClawAgentProfileRequired, UiLanguage::ZhCn) => {
-                "启用 OpenClaw(Local HTTP) 时，OpenClaw Agent Profile 不能为空"
+                "启用 ProviderBacked(Local HTTP) 时，OpenClaw Agent Profile 不能为空"
             }
             (Self::OpenClawAgentProfileRequired, UiLanguage::EnUs) => {
-                "OpenClaw agent profile is required when OpenClaw(Local HTTP) is enabled"
+                "OpenClaw agent profile is required when ProviderBacked(Local HTTP) is enabled"
             }
             (Self::LauncherBinRequired, UiLanguage::ZhCn) => {
                 "启动器二进制路径（launcher bin）是必填项"
@@ -1150,7 +1150,7 @@ enum TransferSubmitState {
 struct ClientLauncherApp {
     config: LaunchConfig,
     config_dirty: bool,
-    openclaw_provider_check_status: OpenClawProviderCheckStatus,
+    openclaw_provider_check_status: ProviderCheckStatus,
     llm_settings_panel: LlmSettingsPanel,
     ui_language: UiLanguage,
     status: LauncherStatus,
@@ -1210,7 +1210,7 @@ impl Default for ClientLauncherApp {
         Self {
             config,
             config_dirty: false,
-            openclaw_provider_check_status: OpenClawProviderCheckStatus::Disabled,
+            openclaw_provider_check_status: ProviderCheckStatus::Disabled,
             llm_settings_panel: LlmSettingsPanel::new(LlmSettingsPanel::default_path()),
             ui_language: UiLanguage::detect_from_env(),
             status: LauncherStatus::Idle,

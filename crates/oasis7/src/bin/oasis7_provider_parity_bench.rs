@@ -7,11 +7,11 @@ use std::process;
 use std::time::Instant;
 
 use oasis7::simulator::{
-    evaluate_openclaw_provider_compatibility, initialize_kernel, openclaw_phase1_required_actions,
-    openclaw_phase1_required_capabilities, Action, ActionCatalogEntry, ActionResult, AgentBehavior,
+    evaluate_provider_compatibility, initialize_kernel, provider_phase1_required_actions,
+    provider_phase1_required_capabilities, Action, ActionCatalogEntry, ActionResult, AgentBehavior,
     AgentDecision, AgentDecisionTrace, AgentRunner, LlmAgentBehavior, Observation,
-    OpenAiChatCompletionClient, OpenClawAdapter, OpenClawLocalHttpClient,
-    OpenClawProviderCompatibilityStatus, ProviderExecutionMode, RuntimePerfSnapshot, WorldConfig,
+    OpenAiChatCompletionClient, ProviderLoopbackAdapter, ProviderLoopbackHttpClient,
+    ProviderCompatibilityStatus, ProviderExecutionMode, RuntimePerfSnapshot, WorldConfig,
     WorldEvent, WorldInitConfig, WorldScenario, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
@@ -22,21 +22,24 @@ const DEFAULT_ADAPTER_VERSION: &str = "openclaw_phase1_adapter_v1";
 const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 const DEFAULT_TICKS: u64 = 20;
 const DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS: u64 = 15_000;
-const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS: &str = "openclaw_local_http";
 const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum BenchProviderKind {
     Builtin,
-    OpenclawLocalHttp,
+    ProviderLoopbackHttp,
 }
 
 impl BenchProviderKind {
     fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "builtin" => Some(Self::Builtin),
-            "openclaw_local_http" | "openclaw" => Some(Self::OpenclawLocalHttp),
+            "provider_loopback_http" | OPENCLAW_LOCAL_HTTP_COMPAT_ALIAS | "openclaw" => {
+                Some(Self::ProviderLoopbackHttp)
+            }
             _ => None,
         }
     }
@@ -44,7 +47,7 @@ impl BenchProviderKind {
     fn as_str(self) -> &'static str {
         match self {
             Self::Builtin => "builtin",
-            Self::OpenclawLocalHttp => "openclaw_local_http",
+            Self::ProviderLoopbackHttp => "provider_loopback_http",
         }
     }
 
@@ -86,11 +89,11 @@ impl Default for CliOptions {
             adapter_version: DEFAULT_ADAPTER_VERSION.to_string(),
             ticks: DEFAULT_TICKS,
             timeout_ms: DEFAULT_TIMEOUT_MS,
-            out_dir: PathBuf::from("output/openclaw_parity/manual"),
+            out_dir: PathBuf::from("output/provider_parity/manual"),
             openclaw_base_url: None,
             openclaw_auth_token: None,
             openclaw_connect_timeout_ms: DEFAULT_PROVIDER_CONNECT_TIMEOUT_MS,
-            openclaw_agent_profile: DEFAULT_OPENCLAW_AGENT_PROFILE.to_string(),
+            openclaw_agent_profile: DEFAULT_PROVIDER_AGENT_PROFILE.to_string(),
             execution_mode: ProviderExecutionMode::HeadlessAgent,
         }
     }
@@ -203,7 +206,7 @@ struct SampleSummary {
 
 enum BenchBehavior {
     Builtin(BuiltinParityBehavior),
-    OpenClaw(ProviderBackedOpenClawBehavior),
+    ProviderBacked(ProviderBackedLoopbackBehavior),
 }
 
 struct BuiltinParityBehavior {
@@ -212,43 +215,43 @@ struct BuiltinParityBehavior {
     pending_trace: Option<AgentDecisionTrace>,
 }
 
-struct ProviderBackedOpenClawBehavior {
-    inner: oasis7::simulator::ProviderBackedAgentBehavior<OpenClawAdapter>,
+struct ProviderBackedLoopbackBehavior {
+    inner: oasis7::simulator::ProviderBackedAgentBehavior<ProviderLoopbackAdapter>,
 }
 
 impl AgentBehavior for BenchBehavior {
     fn agent_id(&self) -> &str {
         match self {
             Self::Builtin(inner) => inner.agent_id(),
-            Self::OpenClaw(inner) => inner.agent_id(),
+            Self::ProviderBacked(inner) => inner.agent_id(),
         }
     }
 
     fn decide(&mut self, observation: &Observation) -> AgentDecision {
         match self {
             Self::Builtin(inner) => inner.decide(observation),
-            Self::OpenClaw(inner) => inner.decide(observation),
+            Self::ProviderBacked(inner) => inner.decide(observation),
         }
     }
 
     fn on_action_result(&mut self, result: &ActionResult) {
         match self {
             Self::Builtin(inner) => inner.on_action_result(result),
-            Self::OpenClaw(inner) => inner.on_action_result(result),
+            Self::ProviderBacked(inner) => inner.on_action_result(result),
         }
     }
 
     fn on_event(&mut self, event: &WorldEvent) {
         match self {
             Self::Builtin(inner) => inner.on_event(event),
-            Self::OpenClaw(inner) => inner.on_event(event),
+            Self::ProviderBacked(inner) => inner.on_event(event),
         }
     }
 
     fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
         match self {
             Self::Builtin(inner) => inner.take_decision_trace(),
-            Self::OpenClaw(inner) => inner.take_decision_trace(),
+            Self::ProviderBacked(inner) => inner.take_decision_trace(),
         }
     }
 }
@@ -360,7 +363,7 @@ fn estimated_current_location_id(observation: &Observation) -> Option<&str> {
         .map(|location| location.location_id.as_str())
 }
 
-impl AgentBehavior for ProviderBackedOpenClawBehavior {
+impl AgentBehavior for ProviderBackedLoopbackBehavior {
     fn agent_id(&self) -> &str {
         self.inner.agent_id()
     }
@@ -693,15 +696,15 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             provider_version: "builtin_llm_env".to_string(),
             adapter_version: options.adapter_version.clone(),
             protocol_version: options.protocol_version.clone(),
-            compatibility_status: OpenClawProviderCompatibilityStatus::Ready
+            compatibility_status: ProviderCompatibilityStatus::Ready
                 .as_str()
                 .to_string(),
             fallback_reason: None,
-            capabilities: openclaw_phase1_required_capabilities()
+            capabilities: provider_phase1_required_capabilities()
                 .iter()
                 .map(|value| (*value).to_string())
                 .collect(),
-            supported_action_sets: openclaw_phase1_required_actions()
+            supported_action_sets: provider_phase1_required_actions()
                 .iter()
                 .map(|value| (*value).to_string())
                 .collect(),
@@ -710,11 +713,11 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             provider_queue_depth: None,
             agent_profile: None,
         }),
-        BenchProviderKind::OpenclawLocalHttp => {
+        BenchProviderKind::ProviderLoopbackHttp => {
             let base_url = options.openclaw_base_url.as_deref().ok_or_else(|| {
-                "--openclaw-base-url is required for openclaw_local_http".to_string()
+                "--openclaw-base-url is required for provider_loopback_http".to_string()
             })?;
-            let client = OpenClawLocalHttpClient::new(
+            let client = ProviderLoopbackHttpClient::new(
                 base_url,
                 options.openclaw_auth_token.as_deref(),
                 options.openclaw_connect_timeout_ms,
@@ -722,7 +725,7 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             .map_err(|err| err.to_string())?;
             let info = client.provider_info().map_err(|err| err.to_string())?;
             let health = client.provider_health().map_err(|err| err.to_string())?;
-            let compatibility = evaluate_openclaw_provider_compatibility(&info, Some(&health));
+            let compatibility = evaluate_provider_compatibility(&info, Some(&health));
             Ok(ProviderRunInfo {
                 provider_kind: options.provider.as_str().to_string(),
                 provider_version: info.version.unwrap_or_else(|| "unknown".to_string()),
@@ -753,7 +756,7 @@ fn build_behavior(
         BenchProviderKind::Builtin => {
             if options.execution_mode != ProviderExecutionMode::HeadlessAgent {
                 return Err(
-                    "--execution-mode=player_parity is only supported with --provider openclaw_local_http"
+                    "--execution-mode=player_parity is only supported with --provider provider_loopback_http"
                         .to_string(),
                 );
             }
@@ -768,11 +771,11 @@ fn build_behavior(
                 pending_trace: None,
             }))
         }
-        BenchProviderKind::OpenclawLocalHttp => {
+        BenchProviderKind::ProviderLoopbackHttp => {
             let base_url = options.openclaw_base_url.as_deref().ok_or_else(|| {
-                "--openclaw-base-url is required for openclaw_local_http".to_string()
+                "--openclaw-base-url is required for provider_loopback_http".to_string()
             })?;
-            let adapter = OpenClawAdapter::new(
+            let adapter = ProviderLoopbackAdapter::new(
                 base_url,
                 options.openclaw_auth_token.as_deref(),
                 options.openclaw_connect_timeout_ms,
@@ -798,7 +801,7 @@ fn build_behavior(
             if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
                 behavior = behavior.with_memory_summary(memory_summary);
             }
-            Ok(BenchBehavior::OpenClaw(ProviderBackedOpenClawBehavior {
+            Ok(BenchBehavior::ProviderBacked(ProviderBackedLoopbackBehavior {
                 inner: behavior,
             }))
         }
@@ -1140,15 +1143,15 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     if options.out_dir.as_os_str().is_empty() {
         return Err("--out-dir cannot be empty".to_string());
     }
-    if options.provider == BenchProviderKind::OpenclawLocalHttp
+    if options.provider == BenchProviderKind::ProviderLoopbackHttp
         && options
             .openclaw_base_url
             .as_deref()
             .is_none_or(|value| value.trim().is_empty())
     {
-        return Err("--openclaw-base-url is required for openclaw_local_http".to_string());
+        return Err("--openclaw-base-url is required for provider_loopback_http".to_string());
     }
-    if options.provider == BenchProviderKind::OpenclawLocalHttp
+    if options.provider == BenchProviderKind::ProviderLoopbackHttp
         && options.openclaw_agent_profile.trim().is_empty()
     {
         return Err("--openclaw-agent-profile cannot be empty".to_string());
@@ -1157,7 +1160,7 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         && options.execution_mode != ProviderExecutionMode::HeadlessAgent
     {
         return Err(
-            "--execution-mode=player_parity is only supported with --provider openclaw_local_http"
+            "--execution-mode=player_parity is only supported with --provider provider_loopback_http"
                 .to_string(),
         );
     }
@@ -1171,11 +1174,12 @@ fn parse_u64(raw: &str, flag: &str) -> Result<u64, String> {
 
 fn print_help() {
     println!(
-        "Usage: oasis7_openclaw_parity_bench [options]\n\n\
-Run one parity benchmark sample for builtin or OpenClaw(Local HTTP) and emit\n\
+        "Usage: oasis7_provider_parity_bench [options]\n\n\
+Run one parity benchmark sample for builtin or the loopback provider and emit\n\
 raw jsonl + single-sample summary json following the parity benchmark contract.\n\n\
 Options:\n\
-  --provider <builtin|openclaw_local_http>\n\
+  --provider <builtin|provider_loopback_http>\n\
+                               compatibility aliases: openclaw_local_http, openclaw\n\
   --scenario <name>\n\
   --scenario-id <id>\n\
   --parity-tier <P0|P1|P2>\n\
@@ -1196,5 +1200,5 @@ Options:\n\
 }
 
 #[cfg(test)]
-#[path = "oasis7_openclaw_parity_bench/tests.rs"]
+#[path = "oasis7_provider_parity_bench/tests.rs"]
 mod tests;

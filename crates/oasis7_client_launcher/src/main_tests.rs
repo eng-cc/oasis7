@@ -1,7 +1,7 @@
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args, chain_runtime_status_from_web,
-    check_openclaw_local_http_provider, collect_chain_required_config_issues,
+    check_provider_loopback_http_provider, collect_chain_required_config_issues,
     collect_required_config_issues,
     config_ui::{issue_field_ids, StartupGuideTarget},
     encode_query_value, encoded_query_pair,
@@ -25,7 +25,7 @@ use super::{
         TransferTimelineState, WebTransferAccountEntry, WebTransferLifecycleStatus,
     },
     ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, GlossaryTerm, LaunchConfig, LauncherStatus,
-    OpenClawProviderCompatibilityStatus, UiLanguage, WebChainRecoverySnapshot, WebRequestDomain,
+    ProviderCompatibilityStatus, UiLanguage, WebChainRecoverySnapshot, WebRequestDomain,
     WebStateSnapshot, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND, OASIS7_CJK_FONT_NAME,
     OASIS7_CLIENT_LAUNCHER_LANG_ENV,
 };
@@ -197,7 +197,7 @@ fn launch_config_defaults_enable_llm() {
 #[test]
 fn launch_config_deserialize_backfills_missing_openclaw_execution_mode() {
     let config: LaunchConfig = serde_json::from_value(json!({
-        "agent_provider_mode": "openclaw_local_http",
+        "agent_provider_mode": "provider_loopback_http",
         "openclaw_base_url": "http://127.0.0.1:5841",
         "openclaw_connect_timeout_ms": "15000",
         "openclaw_agent_profile": "oasis7_p0_low_freq_npc"
@@ -852,7 +852,7 @@ fn probe_chain_status_endpoint_reports_connect_failure() {
 }
 
 #[test]
-fn check_openclaw_local_http_provider_accepts_info_and_health_responses() {
+fn check_provider_loopback_http_provider_accepts_info_and_health_responses() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -876,7 +876,7 @@ fn check_openclaw_local_http_provider_accepts_info_and_health_responses() {
     });
 
     let snapshot =
-        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+        check_provider_loopback_http_provider(format!("http://{}", bind).as_str(), None, 200)
             .expect("provider check should pass");
     assert_eq!(snapshot.provider_id, "openclaw-local");
     assert_eq!(snapshot.name, "OpenClaw");
@@ -884,7 +884,7 @@ fn check_openclaw_local_http_provider_accepts_info_and_health_responses() {
     assert_eq!(snapshot.protocol_version, "v1");
     assert_eq!(
         snapshot.compatibility_status,
-        OpenClawProviderCompatibilityStatus::Ready
+        ProviderCompatibilityStatus::Ready
     );
     assert_eq!(
         snapshot.capabilities,
@@ -904,7 +904,7 @@ fn check_openclaw_local_http_provider_accepts_info_and_health_responses() {
 }
 
 #[test]
-fn check_openclaw_local_http_provider_reports_incompatible_supported_actions() {
+fn check_provider_loopback_http_provider_reports_incompatible_supported_actions() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -928,11 +928,11 @@ fn check_openclaw_local_http_provider_reports_incompatible_supported_actions() {
     });
 
     let snapshot =
-        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+        check_provider_loopback_http_provider(format!("http://{}", bind).as_str(), None, 200)
             .expect("provider check should still return snapshot");
     assert_eq!(
         snapshot.compatibility_status,
-        OpenClawProviderCompatibilityStatus::Incompatible
+        ProviderCompatibilityStatus::Incompatible
     );
     assert_eq!(
         snapshot.fallback_reason.as_deref(),
@@ -942,7 +942,7 @@ fn check_openclaw_local_http_provider_reports_incompatible_supported_actions() {
 }
 
 #[test]
-fn check_openclaw_local_http_provider_marks_unhealthy_provider_as_degraded() {
+fn check_provider_loopback_http_provider_marks_unhealthy_provider_as_degraded() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
     let serve = std::thread::spawn(move || {
@@ -966,11 +966,11 @@ fn check_openclaw_local_http_provider_marks_unhealthy_provider_as_degraded() {
     });
 
     let snapshot =
-        check_openclaw_local_http_provider(format!("http://{}", bind).as_str(), None, 200)
+        check_provider_loopback_http_provider(format!("http://{}", bind).as_str(), None, 200)
             .expect("provider check should still return degraded snapshot");
     assert_eq!(
         snapshot.compatibility_status,
-        OpenClawProviderCompatibilityStatus::Degraded
+        ProviderCompatibilityStatus::Degraded
     );
     assert_eq!(
         snapshot.fallback_reason.as_deref(),

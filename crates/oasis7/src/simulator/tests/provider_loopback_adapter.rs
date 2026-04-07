@@ -21,7 +21,7 @@ struct MockHttpResponse {
 }
 
 #[test]
-fn openclaw_adapter_decides_and_pushes_feedback_via_local_http() {
+fn provider_loopback_adapter_decides_and_pushes_feedback_via_local_http() {
     let fixture = golden_decision_provider_fixtures()
         .into_iter()
         .next()
@@ -87,8 +87,8 @@ fn openclaw_adapter_decides_and_pushes_feedback_via_local_http() {
     });
 
     let mut adapter =
-        OpenClawAdapter::new(base_url.as_str(), Some("secret-token"), 200).expect("adapter");
-    assert_eq!(adapter.provider_id(), "openclaw_local_http");
+        ProviderLoopbackAdapter::new(base_url.as_str(), Some("secret-token"), 200).expect("adapter");
+    assert_eq!(adapter.provider_id(), "provider_loopback_http");
 
     let decided = adapter.decide(&request).expect("decision response");
     assert_eq!(decided, response);
@@ -96,7 +96,7 @@ fn openclaw_adapter_decides_and_pushes_feedback_via_local_http() {
 }
 
 #[test]
-fn openclaw_adapter_rejects_action_ref_outside_phase1_whitelist() {
+fn provider_loopback_adapter_rejects_action_ref_outside_phase1_whitelist() {
     let request = golden_decision_provider_fixtures()
         .into_iter()
         .next()
@@ -124,13 +124,13 @@ fn openclaw_adapter_rejects_action_ref_outside_phase1_whitelist() {
         body: serde_json::to_string(&disallowed_response).expect("encode response"),
     });
 
-    let mut adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let mut adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let err = adapter.decide(&request).expect_err("should reject action");
     assert_eq!(err.code, "action_ref_not_in_catalog");
 }
 
 #[test]
-fn openclaw_adapter_maps_provider_error_envelope_to_decision_provider_error() {
+fn provider_loopback_adapter_maps_provider_error_envelope_to_decision_provider_error() {
     let request = golden_decision_provider_fixtures()
         .into_iter()
         .next()
@@ -152,7 +152,7 @@ fn openclaw_adapter_maps_provider_error_envelope_to_decision_provider_error() {
         body: serde_json::to_string(&provider_error_response).expect("encode response"),
     });
 
-    let mut adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let mut adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let err = adapter
         .decide(&request)
         .expect_err("provider error should surface");
@@ -200,7 +200,7 @@ fn openclaw_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
 }
 
 #[test]
-fn provider_backed_behavior_executes_openclaw_adapter_move_and_records_feedback() {
+fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_feedback() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let response = DecisionResponse {
         decision: ProviderDecision::Act {
@@ -270,7 +270,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_move_and_records_feedback(
         }
     });
 
-    let adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog())
             .with_provider_config_ref("openclaw://local-http")
@@ -279,7 +279,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_move_and_records_feedback(
             .with_fixture_id("fixture.adapter.move")
             .with_replay_id("replay.adapter.move")
             .with_memory_summary("goal=move");
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -304,7 +304,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_move_and_records_feedback(
 }
 
 #[test]
-fn provider_backed_behavior_executes_openclaw_adapter_speak_action() {
+fn provider_backed_behavior_executes_provider_loopback_adapter_speak_action() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let response = DecisionResponse {
         decision: ProviderDecision::Act {
@@ -337,10 +337,10 @@ fn provider_backed_behavior_executes_openclaw_adapter_speak_action() {
         }
     });
 
-    let adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -353,7 +353,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_speak_action() {
 }
 
 #[test]
-fn provider_backed_behavior_executes_openclaw_adapter_inspect_action() {
+fn provider_backed_behavior_executes_provider_loopback_adapter_inspect_action() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let response = DecisionResponse {
         decision: ProviderDecision::Act {
@@ -386,10 +386,10 @@ fn provider_backed_behavior_executes_openclaw_adapter_inspect_action() {
         }
     });
 
-    let adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -402,7 +402,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_inspect_action() {
 }
 
 #[test]
-fn provider_backed_behavior_executes_openclaw_adapter_simple_interact_action() {
+fn provider_backed_behavior_executes_provider_loopback_adapter_simple_interact_action() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let response = DecisionResponse {
         decision: ProviderDecision::Act {
@@ -436,10 +436,10 @@ fn provider_backed_behavior_executes_openclaw_adapter_simple_interact_action() {
         }
     });
 
-    let adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -452,7 +452,7 @@ fn provider_backed_behavior_executes_openclaw_adapter_simple_interact_action() {
 }
 
 #[test]
-fn provider_backed_behavior_downgrades_openclaw_adapter_unsupported_semantics_to_wait() {
+fn provider_backed_behavior_downgrades_provider_loopback_adapter_unsupported_semantics_to_wait() {
     let mut kernel = setup_kernel_with_provider_agent("agent-1");
     let response = DecisionResponse {
         decision: ProviderDecision::Act {
@@ -472,10 +472,10 @@ fn provider_backed_behavior_downgrades_openclaw_adapter_unsupported_semantics_to
         body: serde_json::to_string(&response).expect("encode response"),
     });
 
-    let adapter = OpenClawAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, openclaw_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<OpenClawAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");

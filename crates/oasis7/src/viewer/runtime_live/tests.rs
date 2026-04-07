@@ -547,16 +547,16 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
 }
 
 #[test]
-fn openclaw_settings_from_env_defaults_to_none() {
+fn provider_settings_from_env_defaults_to_none() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
     let settings =
-        super::control_plane::runtime_openclaw_settings_from_env().expect("settings parse");
+        super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
     assert_eq!(settings, None);
 }
 
 #[test]
-fn openclaw_settings_from_env_parses_profile_and_timeout() {
+fn provider_settings_from_env_parses_profile_and_timeout() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
     std::env::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
@@ -568,7 +568,7 @@ fn openclaw_settings_from_env_parses_profile_and_timeout() {
     std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     std::env::set_var(VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, "secret-token");
-    let settings = super::control_plane::runtime_openclaw_settings_from_env()
+    let settings = super::control_plane::runtime_provider_settings_from_env()
         .expect("settings parse")
         .expect("openclaw settings");
     assert_eq!(settings.requested_provider_mode, "provider_backed");
@@ -582,12 +582,12 @@ fn openclaw_settings_from_env_parses_profile_and_timeout() {
 }
 
 #[test]
-fn openclaw_settings_from_env_rejects_removed_old_brand_prefix() {
+fn provider_settings_from_env_rejects_removed_old_brand_prefix() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
     std::env::set_var(
         removed_old_brand_runtime_live_env("AGENT_PROVIDER_MODE"),
-        "openclaw_local_http",
+        "provider_loopback_http",
     );
     std::env::set_var(
         removed_old_brand_runtime_live_env("OPENCLAW_BASE_URL"),
@@ -611,7 +611,7 @@ fn openclaw_settings_from_env_rejects_removed_old_brand_prefix() {
     );
 
     let settings =
-        super::control_plane::runtime_openclaw_settings_from_env().expect("settings parse");
+        super::control_plane::runtime_provider_settings_from_env().expect("settings parse");
     assert_eq!(settings, None);
     clear_runtime_openclaw_env();
 }

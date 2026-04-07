@@ -566,7 +566,7 @@ function buildSemanticCapability(actionId) {
       enabled: false,
       code: "observer_only",
       reason:
-        "selected agent runs through OpenClaw(Local HTTP); software_safe stays observer-only for prompt/chat on this lane",
+        "selected agent runs through the OpenClaw-backed loopback provider; software_safe stays observer-only for prompt/chat on this lane",
     };
   }
   if (policy) {
@@ -1156,7 +1156,7 @@ function selectedAgentExecutionDebugContext() {
 
 function selectedAgentInteractionMode() {
   const debugContext = selectedAgentExecutionDebugContext();
-  if (debugContext?.provider_mode === "openclaw_local_http") {
+  if (debugContext?.provider_mode === "provider_loopback_http") {
     return "observer_only";
   }
   return "interactive";
@@ -1292,7 +1292,7 @@ function describeControls() {
     usage: "Use fillControlExample(action), sendControl(action), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
       "software_safe acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
-      "when selectedAgentDebug.provider_mode=openclaw_local_http, prompt/chat stay observer-only in runtime live",
+      "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
       "without viewer auth bootstrap the browser stays guest_session only; hosted public join player-session issuance is still pending",
     ],
   };
@@ -3204,8 +3204,8 @@ function renderInteractionPanel() {
          <input id="strong-auth-approval-code" type="password" autocomplete="off" value="${escapeHtml(state.strongAuth.approvalCode || "")}" />
        </div>`
     : "";
-  const authNotice = debugContext?.provider_mode === "openclaw_local_http"
-    ? `<div class="empty">Selected agent currently runs through OpenClaw(Local HTTP) in ${escapeHtml(debugContext?.execution_mode || "headless_agent")}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.</div>`
+  const authNotice = debugContext?.provider_mode === "provider_loopback_http"
+    ? `<div class="empty">Selected agent currently runs through the OpenClaw-backed loopback provider in ${escapeHtml(debugContext?.execution_mode || "headless_agent")}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.</div>`
     : interactionEnabled
       ? `<div class="badge-row"><span class="badge badge--good">${escapeHtml(authSurface.currentTier)}</span><span class="badge">player=${escapeHtml(state.auth.playerId)}</span><span class="badge">source=${escapeHtml(authSurface.source)}</span></div>
          <div class="empty">${escapeHtml(promptCapability.reason)}</div>`

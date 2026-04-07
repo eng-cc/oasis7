@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-RUN_ID="openclaw_parity_$(date +%Y%m%d_%H%M%S)"
+RUN_ID="provider_parity_$(date +%Y%m%d_%H%M%S)"
 SCENARIO="llm_bootstrap"
 SCENARIO_ID="P0-001"
 PARITY_TIER="P0"
@@ -22,10 +22,10 @@ RUN_OPENCLAW=1
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/openclaw-parity-p0.sh [options]
+Usage: ./scripts/provider-parity-p0.sh [options]
 
-Run a repeatable P0 parity batch for builtin and/or OpenClaw(Local HTTP).
-This script emits protocol-aligned artifacts under output/openclaw_parity/<run_id>/.
+Run a repeatable P0 parity batch for builtin and/or the loopback provider.
+This script emits protocol-aligned artifacts under output/provider_parity/<run_id>/.
 
 Options:
   --run-id <id>                         Override benchmark run id
@@ -35,14 +35,14 @@ Options:
   --samples <n>                         Sample count per provider (default: 3)
   --ticks <n>                           Ticks per sample (default: 20)
   --timeout-ms <n>                      Timeout budget per sample (default: 15000)
-  --out-dir <path>                      Artifact root (default: output/openclaw_parity/<run_id>)
+  --out-dir <path>                      Artifact root (default: output/provider_parity/<run_id>)
   --openclaw-base-url <url>             OpenClaw local HTTP base URL
   --openclaw-auth-token <token>         OpenClaw bearer token
   --openclaw-connect-timeout-ms <n>     OpenClaw connect timeout (default: 15000)
   --openclaw-agent-profile <id>          OpenClaw gameplay profile/skill id
   --execution-mode <mode>                OpenClaw execution mode (default: headless_agent)
   --builtin-only                        Run only builtin provider
-  --openclaw-only                       Run only OpenClaw provider
+  --openclaw-only                       Run only the OpenClaw-backed loopback provider
   -h, --help                            Show help
 
 Notes:
@@ -138,7 +138,7 @@ done
 [[ "$OPENCLAW_EXECUTION_MODE" == "headless_agent" || "$OPENCLAW_EXECUTION_MODE" == "player_parity" ]] || { echo "error: --execution-mode must be headless_agent or player_parity" >&2; exit 1; }
 
 if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="output/openclaw_parity/$RUN_ID"
+  OUT_DIR="output/provider_parity/$RUN_ID"
 fi
 mkdir -p "$OUT_DIR/raw" "$OUT_DIR/summary" "$OUT_DIR/samples"
 
@@ -148,7 +148,7 @@ run_sample() {
   local sample_dir="$OUT_DIR/samples/$provider/sample_$sample_index"
   mkdir -p "$sample_dir"
 
-  local cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_openclaw_parity_bench --
+  local cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_parity_bench --
     --provider "$provider"
     --scenario "$SCENARIO"
     --scenario-id "$SCENARIO_ID"
@@ -159,7 +159,7 @@ run_sample() {
     --timeout-ms "$TIMEOUT_MS"
     --out-dir "$sample_dir")
 
-  if [[ "$provider" == "openclaw_local_http" ]]; then
+  if [[ "$provider" == "provider_loopback_http" ]]; then
     cmd+=(--openclaw-base-url "$OPENCLAW_BASE_URL")
     if [[ -n "$OPENCLAW_AUTH_TOKEN" ]]; then
       cmd+=(--openclaw-auth-token "$OPENCLAW_AUTH_TOKEN")
@@ -181,7 +181,7 @@ fi
 
 if (( RUN_OPENCLAW )); then
   for sample_index in $(seq 1 "$SAMPLES"); do
-    run_sample openclaw_local_http "$sample_index"
+    run_sample provider_loopback_http "$sample_index"
   done
 fi
 
@@ -205,7 +205,7 @@ providers = []
 if run_builtin:
     providers.append("builtin")
 if run_openclaw:
-    providers.append("openclaw_local_http")
+    providers.append("provider_loopback_http")
 
 summary_dir = out_dir / "summary"
 summary_dir.mkdir(parents=True, exist_ok=True)
@@ -271,7 +271,7 @@ for provider in providers:
 combined_csv = summary_dir / "combined.csv"
 with combined_csv.open("w", newline="") as handle:
     writer = csv.writer(handle)
-    writer.writerow(["metric", "builtin", "openclaw_local_http", "gap_or_note"])
+    writer.writerow(["metric", "builtin", "provider_loopback_http", "gap_or_note"])
     metrics = [
       "completion_rate",
       "invalid_action_rate",
@@ -289,7 +289,7 @@ with combined_csv.open("w", newline="") as handle:
       "benchmark_status",
     ]
     builtin = aggregate.get("builtin", {})
-    openclaw = aggregate.get("openclaw_local_http", {})
+    openclaw = aggregate.get("provider_loopback_http", {})
     for metric in metrics:
         left = builtin.get(metric, "")
         right = openclaw.get(metric, "")

@@ -419,7 +419,7 @@ fn runtime_prompt_control_hosted_public_join_rejects_revoked_session_even_with_v
 fn runtime_prompt_control_openclaw_mode_reports_unsupported() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "openclaw_local_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
     std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
     std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(

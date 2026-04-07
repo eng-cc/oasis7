@@ -155,6 +155,21 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_bf477b3a0333411d8fa8bc2a130d1f16.yaml
+  - task_uid: task_7fc83a5053f84a8a83624ebebcb719c5
+    title: "彻底清理 OpenClaw public/structural naming 残留"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-CORE-009
+      - PRD-WORLD_SIMULATOR-037
+      - PRD-WORLD_SIMULATOR-040
+    acceptance:
+      - "public-facing docs/help/examples stop using openclaw_local_http and --openclaw-* as primary naming"
+      - "internal module/bin/script naming no longer retains openclaw_* where the semantics are generic provider bridge/runtime/parity"
+      - "compatibility parsing remains available where required, with docs/tests updated accordingly"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_7fc83a5053f84a8a83624ebebcb719c5.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2

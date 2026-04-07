@@ -19,7 +19,7 @@ Options:
   --download-dir <path>           Release cache/output root (default: ~/.cache/oasis7/releases)
   --force-download                Redownload bundle even if cached bundle already exists
   --base-url <url>                OpenClaw local provider base url (default: http://127.0.0.1:5841)
-  --agent-id <id>                 OpenClaw runtime agent id (default: oasis7_openclaw_agent)
+  --agent-id <id>                 OpenClaw runtime agent id (default: oasis7_provider_agent)
   --agent-profile <profile>       OpenClaw agent profile (default: oasis7_p0_low_freq_npc)
   --execution-mode <mode>         OpenClaw execution mode (default: headless_agent)
   --scenario <name>               Gameplay scenario (default: llm_bootstrap)
@@ -249,8 +249,8 @@ resolve_source_tree_viewer_static_dir() {
 validate_repo_root() {
   local candidate="$1"
   [[ -f "$candidate/Cargo.toml" ]] &&
-    [[ -f "$candidate/scripts/setup-openclaw-oasis7-runtime.sh" ]] &&
-    [[ -f "$candidate/scripts/openclaw-parity-p0.sh" ]]
+    [[ -f "$candidate/scripts/setup-provider-oasis7-runtime.sh" ]] &&
+    [[ -f "$candidate/scripts/provider-parity-p0.sh" ]]
 }
 
 search_repo_root_upwards() {
@@ -622,9 +622,9 @@ PY
       print_doctor_status OK runtime-agent "$agent_summary"
     else
       if [[ -n "$resolved_repo_root" ]]; then
-        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; run $resolved_repo_root/scripts/setup-openclaw-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; run $resolved_repo_root/scripts/setup-provider-oasis7-runtime.sh $agent_id"
       else
-        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; provide --repo-root and run scripts/setup-openclaw-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "OpenClaw agent '$agent_id' not found; provide --repo-root and run scripts/setup-provider-oasis7-runtime.sh $agent_id"
       fi
       failures=$((failures + 1))
     fi
@@ -726,7 +726,7 @@ release_repo="eng-cc/oasis7"
 download_dir="~/.cache/oasis7/releases"
 force_download="0"
 base_url="http://127.0.0.1:5841"
-agent_id="oasis7_openclaw_agent"
+agent_id="oasis7_provider_agent"
 agent_profile="oasis7_p0_low_freq_npc"
 execution_mode="headless_agent"
 scenario="llm_bootstrap"
@@ -990,14 +990,14 @@ fi
 
 if [[ "$skip_agent_setup" != "1" ]]; then
   wait_for_http "http://127.0.0.1:18789/health" 20 0.5
-  "$repo_root/scripts/setup-openclaw-oasis7-runtime.sh" "$agent_id"
+  "$repo_root/scripts/setup-provider-oasis7-runtime.sh" "$agent_id"
 fi
 
 if [[ "$reuse_bridge" != "1" ]]; then
   wait_for_http "http://127.0.0.1:18789/health" 20 0.5
   (
     cd "$repo_root"
-    exec env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_openclaw_local_bridge -- --openclaw-agent "$agent_id"
+    exec env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --openclaw-agent "$agent_id"
   ) >"$bridge_log" 2>&1 &
   cleanup_bridge_pid="$!"
 fi
@@ -1010,7 +1010,7 @@ case "$mode" in
       cmd=("$bundle_dir/run-game.sh"
         --scenario "$scenario"
         --with-llm
-        --agent-provider-mode openclaw_local_http
+        --agent-provider-mode provider_loopback_http
         --openclaw-base-url "$base_url"
         --openclaw-connect-timeout-ms "$connect_timeout_ms"
         --openclaw-agent-profile "$agent_profile"
@@ -1022,7 +1022,7 @@ case "$mode" in
       cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher --
         --scenario "$scenario"
         --with-llm
-        --agent-provider-mode openclaw_local_http
+        --agent-provider-mode provider_loopback_http
         --openclaw-base-url "$base_url"
         --openclaw-connect-timeout-ms "$connect_timeout_ms"
         --openclaw-agent-profile "$agent_profile"
@@ -1053,7 +1053,7 @@ case "$mode" in
     ;;
   smoke)
     cd "$repo_root"
-    cmd=(bash scripts/openclaw-parity-p0.sh
+    cmd=(bash scripts/provider-parity-p0.sh
       --openclaw-only
       --samples "$samples"
       --ticks "$ticks"

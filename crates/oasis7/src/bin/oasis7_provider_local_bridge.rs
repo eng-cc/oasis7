@@ -12,8 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oasis7::simulator::{
-    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, OpenClawProviderHealth,
-    OpenClawProviderInfo, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
+    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderHealth,
+    ProviderInfo, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
     ProviderTokenUsage, ProviderTraceEnvelope, ProviderTranscriptEntry,
 };
 use reqwest::blocking::Client;
@@ -26,12 +26,12 @@ const DEFAULT_OPENCLAW_THINKING: &str = "off";
 const DEFAULT_PROVIDER_ID: &str = "openclaw_local_bridge";
 const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-openclaw-local-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
-const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 
-#[path = "oasis7_openclaw_local_bridge/support.rs"]
+#[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
 #[cfg(test)]
-#[path = "oasis7_openclaw_local_bridge/tests.rs"]
+#[path = "oasis7_provider_local_bridge/tests.rs"]
 mod tests;
 
 use self::support::{
@@ -88,8 +88,8 @@ impl ProviderState {
         })
     }
 
-    fn provider_info(&self) -> OpenClawProviderInfo {
-        OpenClawProviderInfo {
+    fn provider_info(&self) -> ProviderInfo {
+        ProviderInfo {
             provider_id: DEFAULT_PROVIDER_ID.to_string(),
             name: Some("OpenClaw Local Bridge".to_string()),
             version: Some(env!("CARGO_PKG_VERSION").to_string()),
@@ -111,7 +111,7 @@ impl ProviderState {
         }
     }
 
-    fn provider_health(&self) -> OpenClawProviderHealth {
+    fn provider_health(&self) -> ProviderHealth {
         let active_requests = self.active_requests.load(Ordering::Relaxed);
         match self
             .http
@@ -128,7 +128,7 @@ impl ProviderState {
                         response.status().as_u16()
                     )));
                 }
-                OpenClawProviderHealth {
+                ProviderHealth {
                     ok,
                     status: Some(if ok { "ok" } else { "degraded" }.to_string()),
                     uptime_ms: Some(self.started_at.elapsed().as_millis() as u64),
@@ -139,7 +139,7 @@ impl ProviderState {
             Err(err) => {
                 let detail = format!("openclaw_gateway_unreachable: {err}");
                 self.set_last_error(Some(detail.clone()));
-                OpenClawProviderHealth {
+                ProviderHealth {
                     ok: false,
                     status: Some("degraded".to_string()),
                     uptime_ms: Some(self.started_at.elapsed().as_millis() as u64),
@@ -498,7 +498,7 @@ fn main() {
     let listener = TcpListener::bind(options.bind_addr.as_str())
         .unwrap_or_else(|err| panic!("bind {} failed: {err}", options.bind_addr));
     println!(
-        "oasis7_openclaw_local_bridge listening on http://{} (agent={}, gateway_health={})",
+        "oasis7_provider_local_bridge listening on http://{} (agent={}, gateway_health={})",
         options.bind_addr, options.openclaw_agent_id, options.gateway_health_url
     );
     let invoker: Arc<dyn AgentInvoker> = Arc::new(OpenClawCliInvoker);
@@ -508,7 +508,7 @@ fn main() {
         let invoker = invoker.clone();
         std::thread::spawn(move || {
             if let Err(err) = handle_connection(&mut stream, &state, invoker.as_ref()) {
-                eprintln!("oasis7_openclaw_local_bridge connection error: {err}");
+                eprintln!("oasis7_provider_local_bridge connection error: {err}");
             }
         });
     }
@@ -560,7 +560,7 @@ fn required_value<'a>(
 
 fn print_help() {
     eprintln!(
-        "Usage: oasis7_openclaw_local_bridge [options]\n\n  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n  --openclaw-bin <path>         OpenClaw CLI path (default: openclaw)\n  --openclaw-agent <id>         OpenClaw agent id (default: main)\n  --openclaw-thinking <level>   OpenClaw thinking level (default: off)\n  --gateway-health-url <url>    OpenClaw Gateway health URL\n  --auth-token <token>          Optional bearer token for bridge endpoints\n"
+        "Usage: oasis7_provider_local_bridge [options]\n\n  --bind <host:port>            Loopback bind address (default: 127.0.0.1:5841)\n  --openclaw-bin <path>         OpenClaw CLI path (default: openclaw)\n  --openclaw-agent <id>         OpenClaw agent id (default: main)\n  --openclaw-thinking <level>   OpenClaw thinking level (default: off)\n  --gateway-health-url <url>    OpenClaw Gateway health URL\n  --auth-token <token>          Optional bearer token for bridge endpoints\n"
     );
 }
 
@@ -754,11 +754,11 @@ fn validate_profile(agent_profile: Option<&str>) -> Option<String> {
     else {
         return None;
     };
-    if matches!(agent_profile, DEFAULT_OPENCLAW_AGENT_PROFILE) {
+    if matches!(agent_profile, DEFAULT_PROVIDER_AGENT_PROFILE) {
         None
     } else {
         Some(format!(
-            "unsupported agent_profile `{agent_profile}`; expected {DEFAULT_OPENCLAW_AGENT_PROFILE}"
+            "unsupported agent_profile `{agent_profile}`; expected {DEFAULT_PROVIDER_AGENT_PROFILE}"
         ))
     }
 }
@@ -865,7 +865,7 @@ fn profile_guidance(
     nearest_non_current_location_id: Option<&str>,
 ) -> String {
     match request.agent_profile.as_deref() {
-        Some(DEFAULT_OPENCLAW_AGENT_PROFILE) => {
+        Some(DEFAULT_PROVIDER_AGENT_PROFILE) => {
             let current_location = current_location_id.unwrap_or("unknown");
             let next_location = nearest_non_current_location_id.unwrap_or("none");
             format!(

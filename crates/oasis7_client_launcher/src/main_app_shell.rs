@@ -40,10 +40,10 @@ impl eframe::App for ClientLauncherApp {
                 if let Some(detail) = self.chain_runtime_status.detail() {
                     response.on_hover_text(detail);
                 }
-                if is_openclaw_local_http_mode(&self.config) {
+                if is_provider_loopback_http_mode(&self.config) {
                     ui.separator();
                     let provider_status = match &self.openclaw_provider_check_status {
-                        OpenClawProviderCheckStatus::Disabled => OpenClawProviderCheckStatus::Idle,
+                        ProviderCheckStatus::Disabled => ProviderCheckStatus::Idle,
                         other => other.clone(),
                     };
                     let provider_label = format!(

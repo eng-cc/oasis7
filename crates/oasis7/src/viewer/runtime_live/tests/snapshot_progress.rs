@@ -4,7 +4,7 @@ use super::*;
 fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
     let _guard = runtime_openclaw_env_lock().lock().expect("env lock");
     clear_runtime_openclaw_env();
-    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "openclaw_local_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
     std::env::set_var(VIEWER_OPENCLAW_BASE_URL_ENV, "http://127.0.0.1:5841");
     std::env::set_var(VIEWER_OPENCLAW_AGENT_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     std::env::set_var(VIEWER_OPENCLAW_EXECUTION_MODE_ENV, "player_parity");
@@ -30,7 +30,7 @@ fn runtime_openclaw_compat_snapshot_exposes_agent_execution_debug_contexts() {
         .expect("debug context in snapshot");
     assert_eq!(
         context.provider_mode.as_deref(),
-        Some("openclaw_local_http")
+        Some("provider_loopback_http")
     );
     assert_eq!(context.compatibility_status.as_deref(), Some("ready"));
     assert_eq!(context.execution_mode.as_deref(), Some("player_parity"));
