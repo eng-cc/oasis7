@@ -643,6 +643,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md`
   - `doc/testing/evidence/shared-network-shared-devnet-promotion-record-2026-03-24.md`
   - `doc/testing/evidence/shared-network-shared-devnet-incident-2026-03-24.md`
+  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
 - 当前 runtime 入口：
 ```bash
 ./scripts/release-candidate-bundle.sh create \
@@ -749,6 +750,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `short_window_longrun=pass`
   - `shared_access=partial`
   - `rollback_target_ready=partial`
+  - `mixed_topology_baseline=partial`
+  - 当前 formal lane evidence: `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
   - `mixed_topology_baseline` 在当前语义下仍未升到 shared-window `pass`
   - 因此 shared-devnet 剩余 blocker 现收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
 - `--dry-run` 用于门禁编排冒烟，不执行真实命令。

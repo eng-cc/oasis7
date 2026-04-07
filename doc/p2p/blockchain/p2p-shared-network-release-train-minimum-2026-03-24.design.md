@@ -4,7 +4,7 @@
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 - 对应运行手册: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
 
-审计轮次: 6
+审计轮次: 7
 ## 设计目标
 - 把 benchmark 中 `L5 shared network/release train` 的缺口落成正式执行模型，而不是继续停留在口头 backlog。
 - 明确 oasis7 下一阶段的最小 shared track、promotion 规则、rollback 规则与 claims gate。
@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | local required/full + S6 + S9/S10 | 已具备 | `present` |
 | governance drill clone/live evidence | 已具备基础 | `present_with_limited_coverage` |
-| shared_devnet/staging/canary | 已执行 first `shared_devnet` local-only dry run，但仍缺 shared access / staging / canary 正式证据 | `partial` |
+| shared_devnet/staging/canary | 已执行 first `shared_devnet` dry run 与 follow-up 窗口，但 shared access / mixed-topology / rollback target 仍未全量升到 shared-grade `pass`，且 `staging/canary` 仍未正式执行 | `partial` |
 | public claims | 仍受 preview policy 限制 | `limited playable technical preview` + `crypto-hardened preview` |
 
 ## 三层 shared track
@@ -87,14 +87,14 @@
   - `./scripts/shared-devnet-rehearsal-smoke.sh`
 - 当前设计含义:
   - 同一条命令现在可以围绕一个 `candidate_id` 串起 `release-candidate-bundle create/validate`、可选 `release-gate --dry-run`、same-candidate `headed Web + no-ui + pure_api` 复跑或证据复用、lane scaffold、`lanes.shared_devnet.tsv` 和 `shared-network-track-gate` 输出。
-  - 它默认仍对 `shared_access`、`governance_live_drill`、`short_window_longrun`、`rollback_target_ready` 维持保守语义；编排入口本身不等于 shared-network `pass` 或 claims 升级。
+  - 它默认仍对 `shared_access`、`mixed_topology_baseline`、`governance_live_drill`、`short_window_longrun`、`rollback_target_ready` 维持保守语义；编排入口本身不等于 shared-network `pass` 或 claims 升级。
 
 ## Track QA Required Lanes
 | Track | Required lanes | Gate 结论规则 |
 | --- | --- | --- |
-| `shared_devnet` | `candidate_bundle_integrity` / `shared_access` / `multi_entry_closure` / `governance_live_drill` / `short_window_longrun` / `rollback_target_ready` | 缺任一 required lane 直接 `block`；全部 `pass` 才可 promotion |
-| `staging` | `candidate_bundle_integrity` / `shared_access` / `unified_candidate_gate` / `governance_live_drill` / `upgrade_rehearsal` / `rollback_rehearsal` / `incident_template` | 任一 `block` 或缺 lane 即 `block`；存在 `partial` 则整体 `partial` |
-| `canary` | `candidate_bundle_integrity` / `promotion_record` / `canary_window` / `rollback_rehearsal` / `incident_review` / `exit_decision` | 只有全部 `pass` 才能给出 `eligible_for_promotion`，否则维持 `hold_promotion` |
+| `shared_devnet` | `candidate_bundle_integrity` / `shared_access` / `multi_entry_closure` / `mixed_topology_baseline` / `governance_live_drill` / `short_window_longrun` / `rollback_target_ready` | 缺任一 required lane 直接 `block`；全部 `pass` 才可 promotion |
+| `staging` | `candidate_bundle_integrity` / `shared_access` / `unified_candidate_gate` / `mixed_topology_rehearsal` / `governance_live_drill` / `upgrade_rehearsal` / `rollback_rehearsal` / `incident_template` | 任一 `block` 或缺 lane 即 `block`；存在 `partial` 则整体 `partial` |
+| `canary` | `candidate_bundle_integrity` / `promotion_record` / `canary_window` / `mixed_topology_claim_review` / `rollback_rehearsal` / `incident_review` / `exit_decision` | 只有全部 `pass` 才能给出 `eligible_for_promotion`，否则维持 `hold_promotion` |
 
 ## QA Gate 规则
 1. QA gate 只接受 `pass / partial / block` 三种 lane 状态。
@@ -121,13 +121,13 @@
 2. follow-up window `shared-devnet-20260324-05` 已把 `multi_entry_closure` 提升到 `pass`，并证明 same-candidate `headed Web + no-ui + pure_api` 编排链路可复用。
 3. follow-up window `shared-devnet-20260324-06` 已把 `short_window_longrun` 提升到 `pass`，并留下真实 S9/S10 short-window evidence。
 4. 当前 `shared_devnet` gate 结论仍为 `partial`，promotion recommendation 仍为 `hold_promotion`。
-5. 造成 `partial` 的主因已经只剩 shared access 与 rollback target 仍未达到 shared-grade evidence。
+5. 造成 `partial` 的主因已明确收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline` 三条 lane；其中 mixed-topology 现在已有正式 `partial` 证据，但仍未达到 shared-window `pass`。
 
 ## Partial / Block 语义
 | 状态 | 含义 |
 | --- | --- |
 | `pass` | 轨道目标与证据完整，允许推进 |
-| `partial` | 有环境或运行，但缺 shared 访问、版本固定、QA 结论或 rollback 条件 |
+| `partial` | 有环境或运行，但仍缺 shared access、mixed-topology、rollback 或其他 required lane 的 shared-grade 结论 |
 | `block` | 未满足 promotion 必需条件，不允许推进 |
 | `frozen` | 事故或漂移导致临时冻结推进 |
 | `restored` | 已回滚到上一通过 bundle，并留下恢复证据 |

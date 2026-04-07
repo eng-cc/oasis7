@@ -1,0 +1,24 @@
+task_uid: task_f2d8eaa3b27c41ebba62371b8e3f1e3b
+title: "Advance P2PARCH-7 shared-network mixed-topology live evidence"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-7-shared-network-mixed-topology-live-evidence
+execution_log_path: .pm/tasks/task_f2d8eaa3b27c41ebba62371b8e3f1e3b.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+  - doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md
+acceptance:
+  - "shared_devnet mixed-topology lane has same-window shared-network evidence and audited pass/partial/block semantics"
+  - "shared-network project/runbook/testing manual reflect the new shared_devnet mixed-topology live evidence truth and next blockers"
+  - "PM task, execution log, and gate-related docs remain traceable to P2PARCH-7"
+handoff_to: []
+updated_at: 2026-04-07T10:21:39+08:00
+last_started_at: 2026-04-07T10:11:51+08:00
+last_closed_at: 2026-04-07T10:21:38+08:00

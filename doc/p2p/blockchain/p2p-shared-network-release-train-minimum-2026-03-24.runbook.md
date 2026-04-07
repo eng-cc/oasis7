@@ -4,7 +4,7 @@
 - 对应设计文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.design.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md`
 
-审计轮次: 4
+审计轮次: 5
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -163,9 +163,11 @@
   - QA gate scaffold
   - liveops promotion/freeze/rollback/run window/public claims runbook
   - first `shared_devnet` dry-run candidate / gate / promotion / incident 产物
+- 当前 `mixed_topology_baseline` 已有正式 `partial` evidence：
+  - `doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md`
 - shared-network 总 verdict 当前是 `partial`，不是 `pass`。
 - shared-devnet 剩余 blocker 当前收敛到：
   - `shared_access`
   - `rollback_target_ready`
   - `mixed_topology_baseline`
-- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`。
+- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`；如果 mixed-topology 继续停留在 proxy/shared-window 近似，就必须显式保持 `partial`，不能口头升级。
