@@ -34,6 +34,7 @@ printf '# pure api evidence\n' >"$smoke_root/evidence/pure-api.md"
 printf '# governance evidence\n' >"$smoke_root/evidence/governance.md"
 printf '# longrun evidence\n' >"$smoke_root/evidence/longrun.md"
 printf '# mixed topology evidence\n' >"$smoke_root/evidence/mixed-topology.md"
+printf '# mixed topology pass decision\n' >"$smoke_root/evidence/mixed-topology-pass-decision.md"
 printf '{"candidate":"fallback"}\n' >"$smoke_root/fallback/pass-bundle.json"
 
 partial_out="$smoke_root/output-partial"
@@ -61,6 +62,29 @@ ensure_file_contains "$partial_lanes" $'multi_entry_closure\tqa_engineer\tpartia
 ensure_file_contains "$partial_lanes" $'mixed_topology_baseline\tqa_engineer\tpartial'
 ensure_file_contains "$partial_lanes" $'short_window_longrun\truntime_engineer\tpartial'
 
+if ./scripts/shared-devnet-rehearsal.sh \
+  --window-id shared-devnet-orch-smoke-missing-decision \
+  --candidate-id shared-devnet-orch-smoke-missing-decision \
+  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-missing-decision.json" \
+  --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
+  --world-snapshot-ref "$smoke_root/world" \
+  --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
+  --allow-dirty-worktree \
+  --out-dir "$smoke_root/output-missing-decision" \
+  --release-gate-mode skip \
+  --web-mode skip \
+  --headless-mode skip \
+  --pure-api-mode skip \
+  --governance-mode skip \
+  --longrun-mode skip \
+  --mixed-topology-pass \
+  --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology.md" \
+  >/dev/null 2>"$smoke_root/missing-decision.stderr"; then
+  echo "error: mixed-topology pass should require a pass-decision ref" >&2
+  exit 1
+fi
+ensure_file_contains "$smoke_root/missing-decision.stderr" '--mixed-topology-pass requires --mixed-topology-pass-decision-ref'
+
 pass_out="$smoke_root/output-pass"
 run ./scripts/shared-devnet-rehearsal.sh \
   --window-id shared-devnet-orch-smoke-pass \
@@ -82,6 +106,7 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --governance-window-evidence-ref "$smoke_root/evidence/governance.md" \
   --mixed-topology-pass \
   --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology.md" \
+  --mixed-topology-pass-decision-ref "$smoke_root/evidence/mixed-topology-pass-decision.md" \
   --longrun-mode evidence \
   --longrun-window-evidence-ref "$smoke_root/evidence/longrun.md" \
   --shared-access-pass \
@@ -96,5 +121,6 @@ ensure_file_contains "$pass_gate" '"promotion_recommendation": "eligible_for_pro
 ensure_file_contains "$pass_lanes" $'shared_access\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'mixed_topology_baseline\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'governance_live_drill\truntime_engineer\tpass'
+ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/mixed-topology-gate.md" 'pass-uplift decision ref'
 
 echo "shared-devnet rehearsal smoke checks passed"

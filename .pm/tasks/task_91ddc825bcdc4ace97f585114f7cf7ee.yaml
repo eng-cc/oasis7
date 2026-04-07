@@ -1,0 +1,25 @@
+task_uid: task_91ddc825bcdc4ace97f585114f7cf7ee
+title: "Backfill P2PARCH-9 status and advance P2PARCH-7 pass uplift"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2parch-7-pass-uplift-and-p2parch-9-backfill
+execution_log_path: .pm/tasks/task_91ddc825bcdc4ace97f585114f7cf7ee.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+  - doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md
+acceptance:
+  - "P2PARCH-9 is marked done in the main project with status/next-step text matching the landed viewer UX evidence."
+  - "P2PARCH-7 shared-network docs and evidence truthfully state whether mixed_topology_baseline stays partial or can be uplifted, with explicit blocker semantics."
+  - "PM task, execution log, and gate-facing docs remain traceable to the updated P2PARCH-7/P2PARCH-9 state."
+handoff_to: []
+updated_at: 2026-04-07T11:31:41+08:00
+last_started_at: 2026-04-07T11:19:50+08:00
+last_closed_at: 2026-04-07T11:31:41+08:00

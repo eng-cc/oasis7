@@ -75,6 +75,8 @@ Mixed-topology / Longrun evidence:
                                          Override mixed-topology baseline evidence
   --mixed-topology-shared-evidence-ref <path>
                                          Reuse same-window mixed-topology evidence
+  --mixed-topology-pass-decision-ref <path>
+                                         Producer/QA audited decision ref proving current shared-window evidence is sufficient for pass uplift
   --mixed-topology-pass                  Mark mixed-topology lane as pass
   --longrun-window-evidence-ref <path>    Reuse same-window short-window longrun evidence
   --s9-duration-secs <n>                  S9 duration (default: 300)
@@ -274,6 +276,7 @@ governance_window_evidence_ref=""
 longrun_window_evidence_ref=""
 mixed_topology_baseline_evidence_ref="doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md"
 mixed_topology_shared_evidence_ref=""
+mixed_topology_pass_decision_ref=""
 governance_source_world_dir=""
 governance_baseline_manifest=""
 governance_slot_id=""
@@ -404,6 +407,10 @@ while [[ $# -gt 0 ]]; do
       mixed_topology_shared_evidence_ref=${2:-}
       shift 2
       ;;
+    --mixed-topology-pass-decision-ref)
+      mixed_topology_pass_decision_ref=${2:-}
+      shift 2
+      ;;
     --mixed-topology-pass)
       mixed_topology_pass=1
       shift
@@ -525,8 +532,15 @@ fi
 if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
   require_file "--mixed-topology-shared-evidence-ref" "$mixed_topology_shared_evidence_ref"
 fi
+if [[ -n "$mixed_topology_pass_decision_ref" ]]; then
+  require_file "--mixed-topology-pass-decision-ref" "$mixed_topology_pass_decision_ref"
+fi
 if [[ "$mixed_topology_pass" -eq 1 && -z "$mixed_topology_shared_evidence_ref" ]]; then
   echo "error: --mixed-topology-pass requires --mixed-topology-shared-evidence-ref" >&2
+  exit 2
+fi
+if [[ "$mixed_topology_pass" -eq 1 && -z "$mixed_topology_pass_decision_ref" ]]; then
+  echo "error: --mixed-topology-pass requires --mixed-topology-pass-decision-ref" >&2
   exit 2
 fi
 
@@ -1026,11 +1040,11 @@ if [[ -z "$mixed_topology_baseline_evidence_ref" ]]; then
   mixed_topology_note="no mixed-topology baseline evidence is pinned; keep the shared-network lane partial until P2PARCH-6 baseline or same-window evidence is attached"
 fi
 if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
-  mixed_topology_note="same-window mixed-topology evidence is pinned, but shared-network claim review still decides whether this lane can advance beyond partial"
+  mixed_topology_note="same-window mixed-topology evidence is pinned, but the lane stays partial until producer/QA decision refs explicitly approve pass uplift"
 fi
 if [[ "$mixed_topology_pass" -eq 1 ]]; then
   mixed_topology_status="pass"
-  mixed_topology_note="same-window mixed-topology evidence is pinned and approved as sufficient for the shared-devnet gate"
+  mixed_topology_note="same-window mixed-topology evidence is pinned and an audited producer/QA pass-uplift decision is attached for this shared-devnet gate"
 fi
 cat >"$mixed_topology_summary_path" <<EOF
 # Shared Devnet Mixed-Topology Gate Note
@@ -1053,6 +1067,12 @@ if [[ -n "$mixed_topology_shared_evidence_ref" ]]; then
   cat >>"$mixed_topology_summary_path" <<EOF
 - same-window mixed-topology evidence:
   - \`$mixed_topology_shared_evidence_ref\`
+EOF
+fi
+if [[ -n "$mixed_topology_pass_decision_ref" ]]; then
+  cat >>"$mixed_topology_summary_path" <<EOF
+- pass-uplift decision ref:
+  - \`$mixed_topology_pass_decision_ref\`
 EOF
 fi
 cat >>"$mixed_topology_summary_path" <<EOF
@@ -1093,7 +1113,7 @@ gate_summary_path=$(latest_summary_path "$window_dir/gate" "summary.md" || true)
 gate_summary_json=$(latest_summary_path "$window_dir/gate" "summary.json" || true)
 
 run_config_path="$window_dir/run_config.json"
-python3 - "$run_config_path" "$window_id" "$candidate_bundle" "$candidate_id" "$release_gate_mode" "$web_mode" "$headless_mode" "$pure_api_mode" "$governance_mode" "$longrun_mode" "$bundle_dir" "$fallback_candidate_bundle" "$mixed_topology_baseline_evidence_ref" "$mixed_topology_shared_evidence_ref" "$mixed_topology_pass" <<'PY'
+python3 - "$run_config_path" "$window_id" "$candidate_bundle" "$candidate_id" "$release_gate_mode" "$web_mode" "$headless_mode" "$pure_api_mode" "$governance_mode" "$longrun_mode" "$bundle_dir" "$fallback_candidate_bundle" "$mixed_topology_baseline_evidence_ref" "$mixed_topology_shared_evidence_ref" "$mixed_topology_pass_decision_ref" "$mixed_topology_pass" <<'PY'
 import json
 import pathlib
 import sys
@@ -1114,7 +1134,8 @@ payload = {
     "fallback_candidate_bundle": sys.argv[12],
     "mixed_topology_baseline_evidence_ref": sys.argv[13],
     "mixed_topology_shared_evidence_ref": sys.argv[14],
-    "mixed_topology_pass": sys.argv[15] == "1",
+    "mixed_topology_pass_decision_ref": sys.argv[15],
+    "mixed_topology_pass": sys.argv[16] == "1",
 }
 path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY

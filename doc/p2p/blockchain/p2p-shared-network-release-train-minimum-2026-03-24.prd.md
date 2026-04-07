@@ -82,6 +82,7 @@
   - 若 governance truth、genesis truth 或 claims boundary 发生变化但未更新 candidate bundle 编号，则该 bundle 失效，必须重新编号。
   - 若 shared-network 证据只包含命令记录，没有 `summary/status/incident` 结论，则 promotion 只能记为 `partial_evidence_missing`。
   - 若 shared-devnet 只引用 `P2PARCH-6` matrix baseline、没有 same-window mixed-topology 结论，则最多记为 `partial_mixed_topology_baseline_only`。
+  - 若 shared-devnet 试图把 mixed-topology lane 记为 `pass`，但没有 producer/QA 联审留下的 pass-uplift decision ref，则必须回退到 `partial_missing_pass_decision_ref`。
 - Non-Functional Requirements:
   - NFR-P2P-RTMIN-1: 每个 track 的每次 promotion 必须对应唯一 `candidate_id`，且能回链到 `git_commit/runtime_build/world_snapshot_ref/governance_manifest_ref`。
   - NFR-P2P-RTMIN-2: 任一 track 若无共享访问方式、无 owner、无 evidence path、无 rollback target，则不得标记为 `pass`。
@@ -90,6 +91,7 @@
   - NFR-P2P-RTMIN-5: 在 `shared_devnet/staging/canary` 三层都有最新审计轮次的正式证据前，公开口径不得出现 `release train established`、`shared network validated` 或更高成熟度描述。
   - NFR-P2P-RTMIN-6: shared-network 证据不得包含私钥、助记词、离线签名材料或 operator 私密基础设施细节。
   - NFR-P2P-RTMIN-7: mixed-topology required lane 必须显式区分 `baseline/rehearsal/claim review` 三种阶段；proxy drill 不得在 runbook 或 claims gate 中冒充 dedicated sentry/NAT lab 真值。
+  - NFR-P2P-RTMIN-8: 任何把 shared-devnet mixed-topology lane 提升为 `pass` 的结论，都必须同时固定 same-window evidence ref 与 producer/QA 审计通过的 pass-uplift decision ref，避免仅靠脚本开关改变 gate 语义。
 - Security & Privacy: 本专题涉及共享环境与升级轨道，但不引入新的密钥托管方案。任何 candidate bundle、运行记录与证据都只能引用公钥、版本号、world snapshot 标识和审计结论，不得把敏感 custody 材料写入仓库。
 
 ## 5. Risks & Roadmap

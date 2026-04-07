@@ -710,6 +710,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 用 execute/evidence/skip 模式统一收口 same-candidate `headed Web + no-ui + pure_api`
   - 统一生成 `multi-entry-summary`、mixed-topology gate note、lane scaffold、`lanes.shared_devnet.tsv` 与 gate 输出
   - 未提供 shared access / rollback / governance / short-window / same-window mixed-topology 新证据时，默认保持保守 `partial`，避免误判为已 `pass`
+  - 若要把 mixed-topology lane 标为 `pass`，必须同时提供 same-window evidence 和 producer/QA 审计通过的 pass-uplift decision ref；仅有脚本开关不算通过
 - 当前 `shared-devnet-blocker-packet` 最小职责：
   - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 的实例草稿
   - 固定三条 blocker 的留证字段，避免后续 shared operator / fallback candidate / same-window mixed-topology 输入到位后还要手工重写结构

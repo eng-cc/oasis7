@@ -20,10 +20,10 @@
   已落首个 executable mixed-topology matrix slice：`scripts/p2p-mixed-topology-matrix.sh` 会把 `private/validator_hidden/relay_only` role boundary、bootstrap poisoning、relay-budget detection 与 path failover 收成 `required` exact cases，并把 triad/triad_distributed 的 disconnect/restart/release-chaos 收成 `full` proxy cases；matrix 明确输出 `summary.json/md` 与 per-case command/log 目录，并显式标注当前 `proxy` case 只是 sentry-loss / mixed-topology live recovery 的近似 drill，不等价于 dedicated sentry/NAT lab。`full` live evidence 仍待后续继续执行。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
   已把 mixed-topology lane 升级为 shared-network required gate：`shared-network-track-gate.sh` 现在要求 `shared_devnet/mixed_topology_baseline`、`staging/mixed_topology_rehearsal`、`canary/mixed_topology_claim_review` 三条显式 lane；`shared-devnet-rehearsal.sh` 也会自动生成 mixed-topology gate note，并默认把仅有 `P2PARCH-6` matrix baseline 的窗口保持在 `partial`。
-  当前已把 `mixed_topology_baseline` 从“缺草稿”推进成正式 `partial` evidence：`doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md` 现在显式钉住 `P2PARCH-6` baseline、same-window shared-devnet follow-up/short-window 证据与 proxy 边界；`shared-devnet-blocker-packet.sh` 继续负责生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份 blocker 文档，方便后续把 same-window mixed-topology 证据继续回填到 shared-devnet gate，而不冒充已 `pass`。
+  当前已把 `mixed_topology_baseline` 从“缺草稿”推进成正式 `partial` evidence：`doc/testing/evidence/shared-network-shared-devnet-mixed-topology-draft-2026-04-03.md` 现在显式钉住 `P2PARCH-6` baseline、same-window shared-devnet follow-up/short-window 证据与 proxy 边界；`shared-devnet-blocker-packet.sh` 继续负责生成 `shared_access / mixed_topology_baseline / rollback_target_ready` 三份 blocker 文档，方便后续把 same-window mixed-topology 证据继续回填到 shared-devnet gate，而不冒充已 `pass`。若要正式升到 `pass`，除 same-window evidence 外还必须固定 producer/QA 审计通过的 pass-uplift decision ref。
 - [x] P2PARCH-8 (PRD-P2P-024-F) [test_tier_required]: `producer_system_designer` 冻结用户层部署模式抽象：用户界面只暴露 `自动加入 / 私有安全 / 公网入口` 这类 `2~3` 个简单模式，默认由系统根据公网/NAT/打洞结果自动选择；底层继续保留 `deployment_mode/node_role` 正式语义。
-- [ ] P2PARCH-9 (PRD-P2P-024-F) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 把 AutoNAT / port reachability / hole-punch 结果接成用户层默认模式推荐，并为 `公网入口` 或其他高风险暴露职责补显式确认与高级设置覆盖。
-  已落 runtime slice：`oasis7_node` 新增 `auto_join / private_safe / public_entry` 用户模式、reachability auto-detection 与 recommendation contract；chain runtime / game launcher / web launcher 已统一透传用户模式与 `public_entry` 显式确认，并把推荐结果、探测依据、effective policy 暴露到 chain status payload，默认路径不再要求普通用户直接操作底层 `deployment_mode/node_role`。
+- [x] P2PARCH-9 (PRD-P2P-024-F) [test_tier_required + test_tier_full]: `runtime_engineer` + `viewer_engineer` 把 AutoNAT / port reachability / hole-punch 结果接成用户层默认模式推荐，并为 `公网入口` 或其他高风险暴露职责补显式确认与高级设置覆盖。
+  已落 full-tier launcher/viewer UX baseline：chain status 已把 requested/recommended/applied user mode、reachability evidence 与底层 role mapping 透传到 launcher；`oasis7_client_launcher` 现已展示三档 simple modes、检测依据和 `public_entry` accept/reject 路径，并以 `doc/testing/evidence/p2p-user-mode-launcher-ux-2026-04-07.md` 固化当前 test_tier_full 证据。
 
 ## 当前结论
 - 当前阶段:
@@ -202,6 +202,7 @@
   - `viewer_engineer` 已将 chain status 的 P2P recommendation payload 接入 launcher：`oasis7_web_launcher` 会把 requested/recommended/applied user mode、reachability evidence、底层 role mapping 一起透传给 `oasis7_client_launcher`
   - `oasis7_client_launcher` 已新增用户可见 P2P 模式卡片，明确区分“请求模式 / 自动推荐 / 实际运行态”，并显示 reachability、hole-punch、relay、probe-stable 与 rationale 摘要
   - launcher 高级配置已把 `chain_p2p_user_mode` 收口为 `auto_join / private_safe / public_entry` 三档 simple modes，并对 `public_entry` 增加显式确认门；未确认时拒绝启动高风险模式
+  - `test_tier_full` 当前已以 `doc/testing/evidence/p2p-user-mode-launcher-ux-2026-04-07.md` 固化 launcher UX、confirm/reject 流程和用户模式语义对账
 - 遗留:
   - 当前 runtime 已接入 relay / hole-punch / active-path live evidence，但仍未接入完整 AutoNAT / port reachability probe；CLI detection hint 继续保留为显式 override 通道，后续网络观测面仍需补齐真正的公网/NAT 探测源
   - 当前 viewer UX 的检测依据仍来自 runtime 已暴露的 live snapshot / CLI hint；若后续接入真实 AutoNAT / public-port probe，需要继续把新增证据源并入口径回写到同一张 P2P 卡片
@@ -230,5 +231,5 @@
 ## 状态
 - 当前状态: active
 - 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence；当前 lane 已有正式 `partial` 证据，后续需决定现有 proxy/shared-window 证据是否足以升到 `same-window pass`，否则再落 dedicated sentry/NAT lab 来替换当前 proxy live drills。
-- 下一步: 以 `doc/testing/evidence/p2p-user-mode-launcher-ux-2026-04-07.md` 为基线继续补 dedicated NAT/public-entry lab；当前 full-tier 证据先覆盖 launcher UX、confirm/reject 流程与 mixed-topology/user-mode 语义对账。
+- 下一步: 若后续要把 shared-devnet mixed-topology lane 提升为 `pass`，除 same-window evidence 外还必须固定 producer/QA 审计通过的 pass-uplift decision ref；在此之前继续保持 `partial`，不口头升级。
 - 最近更新: 2026-04-07

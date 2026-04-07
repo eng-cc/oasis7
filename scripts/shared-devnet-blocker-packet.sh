@@ -442,6 +442,7 @@ cat >>"$mixed_topology_out" <<EOF
 - \`validation_expectations\`:
   - \`baseline candidate_id and role boundary still match current shared-devnet bundle truth\`
   - \`same-window mixed-topology evidence is explicitly linked when claiming pass\`
+  - \`pass uplift includes an audited producer/QA decision ref, not just a lane status flip\`
   - \`proxy drill evidence is called out as approximation, not dedicated sentry/NAT lab truth\`
 
 ## Verdict
@@ -451,7 +452,7 @@ cat >>"$mixed_topology_out" <<EOF
   - $mixed_topology_reason
 
 ## Notes
-- \`pass\` only if same-window shared mixed-topology evidence is pinned and reviewed against the current candidate truth.
+- \`pass\` only if same-window shared mixed-topology evidence is pinned, reviewed against the current candidate truth, and backed by an audited producer/QA pass-uplift decision ref.
 - \`partial\` if only the P2PARCH-6 baseline or proxy drill evidence is available.
 - \`block\` if there is no credible mixed-topology basis for the current candidate or the evidence contradicts the gate claim.
 EOF
