@@ -1,0 +1,22 @@
+task_uid: task_2f3851fe1fc74d0fb8bd9a605d2f3a4e
+title: "Promote software_safe to primary formal Web entry"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-core-software-safe-primary-web-entry
+execution_log_path: .pm/tasks/task_2f3851fe1fc74d0fb8bd9a605d2f3a4e.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+related_prd:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "core and world-simulator PRD/project align software_safe as the primary low-fidelity formal Web entry while pure_api remains a first-class mode with a different usage scope"
+  - "task-level acceptance explicitly preserves software_safe as a bounded surface: main_token_transfer and similar specialized asset/governance actions remain outside software_safe by default and must use explicit handoff wording instead of silent omission"
+handoff_to: []
+updated_at: 2026-04-07T17:48:15+08:00
+last_started_at: 2026-04-07T17:11:47+08:00
+last_closed_at: 2026-04-07T17:43:47+08:00

@@ -2,6 +2,19 @@ version: 1
 role: producer_system_designer
 status: done
 tasks:
+  - task_uid: task_2f3851fe1fc74d0fb8bd9a605d2f3a4e
+    title: "Promote software_safe to primary formal Web entry"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/core/player-access-mode-contract-2026-03-19.prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+    acceptance:
+      - "core and world-simulator PRD/project align software_safe as the primary low-fidelity formal Web entry while pure_api remains a first-class mode with a different usage scope"
+      - "task-level acceptance explicitly preserves software_safe as a bounded surface: main_token_transfer and similar specialized asset/governance actions remain outside software_safe by default and must use explicit handoff wording instead of silent omission"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_2f3851fe1fc74d0fb8bd9a605d2f3a4e.yaml
   - task_uid: task_3eb31966906e5ae7b8b8676d756c5510
     title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
     priority: P1

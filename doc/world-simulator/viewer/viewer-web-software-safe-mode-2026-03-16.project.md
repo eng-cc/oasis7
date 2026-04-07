@@ -23,6 +23,10 @@
 - [x] T15 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建改为“临时 bundle 输出 + finalize 回写 `software_safe.js`”正式流程，消除当前 Vite `outDir` 警告，并把 finalize 脚本纳入 freshness source scope。
 - [x] T16 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 新增 repo-owned `software_safe` 最小浏览器回归脚本，稳定验证“加载 -> 连接 -> 选择目标 -> `step` -> DOM/`lastControlFeedback` 反馈”闭环，并把入口写回 testing/manual。
 - [x] T17 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 收口 `software_safe` prompt/chat/rollback/control 反馈可读性，明确 rollback 版本语义、将 raw diagnostics 折叠展示，并为 `llm_init_failed` 等配置失败补产品级摘要与 contract test；随后把该 contract test 纳入 repo-owned required automation，固定 canonical entry 为 `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`。
+- [x] T18 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 按最新产品设定重写本专题 PRD / design / project，把 `software_safe` 从弱图形 fallback 重定位为低保真但正式可玩的主要 Web 入口，并把 `standard` 收口为 visual QA surface。
+- [ ] T19 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将默认 Web 产品入口切到 `software_safe`，并把 `render_mode` / launcher / bootstrap 的默认语义改成“formal Web 主入口优先 software_safe，standard 仅在显式 visual intent 下进入”。
+- [ ] T20 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 补齐 `software_safe` 作为主要正式 Web 入口所需的 canonical 玩家语义摘要、blocked/handoff surface，以及缺失动作的显式交接口径。
+- [ ] T21 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `producer_system_designer` 按新的主入口 contract 重跑 formal Web vs visual QA 证据，拆分 `software_safe` formal gameplay PASS 与 `standard` visual PASS 两类结论。
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -40,10 +44,12 @@
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
 - 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
 - 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
+- 当前阶段：T18 已完成，专题定位已从弱图形 fallback 重写为主要正式 Web 入口，但默认入口实现、canonical 玩家语义与 release claim 仍待 T19~T21 落地。
 - 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 OpenClaw runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-07（`viewer_engineer` 已完成 `software_safe` feedback UX 收口，并将 feedback contract regression 接入 `./scripts/ci-tests.sh required` 正式入口。）
-- 阻塞项：无；后续仅保留交互体验扩展与更多自动化覆盖。
+- 最近更新：2026-04-07（`producer_system_designer` 已完成主入口改向设计收口，下一步转入默认入口实现与 release claim 重跑。）
+- 阻塞项：当前代码与 manual/README 仍未实现“software_safe = 默认正式 Web 入口”；在 T19~T21 完成前，不得把本专题新定位对外表述成“已上线行为”。
 
 ## 备注
-- 本专题的目标不是让 software-safe 与标准模式“视觉等价”，而是让弱图形环境下仍然能完成真实玩家/QA/Agent 的最小闭环。
-- `standard` 仍然是视觉与交互质量签收口径；`software_safe` 是玩法闭环与环境兼容兜底口径。
+- 本专题的目标不是让 `software_safe` 与标准模式“视觉等价”，而是让它成为低保真但正式可玩的主要 Web 入口。
+- `standard` 仍然是视觉与交互质量签收口径；`software_safe` 现在承接正式 Web 主玩法口径。
+- `pure_api` 继续是一等公民，但主要承担无 UI、自动化、长稳与集成场景，不被本专题替代。

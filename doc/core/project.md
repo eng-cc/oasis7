@@ -288,6 +288,8 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher build_launcher_args_accepts_agent_direct_connect_alias -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher openclaw_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 openclaw_settings_from_env_parses_profile_and_timeout -- --nocapture`
+- [x] TASK-CORE-053 (PRD-CORE-009) [test_tier_required]: 按最新产品设定重写三模式总契约，把 `software_safe` 升格为主要正式 Web 入口、把 `standard_3d` 收口为 opt-in visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 定位；同步回写 core/world-simulator 相关 topic project 状态，但不提前改写仍描述“当前实现”的 public entry 文案。
+- [ ] TASK-CORE-054 (PRD-CORE-009) [test_tier_required]: 在 `software_safe` 默认主入口实现与 QA 证据完成后，再统一更新 README/testing/manual/current-entry 文案，避免设计目标与已上线行为混写。
 
 ## 依赖
 - doc/core/prd.index.md
@@ -303,9 +305,10 @@
 
 ## 状态
 - 更新日期: 2026-04-07
-- 当前状态: completed
-- 下一任务: 无
+- 当前状态: active
+- 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
+- 最新完成: `TASK-CORE-053`（已将 `software_safe` 重写为主要正式 Web 入口，将 `standard_3d` 收口为 visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 角色。）
 - 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
 - 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/openclaw_local_http` 降为兼容 alias。）
 - 最新完成: `TASK-CORE-032`（已将 core 模块地图中的当前 crate 路径真值统一收口到 `oasis7*` 目录与包名）。

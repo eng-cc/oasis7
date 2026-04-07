@@ -44,7 +44,7 @@
   - SC-5: 当前阶段优先级（P0/P1/P2）在 core PRD 中有唯一口径，并能映射到对应模块任务与角色 owner。
   - SC-6: 发布前必须先完成玩法微循环、runtime 验收、testing 证据、playability 反馈四条 P0 闭环，缺任一项不得给出 go 结论。
   - SC-7: headless-runtime、自动化稳定性、文档一致性收口具备明确 P1 责任划分与交付标准。
-  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope、mode/lane 分层约束，以及 `pure_api` formal gameplay 的 LLM-required 边界；`agent_direct_connect` 仅保留为接入方式兼容口径，agent provider 的当前正式配置模型必须拆成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
+  - SC-8: `standard_3d / software_safe / pure_api` 三模式在 core 中具备唯一 taxonomy、claim envelope、mode/provider/lane 分层约束，其中 `software_safe` 是主要正式 Web 入口、`standard_3d` 是 visual QA / screenshot 入口、`pure_api` 是一等公民 no-UI mode，且 `pure_api` formal gameplay 继续要求 active LLM access；`agent_direct_connect/openclaw_local_http` 仅保留为兼容 alias，agent provider 的当前正式配置模型必须拆成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
   - SC-9: core 活跃专题标题、Viewer 活跃手册与实际窗口/Web 标题对齐 `oasis7` 品牌；内部旧品牌兼容命名仅以实现说明形式保留，不得继续冒充公开标题。
   - SC-10: `engineering`、`scripts`、`world-runtime` 的历史专题标题在不改动内部实现标识的前提下完成 `oasis7` 品牌收口，减少 active/historical 入口里的旧品牌混用。
 
@@ -241,7 +241,7 @@
 | PRD-CORE-006 | TASK-CORE-022 | `test_tier_required` | 正式版本候选 go/no-go 记录、风险附注与角色交接抽样核验 | 版本候选正式裁决一致性 |
 | PRD-CORE-007 | TASK-CORE-023 | `test_tier_required` | `doc/README.md` 含根 README / site 阅读入口 | 全局导航准确性 |
 | PRD-CORE-008 | TASK-CORE-023 | `test_tier_required` | 更新时间与新阅读顺序存在 | 公开口径同步性 |
-| PRD-CORE-009 | TASK-CORE-028/049/050/051 | `test_tier_required` | 三模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `pure_api` LLM-required、OpenClaw mode/lane 分层与 `non-3D` priority 话术对齐 | 项目级模式 taxonomy、claim 边界与 formal gameplay 前置条件一致性 |
+| PRD-CORE-009 | TASK-CORE-028/049/050/051/052/053 | `test_tier_required` | 三模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `software_safe` 主 Web 入口定位、`pure_api` LLM-required/first-class no-UI 定位、OpenClaw mode/lane 分层与 `non-3D` priority 话术对齐 | 项目级模式 taxonomy、claim 边界与 formal gameplay 分工一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
