@@ -111,6 +111,22 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.yaml
+  - task_uid: task_29852e408c314ad58a143a4451e980d3
+    title: "Rescope P2PARCH-5 closeout and move QA gates to P2PARCH-6/7"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-5 is re-scoped to a runtime implementation milestone and can be truthfully marked done without QA evidence drift."
+      - "P2PARCH-6/7 explicitly own the remaining mixed-topology and release-gate evidence required for public-chain-grade claims."
+      - "PRD/project/PM traceability remains consistent after the scope change."
+    handoff_to:
+      - qa_engineer
+      - liveops_community
+    status: done
+    task_path: .pm/tasks/task_29852e408c314ad58a143a4451e980d3.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2

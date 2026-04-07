@@ -142,7 +142,7 @@
 | PRD-P2P-024-B | P2PARCH-1/2/4 | `test_tier_required + test_tier_full` | transport abstraction、lane split、adapter boundary 设计与 mixed-topology 集成回归 | runtime / network substrate |
 | PRD-P2P-024-C | P2PARCH-2/3 | `test_tier_required + test_tier_full` | validator_hidden、sentry、relay、full-storage、observer 角色矩阵与权限回归 | operator 部署与安全边界 |
 | PRD-P2P-024-D | P2PARCH-2/3/6 | `test_tier_required + test_tier_full` | AutoNAT / hole punch / relay fallback / relay exhaustion / path failover 套件 | 私网节点可达性与恢复 |
-| PRD-P2P-024-E | P2PARCH-5/6/7 | `test_tier_required + test_tier_full` | anti-eclipse、diversity、shared-network mixed-topology、chaos/release-train 证据 | public-chain-grade claims gate |
+| PRD-P2P-024-E | P2PARCH-5/6/7 | `test_tier_required + test_tier_full` | `P2PARCH-5` 负责 peer-manager/diversity/block artifact substrate 与定向 required 验证；`P2PARCH-6/7` 负责 anti-eclipse、mixed-topology、shared-network 与 chaos/release-train 证据 | public-chain-grade claims gate |
 | PRD-P2P-024-F | P2PARCH-8/9 | `test_tier_required + test_tier_full` | 用户可见部署模式、自动探测默认值、高风险职责确认与高级设置覆盖 | 部署 UX 与 role policy 可用性 |
 - Decision Log:
 
@@ -154,3 +154,4 @@
 | DEC-P2P-PRA-004 | 将链差异限制在数据面适配器 | 每种链型各自重做 discovery/reachability | 发现、可达性、加密和 peer scoring 是跨链共性能力。 |
 | DEC-P2P-PRA-005 | 把 anti-eclipse / diversity / relay budget 写成框架层硬约束 | 先实现连通，后续再补安全策略 | 公共主链级 P2P 不能把“安全拓扑”推迟到上线后再补。 |
 | DEC-P2P-PRA-006 | 用户层只暴露 `2~3` 个简单模式，默认全自动探测，底层继续保留正式角色语义 | 让所有用户直接选择 `deployment_mode/node_role`，或彻底取消内部正式角色 | 普通用户不应先学基础设施术语，但系统内部仍需要精确职责语义来守住安全边界。 |
+| DEC-P2P-PRA-007 | 允许将 `P2PARCH-5` 作为 runtime substrate milestone 单独关闭，并把 mixed-topology required/full 与 release-gate claim 继续保留在 `P2PARCH-6/7` | 持续把 QA evidence gate 绑定在 `P2PARCH-5`，导致 runtime 已完成但任务状态长期失真 | runtime 实现闭环与 public-chain-grade claims evidence 是不同层级；前者应按实现真值关闭，后者继续由 QA/release gate 任务阻断。 |
