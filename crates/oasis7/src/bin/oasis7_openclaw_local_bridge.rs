@@ -26,7 +26,6 @@ const DEFAULT_OPENCLAW_THINKING: &str = "off";
 const DEFAULT_PROVIDER_ID: &str = "openclaw_local_bridge";
 const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-openclaw-local-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
-const MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
 const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 
 #[path = "oasis7_openclaw_local_bridge/support.rs"]
@@ -172,6 +171,10 @@ impl ProviderState {
         request: DecisionRequest,
         invoker: &dyn AgentInvoker,
     ) -> DecisionResponse {
+        if let Err(err) = request.validate_contract() {
+            self.set_last_error(Some(err.to_string()));
+            return provider_error_response(err.code, err.message, false, None, None);
+        }
         if let Some(err) = validate_profile(request.agent_profile.as_deref()) {
             self.set_last_error(Some(err.clone()));
             return provider_error_response("unsupported_agent_profile", err, false, None, None);
@@ -762,57 +765,44 @@ fn validate_profile(agent_profile: Option<&str>) -> Option<String> {
 
 fn build_decision_prompt(request: &DecisionRequest, recent_feedback: &[String]) -> String {
     let observation = &request.observation;
-    let visible_agents = observation
+    let nearby_agents = observation
         .observation
-        .visible_agents
+        .nearby_entities
         .iter()
-        .map(|agent| {
+        .filter(|entity| entity.kind == "agent")
+        .map(|entity| {
             json!({
-                "agent_id": agent.agent_id,
-                "location_id": agent.location_id,
-                "distance_cm": agent.distance_cm,
+                "entity_ref": entity.entity_ref,
+                "relation": entity.relation,
+                "relative_hint": entity.relative_hint,
+                "interaction_hint": entity.interaction_hint,
             })
         })
         .collect::<Vec<_>>();
-    let visible_locations = observation
+    let nearby_locations = observation
         .observation
-        .visible_locations
+        .nearby_entities
         .iter()
-        .map(|location| {
+        .filter(|entity| entity.kind == "location")
+        .map(|entity| {
             json!({
-                "location_id": location.location_id,
-                "name": location.name,
-                "distance_cm": location.distance_cm,
+                "entity_ref": entity.entity_ref,
+                "relation": entity.relation,
+                "relative_hint": entity.relative_hint,
+                "interaction_hint": entity.interaction_hint,
             })
         })
         .collect::<Vec<_>>();
-    let resources = observation
-        .observation
-        .self_resources
-        .amounts
-        .iter()
-        .map(|(kind, amount)| (format!("{kind:?}"), *amount))
-        .collect::<BTreeMap<_, _>>();
+    let resources = observation.observation.self_state.resource_summary.clone();
     let action_catalog = observation
         .action_catalog
         .iter()
         .map(|entry| json!({"action_ref": entry.action_ref, "summary": entry.summary}))
         .collect::<Vec<_>>();
-    let current_location_id = observation
-        .observation
-        .visible_locations
-        .iter()
-        .find(|location| location.distance_cm == 0)
-        .map(|location| location.location_id.clone());
-    let nearest_non_current_location_id = observation
-        .observation
-        .visible_locations
-        .iter()
-        .filter(|location| {
-            location.distance_cm > 0 && location.distance_cm <= MAX_MOVE_DISTANCE_CM_PER_TICK
-        })
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.clone());
+    let current_location_id =
+        estimated_current_location_id(&observation.observation).map(str::to_string);
+    let nearest_non_current_location_id =
+        nearest_reachable_non_current_location_id(&observation.observation);
     let can_legally_move_to_visible_non_current_location = observation
         .action_catalog
         .iter()
@@ -825,13 +815,18 @@ fn build_decision_prompt(request: &DecisionRequest, recent_feedback: &[String]) 
     );
     let context = json!({
         "agent_profile": request.agent_profile,
+        "mode": observation.mode.as_str(),
         "agent_id": observation.agent_id,
         "world_time": observation.world_time,
         "timeout_budget_ms": request.timeout_budget_ms,
-        "position": observation.observation.pos,
+        "self_state": observation.observation.self_state,
+        "mission_context": observation.observation.mission_context,
         "resources": resources,
-        "visible_agents": visible_agents,
-        "visible_locations": visible_locations,
+        "nearby_agents": nearby_agents,
+        "nearby_locations": nearby_locations,
+        "recent_events": observation.observation.recent_events,
+        "local_navigation_graph": observation.observation.local_navigation_graph,
+        "interaction_targets": observation.observation.interaction_targets,
         "current_location_id": current_location_id,
         "nearest_non_current_location_id": nearest_non_current_location_id,
         "can_legally_move_to_visible_non_current_location": can_legally_move_to_visible_non_current_location,
@@ -1092,9 +1087,9 @@ fn apply_profile_guardrails(
                     || !request
                         .observation
                         .observation
-                        .visible_locations
+                        .nearby_entities
                         .iter()
-                        .any(|location| location.location_id == to) =>
+                        .any(|entity| entity.kind == "location" && entity.entity_ref == to) =>
             {
                 (
                     ProviderDecision::Act {

@@ -53,11 +53,14 @@ pub use chunking::{
 };
 pub use decision_provider::{
     golden_decision_provider_fixtures, ActionCatalogEntry, DecisionProvider, DecisionProviderError,
-    DecisionRequest, DecisionResponse, FeedbackEnvelope, GoldenDecisionFixture, MemoryWriteIntent,
-    MockDecisionProvider, MockDecisionProviderState, ObservationEnvelope,
-    ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
-    ProviderExecutionMode, ProviderTokenUsage, ProviderTraceEnvelope, ProviderTranscriptEntry,
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    DecisionRequest, DecisionRequestContractError, DecisionResponse, FeedbackEnvelope,
+    GoldenDecisionFixture, MemoryWriteIntent, MockDecisionProvider, MockDecisionProviderState,
+    ObservationEnvelope, ProviderBackedAgentBehavior, ProviderDecision, ProviderDiagnostics,
+    ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
+    ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
+    ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage, ProviderTraceEnvelope,
+    ProviderTranscriptEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 pub use fragment_physics::{
     infer_element_ppm, mass_grams_from_volume_density, synthesize_fragment_budget,

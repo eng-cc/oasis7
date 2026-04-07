@@ -270,3 +270,105 @@ fn provider_backed_agent_behavior_rejects_unknown_action_ref() {
         .unwrap_or_default()
         .contains("unknown action_ref"));
 }
+
+#[test]
+fn provider_backed_agent_behavior_builds_mode_differentiated_observation_payloads() {
+    let mut parity_kernel = setup_kernel_with_provider_agent("agent-1");
+    let parity_provider = MockDecisionProvider::with_scripted_responses(
+        "mock-openclaw",
+        vec![Ok(DecisionResponse::wait("mock-openclaw"))],
+    );
+    let parity_state = parity_provider.shared_state();
+    let parity_behavior =
+        ProviderBackedAgentBehavior::new("agent-1", parity_provider, provider_action_catalog())
+            .with_execution_mode(ProviderExecutionMode::PlayerParity)
+            .with_memory_summary("goal=patrol");
+    let mut parity_runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
+        AgentRunner::new();
+    parity_runner.register(parity_behavior);
+    let _ = parity_runner.tick(&mut parity_kernel).expect("parity tick");
+
+    let mut headless_kernel = setup_kernel_with_provider_agent("agent-1");
+    let headless_provider = MockDecisionProvider::with_scripted_responses(
+        "mock-openclaw",
+        vec![Ok(DecisionResponse::wait("mock-openclaw"))],
+    );
+    let headless_state = headless_provider.shared_state();
+    let headless_behavior =
+        ProviderBackedAgentBehavior::new("agent-1", headless_provider, provider_action_catalog())
+            .with_execution_mode(ProviderExecutionMode::HeadlessAgent)
+            .with_memory_summary("goal=patrol");
+    let mut headless_runner: AgentRunner<ProviderBackedAgentBehavior<MockDecisionProvider>> =
+        AgentRunner::new();
+    headless_runner.register(headless_behavior);
+    let _ = headless_runner
+        .tick(&mut headless_kernel)
+        .expect("headless tick");
+
+    let parity_request = parity_state.lock().expect("parity state").recorded_requests[0].clone();
+    let headless_request = headless_state
+        .lock()
+        .expect("headless state")
+        .recorded_requests[0]
+        .clone();
+
+    assert_eq!(
+        parity_request.observation.mode,
+        ProviderExecutionMode::PlayerParity
+    );
+    assert_eq!(
+        headless_request.observation.mode,
+        ProviderExecutionMode::HeadlessAgent
+    );
+    assert!(parity_request
+        .observation
+        .observation
+        .local_navigation_graph
+        .is_empty());
+    assert!(parity_request
+        .observation
+        .observation
+        .interaction_targets
+        .is_empty());
+    assert!(!headless_request
+        .observation
+        .observation
+        .local_navigation_graph
+        .is_empty());
+    assert!(!headless_request
+        .observation
+        .observation
+        .interaction_targets
+        .is_empty());
+    assert_ne!(
+        parity_request.observation.observation.self_state.pose_hint,
+        headless_request
+            .observation
+            .observation
+            .self_state
+            .pose_hint
+    );
+
+    let parity_json =
+        serde_json::to_string(&parity_request).expect("encode parity observation request");
+    let headless_json =
+        serde_json::to_string(&headless_request).expect("encode headless observation request");
+    assert!(!parity_json.contains("local_navigation_graph"));
+    assert!(!parity_json.contains("interaction_targets"));
+    assert!(headless_json.contains("local_navigation_graph"));
+    assert!(headless_json.contains("interaction_targets"));
+}
+
+#[test]
+fn decision_request_validate_contract_rejects_player_parity_headless_fields() {
+    let mut request = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("fixture")
+        .request;
+    request.observation.mode = ProviderExecutionMode::PlayerParity;
+    let err = request
+        .validate_contract()
+        .expect_err("parity mismatch should fail");
+    assert_eq!(err.code, "mode_observation_mismatch");
+}

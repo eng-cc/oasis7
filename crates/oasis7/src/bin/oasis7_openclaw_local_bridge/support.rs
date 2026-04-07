@@ -120,26 +120,38 @@ struct OpenClawAgentUsage {
 }
 
 pub(super) fn estimated_current_location_id(
-    observation: &oasis7::simulator::Observation,
+    observation: &oasis7::simulator::ProviderObservation,
 ) -> Option<&str> {
-    observation
-        .visible_locations
-        .iter()
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.as_str())
+    if observation.self_state.location_ref.trim().is_empty() {
+        None
+    } else {
+        Some(observation.self_state.location_ref.as_str())
+    }
 }
 
 pub(super) fn nearest_reachable_non_current_location_id(
-    observation: &oasis7::simulator::Observation,
+    observation: &oasis7::simulator::ProviderObservation,
 ) -> Option<String> {
     let current_location_id = estimated_current_location_id(observation);
+    if !observation.local_navigation_graph.is_empty() {
+        return observation
+            .local_navigation_graph
+            .iter()
+            .find(|node| {
+                node.traversable
+                    && node.relation == "reachable_location"
+                    && Some(node.node_ref.as_str()) != current_location_id
+            })
+            .map(|node| node.node_ref.clone());
+    }
     observation
-        .visible_locations
+        .nearby_entities
         .iter()
-        .filter(|location| {
-            location.distance_cm <= MAX_MOVE_DISTANCE_CM_PER_TICK
-                && Some(location.location_id.as_str()) != current_location_id
+        .filter(|entity| {
+            entity.kind == "location"
+                && entity.relation == "reachable_location"
+                && Some(entity.entity_ref.as_str()) != current_location_id
         })
-        .min_by_key(|location| location.distance_cm)
-        .map(|location| location.location_id.clone())
+        .map(|entity| entity.entity_ref.clone())
+        .next()
 }

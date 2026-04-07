@@ -1,4 +1,16 @@
 version: 1
 role: agent_engineer
 status: done
-tasks: []
+tasks:
+  - task_uid: task_f13275ba1efc4a12b0724d0ae7272f90
+    title: "Implement dual-mode observation adapter and fixture diff validation"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-WORLD_SIMULATOR-040
+    acceptance:
+      - "player_parity/headless_agent requests diverge only in observation payload; schema mismatch returns structured failure; required fixture diff tests pass"
+    handoff_to:
+      - runtime_engineer
+    status: done
+    task_path: .pm/tasks/task_f13275ba1efc4a12b0724d0ae7272f90.yaml

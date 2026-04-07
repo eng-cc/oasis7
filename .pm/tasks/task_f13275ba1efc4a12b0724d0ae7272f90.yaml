@@ -1,0 +1,22 @@
+task_uid: task_f13275ba1efc4a12b0724d0ae7272f90
+title: "Implement dual-mode observation adapter and fixture diff validation"
+owner_role: agent_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-agent-dual-mode-observation-adapter-fixture-diff
+execution_log_path: .pm/tasks/task_f13275ba1efc4a12b0724d0ae7272f90.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md
+  - doc/world-simulator/llm/openclaw-agent-dual-mode-contract-2026-03-16.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-040
+acceptance:
+  - "player_parity/headless_agent requests diverge only in observation payload; schema mismatch returns structured failure; required fixture diff tests pass"
+handoff_to:
+  - runtime_engineer
+updated_at: 2026-04-07T10:01:29+08:00
+last_started_at: 2026-04-07T09:43:13+08:00
+last_closed_at: 2026-04-07T10:01:29+08:00

@@ -1,9 +1,9 @@
 use super::*;
-use oasis7::geometry::GeoPos;
 use oasis7::simulator::{
-    ActionCatalogEntry, Observation, ObservationEnvelope, ObservedAgent, ObservedLocation,
-    ProviderExecutionMode, ResourceKind, ResourceStock, WorldTime,
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
+    ActionCatalogEntry, ObservationEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
+    ProviderMissionContext, ProviderNavigationNode, ProviderNearbyEntity, ProviderObservation,
+    ProviderRecentEvent, ProviderSelfState, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 
 #[derive(Debug, Clone)]
@@ -203,58 +203,67 @@ fn validate_profile_accepts_oasis7_and_rejects_removed_profile_alias() {
     );
 }
 
-fn sample_request() -> DecisionRequest {
-    let mut stock = ResourceStock::default();
-    let _ = stock.add(ResourceKind::Electricity, 24);
-    let observation = Observation {
-        time: 7 as WorldTime,
-        agent_id: "agent-1".to_string(),
-        pos: GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
-        },
-        self_resources: stock,
-        visibility_range_cm: 1000,
-        visible_agents: vec![ObservedAgent {
-            agent_id: "agent-2".to_string(),
-            location_id: "loc-2".to_string(),
-            pos: GeoPos {
-                x_cm: 100.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
-            distance_cm: 100,
-        }],
-        visible_locations: vec![
-            ObservedLocation {
-                location_id: "loc-1".to_string(),
-                name: "current".to_string(),
-                pos: GeoPos {
-                    x_cm: 0.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
-                },
-                profile: Default::default(),
-                distance_cm: 0,
-            },
-            ObservedLocation {
-                location_id: "loc-2".to_string(),
-                name: "neighbor".to_string(),
-                pos: GeoPos {
-                    x_cm: 100.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
-                },
-                profile: Default::default(),
-                distance_cm: 100,
-            },
-        ],
-        module_lifecycle: Default::default(),
-        module_market: Default::default(),
-        power_market: Default::default(),
-        social_state: Default::default(),
+#[test]
+fn handle_decision_rejects_unsupported_schema_version() {
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    let invoker = FakeInvoker {
+        response: Err("should not invoke".to_string()),
     };
+    let mut request = sample_request();
+    request.observation.observation_schema_version = "oc_dual_obs_v0".to_string();
+    let response = state.handle_decision(request, &invoker);
+    assert_eq!(response.decision, ProviderDecision::Wait);
+    assert_eq!(
+        response
+            .provider_error
+            .as_ref()
+            .expect("provider_error")
+            .code,
+        "unsupported_schema_version"
+    );
+}
+
+#[test]
+fn handle_decision_rejects_unsupported_action_schema_version() {
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    let invoker = FakeInvoker {
+        response: Err("should not invoke".to_string()),
+    };
+    let mut request = sample_request();
+    request.observation.action_schema_version = "oc_dual_act_v0".to_string();
+    let response = state.handle_decision(request, &invoker);
+    assert_eq!(response.decision, ProviderDecision::Wait);
+    assert_eq!(
+        response
+            .provider_error
+            .as_ref()
+            .expect("provider_error")
+            .code,
+        "unsupported_schema_version"
+    );
+}
+
+#[test]
+fn handle_decision_rejects_player_parity_request_with_headless_fields() {
+    let state = ProviderState::new(CliOptions::default()).expect("provider state");
+    let invoker = FakeInvoker {
+        response: Err("should not invoke".to_string()),
+    };
+    let mut request = sample_request();
+    request.observation.mode = ProviderExecutionMode::PlayerParity;
+    let response = state.handle_decision(request, &invoker);
+    assert_eq!(response.decision, ProviderDecision::Wait);
+    assert_eq!(
+        response
+            .provider_error
+            .as_ref()
+            .expect("provider_error")
+            .code,
+        "mode_observation_mismatch"
+    );
+}
+
+fn sample_request() -> DecisionRequest {
     DecisionRequest {
         observation: ObservationEnvelope {
             agent_id: "agent-1".to_string(),
@@ -264,7 +273,67 @@ fn sample_request() -> DecisionRequest {
             action_schema_version: DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string(),
             environment_class: Some("openclaw_local_bridge".to_string()),
             fallback_reason: None,
-            observation,
+            observation: ProviderObservation {
+                self_state: ProviderSelfState {
+                    location_ref: "loc-1".to_string(),
+                    pose_hint: "grid_pose=(0, 0, 0) visibility_range_cm=1000".to_string(),
+                    status_flags: Vec::new(),
+                    resource_summary: BTreeMap::from([(String::from("Electricity"), 24)]),
+                },
+                mission_context: ProviderMissionContext {
+                    goal_summary: "prefer safe low-frequency actions".to_string(),
+                    blocked_reason: None,
+                },
+                nearby_entities: vec![
+                    ProviderNearbyEntity {
+                        entity_ref: "loc-1".to_string(),
+                        kind: "location".to_string(),
+                        relation: "current_location".to_string(),
+                        relative_hint: "current visible location".to_string(),
+                        interaction_hint: None,
+                    },
+                    ProviderNearbyEntity {
+                        entity_ref: "loc-2".to_string(),
+                        kind: "location".to_string(),
+                        relation: "reachable_location".to_string(),
+                        relative_hint: "reachable location distance_cm=100".to_string(),
+                        interaction_hint: Some("move_agent".to_string()),
+                    },
+                    ProviderNearbyEntity {
+                        entity_ref: "agent-2".to_string(),
+                        kind: "agent".to_string(),
+                        relation: "nearby_agent".to_string(),
+                        relative_hint: "nearby agent distance_cm=100".to_string(),
+                        interaction_hint: Some("inspect_target".to_string()),
+                    },
+                ],
+                recent_events: vec![ProviderRecentEvent {
+                    event_ref: "recent_event_0".to_string(),
+                    kind: "event_summary".to_string(),
+                    summary: "event: AgentRegistered".to_string(),
+                    age_ticks: 0,
+                }],
+                local_navigation_graph: vec![
+                    ProviderNavigationNode {
+                        node_ref: "loc-1".to_string(),
+                        relation: "current_location".to_string(),
+                        relative_hint: "distance_cm=0 visible_name=current".to_string(),
+                        traversable: true,
+                    },
+                    ProviderNavigationNode {
+                        node_ref: "loc-2".to_string(),
+                        relation: "reachable_location".to_string(),
+                        relative_hint: "distance_cm=100 visible_name=neighbor".to_string(),
+                        traversable: true,
+                    },
+                ],
+                hazard_summary: Vec::new(),
+                interaction_targets: vec![ProviderInteractionTarget {
+                    target_ref: "loc-2".to_string(),
+                    target_kind: "location".to_string(),
+                    interaction_hint: "move_agent".to_string(),
+                }],
+            },
             recent_event_summary: vec!["event: AgentRegistered".to_string()],
             memory_summary: Some("prefer safe low-frequency actions".to_string()),
             action_catalog: vec![
