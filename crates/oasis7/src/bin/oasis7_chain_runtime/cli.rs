@@ -2,7 +2,9 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use oasis7::runtime::RewardAssetConfig;
-use oasis7_node::{NodeHolePunchViability, NodeReachabilityAutoDetection, NodeRole, NodeUserMode, PosValidator};
+use oasis7_node::{
+    NodeHolePunchViability, NodeReachabilityAutoDetection, NodeRole, NodeUserMode, PosValidator,
+};
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use oasis7_proto::storage_profile::StorageProfile;
 
@@ -160,7 +162,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--p2p-detected-reachability" => {
                 let raw = parse_required_value(&mut iter, "--p2p-detected-reachability")?;
-                options.p2p_detected_reachability = Some(parse_peer_reachability_class(raw.as_str())?);
+                options.p2p_detected_reachability =
+                    Some(parse_peer_reachability_class(raw.as_str())?);
                 options.p2p_detected_reachability_explicit = true;
             }
             "--p2p-clear-detected-reachability" => {
@@ -169,7 +172,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--p2p-detected-hole-punch" => {
                 let raw = parse_required_value(&mut iter, "--p2p-detected-hole-punch")?;
-                options.p2p_detected_hole_punch_viability = raw.parse::<NodeHolePunchViability>()?;
+                options.p2p_detected_hole_punch_viability =
+                    raw.parse::<NodeHolePunchViability>()?;
                 options.p2p_detected_hole_punch_viability_explicit = true;
             }
             "--p2p-detected-relay-available" => {

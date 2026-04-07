@@ -179,6 +179,8 @@ fn launch_config_defaults_enable_llm() {
     assert_eq!(config.openclaw_agent_profile, "oasis7_p0_low_freq_npc");
     assert!(config.openclaw_auto_discover);
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
+    assert_eq!(config.chain_p2p_user_mode, "auto_join");
+    assert!(!config.chain_p2p_accept_public_entry);
 }
 
 #[test]
@@ -250,6 +252,9 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
     assert!(args.contains(&"127.0.0.1:6121".to_string()));
     assert!(args.contains(&"--node-role".to_string()));
     assert!(args.contains(&"storage".to_string()));
+    assert!(args.contains(&"--p2p-user-mode".to_string()));
+    assert!(args.contains(&"auto_join".to_string()));
+    assert!(args.contains(&"--p2p-decline-public-entry".to_string()));
     assert!(args.contains(&"--node-tick-ms".to_string()));
     assert!(args.contains(&"350".to_string()));
     assert!(args.contains(&"--pos-slot-duration-ms".to_string()));
@@ -683,6 +688,7 @@ fn apply_web_snapshot_tracks_chain_recovery_payload() {
         detail: None,
         chain_status: "stale_execution_world".to_string(),
         chain_detail: Some("stale execution world detected".to_string()),
+        chain_p2p_status: None,
         chain_recovery: Some(WebChainRecoverySnapshot {
             error_code: "stale_execution_world".to_string(),
             reason: "stale execution world detected".to_string(),
@@ -730,6 +736,7 @@ fn apply_web_snapshot_preserves_local_dirty_config_when_snapshot_differs() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_p2p_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: remote_config,
@@ -751,6 +758,7 @@ fn apply_web_snapshot_clears_dirty_flag_when_snapshot_matches_local_config() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_p2p_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -780,6 +788,7 @@ fn apply_web_snapshot_marks_control_plane_snapshot_received() {
         detail: None,
         chain_status: "not_started".to_string(),
         chain_detail: None,
+        chain_p2p_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -953,6 +962,7 @@ fn collect_chain_required_config_issues_reports_missing_required_fields() {
         chain_status_bind: "127.0.0.1".to_string(),
         chain_node_id: "".to_string(),
         chain_node_role: "invalid".to_string(),
+        chain_p2p_user_mode: "invalid".to_string(),
         chain_node_tick_ms: "0".to_string(),
         chain_pos_slot_duration_ms: "0".to_string(),
         chain_pos_ticks_per_slot: "4".to_string(),
@@ -968,6 +978,7 @@ fn collect_chain_required_config_issues_reports_missing_required_fields() {
     assert!(issues.contains(&ConfigIssue::ChainStatusBindInvalid));
     assert!(issues.contains(&ConfigIssue::ChainNodeIdRequired));
     assert!(issues.contains(&ConfigIssue::ChainRoleInvalid));
+    assert!(issues.contains(&ConfigIssue::ChainP2pUserModeInvalid));
     assert!(issues.contains(&ConfigIssue::ChainTickMsInvalid));
     assert!(issues.contains(&ConfigIssue::ChainPosSlotDurationMsInvalid));
     assert!(issues.contains(&ConfigIssue::ChainPosProposalTickPhaseOutOfRange));
@@ -1046,6 +1057,82 @@ fn collect_chain_required_config_issues_accepts_valid_required_fields() {
 
     let issues = collect_chain_required_config_issues(&config);
     assert!(issues.is_empty());
+}
+
+#[test]
+fn collect_chain_required_config_issues_requires_public_entry_confirmation() {
+    let issues = collect_chain_required_config_issues(&LaunchConfig {
+        chain_enabled: true,
+        chain_runtime_bin: std::env::current_exe()
+            .expect("current exe")
+            .to_string_lossy()
+            .to_string(),
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-node-a".to_string(),
+        chain_node_role: "sequencer".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: false,
+        chain_node_validators: "node-a:100".to_string(),
+        ..LaunchConfig::default()
+    });
+    assert!(issues.contains(&ConfigIssue::ChainPublicEntryConfirmationRequired));
+}
+
+#[test]
+fn build_chain_runtime_args_requires_public_entry_confirmation() {
+    let err = build_chain_runtime_args(&LaunchConfig {
+        chain_enabled: true,
+        chain_runtime_bin: "/tmp/oasis7_chain_runtime".to_string(),
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-node-a".to_string(),
+        chain_node_role: "storage".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: false,
+        chain_node_validators: "node-a:100".to_string(),
+        ..LaunchConfig::default()
+    })
+    .expect_err("public entry should require explicit confirmation");
+    assert!(err.contains("explicit confirmation"));
+}
+
+#[test]
+fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
+    let mut app = ClientLauncherApp::default();
+    let snapshot = WebStateSnapshot {
+        status: "idle".to_string(),
+        detail: None,
+        chain_status: "ready".to_string(),
+        chain_detail: None,
+        chain_p2p_status: Some(super::WebChainP2pStatus {
+            requested_user_mode: "auto_join".to_string(),
+            recommended_user_mode: "public_entry".to_string(),
+            effective_user_mode: "private_safe".to_string(),
+            applied_effective_user_mode: Some("private_safe".to_string()),
+            requires_explicit_public_entry_confirmation: true,
+            detected_reachability: Some("public".to_string()),
+            hole_punch_viability: "viable".to_string(),
+            relay_available: false,
+            probe_stable: true,
+            deployment_mode: "private".to_string(),
+            node_role_claim: "validator_core".to_string(),
+            rationale: vec![
+                "observed_reachability=public".to_string(),
+                "public entry confirmation pending".to_string(),
+            ],
+        }),
+        chain_recovery: None,
+        game_url: "http://127.0.0.1:4173/".to_string(),
+        config: app.config.clone(),
+        logs: vec![],
+    };
+
+    app.apply_web_snapshot(snapshot);
+    let status = app
+        .chain_p2p_status
+        .clone()
+        .expect("p2p status should exist");
+    assert_eq!(status.recommended_user_mode, "public_entry");
+    assert!(status.requires_explicit_public_entry_confirmation);
 }
 
 #[test]

@@ -3,15 +3,14 @@ use super::{
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
     build_node_replication_config, derive_node_consensus_signer_keypair, node_keypair_config,
     parse_options, parse_validator_spec, release_security_policy_for_storage_profile, CliOptions,
-    DEFAULT_NODE_ID,
-    DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
+    DEFAULT_NODE_ID, DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind, NodeConfig,
-    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy, NodeReachabilityAutoDetection,
-    NodeRole, NodeSnapshot, NodeUserMode,
+    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
+    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
@@ -337,11 +336,20 @@ fn live_reachability_snapshot_upgrades_detection_when_cli_hints_are_absent() {
         detection.observed_reachability,
         Some(PeerReachabilityClass::Hybrid)
     );
-    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Viable);
+    assert_eq!(
+        detection.hole_punch_viability,
+        NodeHolePunchViability::Viable
+    );
     assert!(!detection.relay_available);
     assert!(detection.probe_stable);
-    assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
-    assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+    assert_eq!(
+        recommendation.recommended_user_mode,
+        NodeUserMode::PublicEntry
+    );
+    assert_eq!(
+        recommendation.effective_user_mode,
+        NodeUserMode::PrivateSafe
+    );
 }
 
 #[test]
@@ -381,7 +389,10 @@ fn failed_hole_punch_snapshot_does_not_force_blocked_viability() {
     )
     .expect("recommendation");
 
-    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Unknown);
+    assert_eq!(
+        detection.hole_punch_viability,
+        NodeHolePunchViability::Unknown
+    );
     assert!(!detection.probe_stable);
 }
 
@@ -418,7 +429,10 @@ fn explicit_cli_detection_hints_override_live_snapshot() {
         detection.observed_reachability,
         Some(PeerReachabilityClass::Private)
     );
-    assert_eq!(detection.hole_punch_viability, NodeHolePunchViability::Blocked);
+    assert_eq!(
+        detection.hole_punch_viability,
+        NodeHolePunchViability::Blocked
+    );
     assert!(!detection.relay_available);
     assert!(!detection.probe_stable);
 }

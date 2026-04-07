@@ -1,10 +1,10 @@
 use super::peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
-use super::runtime_loop::peer_requires_active_quarantine;
 use super::peer_record::{
     build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
+use super::runtime_loop::peer_requires_active_quarantine;
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
     select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,

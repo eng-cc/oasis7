@@ -85,6 +85,7 @@ const DEFAULT_OPENCLAW_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
+const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
 const DEFAULT_CHAIN_NODE_TICK_MS: &str = "200";
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: &str = "12000";
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: &str = "10";
@@ -374,6 +375,8 @@ struct LaunchConfig {
     chain_node_id: String,
     chain_world_id: String,
     chain_node_role: String,
+    chain_p2p_user_mode: String,
+    chain_p2p_accept_public_entry: bool,
     chain_node_tick_ms: String,
     chain_pos_slot_duration_ms: String,
     chain_pos_ticks_per_slot: String,
@@ -422,6 +425,8 @@ impl Default for LaunchConfig {
             chain_node_id: default_chain_node_id(),
             chain_world_id: String::new(),
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
+            chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
+            chain_p2p_accept_public_entry: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
@@ -509,12 +514,29 @@ struct WebChainRecoverySnapshot {
     suggested_config: LaunchConfig,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct WebChainP2pStatus {
+    requested_user_mode: String,
+    recommended_user_mode: String,
+    effective_user_mode: String,
+    applied_effective_user_mode: Option<String>,
+    requires_explicit_public_entry_confirmation: bool,
+    detected_reachability: Option<String>,
+    hole_punch_viability: String,
+    relay_available: bool,
+    probe_stable: bool,
+    deployment_mode: String,
+    node_role_claim: String,
+    rationale: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct WebStateSnapshot {
     status: String,
     detail: Option<String>,
     chain_status: String,
     chain_detail: Option<String>,
+    chain_p2p_status: Option<WebChainP2pStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     game_url: String,
     config: LaunchConfig,
@@ -819,6 +841,8 @@ enum ConfigIssue {
     ChainStatusBindInvalid,
     ChainNodeIdRequired,
     ChainRoleInvalid,
+    ChainP2pUserModeInvalid,
+    ChainPublicEntryConfirmationRequired,
     ChainTickMsInvalid,
     ChainPosSlotDurationMsInvalid,
     ChainPosTicksPerSlotInvalid,
@@ -931,6 +955,18 @@ impl ConfigIssue {
             }
             (Self::ChainRoleInvalid, UiLanguage::EnUs) => {
                 "Chain role must be one of: sequencer/storage/observer"
+            }
+            (Self::ChainP2pUserModeInvalid, UiLanguage::ZhCn) => {
+                "P2P 加入模式必须是 auto_join/private_safe/public_entry"
+            }
+            (Self::ChainP2pUserModeInvalid, UiLanguage::EnUs) => {
+                "P2P join mode must be one of: auto_join/private_safe/public_entry"
+            }
+            (Self::ChainPublicEntryConfirmationRequired, UiLanguage::ZhCn) => {
+                "选择公网入口前，必须显式确认承担公网入口职责"
+            }
+            (Self::ChainPublicEntryConfirmationRequired, UiLanguage::EnUs) => {
+                "Public entry requires explicit confirmation of public-entry responsibility"
             }
             (Self::ChainTickMsInvalid, UiLanguage::ZhCn) => {
                 "链节点轮询间隔毫秒（chain node poll interval ms）必须是正整数"
@@ -1064,6 +1100,7 @@ struct ClientLauncherApp {
     ui_language: UiLanguage,
     status: LauncherStatus,
     chain_runtime_status: ChainRuntimeStatus,
+    chain_p2p_status: Option<WebChainP2pStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     #[cfg(not(target_arch = "wasm32"))]
     running: Option<RunningProcess>,
@@ -1123,6 +1160,7 @@ impl Default for ClientLauncherApp {
             ui_language: UiLanguage::detect_from_env(),
             status: LauncherStatus::Idle,
             chain_runtime_status,
+            chain_p2p_status: None,
             chain_recovery: None,
             #[cfg(not(target_arch = "wasm32"))]
             running: None,

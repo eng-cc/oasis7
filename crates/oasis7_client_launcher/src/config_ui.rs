@@ -53,6 +53,10 @@ pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
         ConfigIssue::ChainStatusBindInvalid => &["chain_status_bind"],
         ConfigIssue::ChainNodeIdRequired => &["chain_node_id"],
         ConfigIssue::ChainRoleInvalid => &["chain_node_role"],
+        ConfigIssue::ChainP2pUserModeInvalid => &["chain_p2p_user_mode"],
+        ConfigIssue::ChainPublicEntryConfirmationRequired => {
+            &["chain_p2p_user_mode", "chain_p2p_accept_public_entry"]
+        }
         ConfigIssue::ChainTickMsInvalid => &["chain_node_tick_ms"],
         ConfigIssue::ChainPosSlotDurationMsInvalid => &["chain_pos_slot_duration_ms"],
         ConfigIssue::ChainPosTicksPerSlotInvalid => &["chain_pos_ticks_per_slot"],
@@ -85,6 +89,14 @@ impl ClientLauncherApp {
         let label = self.ui_field_label(field);
         if field.id == "openclaw_execution_mode" {
             self.render_openclaw_execution_mode_field(ui, label, stack_text_fields);
+            return;
+        }
+        if field.id == "chain_p2p_user_mode" {
+            self.render_chain_p2p_user_mode_field(ui, label, stack_text_fields);
+            return;
+        }
+        if field.id == "chain_p2p_accept_public_entry" {
+            self.render_chain_p2p_accept_public_entry_field(ui, label, stack_text_fields);
             return;
         }
         match field.kind {
@@ -136,8 +148,9 @@ impl ClientLauncherApp {
         label: &str,
         stack_text_fields: bool,
     ) {
-        let current = canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
-            .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE);
+        let current =
+            canonical_openclaw_execution_mode(self.config.openclaw_execution_mode.as_str())
+                .unwrap_or(DEFAULT_OPENCLAW_EXECUTION_MODE);
         if self.config.openclaw_execution_mode != current {
             self.config.openclaw_execution_mode = current.to_string();
             self.config_dirty = true;
@@ -191,6 +204,101 @@ impl ClientLauncherApp {
         if self.config.openclaw_execution_mode != selected {
             self.config.openclaw_execution_mode = selected;
             self.config_dirty = true;
+        }
+    }
+
+    fn render_chain_p2p_user_mode_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        stack_text_fields: bool,
+    ) {
+        let current = canonical_chain_p2p_user_mode(self.config.chain_p2p_user_mode.as_str())
+            .unwrap_or(DEFAULT_CHAIN_P2P_USER_MODE);
+        if self.config.chain_p2p_user_mode != current {
+            self.config.chain_p2p_user_mode = current.to_string();
+            self.config_dirty = true;
+        }
+        let mut selected = current.to_string();
+
+        let render_combo = |ui: &mut egui::Ui, selected: &mut String, app: &ClientLauncherApp| {
+            egui::ComboBox::from_id_salt("chain_p2p_user_mode")
+                .selected_text(app.chain_user_mode_option_label(selected.as_str()))
+                .show_ui(ui, |ui| {
+                    for mode in ["auto_join", "private_safe", "public_entry"] {
+                        ui.selectable_value(
+                            selected,
+                            mode.to_string(),
+                            app.chain_user_mode_option_label(mode),
+                        );
+                    }
+                });
+        };
+
+        if stack_text_fields {
+            ui.vertical(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected, self);
+            });
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(label);
+                render_combo(ui, &mut selected, self);
+            });
+        }
+        ui.small(self.tr(
+            "默认建议使用“自动加入”；只有在你明确要承担公网入口职责时才切到“公网入口”。",
+            "Use Auto Join by default; switch to Public Entry only when you intentionally expose a public ingress surface.",
+        ));
+
+        if self.config.chain_p2p_user_mode != selected {
+            if selected != "public_entry" {
+                self.config.chain_p2p_accept_public_entry = false;
+            }
+            self.config.chain_p2p_user_mode = selected;
+            self.config_dirty = true;
+        }
+    }
+
+    fn render_chain_p2p_accept_public_entry_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        label: &str,
+        stack_text_fields: bool,
+    ) {
+        let needs_emphasis = self.config.chain_p2p_user_mode == "public_entry"
+            || self
+                .chain_p2p_status
+                .as_ref()
+                .is_some_and(|status| status.requires_explicit_public_entry_confirmation);
+        let render_checkbox =
+            |ui: &mut egui::Ui, value: &mut bool, label: &str| ui.checkbox(value, label);
+
+        if stack_text_fields {
+            ui.vertical(|ui| {
+                let response =
+                    render_checkbox(ui, &mut self.config.chain_p2p_accept_public_entry, label);
+                if response.changed() {
+                    self.config_dirty = true;
+                }
+            });
+        } else {
+            ui.horizontal_wrapped(|ui| {
+                let response =
+                    render_checkbox(ui, &mut self.config.chain_p2p_accept_public_entry, label);
+                if response.changed() {
+                    self.config_dirty = true;
+                }
+            });
+        }
+        if needs_emphasis {
+            ui.small(
+                egui::RichText::new(self.tr(
+                    "启用后，节点可被自动提升为公网入口；建议先阅读推荐依据，再决定是否重启链运行时应用。",
+                    "When enabled, the node may be promoted to a public entry surface; review the recommendation evidence before restarting blockchain runtime with this applied.",
+                ))
+                .color(egui::Color32::from_rgb(188, 60, 60)),
+            );
         }
     }
 

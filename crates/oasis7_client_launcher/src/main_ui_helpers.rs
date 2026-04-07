@@ -8,6 +8,179 @@ impl ClientLauncherApp {
         }
     }
 
+    pub(super) fn chain_user_mode_label(&self, mode: &str) -> &'static str {
+        match (mode, self.ui_language) {
+            ("auto_join", UiLanguage::ZhCn) => "自动加入",
+            ("auto_join", UiLanguage::EnUs) => "Auto Join",
+            ("private_safe", UiLanguage::ZhCn) => "私有安全",
+            ("private_safe", UiLanguage::EnUs) => "Private Safe",
+            ("public_entry", UiLanguage::ZhCn) => "公网入口",
+            ("public_entry", UiLanguage::EnUs) => "Public Entry",
+            (_, UiLanguage::ZhCn) => "未知模式",
+            (_, UiLanguage::EnUs) => "Unknown Mode",
+        }
+    }
+
+    pub(super) fn chain_user_mode_option_label(&self, mode: &str) -> &'static str {
+        match (mode, self.ui_language) {
+            ("auto_join", UiLanguage::ZhCn) => "自动加入（系统探测默认值）",
+            ("auto_join", UiLanguage::EnUs) => "Auto Join (system default)",
+            ("private_safe", UiLanguage::ZhCn) => "私有安全（禁止公网入口）",
+            ("private_safe", UiLanguage::EnUs) => "Private Safe (no public ingress)",
+            ("public_entry", UiLanguage::ZhCn) => "公网入口（承担公网职责）",
+            ("public_entry", UiLanguage::EnUs) => "Public Entry (serve public ingress)",
+            (_, UiLanguage::ZhCn) => "未知模式",
+            (_, UiLanguage::EnUs) => "Unknown Mode",
+        }
+    }
+
+    fn p2p_probe_bool_text(&self, value: bool) -> &'static str {
+        match (value, self.ui_language) {
+            (true, UiLanguage::ZhCn) => "是",
+            (true, UiLanguage::EnUs) => "yes",
+            (false, UiLanguage::ZhCn) => "否",
+            (false, UiLanguage::EnUs) => "no",
+        }
+    }
+
+    pub(super) fn render_chain_p2p_summary(&mut self, ui: &mut egui::Ui) {
+        if !self.config.chain_enabled {
+            return;
+        }
+
+        let status = self.chain_p2p_status.clone();
+        ui.group(|ui| {
+            ui.label(self.tr("P2P 加入模式", "P2P Join Mode"));
+
+            if let Some(status) = status {
+                ui.horizontal_wrapped(|ui| {
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("请求", "Requested"),
+                        self.chain_user_mode_label(status.requested_user_mode.as_str())
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("推荐", "Recommended"),
+                        self.chain_user_mode_label(status.recommended_user_mode.as_str())
+                    ));
+                    ui.separator();
+                    let applied_mode = status
+                        .applied_effective_user_mode
+                        .as_deref()
+                        .unwrap_or(status.effective_user_mode.as_str());
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("运行中", "Applied"),
+                        self.chain_user_mode_label(applied_mode)
+                    ));
+                });
+
+                ui.horizontal_wrapped(|ui| {
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("Reachability", "Reachability"),
+                        status
+                            .detected_reachability
+                            .as_deref()
+                            .unwrap_or(self.tr("未探测", "unknown"))
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("打洞", "Hole Punch"),
+                        status.hole_punch_viability
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: relay={} probe={}",
+                        self.tr("证据", "Signals"),
+                        self.p2p_probe_bool_text(status.relay_available),
+                        self.p2p_probe_bool_text(status.probe_stable)
+                    ));
+                });
+
+                ui.small(format!(
+                    "{}: {}/{}",
+                    self.tr("底层角色映射", "Underlying Role Mapping"),
+                    status.deployment_mode,
+                    status.node_role_claim
+                ));
+
+                if !status.rationale.is_empty() {
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("检测依据", "Detection Rationale"),
+                        status.rationale.join(" | ")
+                    ));
+                }
+
+                if status.requires_explicit_public_entry_confirmation {
+                    ui.separator();
+                    ui.colored_label(
+                        egui::Color32::from_rgb(188, 60, 60),
+                        self.tr(
+                            "系统检测当前节点可承担公网入口，但默认仍保持私有安全，直到你显式确认。",
+                            "The node looks eligible for public entry, but the launcher keeps Private Safe until you explicitly confirm.",
+                        ),
+                    );
+                    ui.horizontal_wrapped(|ui| {
+                        if ui
+                            .button(self.tr(
+                                "接受公网入口职责",
+                                "Accept Public Entry Responsibility",
+                            ))
+                            .clicked()
+                        {
+                            self.config.chain_p2p_user_mode = "auto_join".to_string();
+                            self.config.chain_p2p_accept_public_entry = true;
+                            self.config_dirty = true;
+                            self.append_log(self.tr(
+                                "已确认公网入口职责；重启区块链后会按自动推荐应用。",
+                                "Public entry responsibility confirmed; restart blockchain to apply the automatic recommendation.",
+                            ));
+                        }
+                        if ui
+                            .button(self.tr(
+                                "保持自动但拒绝公网入口",
+                                "Keep Auto Join but Reject Public Entry",
+                            ))
+                            .clicked()
+                        {
+                            self.config.chain_p2p_user_mode = "auto_join".to_string();
+                            self.config.chain_p2p_accept_public_entry = false;
+                            self.config_dirty = true;
+                            self.append_log(self.tr(
+                                "已拒绝公网入口职责；系统会继续保持非入口模式。",
+                                "Public entry responsibility rejected; the launcher will keep a non-public-entry mode.",
+                            ));
+                        }
+                    });
+                    ui.small(self.tr(
+                        "提示：这是启动器层的显式确认门；未重启前，当前运行态不会被立即切换。",
+                        "This is a launcher-level confirmation gate; the running mode will not change until blockchain is restarted.",
+                    ));
+                }
+            } else {
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("当前选择", "Current Selection"),
+                    self.chain_user_mode_option_label(self.config.chain_p2p_user_mode.as_str())
+                ));
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("公网入口确认", "Public Entry Confirmation"),
+                    self.p2p_probe_bool_text(self.config.chain_p2p_accept_public_entry)
+                ));
+                ui.small(self.tr(
+                    "启动区块链后，这里会显示自动检测得到的推荐模式、运行态和证据摘要。",
+                    "After blockchain starts, this card will show the recommended mode, applied runtime mode, and detection evidence.",
+                ));
+            }
+        });
+    }
+
     pub(super) fn glossary_term_text(&self, term: GlossaryTerm) -> &'static str {
         match term {
             GlossaryTerm::Nonce => "nonce",

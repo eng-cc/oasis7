@@ -63,9 +63,7 @@ pub(super) fn snapshot_clone(
     shared.lock().expect("lock reachability snapshot").clone()
 }
 
-pub(super) fn note_relay_reservation_accepted(
-    shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
-) {
+pub(super) fn note_relay_reservation_accepted(shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>) {
     let mut snapshot = shared.lock().expect("lock reachability snapshot");
     snapshot.relay_reservation_active = true;
     if snapshot.active_transport_kind.is_none() {
@@ -121,12 +119,11 @@ pub(super) fn refresh_active_transport_snapshot(
 }
 
 fn is_relay_addr(addr: &Multiaddr) -> bool {
-    addr.iter().any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+    addr.iter()
+        .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
 }
 
-fn preferred_transport_kind(
-    snapshot: &Libp2pReachabilitySnapshot,
-) -> Option<LiveTransportKind> {
+fn preferred_transport_kind(snapshot: &Libp2pReachabilitySnapshot) -> Option<LiveTransportKind> {
     if snapshot.active_hole_punch_path_count > 0 {
         Some(LiveTransportKind::HolePunched)
     } else if snapshot.active_relay_path_count > 0 || snapshot.relay_reservation_active {
@@ -146,9 +143,7 @@ mod tests {
     fn path(kind: TransportPathKind) -> TransportPath {
         TransportPath {
             peer_id: PeerId::random(),
-            addr: "/ip4/127.0.0.1/tcp/4001"
-                .parse()
-                .expect("transport addr"),
+            addr: "/ip4/127.0.0.1/tcp/4001".parse().expect("transport addr"),
             kind,
             flavor: super::super::transport_paths::TransportSessionFlavor::TcpNoiseYamux,
             security: super::super::transport_paths::TransportSecurity::Noise,
@@ -167,7 +162,10 @@ mod tests {
         refresh_active_transport_snapshot(&shared, &active);
         let snapshot = snapshot_clone(&shared);
 
-        assert_eq!(snapshot.active_transport_kind, Some(LiveTransportKind::HolePunched));
+        assert_eq!(
+            snapshot.active_transport_kind,
+            Some(LiveTransportKind::HolePunched)
+        );
         assert_eq!(snapshot.active_direct_path_count, 1);
         assert_eq!(snapshot.active_hole_punch_path_count, 1);
         assert_eq!(snapshot.active_relay_path_count, 1);
@@ -210,9 +208,7 @@ mod tests {
         )
         .parse()
         .expect("relay addr");
-        let direct_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001"
-            .parse()
-            .expect("direct addr");
+        let direct_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().expect("direct addr");
 
         sync_relay_reservation_from_listening_addrs(&shared, &[direct_addr.clone(), relay_addr]);
         assert!(snapshot_clone(&shared).relay_reservation_active);

@@ -16,9 +16,9 @@ use oasis7::runtime::{
 };
 use oasis7_node::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig, NodeReachabilityAutoDetection,
-    NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot,
-    NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
+    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig,
+    NodeReachabilityAutoDetection, NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole,
+    NodeRuntime, NodeSnapshot, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -896,7 +896,10 @@ fn build_chain_status_payload(
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
         p2p: ChainP2pStatus {
-            requested_user_mode: live_p2p_recommendation.requested_user_mode.as_str().to_string(),
+            requested_user_mode: live_p2p_recommendation
+                .requested_user_mode
+                .as_str()
+                .to_string(),
             recommended_user_mode: live_p2p_recommendation
                 .recommended_user_mode
                 .as_str()

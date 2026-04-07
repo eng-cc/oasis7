@@ -531,9 +531,9 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
 
 ### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
-- 当前状态（2026-04-03）：
+- 当前状态（2026-04-07）：
   - `P2PARCH-8` 已完成文档冻结：用户层默认只暴露 `自动加入 / 私有安全 / 公网入口` 三档简单模式，底层继续保留 `deployment_mode/node_role` 正式语义。
-  - `P2PARCH-9` 尚未落实现；当前手册先冻结 required/full 应覆盖的验证语义，避免后续实现落地后缺少 QA 对账口径。
+  - `P2PARCH-9` 已接通 viewer/launcher UX：`oasis7_web_launcher` 会把 chain runtime 的 P2P recommendation payload 一并透传给 `oasis7_client_launcher`，客户端会展示 requested/recommended/applied user mode、底层 role mapping 和 detection rationale，并为 `public_entry` 提供显式接受/拒绝路径。
 - required 验证（本轮 docs-only baseline）：
 ```bash
 rg -n "自动加入|私有安全|公网入口|deployment_mode|node_role|AutoNAT|高风险职责|显式确认" \
@@ -557,6 +557,17 @@ git diff --check
   - 覆盖用户从默认推荐切到高级设置覆盖，再回退到自动模式的往返路径，并验证审计证据持续可读。
   - 覆盖多节点混合场景中，非公网节点、公网入口节点与 relay/sentry 语义的映射一致性，避免 UI 用户模式与底层 role policy 脱节。
   - 若复用 shared-network / mixed-topology lane 作为 full-tier 证据，summary 中必须单独标注哪些 case 验证的是用户模式推荐，哪些 case 验证的是底层 reachability 真值。
+- `P2PARCH-9` executable full-tier 基线（2026-04-07）：
+```bash
+env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture
+env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture
+env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unknown-unknown
+```
+- 当前 full-tier 对账重点：
+  - `oasis7_web_launcher` 必须把 `/v1/chain/status` 内的 P2P recommendation/evidence 正确代理到 `/api/state`
+  - `oasis7_client_launcher` 必须正确渲染 requested/recommended/applied user mode、底层 `deployment_mode/node_role_claim` 与 rationale
+  - `public_entry` 在 launcher 配置层必须要求显式确认；未确认时 `public_entry` 启动路径必须被拒绝
+  - `auto_join -> recommended public_entry -> reject -> keep non-entry mode` 与 `auto_join -> accept public_entry -> restart apply` 这两条 UX 路径必须至少有单测或自动化闭环覆盖
 - 证据要求：
   - docs-only 阶段至少留下 `rg` 命中结果与文档门禁通过记录。
   - 实现阶段至少留下模式推荐结果、触发确认的风险提示文本、用户接受/拒绝后的最终模式，以及对应的检测依据摘要。

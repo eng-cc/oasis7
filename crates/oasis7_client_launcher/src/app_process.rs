@@ -706,6 +706,7 @@ impl ClientLauncherApp {
             snapshot.chain_status.as_str(),
             snapshot.chain_detail.as_deref(),
         );
+        self.chain_p2p_status = snapshot.chain_p2p_status;
         self.chain_recovery = snapshot.chain_recovery;
         self.control_plane_snapshot_received = true;
         self.web_game_url = Some(snapshot.game_url);

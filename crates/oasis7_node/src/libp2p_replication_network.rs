@@ -4,9 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
-use oasis7_net::{
-    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot,
-};
+use oasis7_net::{Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot};
 use oasis7_proto::distributed::ErrorResponse;
 use oasis7_proto::distributed_dht::PeerRecord;
 use oasis7_proto::distributed_net::{

@@ -82,8 +82,8 @@ pub use types::{
     NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
     NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy,
     NodePeerCommittedHead, NodePosConfig, NodeReachabilityAutoDetection,
-    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode,
-    NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
+    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation,
+    PosConsensusStatus, PosValidator,
 };
 
 use feedback_runtime::{

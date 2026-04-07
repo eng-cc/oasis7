@@ -237,8 +237,8 @@ fn parse_options_rejects_invalid_chain_role() {
 
 #[test]
 fn parse_options_rejects_invalid_chain_p2p_user_mode() {
-    let err = parse_options(["--chain-p2p-user-mode", "wild"].into_iter())
-        .expect_err("should fail");
+    let err =
+        parse_options(["--chain-p2p-user-mode", "wild"].into_iter()).expect_err("should fail");
     assert!(err.contains("auto_join, private_safe, public_entry"));
 }
 

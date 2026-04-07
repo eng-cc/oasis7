@@ -199,11 +199,15 @@
   - runtime status/recommender 现在会在 CLI 未显式覆盖对应字段时，自动吸收 libp2p live relay reservation、DCUtR success/failure 与 active transport path kind，作为 `auto_join / private_safe / public_entry` 默认推荐的 fallback 探测源
   - runtime follow-up 已补 stale relay reservation 收口：live snapshot 现在会跟随 relayed listen addr 的 `new/expired` 生命周期重算 `relay_reservation_active`，不再把旧 reservation 证据永久滞留在 status/recommender
   - chain status 已把“实际运行态”与“当前 live 推荐态”拆开：保留 `effective_user_mode` 表示按实时 reachability snapshot 计算出的当前有效推荐态，并新增 `applied_effective_user_mode` 表示 runtime 在启动时实际应用的用户模式；若节点是通过底层 `deployment_mode/node_role` 显式 override 启动，则继续以 `deployment_mode/node_role_claim` 作为实际运行态真值
+  - `viewer_engineer` 已将 chain status 的 P2P recommendation payload 接入 launcher：`oasis7_web_launcher` 会把 requested/recommended/applied user mode、reachability evidence、底层 role mapping 一起透传给 `oasis7_client_launcher`
+  - `oasis7_client_launcher` 已新增用户可见 P2P 模式卡片，明确区分“请求模式 / 自动推荐 / 实际运行态”，并显示 reachability、hole-punch、relay、probe-stable 与 rationale 摘要
+  - launcher 高级配置已把 `chain_p2p_user_mode` 收口为 `auto_join / private_safe / public_entry` 三档 simple modes，并对 `public_entry` 增加显式确认门；未确认时拒绝启动高风险模式
 - 遗留:
   - 当前 runtime 已接入 relay / hole-punch / active-path live evidence，但仍未接入完整 AutoNAT / port reachability probe；CLI detection hint 继续保留为显式 override 通道，后续网络观测面仍需补齐真正的公网/NAT 探测源
-  - `viewer_engineer` 仍需把 status payload / launcher config 真正渲染成用户可见的推荐说明与 `公网入口` 风险确认交互
+  - 当前 viewer UX 的检测依据仍来自 runtime 已暴露的 live snapshot / CLI hint；若后续接入真实 AutoNAT / public-port probe，需要继续把新增证据源并入口径回写到同一张 P2P 卡片
 - 完成定义:
   - 系统可在默认启动路径中自动选择用户模式，并给出可审计的探测依据
+  - launcher/viewer 必须提供 `public_entry` 接受 / 拒绝路径，并保证最终运行态与用户确认结果一致可读
 
 ## 依赖
 - `doc/p2p/prd.md`
@@ -217,11 +221,14 @@
 
 ## 验收命令（本轮）
 - `rg -n "validator_hidden|relay_only|signed peer record|AutoNAT|hole punch|relay reservation|gossip plane|blob-state plane|anti-eclipse|tree broadcast|committee direct|自动加入|私有安全|公网入口|deployment_mode|node_role|显式确认" doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.design.md doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md doc/p2p/README.md testing-manual.md`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unknown-unknown`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
 ## 状态
 - 当前状态: active
 - 下一步: 继续执行 `P2PARCH-7` 的 shared-network mixed-topology live evidence；当前 lane 已有正式 `partial` 证据，后续需决定现有 proxy/shared-window 证据是否足以升到 `same-window pass`，否则再落 dedicated sentry/NAT lab 来替换当前 proxy live drills。
-- 下一步: `P2PARCH-9` runtime slice 已落地；后续由 `viewer_engineer` 把 recommendation/status payload 接成用户可见的推荐说明与 `公网入口` 风险确认 UX，再补对应 `test_tier_full` 证据。
+- 下一步: 以 `doc/testing/evidence/p2p-user-mode-launcher-ux-2026-04-07.md` 为基线继续补 dedicated NAT/public-entry lab；当前 full-tier 证据先覆盖 launcher UX、confirm/reject 流程与 mixed-topology/user-mode 语义对账。
 - 最近更新: 2026-04-07

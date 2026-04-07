@@ -50,11 +50,11 @@ pub use peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
-pub use reachability::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
 use reachability::{
     note_hole_punch_result, note_relay_reservation_accepted, refresh_active_transport_snapshot,
     snapshot_clone, sync_relay_reservation_from_listening_addrs,
 };
+pub use reachability::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
 use runtime_loop::{
     enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
     CommandOutcome, CommandStateRefs,

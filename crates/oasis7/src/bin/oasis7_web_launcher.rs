@@ -242,6 +242,24 @@ struct ChainRecoverySnapshot {
     suggested_config: LauncherConfig,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ChainP2pStatusSnapshot {
+    requested_user_mode: String,
+    recommended_user_mode: String,
+    effective_user_mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    applied_effective_user_mode: Option<String>,
+    requires_explicit_public_entry_confirmation: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    detected_reachability: Option<String>,
+    hole_punch_viability: String,
+    relay_available: bool,
+    probe_stable: bool,
+    deployment_mode: String,
+    node_role_claim: String,
+    rationale: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 enum ChainRuntimeStatus {
     Disabled,
@@ -285,6 +303,7 @@ struct ServiceState {
     process_state: ProcessState,
     running: Option<RunningProcess>,
     chain_runtime_status: ChainRuntimeStatus,
+    chain_p2p_status: Option<ChainP2pStatusSnapshot>,
     chain_recovery: Option<ChainRecoverySnapshot>,
     chain_running: Option<RunningProcess>,
     chain_started_at: Option<Instant>,
@@ -313,6 +332,7 @@ impl ServiceState {
             process_state: ProcessState::Idle,
             running: None,
             chain_runtime_status,
+            chain_p2p_status: None,
             chain_recovery: None,
             chain_running: None,
             chain_started_at: None,
@@ -346,6 +366,8 @@ struct StateSnapshot {
     chain_pid: Option<u32>,
     chain_running: bool,
     chain_runtime_bin: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_p2p_status: Option<ChainP2pStatusSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_recovery: Option<ChainRecoverySnapshot>,
     hosted_access: hosted_access::HostedPlayerAccessContract,

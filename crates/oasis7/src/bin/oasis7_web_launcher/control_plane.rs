@@ -243,6 +243,7 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
 pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
     if !state.config.chain_enabled {
         state.chain_runtime_status = ChainRuntimeStatus::Disabled;
+        state.chain_p2p_status = None;
         state.chain_recovery = None;
         state.last_chain_probe_at = None;
         return;
@@ -256,6 +257,7 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
                 | ChainRuntimeStatus::Unreachable(_)
         ) {
             state.chain_runtime_status = ChainRuntimeStatus::NotStarted;
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
         }
         state.last_chain_probe_at = None;
@@ -271,12 +273,14 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
     }
 
     state.last_chain_probe_at = Some(now);
-    match probe_chain_status_endpoint(state.config.chain_status_bind.as_str()) {
-        Ok(()) => {
+    match query_chain_status_endpoint(state.config.chain_status_bind.as_str()) {
+        Ok(p2p_status) => {
             state.chain_runtime_status = ChainRuntimeStatus::Ready;
+            state.chain_p2p_status = Some(p2p_status);
             state.chain_recovery = None;
         }
         Err(err) => {
+            state.chain_p2p_status = None;
             let within_grace = state.chain_started_at.is_some_and(|started_at| {
                 now.duration_since(started_at)
                     < Duration::from_secs(CHAIN_STATUS_STARTING_GRACE_SECS)
@@ -394,7 +398,12 @@ fn format_host_port(host: &str, port: u16) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
+    query_chain_status_endpoint(bind).map(|_| ())
+}
+
+pub(super) fn query_chain_status_endpoint(bind: &str) -> Result<ChainP2pStatusSnapshot, String> {
     let (host, port) = parse_host_port(bind, "chain status bind")?;
     let host = runtime_paths::normalize_bind_host_for_local_access(host.as_str());
     let socket_addr = (host.as_str(), port)
@@ -418,15 +427,32 @@ fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
     );
     std::io::Write::write_all(&mut stream, request.as_bytes())
         .map_err(|err| format!("write chain status probe failed: {err}"))?;
+    std::io::Write::flush(&mut stream)
+        .map_err(|err| format!("flush chain status probe failed: {err}"))?;
 
-    let mut buffer = [0_u8; 256];
-    let bytes = std::io::Read::read(&mut stream, &mut buffer)
+    let mut response_bytes = Vec::new();
+    std::io::Read::read_to_end(&mut stream, &mut response_bytes)
         .map_err(|err| format!("read chain status probe failed: {err}"))?;
-    if bytes == 0 {
+    if response_bytes.is_empty() {
         return Err("chain status probe returned empty response".to_string());
     }
-    let response = String::from_utf8_lossy(&buffer[..bytes]);
-    let status_line = response.lines().next().unwrap_or_default();
+    parse_chain_status_probe_response(response_bytes.as_slice())
+}
+
+fn parse_chain_status_probe_response(
+    response_bytes: &[u8],
+) -> Result<ChainP2pStatusSnapshot, String> {
+    let Some(boundary) = response_bytes
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+    else {
+        return Err("invalid HTTP response: missing header terminator".to_string());
+    };
+    let header = std::str::from_utf8(&response_bytes[..boundary])
+        .map_err(|_| "invalid HTTP response: header is not UTF-8".to_string())?;
+    let body = &response_bytes[(boundary + 4)..];
+
+    let status_line = header.lines().next().unwrap_or_default();
     if !status_line.starts_with("HTTP/") {
         return Err("chain status probe received non-HTTP response".to_string());
     }
@@ -438,7 +464,15 @@ fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
     if !(200..=299).contains(&status_code) {
         return Err(format!("chain status probe returned HTTP {status_code}"));
     }
-    Ok(())
+
+    #[derive(Deserialize)]
+    struct ChainStatusProbeResponse {
+        p2p: ChainP2pStatusSnapshot,
+    }
+
+    let payload: ChainStatusProbeResponse = serde_json::from_slice(body)
+        .map_err(|err| format!("parse chain status probe JSON failed: {err}"))?;
+    Ok(payload.p2p)
 }
 
 fn submit_chain_transfer_remote(
@@ -660,6 +694,7 @@ pub(super) fn start_chain_process(
     if !config.chain_enabled {
         state.config = config;
         state.chain_runtime_status = ChainRuntimeStatus::Disabled;
+        state.chain_p2p_status = None;
         state.chain_recovery = None;
         state.chain_running = None;
         state.chain_started_at = None;
@@ -676,6 +711,7 @@ pub(super) fn start_chain_process(
     if !issues.is_empty() {
         let detail = issues.join("; ");
         state.chain_runtime_status = ChainRuntimeStatus::ConfigError(detail.clone());
+        state.chain_p2p_status = None;
         state.chain_recovery = None;
         state.append_log(format!("chain config validation failed: {detail}"));
         state.mark_updated();
@@ -686,6 +722,7 @@ pub(super) fn start_chain_process(
         Ok(args) => args,
         Err(err) => {
             state.chain_runtime_status = ChainRuntimeStatus::ConfigError(err.clone());
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
             state.append_log(format!("invalid chain runtime args: {err}"));
             state.mark_updated();
@@ -698,6 +735,7 @@ pub(super) fn start_chain_process(
     if !Path::new(chain_runtime_bin.as_str()).is_file() {
         let err = format!("chain runtime binary does not exist: {chain_runtime_bin}");
         state.chain_runtime_status = ChainRuntimeStatus::Unreachable(err.clone());
+        state.chain_p2p_status = None;
         state.chain_recovery = None;
         state.append_log(format!("chain runtime start failed: {err}"));
         state.mark_updated();
@@ -712,6 +750,7 @@ pub(super) fn start_chain_process(
             state.chain_started_at = Some(Instant::now());
             state.last_chain_probe_at = None;
             state.chain_runtime_status = ChainRuntimeStatus::Starting;
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
             state.append_log(format!(
                 "oasis7_chain_runtime started (pid={pid}, bin={chain_runtime_bin})"
@@ -722,6 +761,7 @@ pub(super) fn start_chain_process(
         Err(err) => {
             state.chain_started_at = None;
             state.chain_runtime_status = ChainRuntimeStatus::Unreachable(err.clone());
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
             state.append_log(format!("chain runtime start failed: {err}"));
             state.mark_updated();
@@ -772,6 +812,7 @@ pub(super) fn stop_chain_process(state: &mut ServiceState) -> Result<(), String>
         }
         state.chain_started_at = None;
         state.last_chain_probe_at = None;
+        state.chain_p2p_status = None;
         state.chain_recovery = None;
         state.append_log("oasis7_chain_runtime stop requested but process is not running");
         state.mark_updated();
@@ -787,6 +828,7 @@ pub(super) fn stop_chain_process(state: &mut ServiceState) -> Result<(), String>
             } else {
                 ChainRuntimeStatus::Disabled
             };
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
             state.append_log("oasis7_chain_runtime stopped");
             state.mark_updated();
@@ -794,6 +836,7 @@ pub(super) fn stop_chain_process(state: &mut ServiceState) -> Result<(), String>
         }
         Err(err) => {
             state.chain_runtime_status = ChainRuntimeStatus::Unreachable(err.clone());
+            state.chain_p2p_status = None;
             state.chain_recovery = None;
             state.append_log(format!("oasis7_chain_runtime stop failed: {err}"));
             state.mark_updated();
@@ -824,6 +867,7 @@ pub(super) fn snapshot_from_state(
             &state.config,
             state.chain_runtime_bin.as_str(),
         ),
+        chain_p2p_status: state.chain_p2p_status.clone(),
         chain_recovery: state.chain_recovery.clone(),
         hosted_access: hosted_player_access_contract(deployment_mode_from_config(&state.config)),
         game_url,
@@ -927,11 +971,21 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if parse_chain_role(config.chain_node_role.as_str()).is_err() {
         issues.push("chain role must be one of: sequencer|storage|observer".to_string());
     }
-    if parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()).is_err() {
-        issues.push(
-            "chain P2P user mode must be one of: auto_join|private_safe|public_entry"
-                .to_string(),
-        );
+    match parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()) {
+        Ok(mode) => {
+            if mode == "public_entry" && !config.chain_p2p_accept_public_entry {
+                issues.push(
+                    "public entry mode requires explicit confirmation via Accept Public Entry"
+                        .to_string(),
+                );
+            }
+        }
+        Err(_) => {
+            issues.push(
+                "chain P2P user mode must be one of: auto_join|private_safe|public_entry"
+                    .to_string(),
+            );
+        }
     }
     if parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
@@ -1062,6 +1116,11 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     }
     let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
     let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
+    if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
+        return Err(
+            "public entry mode requires explicit confirmation via Accept Public Entry".to_string(),
+        );
+    }
     let chain_tick_ms = parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
         "chain node poll interval ms",
@@ -1194,8 +1253,7 @@ fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {
     match normalized.as_str() {
         "auto_join" | "private_safe" | "public_entry" => Ok(normalized),
         _ => Err(
-            "chain P2P user mode must be one of: auto_join, private_safe, public_entry"
-                .to_string(),
+            "chain P2P user mode must be one of: auto_join, private_safe, public_entry".to_string(),
         ),
     }
 }

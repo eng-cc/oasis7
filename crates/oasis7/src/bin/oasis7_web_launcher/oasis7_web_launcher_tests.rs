@@ -1,5 +1,7 @@
 use std::env;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -8,10 +10,11 @@ use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args,
     build_launcher_args_with_launcher_bin, chain_error_code_for_state, execute_gui_agent_action,
     finalize_chain_start_outcome, gui_agent_capabilities_response, parse_chain_validators,
-    parse_host_port, parse_options, parse_port, remap_transfer_runtime_target, snapshot_from_state,
-    stop_chain_process, stop_process, validate_chain_config, validate_game_config,
-    validate_game_config_with_launcher_bin, ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions,
-    LauncherConfig, ProcessState, ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND,
+    parse_host_port, parse_options, parse_port, query_chain_status_endpoint,
+    remap_transfer_runtime_target, snapshot_from_state, stop_chain_process, stop_process,
+    validate_chain_config, validate_game_config, validate_game_config_with_launcher_bin,
+    ChainP2pStatusSnapshot, ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions, LauncherConfig,
+    ProcessState, ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND,
     DEFAULT_LISTEN_BIND, DEFAULT_SCENARIO,
 };
 use oasis7_proto::storage_profile::StorageProfile;
@@ -359,6 +362,22 @@ fn build_chain_runtime_args_rejects_unknown_storage_profile() {
 }
 
 #[test]
+fn build_chain_runtime_args_requires_public_entry_confirmation() {
+    let err = build_chain_runtime_args(&LauncherConfig {
+        chain_enabled: true,
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_node_role: "storage".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: false,
+        chain_node_validators: "chain-a:100".to_string(),
+        ..LauncherConfig::default()
+    })
+    .expect_err("public entry should require explicit confirmation");
+    assert!(err.contains("explicit confirmation"));
+}
+
+#[test]
 fn build_game_url_uses_request_host_for_wildcard_bindings() {
     let config = LauncherConfig {
         viewer_host: "0.0.0.0".to_string(),
@@ -504,6 +523,7 @@ fn validate_chain_config_reports_missing_required_fields() {
         chain_node_id: "".to_string(),
         chain_storage_profile: "invalid".to_string(),
         chain_node_role: "invalid".to_string(),
+        chain_p2p_user_mode: "invalid".to_string(),
         chain_node_tick_ms: "0".to_string(),
         chain_pos_slot_duration_ms: "0".to_string(),
         chain_pos_ticks_per_slot: "4".to_string(),
@@ -520,8 +540,27 @@ fn validate_chain_config_reports_missing_required_fields() {
     assert!(issues
         .iter()
         .any(|item| item.contains("chain storage profile")));
-    assert!(issues.iter().any(|item| item.contains("chain P2P user mode")));
+    assert!(issues
+        .iter()
+        .any(|item| item.contains("chain P2P user mode")));
     assert!(issues.iter().any(|item| item.contains("chain pos")));
+}
+
+#[test]
+fn validate_chain_config_requires_public_entry_confirmation() {
+    let issues = validate_chain_config(&LauncherConfig {
+        chain_enabled: true,
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_node_role: "storage".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: false,
+        chain_node_validators: "chain-a:100".to_string(),
+        ..LauncherConfig::default()
+    });
+    assert!(issues
+        .iter()
+        .any(|item| item.contains("explicit confirmation")));
 }
 
 #[test]
@@ -781,6 +820,75 @@ fn gui_agent_capabilities_include_recover_chain_action() {
     assert!(actions
         .iter()
         .any(|item| item.as_str() == Some("recover_chain")));
+}
+
+#[test]
+fn query_chain_status_endpoint_reads_p2p_payload() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    let bind = listener.local_addr().expect("local addr");
+
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept");
+        let mut request = [0_u8; 512];
+        let bytes = stream.read(&mut request).expect("read request");
+        let request_text = String::from_utf8_lossy(&request[..bytes]);
+        assert!(request_text.starts_with("GET /v1/chain/status HTTP/1.1"));
+        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]}}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response should succeed");
+    });
+
+    let p2p_status =
+        query_chain_status_endpoint(format!("127.0.0.1:{}", bind.port()).as_str()).expect("ok");
+    assert_eq!(p2p_status.recommended_user_mode, "public_entry");
+    assert_eq!(
+        p2p_status.applied_effective_user_mode.as_deref(),
+        Some("private_safe")
+    );
+    assert!(p2p_status.requires_explicit_public_entry_confirmation);
+    server.join().expect("server thread should finish");
+}
+
+#[test]
+fn snapshot_from_state_includes_chain_p2p_status() {
+    let mut state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        PathBuf::from("."),
+        LauncherConfig::default(),
+    );
+    state.chain_runtime_status = ChainRuntimeStatus::Ready;
+    state.chain_p2p_status = Some(ChainP2pStatusSnapshot {
+        requested_user_mode: "auto_join".to_string(),
+        recommended_user_mode: "public_entry".to_string(),
+        effective_user_mode: "private_safe".to_string(),
+        applied_effective_user_mode: Some("private_safe".to_string()),
+        requires_explicit_public_entry_confirmation: true,
+        detected_reachability: Some("public".to_string()),
+        hole_punch_viability: "viable".to_string(),
+        relay_available: false,
+        probe_stable: true,
+        deployment_mode: "private".to_string(),
+        node_role_claim: "validator_core".to_string(),
+        rationale: vec!["observed_reachability=public".to_string()],
+    });
+
+    let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));
+    let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
+    assert_eq!(
+        encoded["chain_p2p_status"]["recommended_user_mode"],
+        serde_json::json!("public_entry")
+    );
+    assert_eq!(
+        encoded["chain_p2p_status"]["requires_explicit_public_entry_confirmation"],
+        serde_json::json!(true)
+    );
 }
 
 fn make_temp_dir(label: &str) -> PathBuf {

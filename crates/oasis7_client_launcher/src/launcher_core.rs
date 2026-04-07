@@ -100,6 +100,23 @@ pub(super) fn canonical_agent_provider_mode(raw: &str) -> Option<&'static str> {
     }
 }
 
+pub(super) fn canonical_chain_p2p_user_mode(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "auto_join" | "auto-join" | "auto" => Some("auto_join"),
+        "private_safe" | "private-safe" | "private" => Some("private_safe"),
+        "public_entry" | "public-entry" | "public" => Some("public_entry"),
+        _ => None,
+    }
+}
+
+pub(super) fn validate_chain_p2p_user_mode(raw: &str) -> Result<(), String> {
+    canonical_chain_p2p_user_mode(raw)
+        .map(|_| ())
+        .ok_or_else(|| {
+            "chain P2P user mode must be one of: auto_join, private_safe, public_entry".to_string()
+        })
+}
+
 pub(super) fn effective_openclaw_base_url(config: &LaunchConfig) -> Result<String, String> {
     let base_url = config.openclaw_base_url.trim();
     if !base_url.is_empty() {
@@ -205,6 +222,7 @@ pub(super) fn launcher_text_field_mut<'a>(
         "chain_node_id" => Some(&mut config.chain_node_id),
         "chain_world_id" => Some(&mut config.chain_world_id),
         "chain_node_role" => Some(&mut config.chain_node_role),
+        "chain_p2p_user_mode" => Some(&mut config.chain_p2p_user_mode),
         "chain_node_tick_ms" => Some(&mut config.chain_node_tick_ms),
         "chain_pos_slot_duration_ms" => Some(&mut config.chain_pos_slot_duration_ms),
         "chain_pos_ticks_per_slot" => Some(&mut config.chain_pos_ticks_per_slot),
@@ -229,6 +247,7 @@ pub(super) fn launcher_checkbox_field_mut<'a>(
         "llm_enabled" => Some(&mut config.llm_enabled),
         "openclaw_auto_discover" => Some(&mut config.openclaw_auto_discover),
         "chain_enabled" => Some(&mut config.chain_enabled),
+        "chain_p2p_accept_public_entry" => Some(&mut config.chain_p2p_accept_public_entry),
         "chain_pos_adaptive_tick_scheduler_enabled" => {
             Some(&mut config.chain_pos_adaptive_tick_scheduler_enabled)
         }
@@ -336,6 +355,14 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
     }
     if parse_chain_role(config.chain_node_role.as_str()).is_err() {
         issues.push(ConfigIssue::ChainRoleInvalid);
+    }
+    if validate_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()).is_err() {
+        issues.push(ConfigIssue::ChainP2pUserModeInvalid);
+    }
+    if canonical_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()) == Some("public_entry")
+        && !config.chain_p2p_accept_public_entry
+    {
+        issues.push(ConfigIssue::ChainPublicEntryConfirmationRequired);
     }
     if parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
@@ -489,6 +516,15 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         return Err("chain node id cannot be empty".to_string());
     }
     let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
+    let chain_p2p_user_mode = canonical_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())
+        .ok_or_else(|| {
+            "chain P2P user mode must be one of: auto_join, private_safe, public_entry".to_string()
+        })?;
+    if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
+        return Err(
+            "public entry mode requires explicit confirmation via Accept Public Entry".to_string(),
+        );
+    }
     let chain_tick_ms = parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
         "chain node poll interval ms",
@@ -541,6 +577,13 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         config.chain_status_bind.trim().to_string(),
         "--node-role".to_string(),
         chain_role,
+        "--p2p-user-mode".to_string(),
+        chain_p2p_user_mode.to_string(),
+        if config.chain_p2p_accept_public_entry {
+            "--p2p-accept-public-entry".to_string()
+        } else {
+            "--p2p-decline-public-entry".to_string()
+        },
         "--node-tick-ms".to_string(),
         chain_tick_ms.to_string(),
         "--pos-slot-duration-ms".to_string(),

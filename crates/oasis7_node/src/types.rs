@@ -78,8 +78,7 @@ impl FromStr for NodeUserMode {
             "private_safe" => Ok(Self::PrivateSafe),
             "public_entry" => Ok(Self::PublicEntry),
             _ => Err(
-                "p2p user mode must be one of: auto_join, private_safe, public_entry"
-                    .to_string(),
+                "p2p user mode must be one of: auto_join, private_safe, public_entry".to_string(),
             ),
         }
     }
@@ -241,10 +240,10 @@ impl NodeNetworkPolicy {
         accept_public_entry: bool,
     ) -> Result<NodeUserModeRecommendation, NodeError> {
         let recommended_user_mode = recommend_user_mode(runtime_role, detection);
-        let requires_explicit_public_entry_confirmation =
-            requested_user_mode == NodeUserMode::AutoJoin
-                && recommended_user_mode == NodeUserMode::PublicEntry
-                && !accept_public_entry;
+        let requires_explicit_public_entry_confirmation = requested_user_mode
+            == NodeUserMode::AutoJoin
+            && recommended_user_mode == NodeUserMode::PublicEntry
+            && !accept_public_entry;
         let effective_user_mode = match requested_user_mode {
             NodeUserMode::AutoJoin => {
                 if requires_explicit_public_entry_confirmation {
@@ -261,7 +260,10 @@ impl NodeNetworkPolicy {
 
         let mut rationale = Vec::new();
         if let Some(reachability) = detection.observed_reachability {
-            rationale.push(format!("observed_reachability={}", peer_reachability_as_str(reachability)));
+            rationale.push(format!(
+                "observed_reachability={}",
+                peer_reachability_as_str(reachability)
+            ));
         } else {
             rationale.push("observed_reachability=unknown".to_string());
         }
@@ -305,7 +307,10 @@ fn recommend_user_mode(
         return NodeUserMode::PublicEntry;
     }
 
-    if matches!(detection.hole_punch_viability, NodeHolePunchViability::Viable) {
+    if matches!(
+        detection.hole_punch_viability,
+        NodeHolePunchViability::Viable
+    ) {
         return NodeUserMode::AutoJoin;
     }
 
@@ -1244,8 +1249,14 @@ mod tests {
         )
         .expect("recommendation");
 
-        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
-        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(
+            recommendation.recommended_user_mode,
+            NodeUserMode::PublicEntry
+        );
+        assert_eq!(
+            recommendation.effective_user_mode,
+            NodeUserMode::PrivateSafe
+        );
         assert!(recommendation.requires_explicit_public_entry_confirmation);
         assert_eq!(
             recommendation.effective_policy.deployment_mode,
@@ -1272,8 +1283,14 @@ mod tests {
         )
         .expect("recommendation");
 
-        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PublicEntry);
-        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PublicEntry);
+        assert_eq!(
+            recommendation.recommended_user_mode,
+            NodeUserMode::PublicEntry
+        );
+        assert_eq!(
+            recommendation.effective_user_mode,
+            NodeUserMode::PublicEntry
+        );
         assert!(!recommendation.requires_explicit_public_entry_confirmation);
         assert_eq!(
             recommendation.effective_policy.deployment_mode,
@@ -1300,8 +1317,14 @@ mod tests {
         )
         .expect("recommendation");
 
-        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PrivateSafe);
-        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(
+            recommendation.recommended_user_mode,
+            NodeUserMode::PrivateSafe
+        );
+        assert_eq!(
+            recommendation.effective_user_mode,
+            NodeUserMode::PrivateSafe
+        );
         assert_eq!(
             recommendation.effective_policy.deployment_mode,
             PeerDeploymentMode::Private
@@ -1323,8 +1346,14 @@ mod tests {
         )
         .expect("recommendation");
 
-        assert_eq!(recommendation.recommended_user_mode, NodeUserMode::PrivateSafe);
-        assert_eq!(recommendation.effective_user_mode, NodeUserMode::PrivateSafe);
+        assert_eq!(
+            recommendation.recommended_user_mode,
+            NodeUserMode::PrivateSafe
+        );
+        assert_eq!(
+            recommendation.effective_user_mode,
+            NodeUserMode::PrivateSafe
+        );
         assert_eq!(
             recommendation.effective_policy.node_role_claim,
             PeerNodeRole::ValidatorCore
