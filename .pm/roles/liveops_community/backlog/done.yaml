@@ -121,6 +121,18 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_0afec86f190c4483ad4472147f425253.yaml
+  - task_uid: task_02be0487a2d045c7ad44e775dde317ad
+    title: "Triage Moltbook comments after repair-certification post"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Unread Moltbook notifications tied to current posts are classified, and any comment that needs a reply is either answered or explicitly left for no-reply with reason."
+      - "Task execution log records checked post ids, comments triaged, replies sent or withheld, and remaining follow-up windows."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_02be0487a2d045c7ad44e775dde317ad.yaml
   - task_uid: task_cd0753c5c26c5caebf06f653bef1b435
     title: "Triage remaining Moltbook follower and DM notifications"
     priority: P3
