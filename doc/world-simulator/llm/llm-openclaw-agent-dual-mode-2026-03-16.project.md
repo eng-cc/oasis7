@@ -20,7 +20,7 @@
 - [x] T4.2 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `viewer_engineer` 落地 client launcher 的 `OpenClaw execution mode` 配置与透传，并统一 launcher / operator 的 timeout policy，消除 GUI 主链路默认静默落回 `headless_agent` 与 `200ms` 假超时。
 - [x] T4.3 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `agent_engineer` / `runtime_engineer` 落地真实 `player_parity` / `headless_agent` observation 分层、schema mismatch 结构化失败与 fixture diff 验证，确保 dual-mode 不再只是 metadata 标签。
 - [x] T4.4 (PRD-WORLD_SIMULATOR-040) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 为 launcher probe、runtime live snapshot、viewer debug context 与 parity summary 补 `capabilities/supported_action_sets` 兼容校验与 `fallback_reason` 透传，收口 `ready/degraded/incompatible` 判定与 `agent_direct_connect` alias fallback 审计链。
-- [ ] T4.5 (PRD-WORLD_SIMULATOR-040) [test_tier_full]: 由 `qa_engineer` / `producer_system_designer` 在 T4.2~T4.4 完成后重跑 dual-mode 真实采证，并重新判断本专题是否可恢复 `completed`。
+- [x] T4.5 (PRD-WORLD_SIMULATOR-040) [test_tier_full]: 由 `qa_engineer` / `producer_system_designer` 在 T4.2~T4.4 完成后重跑 dual-mode 真实采证，并重新判断本专题是否可恢复 `completed`。产物文件: `doc/world-simulator/llm/openclaw-agent-dual-mode-recertification-2026-04-07.md`、`doc/world-simulator/llm/llm-openclaw-agent-dual-mode-2026-03-16.project.md`、`doc/world-simulator/project.md`。验收命令 (`test_tier_full`): `openclaw --version`；`curl -sS http://127.0.0.1:18789/health`；`curl -sS http://127.0.0.1:5841/v1/provider/health | jq .`；`curl -sS http://127.0.0.1:5841/v1/provider/info | jq .`；`env -u RUSTC_WRAPPER CARGO_TARGET_DIR=/tmp/oasis7-task298-target bash scripts/openclaw-parity-p0.sh --openclaw-only --samples 1 --ticks 4 --timeout-ms 15000 --openclaw-base-url http://127.0.0.1:5841 --openclaw-connect-timeout-ms 15000 --openclaw-agent-profile oasis7_p0_low_freq_npc --execution-mode headless_agent`；`env -u RUSTC_WRAPPER CARGO_TARGET_DIR=/tmp/oasis7-task298-target bash scripts/openclaw-parity-p0.sh --openclaw-only --samples 1 --ticks 4 --timeout-ms 15000 --openclaw-base-url http://127.0.0.1:5841 --openclaw-connect-timeout-ms 15000 --openclaw-agent-profile oasis7_p0_low_freq_npc --execution-mode player_parity`
 
 ## 依赖
 - `doc/world-simulator/llm/llm-openclaw-agent-experience-parity-2026-03-12.prd.md`
@@ -36,16 +36,14 @@
 - `testing-manual.md`
 
 ## 状态
-- 最近更新：2026-04-07（T4.4 完成）
-- 当前阶段: remediation_reopened
-- 当前任务: `T4.4` 已完成；进入 `T4.5` dual-mode 重采证与 producer/QA 复签。
+- 最近更新：2026-04-07（T4.5 完成，专题恢复 `completed`）
+- 当前阶段: completed
+- 当前任务: 本专题已恢复 `completed`；后续风险与扩面工作转入 `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_SIMULATOR-037` 的 experimental follow-up。
 - owner: `qa_engineer`
 - 联审: `agent_engineer`、`runtime_engineer`、`viewer_engineer`、`qa_engineer`
 - 发起建模: `producer_system_designer`
-- 备注: 本专题的目标态没有变化，仍然是为 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 收口“双轨 lane”的产品目标与执行边界；但 2026-04-06 formal review 已确认当前实现尚未完整兑现 `PRD-WORLD_SIMULATOR-040` 的 launcher 可达性、dual-mode observation、provider handshake 与 fallback 审计链要求，因此 project 状态从“已收口”调整为“需补 remediation 后再复签”。详见 `doc/world-simulator/llm/llm-openclaw-agent-direct-connect-review-2026-04-06.md`。
+- 备注: 本专题的目标态没有变化，仍然是为 `agent_direct_connect` 当前 provider implementation=`openclaw_local_http` 收口“双轨 lane”的产品目标与执行边界。2026-04-06 formal review 提出的 launcher 可达性、dual-mode observation、provider handshake 与 fallback 审计链缺口，现已在 `TASK-WORLD_SIMULATOR-295~298` 中完成 remediation 与真实复采证；2026-04-07 复签结论见 `doc/world-simulator/llm/openclaw-agent-dual-mode-recertification-2026-04-07.md`。
 - 备注补充: runtime live / viewer debug context 当前新增的 `capabilities`、`supported_action_sets` 与 compatibility status 表达的是本地执行 lane 期望遵守的 phase-1 contract 与 fallback 审计结果，不等价于 provider 实际 `/v1/provider/info` handshake 原样回显；真实 provider 兼容性真值仍以 launcher probe 与 parity summary/raw 为准。
 - 当前阻断:
-  - 已解除: client launcher 现已显式暴露并透传 `OpenClaw execution mode`，且与 `oasis7_game_launcher` / operator 默认 connect timeout 统一到 `15000ms`
-  - 已解除: dual-mode request 已切到 provider-facing observation adapter，`player_parity` 不再携带 `local_navigation_graph/interaction_targets` 等 headless-only 字段；bridge 对 `unsupported_schema_version` 与 `mode_observation_mismatch` 现已返回结构化失败，fixture diff 定向测试已落地
-  - 已解除: launcher probe 现会基于 `capabilities/supported_action_sets` 给出 `ready/degraded/incompatible`，runtime live debug context 与 parity summary/raw 已写入 `capabilities`、`supported_action_sets`、compatibility status 与 `fallback_reason`，`agent_direct_connect` alias 也会留下结构化 fallback 审计
-  - 当前剩余阻断: 仅剩 `T4.5` 要求的真实 dual-mode 复采证与 producer/QA 重新判断专题是否可恢复 `completed`
+  - 无。本专题已恢复 `completed`。
+  - 后续非阻断项: `PRD-WORLD_SIMULATOR-038` 仍需继续处理 absolute wait latency 与更广 parity 样本；本轮 `headless_agent` 样本中的一次可恢复 `provider_unreachable` 记为 follow-up 观察项，而不是 reopen 本专题的 blocker。
