@@ -54,6 +54,21 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_382f3d2cc062445ca2f07294f17daf0e.yaml
+  - task_uid: task_220a5c7e570344d284beeb2ba75d4c5f
+    title: "Implement P2PARCH-5 operator/ASN diversity and block artifacts"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "P2PARCH-5 adds enforceable operator/ASN diversity thresholds to peer-manager health evaluation and blocking decisions."
+      - "Runtime emits durable block artifacts or banlist state that survives process-level peer-manager recompute and is traceable to P2PARCH-5."
+      - "Docs, tests, and PM tracking remain traceable to PRD-P2P-024 / P2PARCH-5."
+    handoff_to:
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/task_220a5c7e570344d284beeb2ba75d4c5f.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

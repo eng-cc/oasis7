@@ -1117,6 +1117,8 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
             PeerDiscoverySource::Dht,
         ],
         capability_lanes: network_policy.node_role_claim.default_capability_lanes(),
+        source_operator: options.p2p_source_operator.clone(),
+        source_asn: options.p2p_source_asn.clone(),
         published_at_ms: 0,
         ttl_ms: 60 * 60 * 1000,
     }

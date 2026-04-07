@@ -15,7 +15,7 @@
 - [x] P2PARCH-4 (PRD-P2P-024-B/C) [test_tier_required + test_tier_full]: `runtime_engineer` 收敛 traffic lanes，把 consensus gossip、sync、blob/state、control 拆成独立 QoS 与 peer subset。
   已落地 lane/QoS substrate：`oasis7_proto::distributed_net` 现已冻结 `NetworkLane` / `NetworkLaneQosClass` / topic+protocol classifier；`PeerRecord` 新增 `capability_lanes` 并对 legacy record 做 role-based defaulting，且 `observer_light` 不再默认宣称 `sync/blob_state` 服务能力；`oasis7_net` 会按 lane 选择 subscription inbox 配额，并在 req/resp 选 peer 时优先过滤掉不具备对应 lane capability 的 peer；`oasis7_node` 已把 replication / consensus / `feedback_p2p` 绑定提升为显式 lane registry，并对 `node_role_claim` 执行 publish/subscribe/request/serve 权限校验，observer 只保留 data-lane request，不注册 data-lane serve handler，也不能通过 `feedback_p2p` 订阅或发布 `blob_state` lane topic。
 - [ ] P2PARCH-5 (PRD-P2P-024-B/E) [test_tier_required + test_tier_full]: `runtime_engineer` + `qa_engineer` 落 peer manager、anti-eclipse、diversity、relay budget 与 quarantine 信号。
-  进行中第二个切片：在首个 peer-manager substrate 基础上，`oasis7_net` 现在开始把 `suspect` 与已验证的 hard-`blocked` 升级成 active-set quarantine enforcement。已连接 peer 一旦因 source diversity、subnet、relay-domain 或 relay budget 规则进入 quarantine，runtime 会主动断连，并在 `ConnectionClosed` / `OutgoingConnectionError` 路径抑制 failover / retry，避免 quarantined peer 立刻被本地 transport 状态机拉回；同轮 health 统计也会剔除未准入 active peer，避免瞬时污染其他健康 peer。
+  进行中第三个切片：在首个 peer-manager substrate 与 active-set quarantine enforcement 基础上，`oasis7_net` 已把 `source_operator/source_asn` 接入 peer record、peer manager 健康判定与 block artifact 跟踪。runtime 现在会对 `operator / ASN / subnet / relay-domain` 做正式阈值判定，并为 hard-`blocked` peer 保留跨重算可追溯的 block artifact；当前仍缺 `qa_engineer` required/full 证据，以及把 block artifact 升级为 release-gate/cross-restart denylist 的后续链路。
 - [ ] P2PARCH-6 (PRD-P2P-024-D/E) [test_tier_required + test_tier_full]: `qa_engineer` 建立 mixed-topology 套件，覆盖家宽/NAT、CGNAT、relay exhaustion、sentry loss、bootstrap poisoning、path failover。
   已把 full-tier 从 dry-run 推进到真实 proxy execution：`scripts/p2p-mixed-topology-matrix.sh` 现在会把 shared-window / dedicated-lab / pass-uplift 外部证据与 blocker 语义写入 `summary.json/md`，proxy case 也不再依赖预编译 binary 或默认 561x 端口段。2026-04-07 latest full run（`doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md`）确认 7 个 exact case 全通过，same-window shared refs 已接入 summary，但 2 个 proxy longrun 仍以 `consensus_hash_divergence`、`committed_height_not_monotonic nodes=sequencer`、`known_peer_heads_zero_samples`、`http_failure_samples` 失败，因此当前仍停留在 `required_exact_ready=true / full_proxy_ready=false` 的 audited `partial`。
 - [ ] P2PARCH-7 (PRD-P2P-024-E) [test_tier_required + test_tier_full]: `producer_system_designer` + `liveops_community` + `qa_engineer` 把 shared-network / release-train / claim gate 升级为 mixed-topology 正式门禁。
@@ -49,6 +49,8 @@
   - `P2PARCH-5` 已落首个 peer-manager substrate：`oasis7_net` 现在会基于已发现 peer record 与 active transport path 计算本地 peer health snapshot，并对 `single-source active set`、IPv4 `/24`、relay-domain 与 relay budget 超限发出 `suspect` 信号；request peer 选择会优先选择 `active/candidate`、把 `suspect` 压到最后并直接排除 `blocked` peer。
   - `P2PARCH-5` 已把 discovery ingress 接上首轮 enforcement：`RoutingUpdated` / rendezvous registration 不再绕过 signed peer record 校验直接拨号；`suspect/blocked` peer 也不会提前占用 discovery dial dedupe，使后续 record 升级后仍可重新进入拨号决策。
   - `P2PARCH-5` 已把 quarantine 接到 active connection：已连接的 `suspect` 与已验证 hard-`blocked` peer 现在会被主动断连，且 `ConnectionClosed` / `OutgoingConnectionError` 不再对这些 peer 继续 failover 或 retry；同轮 health 统计会先剔除未准入 active peer，避免坏连接瞬时污染其他健康 peer。
+  - `P2PARCH-5` 已把 `source_operator/source_asn` 接进 runtime 默认 peer record、peer manager 健康快照与调试面；active peer set 现在会对 operator/ASN 与 `/24`、relay-domain 一样执行正式多样性阈值，并把 `>25%` 记为 `suspect`、`>=50%` 升级为 hard-`blocked`。
+  - `P2PARCH-5` 已把 hard-`blocked` 结果沉淀为 process-durable block artifact：runtime 会跨 peer-manager 重算保留 `peer_id/status/issues/path/operator/asn/first_blocked_at/last_blocked_at/last_cleared_at`，并通过 debug API 暴露给后续 QA / release-gate 取证。
 - `P2PARCH-6` 已落首个 mixed-topology validation matrix slice：QA 现在可用一个统一脚本同时编排 `required` exact cases（private/NAT policy、validator_hidden、relay_only、bootstrap poisoning、relay-budget detection、path failover）和 `full` proxy cases（triad/triad_distributed ingress-loss release drills），并把 `proxy != dedicated sentry/NAT lab` 作为证据口径显式写入 summary。
 - `P2PARCH-6` 已把 latest full-tier 真跑到 proxy soak：matrix summary 现在会额外钉住 `required_exact_ready/full_proxy_ready/shared_network_pass_blockers` 等字段；latest live run 虽未通过 proxy gate，但已把 full-tier blocker 从“只停留在 dry-run”推进成“有实际 failure signatures 的 audited partial”。
   - `P2PARCH-8` 已冻结用户层部署抽象：后续产品默认应把正式角色藏在内部，普通用户只看到 `2~3` 个简单模式，且默认由系统自动选择。
@@ -141,12 +143,15 @@
   - discovery dial dedupe 修正：`suspect/blocked` peer 不再提前写入 `dialed_discovery_addrs`，避免同地址在 record 升级为健康后失去首拨机会
   - active-set quarantine enforcement：已连接的 `suspect` 与已验证 hard-`blocked` peer 会被主动断连，并在 `ConnectionClosed` / `OutgoingConnectionError` 上抑制 failover / retry，避免 transport 状态机把 quarantined peer 立即拉回 active set
   - admitted active-set health view：对外发布的 peer health 会先剔除未准入 active peer，不再让待校验或 quarantined 连接在同轮 `/24`、relay-domain、relay budget 统计中瞬时污染其他健康 peer
+  - operator / ASN diversity inputs：chain runtime 默认 peer record 现已支持 `source_operator/source_asn`，peer manager 会归一化标签并把 operator/ASN concentration 纳入 health snapshot
+  - 正式阈值与 block 条件：`operator / ASN / subnet / relay-domain` 现统一采用 `>25% => suspect`、`>=50% => blocked` 的默认判定，并在 issue payload 中回传触发阈值
+  - process-durable block artifact：runtime 会为 hard-`blocked` peer 维护跨 recompute 的 artifact，记录 `peer_id/status/issues/path/operator/asn/first_blocked_at/last_blocked_at/last_cleared_at`，供 debug/release 取证
 - 仍待补齐:
-  - operator / ASN 多样性输入与阈值
-  - `blocked` 到持久 banlist / release-gate 级 block artifact 的升级
   - `qa_engineer` mixed-topology 与 fail-signature required/full 套件
+  - 若要把当前 runtime artifact 升级为 release-gate denylist / cross-restart banlist，仍需后续持久化与 evidence contract
 - 完成定义:
   - operator/ASN/subnet/relay-domain 多样性具备正式阈值与 block 条件
+  - hard-`blocked` peer 至少产出可追溯的 block artifact，并能被 QA / release-gate 消费
 
 ### P2PARCH-6 / qa_engineer
 - 输入:

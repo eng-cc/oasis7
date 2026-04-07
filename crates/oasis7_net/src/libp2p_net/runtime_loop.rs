@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures::channel::oneshot;
 use libp2p::gossipsub::{IdentTopic, TopicHash};
@@ -13,9 +14,10 @@ use super::{
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
     publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
     put_record_query, recompute_peer_manager_healths, should_republish, start_peer_discovery_query,
-    Behaviour, Command, Handler, Keypair, NetworkMessage, NetworkRequest, PeerManagerHealthIssue,
-    PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
-    PendingPeerRecordRequest, SignedPeerRecord, TransportPath, WorldError,
+    Behaviour, Command, Handler, Keypair, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, SignedPeerRecord, TransportPath,
+    WorldError,
     DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
@@ -180,6 +182,7 @@ pub(super) fn refresh_peer_manager_healths(
     previously_admitted_active_peers: &HashSet<PeerId>,
     peer_manager_policy: &PeerManagerPolicy,
     event_peer_healths: &Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
+    event_block_artifacts: &Arc<Mutex<HashMap<String, PeerManagerBlockArtifact>>>,
     event_errors: &Arc<Mutex<Vec<String>>>,
     max_error_messages: usize,
 ) -> (
@@ -301,6 +304,54 @@ pub(super) fn refresh_peer_manager_healths(
             }
         }
         *guard = latest;
+    }
+    {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as i64)
+            .unwrap_or(0);
+        let mut guard = event_block_artifacts.lock().expect("lock peer block artifacts");
+        for health in healths.values() {
+            let existing = guard.get_mut(&health.peer_id);
+            match (existing, health.status) {
+                (Some(artifact), PeerManagerHealthStatus::Blocked) => {
+                    artifact.status = health.status;
+                    artifact.issues = health.issues.clone();
+                    artifact.active_path_kind = health.active_path_kind.clone();
+                    artifact.source_operator = health.source_operator.clone();
+                    artifact.source_asn = health.source_asn.clone();
+                    artifact.last_blocked_at_ms = now_ms;
+                    artifact.last_cleared_at_ms = None;
+                }
+                (Some(artifact), _) => {
+                    artifact.status = health.status;
+                    artifact.issues = health.issues.clone();
+                    artifact.active_path_kind = health.active_path_kind.clone();
+                    artifact.source_operator = health.source_operator.clone();
+                    artifact.source_asn = health.source_asn.clone();
+                    if artifact.last_cleared_at_ms.is_none() {
+                        artifact.last_cleared_at_ms = Some(now_ms);
+                    }
+                }
+                (None, PeerManagerHealthStatus::Blocked) => {
+                    guard.insert(
+                        health.peer_id.clone(),
+                        PeerManagerBlockArtifact {
+                            peer_id: health.peer_id.clone(),
+                            status: health.status,
+                            issues: health.issues.clone(),
+                            active_path_kind: health.active_path_kind.clone(),
+                            source_operator: health.source_operator.clone(),
+                            source_asn: health.source_asn.clone(),
+                            first_blocked_at_ms: now_ms,
+                            last_blocked_at_ms: now_ms,
+                            last_cleared_at_ms: None,
+                        },
+                    );
+                }
+                (None, _) => {}
+            }
+        }
     }
     (healths, quarantined_active_peers, admitted_active_peers)
 }

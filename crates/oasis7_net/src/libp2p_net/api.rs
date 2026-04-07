@@ -17,7 +17,8 @@ use oasis7_proto::distributed_dht::{
 use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
 use super::{
-    snapshot_clone, Command, Libp2pNetwork, Libp2pReachabilitySnapshot, PeerManagerPeerHealth,
+    snapshot_clone, Command, Libp2pNetwork, Libp2pReachabilitySnapshot,
+    PeerManagerBlockArtifact, PeerManagerPeerHealth,
 };
 
 impl Libp2pNetwork {
@@ -81,6 +82,15 @@ impl Libp2pNetwork {
         self.peer_healths
             .lock()
             .expect("lock peer healths")
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    pub fn debug_peer_block_artifacts(&self) -> Vec<PeerManagerBlockArtifact> {
+        self.peer_block_artifacts
+            .lock()
+            .expect("lock peer block artifacts")
             .values()
             .cloned()
             .collect()

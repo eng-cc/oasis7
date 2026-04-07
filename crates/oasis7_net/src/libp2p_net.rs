@@ -48,7 +48,8 @@ use discovery::{
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
 use peer_manager::recompute_peer_manager_healths;
 pub use peer_manager::{
-    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
+    PeerManagerPeerHealth, PeerManagerPolicy,
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
 use reachability::{
@@ -134,6 +135,7 @@ pub struct Libp2pNetwork {
     connected_peers: Arc<Mutex<HashSet<PeerId>>>,
     errors: Arc<Mutex<Vec<String>>>,
     peer_healths: Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
+    peer_block_artifacts: Arc<Mutex<HashMap<String, PeerManagerBlockArtifact>>>,
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
 }
 
@@ -220,6 +222,8 @@ impl Libp2pNetwork {
         let connected_peers = Arc::new(Mutex::new(HashSet::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
         let peer_healths = Arc::new(Mutex::new(HashMap::<String, PeerManagerPeerHealth>::new()));
+        let peer_block_artifacts =
+            Arc::new(Mutex::new(HashMap::<String, PeerManagerBlockArtifact>::new()));
         let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
@@ -233,6 +237,7 @@ impl Libp2pNetwork {
         let event_connected_peers = Arc::clone(&connected_peers);
         let event_errors = Arc::clone(&errors);
         let event_peer_healths = Arc::clone(&peer_healths);
+        let event_peer_block_artifacts = Arc::clone(&peer_block_artifacts);
         let event_reachability = Arc::clone(&reachability);
         let config_clone = config.clone();
         let keypair_clone = keypair.clone();
@@ -477,6 +482,7 @@ impl Libp2pNetwork {
                                                             &admitted_active_peers,
                                                             &config_clone.peer_manager_policy,
                                                             &event_peer_healths,
+                                                            &event_peer_block_artifacts,
                                                             &event_errors,
                                                             max_error_messages,
                                                         );
@@ -602,6 +608,7 @@ impl Libp2pNetwork {
                                                                     &admitted_active_peers,
                                                                     &config_clone.peer_manager_policy,
                                                                     &event_peer_healths,
+                                                                    &event_peer_block_artifacts,
                                                                     &event_errors,
                                                                     max_error_messages,
                                                                 );
@@ -1054,6 +1061,7 @@ impl Libp2pNetwork {
                                         &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
+                                        &event_peer_block_artifacts,
                                         &event_errors,
                                         max_error_messages,
                                     );
@@ -1144,6 +1152,7 @@ impl Libp2pNetwork {
                                         &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
+                                        &event_peer_block_artifacts,
                                         &event_errors,
                                         max_error_messages,
                                     );
@@ -1243,6 +1252,7 @@ impl Libp2pNetwork {
             connected_peers,
             errors,
             peer_healths,
+            peer_block_artifacts,
             reachability,
         }
     }

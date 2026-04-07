@@ -43,6 +43,8 @@ pub(super) struct CliOptions {
     pub p2p_detected_probe_stable: bool,
     pub p2p_deployment_mode: PeerDeploymentMode,
     pub p2p_node_role: PeerNodeRole,
+    pub p2p_source_operator: Option<String>,
+    pub p2p_source_asn: Option<String>,
     pub node_tick_ms: u64,
     pub pos_slot_duration_ms: u64,
     pub pos_ticks_per_slot: u64,
@@ -93,6 +95,8 @@ impl Default for CliOptions {
             p2p_detected_probe_stable: false,
             p2p_deployment_mode: PeerDeploymentMode::Private,
             p2p_node_role: PeerNodeRole::ValidatorCore,
+            p2p_source_operator: None,
+            p2p_source_asn: None,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
             pos_slot_duration_ms: DEFAULT_POS_SLOT_DURATION_MS,
             pos_ticks_per_slot: DEFAULT_POS_TICKS_PER_SLOT,
@@ -205,6 +209,16 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 let raw = parse_required_value(&mut iter, "--p2p-node-role")?;
                 options.p2p_node_role = raw.parse::<PeerNodeRole>()?;
                 options.p2p_node_role_explicit = true;
+            }
+            "--p2p-source-operator" => {
+                let raw = parse_required_value(&mut iter, "--p2p-source-operator")?;
+                options.p2p_source_operator =
+                    Some(normalize_p2p_metadata_label(raw.as_str(), "--p2p-source-operator")?);
+            }
+            "--p2p-source-asn" => {
+                let raw = parse_required_value(&mut iter, "--p2p-source-asn")?;
+                options.p2p_source_asn =
+                    Some(normalize_p2p_metadata_label(raw.as_str(), "--p2p-source-asn")?);
             }
             "--node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--node-tick-ms")?;
@@ -442,6 +456,14 @@ fn parse_peer_reachability_class(raw: &str) -> Result<PeerReachabilityClass, Str
     }
 }
 
+fn normalize_p2p_metadata_label(raw: &str, flag: &str) -> Result<String, String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Err(format!("{flag} requires a non-empty value"));
+    }
+    Ok(normalized)
+}
+
 pub(super) fn parse_validator_spec(raw: &str) -> Result<PosValidator, String> {
     let (validator_id, stake_text) = raw
         .rsplit_once(':')
@@ -483,6 +505,8 @@ Options:\n\
   --p2p-detected-probe-unstable     mark auto-detection as unstable\n\
   --p2p-deployment-mode <mode>      public|hybrid|private|relay_only|validator_hidden (default: private)\n\
   --p2p-node-role <role>            validator_core|sentry|relay|full_storage|observer_light\n\
+  --p2p-source-operator <label>     canonical operator label for peer diversity policy\n\
+  --p2p-source-asn <label>          canonical ASN label for peer diversity policy\n\
   --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
   --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {DEFAULT_POS_SLOT_DURATION_MS})\n\
   --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {DEFAULT_POS_TICKS_PER_SLOT})\n\

@@ -12,7 +12,13 @@ pub struct PeerManagerPolicy {
     pub min_active_discovery_sources: usize,
     pub min_peer_discovery_sources: usize,
     pub max_ipv4_subnet_share_per_mille: u16,
+    pub block_ipv4_subnet_share_per_mille: u16,
     pub max_relay_domain_share_per_mille: u16,
+    pub block_relay_domain_share_per_mille: u16,
+    pub max_operator_share_per_mille: u16,
+    pub block_operator_share_per_mille: u16,
+    pub max_asn_share_per_mille: u16,
+    pub block_asn_share_per_mille: u16,
     pub max_relayed_active_peer_share_per_mille: u16,
 }
 
@@ -22,7 +28,13 @@ impl Default for PeerManagerPolicy {
             min_active_discovery_sources: 2,
             min_peer_discovery_sources: 2,
             max_ipv4_subnet_share_per_mille: 250,
+            block_ipv4_subnet_share_per_mille: 500,
             max_relay_domain_share_per_mille: 250,
+            block_relay_domain_share_per_mille: 500,
+            max_operator_share_per_mille: 250,
+            block_operator_share_per_mille: 500,
+            max_asn_share_per_mille: 250,
+            block_asn_share_per_mille: 500,
             max_relayed_active_peer_share_per_mille: 500,
         }
     }
@@ -59,6 +71,18 @@ pub enum PeerManagerHealthIssue {
         active_peer_count: usize,
         limit_per_mille: u16,
     },
+    OperatorConcentration {
+        source_operator: String,
+        peers_in_bucket: usize,
+        active_peer_count: usize,
+        limit_per_mille: u16,
+    },
+    AsnConcentration {
+        source_asn: String,
+        peers_in_bucket: usize,
+        active_peer_count: usize,
+        limit_per_mille: u16,
+    },
     RelayBudgetExceeded {
         relayed_active_peers: usize,
         active_peer_count: usize,
@@ -73,6 +97,21 @@ pub struct PeerManagerPeerHealth {
     pub issues: Vec<PeerManagerHealthIssue>,
     pub discovery_sources: Vec<PeerDiscoverySource>,
     pub active_path_kind: Option<String>,
+    pub source_operator: Option<String>,
+    pub source_asn: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerManagerBlockArtifact {
+    pub peer_id: String,
+    pub status: PeerManagerHealthStatus,
+    pub issues: Vec<PeerManagerHealthIssue>,
+    pub active_path_kind: Option<String>,
+    pub source_operator: Option<String>,
+    pub source_asn: Option<String>,
+    pub first_blocked_at_ms: i64,
+    pub last_blocked_at_ms: i64,
+    pub last_cleared_at_ms: Option<i64>,
 }
 
 pub(super) fn recompute_peer_manager_healths(
@@ -84,12 +123,22 @@ pub(super) fn recompute_peer_manager_healths(
     let mut active_discovery_sources = BTreeSet::new();
     let mut ipv4_subnet_counts: HashMap<String, usize> = HashMap::new();
     let mut relay_domain_counts: HashMap<String, usize> = HashMap::new();
+    let mut operator_counts: HashMap<String, usize> = HashMap::new();
+    let mut asn_counts: HashMap<String, usize> = HashMap::new();
     let mut relayed_active_peers = 0usize;
 
     for (peer_id, active_path) in active_transport_paths {
         if let Some(record) = discovered_peer_records.get(peer_id) {
             for source in &record.record.discovery_sources {
                 active_discovery_sources.insert(discovery_source_label(*source));
+            }
+            if let Some(source_operator) =
+                normalized_source_label(record.record.source_operator.as_deref())
+            {
+                *operator_counts.entry(source_operator).or_default() += 1;
+            }
+            if let Some(source_asn) = normalized_source_label(record.record.source_asn.as_deref()) {
+                *asn_counts.entry(source_asn).or_default() += 1;
             }
         }
         if let Some(bucket) = ipv4_subnet_bucket(active_path) {
@@ -122,12 +171,18 @@ pub(super) fn recompute_peer_manager_healths(
         let record = discovered_peer_records.get(&peer_id);
         let active_path = active_transport_paths.get(&peer_id);
         let mut issues = Vec::new();
+        let mut hard_block = false;
         let discovery_sources = record
             .map(|record| record.record.discovery_sources.clone())
             .unwrap_or_default();
+        let source_operator =
+            record.and_then(|entry| normalized_source_label(entry.record.source_operator.as_deref()));
+        let source_asn =
+            record.and_then(|entry| normalized_source_label(entry.record.source_asn.as_deref()));
 
         if record.is_none() {
             issues.push(PeerManagerHealthIssue::MissingPeerRecord);
+            hard_block = true;
         } else if discovery_sources.len() < policy.min_peer_discovery_sources {
             issues.push(PeerManagerHealthIssue::SingleSourceDiscovery {
                 observed_sources: discovery_sources.len(),
@@ -148,6 +203,20 @@ pub(super) fn recompute_peer_manager_healths(
                     .copied()
                     .unwrap_or(0);
                 if bucket_count >= 2
+                    && meets_or_exceeds_share_limit(
+                        bucket_count,
+                        active_peer_count,
+                        policy.block_ipv4_subnet_share_per_mille,
+                    )
+                {
+                    issues.push(PeerManagerHealthIssue::Ipv4SubnetConcentration {
+                        subnet: bucket,
+                        peers_in_bucket: bucket_count,
+                        active_peer_count,
+                        limit_per_mille: policy.block_ipv4_subnet_share_per_mille,
+                    });
+                    hard_block = true;
+                } else if bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
                         active_peer_count,
@@ -176,6 +245,20 @@ pub(super) fn recompute_peer_manager_healths(
                         .copied()
                         .unwrap_or(0);
                     if bucket_count >= 2
+                        && meets_or_exceeds_share_limit(
+                            bucket_count,
+                            active_peer_count,
+                            policy.block_relay_domain_share_per_mille,
+                        )
+                    {
+                        issues.push(PeerManagerHealthIssue::RelayDomainConcentration {
+                            relay_domain: domain,
+                            peers_in_bucket: bucket_count,
+                            active_peer_count,
+                            limit_per_mille: policy.block_relay_domain_share_per_mille,
+                        });
+                        hard_block = true;
+                    } else if bucket_count >= 2
                         && exceeds_share_limit(
                             bucket_count,
                             active_peer_count,
@@ -191,12 +274,74 @@ pub(super) fn recompute_peer_manager_healths(
                     }
                 }
             }
+            if let Some(source_operator) = source_operator.clone() {
+                let bucket_count = operator_counts
+                    .get(source_operator.as_str())
+                    .copied()
+                    .unwrap_or(0);
+                if bucket_count >= 2
+                    && meets_or_exceeds_share_limit(
+                        bucket_count,
+                        active_peer_count,
+                        policy.block_operator_share_per_mille,
+                    )
+                {
+                    issues.push(PeerManagerHealthIssue::OperatorConcentration {
+                        source_operator,
+                        peers_in_bucket: bucket_count,
+                        active_peer_count,
+                        limit_per_mille: policy.block_operator_share_per_mille,
+                    });
+                    hard_block = true;
+                } else if bucket_count >= 2
+                    && exceeds_share_limit(
+                        bucket_count,
+                        active_peer_count,
+                        policy.max_operator_share_per_mille,
+                    )
+                {
+                    issues.push(PeerManagerHealthIssue::OperatorConcentration {
+                        source_operator,
+                        peers_in_bucket: bucket_count,
+                        active_peer_count,
+                        limit_per_mille: policy.max_operator_share_per_mille,
+                    });
+                }
+            }
+            if let Some(source_asn) = source_asn.clone() {
+                let bucket_count = asn_counts.get(source_asn.as_str()).copied().unwrap_or(0);
+                if bucket_count >= 2
+                    && meets_or_exceeds_share_limit(
+                        bucket_count,
+                        active_peer_count,
+                        policy.block_asn_share_per_mille,
+                    )
+                {
+                    issues.push(PeerManagerHealthIssue::AsnConcentration {
+                        source_asn,
+                        peers_in_bucket: bucket_count,
+                        active_peer_count,
+                        limit_per_mille: policy.block_asn_share_per_mille,
+                    });
+                    hard_block = true;
+                } else if bucket_count >= 2
+                    && exceeds_share_limit(
+                        bucket_count,
+                        active_peer_count,
+                        policy.max_asn_share_per_mille,
+                    )
+                {
+                    issues.push(PeerManagerHealthIssue::AsnConcentration {
+                        source_asn,
+                        peers_in_bucket: bucket_count,
+                        active_peer_count,
+                        limit_per_mille: policy.max_asn_share_per_mille,
+                    });
+                }
+            }
         }
 
-        let status = if issues
-            .iter()
-            .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord))
-        {
+        let status = if hard_block {
             PeerManagerHealthStatus::Blocked
         } else if !issues.is_empty() {
             PeerManagerHealthStatus::Suspect
@@ -214,6 +359,8 @@ pub(super) fn recompute_peer_manager_healths(
                 issues,
                 discovery_sources,
                 active_path_kind: active_path.map(|path| path.kind_label().to_string()),
+                source_operator,
+                source_asn,
             },
         );
     }
@@ -226,6 +373,13 @@ fn exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool
         return false;
     }
     count.saturating_mul(1000) > total.saturating_mul(limit_per_mille as usize)
+}
+
+fn meets_or_exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool {
+    if total == 0 {
+        return false;
+    }
+    count.saturating_mul(1000) >= total.saturating_mul(limit_per_mille as usize)
 }
 
 fn ipv4_subnet_bucket(path: &TransportPath) -> Option<String> {
@@ -244,6 +398,12 @@ fn relay_domain(path: &TransportPath) -> Option<String> {
         Protocol::Ip6(ip) => Some(ip.to_string()),
         _ => None,
     })
+}
+
+fn normalized_source_label(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_lowercase())
 }
 
 fn ipv4_bucket(ip: Ipv4Addr) -> String {
@@ -296,6 +456,8 @@ mod tests {
                     NetworkLane::BlobState,
                     NetworkLane::Control,
                 ],
+                source_operator: None,
+                source_asn: None,
                 published_at_ms: 0,
                 ttl_ms: 60_000,
             },
@@ -539,7 +701,7 @@ mod tests {
             recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
         for peer in [peer_a, peer_b] {
             let health = &healths[&peer];
-            assert_eq!(health.status, PeerManagerHealthStatus::Suspect);
+            assert_eq!(health.status, PeerManagerHealthStatus::Blocked);
             assert!(health
                 .issues
                 .iter()
@@ -595,5 +757,145 @@ mod tests {
             .issues
             .iter()
             .any(|issue| matches!(issue, PeerManagerHealthIssue::SingleSourceDiscovery { .. })));
+    }
+
+    #[test]
+    fn recompute_marks_operator_and_asn_concentration_as_blocked() {
+        let peer_a = PeerId::random();
+        let peer_b = PeerId::random();
+        let peer_c = PeerId::random();
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
+        let mut record_a = sample_record(peer_a, discovery_sources.clone());
+        record_a.record.source_operator = Some("operator-a".to_string());
+        record_a.record.source_asn = Some("AS64500".to_string());
+        let mut record_b = sample_record(peer_b, discovery_sources.clone());
+        record_b.record.source_operator = Some("operator-a".to_string());
+        record_b.record.source_asn = Some("AS64500".to_string());
+        let mut record_c = sample_record(peer_c, discovery_sources);
+        record_c.record.source_operator = Some("operator-b".to_string());
+        record_c.record.source_asn = Some("AS64501".to_string());
+        let discovered = HashMap::from([(peer_a, record_a), (peer_b, record_b), (peer_c, record_c)]);
+        let active = HashMap::from([
+            (
+                peer_a,
+                transport_path(
+                    peer_a,
+                    "/ip4/10.0.0.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_b,
+                transport_path(
+                    peer_b,
+                    "/ip4/10.1.0.1/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_c,
+                transport_path(
+                    peer_c,
+                    "/ip4/10.2.0.1/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        for peer in [peer_a, peer_b] {
+            let health = &healths[&peer];
+            assert_eq!(health.status, PeerManagerHealthStatus::Blocked);
+            assert_eq!(health.source_operator.as_deref(), Some("operator-a"));
+            assert_eq!(health.source_asn.as_deref(), Some("as64500"));
+            assert!(health.issues.iter().any(|issue| matches!(
+                issue,
+                PeerManagerHealthIssue::OperatorConcentration { source_operator, .. }
+                    if source_operator == "operator-a"
+            )));
+            assert!(health.issues.iter().any(|issue| matches!(
+                issue,
+                PeerManagerHealthIssue::AsnConcentration { source_asn, .. }
+                    if source_asn == "as64500"
+            )));
+        }
+        assert_eq!(healths[&peer_c].status, PeerManagerHealthStatus::Active);
+    }
+
+    #[test]
+    fn recompute_blocks_operator_and_asn_concentration_at_exact_half_share() {
+        let peer_a = PeerId::random();
+        let peer_b = PeerId::random();
+        let peer_c = PeerId::random();
+        let peer_d = PeerId::random();
+        let discovery_sources = vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ];
+        let mut record_a = sample_record(peer_a, discovery_sources.clone());
+        record_a.record.source_operator = Some("operator-a".to_string());
+        record_a.record.source_asn = Some("AS64500".to_string());
+        let mut record_b = sample_record(peer_b, discovery_sources.clone());
+        record_b.record.source_operator = Some("operator-a".to_string());
+        record_b.record.source_asn = Some("AS64500".to_string());
+        let mut record_c = sample_record(peer_c, discovery_sources.clone());
+        record_c.record.source_operator = Some("operator-b".to_string());
+        record_c.record.source_asn = Some("AS64501".to_string());
+        let mut record_d = sample_record(peer_d, discovery_sources);
+        record_d.record.source_operator = Some("operator-c".to_string());
+        record_d.record.source_asn = Some("AS64502".to_string());
+        let discovered = HashMap::from([
+            (peer_a, record_a),
+            (peer_b, record_b),
+            (peer_c, record_c),
+            (peer_d, record_d),
+        ]);
+        let active = HashMap::from([
+            (
+                peer_a,
+                transport_path(
+                    peer_a,
+                    "/ip4/10.0.0.1/udp/4101/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_b,
+                transport_path(
+                    peer_b,
+                    "/ip4/10.1.0.1/udp/4102/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_c,
+                transport_path(
+                    peer_c,
+                    "/ip4/10.2.0.1/udp/4103/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+            (
+                peer_d,
+                transport_path(
+                    peer_d,
+                    "/ip4/10.3.0.1/udp/4104/quic-v1",
+                    TransportPathKind::Direct,
+                ),
+            ),
+        ]);
+
+        let healths =
+            recompute_peer_manager_healths(&discovered, &active, &PeerManagerPolicy::default());
+        for peer in [peer_a, peer_b] {
+            assert_eq!(healths[&peer].status, PeerManagerHealthStatus::Blocked);
+        }
+        for peer in [peer_c, peer_d] {
+            assert_eq!(healths[&peer].status, PeerManagerHealthStatus::Active);
+        }
     }
 }

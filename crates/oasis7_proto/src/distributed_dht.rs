@@ -252,6 +252,10 @@ pub struct PeerRecord {
     pub discovery_sources: Vec<PeerDiscoverySource>,
     #[serde(default)]
     pub capability_lanes: Vec<NetworkLane>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_operator: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_asn: Option<String>,
     pub published_at_ms: i64,
     pub ttl_ms: i64,
 }

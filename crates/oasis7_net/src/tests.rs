@@ -133,7 +133,13 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
         min_active_discovery_sources: 0,
         min_peer_discovery_sources: 0,
         max_ipv4_subnet_share_per_mille: 1_000,
+        block_ipv4_subnet_share_per_mille: 1_000,
         max_relay_domain_share_per_mille: 1_000,
+        block_relay_domain_share_per_mille: 1_000,
+        max_operator_share_per_mille: 1_000,
+        block_operator_share_per_mille: 1_000,
+        max_asn_share_per_mille: 1_000,
+        block_asn_share_per_mille: 1_000,
         max_relayed_active_peer_share_per_mille: 1_000,
     };
     let peer_record = PeerRecord {
@@ -149,6 +155,8 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
         relay_addrs: Vec::new(),
         discovery_sources: vec![PeerDiscoverySource::Dht],
         capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+        source_operator: None,
+        source_asn: None,
         published_at_ms: 1,
         ttl_ms: 60_000,
     };
@@ -293,6 +301,8 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
                 PeerDiscoverySource::Dht,
             ],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 0,
             ttl_ms: 60_000,
         }
@@ -391,6 +401,8 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
                 PeerDiscoverySource::Rendezvous,
             ],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 0,
             ttl_ms: 60_000,
         }

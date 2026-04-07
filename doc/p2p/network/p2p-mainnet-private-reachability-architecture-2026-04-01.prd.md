@@ -46,14 +46,14 @@
 
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Peer identity 与 record | `peer_id/node_identity_key/chain_id/role_mask/reachability_class/public_addrs/relay_addrs/capability_lanes/ttl/signature` | 节点发布带有效期的签名 peer record，并显式声明可服务的 traffic lanes | `draft -> published -> refreshed -> expired/revoked` | record 必须链内域分离签名，过期或域不匹配即拒绝；未声明某 lane 的 peer 不应被优先选为该 lane provider | 只有节点身份持有者可发布；consensus signer 不直接暴露 |
+| Peer identity 与 record | `peer_id/node_identity_key/chain_id/role_mask/reachability_class/public_addrs/relay_addrs/capability_lanes/source_operator/source_asn/ttl/signature` | 节点发布带有效期的签名 peer record，并显式声明可服务的 traffic lanes 与 diversity 元数据 | `draft -> published -> refreshed -> expired/revoked` | record 必须链内域分离签名，过期或域不匹配即拒绝；未声明某 lane 的 peer 不应被优先选为该 lane provider | 只有节点身份持有者可发布；consensus signer 不直接暴露 |
 | Reachability service | `observed_addr/autonat_status/hole_punch_status/relay_reservation/path_quality` | 探测 direct、尝试打洞、预留 relay、维护路径排序 | `unknown -> direct/private/relay_only -> degraded/recovered` | direct 优先于 punched，punched 优先于 relay；不能打洞时自动降级 relay | 节点本地决策；relay 只提供转发，不授予签名权限 |
 | Discovery fabric | `bootnodes/dht_namespace/rendezvous_topic/peer_record_cache/source_diversity` | 从 bootnode、DHT、rendezvous 与静态 allowlist 聚合候选 peer | `seeded -> converging -> healthy/degraded` | 至少保留两类独立 discovery source；单源集中不得视为 healthy | bootnode/relay 可公开；validator core 可只做 consumer |
 | Transport abstraction | `transport_id/directness/security/mux/qos_class/max_streams` | 在 direct、hole-punched、relay 路径上复用统一流接口 | `dialing -> established -> draining -> closed` | QUIC 为主、TCP/Noise 为回退；UDP 只可作为加速，不得成为唯一真值链路 | transport key 可轮换；长期 signer 不进入 transport session |
 | User-visible deployment mode | `user_mode/auto_detect_result/allow_public_entry/high_value_node/override_source` | 给用户展示 `自动加入 / 私有安全 / 公网入口` 简化模式，并映射到正式角色语义 | `auto_detected -> proposed -> confirmed/enforced` | 默认必须自动选择；只有检测结果涉及 `public entry` 或高价值角色暴露面时才要求显式确认；普通路径不要求用户先理解底层正式角色 | 普通用户只能选简化模式；高级用户才可覆盖内部 role/deployment 配置 |
 | Role policy | `deployment_mode/node_role/sentry_set/relay_budget/exposed_surface` | 根据角色限制订阅、入站、转发与公开面 | `declared -> admitted -> enforced` | validator_hidden 至少配 2 条独立 ingress path；observer 不得请求 validator-private RPC | 角色由 operator 配置并被 peer manager 强制执行 |
 | Traffic lanes | `lane_id/topic_or_stream/qos/peer_subset/replay_policy` | 分离 gossip、sync、blob/state、control 流量 | `registered -> active -> throttled/quarantined` | consensus lane 优先低抖动；blob/state lane 独立限速，不得拖垮 finality | 不同角色只开放最小必要 lane |
-| Peer manager / anti-eclipse | `score/source_asn/source_operator/subnet_bucket/relay_dependence/misbehavior` | 评分、淘汰、重连、路径切换与 quarantine | `candidate -> active -> suspect -> blocked` | 同一 operator、同一 `/24`、同一 relay-domain 占比超过阈值即降权 | 安全策略由本地 peer manager 执行，不能由远端覆盖 |
+| Peer manager / anti-eclipse | `score/source_asn/source_operator/subnet_bucket/relay_dependence/misbehavior` | 评分、淘汰、重连、路径切换与 quarantine | `candidate -> active -> suspect -> blocked` | 同一 operator、同一 ASN、同一 `/24`、同一 relay-domain 占比超过阈值即降权或阻断，`blocked` 必须留下可审计工件 | 安全策略由本地 peer manager 执行，不能由远端覆盖 |
 - Acceptance Criteria:
   - AC-1: 本专题必须明确声明“公网 IP 不是 validator/full/storage/observer 参与网络的通用前置条件”，只是一种 reachability 优势。
   - AC-2: 本专题必须冻结五种部署模式：`public`、`hybrid`、`private`、`relay_only`、`validator_hidden`，并说明各自公开面与限制。

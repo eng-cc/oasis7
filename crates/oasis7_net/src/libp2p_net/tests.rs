@@ -37,6 +37,8 @@ fn signed_discovery_peer_record(
             relay_addrs: Vec::new(),
             discovery_sources,
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms,
             ttl_ms: 60_000,
         },
@@ -166,6 +168,8 @@ fn sign_and_verify_peer_record_round_trip() {
             crate::dht::PeerDiscoverySource::Dht,
         ],
         capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
+        source_operator: None,
+        source_asn: None,
         published_at_ms: 42,
         ttl_ms: 60_000,
     };
@@ -203,6 +207,8 @@ fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
             relay_addrs: Vec::new(),
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 0,
             ttl_ms: 60_000,
         },
@@ -248,6 +254,8 @@ fn build_configured_peer_record_keeps_private_validator_without_direct_addrs() {
                 crate::dht::PeerDiscoverySource::Dht,
             ],
             capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 0,
             ttl_ms: 60_000,
         },
@@ -277,6 +285,8 @@ fn peer_record_enables_rendezvous_only_when_source_is_declared() {
             crate::dht::PeerDiscoverySource::Dht,
         ],
         capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+        source_operator: None,
+        source_asn: None,
         published_at_ms: 0,
         ttl_ms: 60_000,
     };
@@ -309,6 +319,8 @@ fn dht_get_peer_record_decodes_and_verifies_record() {
             relay_addrs: vec!["/dns4/relay.example/tcp/443".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -372,6 +384,8 @@ fn filter_request_peers_by_health_prefers_non_suspect_peers() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -382,6 +396,8 @@ fn filter_request_peers_by_health_prefers_non_suspect_peers() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -392,6 +408,8 @@ fn filter_request_peers_by_health_prefers_non_suspect_peers() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
             },
         ),
     ]);
@@ -414,6 +432,8 @@ fn filter_request_peers_by_health_excludes_all_blocked_peers() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -424,6 +444,8 @@ fn filter_request_peers_by_health_excludes_all_blocked_peers() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
             },
         ),
     ]);
@@ -447,6 +469,8 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -457,6 +481,8 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -471,6 +497,8 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
                 }],
                 discovery_sources: Vec::new(),
                 active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -481,6 +509,8 @@ fn peer_requires_active_quarantine_skips_missing_peer_record_block() {
                 issues: vec![PeerManagerHealthIssue::MissingPeerRecord],
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
     ]);
@@ -543,6 +573,8 @@ fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -553,6 +585,8 @@ fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("relay_reserved".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -567,6 +601,8 @@ fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
                 }],
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -577,6 +613,8 @@ fn collect_quarantined_active_peers_only_returns_quarantined_active_set() {
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
             },
         ),
     ]);
@@ -634,6 +672,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -644,6 +684,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
                 issues: Vec::new(),
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
         (
@@ -654,6 +696,8 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
                 issues: vec![PeerManagerHealthIssue::MissingPeerRecord],
                 discovery_sources: Vec::new(),
                 active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
             },
         ),
     ]);
@@ -703,6 +747,7 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         ),
     ]);
     let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
+    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
     let event_errors = Arc::new(Mutex::new(Vec::new()));
 
     let (healths, quarantined, admitted) = refresh_peer_manager_healths(
@@ -711,6 +756,7 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         &HashSet::from([healthy_peer]),
         &PeerManagerPolicy::default(),
         &event_peer_healths,
+        &event_block_artifacts,
         &event_errors,
         32,
     );
@@ -729,6 +775,8 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
         .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord)));
     assert!(quarantined.is_empty());
     assert_eq!(admitted, HashSet::from([healthy_peer]));
+    let artifacts = event_block_artifacts.lock().expect("lock block artifacts");
+    assert!(artifacts.contains_key(unverified_peer.to_string().as_str()));
 }
 
 #[test]
@@ -870,6 +918,8 @@ fn filter_request_peers_by_lane_prefers_capable_peer_records() {
                 relay_addrs: Vec::new(),
                 discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
                 capability_lanes: vec![NetworkLane::BlobState, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
                 published_at_ms: 1,
                 ttl_ms: 60_000,
             },
@@ -893,6 +943,8 @@ fn filter_request_peers_by_lane_prefers_capable_peer_records() {
                 relay_addrs: Vec::new(),
                 discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
                 capability_lanes: vec![NetworkLane::Sync, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
                 published_at_ms: 1,
                 ttl_ms: 60_000,
             },
@@ -931,6 +983,8 @@ fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -975,6 +1029,8 @@ fn preferred_transport_path_skips_direct_and_falls_back_to_hole_punch_before_rel
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -1011,6 +1067,8 @@ fn sync_known_transport_paths_removes_stale_failed_labels() {
             relay_addrs: vec!["/dns4/relay.example/tcp/443/p2p-circuit".to_string()],
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 77,
             ttl_ms: 60_000,
         },
@@ -1080,6 +1138,8 @@ fn active_transport_path_from_endpoint_keeps_hole_punch_kind_when_known() {
             relay_addrs: Vec::new(),
             discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
             capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 77,
             ttl_ms: 60_000,
         },

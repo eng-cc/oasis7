@@ -91,17 +91,20 @@
 - 同一 operator、同一 ASN、同一 `/24` 的 active peer 占比默认上限 `25%`。
 - validator_hidden 至少维持两条独立 ingress path，且不能同属一个 relay-domain。
 - relay 采用 budget 和 quota；blob/state 流量不得吞噬 consensus/control 预算。
-- 发现异常时，peer manager 要把节点置为 `suspect` 而不是继续乐观接纳。
+- 发现异常时，peer manager 要按阈值把节点置为 `suspect` 或 `blocked`，而不是继续乐观接纳。
 
-实现落点（2026-04-02 / P2PARCH-5 首个切片）:
+实现落点（2026-04-07 / P2PARCH-5 第二个切片）:
 - `oasis7_net` 新增 `PeerManagerPolicy` / `PeerManagerPeerHealth` / `PeerManagerHealthIssue` substrate，在 libp2p worker 内基于已发现 peer record 与 active transport path 计算本地 peer health snapshot。
-- 当前已接线的 fail signatures 包含：`single-source active set`、单 peer `single-source discovery`、IPv4 `/24` 集中、relay-domain 集中、relay budget 超限。
+- 当前已接线的 fail signatures 包含：`single-source active set`、单 peer `single-source discovery`、IPv4 `/24` 集中、relay-domain 集中、operator 集中、ASN 集中、relay budget 超限。
+- runtime 默认把同一 `operator / ASN / /24 / relay-domain` 的 active peer 占比 `>25%` 视为 `suspect`，占比 `>=50%` 视为 hard-`blocked`，并在 peer health 中保留触发阈值。
 - req/resp peer 选择现在会在 lane capability 过滤后，继续优先选择 `active/candidate` peer，把 `suspect` 压到最后，并直接排除 `blocked` peer。
 - discovery ingress 现在不再对 `RoutingUpdated` / rendezvous registration 暴露的裸地址做 speculative dial；runtime 会先拿到并校验 signed peer record，再按 peer health 决定是否拨号，避免 `MissingPeerRecord => Blocked` 语义被旁路。
 - `suspect/blocked` peer 现在也不会污染 discovery dial dedupe 状态；同一地址若后续随更健康的 peer record 刷新回来，仍可重新进入首拨决策。
 - active-set quarantine 现在已开始生效：当已连接 peer 刷新为 `suspect` 或已验证的 hard-`blocked` 时，runtime 会主动 `disconnect_peer_id`，并在 `ConnectionClosed` / `OutgoingConnectionError` 上抑制 failover 与 retry，避免 quarantined peer 被本地状态机立即拉回 active set。
 - peer health 对外发布前会先剔除未准入 active peer：待校验的 `MissingPeerRecord` 连接与本轮判定出的 quarantined active peer 不再参与同轮 `/24`、relay-domain、relay budget 的健康统计，避免瞬时污染其他健康 peer。
-- 当前仍未接线 operator / ASN 外部情报，也还没把 `blocked` 升级成持久 banlist / release-gate 级 block artifact；这些收口继续留在后续 `P2PARCH-5` / `P2PARCH-6`。
+- chain runtime 默认 peer record 现已支持 `source_operator/source_asn` 输入，peer manager 会在本地归一化标签后参与 diversity 统计。
+- runtime 现已为 `blocked` peer 维护可调试的 block artifact，至少跨 peer-manager 重算保留 `peer_id/status/issues/path/operator/asn/first_blocked_at/last_blocked_at/last_cleared_at`；当前仍未升级为跨重启 banlist 或 release-gate 证据存储。
+- 当前仍待 `qa_engineer` 把 mixed-topology / fail-signature required/full 套件与 release evidence contract 补齐；这些收口继续留在后续 `P2PARCH-5` / `P2PARCH-6`。
 - `P2PARCH-6` 现已新增 `scripts/p2p-mixed-topology-matrix.sh`：QA 会把 `private/validator_hidden/relay_only` 角色边界、bootstrap poisoning、relay exhaustion 与 path failover 组装成 `required` exact matrix，再把 triad/triad_distributed 的 disconnect/restart longrun 组装成 `full` proxy matrix。该 matrix 会明确标注 `proxy != dedicated sentry/NAT lab`，避免把当前可执行近似 drill 误写成最终 mixed-topology 实证。
 
 ## 适配多链型的数据面
