@@ -92,6 +92,22 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime feedback_p2
     - `fix_failed_matrix_cases`
     - `producer_qa_pass_uplift_decision_ref`
 
+## Current Real Environment Note
+- 当前已知可直接调度的真实多节点环境:
+  - `local_node_count=1`
+  - `aliyun_node_count=2`
+- 该环境当前可合理承接:
+  - `P2PARCH-6` follow-up real runs
+  - `本机节点 + cloud public` mixed-topology drills
+  - `bootstrap_poisoning / sentry_loss / path_failover / relay_budget / release_proxy` 类真实三节点回归
+- 该环境当前不能单独证明:
+  - `CGNAT` truth 已真实覆盖
+  - dedicated `sentry/NAT lab` truth 已具备
+  - 独立 operator / ASN diversity 已具备更强外部证据
+  - `P2PARCH-7` shared-network `pass` gate 已满足
+- 记录原则:
+  - 后续若以这组环境追加 real-run evidence，应在 summary 或 evidence packet 中继续显式标注“`1` 本机 + `2` 阿里云”这一边界，避免把它误写成完整 mixed-topology lab truth。
+
 ## 结论
 - 这轮工作把 `P2PARCH-6` 从“只有 full dry-run 计划”推进成“有真实 full proxy 执行和明确 failure signatures 的 audited partial”。
 - current blocker 已不再是脚本无法自举或默认端口冲突，而是 proxy soak 本身暴露出的真实 `consensus/recovery` 失败签名。

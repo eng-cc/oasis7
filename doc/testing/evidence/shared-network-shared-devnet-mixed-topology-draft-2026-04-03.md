@@ -49,3 +49,4 @@
 - This document upgrades the lane from an implicit missing scaffold to an explicit audited `partial` evidence packet.
 - It is sufficient to keep `shared_devnet` gate semantics honest, but not sufficient to promote `shared_devnet` to `pass`.
 - The next uplift still requires stronger same-window mixed-topology evidence, or an approved decision that current proxy/shared-window evidence is enough for this track.
+- 当前已知可直接补充到该 lane 的真实环境是 `1` 个本机节点 + `2` 个阿里云节点；这组环境适合继续补 `P2PARCH-6` 的真实三节点 mixed-topology drill，但单凭它仍不足以替代 same-window shared-network gate、producer/QA pass-uplift decision ref，或更强的 dedicated sentry/NAT lab truth。

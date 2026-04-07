@@ -165,9 +165,11 @@
   - `testing-manual.md` S9B：补 mixed-topology 推荐命令、通过标准、产物路径、`proxy` 边界口径，以及 `evidence_contract/external_evidence` 机器可读字段
   - latest full-tier evidence：`doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md` 已固化 7 个 exact case 全通过、2 个 proxy case 真实执行但失败的当前 blocker
   - matrix/runtime follow-up：proxy case 不再依赖预编译 binary 或默认 561x 端口段；`oasis7_chain_runtime` 也不再对 `observer` 无条件启用 `feedback_p2p`，避免与 `P2PARCH-4` lane gate 冲突
+  - 当前已知可复用的真实环境：`1` 个本机节点 + `2` 个阿里云节点。该环境可作为后续 `P2PARCH-6` real-run 的第一批真机拓扑输入，用于补强“本机节点 + cloud public” mixed-topology drill、bootstrap poisoning、sentry loss、path failover、relay budget 与 release-proxy 类回归，而不必只停留在本地 proxy 近似。
 - 完成定义:
   - 家宽 / NAT / CGNAT / cloud mixed topology 均有 required/full 套件
   - `P2PARCH-5` runtime substrate 的 anti-eclipse / fail-signature 行为已由 required/full evidence 固化
+  - 仅有 `1` 本机 + `2` 阿里云的真实环境时，可以推进 `P2PARCH-6` 的真实多节点证据，但除非额外补齐 NAT 类型、CGNAT、独立 operator/ASN 或 dedicated sentry/NAT lab 证据，否则不得把这组环境误写成 full truth 已覆盖全部边界
 
 ### P2PARCH-7 / producer_system_designer + liveops_community + qa_engineer
 - 输入:
@@ -180,6 +182,7 @@
 - 完成定义:
   - `P2PARCH-5` block artifact 若要进入 release truth，必须在本任务内被升级为 gate-consumable evidence contract 或显式 denylist 结论
   - 未完成 mixed-topology shared-network 证据前，不得宣称 public-chain-grade P2P 已落地
+  - 当前 `1` 本机 + `2` 阿里云的真实环境可作为 `P2PARCH-7` 的前置输入或 partial evidence，但单凭这组环境并不足以直接替代 shared-window shared-network gate、producer/QA pass-uplift decision ref，或 dedicated sentry/NAT lab 级更强 truth
 
 ### P2PARCH-8 / producer_system_designer
 - 输入:
