@@ -45,10 +45,10 @@
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
 - 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
 - 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
-- 当前阶段：T18~T22 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地，且新 contract 的 QA 证据与 Local Provider readiness truth 表达都已补齐：primary Web entry PASS、`standard` visual QA PASS、software-safe 已区分 lane metadata 与 actual provider check、`software_safe` formal gameplay 当前仍因缺少 LLM 配置而 `blocked`。
+- 当前阶段：T18~T22 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地，且新 contract 的 QA 证据与 Local Provider readiness truth 表达都已补齐：primary Web entry PASS、`standard` visual QA PASS、software-safe 已区分 lane metadata 与 actual provider check，且 `software_safe` formal gameplay 已在 LLM-enabled 环境中补跑 PASS。
 - 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3/T4.6`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 execution lane 元数据、actual provider check 真值，以及 OpenClaw runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-08（完成 `T22`，把 Local Provider actual readiness truth 从 lane metadata 中拆开显示；2026-04-07 的主入口 contract 采证结论保持不变，formal gameplay 仍被 `missing env variable: OASIS7_LLM_MODEL` 阻断，详见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md`。）
-- 阻塞项：主入口 contract 证据已完成；当前剩余阻塞收敛为“QA/runtime 环境缺少可用 LLM provider 配置，故 formal gameplay 尚无 release-grade PASS 复采”，README / current-entry / release claim 仍不得写成“formal Web gameplay 已完成 release PASS”。
+- 最近更新：2026-04-08（完成 `T22` 后继续补跑 LLM-enabled formal gameplay：针对 `https://api.letai.run/v1` 修复 `Responses API` stream/list-input/output-item 聚合兼容层，随后以 `output/playwright/viewer-software-safe-step/20260408-133532/` 取得 formal Web gameplay PASS；详见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 的 2026-04-08 addendum。）
+- 阻塞项：本专题主入口 contract 与 formal gameplay PASS 证据均已完成；当前剩余事项已转为 README / current-entry / release claim 口径同步，以及 `PRD-WORLD_SIMULATOR-037/038` parity/latency experimental follow-up，不能再把本专题记成“缺 provider 配置导致 blocked”。
 
 ## 备注
 - 本专题的目标不是让 `software_safe` 与标准模式“视觉等价”，而是让它成为低保真但正式可玩的主要 Web 入口。

@@ -3,10 +3,11 @@
 use async_openai::config::OpenAIConfig;
 use async_openai::error::OpenAIError;
 use async_openai::types::responses::{
-    CreateResponse, CreateResponseArgs, FunctionTool, InputParam, OutputItem, Response, Tool,
-    ToolChoiceOptions, ToolChoiceParam,
+    CreateResponse, CreateResponseArgs, FunctionTool, OutputItem, Response, ResponseStreamEvent,
+    Tool, ToolChoiceOptions, ToolChoiceParam,
 };
 use async_openai::Client as AsyncOpenAiClient;
+use futures_util::StreamExt;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
@@ -57,7 +58,7 @@ use config_helpers::{
     toml_value_to_string,
 };
 use openai_payload::{
-    build_responses_request_payload, completion_result_from_sdk_response,
+    build_responses_request_payload, completion_result_from_sdk_stream_events,
     normalize_openai_api_base_url,
 };
 #[cfg(test)]
@@ -792,15 +793,24 @@ impl OpenAiChatCompletionClient {
         &self,
         client: &AsyncOpenAiClient<OpenAIConfig>,
         payload: CreateResponse,
-    ) -> Result<Response, OpenAiRequestError> {
+    ) -> Result<LlmCompletionResult, OpenAiRequestError> {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|err| OpenAiRequestError::Other(err.to_string()))?;
 
-        runtime
-            .block_on(client.responses().create(payload))
-            .map_err(OpenAiRequestError::from)
+        runtime.block_on(async {
+            let mut stream = client
+                .responses()
+                .create_stream(payload)
+                .await
+                .map_err(OpenAiRequestError::from)?;
+            let mut events = Vec::<ResponseStreamEvent>::new();
+            while let Some(event) = stream.next().await {
+                events.push(event.map_err(OpenAiRequestError::from)?);
+            }
+            completion_result_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
+        })
     }
 }
 
@@ -808,14 +818,35 @@ impl OpenAiChatCompletionClient {
 enum OpenAiRequestError {
     Timeout(String),
     ParseBody(String),
+    Completion(LlmClientError),
     Other(String),
 }
 
 impl From<OpenAIError> for OpenAiRequestError {
     fn from(value: OpenAIError) -> Self {
+        fn error_chain_contains_timeout(err: &dyn Error) -> bool {
+            let mut current = Some(err);
+            while let Some(err) = current {
+                let message = err.to_string().to_ascii_lowercase();
+                if message.contains("timed out")
+                    || message.contains("timeout")
+                    || message.contains("deadline has elapsed")
+                {
+                    return true;
+                }
+                current = err.source();
+            }
+            false
+        }
+
         match value {
-            OpenAIError::Reqwest(err) if err.is_timeout() => Self::Timeout(err.to_string()),
+            OpenAIError::Reqwest(err) if err.is_timeout() || error_chain_contains_timeout(&err) => {
+                Self::Timeout(err.to_string())
+            }
             OpenAIError::JSONDeserialize(_, raw_body) => Self::ParseBody(raw_body),
+            OpenAIError::StreamError(err) if error_chain_contains_timeout(err.as_ref()) => {
+                Self::Timeout(err.to_string())
+            }
             other => Self::Other(other.to_string()),
         }
     }
@@ -880,7 +911,7 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
         let payload = build_responses_request_payload(request)?;
 
         match self.send_responses_request(&self.client, payload.clone()) {
-            Ok(response) => return completion_result_from_sdk_response(response),
+            Ok(result) => return Ok(result),
             Err(OpenAiRequestError::ParseBody(raw_body)) => {
                 return Err(LlmClientError::DecodeResponse {
                     message: format!(
@@ -896,6 +927,9 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
                         self.request_timeout_ms, err
                     ),
                 });
+            }
+            Err(OpenAiRequestError::Completion(err)) => {
+                return Err(err);
             }
             Err(OpenAiRequestError::Other(err)) => {
                 return Err(LlmClientError::Http { message: err });

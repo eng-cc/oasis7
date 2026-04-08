@@ -1,4 +1,9 @@
 use super::*;
+use async_openai::types::responses::{
+    InputContent, InputItem, InputMessage, InputParam, InputRole, InputTextContent, Item,
+    MessageItem, ResponseStreamEvent,
+};
+use std::collections::BTreeMap;
 
 const AGENT_SUBMIT_DECISION_SCHEMA_JSON: &str = r#"{
   "type": "object",
@@ -504,6 +509,71 @@ pub(super) fn completion_result_from_sdk_response(
     })
 }
 
+fn summarize_response_error(value: Option<&impl Serialize>) -> Option<String> {
+    value.and_then(|value| serde_json::to_string(value).ok())
+}
+
+fn stream_terminal_response_error(status: &str, response: &Response) -> LlmClientError {
+    let detail = summarize_response_error(response.error.as_ref())
+        .or_else(|| summarize_response_error(response.incomplete_details.as_ref()))
+        .unwrap_or_else(|| "no additional detail".to_string());
+    LlmClientError::Http {
+        message: format!(
+            "responses stream terminated with status {status} for {}: {}",
+            response.id, detail
+        ),
+    }
+}
+
+pub(super) fn completion_result_from_sdk_stream_events<I>(
+    events: I,
+) -> Result<LlmCompletionResult, LlmClientError>
+where
+    I: IntoIterator<Item = ResponseStreamEvent>,
+{
+    let mut completed_response = None;
+    let mut completed_output_items = BTreeMap::<u32, OutputItem>::new();
+
+    for event in events {
+        match event {
+            ResponseStreamEvent::ResponseOutputItemDone(event) => {
+                completed_output_items.insert(event.output_index, event.item);
+            }
+            ResponseStreamEvent::ResponseCompleted(event) => {
+                completed_response = Some(event.response);
+            }
+            ResponseStreamEvent::ResponseFailed(event) => {
+                return Err(stream_terminal_response_error("failed", &event.response));
+            }
+            ResponseStreamEvent::ResponseIncomplete(event) => {
+                return Err(stream_terminal_response_error(
+                    "incomplete",
+                    &event.response,
+                ));
+            }
+            ResponseStreamEvent::ResponseError(event) => {
+                let code = event
+                    .code
+                    .as_deref()
+                    .map(|code| format!(" ({code})"))
+                    .unwrap_or_default();
+                return Err(LlmClientError::Http {
+                    message: format!("responses stream error{code}: {}", event.message),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let mut response = completed_response.ok_or_else(|| LlmClientError::DecodeResponse {
+        message: "responses stream ended without response.completed".to_string(),
+    })?;
+    if response.output.is_empty() && !completed_output_items.is_empty() {
+        response.output = completed_output_items.into_values().collect();
+    }
+    completion_result_from_sdk_response(response)
+}
+
 pub(super) fn normalize_openai_api_base_url(base_url: &str) -> String {
     let normalized = base_url.trim().trim_end_matches('/');
     if let Some(stripped) = normalized.strip_suffix("/chat/completions") {
@@ -521,7 +591,15 @@ pub(super) fn build_responses_request_payload(
     CreateResponseArgs::default()
         .model(request.model.clone())
         .instructions(request.system_prompt.clone())
-        .input(InputParam::Text(request.user_prompt.clone()))
+        .input(InputParam::Items(vec![InputItem::Item(Item::Message(
+            MessageItem::Input(InputMessage {
+                content: vec![InputContent::InputText(InputTextContent {
+                    text: request.user_prompt.clone(),
+                })],
+                role: InputRole::User,
+                status: None,
+            }),
+        ))]))
         .tools(responses_tools_with_debug_mode(request.debug_mode))
         .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)

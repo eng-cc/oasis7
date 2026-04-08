@@ -15,7 +15,45 @@ fn build_responses_request_payload_includes_tools_and_required_choice() {
         Some("system")
     );
     assert_eq!(
-        payload_json.get("input").and_then(|v| v.as_str()),
+        payload_json
+            .get("input")
+            .and_then(|v| v.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("type"))
+            .and_then(|v| v.as_str()),
+        Some("message")
+    );
+    assert_eq!(
+        payload_json
+            .get("input")
+            .and_then(|v| v.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("role"))
+            .and_then(|v| v.as_str()),
+        Some("user")
+    );
+    assert_eq!(
+        payload_json
+            .get("input")
+            .and_then(|v| v.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("content"))
+            .and_then(|v| v.as_array())
+            .and_then(|content| content.first())
+            .and_then(|part| part.get("type"))
+            .and_then(|v| v.as_str()),
+        Some("input_text")
+    );
+    assert_eq!(
+        payload_json
+            .get("input")
+            .and_then(|v| v.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("content"))
+            .and_then(|v| v.as_array())
+            .and_then(|content| content.first())
+            .and_then(|part| part.get("text"))
+            .and_then(|v| v.as_str()),
         Some("user")
     );
 
@@ -56,6 +94,98 @@ fn build_responses_request_payload_includes_tools_and_required_choice() {
             OPENAI_TOOL_SOCIAL_STATE_STATUS,
             OPENAI_TOOL_AGENT_SUBMIT_DECISION,
         ]
+    );
+}
+
+#[test]
+fn completion_result_from_sdk_stream_events_uses_completed_response() {
+    let completed = serde_json::from_value::<async_openai::types::responses::ResponseStreamEvent>(
+        serde_json::json!({
+            "type": "response.completed",
+            "sequence_number": 3,
+            "response": {
+                "id": "resp_stream_1",
+                "object": "response",
+                "created_at": 1,
+                "completed_at": 2,
+                "model": "gpt-test",
+                "output": [{
+                    "type": "function_call",
+                    "call_id": "call_decision",
+                    "name": OPENAI_TOOL_AGENT_SUBMIT_DECISION,
+                    "arguments": "{\"decision\":\"wait_ticks\",\"ticks\":2}"
+                }],
+                "status": "completed",
+                "parallel_tool_calls": false
+            }
+        }),
+    )
+    .expect("stream completed event");
+
+    let result = completion_result_from_sdk_stream_events(vec![completed]).expect("completion");
+
+    assert_eq!(result.model.as_deref(), Some("gpt-test"));
+    assert_eq!(result.output, "{\"decision\":\"wait_ticks\",\"ticks\":2}");
+    assert_eq!(
+        result.turns,
+        vec![LlmCompletionTurn::Decision {
+            payload: serde_json::json!({
+                "decision": "wait_ticks",
+                "ticks": 2,
+            }),
+        }]
+    );
+}
+
+#[test]
+fn completion_result_from_sdk_stream_events_uses_output_item_done_when_completed_output_is_empty() {
+    let output_item_done =
+        serde_json::from_value::<async_openai::types::responses::ResponseStreamEvent>(
+            serde_json::json!({
+                "type": "response.output_item.done",
+                "sequence_number": 14,
+                "output_index": 0,
+                "item": {
+                    "type": "function_call",
+                    "call_id": "call_decision",
+                    "name": OPENAI_TOOL_AGENT_SUBMIT_DECISION,
+                    "arguments": "{\"decision\":\"wait_ticks\",\"ticks\":2}",
+                    "status": "completed"
+                }
+            }),
+        )
+        .expect("output item done event");
+    let completed = serde_json::from_value::<async_openai::types::responses::ResponseStreamEvent>(
+        serde_json::json!({
+            "type": "response.completed",
+            "sequence_number": 15,
+            "response": {
+                "id": "resp_stream_2",
+                "object": "response",
+                "created_at": 1,
+                "completed_at": 2,
+                "model": "gpt-test",
+                "output": [],
+                "status": "completed",
+                "parallel_tool_calls": false
+            }
+        }),
+    )
+    .expect("stream completed event");
+
+    let result = completion_result_from_sdk_stream_events(vec![output_item_done, completed])
+        .expect("completion from output item");
+
+    assert_eq!(result.model.as_deref(), Some("gpt-test"));
+    assert_eq!(result.output, "{\"decision\":\"wait_ticks\",\"ticks\":2}");
+    assert_eq!(
+        result.turns,
+        vec![LlmCompletionTurn::Decision {
+            payload: serde_json::json!({
+                "decision": "wait_ticks",
+                "ticks": 2,
+            }),
+        }]
     );
 }
 
