@@ -50,3 +50,4 @@ crates/oasis7_viewer/.software-safe-build/
 crates/oasis7_viewer/dist
 crates/oasis7/explorer-index.json
 tools/provider/oasis7_provider_workspace/.provider/
+tools/provider/oasis7_provider_workspace/.openclaw/
