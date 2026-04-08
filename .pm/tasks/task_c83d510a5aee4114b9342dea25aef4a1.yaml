@@ -1,0 +1,21 @@
+task_uid: task_c83d510a5aee4114b9342dea25aef4a1
+title: "Upgrade shared-devnet triad nodes to latest runtime"
+owner_role: runtime_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_c83d510a5aee4114b9342dea25aef4a1.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "Local observer and both ECS nodes run the same latest oasis7_chain_runtime release"
+  - "Deployment evidence and rollback-relevant notes are written back to p2p docs and task execution log"
+handoff_to: []
+updated_at: 2026-04-07T23:59:12+08:00
+last_started_at: 2026-04-07T21:42:46+08:00
+last_closed_at: 2026-04-07T23:55:17+08:00
