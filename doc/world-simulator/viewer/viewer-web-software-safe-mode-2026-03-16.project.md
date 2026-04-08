@@ -26,7 +26,7 @@
 - [x] T18 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 按最新产品设定重写本专题 PRD / design / project，把 `software_safe` 从弱图形 fallback 重定位为低保真但正式可玩的主要 Web 入口，并把 `standard` 收口为 visual QA surface。
 - [x] T19 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将默认 Web 产品入口切到 `software_safe`，并把 `render_mode` / launcher / bootstrap 的默认语义改成“formal Web 主入口优先 software_safe，standard 仅在显式 visual intent 下进入”。
 - [x] T20 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 补齐 `software_safe` 作为主要正式 Web 入口所需的 canonical 玩家语义摘要、blocked/handoff surface，以及缺失动作的显式交接口径。
-- [ ] T21 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `producer_system_designer` 按新的主入口 contract 重跑 formal Web vs visual QA 证据，拆分 `software_safe` formal gameplay PASS 与 `standard` visual PASS 两类结论。
+- [x] T21 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `producer_system_designer` 按新的主入口 contract 重跑 formal Web vs visual QA 证据，确认 `/` 与 `render_mode=auto` -> `software_safe` PASS、显式 `render_mode=standard` visual QA PASS，并记录 `software_safe` formal gameplay 当前因缺少 `OASIS7_LLM_MODEL` 环境配置而处于 `blocked`；产物见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 与 `output/playwright/viewer-{primary-web-entry,software-safe-step}/...`。
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -44,10 +44,10 @@
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
 - 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
 - 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
-- 当前阶段：T18~T20 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地；剩余 `T21` 负责按新 contract 重跑 formal gameplay vs visual QA 证据。
-- 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 provider runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-07（`viewer_engineer` 已将默认 Web / launcher / bootstrap 改为以 `software_safe` 为正式主入口，并在页面顶层补齐 canonical gameplay summary 与显式 handoff surface；下一步只剩 `qa_engineer` / `producer_system_designer` 重跑新 contract 证据。）
-- 阻塞项：`T21` formal gameplay vs visual QA 证据尚未重跑，README / current-entry / release claim 仍不得先于证据把该改向表述成“已完成上线行为”。
+- 当前阶段：T18~T21 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地，且新 contract 的 QA 证据已补齐：primary Web entry PASS、`standard` visual QA PASS、`software_safe` formal gameplay 当前因缺少 LLM 配置而 `blocked`。
+- 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 headless lane 元数据展示，以及 OpenClaw runtime live 下的 observer-only 提示。
+- 最近更新：2026-04-07（`qa_engineer` 已完成新主入口 contract 采证：默认 `/` 与 `render_mode=auto` 均落到 `software_safe`，显式 `render_mode=standard` 保持 visual QA surface；但 formal gameplay 复采被 `missing env variable: OASIS7_LLM_MODEL` 阻断，详见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md`。）
+- 阻塞项：主入口 contract 证据已完成；当前剩余阻塞收敛为“QA/runtime 环境缺少可用 LLM provider 配置，故 formal gameplay 尚无 release-grade PASS 复采”，README / current-entry / release claim 仍不得写成“formal Web gameplay 已完成 release PASS”。
 
 ## 备注
 - 本专题的目标不是让 `software_safe` 与标准模式“视觉等价”，而是让它成为低保真但正式可玩的主要 Web 入口。

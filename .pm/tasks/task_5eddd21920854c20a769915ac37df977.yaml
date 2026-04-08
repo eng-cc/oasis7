@@ -1,0 +1,21 @@
+task_uid: task_5eddd21920854c20a769915ac37df977
+title: "Re-run software_safe formal Web evidence"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-software-safe-formal-web-evidence
+execution_log_path: .pm/tasks/task_5eddd21920854c20a769915ac37df977.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+acceptance:
+  - "rerun formal software_safe gameplay evidence against the new primary-entry contract and record PASS/FAIL with reproducible artifacts"
+  - "rerun explicit standard visual QA evidence separately and keep release/current-entry claims gated until evidence is written back"
+handoff_to: []
+updated_at: 2026-04-08T09:00:03+08:00
+last_started_at: 2026-04-07T22:15:13+08:00
+last_closed_at: 2026-04-08T08:56:55+08:00
