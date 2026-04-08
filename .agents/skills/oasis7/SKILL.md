@@ -50,7 +50,8 @@ If you need `debug_viewer`, `software_safe`, or other UI/observer guidance, read
 Check these first:
 
 - provider CLI configured by `OASIS7_PROVIDER_CLI_BIN` is callable
-  - if unset, the repo scripts fall back to the current local provider CLI
+  - set `OASIS7_PROVIDER_CLI_BIN` explicitly when you want to override the repo default
+  - if unset, use `oasis7-run.sh resolve-provider-cli` to inspect the helper's current fallback resolution
 - Local Provider Gateway is live on `127.0.0.1:18789`
 - oasis7 bridge is or can be made available on `127.0.0.1:5841`
 - `cargo` is only required for repo-backed runtime-agent bootstrap, auto bridge startup, source-tree launch, and smoke
@@ -59,7 +60,8 @@ Check these first:
 Useful probes:
 
 ```bash
-${OASIS7_PROVIDER_CLI_BIN:-openclaw} --version
+provider_cli_bin="$(.agents/skills/oasis7/scripts/oasis7-run.sh resolve-provider-cli)"
+"$provider_cli_bin" --version
 curl -sS http://127.0.0.1:18789/health
 ```
 
@@ -262,12 +264,14 @@ bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
 ```bash
 .agents/skills/oasis7/scripts/oasis7-run.sh doctor
 .agents/skills/oasis7/scripts/oasis7-run.sh doctor --json
+.agents/skills/oasis7/scripts/oasis7-run.sh resolve-provider-cli
 ```
 
 What it does:
 
 - `download`: downloads and extracts the GitHub Release bundle, then prints the usable bundle directory
 - `doctor`: checks command availability, Gateway health, bridge health, provider info, runtime agent presence, and optional `--bundle-dir` validity; add `--json` for machine-readable output
+- `resolve-provider-cli`: prints the resolved provider CLI command that the helper will invoke after applying `OASIS7_PROVIDER_CLI_BIN` override / fallback resolution
 - `play`: bootstrap `oasis7_provider_agent` unless you disable it, verify Gateway health, start the local bridge unless you pass `--reuse-bridge`, then run launcher from the bundle or source tree
 - `smoke`: remains repo-backed because the parity harness lives under `scripts/provider-parity-p0.sh`
 

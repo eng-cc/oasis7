@@ -9,6 +9,7 @@ Usage:
   oasis7-run.sh play [options]
   oasis7-run.sh smoke [options]
   oasis7-run.sh doctor [options]
+  oasis7-run.sh resolve-provider-cli
 
 Options:
   --repo-root <path>              Explicit repo root for repo-backed actions
@@ -42,6 +43,14 @@ require_cmd() {
     echo "missing required command: $1" >&2
     exit 1
   }
+}
+
+resolve_provider_cli_path() {
+  command -v "$provider_cli_bin" >/dev/null 2>&1 || {
+    echo "provider runtime CLI not found: $provider_cli_bin" >&2
+    return 1
+  }
+  command -v "$provider_cli_bin"
 }
 
 http_get() {
@@ -907,6 +916,8 @@ case "$mode" in
   doctor)
     require_cmd curl
     ;;
+  resolve-provider-cli)
+    ;;
   play)
     if [[ -n "$bundle_dir" ]]; then
       if ! validate_bundle_dir "$bundle_dir"; then
@@ -981,6 +992,11 @@ fi
 
 if [[ "$mode" == "doctor" ]]; then
   run_doctor
+  exit $?
+fi
+
+if [[ "$mode" == "resolve-provider-cli" ]]; then
+  resolve_provider_cli_path
   exit $?
 fi
 

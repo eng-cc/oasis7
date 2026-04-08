@@ -1,0 +1,22 @@
+task_uid: task_27c7002858d245489a8e9aa651818e12
+title: "Purge remaining legacy provider naming in oasis7 skill"
+owner_role: agent_engineer
+worktree_hint: oasis7-world-simulator-oasis7-skill-provider-naming-purge
+execution_log_path: .pm/tasks/task_27c7002858d245489a8e9aa651818e12.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - .agents/skills/oasis7/SKILL.md
+  - .agents/skills/oasis7/references/failure-signatures.md
+doc_refs:
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "The oasis7 skill and its references no longer contain visible openclaw naming in operator-facing text."
+  - "Skill guidance still states how to probe the provider CLI without reintroducing legacy branding into the docs."
+handoff_to: []
+updated_at: 2026-04-08T09:55:07+08:00
+last_started_at: 2026-04-07T23:48:43+08:00
+last_closed_at: 2026-04-08T09:54:49+08:00

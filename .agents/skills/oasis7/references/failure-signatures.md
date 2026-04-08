@@ -33,7 +33,7 @@ Meaning:
 Check:
 
 1. `curl -sS http://127.0.0.1:18789/health`
-2. `${OASIS7_PROVIDER_CLI_BIN:-openclaw} --version`
+2. `provider_cli_bin="$(.agents/skills/oasis7/scripts/oasis7-run.sh resolve-provider-cli)" && "$provider_cli_bin" --version`
 3. bridge stderr / log file
 
 ## `bridge_model_output_invalid`
