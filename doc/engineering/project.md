@@ -94,19 +94,20 @@
 - [x] TASK-ENGINEERING-082 (PRD-ENGINEERING-021) [test_tier_required]: 落地 `promote-memory` 契约、signal `memory_promotion_state` 决策回写，以及 `promotion_reason` / `reject_reason` 白名单。
 - [x] TASK-ENGINEERING-083 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `memory-report`，并补 stale review、active 冲突、superseded 链和新角色扩容回归。
 - [x] TASK-ENGINEERING-084 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 落地 `role-report`，汇总角色 backlog + role memory，并补按角色查询与扩容回归。
-- [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前 subagent review 规则与 smoke。
+- [x] TASK-ENGINEERING-085 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 把 `.pm` 接入现有开发工作流，补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并同步接入 `AGENTS.md`、角色职责卡、`new-task-worktree` 提示、commit 前快照式 `codex exec review --uncommitted` 规则与 smoke。
 - [x] TASK-ENGINEERING-086 (PRD-ENGINEERING-022) [test_tier_required]: 建立“记忆启发式自我进化补强”专题 `prd/design/project`，冻结 `memoryOSS` / 《Hindsight》 的 adopted/rejected/deferred 边界，并同步回写 engineering 根入口、主项目、索引与 task execution log 规则。
 - [x] TASK-ENGINEERING-091 (PRD-ENGINEERING-022) [test_tier_required]: 补充“会话记录分析 -> task-scoped working_memory”专题口径，冻结 Codex/engineering task 的 phase 1 来源为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时为当前 live session 抽取补齐 `last_extracted_ts/captured_until_ts` 水位与默认增量抽取口径，并回写记忆启发式补强专题、engineering 主项目与 task execution log。
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-021) [test_tier_required]: 起草 7 个标准角色 `topic` allowlist、扩展 `promotion_reason` 白名单与 close-phase 记忆抽取 checklist，并同步接入长期 memory 专题、角色职责卡、`workflow-report` 与 `.pm/templates/role-memory-policy.yaml` 草案。
-- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 补齐 commit 前 subagent review 的正式追踪入口，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 task execution log，确保默认流程互链完整。
-- [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-021) [test_tier_required]: 将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 专题中的 commit 前 subagent review 规则统一收口为仓库默认流程口径。
+- [x] TASK-ENGINEERING-093 (PRD-ENGINEERING-021) [test_tier_required]: 补齐 commit 前 review 流程的正式追踪入口，并同步回写 `AGENTS.md`、engineering 主 PRD、self-evolution 专题 project/PRD 与 task execution log，确保默认流程互链完整。
+- [x] TASK-ENGINEERING-094 (PRD-ENGINEERING-021) [test_tier_required]: 将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 专题中的 commit 前 review 规则统一收口为仓库默认流程口径。
 - [x] TASK-ENGINEERING-095 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 修复 `memory-regression-smoke` 的 blocked-task fixture，使其按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造测试数据，恢复 full-tier smoke 通过。
 - [x] TASK-ENGINEERING-096 (PRD-ENGINEERING-021) [test_tier_required] + [test_tier_full]: 将执行日志 canonical 路径切换为 `.pm/tasks/task_<32hex>.execution.md`，并同步接入 `AGENTS.md`、`.pm/README`、`workflow-report`、task lint 与 smoke。
-- [x] TASK-ENGINEERING-097 (PRD-ENGINEERING-021) [test_tier_required]: 收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并把运行环境阻断边界同步回写到正式文档与 `workflow-report` checklist。
+- [x] TASK-ENGINEERING-097 (PRD-ENGINEERING-021) [test_tier_required]: 收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并把运行环境阻断边界同步回写到正式文档与 `workflow-report` checklist。
 - [x] TASK-ENGINEERING-098 (PRD-ENGINEERING-021) [test_tier_required]: 将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
 - [x] TASK-ENGINEERING-099 (PRD-ENGINEERING-021/023) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐迁移脚本、lint/smoke 与正式文档收口。
 - [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-021) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 source_ref 的残留口径，补齐 stage/signal/task/memory 门禁、source_ref 校验与正式文档回写。
 - [x] TASK-ENGINEERING-101 (PRD-ENGINEERING-021) [test_tier_required]: 新增 repo-local `.codex/config.toml`，默认 `sandbox_mode = "danger-full-access"`，并补齐 `.gitignore` 精确例外、engineering PRD/project 与 task execution log 追踪。
+- [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-021) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -148,20 +149,21 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-07
+- 更新日期: 2026-04-08
 - 当前状态: active
 - 下一任务: 回到 `TASK-ENGINEERING-089/090`，继续收口 `.codex -> working_memory -> reflection` 契约与质量回归；`TASK-ENGINEERING-099/100` 已分别完成 task identity 单一真值迁移与 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-102`（已清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。）
 - 最新完成: `TASK-ENGINEERING-101`（已新增 repo-local `.codex/config.toml` 并默认 `danger-full-access`，同时补齐 `.gitignore` 精确例外、engineering 主 PRD/project 与 task execution log 追踪。）
-- 最新完成: `TASK-ENGINEERING-097`（已收紧 commit 前 review 话术，明确 Codex 中的 subagent review 默认指 `spawn_agent` 派生 agent，`codex exec review --uncommitted` 不计作等价流程，并补齐运行环境阻断边界。）
+- 最新完成: `TASK-ENGINEERING-097`（已收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界。）
 - 最新完成: `TASK-ENGINEERING-098`（已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。）
 - 最新完成: `TASK-ENGINEERING-099`（已将 `.pm` task identity 收敛为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并完成 lint/smoke 与正式文档迁移收口。）
 - 最新完成: `TASK-ENGINEERING-100`（已明确 `doc/devlog/*.md` 仅作历史归档，`.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence，并补齐 lint / promote-signal / set-stage 阻断。）
 - 最新完成: `TASK-ENGINEERING-096`（已将执行日志 canonical 路径切到 `.pm/tasks/task_<32hex>.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。）
 - 最新完成: `TASK-ENGINEERING-095`（已将 `memory-regression-smoke` 的 blocked-task fixture 改为按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造，恢复 full-tier smoke 通过。）
-- 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 subagent review 规则统一收口为仓库默认流程。）
+- 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 review 规则统一收口为仓库默认流程。）
 - 最新完成: `TASK-ENGINEERING-049`（根 `AGENTS.md` 顶部协作执行语义收敛为角色视角切换）。
 - 最新完成: `TASK-ENGINEERING-050`（engineering 模块仍可读治理专题标题统一切到 `oasis7` 品牌）。
 - 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。

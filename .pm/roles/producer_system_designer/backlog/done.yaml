@@ -217,6 +217,20 @@ tasks:
       - qa_engineer
     status: done
     task_path: .pm/tasks/task_48a944753c634a469497bc5c906284c7.yaml
+  - task_uid: task_b006f2efdbd247ab883906d150cacbaf
+    title: "TASK-ENGINEERING-102 清理旧 review 口径并落地无副作用 codex snapshot review"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "formal workflow docs replace the old review wording with snapshot-based codex review"
+      - "workflow-report close checklist and smoke point to ./scripts/pm/codex-review-snapshot.sh as the required pre-commit review step"
+      - "AGENTS.md, engineering tracking, self-evolution tracking, and shared workflow memory stay consistent after the update"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_b006f2efdbd247ab883906d150cacbaf.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2

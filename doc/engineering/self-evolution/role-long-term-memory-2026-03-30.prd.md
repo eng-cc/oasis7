@@ -132,7 +132,7 @@
   - NFR-MEM-5: 新角色接入时无需调整历史 memory 数据格式。
   - NFR-MEM-6: active memory 到 stage/backlog 的引用可达性覆盖率 100%。
   - NFR-MEM-7: 7 个标准角色的 topic allowlist 草案覆盖率 100%，不得长期只有少数角色具备“什么能进 memory”的明确口径。
-  - NFR-MEM-8: `workflow-report --phase close` 中记忆抽取三问的暴露率 100%，不得出现 close checklist 只剩“写 execution log + subagent review”的收口口径。
+  - NFR-MEM-8: `workflow-report --phase close` 中记忆抽取三问的暴露率 100%，不得出现 close checklist 只剩“写 execution log + 快照式 `codex exec review --uncommitted`”的收口口径。
 - Security & Privacy:
   - memory 只允许记录工程治理语义，不允许复制敏感原文、token、cookie、密钥。
   - 若 incident/runbook 含敏感信息，只记录脱敏摘要和来源引用。

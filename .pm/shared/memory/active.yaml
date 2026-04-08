@@ -19,20 +19,20 @@ records:
     promotion_reason: stage_decision
   - id: MEM-SHARED-0002
     role: shared
-    topic: cross_role.workflow.subagent_review_requires_spawn_agent
-    summary: "In Codex, the default pre-commit subagent review flow must be an actual spawn_agent review; codex exec review --uncommitted is only shell self-check and does not satisfy the repository workflow."
+    topic: cross_role.workflow.codex_review_requires_isolated_snapshot
+    summary: "In Codex, the default pre-commit review flow must run `codex exec review --uncommitted` inside a temporary isolated snapshot via `./scripts/pm/codex-review-snapshot.sh`, so the live task worktree and `.pm` state stay untouched."
     source_refs:
       - .pm/tasks/task_5228ebc444f252a89ecdc8bba46db869.execution.md
-      - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+      - .pm/tasks/task_b006f2efdbd247ab883906d150cacbaf.execution.md
     tags:
       - workflow
       - review
-      - spawn_agent
-    effective_at: 2026-04-06T23:33:31+08:00
-    last_reviewed_at: 2026-04-06T23:33:31+08:00
+      - snapshot
+    effective_at: 2026-04-08T21:56:42+08:00
+    last_reviewed_at: 2026-04-08T21:56:42+08:00
     status: active
     confidence: confirmed
-    promotion_reason: policy_boundary
+    promotion_reason: engineering_constraint
   - id: MEM-SHARED-0003
     role: shared
     topic: cross_role.workflow.task_scoped_working_memory_close_checklist

@@ -47,14 +47,14 @@
   - SC-16: `AGENTS.md` 的开发工作流已升级为角色协作版，明确 owner role、handoff 触发条件、QA 与 LiveOps 回流路径。
   - SC-17: 任务执行日志 canonical 路径统一为 `.pm/tasks/task_<32hex>.execution.md`，多角色执行时单条记录必须显式标注角色。
   - SC-18: task execution log / handoff 中的角色字段由 `.agents/roles/*.md` 白名单约束，新增别名违规数为 0。
-  - SC-19: 当任务需要其他伙伴协作时，执行主体必须切换到标准角色视角并加载对应职责卡；`subagent` 只能作为 commit 前独立 review 机制，不得替代 owner / role 协作语义。
+  - SC-19: 当任务需要其他伙伴协作时，执行主体必须切换到标准角色视角并加载对应职责卡；commit 前独立 review 只用于暴露风险/回归/缺测，不得替代 owner / role 协作语义。
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
-  - SC-23: 每次 commit 前都必须启动一个独立 subagent review 当前 diff，并在提交前处理或显式记录 review findings；在 Codex 环境中，该动作默认指通过 `spawn_agent` 派生独立 review agent。
-  - SC-24: commit 前 subagent review 在仓库流程层面属于默认执行步骤，不需要因为“只是执行这条既有流程”再单独向用户申请一次。
-  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪必须对该流程维持单一口径：commit 前先做独立 subagent review，再处理 findings 后提交。
-  - SC-24B: `codex exec review --uncommitted` 仅可视为 shell 内自检，不得记作仓库要求的 subagent review；若运行环境禁止派生 agent，必须显式记录为运行环境阻断，而不是静默降级。
+  - SC-23: 每次 commit 前都必须通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review 当前 diff，并在提交前处理或显式记录 review findings。
+  - SC-24: commit 前快照式 `codex exec review --uncommitted` 在仓库流程层面属于默认执行步骤，不需要因为“只是执行这条既有流程”再单独向用户申请一次。
+  - SC-24A: 根 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪必须对该流程维持单一口径：commit 前先通过 `./scripts/pm/codex-review-snapshot.sh` 触发隔离快照 review，再处理 findings 后提交。
+  - SC-24B: 若快照式 `codex exec review --uncommitted` 因运行环境或工具失败无法执行，必须显式记录为运行环境阻断，而不是静默跳过或降级。
   - SC-25: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
   - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
@@ -89,7 +89,7 @@
   - PRD-ENGINEERING-022: As a `producer_system_designer`, I want external memory and reflection patterns benchmarked against our file-native governance model, so that future self-evolution upgrades borrow structure without replacing repo-native truth.
   - PRD-ENGINEERING-023: As a `.pm` workflow owner, I want task identity to be a merge-stable `task_uid` instead of a sequential display number, so that task creation in parallel worktrees no longer collides during rebase/landing.
 - Critical User Flows:
-  1. Flow-ENG-001: `提交前执行脚本 -> 通过 spawn_agent 启动独立 subagent review 当前 diff -> 修复 findings 并复测 -> 进入 CI`
+  1. Flow-ENG-001: `提交前执行脚本 -> 通过 codex-review-snapshot 在临时隔离快照中执行 codex exec review --uncommitted review 当前 diff -> 修复 findings 并复测 -> 进入 CI`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
   3. Flow-ENG-003: `季度复盘 -> 汇总违规趋势 -> 调整门禁阈值 -> 发布新治理基线`
   4. Flow-ENG-004: `逐篇阅读旧文档 -> 按 strict schema 重写 -> 内容保真复核 -> 更新任务与执行日志追踪`
@@ -115,7 +115,7 @@
 | 全量 PRD 审读清单 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 逐篇阅读后更新清单并回写偏差 | `unread -> read -> aligned` | 入口优先、风险优先 | 维护者与评审者可写，贡献者可读 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 默认先 brief 后 detailed，按风险等级决定是否升级 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
-| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-commit review 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；commit 前额外通过 `spawn_agent` 启动独立 subagent review 当前 diff | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；subagent 只允许作为 pre-commit review 辅助，不得替代角色协作规则 | 全体贡献者遵守，治理维护者可演进 |
+| 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-commit review 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；commit 前额外通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review 当前 diff | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；pre-commit review 只允许作为风险暴露步骤，不得替代角色协作规则 | 全体贡献者遵守，治理维护者可演进 |
 | task execution log | `task_uid`、日期、时刻、角色、完成内容、遗留事项 | 每个任务写入 `.pm/tasks/task_<32hex>.execution.md`，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认一任务一文件，按时间排序 | 全体贡献者可写，评审者可按任务/角色回溯 |
 | 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
@@ -141,7 +141,7 @@
   - AC-17: `.agents/roles/templates/` 下至少提供一套可直接复制使用的角色交接模板，并在根 `AGENTS.md` 可达。
   - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
   - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
-  - AC-18B: 根 `AGENTS.md` 的 commit 前 subagent review 规则需只保留单一默认流程口径。
+  - AC-18B: 根 `AGENTS.md` 的 commit 前快照式 `codex exec review --uncommitted` 规则需只保留单一默认流程口径。
   - AC-19: 根 `AGENTS.md` 的 task execution log 规则需明确“一任务一文件、不按角色拆文件、条目级标角色”的约束。
   - AC-20: 文档治理门禁需阻断 task execution log / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -256,10 +256,10 @@
 | PRD-ENGINEERING-015 | TASK-ENGINEERING-025 | `test_tier_required` | 规范正文结构检查、模块入口回写、索引可达性检查 | 新增文档可发现性与详细设计落位一致性 |
 | PRD-ENGINEERING-016 | TASK-ENGINEERING-030/036 | `test_tier_required` | 角色职责卡存在性、字段完整性、推荐技能区段与根 `AGENTS.md` 入口映射检查 | 人机协作分工清晰度与执行一致性 |
 | PRD-ENGINEERING-017 | TASK-ENGINEERING-031 | `test_tier_required` | 交接模板存在性、字段完整性与入口可达性检查 | 跨角色协作质量与上下文传递稳定性 |
-| PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且只允许把 subagent 用作 commit 前 review | 协作流程稳定性与执行确定性 |
+| PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且 commit 前 review 需显式落到 `codex exec review --uncommitted` | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、subagent review 默认流程文案一致性、`spawn_agent`/shell-review 边界、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、快照式 `codex exec review --uncommitted` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 
@@ -282,7 +282,7 @@
 | DEC-ENG-014 | 重复与上下游对齐问题在同批次完成修复与回填 | 跨批次累积处理 | 同批次闭环可避免问题扩散到下一轮审读。 |
 | DEC-ENG-015 | 根 `AGENTS.md` 仅保留 7 个组合角色入口，详细职责下沉到 `.agents/roles/*.md` | 在根 `AGENTS.md` 内持续堆叠所有角色长描述 | 入口更短、更稳，且更便于按角色独立演进职责卡。 |
 | DEC-ENG-016 | 为角色协作提供统一 handoff 模板，并放在 `.agents/roles/templates/` | 继续依赖自由格式口头/临时文本交接 | 统一模板能显著降低跨角色遗漏、返工和上下文漂移。 |
-| DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / pre-commit subagent review / no-commit 例外 | 继续保留单线程开发表述，或让 subagent 替代 owner role | 当前仓库已引入角色职责卡与交接模板；需要继续由角色视角承接 owner 责任，同时用独立 subagent 提前暴露 commit 前风险。 |
+| DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / pre-commit snapshot codex review / no-commit 例外 | 继续保留单线程开发表述，或让独立 review 替代 owner role | 当前仓库已引入角色职责卡与交接模板；需要继续由角色视角承接 owner 责任，同时用快照式 `codex exec review --uncommitted` 提前暴露 commit 前风险且不污染源 worktree。 |
 | DEC-ENG-018 | 自我进化项目管理首期采用仓库内文件化运行层 | 直接将外部 PM/SaaS 作为主真值 | 当前仓库已具备 Git/worktree/正式文档治理链，先在 repo 内闭环更符合现有工程约束。 |
 | DEC-ENG-019 | 执行日志收敛为 task-local `.pm/tasks/task_<32hex>.execution.md`，并在条目级强制标注角色 | 继续维护集中式日表或按角色拆分日志文件 | `.pm` 已经以 task 为基本执行单元，任务日志跟 task file 同址更利于追溯、lint 与多 worktree 并发隔离。 |
 | DEC-ENG-020 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 改为扫描重建视图 | 继续把 `TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名绑定为正式主键 | 顺序号一旦同时承担主键、文件名、视图索引和人类展示作用，就会在并发 worktree 下制造结构性 rebase/landing 冲突；`task_uid` 可把冲突面收敛回真正被并发编辑的 task 对象。 |

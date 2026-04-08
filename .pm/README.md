@@ -54,6 +54,7 @@
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
+- `./scripts/pm/codex-review-snapshot.sh`：在临时隔离 Git 快照中重放当前未提交 diff，并在该快照内执行 `codex exec review --uncommitted`，避免 review 过程改动源 worktree 的 `.pm` 或其他文件。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
@@ -62,6 +63,7 @@
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
+- 提交前 review：`./scripts/pm/codex-review-snapshot.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
@@ -120,6 +122,7 @@ workflow report 基础用法：
 - `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
+- `./scripts/pm/codex-review-snapshot.sh --output-last-message /tmp/codex-review.txt`
 - 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-uid` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
 
 阶段汇总基础用法：

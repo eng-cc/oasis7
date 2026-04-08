@@ -460,8 +460,11 @@ if any(item.get("id") == "review-signals" and "command" in item for item in work
     raise SystemExit("workflow review checklist should not suggest promote-signal for pending signal handling")
 if any(item.get("id") == "triage-signals" and "command" in item for item in workflow_start["checklist"]):
     raise SystemExit("workflow start checklist should not suggest promote-signal for pending signal handling")
-if not any(item.get("id") == "subagent-review" for item in workflow_close["checklist"]):
-    raise SystemExit("workflow close checklist should require subagent review before commit")
+if not any(item.get("id") == "codex-review" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should require codex review before commit")
+codex_items = [item for item in workflow_close["checklist"] if item.get("id") == "codex-review"]
+if codex_items[0].get("command") != "./scripts/pm/codex-review-snapshot.sh":
+    raise SystemExit("workflow close codex review checklist should point to codex-review-snapshot.sh")
 if not any(item.get("id") == "bootstrap-working-memory" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should suggest bootstrapping working_memory when the current task has no entries")
 if any(item.get("id") == "review-working-memory" for item in workflow_close["checklist"]):

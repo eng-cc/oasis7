@@ -2502,8 +2502,9 @@ def build_workflow_checklist(
                 reason=f"triaged_reflections={pending_reflections}",
             )
         add(
-            "subagent-review",
-            "commit 前必须启动独立 subagent review 当前 diff；在 Codex 环境中默认通过 spawn_agent 派生独立 review agent。`codex exec review --uncommitted` 只算 shell 自检，不计作该流程完成；若运行环境禁止派生 agent，需显式记录为阻断。review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
+            "codex-review",
+            "commit 前必须通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review 当前 diff；若命令因运行环境或工具失败无法执行，需显式记录为阻断。review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
+            command="./scripts/pm/codex-review-snapshot.sh",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(
