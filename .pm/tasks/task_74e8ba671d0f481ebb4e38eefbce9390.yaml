@@ -1,0 +1,24 @@
+task_uid: task_74e8ba671d0f481ebb4e38eefbce9390
+title: "Roll out sequencer stale-height fix and rerun real-env triad"
+owner_role: runtime_engineer
+worktree_hint: oasis7-p2p-p2parch-6-sequencer-stale-height-rollout
+execution_log_path: .pm/tasks/task_74e8ba671d0f481ebb4e38eefbce9390.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/testing/evidence/p2p-real-env-triad-reconfirm-2026-04-08.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+  - doc/testing/evidence/p2p-real-env-triad-reconfirm-2026-04-08.md
+  - doc/testing/evidence/p2p-real-env-triad-stale-height-rollout-2026-04-08.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "The stale-height recovery runtime binary is deployed to triad-sequencer-a without regressing current triad service topology."
+  - "A post-rollout same-window triad snapshot records whether sequencer clears committed_height/network_committed_height zero and updates P2PARCH-6 blocker truth accordingly."
+  - "Task docs and evidence capture rollout commands, verification results, and any remaining real-env blocker after deployment."
+handoff_to: []
+updated_at: 2026-04-08T13:25:46+08:00
+last_started_at: 2026-04-08T12:57:07+08:00
+last_closed_at: 2026-04-08T13:25:29+08:00
