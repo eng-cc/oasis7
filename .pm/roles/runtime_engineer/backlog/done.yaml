@@ -106,6 +106,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_91949e5879a8434db3a55d3012b76950.yaml
+  - task_uid: task_21d194cd65564fd0967f64f847cefd3d
+    title: "Reconfirm P2PARCH-6 real-env triad and close three-node gaps"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "Current 1-local + 2-cloud triad can be sampled in one same-window run, with local and remote service/status truth recorded without overstating shared-network pass."
+      - "Any newly exposed local/runtime blocker that is reproducible in the current three-node environment is either fixed with tests or explicitly captured as residual risk/evidence."
+      - "Project tracking and task execution log reflect the latest triad evidence and next blocker truth for P2PARCH-6."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_21d194cd65564fd0967f64f847cefd3d.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

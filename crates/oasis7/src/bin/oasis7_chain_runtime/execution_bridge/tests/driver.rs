@@ -3,8 +3,9 @@ use super::super::checkpoint::{
     load_execution_bridge_record,
 };
 use super::super::driver::{
-    load_execution_bridge_state, load_execution_world, persist_execution_world,
-    simulator_world_dir_from_execution_world_dir, NodeRuntimeExecutionDriver,
+    load_execution_bridge_state, load_execution_world, persist_execution_bridge_state,
+    persist_execution_world, simulator_world_dir_from_execution_world_dir,
+    NodeRuntimeExecutionDriver,
 };
 use super::super::external_effect::load_execution_external_effect_materialization;
 use super::*;
@@ -418,6 +419,163 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
     let state = load_execution_bridge_state(state_path.as_path()).expect("load state");
     assert_eq!(state.last_applied_committed_height, 34);
     assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h34"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
+    let dir = temp_dir("execution-driver-stale-state-reconcile");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    let mut last_result = None;
+    for height in 1..=3 {
+        last_result = Some(
+            driver
+                .on_commit(NodeExecutionCommitContext {
+                    world_id: "w1".to_string(),
+                    node_id: "node-a".to_string(),
+                    height,
+                    slot: height.saturating_sub(1),
+                    epoch: 0,
+                    node_block_hash: format!("node-h{height}"),
+                    action_root: empty_action_root.clone(),
+                    committed_actions: Vec::new(),
+                    committed_at_unix_ms: height as i64 * 1_000,
+                })
+                .expect("seed commit"),
+        );
+    }
+    let height_three = last_result.expect("height three result");
+    drop(driver);
+
+    let stale_state = ExecutionBridgeState {
+        last_applied_committed_height: 4,
+        last_execution_block_hash: Some("stale-execution-hash".to_string()),
+        last_execution_state_root: Some("stale-state-root".to_string()),
+        last_node_block_hash: Some("stale-node-hash".to_string()),
+    };
+    persist_execution_bridge_state(state_path.as_path(), &stale_state).expect("persist stale state");
+
+    let mut restarted = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("restarted driver");
+    let reconciled = restarted
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 3,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "node-h3".to_string(),
+            action_root: empty_action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 3_000,
+        })
+        .expect("reconcile stale state from record");
+
+    assert_eq!(reconciled.execution_height, 3);
+    assert_eq!(
+        reconciled.execution_block_hash,
+        height_three.execution_block_hash
+    );
+    assert_eq!(
+        reconciled.execution_state_root,
+        height_three.execution_state_root
+    );
+
+    let state = load_execution_bridge_state(state_path.as_path()).expect("load reconciled state");
+    assert_eq!(state.last_applied_committed_height, 3);
+    assert_eq!(
+        state.last_execution_block_hash.as_deref(),
+        Some(height_three.execution_block_hash.as_str())
+    );
+    assert_eq!(
+        state.last_execution_state_root.as_deref(),
+        Some(height_three.execution_state_root.as_str())
+    );
+    assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h3"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_stale_restore_from_other_world() {
+    let dir = temp_dir("execution-driver-stale-state-world-mismatch");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("seed commit");
+    drop(driver);
+
+    let stale_state = ExecutionBridgeState {
+        last_applied_committed_height: 2,
+        last_execution_block_hash: Some("stale-execution-hash".to_string()),
+        last_execution_state_root: Some("stale-state-root".to_string()),
+        last_node_block_hash: Some("stale-node-hash".to_string()),
+    };
+    persist_execution_bridge_state(state_path.as_path(), &stale_state).expect("persist stale state");
+
+    let mut restarted = NodeRuntimeExecutionDriver::new(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+    )
+    .expect("restarted driver");
+    let err = restarted
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w2".to_string(),
+            node_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: empty_action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect_err("world mismatch should fail closed");
+    assert!(
+        err.contains("stale-height restore world_id mismatch"),
+        "unexpected mismatch error: {err}"
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

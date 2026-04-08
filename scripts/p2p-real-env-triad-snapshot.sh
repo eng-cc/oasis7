@@ -514,6 +514,8 @@ jq -s \
         and ((.nodes.sequencer_ecs.service_states | index("active")) != null)
         and ((.nodes.storage_ecs.service_states | index("active")) != null)
       ),
+      sequencer_chain_visible: (.nodes.sequencer_ecs.heights.max_committed_height > 0),
+      storage_chain_visible: (.nodes.storage_ecs.heights.max_committed_height > 0),
       cloud_pair_chain_visible: (
         (.nodes.sequencer_ecs.heights.max_committed_height > 0)
         and (.nodes.storage_ecs.heights.max_committed_height > 0)
@@ -521,6 +523,11 @@ jq -s \
       cloud_pair_progress_signal_present: (
         (.nodes.sequencer_ecs.heights.last_committed_height > .nodes.sequencer_ecs.heights.first_committed_height)
         or (.nodes.storage_ecs.heights.last_committed_height > .nodes.storage_ecs.heights.first_committed_height)
+      ),
+      sequencer_execution_stale_height: (
+        (.nodes.sequencer_ecs.last_errors | any(
+          . != null and (. | test("execution driver received stale height"))
+        ))
       ),
       observer_service_healthy: (
         (.nodes.observer_local.healthz_all_ok == true)
@@ -534,8 +541,17 @@ jq -s \
   | .failure_signatures = (
       []
       + (if .analysis.cloud_pair_service_healthy then [] else ["cloud_pair_service_unhealthy"] end)
-      + (if .analysis.cloud_pair_chain_visible then [] else ["cloud_pair_chain_not_visible"] end)
+      + (
+          if .analysis.cloud_pair_chain_visible then []
+          elif ((.analysis.sequencer_chain_visible | not) and (.analysis.storage_chain_visible | not))
+          then ["cloud_pair_chain_not_visible"]
+          else []
+          end
+        )
+      + (if .analysis.sequencer_chain_visible then [] else ["sequencer_committed_height_zero"] end)
+      + (if .analysis.storage_chain_visible then [] else ["storage_committed_height_zero"] end)
       + (if .analysis.cloud_pair_progress_signal_present then [] else ["cloud_pair_no_recent_progress_signal"] end)
+      + (if .analysis.sequencer_execution_stale_height then ["sequencer_execution_stale_height"] else [] end)
       + (if .analysis.observer_service_healthy then [] else ["observer_service_unhealthy"] end)
       + (if .analysis.observer_peer_visibility_ok then [] else ["observer_known_peer_heads_zero"] end)
       + (if .analysis.observer_network_commit_visible then [] else ["observer_network_committed_height_zero"] end)
@@ -577,6 +593,7 @@ jq -s \
     echo "- status_fetch_all_ok: \`$(jq -r --arg label "$label" '.nodes[$label].status_fetch_all_ok' "$summary_json")\`"
     echo "- node_ids: \`$(jq -r --arg label "$label" '.nodes[$label].node_ids | join(", ")' "$summary_json")\`"
     echo "- roles: \`$(jq -r --arg label "$label" '.nodes[$label].roles | join(", ")' "$summary_json")\`"
+    echo "- last_errors: \`$(jq -r --arg label "$label" '.nodes[$label].last_errors | map(select(. != null)) | if length == 0 then "(none)" else join(" | ") end' "$summary_json")\`"
     echo "- committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].heights.first_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].heights.last_committed_height' "$summary_json")\`"
     echo "- network_committed_height: \`$(jq -r --arg label "$label" '.nodes[$label].network.first_network_committed_height' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].network.last_network_committed_height' "$summary_json")\`"
     echo "- known_peer_heads: \`$(jq -r --arg label "$label" '.nodes[$label].peers.min_known_peer_heads' "$summary_json") -> $(jq -r --arg label "$label" '.nodes[$label].peers.max_known_peer_heads' "$summary_json")\`"

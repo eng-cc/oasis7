@@ -6,9 +6,13 @@ use oasis7::consensus_action_payload::{
     decode_consensus_action_payload, ConsensusActionPayloadBody,
 };
 use oasis7::runtime::{
-    blake3_hex, BlobStore, LocalCasStore, ReleaseSecurityPolicy, World as RuntimeWorld,
+    blake3_hex, BlobStore, Journal as RuntimeJournal, LocalCasStore, ReleaseSecurityPolicy,
+    Snapshot as RuntimeSnapshot, World as RuntimeWorld,
 };
-use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
+use oasis7::simulator::{
+    Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
+    WorldKernel, WorldSnapshot as SimulatorSnapshot,
+};
 use oasis7_node::{
     compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionCommitResult,
     NodeExecutionHook, NodeSnapshot,
@@ -19,6 +23,7 @@ use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde::Serialize;
 
 use super::checkpoint::{
+    execution_bridge_record_path, load_execution_bridge_record,
     maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
     run_execution_bridge_retention_maintenance,
 };
@@ -207,6 +212,138 @@ impl NodeRuntimeExecutionDriver {
             state_root,
         }))
     }
+
+    fn restore_execution_head_from_record(
+        &mut self,
+        expected_world_id: &str,
+        target_height: u64,
+    ) -> Result<bool, String> {
+        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
+        if !record_path.exists() {
+            return Ok(false);
+        }
+
+        let record = load_execution_bridge_record(record_path.as_path())?;
+        if record.world_id != expected_world_id {
+            return Err(format!(
+                "execution driver stale-height restore world_id mismatch at height {}: expected={} actual={}",
+                target_height, expected_world_id, record.world_id
+            ));
+        }
+        let world_policy = self.execution_world.release_security_policy().clone();
+        let snapshot_ref = record
+            .latest_state_ref
+            .as_deref()
+            .or(record.snapshot_ref.as_deref())
+            .ok_or_else(|| {
+                format!(
+                    "execution record at height {} missing latest_state_ref",
+                    target_height
+                )
+            })?;
+        let journal_ref = record.journal_ref.as_deref().ok_or_else(|| {
+            format!(
+                "execution record at height {} missing journal_ref",
+                target_height
+            )
+        })?;
+
+        let snapshot_bytes = self.execution_store.get_verified(snapshot_ref).map_err(|err| {
+            format!(
+                "execution driver restore snapshot ref {} failed at height {}: {:?}",
+                snapshot_ref, target_height, err
+            )
+        })?;
+        let journal_bytes = self.execution_store.get_verified(journal_ref).map_err(|err| {
+            format!(
+                "execution driver restore journal ref {} failed at height {}: {:?}",
+                journal_ref, target_height, err
+            )
+        })?;
+        let snapshot =
+            serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice()).map_err(|err| {
+                format!(
+                    "execution driver decode runtime snapshot failed at height {}: {}",
+                    target_height, err
+                )
+            })?;
+        let journal =
+            serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice()).map_err(|err| {
+                format!(
+                    "execution driver decode runtime journal failed at height {}: {}",
+                    target_height, err
+                )
+            })?;
+        let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal)
+            .map_err(|err| {
+                format!(
+                    "execution driver rebuild runtime world failed at height {}: {:?}",
+                    target_height, err
+                )
+            })?;
+        restored_world.set_release_security_policy(world_policy);
+        persist_execution_world(self.world_dir.as_path(), &restored_world)?;
+        self.execution_world = restored_world;
+
+        if let Some(simulator_mirror) = record.simulator_mirror.as_ref() {
+            let simulator_snapshot_bytes = self
+                .execution_store
+                .get_verified(simulator_mirror.snapshot_ref.as_str())
+                .map_err(|err| {
+                    format!(
+                        "execution driver restore simulator snapshot ref {} failed at height {}: {:?}",
+                        simulator_mirror.snapshot_ref, target_height, err
+                    )
+                })?;
+            let simulator_journal_bytes = self
+                .execution_store
+                .get_verified(simulator_mirror.journal_ref.as_str())
+                .map_err(|err| {
+                    format!(
+                        "execution driver restore simulator journal ref {} failed at height {}: {:?}",
+                        simulator_mirror.journal_ref, target_height, err
+                    )
+                })?;
+            let simulator_snapshot =
+                serde_cbor::from_slice::<SimulatorSnapshot>(simulator_snapshot_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode simulator snapshot failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+            let simulator_journal =
+                serde_cbor::from_slice::<SimulatorJournal>(simulator_journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode simulator journal failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+            let restored_simulator =
+                WorldKernel::from_snapshot(simulator_snapshot, simulator_journal).map_err(
+                    |err| {
+                        format!(
+                            "execution driver rebuild simulator mirror failed at height {}: {:?}",
+                            target_height, err
+                        )
+                    },
+                )?;
+            persist_simulator_execution_world(
+                self.simulator_world_dir.as_path(),
+                &restored_simulator,
+            )?;
+            self.simulator_mirror = restored_simulator;
+        }
+
+        self.state.last_applied_committed_height = record.height;
+        self.state.last_execution_block_hash = Some(record.execution_block_hash);
+        self.state.last_execution_state_root = Some(record.execution_state_root);
+        self.state.last_node_block_hash = record.node_block_hash;
+        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
+
+        Ok(true)
+    }
 }
 
 impl NodeExecutionHook for NodeRuntimeExecutionDriver {
@@ -215,10 +352,16 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         context: NodeExecutionCommitContext,
     ) -> Result<NodeExecutionCommitResult, String> {
         if context.height < self.state.last_applied_committed_height {
-            return Err(format!(
-                "execution driver received stale height: context={} state={}",
-                context.height, self.state.last_applied_committed_height
-            ));
+            let stale_state_height = self.state.last_applied_committed_height;
+            if !self.restore_execution_head_from_record(
+                context.world_id.as_str(),
+                context.height,
+            )? {
+                return Err(format!(
+                    "execution driver received stale height: context={} state={}",
+                    context.height, stale_state_height
+                ));
+            }
         }
         if context.height == self.state.last_applied_committed_height {
             let execution_block_hash =

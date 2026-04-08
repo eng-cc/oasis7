@@ -500,14 +500,13 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - latest failure signatures:
     - `sentry_loss_proxy_longrun`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
     - `mixed_topology_release_proxy`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
-- 当前 real-env 基线（2026-04-07 latest）：
-  - latest real-env summary: `.tmp/p2p_real_env_triad/20260407-205218/summary.json`
-  - latest real-env evidence: `doc/testing/evidence/p2p-real-env-triad-snapshot-2026-04-07.md`
-  - `claim_status=partial_with_observer_blocker`
+- 当前 real-env 基线（2026-04-08 latest）：
+  - latest real-env summary: `.tmp/p2p_real_env_triad/20260408-120134/summary.json`
+  - latest real-env evidence: `doc/testing/evidence/p2p-real-env-triad-reconfirm-2026-04-08.md`
+  - `claim_status=blocked`
   - latest real-env failure signatures:
-    - `observer_known_peer_heads_zero`
-    - `observer_network_committed_height_zero`
-    - `observer_committed_height_not_advancing`
+    - `sequencer_committed_height_zero`
+    - `sequencer_execution_stale_height`
 - 建议命令（required）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh --tier required
@@ -588,7 +587,7 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
-  - 2026-04-07 latest real-env triad snapshot 已证明这套真机能留下 live mixed-topology 样本，但当前结果只足以支持 `partial_with_observer_blocker`；云上双节点链高可见，不等于本机 observer 已完成 mixed-topology 接入。
+  - 2026-04-08 latest real-env triad reconfirm 已证明 same-window 三节点样本可重复采集，而且本机 observer 已不再是主 blocker；当前真实 residual 已收敛到 ECS sequencer 的 `execution driver received stale height`。在把带该修复的 runtime 二进制重新部署到远端前，这条 lane 仍不能升级为 `pass`。
 
 ### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
 - 当前状态（2026-04-07）：
