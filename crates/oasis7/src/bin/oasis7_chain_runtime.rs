@@ -185,6 +185,7 @@ struct ChainStatusResponse {
     release_security_policy: ReleaseSecurityPolicy,
     reward_runtime: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage: storage_metrics::StorageMetricsSnapshot,
+    replication: ChainReplicationDebugStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -224,6 +225,27 @@ struct ChainConsensusStatus {
     last_execution_block_hash: Option<String>,
     last_execution_state_root: Option<String>,
     known_peer_heads: usize,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct ChainReplicationDebugStatus {
+    local_peer_id: String,
+    connected_peers: Vec<String>,
+    peer_healths: Vec<ChainPeerHealthStatus>,
+    registered_protocols: Vec<String>,
+    unsupported_protocol_peers: BTreeMap<String, Vec<String>>,
+    recent_errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChainPeerHealthStatus {
+    peer_id: String,
+    status: String,
+    issues: Vec<String>,
+    discovery_sources: Vec<String>,
+    active_path_kind: Option<String>,
+    source_operator: Option<String>,
+    source_asn: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -831,7 +853,7 @@ fn handle_chain_status_connection(
                 build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
             let applied_effective_user_mode =
                 applied_runtime_user_mode_label(options).map(str::to_string);
-            let payload = build_chain_status_payload(
+            let mut payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
                 &p2p_recommendation,
@@ -842,6 +864,8 @@ fn handle_chain_status_connection(
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
             );
+            payload.replication =
+                build_chain_replication_debug_status(replication_network.as_ref());
             let body = serde_json::to_vec_pretty(&payload)
                 .map_err(|err| format!("failed to encode status payload: {err}"))?;
             write_json_response(&mut stream, 200, body.as_slice(), head_only)
@@ -942,6 +966,44 @@ fn build_chain_status_payload(
         release_security_policy,
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,
+        replication: ChainReplicationDebugStatus::default(),
+    }
+}
+
+fn build_chain_replication_debug_status(
+    replication_network: &Libp2pReplicationNetwork,
+) -> ChainReplicationDebugStatus {
+    let debug_snapshot = replication_network.debug_snapshot();
+    let peer_healths: Vec<ChainPeerHealthStatus> = debug_snapshot
+        .peer_healths
+        .into_iter()
+        .map(|health| ChainPeerHealthStatus {
+            peer_id: health.peer_id,
+            status: health.status,
+            issues: health.issues,
+            discovery_sources: health.discovery_sources,
+            active_path_kind: health.active_path_kind,
+            source_operator: health.source_operator,
+            source_asn: health.source_asn,
+        })
+        .collect();
+
+    let mut unsupported_protocol_peers: BTreeMap<String, Vec<String>> = debug_snapshot
+        .unsupported_protocol_peers
+        .into_iter()
+        .collect();
+    for peer_ids in unsupported_protocol_peers.values_mut() {
+        peer_ids.sort();
+        peer_ids.dedup();
+    }
+
+    ChainReplicationDebugStatus {
+        local_peer_id: debug_snapshot.local_peer_id,
+        connected_peers: debug_snapshot.connected_peers,
+        peer_healths,
+        registered_protocols: debug_snapshot.registered_protocols,
+        unsupported_protocol_peers,
+        recent_errors: debug_snapshot.recent_errors,
     }
 }
 

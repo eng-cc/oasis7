@@ -103,6 +103,8 @@ impl PosNodeEngine {
             next_slot: 0,
             committed_height: 0,
             network_committed_height: 0,
+            replication_persisted_height: 0,
+            storage_challenge_fallback_height: 1,
             pending: None,
             auto_attest_all_validators: config.auto_attest_all_validators,
             last_broadcast_proposal_height: 0,
@@ -801,7 +803,7 @@ impl PosNodeEngine {
     }
 
     fn enforce_storage_challenge_gate(
-        &self,
+        &mut self,
         replication: &ReplicationRuntime,
         network_endpoint: Option<&ReplicationNetworkEndpoint>,
         node_id: &str,
@@ -821,115 +823,74 @@ impl PosNodeEngine {
         let Some(endpoint) = network_endpoint else {
             return Ok(());
         };
-        let content_hashes = replication
-            .recent_replicated_content_hashes(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
-        if content_hashes.is_empty() {
+        let primary_samples = replication
+            .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
+        if primary_samples.is_empty() {
             return Ok(());
         }
 
         let mut successful_matches = 0usize;
         let mut attempted_samples = 0usize;
         let mut failure_reasons = Vec::new();
-        for content_hash in content_hashes {
+        let mut hard_failure = false;
+        for (_, content_hash) in primary_samples.iter() {
             attempted_samples = attempted_samples.saturating_add(1);
-
-            let local_blob = match replication.load_blob_by_hash(content_hash.as_str())? {
-                Some(blob) => blob,
-                None => {
-                    failure_reasons.push(format!(
-                        "storage challenge gate local blob missing for hash {}",
-                        content_hash
-                    ));
-                    continue;
+            match evaluate_storage_challenge_sample(
+                replication,
+                endpoint,
+                world_id,
+                content_hash.as_str(),
+            )? {
+                StorageChallengeSampleOutcome::Matched => {
+                    successful_matches = successful_matches.saturating_add(1);
                 }
-            };
-            let fetch_blob_request = replication.build_fetch_blob_request(content_hash.as_str())?;
-            let provider_lookup =
-                match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash.as_str())
-                {
-                    Ok(provider_ids) => provider_ids,
-                    Err(err) => {
-                        failure_reasons.push(format!(
-                            "storage challenge gate provider lookup failed for hash {}: {:?}",
-                            content_hash, err
-                        ));
-                        continue;
-                    }
-                };
-            let response = match if let Some(provider_ids) = provider_lookup.as_ref() {
-                if provider_ids.is_empty() {
-                    endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-                        REPLICATION_FETCH_BLOB_PROTOCOL,
-                        &fetch_blob_request,
-                    )
-                } else {
-                    match endpoint.request_json_with_providers::<
-                        FetchBlobRequest,
-                        FetchBlobResponse,
-                    >(
-                        REPLICATION_FETCH_BLOB_PROTOCOL,
-                        &fetch_blob_request,
-                        provider_ids.as_slice(),
-                    ) {
-                        Ok(response) => Ok(response),
-                        Err(err)
-                            if should_fallback_provider_aware_replication_request(&err) =>
-                        {
-                            endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-                                REPLICATION_FETCH_BLOB_PROTOCOL,
-                                &fetch_blob_request,
-                            )
-                        }
-                        Err(err) => Err(err),
-                    }
+                StorageChallengeSampleOutcome::Unavailable { reason } => {
+                    failure_reasons.push(reason);
                 }
-            } else {
-                endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-                    REPLICATION_FETCH_BLOB_PROTOCOL,
-                    &fetch_blob_request,
-                )
-            } {
-                Ok(response) => response,
-                Err(err) => {
-                    failure_reasons.push(format!(
-                        "storage challenge gate network request failed for hash {}: {:?}",
-                        content_hash, err
-                    ));
-                    continue;
+                StorageChallengeSampleOutcome::HardFailure { reason } => {
+                    hard_failure = true;
+                    failure_reasons.push(reason);
                 }
-            };
-            if !response.found {
-                failure_reasons.push(format!(
-                    "storage challenge gate network blob not found for hash {}",
-                    content_hash
-                ));
-                continue;
             }
-            let Some(network_blob) = response.blob else {
-                failure_reasons.push(format!(
-                    "storage challenge gate network blob payload missing for hash {}",
-                    content_hash
-                ));
-                continue;
-            };
-            if blake3_hex(network_blob.as_slice()) != content_hash {
-                failure_reasons.push(format!(
-                    "storage challenge gate network blob hash mismatch for hash {}",
-                    content_hash
-                ));
-                continue;
-            }
-            if network_blob != local_blob {
-                failure_reasons.push(format!(
-                    "storage challenge gate network blob bytes mismatch for hash {}",
-                    content_hash
-                ));
-                continue;
-            }
-            successful_matches = successful_matches.saturating_add(1);
         }
 
-        let required_matches = required_network_blob_matches(attempted_samples);
+        let required_matches = required_network_blob_matches(primary_samples.len());
+        if successful_matches >= required_matches {
+            return Ok(());
+        }
+
+        if !hard_failure {
+            let fallback_samples = replication.replicated_content_refs_from_height(
+                world_id,
+                self.storage_challenge_fallback_height,
+                STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK,
+            )?;
+            for (height, content_hash) in fallback_samples {
+                attempted_samples = attempted_samples.saturating_add(1);
+                match evaluate_storage_challenge_sample(
+                    replication,
+                    endpoint,
+                    world_id,
+                    content_hash.as_str(),
+                )? {
+                    StorageChallengeSampleOutcome::Matched => {
+                        successful_matches = successful_matches.saturating_add(1);
+                    }
+                    StorageChallengeSampleOutcome::Unavailable { reason } => {
+                        failure_reasons.push(reason);
+                    }
+                    StorageChallengeSampleOutcome::HardFailure { reason } => {
+                        failure_reasons.push(reason);
+                        break;
+                    }
+                }
+                if successful_matches >= required_matches {
+                    self.storage_challenge_fallback_height = height.saturating_add(1);
+                    return Ok(());
+                }
+            }
+        }
+
         if successful_matches < required_matches {
             return Err(NodeError::Consensus {
                 reason: format!(
@@ -954,12 +915,18 @@ impl PosNodeEngine {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
         };
+        self.refresh_replication_persisted_height(replication_runtime, world_id)?;
         let messages = endpoint.drain_replications()?;
         let mut rejected = Vec::new();
         for message in messages {
             let committed_successor = checked_replication_successor(
                 self.committed_height,
                 "committed_height",
+                "ingesting replication message",
+            )?;
+            let persisted_successor = checked_replication_successor(
+                self.replication_persisted_height,
+                "replication_persisted_height",
                 "ingesting replication message",
             )?;
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
@@ -995,7 +962,7 @@ impl PosNodeEngine {
             }
             let should_apply = payload_view
                 .as_ref()
-                .map(|payload| payload.height <= committed_successor)
+                .map(|payload| payload.height <= persisted_successor)
                 .unwrap_or(true);
             if !should_apply {
                 continue;
@@ -1007,10 +974,15 @@ impl PosNodeEngine {
                         message.record.content_hash.as_str(),
                     )?;
                     if let Some(payload) = payload_view {
+                        if replication_runtime
+                            .load_commit_message_by_height(world_id, payload.height)?
+                            .is_some()
+                        {
+                            self.replication_persisted_height =
+                                self.replication_persisted_height.max(payload.height);
+                        }
                         if payload.height == committed_successor
-                            && replication_runtime
-                                .load_commit_message_by_height(world_id, payload.height)?
-                                .is_some()
+                            && self.replication_persisted_height >= payload.height
                         {
                             self.record_synced_replication_height(
                                 payload.height,
@@ -1069,13 +1041,14 @@ impl PosNodeEngine {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
         };
-        if self.network_committed_height <= self.committed_height {
+        self.refresh_replication_persisted_height(replication_runtime, world_id)?;
+        if self.network_committed_height <= self.replication_persisted_height {
             return Ok(());
         }
 
         let mut next_height = checked_replication_successor(
-            self.committed_height,
-            "committed_height",
+            self.replication_persisted_height,
+            "replication_persisted_height",
             "starting replication gap sync",
         )?;
         while next_height <= self.network_committed_height {
@@ -1110,6 +1083,8 @@ impl PosNodeEngine {
                 }
             }
             if let Some((block_hash, committed_at_ms)) = synced_commit {
+                self.replication_persisted_height =
+                    self.replication_persisted_height.max(next_height);
                 self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
                 next_height = checked_replication_successor(
                     next_height,
@@ -1132,6 +1107,17 @@ impl PosNodeEngine {
         }
         Ok(())
     }
+
+    fn refresh_replication_persisted_height(
+        &mut self,
+        replication_runtime: &ReplicationRuntime,
+        world_id: &str,
+    ) -> Result<(), NodeError> {
+        self.replication_persisted_height = self
+            .replication_persisted_height
+            .max(replication_runtime.latest_persisted_commit_height(world_id)?);
+        Ok(())
+    }
 }
 
 fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
@@ -1143,4 +1129,161 @@ fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
         || reason.contains("libp2p-replication no connected peers for protocol")
         || (reason.contains("NetworkRequestFailed")
             && reason.contains("NetworkProtocolUnavailable"))
+}
+
+fn request_fetch_blob_with_route_fallback(
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+    request: &FetchBlobRequest,
+    provider_ids: Option<&[String]>,
+) -> Result<FetchBlobResponse, NodeError> {
+    let mut last_not_found: Option<FetchBlobResponse> = None;
+    let mut last_retryable_error: Option<NodeError> = None;
+
+    if let Some(provider_ids) = provider_ids {
+        for provider_id in provider_ids {
+            let provider_route = [provider_id.clone()];
+            match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
+                REPLICATION_FETCH_BLOB_PROTOCOL,
+                request,
+                provider_route.as_slice(),
+            ) {
+                Ok(response) => {
+                    if response.found {
+                        return Ok(response);
+                    }
+                    last_not_found = Some(response);
+                }
+                Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                    last_retryable_error = Some(err);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    for _ in 0..REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
+        match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+            REPLICATION_FETCH_BLOB_PROTOCOL,
+            request,
+        ) {
+            Ok(response) => {
+                if response.found {
+                    return Ok(response);
+                }
+                last_not_found = Some(response);
+            }
+            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                last_retryable_error = Some(err);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    if let Some(response) = last_not_found {
+        return Ok(response);
+    }
+
+    Err(last_retryable_error.unwrap_or_else(|| NodeError::Replication {
+        reason: format!(
+            "blob fetch routes exhausted without response for world_id={} hash={}",
+            world_id, content_hash
+        ),
+    }))
+}
+
+enum StorageChallengeSampleOutcome {
+    Matched,
+    Unavailable { reason: String },
+    HardFailure { reason: String },
+}
+
+fn evaluate_storage_challenge_sample(
+    replication: &ReplicationRuntime,
+    endpoint: &ReplicationNetworkEndpoint,
+    world_id: &str,
+    content_hash: &str,
+) -> Result<StorageChallengeSampleOutcome, NodeError> {
+    let local_blob = match replication.load_blob_by_hash(content_hash)? {
+        Some(blob) => blob,
+        None => {
+            return Ok(StorageChallengeSampleOutcome::HardFailure {
+                reason: format!(
+                    "storage challenge gate local blob missing for hash {}",
+                    content_hash
+                ),
+            });
+        }
+    };
+    let fetch_blob_request = replication.build_fetch_blob_request(content_hash)?;
+    let mut provider_lookup_failure = None;
+    let provider_lookup = match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash)
+    {
+        Ok(provider_ids) => provider_ids,
+        Err(err) => {
+            provider_lookup_failure = Some(format!(
+                "storage challenge gate provider lookup failed for hash {}: {:?}",
+                content_hash, err
+            ));
+            None
+        }
+    };
+    let response = match request_fetch_blob_with_route_fallback(
+        endpoint,
+        world_id,
+        content_hash,
+        &fetch_blob_request,
+        provider_lookup.as_deref(),
+    ) {
+        Ok(response) => response,
+        Err(err) => {
+            let reason = if let Some(provider_lookup_failure) = provider_lookup_failure {
+                format!(
+                    "{}; storage challenge gate network request failed for hash {}: {:?}",
+                    provider_lookup_failure, content_hash, err
+                )
+            } else {
+                format!(
+                    "storage challenge gate network request failed for hash {}: {:?}",
+                    content_hash, err
+                )
+            };
+            return Ok(StorageChallengeSampleOutcome::Unavailable { reason });
+        }
+    };
+    if !response.found {
+        return Ok(StorageChallengeSampleOutcome::Unavailable {
+            reason: format!(
+                "storage challenge gate network blob not found for hash {}",
+                content_hash
+            ),
+        });
+    }
+    let Some(network_blob) = response.blob else {
+        return Ok(StorageChallengeSampleOutcome::Unavailable {
+            reason: format!(
+                "storage challenge gate network blob payload missing for hash {}",
+                content_hash
+            ),
+        });
+    };
+    if blake3_hex(network_blob.as_slice()) != content_hash {
+        return Ok(StorageChallengeSampleOutcome::HardFailure {
+            reason: format!(
+                "storage challenge gate network blob hash mismatch for hash {}",
+                content_hash
+            ),
+        });
+    }
+    if network_blob != local_blob {
+        return Ok(StorageChallengeSampleOutcome::HardFailure {
+            reason: format!(
+                "storage challenge gate network blob bytes mismatch for hash {}",
+                content_hash
+            ),
+        });
+    }
+
+    Ok(StorageChallengeSampleOutcome::Matched)
 }

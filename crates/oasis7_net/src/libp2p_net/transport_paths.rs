@@ -162,12 +162,7 @@ pub(super) fn active_transport_path_from_endpoint(
 
     if let Some(found) = known_transport_paths
         .get(&peer_id)
-        .and_then(|paths| {
-            paths.iter().find(|path| {
-                path.addr == normalized
-                    || split_peer_id(path.addr.clone()).1 == normalized_without_peer_id
-            })
-        })
+        .and_then(|paths| transport_path_for_endpoint(paths.as_slice(), &normalized))
         .cloned()
     {
         return found;
@@ -190,6 +185,44 @@ pub(super) fn active_transport_path_from_endpoint(
             &normalized_without_peer_id,
         ),
     }
+}
+
+fn transport_path_for_endpoint<'a>(
+    paths: &'a [TransportPath],
+    endpoint_addr: &Multiaddr,
+) -> Option<&'a TransportPath> {
+    let endpoint_without_peer_id = split_peer_id(endpoint_addr.clone()).1;
+    paths
+        .iter()
+        .find(|path| {
+            path.addr == *endpoint_addr
+                || split_peer_id(path.addr.clone()).1 == endpoint_without_peer_id
+        })
+        .or_else(|| {
+            let endpoint_family = transport_endpoint_family(endpoint_without_peer_id.clone());
+            paths.iter().find(|path| {
+                transport_endpoint_family(split_peer_id(path.addr.clone()).1) == endpoint_family
+            })
+        })
+}
+
+fn transport_endpoint_family(addr: Multiaddr) -> Vec<String> {
+    addr.iter()
+        .map(|protocol| match protocol {
+            Protocol::Ip4(value) => format!("ip4:{value}"),
+            Protocol::Ip6(value) => format!("ip6:{value}"),
+            Protocol::Dns(value) => format!("dns:{value}"),
+            Protocol::Dns4(value) => format!("dns4:{value}"),
+            Protocol::Dns6(value) => format!("dns6:{value}"),
+            Protocol::Dnsaddr(value) => format!("dnsaddr:{value}"),
+            Protocol::Tcp(_) => "tcp:*".to_string(),
+            Protocol::Udp(_) => "udp:*".to_string(),
+            Protocol::Quic => "quic".to_string(),
+            Protocol::QuicV1 => "quic-v1".to_string(),
+            Protocol::P2pCircuit => "p2p-circuit".to_string(),
+            other => format!("{other}"),
+        })
+        .collect()
 }
 
 pub(super) fn note_established_transport_path(

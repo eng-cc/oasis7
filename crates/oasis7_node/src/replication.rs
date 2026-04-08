@@ -686,6 +686,33 @@ impl ReplicationRuntime {
         load_commit_message_from_root(self.config.root_dir.as_path(), world_id, height)
     }
 
+    pub(crate) fn latest_persisted_commit_height(&self, world_id: &str) -> Result<u64, NodeError> {
+        let hot_height = build_commit_message_retention_plan(
+            self.config.root_dir.as_path(),
+            self.config.max_hot_commit_messages,
+        )?
+        .hot_window
+        .latest_height
+        .unwrap_or(0);
+        let cold_height = load_commit_message_cold_index_from_root(self.config.root_dir.as_path())?
+            .by_height
+            .keys()
+            .next_back()
+            .copied()
+            .unwrap_or(0);
+        let mut candidate = hot_height.max(cold_height);
+        while candidate > 0 {
+            if self
+                .load_commit_message_by_height(world_id, candidate)?
+                .is_some()
+            {
+                return Ok(candidate);
+            }
+            candidate -= 1;
+        }
+        Ok(0)
+    }
+
     pub(crate) fn load_blob_by_hash(
         &self,
         content_hash: &str,
@@ -759,6 +786,18 @@ impl ReplicationRuntime {
         world_id: &str,
         max_samples: usize,
     ) -> Result<Vec<String>, NodeError> {
+        Ok(self
+            .recent_replicated_content_refs(world_id, max_samples)?
+            .into_iter()
+            .map(|(_, content_hash)| content_hash)
+            .collect())
+    }
+
+    pub(crate) fn recent_replicated_content_refs(
+        &self,
+        world_id: &str,
+        max_samples: usize,
+    ) -> Result<Vec<(u64, String)>, NodeError> {
         if max_samples == 0 || self.writer_state.last_replicated_height == 0 {
             return Ok(Vec::new());
         }
@@ -770,10 +809,43 @@ impl ReplicationRuntime {
             if let Some(message) = self.load_commit_message_by_height(world_id, height)? {
                 let content_hash = message.record.content_hash.trim();
                 if !content_hash.is_empty() && seen.insert(content_hash.to_string()) {
-                    samples.push(content_hash.to_string());
+                    samples.push((height, content_hash.to_string()));
                 }
             }
             height -= 1;
+        }
+        Ok(samples)
+    }
+
+    pub(crate) fn replicated_content_refs_from_height(
+        &self,
+        world_id: &str,
+        start_height: u64,
+        max_samples: usize,
+    ) -> Result<Vec<(u64, String)>, NodeError> {
+        if max_samples == 0 || self.writer_state.last_replicated_height == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut height = start_height.max(1);
+        let latest_height = self.writer_state.last_replicated_height;
+        if height > latest_height {
+            return Ok(Vec::new());
+        }
+
+        let mut samples = Vec::with_capacity(max_samples);
+        let mut seen = BTreeSet::new();
+        while height <= latest_height && samples.len() < max_samples {
+            if let Some(message) = self.load_commit_message_by_height(world_id, height)? {
+                let content_hash = message.record.content_hash.trim();
+                if !content_hash.is_empty() && seen.insert(content_hash.to_string()) {
+                    samples.push((height, content_hash.to_string()));
+                }
+            }
+            height = match height.checked_add(1) {
+                Some(next_height) => next_height,
+                None => break,
+            };
         }
         Ok(samples)
     }

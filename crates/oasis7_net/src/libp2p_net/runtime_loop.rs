@@ -17,8 +17,7 @@ use super::{
     Behaviour, Command, Handler, Keypair, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
     PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, SignedPeerRecord, TransportPath,
-    WorldError,
-    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    WorldError, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 pub(super) enum CommandOutcome {
@@ -70,20 +69,21 @@ pub(super) fn filter_request_peers_by_lane(
     let Some(lane) = classify_network_protocol(protocol) else {
         return peers;
     };
-    let lane_filtered: Vec<PeerId> = peers
-        .iter()
-        .copied()
-        .filter(|peer_id| {
-            discovered_peer_records
-                .get(peer_id)
-                .map(|record| record.record.supports_lane(lane))
-                .unwrap_or(true)
-        })
-        .collect();
-    if lane_filtered.is_empty() {
-        peers
+    let mut capable_record_peers = Vec::new();
+    let mut unknown_record_peers = Vec::new();
+    for peer_id in peers.iter().copied() {
+        match discovered_peer_records.get(&peer_id) {
+            Some(record) if record.record.supports_lane(lane) => capable_record_peers.push(peer_id),
+            Some(_) => {}
+            None => unknown_record_peers.push(peer_id),
+        }
+    }
+    if !capable_record_peers.is_empty() {
+        capable_record_peers
+    } else if !unknown_record_peers.is_empty() {
+        unknown_record_peers
     } else {
-        lane_filtered
+        Vec::new()
     }
 }
 
@@ -310,7 +310,9 @@ pub(super) fn refresh_peer_manager_healths(
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_millis() as i64)
             .unwrap_or(0);
-        let mut guard = event_block_artifacts.lock().expect("lock peer block artifacts");
+        let mut guard = event_block_artifacts
+            .lock()
+            .expect("lock peer block artifacts");
         for health in healths.values() {
             let existing = guard.get_mut(&health.peer_id);
             match (existing, health.status) {

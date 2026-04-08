@@ -222,8 +222,9 @@ impl Libp2pNetwork {
         let connected_peers = Arc::new(Mutex::new(HashSet::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
         let peer_healths = Arc::new(Mutex::new(HashMap::<String, PeerManagerPeerHealth>::new()));
-        let peer_block_artifacts =
-            Arc::new(Mutex::new(HashMap::<String, PeerManagerBlockArtifact>::new()));
+        let peer_block_artifacts = Arc::new(Mutex::new(
+            HashMap::<String, PeerManagerBlockArtifact>::new(),
+        ));
         let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
@@ -979,10 +980,6 @@ impl Libp2pNetwork {
                                                 max_error_messages,
                                                 "lock errors",
                                             );
-                                            swarm
-                                                .behaviour_mut()
-                                                .kademlia
-                                                .add_address(&peer_id, send_back_addr.clone());
                                         }
                                     }
                                     maybe_queue_discovery_peer_record(

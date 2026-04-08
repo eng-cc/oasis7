@@ -963,6 +963,130 @@ fn filter_request_peers_by_lane_prefers_capable_peer_records() {
 }
 
 #[test]
+fn filter_request_peers_by_lane_excludes_unknown_peers_when_capable_record_exists() {
+    let blob_peer_key = Keypair::generate_ed25519();
+    let unknown_peer_key = Keypair::generate_ed25519();
+    let blob_peer_id = PeerId::from(blob_peer_key.public());
+    let unknown_peer_id = PeerId::from(unknown_peer_key.public());
+    let mut discovered = HashMap::new();
+    discovered.insert(
+        blob_peer_id,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: blob_peer_id.to_string(),
+                node_id: "blob-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Hybrid,
+                reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::BlobState, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &blob_peer_key,
+        )
+        .expect("blob peer record"),
+    );
+
+    let filtered = filter_request_peers_by_lane(
+        vec![unknown_peer_id, blob_peer_id],
+        "/aw/node/replication/fetch-blob/1.0.0",
+        &discovered,
+    );
+
+    assert_eq!(filtered, vec![blob_peer_id]);
+}
+
+#[test]
+fn filter_request_peers_by_lane_falls_back_to_unknown_peers_when_no_records_match() {
+    let sync_only_peer_key = Keypair::generate_ed25519();
+    let unknown_peer_key = Keypair::generate_ed25519();
+    let sync_only_peer_id = PeerId::from(sync_only_peer_key.public());
+    let unknown_peer_id = PeerId::from(unknown_peer_key.public());
+    let mut discovered = HashMap::new();
+    discovered.insert(
+        sync_only_peer_id,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: sync_only_peer_id.to_string(),
+                node_id: "sync-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Private,
+                reachability_class: crate::dht::PeerReachabilityClass::Private,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::Sync, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &sync_only_peer_key,
+        )
+        .expect("sync peer record"),
+    );
+
+    let filtered = filter_request_peers_by_lane(
+        vec![sync_only_peer_id, unknown_peer_id],
+        "/aw/node/replication/fetch-blob/1.0.0",
+        &discovered,
+    );
+
+    assert_eq!(filtered, vec![unknown_peer_id]);
+}
+
+#[test]
+fn filter_request_peers_by_lane_returns_empty_when_all_known_peers_lack_capability() {
+    let sync_only_peer_key = Keypair::generate_ed25519();
+    let sync_only_peer_id = PeerId::from(sync_only_peer_key.public());
+    let mut discovered = HashMap::new();
+    discovered.insert(
+        sync_only_peer_id,
+        sign_peer_record(
+            &PeerRecord {
+                peer_id: sync_only_peer_id.to_string(),
+                node_id: "sync-peer".to_string(),
+                world_id: "world-a".to_string(),
+                network_id: "network-a".to_string(),
+                node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
+                deployment_mode: PeerDeploymentMode::Private,
+                reachability_class: crate::dht::PeerReachabilityClass::Private,
+                direct_addrs: Vec::new(),
+                hole_punch_addrs: Vec::new(),
+                relay_addrs: Vec::new(),
+                discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+                capability_lanes: vec![NetworkLane::Sync, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
+                published_at_ms: 1,
+                ttl_ms: 60_000,
+            },
+            &sync_only_peer_key,
+        )
+        .expect("sync peer record"),
+    );
+
+    let filtered = filter_request_peers_by_lane(
+        vec![sync_only_peer_id],
+        "/aw/node/replication/fetch-blob/1.0.0",
+        &discovered,
+    );
+
+    assert!(filtered.is_empty());
+}
+
+#[test]
 fn peer_record_transport_paths_rank_direct_before_hole_punch_before_relay() {
     let keypair = Keypair::generate_ed25519();
     let signed = sign_peer_record(
@@ -1160,4 +1284,51 @@ fn active_transport_path_from_endpoint_keeps_hole_punch_kind_when_known() {
     );
     assert_eq!(hole_punched_path.kind, TransportPathKind::HolePunched);
     assert_eq!(hole_punched_path.flavor, TransportSessionFlavor::Quic);
+}
+
+#[test]
+fn active_transport_path_from_endpoint_maps_inbound_ephemeral_tcp_port_to_known_direct_path() {
+    let peer_id = PeerId::random();
+    let signed = sign_peer_record(
+        &PeerRecord {
+            peer_id: peer_id.to_string(),
+            node_id: "node-a".to_string(),
+            world_id: "world-a".to_string(),
+            network_id: "network-a".to_string(),
+            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+            deployment_mode: PeerDeploymentMode::Hybrid,
+            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
+            direct_addrs: vec!["/ip4/39.104.205.67/tcp/5612".to_string()],
+            hole_punch_addrs: Vec::new(),
+            relay_addrs: Vec::new(),
+            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
+            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+            source_operator: None,
+            source_asn: None,
+            published_at_ms: 77,
+            ttl_ms: 60_000,
+        },
+        &Keypair::generate_ed25519(),
+    )
+    .expect("sign peer record");
+    let mut known = HashMap::new();
+    known.insert(
+        peer_id,
+        peer_record_transport_paths(&signed).expect("transport paths"),
+    );
+
+    let mapped_path = active_transport_path_from_endpoint(
+        &known,
+        peer_id,
+        &format!("/ip4/39.104.205.67/tcp/60900/p2p/{peer_id}")
+            .parse()
+            .expect("listener endpoint"),
+    );
+
+    assert_eq!(
+        mapped_path.addr.to_string(),
+        format!("/ip4/39.104.205.67/tcp/5612/p2p/{peer_id}")
+    );
+    assert_eq!(mapped_path.kind, TransportPathKind::Direct);
+    assert_eq!(mapped_path.flavor, TransportSessionFlavor::TcpNoiseYamux);
 }

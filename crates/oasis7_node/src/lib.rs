@@ -102,7 +102,9 @@ use runtime_util::{lock_state, now_unix_ms};
 
 const STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK: usize = 3;
 const STORAGE_GATE_NETWORK_MIN_MATCHES_CAP: usize = 2;
+const STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK: usize = 3;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
+const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
 
 fn required_network_blob_matches(sample_count: usize) -> usize {
@@ -1099,6 +1101,8 @@ struct PosNodeEngine {
     next_slot: u64,
     committed_height: u64,
     network_committed_height: u64,
+    replication_persisted_height: u64,
+    storage_challenge_fallback_height: u64,
     pending: Option<PendingProposal>,
     auto_attest_all_validators: bool,
     last_broadcast_proposal_height: u64,

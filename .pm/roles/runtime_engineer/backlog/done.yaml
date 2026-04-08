@@ -132,6 +132,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_74e8ba671d0f481ebb4e38eefbce9390.yaml
+  - task_uid: task_fe194839357843bb813face2c42bb218
+    title: "Unify observer release and trace triad blob availability root cause"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "triad-observer-local is upgraded to the same runtime release used by the ECS triad nodes and the deployed versions are re-verified."
+      - "Sequencer storage-challenge blob hashes and observer gap-sync blob hashes are traced through storage existence, provider advertisement, authorization, and fetch-path evidence."
+      - "Task docs capture whether the residual blocker is missing blob persistence, provider routing, authorization, or another replication availability failure."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_fe194839357843bb813face2c42bb218.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

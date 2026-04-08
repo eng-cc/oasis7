@@ -9,7 +9,8 @@ use oasis7_net::{Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot}
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
 use oasis7_proto::distributed_dht::{
-    DistributedDht, MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
+    DistributedDht, MembershipDirectorySnapshot, PeerDiscoverySource, PeerRecord, ProviderRecord,
+    SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
     DistributedNetwork as ProtoDistributedNetwork, NetworkSubscription,
@@ -19,6 +20,27 @@ use oasis7_proto::world_error::WorldError;
 use crate::NodeError;
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplicationPeerHealthDebug {
+    pub peer_id: String,
+    pub status: String,
+    pub issues: Vec<String>,
+    pub discovery_sources: Vec<String>,
+    pub active_path_kind: Option<String>,
+    pub source_operator: Option<String>,
+    pub source_asn: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplicationNetworkDebugSnapshot {
+    pub local_peer_id: String,
+    pub connected_peers: Vec<String>,
+    pub peer_healths: Vec<ReplicationPeerHealthDebug>,
+    pub registered_protocols: Vec<String>,
+    pub unsupported_protocol_peers: HashMap<String, Vec<String>>,
+    pub recent_errors: Vec<String>,
+}
 
 const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
@@ -82,14 +104,93 @@ impl Libp2pReplicationNetwork {
         self.inner.listening_addrs()
     }
 
-    #[cfg(test)]
     pub fn connected_peers(&self) -> Vec<PeerId> {
         self.inner.connected_peers()
     }
 
-    #[cfg(test)]
     pub fn debug_errors(&self) -> Vec<String> {
         self.inner.debug_errors()
+    }
+
+    pub fn debug_snapshot(&self) -> ReplicationNetworkDebugSnapshot {
+        let local_peer_id = self.peer_id().to_string();
+        let mut connected_peers: Vec<String> = self
+            .inner
+            .connected_peers()
+            .into_iter()
+            .map(|peer_id| peer_id.to_string())
+            .collect();
+        connected_peers.sort();
+        connected_peers.dedup();
+
+        let mut peer_healths: Vec<ReplicationPeerHealthDebug> = self
+            .inner
+            .debug_peer_healths()
+            .into_iter()
+            .map(|health| {
+                let mut discovery_sources: Vec<String> = health
+                    .discovery_sources
+                    .into_iter()
+                    .map(replication_discovery_source_label)
+                    .collect();
+                discovery_sources.sort();
+                discovery_sources.dedup();
+                ReplicationPeerHealthDebug {
+                    peer_id: health.peer_id,
+                    status: replication_peer_health_status_label(health.status),
+                    issues: health
+                        .issues
+                        .into_iter()
+                        .map(replication_peer_health_issue_label)
+                        .collect(),
+                    discovery_sources,
+                    active_path_kind: health.active_path_kind,
+                    source_operator: health.source_operator,
+                    source_asn: health.source_asn,
+                }
+            })
+            .collect();
+        peer_healths.sort_by(|left, right| left.peer_id.cmp(&right.peer_id));
+
+        let mut unsupported_protocol_peers: HashMap<String, Vec<String>> = self
+            .unsupported_protocol_peers
+            .lock()
+            .expect("lock unsupported protocol peers")
+            .iter()
+            .map(|(protocol, peers)| {
+                let mut peer_ids: Vec<String> = peers.iter().map(PeerId::to_string).collect();
+                peer_ids.sort();
+                peer_ids.dedup();
+                (protocol.clone(), peer_ids)
+            })
+            .collect();
+        for peer_ids in unsupported_protocol_peers.values_mut() {
+            peer_ids.sort();
+            peer_ids.dedup();
+        }
+
+        let mut recent_errors = self.inner.debug_errors();
+        recent_errors.sort();
+        recent_errors.dedup();
+
+        let mut registered_protocols: Vec<String> = self
+            .handlers
+            .lock()
+            .expect("lock libp2p replication handlers")
+            .keys()
+            .cloned()
+            .collect();
+        registered_protocols.sort();
+        registered_protocols.dedup();
+
+        ReplicationNetworkDebugSnapshot {
+            local_peer_id,
+            connected_peers,
+            peer_healths,
+            registered_protocols,
+            unsupported_protocol_peers,
+            recent_errors,
+        }
     }
 
     pub fn reachability_snapshot(&self) -> Libp2pReachabilitySnapshot {
@@ -141,11 +242,7 @@ impl Libp2pReplicationNetwork {
             .copied()
             .filter(|peer| !peers.contains(peer))
             .collect();
-        if filtered.is_empty() {
-            ordered_peers
-        } else {
-            filtered
-        }
+        filtered
     }
 
     fn mark_peer_unsupported_for_protocol(&self, protocol: &str, peer: PeerId) {
@@ -382,6 +479,82 @@ impl DistributedDht<WorldError> for Libp2pReplicationNetwork {
 
 fn decode_error_response(payload: &[u8]) -> Option<ErrorResponse> {
     serde_cbor::from_slice(payload).ok()
+}
+
+fn replication_discovery_source_label(source: PeerDiscoverySource) -> String {
+    match source {
+        PeerDiscoverySource::StaticBootstrap => "static_bootstrap".to_string(),
+        PeerDiscoverySource::Dht => "dht".to_string(),
+        PeerDiscoverySource::Rendezvous => "rendezvous".to_string(),
+        PeerDiscoverySource::PeerExchange => "peer_exchange".to_string(),
+        PeerDiscoverySource::Manual => "manual".to_string(),
+    }
+}
+
+fn replication_peer_health_status_label(status: oasis7_net::PeerManagerHealthStatus) -> String {
+    match status {
+        oasis7_net::PeerManagerHealthStatus::Active => "active".to_string(),
+        oasis7_net::PeerManagerHealthStatus::Candidate => "candidate".to_string(),
+        oasis7_net::PeerManagerHealthStatus::Suspect => "suspect".to_string(),
+        oasis7_net::PeerManagerHealthStatus::Blocked => "blocked".to_string(),
+    }
+}
+
+fn replication_peer_health_issue_label(issue: oasis7_net::PeerManagerHealthIssue) -> String {
+    match issue {
+        oasis7_net::PeerManagerHealthIssue::MissingPeerRecord => "missing_peer_record".to_string(),
+        oasis7_net::PeerManagerHealthIssue::SingleSourceDiscovery {
+            observed_sources,
+            required_sources,
+        } => format!(
+            "single_source_discovery observed={observed_sources} required={required_sources}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+            observed_sources,
+            required_sources,
+        } => format!(
+            "insufficient_active_discovery_sources observed={observed_sources} required={required_sources}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::Ipv4SubnetConcentration {
+            subnet,
+            peers_in_bucket,
+            active_peer_count,
+            limit_per_mille,
+        } => format!(
+            "ipv4_subnet_concentration subnet={subnet} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::RelayDomainConcentration {
+            relay_domain,
+            peers_in_bucket,
+            active_peer_count,
+            limit_per_mille,
+        } => format!(
+            "relay_domain_concentration relay_domain={relay_domain} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::OperatorConcentration {
+            source_operator,
+            peers_in_bucket,
+            active_peer_count,
+            limit_per_mille,
+        } => format!(
+            "operator_concentration source_operator={source_operator} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::AsnConcentration {
+            source_asn,
+            peers_in_bucket,
+            active_peer_count,
+            limit_per_mille,
+        } => format!(
+            "asn_concentration source_asn={source_asn} peers_in_bucket={peers_in_bucket} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+        oasis7_net::PeerManagerHealthIssue::RelayBudgetExceeded {
+            relayed_active_peers,
+            active_peer_count,
+            limit_per_mille,
+        } => format!(
+            "relay_budget_exceeded relayed_active_peers={relayed_active_peers} active_peer_count={active_peer_count} limit_per_mille={limit_per_mille}"
+        ),
+    }
 }
 
 fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
@@ -625,6 +798,29 @@ mod tests {
         listener_thread
             .join()
             .expect("join delayed listener thread");
+    }
+
+    #[test]
+    fn filtered_request_peers_excludes_known_unsupported_peers_without_fallback() {
+        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+        let observer_peer = PeerId::random();
+        let sequencer_peer = PeerId::random();
+        network.mark_peer_unsupported_for_protocol(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            observer_peer,
+        );
+
+        let filtered = network.filtered_request_peers(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            vec![observer_peer, sequencer_peer],
+        );
+        assert_eq!(filtered, vec![sequencer_peer]);
+
+        let filtered_only_unsupported = network.filtered_request_peers(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            vec![observer_peer],
+        );
+        assert!(filtered_only_unsupported.is_empty());
     }
 
     #[test]
