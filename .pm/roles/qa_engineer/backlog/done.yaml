@@ -42,6 +42,22 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_176c0cf78fef462a9275ac66b991e5c5.yaml
+  - task_uid: task_9c357e07328e402a9f1d441e285b6117
+    title: "Run P2PARCH-6 real-environment mixed-topology matrix"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+      - doc/p2p/prd.md
+    acceptance:
+      - "Execute a first P2PARCH-6 real-environment run using the current one-local plus two-Aliyun topology and record evidence truthfully."
+      - "Capture whether the current real environment reproduces or narrows the known proxy failure signatures."
+      - "Return a QA conclusion that clearly states what this environment validates and what it still cannot prove for P2PARCH-7."
+    handoff_to:
+      - producer_system_designer
+      - runtime_engineer
+    status: done
+    task_path: .pm/tasks/task_9c357e07328e402a9f1d441e285b6117.yaml
   - task_uid: task_f5ff387007264254b4cafde421f34e10
     title: "Implement P2PARCH-6 mixed-topology validation matrix"
     priority: P2

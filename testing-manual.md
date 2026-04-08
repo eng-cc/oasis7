@@ -500,6 +500,14 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - latest failure signatures:
     - `sentry_loss_proxy_longrun`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
     - `mixed_topology_release_proxy`: `consensus_hash_divergence`, `committed_height_not_monotonic nodes=sequencer`, `known_peer_heads_zero_samples`, `http_failure_samples`
+- 当前 real-env 基线（2026-04-07 latest）：
+  - latest real-env summary: `.tmp/p2p_real_env_triad/20260407-205218/summary.json`
+  - latest real-env evidence: `doc/testing/evidence/p2p-real-env-triad-snapshot-2026-04-07.md`
+  - `claim_status=partial_with_observer_blocker`
+  - latest real-env failure signatures:
+    - `observer_known_peer_heads_zero`
+    - `observer_network_committed_height_zero`
+    - `observer_committed_height_not_advancing`
 - 建议命令（required）：
 ```bash
 ./scripts/p2p-mixed-topology-matrix.sh --tier required
@@ -519,6 +527,15 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-follow-up-window-2026-03-24.md \
   --shared-window-evidence-ref doc/testing/evidence/shared-network-shared-devnet-short-window-pass-2026-03-24.md
 ```
+- 建议命令（real env triad snapshot）：
+```bash
+P2PARCH6_SEQ_SSH_PASSWORD='***' \
+P2PARCH6_STORAGE_SSH_PASSWORD='***' \
+./scripts/p2p-real-env-triad-snapshot.sh \
+  --samples 4 \
+  --interval-secs 5 \
+  --out-dir .tmp/p2p_real_env_triad
+```
 - 脚本 smoke：
 ```bash
 ./scripts/p2p-mixed-topology-matrix-smoke.sh
@@ -529,6 +546,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `full` 档位必须额外包含 `coverage=proxy` 的 longrun case，并在 evidence 中明确它们是 sentry-loss / mixed-topology live recovery 的当前代理，而不是 dedicated sentry/NAT lab 真值；
   - `summary.json.evidence_contract.executable_boundary.required_exact_ready` 必须为 `true`；
   - 若要宣称 full-tier proxy drill 已真实执行，则 `summary.json.evidence_contract.executable_boundary.full_proxy_ready` 必须为 `true`；
+  - 若要把当前 `1` 本机 + `2` ECS real env 计入可审计 baseline，`summary.json.claim_status` 至少要达到 `partial_with_observer_blocker`，且样本必须明确写出真实 blocker；
+  - 若要宣称本机 observer mixed-topology 接入已打通，则 real-env summary 里不得再出现 `observer_known_peer_heads_zero`、`observer_network_committed_height_zero`、`observer_committed_height_not_advancing`；
   - 若要继续给 shared-network lane 提供 uplift 输入，`summary.json.external_evidence.shared_window_evidence_refs` 必须明确列出 same-window refs，且 `summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers` 只能保留经审计接受的剩余 blocker；
   - 产物目录下必须同时有 `summary.json`、`summary.md`、`cases/<case_id>/command.txt`，live 执行还必须留下 `stdout.log/stderr.log`。
 - 当前 exact case 入口：
@@ -546,6 +565,9 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/summary.json`
   - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/summary.md`
   - `.tmp/p2p_mixed_topology/<timestamp>-<tier>/cases/<case_id>/`
+  - `.tmp/p2p_real_env_triad/<timestamp>/summary.json`
+  - `.tmp/p2p_real_env_triad/<timestamp>/summary.md`
+  - `.tmp/p2p_real_env_triad/<timestamp>/nodes/<label>/`
 - summary 关键字段：
   - `external_evidence.shared_window_evidence_refs`
   - `external_evidence.dedicated_lab_evidence_refs`
@@ -556,9 +578,17 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - `evidence_contract.claim_readiness.mixed_topology_full_tier_status`
   - `evidence_contract.claim_readiness.stronger_full_tier_truth_blockers`
   - `evidence_contract.claim_readiness.shared_network_pass_blockers`
+  - `claim_status`
+  - `failure_signatures`
+  - `analysis.cloud_pair_service_healthy`
+  - `analysis.cloud_pair_chain_visible`
+  - `analysis.cloud_pair_progress_signal_present`
+  - `analysis.observer_peer_visibility_ok`
+  - `analysis.observer_network_commit_visible`
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
+  - 2026-04-07 latest real-env triad snapshot 已证明这套真机能留下 live mixed-topology 样本，但当前结果只足以支持 `partial_with_observer_blocker`；云上双节点链高可见，不等于本机 observer 已完成 mixed-topology 接入。
 
 ### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
 - 当前状态（2026-04-07）：

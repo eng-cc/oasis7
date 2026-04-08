@@ -166,6 +166,8 @@
   - `scripts/p2p-mixed-topology-matrix-smoke.sh`：对 matrix case 装配与 summary 结构做快速 smoke
   - `testing-manual.md` S9B：补 mixed-topology 推荐命令、通过标准、产物路径、`proxy` 边界口径，以及 `evidence_contract/external_evidence` 机器可读字段
   - latest full-tier evidence：`doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-07.md` 已固化 7 个 exact case 全通过、2 个 proxy case 真实执行但失败的当前 blocker
+  - `scripts/p2p-real-env-triad-snapshot.sh`：新增真实 triad 采样入口，统一抓取本机 observer、ECS sequencer、ECS storage 的 `systemctl + /healthz + /v1/chain/status`，并把 real-env blocker 收口成可复跑 summary
+  - latest real-env evidence：`doc/testing/evidence/p2p-real-env-triad-snapshot-2026-04-07.md` 已固化当前 `1` 本机 + `2` 阿里云真实环境的首轮 live snapshot；本轮结论为 `partial_with_observer_blocker`，云上双节点链高可见，但本机 observer 仍稳定复现 `known_peer_heads=0 / network_committed_height=0 / committed_height=0`
   - matrix/runtime follow-up：proxy case 不再依赖预编译 binary 或默认 561x 端口段；`oasis7_chain_runtime` 也不再对 `observer` 无条件启用 `feedback_p2p`，避免与 `P2PARCH-4` lane gate 冲突
   - 当前已知可复用的真实环境：`1` 个本机节点 + `2` 个阿里云节点。该环境可作为后续 `P2PARCH-6` real-run 的第一批真机拓扑输入，用于补强“本机节点 + cloud public” mixed-topology drill、bootstrap poisoning、sentry loss、path failover、relay budget 与 release-proxy 类回归，而不必只停留在本地 proxy 近似。
   - 2026-04-07 real-run follow-up：private observer triad 已通过“reverse UDP hello seeding + mixed-root validator signer override + replication remote-writer allowlist”闭环 reachability。真实 observer 当前可从云端 storage peer 连续回放 commit，高位样本为 `latest_height=88 / committed_height=88 / network_committed_height=58086 / known_peer_heads=1 / last_error=null`；同窗口 residual blocker 仅剩 `triad-sequencer-a` 的 `execution driver received stale height`。
