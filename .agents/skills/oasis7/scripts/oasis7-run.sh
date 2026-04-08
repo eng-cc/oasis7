@@ -632,9 +632,9 @@ PY
       print_doctor_status OK runtime-agent "$agent_summary"
     else
       if [[ -n "$resolved_repo_root" ]]; then
-        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; run $resolved_repo_root/scripts/setup-provider-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; run bash $resolved_repo_root/scripts/setup-provider-oasis7-runtime.sh $agent_id"
       else
-        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; provide --repo-root and run scripts/setup-provider-oasis7-runtime.sh $agent_id"
+        print_doctor_status FAIL runtime-agent "local provider agent '$agent_id' not found; provide --repo-root and run bash scripts/setup-provider-oasis7-runtime.sh $agent_id"
       fi
       failures=$((failures + 1))
     fi
@@ -1007,7 +1007,7 @@ fi
 
 if [[ "$skip_agent_setup" != "1" ]]; then
   wait_for_http "http://127.0.0.1:18789/health" 20 0.5
-  "$repo_root/scripts/setup-provider-oasis7-runtime.sh" "$agent_id"
+  bash "$repo_root/scripts/setup-provider-oasis7-runtime.sh" "$agent_id"
 fi
 
 if [[ "$reuse_bridge" != "1" ]]; then

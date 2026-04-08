@@ -1,0 +1,23 @@
+task_uid: task_6a5ec3f5819240d6ac60adbde70b63b1
+title: "修复 oasis7 provider smoke 自动 bootstrap 权限阻塞"
+owner_role: agent_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-provider-smoke-bootstrap-permission
+execution_log_path: .pm/tasks/task_6a5ec3f5819240d6ac60adbde70b63b1.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/prd.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-037
+acceptance:
+  - "oasis7-run.sh smoke 在默认自动 bootstrap 路径下不再因 setup-provider-oasis7-runtime.sh 权限报错而中断。"
+  - "scripts/setup-provider-oasis7-runtime.sh 的调用方式在脚本缺少可执行位时仍可工作，且不要求仓库手工 chmod 才能运行 smoke。"
+  - "bash -n scripts/setup-provider-oasis7-runtime.sh、.agents/skills/oasis7/scripts/oasis7-run.sh doctor --json 与最小 smoke 验证可复现通过或给出结构化阻断。"
+handoff_to: []
+updated_at: 2026-04-08T10:35:34+08:00
+last_started_at: 2026-04-08T10:24:11+08:00
+last_closed_at: 2026-04-08T10:35:34+08:00

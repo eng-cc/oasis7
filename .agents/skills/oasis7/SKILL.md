@@ -94,7 +94,7 @@ Useful overrides:
 For real gameplay or parity, prefer the repo-owned lightweight agent instead of the user’s default Local Provider workspace.
 
 ```bash
-scripts/setup-provider-oasis7-runtime.sh
+bash scripts/setup-provider-oasis7-runtime.sh
 ```
 
 Defaults:
