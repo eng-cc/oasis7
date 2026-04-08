@@ -873,7 +873,7 @@ impl PosNodeEngine {
                     ) {
                         Ok(response) => Ok(response),
                         Err(err)
-                            if should_fallback_storage_challenge_provider_request(&err) =>
+                            if should_fallback_provider_aware_replication_request(&err) =>
                         {
                             endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
                                 REPLICATION_FETCH_BLOB_PROTOCOL,
@@ -1134,7 +1134,7 @@ impl PosNodeEngine {
     }
 }
 
-fn should_fallback_storage_challenge_provider_request(err: &NodeError) -> bool {
+fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
     let NodeError::Replication { reason } = err else {
         return false;
     };

@@ -272,6 +272,10 @@ impl ProviderAwareTestNetwork {
             .expect("lock provider attempts")
             .clone()
     }
+
+    fn clear_topic(&self, topic: &str) {
+        self.inner.clear_topic(topic);
+    }
 }
 
 #[derive(Clone)]
@@ -305,6 +309,10 @@ impl ProviderFallbackTestNetwork {
             .lock()
             .expect("lock generic attempts")
     }
+
+    fn clear_topic(&self, topic: &str) {
+        self.inner.clear_topic(topic);
+    }
 }
 
 #[derive(Clone)]
@@ -333,6 +341,25 @@ impl TestReplicaMaintenanceDht {
 
     fn published_records(&self) -> Vec<(String, String, String)> {
         self.published.lock().expect("lock published").clone()
+    }
+
+    fn seed_provider(&self, content_hash: &str, provider_id: &str) {
+        self.providers_by_hash
+            .lock()
+            .expect("lock providers_by_hash")
+            .insert(
+                content_hash.to_string(),
+                vec![ProviderRecord {
+                    provider_id: provider_id.to_string(),
+                    last_seen_ms: 1_000,
+                    storage_total_bytes: None,
+                    storage_available_bytes: None,
+                    uptime_ratio_per_mille: None,
+                    challenge_pass_ratio_per_mille: None,
+                    load_ratio_per_mille: None,
+                    p50_read_latency_ms: None,
+                }],
+            );
     }
 }
 

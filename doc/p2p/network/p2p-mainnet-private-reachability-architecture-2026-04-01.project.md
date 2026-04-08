@@ -171,6 +171,7 @@
   - matrix/runtime follow-up：proxy case 不再依赖预编译 binary 或默认 561x 端口段；`oasis7_chain_runtime` 也不再对 `observer` 无条件启用 `feedback_p2p`，避免与 `P2PARCH-4` lane gate 冲突
   - 当前已知可复用的真实环境：`1` 个本机节点 + `2` 个阿里云节点。该环境可作为后续 `P2PARCH-6` real-run 的第一批真机拓扑输入，用于补强“本机节点 + cloud public” mixed-topology drill、bootstrap poisoning、sentry loss、path failover、relay budget 与 release-proxy 类回归，而不必只停留在本地 proxy 近似。
   - 2026-04-07 real-run follow-up：private observer triad 已通过“reverse UDP hello seeding + mixed-root validator signer override + replication remote-writer allowlist”闭环 reachability。真实 observer 当前可从云端 storage peer 连续回放 commit，高位样本为 `latest_height=88 / committed_height=88 / network_committed_height=58086 / known_peer_heads=1 / last_error=null`；同窗口 residual blocker 仅剩 `triad-sequencer-a` 的 `execution driver received stale height`。
+  - 2026-04-08 observer local follow-up：`doc/testing/evidence/p2p-real-env-observer-gap-sync-followup-2026-04-08.md` 说明当前本机 observer 已不再复现 `known_peer_heads=0 / network_committed_height=0`，而是稳定进入 `known_peer_heads=1 / network_committed_height>0` 状态；当前更贴近真实环境的 blocker 已切换成 replication gap-sync `blob not found`。同轮 runtime 已把 gap-sync `fetch-blob` 升级为 provider-aware DHT 路由，并在 provider route 暂时不可用时回退到普通 lane-aware request。由于该轮未带远端 ECS 凭据，same-window triad 仍需后续带认证复核。
 - 完成定义:
   - 家宽 / NAT / CGNAT / cloud mixed topology 均有 required/full 套件
   - `P2PARCH-5` runtime substrate 的 anti-eclipse / fail-signature 行为已由 required/full evidence 固化

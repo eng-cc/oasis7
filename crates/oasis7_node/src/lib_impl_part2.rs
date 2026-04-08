@@ -32,10 +32,38 @@ impl PosNodeEngine {
 
         let blob_request =
             replication_runtime.build_fetch_blob_request(message.record.content_hash.as_str())?;
-        let blob_response = endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-            REPLICATION_FETCH_BLOB_PROTOCOL,
-            &blob_request,
+        let provider_lookup = endpoint.lookup_provider_ids_for_content_hash(
+            world_id,
+            message.record.content_hash.as_str(),
         )?;
+        let blob_response = if let Some(provider_ids) = provider_lookup.as_ref() {
+            if provider_ids.is_empty() {
+                endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                    &blob_request,
+                )?
+            } else {
+                match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
+                    REPLICATION_FETCH_BLOB_PROTOCOL,
+                    &blob_request,
+                    provider_ids.as_slice(),
+                ) {
+                    Ok(response) => response,
+                    Err(err) if should_fallback_provider_aware_replication_request(&err) => {
+                        endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                            REPLICATION_FETCH_BLOB_PROTOCOL,
+                            &blob_request,
+                        )?
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        } else {
+            endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
+                REPLICATION_FETCH_BLOB_PROTOCOL,
+                &blob_request,
+            )?
+        };
         if !blob_response.found {
             return Err(NodeError::Replication {
                 reason: format!(
