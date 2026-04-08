@@ -775,6 +775,7 @@ impl ViewerRuntimeLiveServer {
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
         let next_action_id = runtime_snapshot.next_action_id.max(1);
+        self.llm_sidecar.refresh_provider_check_snapshot();
         let gameplay_gate = self
             .llm_sidecar
             .ensure_gameplay_ready(&self.world, &self.snapshot_config)

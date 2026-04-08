@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
 use crate::runtime::{
@@ -11,8 +12,9 @@ use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
     AgentPromptProfile, AgentRunner, ChunkRuntimeConfig, LlmAgentBehavior,
     OpenAiChatCompletionClient, ProviderLoopbackAdapter, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind, WorldJournal,
-    WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
+    ProviderExecutionMode, ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent,
+    WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
+    SNAPSHOT_VERSION, evaluate_provider_compatibility,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -53,6 +55,7 @@ const VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV: &str =
 const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
+const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
@@ -63,6 +66,18 @@ pub(in crate::viewer::runtime_live) struct ProviderDecisionSettings {
     pub(in crate::viewer::runtime_live) agent_profile: String,
     pub(in crate::viewer::runtime_live) execution_mode: ProviderExecutionMode,
     pub(in crate::viewer::runtime_live) fallback_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
+    pub(in crate::viewer::runtime_live) source: String,
+    pub(in crate::viewer::runtime_live) status: String,
+    pub(in crate::viewer::runtime_live) capabilities: Vec<String>,
+    pub(in crate::viewer::runtime_live) supported_action_sets: Vec<String>,
+    pub(in crate::viewer::runtime_live) fallback_reason: Option<String>,
+    pub(in crate::viewer::runtime_live) error: Option<String>,
+    checked_at_unix_ms: u64,
+    cache_key: String,
 }
 
 enum RuntimeDecisionRunner {
@@ -315,6 +330,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     runner: Option<RuntimeDecisionRunner>,
     shadow_kernel: Option<WorldKernel>,
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
+    provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
 }
 
 impl RuntimeLlmSidecar {
@@ -332,6 +348,7 @@ impl RuntimeLlmSidecar {
             runner: None,
             shadow_kernel: None,
             pending_actions: BTreeMap::new(),
+            provider_check_snapshot: None,
         }
     }
 
@@ -345,6 +362,77 @@ impl RuntimeLlmSidecar {
 
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
         !env_requests_provider_backend()
+    }
+
+    pub(in crate::viewer::runtime_live) fn refresh_provider_check_snapshot(&mut self) {
+        let Ok(Some(settings)) = provider_settings_from_env() else {
+            self.provider_check_snapshot = None;
+            return;
+        };
+
+        let cache_key = runtime_provider_check_cache_key(&settings);
+        let checked_at_unix_ms = runtime_provider_check_now_unix_ms();
+        if self
+            .provider_check_snapshot
+            .as_ref()
+            .is_some_and(|snapshot| {
+                snapshot.cache_key == cache_key
+                    && checked_at_unix_ms.saturating_sub(snapshot.checked_at_unix_ms)
+                        < RUNTIME_PROVIDER_CHECK_CACHE_MS
+            })
+        {
+            return;
+        }
+
+        self.provider_check_snapshot = Some(
+            match ProviderLoopbackHttpClient::new(
+                settings.base_url.as_str(),
+                settings.auth_token.as_deref(),
+                settings.connect_timeout_ms.min(500),
+            ) {
+                Ok(client) => match (client.provider_info(), client.provider_health()) {
+                    (Ok(info), Ok(health)) => {
+                        let compatibility = evaluate_provider_compatibility(&info, Some(&health));
+                        RuntimeProviderCheckSnapshot {
+                            source: "runtime_live_probe".to_string(),
+                            status: compatibility.status.as_str().to_string(),
+                            capabilities: info.capabilities,
+                            supported_action_sets: info.supported_action_sets,
+                            fallback_reason: compatibility.fallback_reason,
+                            error: None,
+                            checked_at_unix_ms,
+                            cache_key,
+                        }
+                    }
+                    (Err(err), _) | (_, Err(err)) => RuntimeProviderCheckSnapshot {
+                        source: "runtime_live_probe".to_string(),
+                        status: "check_failed".to_string(),
+                        capabilities: Vec::new(),
+                        supported_action_sets: Vec::new(),
+                        fallback_reason: None,
+                        error: Some(err.to_string()),
+                        checked_at_unix_ms,
+                        cache_key,
+                    },
+                },
+                Err(err) => RuntimeProviderCheckSnapshot {
+                    source: "runtime_live_probe".to_string(),
+                    status: "check_failed".to_string(),
+                    capabilities: Vec::new(),
+                    supported_action_sets: Vec::new(),
+                    fallback_reason: None,
+                    error: Some(err.to_string()),
+                    checked_at_unix_ms,
+                    cache_key,
+                },
+            },
+        );
+    }
+
+    pub(in crate::viewer::runtime_live) fn provider_check_snapshot(
+        &self,
+    ) -> Option<&RuntimeProviderCheckSnapshot> {
+        self.provider_check_snapshot.as_ref()
     }
 
     pub(in crate::viewer::runtime_live) fn ensure_gameplay_ready(
@@ -878,6 +966,25 @@ impl RuntimeLlmSidecar {
         }
         Ok(())
     }
+}
+
+fn runtime_provider_check_now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+fn runtime_provider_check_cache_key(settings: &ProviderDecisionSettings) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        settings.base_url,
+        settings.connect_timeout_ms,
+        settings.agent_profile,
+        settings.auth_token.as_deref().unwrap_or("")
+    )
 }
 
 fn normalize_optional_public_key(value: Option<&str>) -> Option<String> {

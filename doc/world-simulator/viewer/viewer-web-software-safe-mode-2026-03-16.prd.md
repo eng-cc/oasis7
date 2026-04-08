@@ -131,7 +131,7 @@
 - AC-5: `oasis7` 与 testing/manual 口径必须把 `software_safe` 写成浏览器正式主路径，把 `standard` 写成 visual QA/screenshot 路径，而不是相反。
 - AC-6: `standard` 在硬件可用时仍可独立验证高保真画面，但其 PASS 不得替代 `software_safe` 的 formal Web gameplay PASS。
 - AC-7: `software_safe` 若未暴露 `main_token_transfer` 等专门动作，页面必须显式说明该动作未在此 surface 暴露，并给出 handoff 指引；不得让用户误以为这是 bug 或隐式权限失败。
-- AC-8: 当 runtime live 使用 `Local Provider(Local HTTP)` 驱动 Agent 时，software-safe 页面必须显式标识自身处于 `debug_viewer` 旁路订阅层，并展示选中 Agent 的 `mode/schema/environment/fallback` 摘要；此时 prompt/chat 控制面需要明确提示 observer-only 边界。
+- AC-8: 当 runtime live 使用 `Local Provider(Local HTTP)` 驱动 Agent 时，software-safe 页面必须显式标识自身处于 `debug_viewer` 旁路订阅层，并把 execution lane 期望 metadata 与 provider 实际 readiness check 分开展示：前者至少包含选中 Agent 的 `mode/schema/environment/fallback`，后者至少包含 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error`；此时 prompt/chat 控制面需要明确提示 observer-only 边界。
 
 ## 6. Non-Functional Requirements
 - NFR-1: `software_safe` 模式不得依赖硬件 GPU；在 software renderer / 无 WebGL / 受限 WebGL 环境下仍可启动。
@@ -191,6 +191,7 @@
 ## 8. Validation & Decision Record
 - Traceability:
   - `PRD-WORLD_SIMULATOR-039 -> T13 / TASK-WORLD_SIMULATOR-162 -> test_tier_required`
+  - `PRD-WORLD_SIMULATOR-039/040 -> T22 / TASK-WORLD_SIMULATOR-306 -> test_tier_required`
 
 ## 增量实现说明（2026-04-02）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
@@ -246,3 +247,19 @@
   - AC-20: `software_safe` 必须能承接浏览器主玩法闭环，同时显式区分“已暴露动作”和“需 handoff 的专门动作”。
   - AC-21: `standard` 必须被文档与测试口径收口为 visual QA / screenshot mode；其 PASS 不得替代 `software_safe` formal Web PASS。
   - AC-22: `pure_api` 在 mode taxonomy 与项目任务规划中继续保持一等公民定位，使用场景明确为无 UI、自动化、长稳与集成。
+
+## 增量需求（2026-04-08 / provider readiness truth）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - `software_safe` 虽然已经展示了 lane 相关的 `mode/schema/environment/fallback` 信息，但这组字段表达的是当前 execution lane 期望 contract，不是 runtime 对实际 provider `/v1/provider/info` + health 的 readiness 真值；若不分开呈现，QA / producer 容易把“lane metadata 已 ready”误读成“provider 实际已 ready”。
+- Proposed Solution:
+  - 在 `software_safe` 的 Local Provider observer/debug surface 上新增独立的 actual provider check 区块，显式显示 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error`；
+  - 保留原有 lane metadata 作为“期望执行 contract”摘要，但必须以单独文案说明两者语义不同。
+- Functional Constraints:
+  - 不移除现有 `mode/schema/environment/fallback` 摘要；它仍是解释 execution lane 的必要信息。
+  - 不把 actual provider check 伪装成新的控制权限；页面仍是 `debug_viewer` / observer-only surface。
+  - 不要求 runtime live 在每一帧都同步重新握手；允许短 TTL probe cache，但 UI 必须展示数据来源。
+- Acceptance Criteria:
+  - AC-23: `software_safe` 页面在 Local Provider observer/debug 场景下，必须同时可读地展示“lane 期望 metadata”和“provider 实际 readiness check”，且二者标题/文案不能混淆。
+  - AC-24: actual provider check 至少展示 `status` 与 `source`，在可用时展示 `fallback_reason`、`capabilities`、`supported_action_sets`，在失败时展示结构化 `error`。
+  - AC-25: repo-owned contract regression 至少覆盖一条 Local Provider readiness truth 断言，验证 `compatibility_status=degraded` 时仍可单独看到 `provider_check_status=ready` 之类的语义分层，而不是把二者合并成单一字段。

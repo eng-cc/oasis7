@@ -16,7 +16,8 @@
   - observation 分层：`TASK-WORLD_SIMULATOR-296` 的 fixture diff / negative tests 仍是“`player_parity` 不泄露 headless-only 真值”的权威证据；本轮真实样本则补上了 remediation 后的 live run 佐证，证明双 lane 不再只是 metadata 标签。
   - fallback 可审计：provider `/info` 和本轮 parity summary 已共同输出 `capabilities`、`supported_action_sets`、`compatibility_status` 与 `fallback_reason`，可直接判断当前运行是否 `ready`、是否发生 fallback。
 - 因此，本专题可以恢复为 `completed`；但这次复签不改变 `PRD-WORLD_SIMULATOR-038` 的实验态结论，Local Provider 绝对等待时延仍高于默认放行线，且本轮 `headless_agent` 样本仍出现一次可恢复 `provider_unreachable` 抖动。
-- `restore completed` 在这里的含义是：2026-04-06 formal review reopen 的四项 contract / reachability / audit gap 已经被修正并经过真实样本复核；它不等于“仅凭本轮 `samples=1` 就重新统计证明了全部成功率/复现率门槛”。涉及成功率、复现率与更广样本稳定性的判断，继续以本专题既有历史证据与后续 soak / parity 跟踪共同维护。
+- `restore completed` 在这里的含义是：2026-04-06 formal review reopen 的四项 contract / reachability / audit gap 已经被修正并经过真实样本复核；它不等于“仅凭本轮 `samples=1` 就重新统计证明了全部成功率/复现率门槛”，也不等于“允许默认启用”。涉及成功率、复现率、默认启用与更广样本稳定性的判断，继续以 `PRD-WORLD_SIMULATOR-038` 的 `behavior_parity_pass + latency_class` 门禁、既有历史证据与后续 soak / parity 跟踪共同维护。
+- 为了让 repo-only reviewer 不依赖 `.gitignore` 下的 `output/provider_parity/...` 原始产物也能审计本轮结论，本次复签另补 repo-owned 摘要 `doc/testing/evidence/provider-agent-dual-mode-recertification-evidence-2026-04-07.md`；ignored output 路径只保留 drill-down 原始数据。
 
 ## 2. 批次与环境
 - 执行日期: `2026-04-07`
@@ -43,6 +44,8 @@
   - summary: `output/provider_parity/provider_parity_20260407_112747/summary/P0-001.provider_loopback_http.json`
   - sample summary: `output/provider_parity/provider_parity_20260407_112747/samples/provider_loopback_http/sample_1/summary/P0-001.provider_loopback_http.json`
   - raw trace: `output/provider_parity/provider_parity_20260407_112747/samples/provider_loopback_http/sample_1/raw/P0-001_sample_1.provider_loopback_http.jsonl`
+- repo-owned audit summary:
+  - `doc/testing/evidence/provider-agent-dual-mode-recertification-evidence-2026-04-07.md`
 
 ## 4. 核心对照结果
 | lane | mode / env | completion_rate | invalid_action_rate | timeout_rate | recoverable_error_resolution_rate | median_extra_wait_ms | p95_extra_wait_ms | fallback_reason | compatibility_status |
@@ -55,6 +58,7 @@
 - `headless_agent` 样本出现一次可恢复 `provider_unreachable`，最终在同批次内恢复并完成目标；`player_parity` 未复现该抖动。
 - 两条 lane 的 summary 都保留了 remediation 要求的 `mode`、`observation_schema_version`、`action_schema_version`、`environment_class` 与 `fallback_reason` 字段。
 - 两条 lane 的 sample summary 都在 `provider` 字段里携带了 `capabilities`、`supported_action_sets` 与 `compatibility_status=ready`，说明本轮不是“只知道 provider 活着”，而是拿到了 phase-1 contract 层面的兼容性判定。
+- 当前 runtime live / software-safe 已将这组 phase-1 contract metadata 与实际 provider readiness check 真值分开展示：前者继续说明 lane 期望 contract，后者以 `provider_check_status/source/...` 表达运行时 probe 结果，避免把“metadata ready”误读成“provider 实际 ready”。
 
 ## 5. QA 结论
 - 结论: `pass`

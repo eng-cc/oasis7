@@ -84,14 +84,16 @@
   - AC-2: `player_parity` 与 `headless_agent` 共用同一动作 contract 与 runtime 校验，不得出现“某模式专属捷径”。
   - AC-3: `debug_viewer` 必须是旁路层，关闭 Viewer 不影响 Agent 权威执行、回放与 summary 产出。
   - AC-4: 回放 / summary / benchmark 产物中必须带有 `mode`、`observation_schema_version`、`action_schema_version`。
-  - AC-4.1: `software_safe` / Web Viewer 必须显式展示 `debug_viewer` 订阅状态，以及选中 Agent 当前 `headless_agent` lane 的 `mode/schema/environment/fallback` 摘要，避免把观战层误解成执行依赖。
+  - AC-4.1: `software_safe` / Web Viewer 必须显式展示 `debug_viewer` 订阅状态，并把“execution lane 期望 metadata”和“provider 实际 readiness check”分开展示：前者至少包含选中 Agent 当前 `mode/schema/environment/fallback` 摘要，后者至少包含 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error`；不得再让观战层看起来像执行依赖，也不得把期望 lane metadata 误读成 provider 实际握手真值。
   - AC-5: QA 可以对同一场景同时产出 `player_parity` 与 `headless_agent` 对照证据，并给出偏差结论。
   - AC-6: 若 `player_parity` 未通过而 `headless_agent` 通过，系统仍不得宣称“玩家体验等价”；两条口径必须分开汇报。
+  - AC-6.1: 本专题恢复 `completed` 只表示 dual-mode contract / reachability / audit remediation 已收口；是否允许默认启用或扩大覆盖范围，仍必须单独满足 `PRD-WORLD_SIMULATOR-038` 的 `behavior_parity_pass + latency_class` 门禁。
 - Non-Goals:
   - 本专题不追求像素级视觉智能 benchmark，也不要求 Local Provider 首期仅靠屏幕像素完成全部感知。
   - 本专题不允许为 `headless_agent` 提供绕过 runtime 的直接状态改写能力。
   - 本专题不把 Viewer 做成 Agent 的必需输入源。
   - 本专题不把 `player_parity` / `headless_agent` / `debug_viewer` 升格成新的玩家访问模式。
+  - 本专题不单独授予 Local Provider 默认启用资格；默认启用与扩面仍由 `PRD-WORLD_SIMULATOR-038` 决定。
   - 本专题不在此轮解决全部多 Agent 并发策略，只先定义模式与契约边界。
 
 ## 3. AI System Requirements
@@ -157,6 +159,7 @@
 | PRD-WORLD_SIMULATOR-040 | T1 | `test_tier_required` | contract schema review + fixture diff | observation/action contract、一致性约束 |
 | PRD-WORLD_SIMULATOR-040 | T2/T3/T3.5 (`TASK-WORLD_SIMULATOR-150/151/152`) | `test_tier_required` | `headless_agent` / `player_parity` 真实 smoke + replay metadata verification | 无 GUI 回归主链路、mode metadata、真实 player_parity lane |
 | PRD-WORLD_SIMULATOR-040 | T4 (`TASK-WORLD_SIMULATOR-153`) | `test_tier_full` | `player_parity` vs `headless_agent` 对照采证 + QA/producer 评审 | 玩家体验口径、Viewer 旁路调试与默认模式策略 |
+| PRD-WORLD_SIMULATOR-040 | T4.6 (`TASK-WORLD_SIMULATOR-306`) | `test_tier_required` | repo-owned recertification evidence + `runtime_provider_compat_snapshot` + `software-safe-feedback-contract` | `completed` vs `experimental` 口径边界、provider 实际 readiness 真值与 Viewer 旁路表达 |
 
 - Decision Log:
 

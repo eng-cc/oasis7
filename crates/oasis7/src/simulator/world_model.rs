@@ -91,6 +91,10 @@ pub struct AgentExecutionDebugContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_check_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_check_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observation_schema_version: Option<String>,
@@ -102,8 +106,16 @@ pub struct AgentExecutionDebugContext {
     pub capabilities: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub supported_action_sets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_reported_capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provider_reported_supported_action_sets: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_check_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_check_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_config_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

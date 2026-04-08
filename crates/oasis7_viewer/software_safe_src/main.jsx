@@ -364,6 +364,32 @@ function WorldSummaryPanel() {
                 <Badge>{`agentProfile=${debug().agent_profile || "-"}`}</Badge>
                 <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
               </div>
+              <EmptyState style="margin-top:-2px;">
+                Lane badges show the expected phase-1 execution contract. Provider check badges below
+                show the actual runtime_live probe against <code>/v1/provider/info</code> and{" "}
+                <code>/v1/provider/health</code>.
+              </EmptyState>
+              <div class="badge-row">
+                <Badge class="badge badge--accent">provider check</Badge>
+                <Badge>{`status=${debug().provider_check_status || "-"}`}</Badge>
+                <Badge>{`source=${debug().provider_check_source || "-"}`}</Badge>
+                <Badge>{`fallback=${debug().provider_check_fallback_reason || "-"}`}</Badge>
+              </div>
+              <Show
+                when={
+                  debug().provider_check_error ||
+                  debug().provider_reported_capabilities?.length ||
+                  debug().provider_reported_supported_action_sets?.length
+                }
+              >
+                <div class="badge-row">
+                  <Badge>{`actualCaps=${(debug().provider_reported_capabilities || []).join(",") || "-"}`}</Badge>
+                  <Badge>
+                    {`actualActions=${(debug().provider_reported_supported_action_sets || []).join(",") || "-"}`}
+                  </Badge>
+                  <Badge>{`checkError=${debug().provider_check_error || "-"}`}</Badge>
+                </div>
+              </Show>
               <JsonBlock value={debug()} />
             </>
           )}

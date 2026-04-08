@@ -1,11 +1,40 @@
 use super::*;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
+
+fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    let bind = listener.local_addr().expect("listener addr");
+    let serve = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept probe connection");
+            let mut request = [0_u8; 1024];
+            let bytes = stream.read(&mut request).expect("read request");
+            let request_text = String::from_utf8_lossy(&request[..bytes]);
+            let body = if request_text.contains("GET /v1/provider/info") {
+                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
+            } else {
+                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
+            };
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+    (format!("http://{bind}"), serve)
+}
 
 #[test]
 fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
+    let (base_url, serve) = spawn_runtime_provider_probe_server();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
     std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     let mut server = ViewerRuntimeLiveServer::new(
@@ -33,6 +62,11 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
         Some("provider_loopback_http")
     );
     assert_eq!(context.compatibility_status.as_deref(), Some("ready"));
+    assert_eq!(
+        context.provider_check_source.as_deref(),
+        Some("runtime_live_probe")
+    );
+    assert_eq!(context.provider_check_status.as_deref(), Some("ready"));
     assert_eq!(context.execution_mode.as_deref(), Some("player_parity"));
     assert_eq!(
         context.observation_schema_version.as_deref(),
@@ -58,20 +92,29 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
             "simple_interact".to_string(),
         ]
     );
+    assert_eq!(
+        context.provider_reported_capabilities,
+        vec!["decision".to_string(), "feedback".to_string()]
+    );
+    assert_eq!(context.provider_reported_supported_action_sets.len(), 6);
     assert_eq!(context.fallback_reason, None);
+    assert_eq!(context.provider_check_fallback_reason, None);
+    assert_eq!(context.provider_check_error, None);
     assert_eq!(
         context.agent_profile.as_deref(),
         Some("oasis7_p0_low_freq_npc")
     );
     clear_runtime_provider_env();
+    serve.join().expect("server thread should finish");
 }
 
 #[test]
 fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();
+    let (base_url, serve) = spawn_runtime_provider_probe_server();
     std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "agent_direct_connect");
-    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:5841");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
     std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -98,7 +141,14 @@ fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
         context.fallback_reason.as_deref(),
         Some("provider_mode_alias:agent_direct_connect")
     );
+    assert_eq!(context.provider_check_status.as_deref(), Some("ready"));
+    assert_eq!(
+        context.provider_check_source.as_deref(),
+        Some("runtime_live_probe")
+    );
+    assert_eq!(context.provider_check_error, None);
     clear_runtime_provider_env();
+    serve.join().expect("server thread should finish");
 }
 
 #[test]

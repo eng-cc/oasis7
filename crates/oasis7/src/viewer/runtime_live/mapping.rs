@@ -67,6 +67,7 @@ fn collect_agent_execution_debug_contexts(
         .keys()
         .map(|agent_id| {
             let fallback_reason = settings.fallback_reason.clone();
+            let provider_check_snapshot = sidecar.provider_check_snapshot().cloned();
             (
                 agent_id.clone(),
                 AgentExecutionDebugContext {
@@ -76,6 +77,12 @@ fn collect_agent_execution_debug_contexts(
                     } else {
                         "ready".to_string()
                     }),
+                    provider_check_source: provider_check_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.source.clone()),
+                    provider_check_status: provider_check_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.status.clone()),
                     execution_mode: Some(settings.execution_mode.as_str().to_string()),
                     observation_schema_version: Some(
                         DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string(),
@@ -90,7 +97,21 @@ fn collect_agent_execution_debug_contexts(
                         .iter()
                         .map(|value| (*value).to_string())
                         .collect(),
+                    provider_reported_capabilities: provider_check_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.capabilities.clone())
+                        .unwrap_or_default(),
+                    provider_reported_supported_action_sets: provider_check_snapshot
+                        .as_ref()
+                        .map(|snapshot| snapshot.supported_action_sets.clone())
+                        .unwrap_or_default(),
                     fallback_reason,
+                    provider_check_fallback_reason: provider_check_snapshot
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.fallback_reason.clone()),
+                    provider_check_error: provider_check_snapshot
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.error.clone()),
                     provider_config_ref: Some(format!(
                         "provider://loopback-http/runtime-live/{}",
                         agent_id

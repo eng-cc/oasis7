@@ -201,6 +201,22 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_d35fcf0504a6400ca75d6891f4b5a24f.yaml
+  - task_uid: task_48a944753c634a469497bc5c906284c7
+    title: "Close agent direct product completeness gaps"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-WORLD_SIMULATOR-037
+      - PRD-WORLD_SIMULATOR-038
+      - PRD-WORLD_SIMULATOR-039
+      - PRD-WORLD_SIMULATOR-040
+    acceptance:
+      - "Repo-owned evidence is reviewable without ignored output artifacts; software_safe/native surfaces expose real provider readiness truth distinctly from expected lane metadata; world-simulator docs state experimental/default-enable boundaries without ambiguity"
+    handoff_to:
+      - viewer_engineer
+      - qa_engineer
+    status: done
+    task_path: .pm/tasks/task_48a944753c634a469497bc5c906284c7.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2
