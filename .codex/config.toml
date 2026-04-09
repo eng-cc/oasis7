@@ -1,1 +1,7 @@
 sandbox_mode = "danger-full-access"
+[features]
+memories = true
+
+[memories]
+generate_memories = true
+use_memories = true
