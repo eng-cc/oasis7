@@ -105,6 +105,12 @@ for memory_path in list((root / ".pm/roles").glob("*/memory/*.yaml")) + list((ro
         for source_ref in record.get("source_refs") or []:
             mirror_source_ref(str(source_ref))
 
+for working_memory_path in (root / ".pm/working_memory").glob("*.yaml"):
+    payload = yaml.safe_load(working_memory_path.read_text(encoding="utf-8")) or {}
+    for entry in payload.get("entries") or []:
+        for source_ref in entry.get("source_refs") or []:
+            mirror_source_ref(str(source_ref))
+
 for stage_path in (root / ".pm/stage").glob("*.yaml"):
     payload = yaml.safe_load(stage_path.read_text(encoding="utf-8")) or {}
     for source_ref in payload.get("updated_from") or []:
@@ -155,6 +161,26 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     "version: 1\ngate_id: null\nstatus: draft\nlane_status: []\nblocking_tasks: []\nupdated_from: []\n",
     encoding="utf-8",
 )
+
+for path in (root / ".pm/tasks").glob("*.yaml"):
+    path.unlink()
+for path in (root / ".pm/tasks").glob("*.execution.md"):
+    path.unlink()
+for path in (root / ".pm/working_memory").glob("*.yaml"):
+    path.unlink()
+
+(root / ".pm/registry/tasks.yaml").write_text(
+    'version: 2\nidentity_key: task_uid\ngenerated_from: ".pm/tasks/*.yaml"\ntasks: []\n',
+    encoding="utf-8",
+)
+
+for backlog_path in (root / ".pm/roles").glob("*/backlog/*.yaml"):
+    role = backlog_path.parts[-3]
+    status = backlog_path.stem
+    backlog_path.write_text(
+        f"version: 1\nrole: {role}\nstatus: {status}\ntasks: []\n",
+        encoding="utf-8",
+    )
 PY
 
 cat > "$TMPDIR/.pm/evidence/bootstrap.md" <<'EOF'
@@ -467,6 +493,9 @@ if codex_items[0].get("command") != "./scripts/pm/codex-review-snapshot.sh":
     raise SystemExit("workflow close codex review checklist should point to codex-review-snapshot.sh")
 if not any(item.get("id") == "bootstrap-working-memory" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should suggest bootstrapping working_memory when the current task has no entries")
+bootstrap_items = [item for item in workflow_close["checklist"] if item.get("id") == "bootstrap-working-memory"]
+if bootstrap_items[0].get("command") != f"./scripts/pm/codex-working-memory.sh --task-uid {move_payload['task_uid']} --role qa_engineer --session-id <session_id>":
+    raise SystemExit("workflow close bootstrap command should require an explicit session_id by default")
 if any(item.get("id") == "review-working-memory" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should not suggest reviewing working_memory when the current task has no entries")
 if any(item.get("id") == "autoflow-working-memory" for item in workflow_close["checklist"]):

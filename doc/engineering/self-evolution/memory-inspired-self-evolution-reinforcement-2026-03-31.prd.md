@@ -9,14 +9,14 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前 `self-evolution` 与长期 memory 专题已经冻结了 `.pm/` 文件真值、role memory schema 与 `signal -> memory/task` 基础链路，但仍缺少两层关键规格：一是“外部 memory/reflective agent 方案里哪些值得借鉴、哪些必须拒绝”；二是“做事过程中的会话/临时判断该如何被记录，而不污染长期 memory”。若不先冻结这层借鉴与分层边界，后续很容易把“记忆增强”“反思归纳”“过程笔记”“自我进化自治”混成一个不受控的大口袋。
-- Proposed Solution: 在 `engineering/self-evolution` 子专题中，对 `memoryOSS` 与论文《Hindsight》做结构化对照，并新增 `working_memory` 与 `conversation transcript analysis` 分层。明确 oasis7 只借鉴记忆分类、预算化召回、namespace 隔离、会话到工作记忆的提炼与反思审核链路；对 Codex/engineering task，phase 1 优先从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取 raw evidence，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，暂不把 wrapper 导出的 transcript artifact 设为前置依赖，也不允许 agent 直接绕过 owner/worktree/QA 链路执行高风险改动。
+- Proposed Solution: 在 `engineering/self-evolution` 子专题中，对 `memoryOSS` 与论文《Hindsight》做结构化对照，并新增 `working_memory` 与 `conversation transcript analysis` 分层。明确 oasis7 只借鉴记忆分类、预算化召回、namespace 隔离、会话到工作记忆的提炼与反思审核链路；对 Codex/engineering task，phase 1 允许从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取 raw evidence，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，但默认不把“同一 live session 自读”当作收口路径。owner 若确实要从 `.codex` transcript 提炼 `working_memory`，必须显式提供 `--session-id`，或显式传 `--allow-auto-session` 做 opt-in；同时暂不把 wrapper 导出的 transcript artifact 设为前置依赖，也不允许 agent 直接绕过 owner/worktree/QA 链路执行高风险改动。
 - Success Criteria:
   - SC-1: 新专题明确区分 `memory_kind = fact | experience | summary | belief` 四类记忆，并给出与现有 `.pm/roles/*/memory/*.yaml` 的字段映射。
   - SC-2: 对 `belief`/暂定判断类记忆，100% 定义 `confidence`、`review_due_at`、`superseded_by`/`superseded_at` 等审计字段，不允许无限期以“猜测”身份停留为 active 真值。
   - SC-3: 召回策略 100% 通过 repo 内可审计配置表达 `role`、`phase`、`kind_allowlist`、`max_items`、`budget_chars` 与 `freshness_days`，禁止无上限把历史 memory 全量注入上下文。
   - SC-4: 反思产物 100% 先进入 `signal`/候选对象，再由 owner 决定提升为 memory、task 或 rejected，不允许自动覆盖正式 PRD / project。
   - SC-5: 专题对 `memoryOSS` / `Hindsight` 的 adopted / rejected / deferred 项均给出明确理由，并与现有 `self-evolution` / `role-long-term-memory` 边界保持零冲突。
-  - SC-6: 会话记录只能作为 `raw evidence` 输入；对 Codex/engineering task，phase 1 来源固定为 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`（`~/.codex/logs_1.sqlite` 仅作可选后续解析层），100% 先提炼到 `working_memory` 或 `signal`，不得整段会话直接写入长期 memory。
+  - SC-6: 会话记录只能作为 `raw evidence` 输入；对 Codex/engineering task，phase 1 允许使用 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`（`~/.codex/logs_1.sqlite` 仅作可选后续解析层），但默认不得依赖“同一 live session 自读”作为关闭任务的标准步骤。若要从 `.codex` transcript 提炼，必须显式指定 `session_id` 或显式 opt-in 自动解析，且 100% 先提炼到 `working_memory` 或 `signal`，不得整段会话直接写入长期 memory。
   - SC-7: `working_memory` 100% 带 `task_uid`、`role`、`worktree_hint`、`entry_kind`、`source_refs`、`captured_at`、`expires_at` 字段，并在任务关闭后显式清理、转 task、转 signal 或丢弃。
 
 ## 2. User Experience & Functionality
@@ -46,13 +46,13 @@
   3. Flow-MIR-003: 运行或评审过程中出现“重复模式/新的判断” -> 先以 `source_type=reflection` 或等价 signal 进入 inbox -> owner 审核后提升为 `task`、`memory` 或 `rejected/deferred`。
   4. Flow-MIR-004: `belief` 类 active memory 与新事实冲突 -> 旧记录进入 `superseded`，新记录根据证据改写为 `fact`、`summary` 或新的 `belief` -> stage/backlog 引用更新到新记录。
   5. Flow-MIR-005: 新角色或新工作流需要记忆扩容 -> 复用 role-agnostic schema 与 recall profile -> lint/report 在不迁移历史数据的前提下自动纳入。
-  6. Flow-MIR-006: Codex/engineering task 从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 读取会话 raw evidence，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，再结合 task execution log / 手工 evidence 进入系统 -> 提取 `attempt/hypothesis/decision/open_question/next_step` 到 `working_memory` -> 当内容稳定时再提升为 reflection signal、task 或长期 memory -> 任务关闭时清理或归档剩余 working memory。
+  6. Flow-MIR-006: Codex/engineering task 若确实需要从 `.codex` transcript 提炼过程记忆，owner 先显式提供 `session_id`，或显式 opt-in 自动 session 解析；系统随后从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 读取会话 raw evidence，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，再结合 task execution log / 手工 evidence 进入系统 -> 提取 `attempt/hypothesis/decision/open_question/next_step` 到 `working_memory` -> 当内容稳定时再提升为 reflection signal、task 或长期 memory -> 任务关闭时清理或归档剩余 working memory。
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 记忆分类层 | `memory_kind=fact|experience|summary|belief`、`confidence`、`review_due_at`、`recall_priority` | `promote-memory` 新增记录时必须选择 kind；`belief` 必须附 `confidence` 与 review 截止 | `draft -> active -> needs_review -> superseded/retired` | `fact` 高于 `summary`，`experience` 高于 `belief`；同类内按 `recall_priority`、`effective_at desc` 排序 | role owner 可写本角色；`shared` 仍仅 producer/治理维护者可写 |
 | Recall Profile | `profile_id`、`role`、`phase`、`kind_allowlist[]`、`max_items`、`budget_chars`、`freshness_days`、`topic_filters[]` | `workflow-report` / `memory-report` 根据 profile 输出预算化视图；超预算时截断并给出原因 | `draft -> active -> superseded` | 先按 `kind` 权重、再按 `recall_priority`、再按 freshness 排序；超出 `budget_chars` 的条目不注入 | 所有人可读；owner role 与 producer 决定各自 profile |
-| Working Memory | `task_uid`、`role`、`worktree_hint`、`entry_id`、`entry_kind=attempt|hypothesis|decision|open_question|next_step`、`summary`、`source_refs[]`、`captured_at`、`expires_at`、`promoted_to[]` | 会话/过程分析先写入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 默认从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 提炼，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，owner 决定保留、提炼成 signal/task、或丢弃 | `captured -> active -> promoted/discarded/expired` | 默认按 `captured_at desc`；`decision/next_step` 高于 `attempt`；过期条目不进入 recall | 当前 task owner 可写；handoff 接收方可续写；不得直接当正式真值 |
+| Working Memory | `task_uid`、`role`、`worktree_hint`、`entry_id`、`entry_kind=attempt|hypothesis|decision|open_question|next_step`、`summary`、`source_refs[]`、`captured_at`、`expires_at`、`promoted_to[]` | 会话/过程分析先写入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 仅在 owner 显式指定 `session_id` 或显式 opt-in 自动 session 解析后，才从 `~/.codex/session_index.jsonl` + `~/.codex/history.jsonl` 提炼，若命中为空则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，owner 决定保留、提炼成 signal/task、或丢弃 | `captured -> active -> promoted/discarded/expired` | 默认按 `captured_at desc`；`decision/next_step` 高于 `attempt`；过期条目不进入 recall | 当前 task owner 可写；handoff 接收方可续写；不得直接当正式真值 |
 | Reflection Signal Contract | `source_type=reflection`、`summary`、`source_ref`、`role_hint`、`severity`、`candidate_kind`、`candidate_topic` | `promote-signal` 写入反思信号；owner 决定 `promoted_candidate_task`、`promoted_memory`、`rejected` 或 `deferred` | `new -> triaged -> promoted/rejected/deferred` | 已有同 topic active memory 时优先复用/更新，避免重复创建 | 全角色可提交；对应 owner 负责处置；QA/producer 可阻断高风险反思 |
 | Belief Review Gate | `confidence`、`review_due_at`、`last_reviewed_at`、`contradicted_by[]` | `memory-report` / `workflow-report` 对过期 `belief` 标记 `needs_review`；`supersede-memory` 处理冲突 | `active -> needs_review -> superseded/retired` | 过期 `belief` 在 review 视图优先级高于普通 stale memory | owner role 负责复核；producer 可升级为阶段阻断 |
 | External Inspiration Matrix | `source_name`、`source_ref`、`pattern`、`decision=adopted|rejected|deferred`、`rationale`、`target_object` | 设计/PRD 中冻结 adopted / rejected 项；后续实现只能引用已 adopted 模式 | `proposed -> adopted/rejected/deferred -> superseded` | adopted 项按影响范围和依赖前置排序 | 仅 producer_system_designer 可冻结正式结论；相关工程 owner 联审实现影响 |
@@ -117,6 +117,7 @@
   - 误把未验证猜测写成 `fact`：lint 或 review 必须阻断，并要求降级为 `belief` 或 rejected。
   - `~/.codex/session_index.jsonl` / `history.jsonl` 缺失或不可用：允许回退到 `~/.codex/sessions/**/rollout-*.jsonl`；若仍不可用，则只依据 task execution log / 手工 evidence 写 working memory，不阻断任务执行。
   - `~/.codex/logs_1.sqlite` 无解析器或环境无 `sqlite3`：phase 1 继续使用 JSONL 来源，不阻断任务执行。
+  - 同一 live session 的 transcript extraction 产生自读污染或审计争议：默认关闭隐式 auto-resolution；只有显式 `--session-id` 或显式 `--allow-auto-session` 才允许读取 `.codex` transcript。
   - `working_memory` 长时间未清理：任务关闭时必须转 `promoted/discarded/expired`，不得无限期留在 active。
   - transcript 含敏感信息：只允许抽取脱敏摘要与 source ref，不得原样复制进 `working_memory`/memory。
   - `belief` 长时间无人复核：report 标记 `needs_review`，producer review 视图必须显式暴露。
@@ -144,7 +145,7 @@
   - MVP: 建立本专题 `prd/design/project`，冻结 adopted/rejected/deferred 边界与对象映射。
   - v1.1: 扩展 memory schema，增加 `memory_kind`、`review_due_at`、`recall_priority` 等字段及 lint/report。
   - v2.0: 为 `workflow-report` / `memory-report` 增加 recall profile 与预算化输出。
-  - v2.1: 建立 `working_memory` 与会话分析契约，定义 `~/.codex/session_index.jsonl + history.jsonl (+ sessions rollout fallback) -> working_memory -> reflection signal` 的 canonical 路径，并为后续 wrapper artifact 留出替换位。
+  - v2.1: 建立 `working_memory` 与会话分析契约，定义 `显式 session 选择/显式 opt-in auto-resolution + ~/.codex/session_index.jsonl + history.jsonl (+ sessions rollout fallback) -> working_memory -> reflection signal` 的 canonical 路径，并为后续 wrapper artifact 留出替换位。
   - v3.0: 建立 recall/working_memory/reflection smoke 与质量评估基线，验证噪声率、复发率、stale belief 与 working_memory 残留指标。
 - Technical Risks:
   - 风险-1: 记忆分类过细但没有预算约束，会把 `workflow-report` 重新做成“第二份全文索引”。
@@ -172,7 +173,7 @@
 | DEC-MIR-004 | 召回必须预算化并按 phase/role/kind 控制 | 允许 agent 自由检索并全量注入历史记忆 | 无预算的长上下文会放大噪声和相互矛盾记忆，不符合 oasis7 的 deterministic governance 目标。 |
 | DEC-MIR-005 | 对 `belief` 施加 review_due_at 与 superseded 约束 | 把 `belief` 与 `fact` 一视同仁长期保留 active | 暂定判断本质上是待验证假设，必须更快过期和复核。 |
 | DEC-MIR-006 | 将会话/过程记忆先落到 task-scoped `working_memory` | 直接把 transcript 或中间推理写入长期 memory | 过程认知变化快、噪声高，且主要服务于当前任务，不适合直接变成长期真值。 |
-| DEC-MIR-007 | Codex/engineering task 的 phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl` | 先要求 wrapper 导出 `output/.../<task_uid>.jsonl` 作为唯一 transcript 来源 | 当前环境已存在可直接读取的本地 Codex 会话索引与 rollout 存档；先复用现成 raw evidence 更快闭环，且不新增第二套导出前置依赖。 |
+| DEC-MIR-007 | Codex/engineering task 的 phase 1 允许读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，但默认必须显式指定 `session_id`；只有显式 `--allow-auto-session` 才允许 registry/worktree pattern 自动解析 | 继续把“读取当前/最近 live session”当成默认收口路径；或先要求 wrapper 导出 `output/.../<task_uid>.jsonl` 作为唯一 transcript 来源 | 当前环境已存在可直接读取的本地 Codex 会话索引与 rollout 存档，所以可以继续复用现成 raw evidence；但同一 live session 的隐式自读不够优雅且容易引入自污染/审计歧义，因此改为显式 opt-in。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

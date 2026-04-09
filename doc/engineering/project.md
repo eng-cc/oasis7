@@ -108,6 +108,7 @@
 - [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-021) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 source_ref 的残留口径，补齐 stage/signal/task/memory 门禁、source_ref 校验与正式文档回写。
 - [x] TASK-ENGINEERING-101 (PRD-ENGINEERING-021) [test_tier_required]: 新增 repo-local `.codex/config.toml`，默认 `sandbox_mode = "danger-full-access"`，并补齐 `.gitignore` 精确例外、engineering PRD/project 与 task execution log 追踪。
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-021) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
+- [x] TASK-ENGINEERING-103 (PRD-ENGINEERING-021/022) [test_tier_required]: 默认关闭同一/最近 live Codex session 的 working_memory 隐式自读；`codex-working-memory.sh` 改为默认要求显式 `--session-id`，仅在显式 `--allow-auto-session` 时允许 registry / worktree pattern 自动解析，并同步收口 `workflow-report`、README、self-evolution 专题与 smoke。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -190,6 +191,7 @@
 - 最新完成: `TASK-ENGINEERING-085`（已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。）
 - 最新完成: `TASK-ENGINEERING-086`（已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的借鉴边界，并将 recall/reflection 的后续补强正式挂入 engineering 入口与 task execution log 追踪。）
 - 最新完成: `TASK-ENGINEERING-091`（已将“会话记录 -> task-scoped working_memory -> reflection signal”补入记忆启发式补强专题，明确 Codex/engineering task phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若缺失则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时通过 `last_extracted_ts/captured_until_ts` 水位把当前 live session 固定为“首轮快照、后续增量”，避免提炼过程自污染，且过程记忆只作为中间层，不直接进入长期 memory。）
+- 最新完成: `TASK-ENGINEERING-103`（已将 `codex-working-memory.sh` 默认行为收敛为显式 session 选择：默认不再隐式读取当前/最近 live Codex session；若 owner 确实需要从 `.codex` transcript 提炼 task-scoped `working_memory`，必须显式给出 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。对应的 `workflow-report` close checklist、`.pm/README`、记忆启发式专题与 smoke 断言已同步更新。）
 - 最新完成: `TASK-ENGINEERING-092`（已为 7 个标准角色起草 `topic` allowlist 与 `promotion_reason` 草案，新增 `.pm/templates/role-memory-policy.yaml`，扩展 `pm_store.py` 的长期 memory promotion 白名单，并把 close-phase 记忆抽取三问补入 `workflow-report` 与 7 张角色职责卡。）
 - 最新完成: `TASK-ENGINEERING-083`（已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容 lint/scaffold，以及 stale/conflict/superseded-chain/role-expansion full-tier smoke。）
 - 最新完成: `TASK-ENGINEERING-082`（已落地 `promote-memory.sh`、signal `memory_promotion_state` 决策回写、promotion/reject 白名单，以及 accepted/rejected promotion smoke。）

@@ -10,6 +10,7 @@ ROLE=""
 SESSION_ID=""
 WORKTREE_HINT=""
 THREAD_NAME_PATTERN=""
+ALLOW_AUTO_SESSION=0
 CODEX_DIR="${CODEX_DIR:-$HOME/.codex}"
 CODEX_BIN="${CODEX_BIN:-codex}"
 MODEL=""
@@ -20,7 +21,8 @@ FULL_SCAN=0
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pm/codex-working-memory.sh --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --role producer_system_designer [--session-id <session_id> | --thread-name-pattern <pattern> | --worktree-hint <hint>] [options]
+Usage: ./scripts/pm/codex-working-memory.sh --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --role producer_system_designer --session-id <session_id> [options]
+       ./scripts/pm/codex-working-memory.sh --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --role producer_system_designer --allow-auto-session [--thread-name-pattern <pattern> | --worktree-hint <hint>] [options]
 
 Deterministically preprocess one Codex session transcript (sort + redact), then call `codex exec`
 to extract task-scoped working_memory entries, and finally write them to `.pm/working_memory/<task_uid>.yaml`.
@@ -28,10 +30,11 @@ to extract task-scoped working_memory entries, and finally write them to `.pm/wo
 Options:
   --task-uid <id>         Required task uid
   --role <role>           Required role
-  --session-id <id>       Optional Codex session id; if omitted, try registry or pattern resolution
+  --session-id <id>       Explicit Codex session id; default path requires this
+  --allow-auto-session    Opt into registry/pattern session auto-resolution; off by default to avoid reading the current live session implicitly
   --worktree-hint <hint>  Optional worktree hint written into working_memory header
   --thread-name-pattern <pattern>
-                          Optional fallback pattern for session resolution
+                          Optional fallback pattern for auto-session resolution
   --codex-dir <path>      Codex home directory (default: ~/.codex)
   --codex-bin <path>      Codex CLI binary (default: codex)
   --model <name>          Optional model override passed to `codex exec`
@@ -64,6 +67,10 @@ while [[ $# -gt 0 ]]; do
     --thread-name-pattern)
       THREAD_NAME_PATTERN="$2"
       shift 2
+      ;;
+    --allow-auto-session)
+      ALLOW_AUTO_SESSION=1
+      shift
       ;;
     --codex-dir)
       CODEX_DIR="$2"
@@ -107,6 +114,12 @@ done
 
 if [[ -z "$TASK_UID" || -z "$ROLE" ]]; then
   echo "codex-working-memory: --task-uid and --role are required" >&2
+  usage >&2
+  exit 2
+fi
+
+if [[ -z "$SESSION_ID" && "$ALLOW_AUTO_SESSION" != "1" ]]; then
+  echo "codex-working-memory: explicit --session-id is required by default; pass --allow-auto-session to opt into registry/pattern auto-resolution" >&2
   usage >&2
   exit 2
 fi

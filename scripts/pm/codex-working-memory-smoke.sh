@@ -65,6 +65,62 @@ import sys
 
 root = Path(sys.argv[1])
 
+for path in (root / ".pm/tasks").glob("*.yaml"):
+    path.unlink()
+for path in (root / ".pm/tasks").glob("*.execution.md"):
+    path.unlink()
+for path in (root / ".pm/working_memory").glob("*.yaml"):
+    path.unlink()
+
+(root / ".pm/inbox/signals.jsonl").write_text("", encoding="utf-8")
+(root / ".pm/registry/tasks.yaml").write_text(
+    'version: 2\nidentity_key: task_uid\ngenerated_from: ".pm/tasks/*.yaml"\ntasks: []\n',
+    encoding="utf-8",
+)
+(root / ".pm/registry/codex-sessions.yaml").write_text(
+    "version: 1\nsessions: []\n",
+    encoding="utf-8",
+)
+(root / ".pm/stage/current.yaml").write_text(
+    "version: 1\ncurrent_stage: null\ncandidate_stage: null\nclaim_envelope: null\ndecision_date: null\nupdated_from: []\nblocking_tasks: []\n",
+    encoding="utf-8",
+)
+(root / ".pm/stage/gate.yaml").write_text(
+    "version: 1\ngate_id: null\nstatus: draft\nlane_status: []\nblocking_tasks: []\nupdated_from: []\n",
+    encoding="utf-8",
+)
+
+for active_path in (root / ".pm/roles").glob("*/memory/active.yaml"):
+    role = active_path.parts[-3]
+    active_path.write_text(
+        f"version: 1\nrole: {role}\nkind: memory_active\nrecords: []\n",
+        encoding="utf-8",
+    )
+
+for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
+    role = superseded_path.parts[-3]
+    superseded_path.write_text(
+        f"version: 1\nrole: {role}\nkind: memory_superseded\nrecords: []\n",
+        encoding="utf-8",
+    )
+
+(root / ".pm/shared/memory/active.yaml").write_text(
+    "version: 1\nscope: shared\nkind: memory_active\nrecords: []\n",
+    encoding="utf-8",
+)
+(root / ".pm/shared/memory/superseded.yaml").write_text(
+    "version: 1\nscope: shared\nkind: memory_superseded\nrecords: []\n",
+    encoding="utf-8",
+)
+
+for backlog_path in (root / ".pm/roles").glob("*/backlog/*.yaml"):
+    role = backlog_path.parts[-3]
+    status = backlog_path.stem
+    backlog_path.write_text(
+        f"version: 1\nrole: {role}\nstatus: {status}\ntasks: []\n",
+        encoding="utf-8",
+    )
+
 for path in root.glob(".pm/**/*.yaml"):
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
@@ -188,9 +244,21 @@ RESULT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.
   --codex-bin "$TMPDIR/fake-codex" \
   --json)"
 
+set +e
+AUTO_SESSION_DISABLED_OUTPUT="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
+  --task-uid "$SMOKE_TASK_UID" \
+  --role producer_system_designer \
+  --worktree-hint codex-working-memory-smoke \
+  --codex-dir "$TMPDIR/.codex" \
+  --codex-bin "$TMPDIR/fake-codex" \
+  --json 2>&1)"
+AUTO_SESSION_DISABLED_STATUS=$?
+set -e
+
 RESULT_JSON_REGISTRY="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/codex-working-memory.sh" \
   --task-uid "$SMOKE_TASK_UID" \
   --role producer_system_designer \
+  --allow-auto-session \
   --worktree-hint codex-working-memory-smoke \
   --codex-dir "$TMPDIR/.codex" \
   --codex-bin "$TMPDIR/fake-codex" \
@@ -265,7 +333,7 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/working-memory-report.sh" --task-uid "$SMOKE_TASK_UID" --json)"
 
-python3 - "$TMPDIR" "$SMOKE_TASK_UID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$RESULT_JSON_REGISTRY" "$DRY_RUN_JSON" "$DRY_RUN_SIGNAL_SHA_BEFORE" "$DRY_RUN_SIGNAL_SHA_AFTER" "$DRY_RUN_WM_SHA_BEFORE" "$DRY_RUN_WM_SHA_AFTER" "$DRY_RUN_TASK_REGISTRY_SHA_BEFORE" "$DRY_RUN_TASK_REGISTRY_SHA_AFTER" "$DRY_RUN_BACKLOG_SHA_BEFORE" "$DRY_RUN_BACKLOG_SHA_AFTER" "$DRY_RUN_TASK_LIST_BEFORE" "$DRY_RUN_TASK_LIST_AFTER" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
+python3 - "$TMPDIR" "$SMOKE_TASK_UID" "$PREPARED_JSON" "$PREPARED_JSON_FALLBACK" "$RESULT_JSON" "$AUTO_SESSION_DISABLED_OUTPUT" "$AUTO_SESSION_DISABLED_STATUS" "$RESULT_JSON_REGISTRY" "$DRY_RUN_JSON" "$DRY_RUN_SIGNAL_SHA_BEFORE" "$DRY_RUN_SIGNAL_SHA_AFTER" "$DRY_RUN_WM_SHA_BEFORE" "$DRY_RUN_WM_SHA_AFTER" "$DRY_RUN_TASK_REGISTRY_SHA_BEFORE" "$DRY_RUN_TASK_REGISTRY_SHA_AFTER" "$DRY_RUN_BACKLOG_SHA_BEFORE" "$DRY_RUN_BACKLOG_SHA_AFTER" "$DRY_RUN_TASK_LIST_BEFORE" "$DRY_RUN_TASK_LIST_AFTER" "$SIGNAL_JSON" "$AUTOFLOW_JSON" "$REPORT_JSON" "$OUTPUT_JSON" <<'PY'
 from __future__ import annotations
 import json
 import sys
@@ -276,22 +344,24 @@ smoke_task_uid = sys.argv[2]
 prepared = json.loads(sys.argv[3])
 prepared_fallback = json.loads(sys.argv[4])
 result = json.loads(sys.argv[5])
-result_registry = json.loads(sys.argv[6])
-dry_run = json.loads(sys.argv[7])
-dry_run_signal_sha_before = sys.argv[8]
-dry_run_signal_sha_after = sys.argv[9]
-dry_run_wm_sha_before = sys.argv[10]
-dry_run_wm_sha_after = sys.argv[11]
-dry_run_task_registry_sha_before = sys.argv[12]
-dry_run_task_registry_sha_after = sys.argv[13]
-dry_run_backlog_sha_before = sys.argv[14]
-dry_run_backlog_sha_after = sys.argv[15]
-dry_run_task_list_before = sys.argv[16]
-dry_run_task_list_after = sys.argv[17]
-signal_json = json.loads(sys.argv[18])
-autoflow_json = json.loads(sys.argv[19])
-report = json.loads(sys.argv[20])
-output_json = sys.argv[21] == "1"
+auto_session_disabled_output = sys.argv[6]
+auto_session_disabled_status = int(sys.argv[7])
+result_registry = json.loads(sys.argv[8])
+dry_run = json.loads(sys.argv[9])
+dry_run_signal_sha_before = sys.argv[10]
+dry_run_signal_sha_after = sys.argv[11]
+dry_run_wm_sha_before = sys.argv[12]
+dry_run_wm_sha_after = sys.argv[13]
+dry_run_task_registry_sha_before = sys.argv[14]
+dry_run_task_registry_sha_after = sys.argv[15]
+dry_run_backlog_sha_before = sys.argv[16]
+dry_run_backlog_sha_after = sys.argv[17]
+dry_run_task_list_before = sys.argv[18]
+dry_run_task_list_after = sys.argv[19]
+signal_json = json.loads(sys.argv[20])
+autoflow_json = json.loads(sys.argv[21])
+report = json.loads(sys.argv[22])
+output_json = sys.argv[23] == "1"
 
 assert prepared["messages"][0]["ts"] == 100
 assert prepared["messages"][1]["ts"] == 200
@@ -302,6 +372,8 @@ assert prepared_fallback["messages"][0]["text"] == "还是先直接从.codex里�
 assert prepared_fallback["messages"][2]["text"] == "继续做完，补一个 sessions fallback。"
 assert result["import_result"]["added"] == 2
 assert result["import_result"]["codex_session_mapping"]["session_id"] == "session-test-001"
+assert auto_session_disabled_status != 0
+assert "explicit --session-id is required by default" in auto_session_disabled_output
 assert result_registry["prepared"]["message_count"] == 0
 assert str(result_registry["prepared"]["after_ts"]) == "300"
 assert result_registry["import_result"]["added"] == 0

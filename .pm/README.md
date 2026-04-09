@@ -45,7 +45,7 @@
 - `./scripts/pm/working-memory-lint.sh`：校验 `.pm/working_memory/*.yaml` 的 task/role/header、entry kind、source refs 与时间字段。
 - `./scripts/pm/working-memory-report.sh`：按 task/role 输出 task-scoped `working_memory` 报表。
 - `./scripts/pm/codex-transcript-report.sh`：优先从 `~/.codex/session_index.jsonl` / `history.jsonl` 读取单个 `session_id`；若 `history.jsonl` 无该会话消息，则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，只做排序与脱敏预处理。
-- `./scripts/pm/codex-working-memory.sh`：先跑 `codex-transcript-report`，再调用 `codex exec --ephemeral` 把脱敏 transcript 提炼成 `working_memory` 条目。
+- `./scripts/pm/codex-working-memory.sh`：先跑 `codex-transcript-report`，再调用 `codex exec --ephemeral` 把脱敏 transcript 提炼成 `working_memory` 条目；默认要求显式 `--session-id`，避免隐式读取当前 live Codex session。
 - `./scripts/pm/working-memory-to-signal.sh`：把选中的 `working_memory` 条目提升成 `source_type=reflection` signal，并回写 `promoted_to`。
 - `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
 - `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
@@ -98,15 +98,17 @@ working_memory 基础用法：
 - `./scripts/pm/working-memory-report.sh --task-uid task_<32hex> --json`
 - `./scripts/pm/codex-transcript-report.sh --session-id <session_id> --json`
 - `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --session-id <session_id> --worktree-hint <hint>`
+- `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --allow-auto-session --worktree-hint <hint>`
 - `./scripts/pm/codex-transcript-report.sh --task-uid task_<32hex> --json`
-- `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --full-scan`
+- `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --session-id <session_id> --full-scan`
 - `./scripts/pm/working-memory-to-signal.sh --task-uid task_<32hex> --entry-id WM-0001 --severity medium`
 - `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --severity medium --priority P2`
 - `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --dry-run --json`
 - `./scripts/pm/reflection-report.sh --role producer_system_designer --json`
 - phase 1 的 transcript 预处理只负责排序与脱敏；结构化提炼统一交给 `codex exec --ephemeral`。
-- `codex-working-memory.sh` 首次成功导入后会把 `task_uid -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续同一 task 可不再显式传 `--session-id`。
-- 同一 `task_uid + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取，避免当前 live session 在提炼过程中把新生成消息再次吸回本轮输入；需要重扫整段 transcript 时显式传 `--full-scan`。
+- `codex-working-memory.sh` 默认不会仅凭 task/worktree 自动解析 `.codex` session；若确实要走 registry / worktree pattern 自动解析，必须显式传 `--allow-auto-session`。
+- `codex-working-memory.sh` 首次成功导入后会把 `task_uid -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续若要继续复用该 registry 映射，也必须显式传 `--allow-auto-session`，或直接给出新的 `--session-id`。
+- 同一 `task_uid + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取；这只在 owner 显式选择该 session 后生效，避免把当前 live session 的隐式自读当作默认收口路径。需要重扫整段 transcript 时显式传 `--full-scan`。
 - `working_memory` header 会记录 `source_session_id`、`source_thread_name`、`transcript_source`、`last_extracted_ts` 与 `captured_until_ts`，用于回放抽取来源与当前水位。
 - `working-memory-autoflow.sh` 只自动做安全动作：reflection signal + candidate task；不会自动升长期 memory，也不会自动改 stage / 正式文档。
 - `working-memory-autoflow.sh --dry-run` 是严格只读的 plan 模式：它只返回“会创建/复用哪些 reflection signal 与 candidate task”，不会改 `.pm/inbox/signals.jsonl`、`.pm/working_memory/*.yaml`、task registry 或 task files。

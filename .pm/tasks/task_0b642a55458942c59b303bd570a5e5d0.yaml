@@ -1,0 +1,23 @@
+task_uid: task_0b642a55458942c59b303bd570a5e5d0
+title: "Disable default same-session Codex working_memory extraction"
+owner_role: producer_system_designer
+worktree_hint: engineering-disable-default-codex-working-memory
+execution_log_path: .pm/tasks/task_0b642a55458942c59b303bd570a5e5d0.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-022
+acceptance:
+  - "codex-working-memory no longer reads the current live session by default"
+  - "workflow-report close no longer implies same-session extraction as default closure"
+  - "docs and smoke cover the new opt-in behavior"
+handoff_to: []
+updated_at: 2026-04-09T17:16:22+08:00
+last_started_at: 2026-04-09T16:51:39+08:00
+last_closed_at: 2026-04-09T17:12:59+08:00

@@ -94,7 +94,7 @@
 ```
 
 ## 会话来源策略
-- 对 Codex/engineering task，phase 1 raw evidence 直接读取：
+- 对 Codex/engineering task，phase 1 raw evidence 只在 owner 显式指定 `session_id`，或显式传 `--allow-auto-session` 后才读取：
   - `~/.codex/session_index.jsonl`
   - `~/.codex/history.jsonl`
   - `~/.codex/sessions/**/rollout-*.jsonl`（当 `history.jsonl` 无该会话消息时回退）
@@ -108,7 +108,7 @@
 ## 流程设计
 ### Retain
 - 原始证据来自 task execution log、runbook、QA failure、community feedback、正式评审结论，或 Codex 本地会话存档。
-- 对 Codex/engineering task，phase 1 会话 transcript 优先从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取；若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，再与任务过程记录一起提炼为 `working_memory`，不直接写 memory。
+- 对 Codex/engineering task，phase 1 会话 transcript 只在 owner 显式选择 session 后才从 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl` 读取；若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，再与任务过程记录一起提炼为 `working_memory`，不直接写 memory。
 - 如果产出的是“反思”，先进入 `signal(source_type=reflection)`，不直接写 memory。
 - owner 决定把反思提升为：
   - 新 memory；
@@ -133,7 +133,8 @@
   - `decision`
   - `open_question`
   - `next_step`
-- 对同一 live Codex session，抽取必须支持“首轮快照 + 后续按水位增量”：
+- 对同一 live Codex session，只有在 owner 显式 opt-in 的前提下，抽取才支持“首轮快照 + 后续按水位增量”：
+  - 默认 wrapper 需要显式 `--session-id`；若 owner 要让脚本通过 registry/worktree pattern 自动解析当前/最近 session，必须显式传 `--allow-auto-session`；
   - 首轮可全量扫描已存在 transcript；
   - 成功导入后，将 `source_session_id`、`transcript_source`、`last_extracted_ts`、`captured_until_ts` 回写到 `.pm/working_memory/<task_uid>.yaml` header；
   - 后续默认只读取 `after_ts=last_extracted_ts` 之后的新消息，避免“提炼 working_memory 的过程本身”污染同一轮输入；
@@ -143,7 +144,7 @@
   - 必须定义 `memory_kind`；
   - 若为 `belief`，必须定义 `review_due_at`；
   - 若推翻旧结论，必须通过 `supersede-memory` 保留历史链。
-- phase 1 的 canonical chain 为 `~/.codex/session_index.jsonl + ~/.codex/history.jsonl (+ sessions rollout fallback) + task execution log/evidence -> working_memory -> reflection signal`；后续若增加 wrapper artifact，只能替换输入层，不能绕过 `working_memory`。
+- phase 1 的 canonical chain 为 `显式 session 选择/显式 opt-in auto-resolution + ~/.codex/session_index.jsonl + ~/.codex/history.jsonl (+ sessions rollout fallback) + task execution log/evidence -> working_memory -> reflection signal`；后续若增加 wrapper artifact，只能替换输入层，不能绕过 `working_memory`。
 
 ## 脚本与文件映射
 - 现有文件继续作为真值：
@@ -183,7 +184,7 @@
 - 风险：`.codex` 源格式后续漂移，导致抽取器失配
   - 缓解：phase 1 只锁定 `session_index.jsonl` / `history.jsonl` 的最小字段契约，并允许 `sessions/rollout-*.jsonl` 作为兼容 fallback；`logs_1.sqlite` 与 wrapper artifact 留作后续兼容层
 - 风险：当前 live session 做提炼时把新生成消息重新并入本轮 transcript，形成自污染
-  - 缓解：采用 `last_extracted_ts/captured_until_ts` 水位；默认增量抽取，只有显式 `--full-scan` 才回扫全量 transcript
+  - 缓解：默认关闭隐式 auto-resolution；owner 必须显式 `--session-id` 或显式 `--allow-auto-session` 才能读取 `.codex` transcript。在显式 opt-in 的 live-session 场景下，继续采用 `last_extracted_ts/captured_until_ts` 水位；默认增量抽取，只有显式 `--full-scan` 才回扫全量 transcript
 - 风险：新 schema 破坏既有 role memory
   - 缓解：字段增量设计、旧数据兼容、lint/report 双向回归
 

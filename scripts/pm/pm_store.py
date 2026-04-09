@@ -2479,8 +2479,8 @@ def build_workflow_checklist(
         if task_context is not None and working_memory_entries == 0:
             add(
                 "bootstrap-working-memory",
-                "当前 task 还没有 working_memory；若本轮主要过程发生在 Codex 会话里，先抽取一次 task-scoped working_memory，再决定是否需要 reflection signal / candidate task。",
-                command=f"./scripts/pm/codex-working-memory.sh --task-uid {task_context['task_uid']} --role {role}",
+                "当前 task 还没有 working_memory；默认不要直接从当前 live Codex session 自读。若确实需要 transcript extraction，请显式给出 `--session-id`，或显式传 `--allow-auto-session` 后再决定是否提炼为 reflection signal / candidate task。",
+                command=f"./scripts/pm/codex-working-memory.sh --task-uid {task_context['task_uid']} --role {role} --session-id <session_id>",
             )
         elif working_memory_entries > 0:
             add(
