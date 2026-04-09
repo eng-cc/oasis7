@@ -152,11 +152,17 @@
 - [x] TASK-GAME-058 (PRD-GAME-001) [test_tier_required]: 执行 ROUND-010 `game` 模块入口治理，为 `doc/game/README.md` 增加轻量“从这里开始”分流，明确产品目标、执行追踪、玩法总览、试玩口径与高频专题之间的阅读顺序。
 - [x] TASK-GAME-059 (PRD-GAME-011) [test_tier_required + test_tier_full]: 将 restricted grant 的 daily treasury source 从 `ecosystem_pool` 拆分为独立 `restricted_starter_claim_liveops_pool`，新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action，并同步让 liveops CLI / runbook 转向 dedicated pool 余额。
 - [x] TASK-GAME-060 (PRD-GAME-008) [test_tier_required]: 按最新产品设定收口 `pure_api` 正式游玩前置，把 `game` 根 PRD / project 与 active 专题改写为“active LLM access required；无 LLM 仅 observer/debug”，并同步替换当前门禁命令中的 `--no-llm` 示例。
+- [x] TASK-GAME-061 (PRD-GAME-012) [test_tier_required]: 新增“10 分钟留存修复”专题 PRD / design / project，并完成 `game` 根 PRD / project、`gameplay-top-level-design` 主文档、索引与 task execution log 挂载。
+- [ ] TASK-GAME-062 (PRD-GAME-012) [test_tier_required + test_tier_full]: `viewer_engineer` / `runtime_engineer` 收口首次进入与最小控制地板，让 headed Web/UI 与 `software_safe` 正式入口都稳定达到 `open -> connected -> play/step/select`，不再依赖手动恢复。
+- [ ] TASK-GAME-063 (PRD-GAME-012) [test_tier_required]: `runtime_engineer` / `viewer_engineer` 将 `PostOnboarding` 后 10 分钟工业中循环加厚为“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的可复跑目标包。
+- [ ] TASK-GAME-064 (PRD-GAME-012) [test_tier_required]: `viewer_engineer` / `agent_engineer` 收口首屏噪音、玩家身份和后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
+- [ ] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 建立 active-LLM 10 分钟留存 gate 与 `software_safe` floor verdict，`producer_system_designer` 根据样本正式决定 continue / hold。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
 - doc/game/prd.index.md
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
+- `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
 - `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md`
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
@@ -166,10 +172,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-04-09
 - 当前状态: in_progress
-- 下一任务: `TASK-GAME-036（监控 GitHub issue eng-cc/oasis7#48，并回流首批真实 builder 信号）`
-- 已登记待排任务: `无（PRD-GAME-011 当前专题已闭环；当前新增的是运营入口层，不改变底层规则边界）`
+- 下一任务: `TASK-GAME-062（收口首次进入与最小控制地板）`
+- 已登记待排任务: `无（PRD-GAME-012 已完成冻结；当前等待 viewer/runtime/qa 按 lane 推进）`
+- 最新完成: `TASK-GAME-061`（已新增 `PRD-GAME-012` 10 分钟留存修复专题，并把未来两周优先级正式冻结为首次控制地板、工业中循环包、首屏降噪、后果可见化与 active-LLM retention gate 五条 lane。）
 - 最新完成: `TASK-GAME-059`（`runtime_engineer` 已新增独立 `restricted_starter_claim_liveops_pool` 与 `TopUpRestrictedStarterClaimLiveopsPool` 治理动作，让 `ecosystem_pool` 继续保留 `2-of-3` 高门槛审批，而 daily restricted grant 只消耗专用 liveops 池。）
 - 最新完成: `TASK-GAME-058`（已为 `game` README 增加轻量“从这里开始”分流，明确 `prd.md`、`project.md`、玩法总览、试玩口径专题与高频 claim 规则专题的阅读顺序，不再把根 README 当成第二份 `prd.index.md`。）
 - 最新完成: `TASK-GAME-057`（`liveops_community` 已补齐 restricted grant runbook 的开通/恢复/日常操作 SOP，明确 governance registry import 属于全量 registry 重写、slot-only manifest 不能直接导入 world，且每次重导入后都要重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。）

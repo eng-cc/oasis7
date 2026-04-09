@@ -214,7 +214,26 @@
 
 专题口径见 `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`。
 
-## 2.7 纯 API 客户端等价
+## 2.7 当前两周收口重点（2026-04-09）
+
+在当前 `internal_playable_alpha_late` 阶段，接下来两周不再把新增宏系统功能当作主目标，而是优先收口 10 分钟留存。
+
+优先顺序固定为：
+
+1. 首次进入与最小控制地板。
+2. `PostOnboarding` 后 10 分钟工业中循环包。
+3. 首屏降噪与玩家身份收束。
+4. 后果可见化与奖励节奏。
+5. active-LLM 正式 10 分钟留存 gate。
+
+非目标：
+- 不继续扩大战争/治理/元进度在首局中的曝光。
+- 不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
+- 不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
+
+专题口径见 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
+
+## 2.8 纯 API 客户端等价
 
 纯 API 客户端不应该只是“能看日志、能发 step”的调试通道，而应是正式玩家入口之一。
 

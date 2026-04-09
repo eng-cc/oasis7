@@ -1,7 +1,7 @@
 # game PRD 文件级索引
-审计轮次: 9
+审计轮次: 10
 
-更新时间：2026-03-27
+更新时间：2026-04-09
 
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
@@ -28,6 +28,7 @@
 | `doc/game/gameplay/gameplay-release-production-closure.prd.md` | `doc/game/gameplay/gameplay-release-production-closure.design.md` | `doc/game/gameplay/gameplay-release-production-closure.project.md` |
 | `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.design.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
+| `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

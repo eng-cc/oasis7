@@ -66,6 +66,7 @@
   - PRD-GAME-009: As a 制作人与阶段评审 owner, I want a unified closed-beta admission gate, so that stage upgrades and external claims are evidence-driven instead of topic-by-topic guesses.
   - PRD-GAME-010: As a 制作人与 limited preview owner, I want one controlled external execution loop, so that the new claim envelope is validated with real feedback instead of internal assumptions.
   - PRD-GAME-011: As a 中循环玩家与玩法 owner, I want agent claims to keep a non-zero main-token-denominated cost and require upkeep, while allowing a restricted starter claim balance for `slot-1`, so that agent control reflects sustained commitment without forcing limited preview users to hold transferable assets.
+  - PRD-GAME-012: As a 中循环玩家与制作人 owner, I want a stable 10-minute retention loop after onboarding, so that the game feels reliably playable before any further system expansion.
 - 模式分层说明：按 `PRD-CORE-009`，`PRD-GAME-008` 所承接的是玩家访问模式 `pure_api`，而不是 provider-backed `headless_agent` 一类 execution lane。
 - 正式游玩前置：按最新 `PRD-CORE-009` 口径，`PRD-GAME-008` 的 `pure_api` 正式游玩与 headed Web/UI 一样，要求 active LLM access；`--no-llm` 仅保留 observer/debug，不再计入正式可玩性与 parity 放行。
 - Critical User Flows:
@@ -146,6 +147,7 @@
   - AC-13: 新增 `PRD-GAME-009` 封闭 Beta 准入专题，明确当前阶段、统一 release gate、趋势阈值和对外口径边界，并能直接驱动跨角色 handoff。
   - AC-14: 新增 `PRD-GAME-010` 受控 limited preview 执行专题，明确 controlled builder-facing 外放、claim drift 纠偏、QA 持续守门与制作人 continue/hold/reassess 决策。
   - AC-15: 新增 `PRD-GAME-011` agent 认领成本专题，明确“首个也不免费”、claim bond/upkeep、`restricted starter claim balance`、闲置/欠费回收、tier cap 与 UI/API canonical 字段。
+  - AC-16: 新增 `PRD-GAME-012` 10 分钟留存修复专题，明确未来两周只优先推进首次控制地板、工业中循环包、首屏降噪、后果可见化与 active-LLM retention gate 五条 lane。
 - Non-Goals:
   - 不在本 PRD 中给出逐条数值参数表。
   - 不替代 runtime/p2p 的底层实现设计。
@@ -158,6 +160,7 @@
 - Architecture Overview: game 模块定义玩法层抽象，依赖 world-runtime 提供规则执行与资源约束，依赖 world-simulator 与 testing 模块提供可观测与验收。
 - Integration Points:
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
+  - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
   - `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
   - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
@@ -198,6 +201,7 @@
   - NFR-GAME-15: 在 `PRD-GAME-009` 的统一 release gate 未通过前，公开渠道 100% 维持 `limited playable technical preview` 口径，不允许出现 `closed beta` / `play now` / `live now`。
   - NFR-GAME-16: `PRD-GAME-010` 的每一轮受控 limited preview 执行都必须在同日回写信号归档、owner 与 next action，并允许 QA 因真实反馈把 unified gate 从 `pass` 回退为 `block`。
   - NFR-GAME-17: `PRD-GAME-011` 的首个 claim 免费路径命中次数必须为 `0`，并且 claim / upkeep / refund / slash / restricted grant 事件必须 100% 进入 token 审计链路。
+  - NFR-GAME-18: `PRD-GAME-012` 的正式 10 分钟留存 gate 必须使用 active-LLM 样本；`--no-llm` 只允许作为 debug/probe lane，不得单独支撑“已可玩/已留存”结论。
 - Security & Privacy: gameplay 不直接处理密钥；涉及玩家反馈与行为数据时遵循最小化采集与脱敏记录。
 
 ## 5. Risks & Roadmap
@@ -224,6 +228,7 @@
 | PRD-GAME-009 | TASK-GAME-028/029/030/031/032/033 | `test_tier_required` + `test_tier_full` | 文档治理检查、统一 release gate、趋势基线对账、longrun/recovery 证据、runbook 口径检查 | 当前阶段判断、封闭 Beta 准入、对外口径一致性 |
 | PRD-GAME-010 | TASK-GAME-035/036/037/038 | `test_tier_required` | 文档治理检查、limited preview callout 与回流模板核验、QA 守门结论、producer 复盘记录 | 受控预览执行、claim drift、继续/暂停决策 |
 | PRD-GAME-011 | TASK-GAME-039/040/041/042/043/044/045/046/047/048/049/050/051 | `test_tier_required` + `test_tier_full` | 文档治理检查、claim/upkeep/reclaim 状态机回归、restricted bucket 与 provenance 回归、grant lifecycle 与 issuer runbook、Viewer/API parity、经济审计与 abuse suite | agent 占有边界、token sink、受限启动余额、回收与可观测性 |
+| PRD-GAME-012 | TASK-GAME-061/062/063/064/065 | `test_tier_required` + `test_tier_full` | 文档治理检查、headed Web/UI 与 `software_safe` 控制 floor、工业中循环卡组、active-LLM 10 分钟留存样本与 producer continue/hold 结论 | 10 分钟正式留存、首屏主目标、工业中循环承接 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -240,3 +245,4 @@
 | DEC-GAME-011 | 新增独立 `PRD-GAME-010` 作为受控 limited preview 执行专题 | 在没有真实外部样本的情况下直接扩大节奏或继续只做内部判断 | 现在缺的不是新的技术门，而是“limited playable technical preview”在真实执行中是否稳定成立的治理闭环。 |
 | DEC-GAME-012 | 新增独立 `PRD-GAME-011` 作为 agent 认领成本专题，并明确首个 claim 也不免费 | 继续允许零成本首槽或只对后续槽位收费 | agent 控制权需要体现持续承诺；首槽免费会成为囤位与多号利用的最短路径。 |
 | DEC-GAME-013 | 对 `PRD-GAME-011` 追加 `restricted starter claim balance`，作为 `slot-1` 专用受限资金来源 | 继续要求所有首个 claim 都必须持有可转账 liquid；或直接空投可转账 main token | 受控测试需要启动资金，但不能把启动补贴变成可转账资产，也不能推翻“首个 claim 非免费”的主规则。 |
+| DEC-GAME-014 | 新增独立 `PRD-GAME-012` 作为 10 分钟留存修复专题 | 继续把留存问题拆散到 viewer/runtime/QA 各专题自行优化 | 当前问题不是单条 lane 的点状回归，而是“控制地板、中循环、首屏和 QA 门禁”需要在同一冲刺窗口统一排序。 |

@@ -1,0 +1,26 @@
+task_uid: task_b380bf462b7044e69c1d3f1d2b3d951a
+title: "Freeze 10-minute retention recovery plan for gameplay"
+owner_role: producer_system_designer
+worktree_hint: oasis7-gameplay-ten-minute-retention-plan
+execution_log_path: .pm/tasks/task_b380bf462b7044e69c1d3f1d2b3d951a.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/game/gameplay/gameplay-top-level-design.project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-top-level-design.project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+  - doc/game/project.md
+related_prd:
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+acceptance:
+  - "A gameplay PRD/project slice defines the next two-week retention recovery plan with explicit owner-role handoffs."
+  - "The plan prioritizes first-session control reliability, 10-minute industrial midloop, screen-noise reduction, consequence visibility, and QA retention gates."
+  - "Top-level gameplay docs link the new slice and stay consistent with current internal-playable status."
+handoff_to: []
+updated_at: 2026-04-09T14:23:03+08:00
+last_started_at: 2026-04-09T14:10:50+08:00
+last_closed_at: 2026-04-09T14:23:03+08:00
