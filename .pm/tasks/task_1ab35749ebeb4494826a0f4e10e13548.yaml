@@ -1,0 +1,25 @@
+task_uid: task_1ab35749ebeb4494826a0f4e10e13548
+title: "Restore software_safe active-LLM first-step progress within Responses API budget"
+owner_role: agent_engineer
+worktree_hint: oasis7-world-simulator-software-safe-provider-timeout-budget
+execution_log_path: .pm/tasks/task_1ab35749ebeb4494826a0f4e10e13548.execution.md
+status: done
+priority: P0
+source_signal: SIG-PM-0026
+source_refs:
+  - .pm/inbox/signals.jsonl
+doc_refs:
+  - doc/game/project.md
+  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+  - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
+  - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
+acceptance:
+  - "software_safe active-LLM formal lane advances logical time on the first step again under the configured provider budget, or the task documents a narrower request-budget contract that matches reality."
+  - "LLM/provider code, launcher/runtime wiring, and regression evidence explain why the 2026-04-08 PASS regressed into the 2026-04-09 10s timeout and prevent silent timeout drift."
+  - "Targeted tests plus at least one reproducible formal-lane rerun artifact are recorded in the execution log and linked docs."
+handoff_to: []
+updated_at: 2026-04-09T22:34:44+08:00
+last_started_at: 2026-04-09T21:37:17+08:00
+last_closed_at: 2026-04-09T22:34:16+08:00

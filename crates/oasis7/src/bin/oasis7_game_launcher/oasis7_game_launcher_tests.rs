@@ -277,7 +277,7 @@ fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
     let options = CliOptions::default();
     let mut command = Command::new("echo");
 
-    apply_viewer_live_env_overrides(&mut command, &options, false);
+    apply_viewer_live_env_overrides(&mut command, &options, false, false);
 
     assert_eq!(
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
@@ -294,7 +294,17 @@ fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
     let options = CliOptions::default();
     let mut command = Command::new("echo");
 
-    apply_viewer_live_env_overrides(&mut command, &options, true);
+    apply_viewer_live_env_overrides(&mut command, &options, true, false);
+
+    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
+}
+
+#[test]
+fn builtin_viewer_live_env_skips_default_llm_timeout_when_repo_config_exists() {
+    let options = CliOptions::default();
+    let mut command = Command::new("echo");
+
+    apply_viewer_live_env_overrides(&mut command, &options, false, true);
 
     assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
 }
@@ -313,7 +323,7 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
     options.agent_execution_lane = ProviderExecutionMode::PlayerParity;
     let mut command = Command::new("echo");
 
-    apply_viewer_live_env_overrides(&mut command, &options, false);
+    apply_viewer_live_env_overrides(&mut command, &options, false, false);
 
     assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
     assert_eq!(
@@ -363,7 +373,7 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 #[test]
 fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     let options = CliOptions::default();
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false);
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
     let args: Vec<String> = command
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -374,6 +384,19 @@ fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
         Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))
     );
+}
+
+#[test]
+fn build_viewer_live_command_skips_default_llm_timeout_when_repo_config_exists() {
+    let options = CliOptions::default();
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, true);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+
+    assert!(args.contains(&"--llm".to_string()));
+    assert_eq!(command_env_value(&command, LLM_TIMEOUT_MS_ENV), None);
 }
 
 #[test]

@@ -326,8 +326,14 @@ fn install_signal_handler() -> Result<(), String> {
 }
 
 fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, String> {
-    let mut command =
-        build_oasis7_viewer_live_command(path, options, env::var_os(LLM_TIMEOUT_MS_ENV).is_some());
+    let parent_has_llm_timeout_ms = env::var_os(LLM_TIMEOUT_MS_ENV).is_some();
+    let repo_has_node_config_file = Path::new(NODE_CONFIG_FILE_NAME).is_file();
+    let mut command = build_oasis7_viewer_live_command(
+        path,
+        options,
+        parent_has_llm_timeout_ms,
+        repo_has_node_config_file,
+    );
     command.spawn().map_err(|err| {
         format!(
             "failed to start oasis7_viewer_live from `{}`: {err}",
@@ -340,6 +346,7 @@ fn build_oasis7_viewer_live_command(
     path: &Path,
     options: &CliOptions,
     parent_has_llm_timeout_ms: bool,
+    repo_has_node_config_file: bool,
 ) -> Command {
     let mut command = Command::new(path);
     command
@@ -352,7 +359,12 @@ fn build_oasis7_viewer_live_command(
         .arg(options.deployment_mode.as_str());
     if options.with_llm {
         command.arg("--llm");
-        apply_viewer_live_env_overrides(&mut command, options, parent_has_llm_timeout_ms);
+        apply_viewer_live_env_overrides(
+            &mut command,
+            options,
+            parent_has_llm_timeout_ms,
+            repo_has_node_config_file,
+        );
     } else {
         command.arg("--no-llm");
     }
@@ -363,6 +375,7 @@ fn apply_viewer_live_env_overrides(
     command: &mut Command,
     options: &CliOptions,
     parent_has_llm_timeout_ms: bool,
+    repo_has_node_config_file: bool,
 ) {
     for env_name in [
         VIEWER_AGENT_DECISION_SOURCE_ENV,
@@ -421,7 +434,10 @@ fn apply_viewer_live_env_overrides(
         return;
     }
 
-    if !parent_has_llm_timeout_ms {
+    if !parent_has_llm_timeout_ms && !repo_has_node_config_file {
+        // When the repo root already carries a config.toml, let file-backed LLM
+        // config keep control of timeout resolution instead of silently forcing
+        // the interactive 10s fail-fast default through the environment.
         command.env(
             LLM_TIMEOUT_MS_ENV,
             DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string(),

@@ -174,8 +174,8 @@
 ## 状态
 - 更新日期: 2026-04-09
 - 当前状态: in_progress
-- 下一任务: `无（PRD-GAME-012 的 5 条冻结 lane 已全部收口；formal active-LLM retention gate 当前结论维持 hold，待后续新任务承接 provider timeout / request budget 修复）`
-- 已登记待排任务: `无（PRD-GAME-012 已完成冻结；当前等待 viewer/runtime/qa 按 lane 推进）`
+- 下一任务: `由 qa_engineer 重开 TASK-GAME-065 的 active-LLM retention samples，并在真实 provider 环境中复核 software_safe formal lane 是否恢复 first-step progress；当前 agent_engineer 已消除 repo-config 场景下的 implicit 10s timeout drift。`
+- 已登记待排任务: `若真实 provider rerun 仍失败，则继续沿 provider request budget / latency / prompt 体积方向排查；若 first-step progress 恢复，再继续收集 3 条 retention samples 后更新 continue/hold verdict。`
 - 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 区分 active-LLM formal lane 与 debug/probe lane，并通过 fresh `software_safe` rerun 复现正式入口首个 `step` 因 Responses API 10 秒超时而 `blocked`；`producer_system_designer` 已据此维持 `hold`，不宣称 formal gameplay PASS。）
 - 最新完成: `TASK-GAME-064`（`viewer_engineer` 已收口首屏信息层级与玩家口吻反馈，把玩家身份、当前主目标、主阻塞、立即下一步以及奖励/恢复/阻塞语义抬到首层，并补齐对应 Viewer 测试。）
 - 最新完成: `TASK-GAME-063`（`runtime_engineer` 已把 `PostOnboarding` canonical 中循环扩成“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的三段包，补齐首产出后的停机恢复与扩产取舍状态语义。）
