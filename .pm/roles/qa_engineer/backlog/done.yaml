@@ -14,6 +14,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_5eddd21920854c20a769915ac37df977.yaml
+  - task_uid: task_fbf26487f0804cf48de7e52aca625088
+    title: "Establish active-LLM 10-minute retention gate and producer continue/hold verdict"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+    acceptance:
+      - "active-LLM formal lane records at least three 10-minute samples and distinguishes formal lane from debug/probe lane."
+      - "software_safe floor is rechecked against the same retention slice and documented with a clear blocker/no-blocker verdict."
+      - "qa_engineer outputs a continue_playing/hold gate input and producer_system_designer can write back the final continue/hold decision."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_fbf26487f0804cf48de7e52aca625088.yaml
   - task_uid: task_f2e680d768844eff8232de25ba172a29
     title: "Audit software_safe end-to-end playability with browser screenshots"
     priority: P1

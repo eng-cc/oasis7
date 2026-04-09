@@ -131,3 +131,4 @@
 | DEC-RR-001 | 两周内只做 5 条高优先级 retention lane | 同时继续扩大战争/治理/元进度新功能 | 当前主要矛盾是 10 分钟留存，不是功能面不够大。 |
 | DEC-RR-002 | active-LLM 样本作为正式 retention gate | 继续使用 `--no-llm` 作为正式可玩性结论 | 当前制作人口径已明确 no-LLM 仅保留 observer/debug。 |
 | DEC-RR-003 | 先修控制地板，再做首屏 polish 与中循环加厚 | 先做更漂亮的前端或更宏大的系统宣传 | 玩家信任先于审美放大；不稳定控制会吞掉所有包装收益。 |
+| DEC-RR-004 | 2026-04-09 当前切片先维持 `hold`，不继续累积 retention 样本 | 忽略 fresh `software_safe` floor blocker，继续拿旧 PASS 或 debug/probe 样本拼接 continue 结论 | fresh active-LLM rerun 已证明正式入口第一步仍会被 provider timeout 阻断；在 floor 未恢复前继续累计 10 分钟样本只会污染正式 gate。 |

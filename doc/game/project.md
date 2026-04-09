@@ -156,7 +156,7 @@
 - [ ] TASK-GAME-062 (PRD-GAME-012) [test_tier_required + test_tier_full]: `viewer_engineer` / `runtime_engineer` 收口首次进入与最小控制地板，让 headed Web/UI 与 `software_safe` 正式入口都稳定达到 `open -> connected -> play/step/select`，不再依赖手动恢复。
 - [ ] TASK-GAME-063 (PRD-GAME-012) [test_tier_required]: `runtime_engineer` / `viewer_engineer` 将 `PostOnboarding` 后 10 分钟工业中循环加厚为“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的可复跑目标包。
 - [ ] TASK-GAME-064 (PRD-GAME-012) [test_tier_required]: `viewer_engineer` / `agent_engineer` 收口首屏噪音、玩家身份和后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
-- [ ] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 建立 active-LLM 10 分钟留存 gate 与 `software_safe` floor verdict，`producer_system_designer` 根据样本正式决定 continue / hold。
+- [x] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在当前切片 fresh `software_safe` rerun 中确认正式入口首个 `step` 仍被 LLM provider timeout 阻断；`producer_system_designer` 已据此正式决定 `hold`。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -176,6 +176,7 @@
 - 当前状态: in_progress
 - 下一任务: `TASK-GAME-062（收口首次进入与最小控制地板）`
 - 已登记待排任务: `无（PRD-GAME-012 已完成冻结；当前等待 viewer/runtime/qa 按 lane 推进）`
+- 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 区分 active-LLM formal lane 与 debug/probe lane，并通过 fresh `software_safe` rerun 复现正式入口首个 `step` 因 Responses API 10 秒超时而 `blocked`；`producer_system_designer` 已据此维持 `hold`，先回到 `TASK-GAME-062` 修最小控制地板。）
 - 最新完成: `TASK-GAME-061`（已新增 `PRD-GAME-012` 10 分钟留存修复专题，并把未来两周优先级正式冻结为首次控制地板、工业中循环包、首屏降噪、后果可见化与 active-LLM retention gate 五条 lane。）
 - 最新完成: `TASK-GAME-059`（`runtime_engineer` 已新增独立 `restricted_starter_claim_liveops_pool` 与 `TopUpRestrictedStarterClaimLiveopsPool` 治理动作，让 `ecosystem_pool` 继续保留 `2-of-3` 高门槛审批，而 daily restricted grant 只消耗专用 liveops 池。）
 - 最新完成: `TASK-GAME-058`（已为 `game` README 增加轻量“从这里开始”分流，明确 `prd.md`、`project.md`、玩法总览、试玩口径专题与高频 claim 规则专题的阅读顺序，不再把根 README 当成第二份 `prd.index.md`。）

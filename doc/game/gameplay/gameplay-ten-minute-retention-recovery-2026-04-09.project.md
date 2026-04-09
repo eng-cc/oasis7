@@ -11,7 +11,7 @@
 - [ ] TASK-GAMEPLAY-RR-002 (`PRD-GAME-012`) [test_tier_required + test_tier_full]: `viewer_engineer` / `runtime_engineer` 收口首次进入与最小控制地板，让 headed Web/UI 与 `software_safe` 正式入口都稳定达到 `open -> connected -> play/step/select`。
 - [ ] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` / `viewer_engineer` 将 `PostOnboarding` 后 10 分钟工业中循环加厚为“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的可复跑目标包。
 - [ ] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` / `agent_engineer` 收口首屏噪音、玩家身份和后果可见化，把当前主目标、阻塞、代价与奖励节奏做成前台主语义。
-- [ ] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 输出 active-LLM 10 分钟留存 gate 与 `software_safe` floor verdict，`producer_system_designer` 根据样本给出 continue / hold 决策。
+- [x] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在当前切片 fresh rerun 中确认 `software_safe` formal floor 仍被 LLM provider timeout 阻断；`producer_system_designer` 已据此给出 `hold` 决策。
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -75,8 +75,8 @@
   - [ ] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
   - [ ] 玩家能直接读到代价、阻塞、恢复和奖励
 - `TASK-GAME-065`
-  - [ ] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
-  - [ ] producer 已给出 continue / hold 结论并回写根项目文档
+  - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
+  - [x] producer 已给出 continue / hold 结论并回写根项目文档
 
 ## 依赖
 
@@ -98,3 +98,4 @@
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
+  - `TASK-GAME-065` 已在当前切片给出 `hold`：fresh active-LLM `software_safe` floor 仍因 `Responses API` 10 秒超时卡在第一步，正式 10 分钟样本收集暂缓，优先回到 `TASK-GAME-062` 修 floor。
