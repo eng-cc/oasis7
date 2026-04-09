@@ -43,15 +43,15 @@
 
 ```bash
 sha256sum /opt/oasis7/p2p-triad-local/current/bin/oasis7_chain_runtime
-sshpass -p '&UJM8ik,' ssh -o StrictHostKeyChecking=no root@39.104.204.172 \
+sshpass -p "$P2PARCH6_SEQ_SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@39.104.204.172 \
   "sha256sum /opt/oasis7/p2p-triad/current/bin/oasis7_chain_runtime"
-sshpass -p '%TGB6yhn' ssh -o StrictHostKeyChecking=no root@39.104.205.67 \
+sshpass -p "$P2PARCH6_STORAGE_SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@39.104.205.67 \
   "sha256sum /opt/oasis7/p2p-triad/current/bin/oasis7_chain_runtime"
 
 curl -fsS http://127.0.0.1:5633/v1/chain/status | jq '{observed_at_unix_ms,node_id,consensus:.consensus|{latest_height,committed_height,network_committed_height,known_peer_heads,last_status},last_error}'
-sshpass -p '&UJM8ik,' ssh -o StrictHostKeyChecking=no root@39.104.204.172 \
+sshpass -p "$P2PARCH6_SEQ_SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@39.104.204.172 \
   "curl -fsS http://127.0.0.1:5631/v1/chain/status | jq '{observed_at_unix_ms,node_id,consensus:.consensus|{latest_height,committed_height,network_committed_height,known_peer_heads,last_status},last_error}'"
-sshpass -p '%TGB6yhn' ssh -o StrictHostKeyChecking=no root@39.104.205.67 \
+sshpass -p "$P2PARCH6_STORAGE_SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@39.104.205.67 \
   "curl -fsS http://127.0.0.1:5632/v1/chain/status | jq '{observed_at_unix_ms,node_id,consensus:.consensus|{latest_height,committed_height,network_committed_height,known_peer_heads,last_status},last_error}'"
 ```
 
