@@ -175,8 +175,8 @@ pub(super) fn recompute_peer_manager_healths(
         let discovery_sources = record
             .map(|record| record.record.discovery_sources.clone())
             .unwrap_or_default();
-        let source_operator =
-            record.and_then(|entry| normalized_source_label(entry.record.source_operator.as_deref()));
+        let source_operator = record
+            .and_then(|entry| normalized_source_label(entry.record.source_operator.as_deref()));
         let source_asn =
             record.and_then(|entry| normalized_source_label(entry.record.source_asn.as_deref()));
 
@@ -777,7 +777,8 @@ mod tests {
         let mut record_c = sample_record(peer_c, discovery_sources);
         record_c.record.source_operator = Some("operator-b".to_string());
         record_c.record.source_asn = Some("AS64501".to_string());
-        let discovered = HashMap::from([(peer_a, record_a), (peer_b, record_b), (peer_c, record_c)]);
+        let discovered =
+            HashMap::from([(peer_a, record_a), (peer_b, record_b), (peer_c, record_c)]);
         let active = HashMap::from([
             (
                 peer_a,

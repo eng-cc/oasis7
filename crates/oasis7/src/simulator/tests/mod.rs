@@ -68,13 +68,13 @@ mod memory;
 mod module_lifecycle;
 mod module_visual;
 mod monotonicity;
+mod persist;
+mod physics_parameters;
+mod power;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_http;
-mod persist;
-mod physics_parameters;
-mod power;
 mod runner;
 mod social;
 mod social_persist;

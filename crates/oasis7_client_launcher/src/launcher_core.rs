@@ -1,8 +1,6 @@
 use super::*;
 #[cfg(not(target_arch = "wasm32"))]
-use oasis7::simulator::{
-    evaluate_provider_compatibility, ProviderHealth, ProviderInfo,
-};
+use oasis7::simulator::{evaluate_provider_compatibility, ProviderHealth, ProviderInfo};
 #[cfg(not(target_arch = "wasm32"))]
 use serde::de::DeserializeOwned;
 #[cfg(not(target_arch = "wasm32"))]
@@ -86,9 +84,7 @@ pub(super) fn is_provider_loopback_http_mode(config: &LaunchConfig) -> bool {
 pub(super) fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
     canonical_agent_decision_source(raw)
         .map(|_| ())
-        .ok_or_else(|| {
-            "agent decision source must be builtin_llm or provider_backed".to_string()
-        })
+        .ok_or_else(|| "agent decision source must be builtin_llm or provider_backed".to_string())
 }
 
 pub(super) fn validate_agent_provider_backend(raw: &str) -> Result<(), String> {
@@ -120,9 +116,7 @@ pub(super) fn canonical_provider_execution_mode(raw: &str) -> Option<&'static st
 pub(super) fn validate_provider_execution_mode(raw: &str) -> Result<(), String> {
     canonical_provider_execution_mode(raw)
         .map(|_| ())
-        .ok_or_else(|| {
-            "agent execution lane must be player_parity or headless_agent".to_string()
-        })
+        .ok_or_else(|| "agent execution lane must be player_parity or headless_agent".to_string())
 }
 
 pub(super) fn canonical_agent_decision_source(raw: &str) -> Option<&'static str> {
@@ -277,25 +271,15 @@ pub(super) fn launcher_text_field_mut<'a>(
         "web_bind" => Some(&mut config.web_bind),
         "viewer_host" => Some(&mut config.viewer_host),
         "viewer_port" => Some(&mut config.viewer_port),
-        "agent_decision_source" | "agent_provider_mode" => {
-            Some(&mut config.agent_decision_source)
-        }
+        "agent_decision_source" | "agent_provider_mode" => Some(&mut config.agent_decision_source),
         "agent_provider_backend" => Some(&mut config.agent_provider_backend),
         "agent_provider_contract" => Some(&mut config.agent_provider_contract),
         "agent_provider_transport" => Some(&mut config.agent_provider_transport),
         "agent_provider_url" => Some(&mut config.agent_provider_url),
-        "agent_provider_auth_token" => {
-            Some(&mut config.agent_provider_auth_token)
-        }
-        "agent_provider_connect_timeout_ms" => {
-            Some(&mut config.agent_provider_connect_timeout_ms)
-        }
-        "agent_execution_lane" => {
-            Some(&mut config.agent_execution_lane)
-        }
-        "agent_provider_profile" => {
-            Some(&mut config.agent_provider_profile)
-        }
+        "agent_provider_auth_token" => Some(&mut config.agent_provider_auth_token),
+        "agent_provider_connect_timeout_ms" => Some(&mut config.agent_provider_connect_timeout_ms),
+        "agent_execution_lane" => Some(&mut config.agent_execution_lane),
+        "agent_provider_profile" => Some(&mut config.agent_provider_profile),
         "chain_status_bind" => Some(&mut config.chain_status_bind),
         "chain_node_id" => Some(&mut config.chain_node_id),
         "chain_world_id" => Some(&mut config.chain_world_id),
@@ -574,8 +558,7 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
             args.push(
                 canonical_provider_execution_mode(config.agent_execution_lane.as_str())
                     .ok_or_else(|| {
-                        "agent execution lane must be player_parity or headless_agent"
-                            .to_string()
+                        "agent execution lane must be player_parity or headless_agent".to_string()
                     })?
                     .to_string(),
             );
@@ -882,11 +865,12 @@ pub(super) fn check_provider_loopback_http_provider(
         last_error: health.last_error,
         queue_depth: health.queue_depth,
     };
-    let compatibility =
-        evaluate_provider_compatibility(&provider_info, Some(&provider_health));
+    let compatibility = evaluate_provider_compatibility(&provider_info, Some(&provider_health));
     Ok(ProviderSnapshot {
         provider_id: provider_info.provider_id,
-        name: provider_info.name.unwrap_or_else(|| "Local Provider".to_string()),
+        name: provider_info
+            .name
+            .unwrap_or_else(|| "Local Provider".to_string()),
         version: provider_info
             .version
             .unwrap_or_else(|| "unknown".to_string()),
@@ -1006,11 +990,7 @@ fn http_request_with_timeout(
     let connect_host = normalize_host_for_connect(host.as_str());
     let socket_addr = (connect_host.as_str(), port)
         .to_socket_addrs()
-        .map_err(|err| {
-            ProviderCheckError::Unreachable(format!(
-                "resolve provider failed: {err}"
-            ))
-        })?
+        .map_err(|err| ProviderCheckError::Unreachable(format!("resolve provider failed: {err}")))?
         .next()
         .ok_or_else(|| {
             ProviderCheckError::Unreachable(
@@ -1020,9 +1000,7 @@ fn http_request_with_timeout(
     let mut stream =
         TcpStream::connect_timeout(&socket_addr, Duration::from_millis(timeout_ms.max(1)))
             .map_err(|err| {
-                ProviderCheckError::Unreachable(format!(
-                    "connect provider failed: {err}"
-                ))
+                ProviderCheckError::Unreachable(format!("connect provider failed: {err}"))
             })?;
     let timeout = Some(Duration::from_millis(timeout_ms.max(1)));
     let _ = stream.set_read_timeout(timeout);
@@ -1036,15 +1014,11 @@ fn http_request_with_timeout(
     }
     request.push_str("\r\n");
     stream.write_all(request.as_bytes()).map_err(|err| {
-        ProviderCheckError::Unreachable(format!(
-            "write provider check failed: {err}"
-        ))
+        ProviderCheckError::Unreachable(format!("write provider check failed: {err}"))
     })?;
     let mut response_bytes = Vec::new();
     stream.read_to_end(&mut response_bytes).map_err(|err| {
-        ProviderCheckError::Unreachable(format!(
-            "read provider check failed: {err}"
-        ))
+        ProviderCheckError::Unreachable(format!("read provider check failed: {err}"))
     })?;
     parse_http_response(response_bytes.as_slice())
 }
@@ -1057,9 +1031,7 @@ fn parse_http_response(bytes: &[u8]) -> Result<(u16, Vec<u8>), ProviderCheckErro
         ));
     };
     let header = std::str::from_utf8(&bytes[..boundary]).map_err(|_| {
-        ProviderCheckError::Unreachable(
-            "invalid HTTP response: header is not UTF-8".to_string(),
-        )
+        ProviderCheckError::Unreachable("invalid HTTP response: header is not UTF-8".to_string())
     })?;
     let body = bytes[(boundary + 4)..].to_vec();
     let Some(status_line) = header.lines().next() else {

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
@@ -44,6 +44,8 @@ pub struct ReplicationNetworkDebugSnapshot {
 
 const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
+const REQUEST_CONNECTION_REFRESH_RETRIES: usize = 12;
+const UNSUPPORTED_PROTOCOL_RETRY_AFTER_MS: u64 = 5_000;
 
 #[derive(Debug, Clone)]
 pub struct Libp2pReplicationNetworkConfig {
@@ -52,6 +54,7 @@ pub struct Libp2pReplicationNetworkConfig {
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub allow_local_handler_fallback_when_no_peers: bool,
+    pub unsupported_protocol_retry_after: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -62,6 +65,9 @@ impl Default for Libp2pReplicationNetworkConfig {
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
             allow_local_handler_fallback_when_no_peers: false,
+            unsupported_protocol_retry_after: Duration::from_millis(
+                UNSUPPORTED_PROTOCOL_RETRY_AFTER_MS,
+            ),
         }
     }
 }
@@ -72,7 +78,8 @@ pub struct Libp2pReplicationNetwork {
     allow_local_handler_fallback_when_no_peers: bool,
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
     request_peer_cursor: Arc<AtomicUsize>,
-    unsupported_protocol_peers: Arc<Mutex<HashMap<String, HashSet<PeerId>>>>,
+    unsupported_protocol_retry_after: Duration,
+    unsupported_protocol_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
 }
 
 impl Libp2pReplicationNetwork {
@@ -91,6 +98,7 @@ impl Libp2pReplicationNetwork {
                 .allow_local_handler_fallback_when_no_peers,
             handlers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
+            unsupported_protocol_retry_after: config.unsupported_protocol_retry_after,
             unsupported_protocol_peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -158,7 +166,7 @@ impl Libp2pReplicationNetwork {
             .expect("lock unsupported protocol peers")
             .iter()
             .map(|(protocol, peers)| {
-                let mut peer_ids: Vec<String> = peers.iter().map(PeerId::to_string).collect();
+                let mut peer_ids: Vec<String> = peers.keys().map(PeerId::to_string).collect();
                 peer_ids.sort();
                 peer_ids.dedup();
                 (protocol.clone(), peer_ids)
@@ -230,28 +238,35 @@ impl Libp2pReplicationNetwork {
     }
 
     fn filtered_request_peers(&self, protocol: &str, ordered_peers: Vec<PeerId>) -> Vec<PeerId> {
-        let unsupported = self
+        let now = Instant::now();
+        let mut unsupported = self
             .unsupported_protocol_peers
             .lock()
             .expect("lock unsupported protocol peers");
-        let Some(peers) = unsupported.get(protocol) else {
+        let Some(peers) = unsupported.get_mut(protocol) else {
             return ordered_peers;
         };
+        peers.retain(|_, unsupported_until| *unsupported_until > now);
+        let keep_protocol_entry = !peers.is_empty();
         let filtered: Vec<PeerId> = ordered_peers
             .iter()
             .copied()
-            .filter(|peer| !peers.contains(peer))
+            .filter(|peer| !peers.contains_key(peer))
             .collect();
+        if !keep_protocol_entry {
+            unsupported.remove(protocol);
+        }
         filtered
     }
 
     fn mark_peer_unsupported_for_protocol(&self, protocol: &str, peer: PeerId) {
+        let unsupported_until = Instant::now() + self.unsupported_protocol_retry_after;
         self.unsupported_protocol_peers
             .lock()
             .expect("lock unsupported protocol peers")
             .entry(protocol.to_string())
             .or_default()
-            .insert(peer);
+            .insert(peer, unsupported_until);
     }
 
     fn call_local_handler(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
@@ -264,7 +279,7 @@ impl Libp2pReplicationNetwork {
     }
 
     fn wait_for_connected_peers(&self) -> Vec<PeerId> {
-        let mut peers = self.inner.connected_peers();
+        let mut peers = self.connected_peers_sorted();
         for _ in 0..REQUEST_CONNECTED_PEER_WAIT_RETRIES {
             if !peers.is_empty() {
                 break;
@@ -272,27 +287,37 @@ impl Libp2pReplicationNetwork {
             std::thread::sleep(Duration::from_millis(
                 REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS,
             ));
-            peers = self.inner.connected_peers();
+            peers = self.connected_peers_sorted();
         }
-        peers.sort_by_key(|peer| peer.to_string());
         peers
+    }
+
+    fn connected_peers_sorted(&self) -> Vec<PeerId> {
+        connected_or_active_transport_peers(
+            self.inner.connected_peers(),
+            self.debug_snapshot().peer_healths.as_slice(),
+        )
+    }
+
+    fn collect_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
+        let connected_peers: HashSet<PeerId> = self.connected_peers_sorted().into_iter().collect();
+        let mut ordered_provider_peers = Vec::new();
+        let mut seen = HashSet::new();
+        for provider in providers {
+            let Ok(peer_id) = provider.parse::<PeerId>() else {
+                continue;
+            };
+            if !connected_peers.contains(&peer_id) || !seen.insert(peer_id) {
+                continue;
+            }
+            ordered_provider_peers.push(peer_id);
+        }
+        ordered_provider_peers
     }
 
     fn wait_for_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
         for attempt in 0..=REQUEST_CONNECTED_PEER_WAIT_RETRIES {
-            let connected_peers: HashSet<PeerId> =
-                self.inner.connected_peers().into_iter().collect();
-            let mut ordered_provider_peers = Vec::new();
-            let mut seen = HashSet::new();
-            for provider in providers {
-                let Ok(peer_id) = provider.parse::<PeerId>() else {
-                    continue;
-                };
-                if !connected_peers.contains(&peer_id) || !seen.insert(peer_id) {
-                    continue;
-                }
-                ordered_provider_peers.push(peer_id);
-            }
+            let ordered_provider_peers = self.collect_connected_provider_peers(providers);
             if !ordered_provider_peers.is_empty() || attempt == REQUEST_CONNECTED_PEER_WAIT_RETRIES
             {
                 return ordered_provider_peers;
@@ -302,6 +327,74 @@ impl Libp2pReplicationNetwork {
             ));
         }
         Vec::new()
+    }
+
+    fn request_over_refreshed_peers<F, G>(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        initial_peers: Vec<PeerId>,
+        mut refresh_peers: F,
+        no_connected_error: G,
+    ) -> Result<Vec<u8>, WorldError>
+    where
+        F: FnMut() -> Vec<PeerId>,
+        G: Fn() -> WorldError,
+    {
+        let cursor = self.request_peer_cursor.fetch_add(1, Ordering::Relaxed);
+        let mut last_error = None;
+
+        for attempt in 0..=REQUEST_CONNECTION_REFRESH_RETRIES {
+            let candidate_source = if attempt == 0 {
+                initial_peers.clone()
+            } else {
+                refresh_peers()
+            };
+            let ordered_peers = self.filtered_request_peers(
+                protocol,
+                rotated_peers(candidate_source.as_slice(), cursor.saturating_add(attempt)),
+            );
+            if ordered_peers.is_empty() {
+                let should_retry = attempt < REQUEST_CONNECTION_REFRESH_RETRIES
+                    && last_error
+                        .as_ref()
+                        .map(peer_error_indicates_retryable_connection_gap)
+                        .unwrap_or(false);
+                if should_retry {
+                    std::thread::sleep(Duration::from_millis(
+                        REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS,
+                    ));
+                    continue;
+                }
+                return Err(last_error.unwrap_or_else(&no_connected_error));
+            }
+
+            let mut retryable_connection_gap = false;
+            for peer in ordered_peers {
+                match self.request_via_peer(protocol, payload, peer) {
+                    Ok(reply) => return Ok(reply),
+                    Err(err) => {
+                        if peer_error_indicates_unsupported_protocol(&err) {
+                            self.mark_peer_unsupported_for_protocol(protocol, peer);
+                        }
+                        retryable_connection_gap |=
+                            peer_error_indicates_retryable_connection_gap(&err);
+                        last_error = Some(err);
+                    }
+                }
+            }
+
+            if retryable_connection_gap && attempt < REQUEST_CONNECTION_REFRESH_RETRIES {
+                std::thread::sleep(Duration::from_millis(
+                    REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS,
+                ));
+                continue;
+            }
+
+            return Err(last_error.unwrap_or_else(&no_connected_error));
+        }
+
+        Err(last_error.unwrap_or_else(no_connected_error))
     }
 }
 
@@ -335,26 +428,14 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             });
         }
 
-        let cursor = self.request_peer_cursor.fetch_add(1, Ordering::Relaxed);
-        let ordered_peers =
-            self.filtered_request_peers(protocol, rotated_peers(peers.as_slice(), cursor));
-        let mut last_error = None;
-        for peer in ordered_peers {
-            match self.request_via_peer(protocol, payload, peer) {
-                Ok(reply) => return Ok(reply),
-                Err(err) => {
-                    if peer_error_indicates_unsupported_protocol(&err) {
-                        self.mark_peer_unsupported_for_protocol(protocol, peer);
-                    }
-                    last_error = Some(err);
-                }
-            }
-        }
-
-        Err(
-            last_error.unwrap_or_else(|| WorldError::NetworkProtocolUnavailable {
+        self.request_over_refreshed_peers(
+            protocol,
+            payload,
+            peers,
+            || self.connected_peers_sorted(),
+            || WorldError::NetworkProtocolUnavailable {
                 protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
-            }),
+            },
         )
     }
 
@@ -369,7 +450,6 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
         }
 
         let ordered_provider_peers = self.wait_for_connected_provider_peers(providers);
-        let ordered_provider_peers = self.filtered_request_peers(protocol, ordered_provider_peers);
         if ordered_provider_peers.is_empty() {
             return Err(WorldError::NetworkProtocolUnavailable {
                 protocol: format!(
@@ -378,25 +458,16 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             });
         }
 
-        let mut last_error = None;
-        for peer in ordered_provider_peers {
-            match self.request_via_peer(protocol, payload, peer) {
-                Ok(reply) => return Ok(reply),
-                Err(err) => {
-                    if peer_error_indicates_unsupported_protocol(&err) {
-                        self.mark_peer_unsupported_for_protocol(protocol, peer);
-                    }
-                    last_error = Some(err);
-                }
-            }
-        }
-
-        Err(
-            last_error.unwrap_or_else(|| WorldError::NetworkProtocolUnavailable {
+        self.request_over_refreshed_peers(
+            protocol,
+            payload,
+            ordered_provider_peers,
+            || self.collect_connected_provider_peers(providers),
+            || WorldError::NetworkProtocolUnavailable {
                 protocol: format!(
                     "libp2p-replication no connected providers for protocol {protocol}"
                 ),
-            }),
+            },
         )
     }
 
@@ -560,12 +631,20 @@ fn replication_peer_health_issue_label(issue: oasis7_net::PeerManagerHealthIssue
 fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
     match err {
         WorldError::NetworkRequestFailed { code, message, .. } => {
-            matches!(
-                code,
-                DistributedErrorCode::ErrNotFound | DistributedErrorCode::ErrUnsupported
-            ) || message.contains("NetworkProtocolUnavailable")
+            matches!(code, DistributedErrorCode::ErrUnsupported)
+                || message.contains("NetworkProtocolUnavailable")
         }
         WorldError::NetworkProtocolUnavailable { protocol } => protocol.contains("handler missing"),
+        _ => false,
+    }
+}
+
+fn peer_error_indicates_retryable_connection_gap(err: &WorldError) -> bool {
+    match err {
+        WorldError::NetworkProtocolUnavailable { protocol } => {
+            protocol.contains("is not connected for protocol")
+                || protocol.contains("no connected peers for protocol")
+        }
         _ => false,
     }
 }
@@ -580,6 +659,32 @@ fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {
         .chain(peers[..start].iter())
         .copied()
         .collect()
+}
+
+fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
+    peers.sort_by_key(|peer| peer.to_string());
+    peers.dedup();
+    peers
+}
+
+fn active_transport_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -> Vec<PeerId> {
+    let peers = healths
+        .iter()
+        .filter(|health| health.active_path_kind.is_some())
+        .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
+        .collect();
+    dedup_sorted_peers(peers)
+}
+
+fn connected_or_active_transport_peers(
+    connected_peers: Vec<PeerId>,
+    healths: &[ReplicationPeerHealthDebug],
+) -> Vec<PeerId> {
+    let connected_peers = dedup_sorted_peers(connected_peers);
+    if !connected_peers.is_empty() {
+        return connected_peers;
+    }
+    active_transport_peers_from_healths(healths)
 }
 
 #[cfg(test)]
@@ -824,6 +929,33 @@ mod tests {
     }
 
     #[test]
+    fn filtered_request_peers_retries_unsupported_peer_after_retry_window() {
+        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+            unsupported_protocol_retry_after: Duration::from_millis(5),
+            ..Libp2pReplicationNetworkConfig::default()
+        });
+        let sequencer_peer = PeerId::random();
+        network.mark_peer_unsupported_for_protocol(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            sequencer_peer,
+        );
+
+        let filtered_initial = network.filtered_request_peers(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            vec![sequencer_peer],
+        );
+        assert!(filtered_initial.is_empty());
+
+        std::thread::sleep(Duration::from_millis(15));
+
+        let filtered_after_retry_window = network.filtered_request_peers(
+            "/aw/node/replication/fetch-commit/1.0.0",
+            vec![sequencer_peer],
+        );
+        assert_eq!(filtered_after_retry_window, vec![sequencer_peer]);
+    }
+
+    #[test]
     fn libp2p_replication_network_request_round_robins_across_connected_peers() {
         let listener_a = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
             listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener a addr")],
@@ -954,6 +1086,177 @@ mod tests {
 
         assert_eq!(first, b"node-ok".to_vec());
         assert_eq!(second, b"node-ok".to_vec());
+    }
+
+    #[test]
+    fn libp2p_replication_network_retries_previously_unsupported_single_peer_after_retry_window() {
+        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+            ..Libp2pReplicationNetworkConfig::default()
+        });
+        let listen_deadline = Instant::now() + Duration::from_secs(10);
+        wait_until("listener bind", listen_deadline, || {
+            !listener.listening_addrs().is_empty()
+        });
+
+        listener
+            .register_handler(
+                "/aw/node/replication/ping",
+                Box::new(move |payload| {
+                    let mut out = payload.to_vec();
+                    out.extend_from_slice(b"-recovered");
+                    Ok(out)
+                }),
+            )
+            .expect("register listener handler");
+
+        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+            bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+            unsupported_protocol_retry_after: Duration::from_millis(25),
+            ..Libp2pReplicationNetworkConfig::default()
+        });
+        let connect_deadline = Instant::now() + Duration::from_secs(10);
+        wait_until("dialer connection", connect_deadline, || {
+            !dialer.connected_peers().is_empty()
+        });
+
+        let listener_peer_id = listener.peer_id();
+        dialer.mark_peer_unsupported_for_protocol("/aw/node/replication/ping", listener_peer_id);
+
+        let immediate_retry = dialer.request("/aw/node/replication/ping", b"node");
+        assert!(matches!(
+            immediate_retry,
+            Err(WorldError::NetworkProtocolUnavailable { protocol })
+                if protocol.contains("no connected peers")
+        ));
+
+        std::thread::sleep(Duration::from_millis(60));
+
+        let recovered = dialer
+            .request("/aw/node/replication/ping", b"node")
+            .expect("request after retry window");
+        assert_eq!(recovered, b"node-recovered".to_vec());
+    }
+
+    #[test]
+    fn libp2p_replication_network_does_not_quarantine_not_found_response_as_unsupported() {
+        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+            ..Libp2pReplicationNetworkConfig::default()
+        });
+        let listen_deadline = Instant::now() + Duration::from_secs(10);
+        wait_until("listener bind", listen_deadline, || {
+            !listener.listening_addrs().is_empty()
+        });
+
+        listener
+            .register_handler(
+                "/aw/node/replication/ping",
+                Box::new(|_payload| {
+                    Err(WorldError::NetworkRequestFailed {
+                        code: DistributedErrorCode::ErrNotFound,
+                        message: "missing content".to_string(),
+                        retryable: false,
+                    })
+                }),
+            )
+            .expect("register listener handler");
+
+        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+            bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+            unsupported_protocol_retry_after: Duration::from_millis(250),
+            ..Libp2pReplicationNetworkConfig::default()
+        });
+        let connect_deadline = Instant::now() + Duration::from_secs(10);
+        wait_until("dialer connection", connect_deadline, || {
+            !dialer.connected_peers().is_empty()
+        });
+
+        let first = dialer.request("/aw/node/replication/ping", b"node");
+        assert!(matches!(
+            first,
+            Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrNotFound,
+                ..
+            })
+        ));
+
+        let second = dialer.request("/aw/node/replication/ping", b"node");
+        assert!(matches!(
+            second,
+            Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrNotFound,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn retryable_connection_gap_detection_matches_request_to_peer_disconnects() {
+        let err = WorldError::NetworkProtocolUnavailable {
+            protocol: "libp2p-replication outbound request failed: NetworkProtocolUnavailable { protocol: \"peer 12D3KooW... is not connected for protocol /aw/node/replication/fetch-commit/1.0.0\" }".to_string(),
+        };
+        assert!(peer_error_indicates_retryable_connection_gap(&err));
+
+        let not_retryable = WorldError::NetworkProtocolUnavailable {
+            protocol: "libp2p-replication handler missing: /aw/node/replication/fetch-commit/1.0.0"
+                .to_string(),
+        };
+        assert!(!peer_error_indicates_retryable_connection_gap(
+            &not_retryable
+        ));
+    }
+
+    #[test]
+    fn connected_or_active_transport_peers_prefers_connected_snapshot() {
+        let peer_a = PeerId::random();
+        let peer_b = PeerId::random();
+        let active_only = vec![ReplicationPeerHealthDebug {
+            peer_id: PeerId::random().to_string(),
+            status: "active".to_string(),
+            issues: Vec::new(),
+            discovery_sources: Vec::new(),
+            active_path_kind: Some("direct".to_string()),
+            source_operator: None,
+            source_asn: None,
+        }];
+
+        let resolved =
+            connected_or_active_transport_peers(vec![peer_b, peer_a], active_only.as_slice());
+
+        assert_eq!(resolved, vec![peer_a, peer_b]);
+    }
+
+    #[test]
+    fn connected_or_active_transport_peers_falls_back_to_active_health_peers() {
+        let active_peer = PeerId::random();
+        let candidate_peer = PeerId::random();
+        let healths = vec![
+            ReplicationPeerHealthDebug {
+                peer_id: candidate_peer.to_string(),
+                status: "candidate".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["dht".to_string()],
+                active_path_kind: None,
+                source_operator: None,
+                source_asn: None,
+            },
+            ReplicationPeerHealthDebug {
+                peer_id: active_peer.to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["dht".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            },
+        ];
+
+        let resolved = connected_or_active_transport_peers(Vec::new(), healths.as_slice());
+
+        assert_eq!(resolved, vec![active_peer]);
     }
 
     #[test]

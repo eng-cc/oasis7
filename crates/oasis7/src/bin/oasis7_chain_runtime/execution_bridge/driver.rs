@@ -25,7 +25,7 @@ use serde::Serialize;
 use super::checkpoint::{
     execution_bridge_record_path, load_execution_bridge_record,
     maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
-    run_execution_bridge_retention_maintenance,
+    persist_execution_bridge_record_only, run_execution_bridge_retention_maintenance,
 };
 use super::external_effect::{
     build_execution_external_effect_materialization,
@@ -213,6 +213,36 @@ impl NodeRuntimeExecutionDriver {
         }))
     }
 
+    fn recover_runtime_journal_from_loaded_world(
+        &self,
+        snapshot: &RuntimeSnapshot,
+        target_height: u64,
+    ) -> Result<RuntimeJournal, String> {
+        let loaded_journal = self.execution_world.journal().clone();
+        if snapshot.journal_len > loaded_journal.len() {
+            return Err(format!(
+                "execution record at height {} missing journal_ref and loaded execution world only has {} events, need at least {}",
+                target_height,
+                loaded_journal.len(),
+                snapshot.journal_len
+            ));
+        }
+
+        let mut recovered = loaded_journal;
+        recovered.events.truncate(snapshot.journal_len);
+        let recovered_last_event_id = recovered.events.last().map(|event| event.id).unwrap_or(0);
+        if recovered_last_event_id != snapshot.last_event_id {
+            return Err(format!(
+                "execution record at height {} missing journal_ref and loaded execution world journal prefix mismatches snapshot last_event_id expected={} actual={}",
+                target_height,
+                snapshot.last_event_id,
+                recovered_last_event_id
+            ));
+        }
+
+        Ok(recovered)
+    }
+
     fn restore_execution_head_from_record(
         &mut self,
         expected_world_id: &str,
@@ -223,7 +253,7 @@ impl NodeRuntimeExecutionDriver {
             return Ok(false);
         }
 
-        let record = load_execution_bridge_record(record_path.as_path())?;
+        let mut record = load_execution_bridge_record(record_path.as_path())?;
         if record.world_id != expected_world_id {
             return Err(format!(
                 "execution driver stale-height restore world_id mismatch at height {}: expected={} actual={}",
@@ -232,55 +262,73 @@ impl NodeRuntimeExecutionDriver {
         }
         let world_policy = self.execution_world.release_security_policy().clone();
         let snapshot_ref = record
-            .latest_state_ref
-            .as_deref()
-            .or(record.snapshot_ref.as_deref())
+            .recovery_snapshot_ref()
             .ok_or_else(|| {
                 format!(
                     "execution record at height {} missing latest_state_ref",
                     target_height
                 )
-            })?;
-        let journal_ref = record.journal_ref.as_deref().ok_or_else(|| {
-            format!(
-                "execution record at height {} missing journal_ref",
-                target_height
-            )
-        })?;
+            })?
+            .to_string();
 
-        let snapshot_bytes = self.execution_store.get_verified(snapshot_ref).map_err(|err| {
-            format!(
-                "execution driver restore snapshot ref {} failed at height {}: {:?}",
-                snapshot_ref, target_height, err
-            )
-        })?;
-        let journal_bytes = self.execution_store.get_verified(journal_ref).map_err(|err| {
-            format!(
-                "execution driver restore journal ref {} failed at height {}: {:?}",
-                journal_ref, target_height, err
-            )
-        })?;
-        let snapshot =
-            serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice()).map_err(|err| {
+        let snapshot_bytes = self
+            .execution_store
+            .get_verified(snapshot_ref.as_str())
+            .map_err(|err| {
+                format!(
+                    "execution driver restore snapshot ref {} failed at height {}: {:?}",
+                    snapshot_ref, target_height, err
+                )
+            })?;
+        let snapshot = serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice())
+            .map_err(|err| {
                 format!(
                     "execution driver decode runtime snapshot failed at height {}: {}",
                     target_height, err
                 )
             })?;
-        let journal =
-            serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice()).map_err(|err| {
-                format!(
-                    "execution driver decode runtime journal failed at height {}: {}",
-                    target_height, err
-                )
-            })?;
-        let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal)
-            .map_err(|err| {
-                format!(
-                    "execution driver rebuild runtime world failed at height {}: {:?}",
-                    target_height, err
-                )
-            })?;
+        let (journal, recovered_journal_ref) = match record.journal_ref.as_deref() {
+            Some(journal_ref) => {
+                let journal_bytes =
+                    self.execution_store
+                        .get_verified(journal_ref)
+                        .map_err(|err| {
+                            format!(
+                                "execution driver restore journal ref {} failed at height {}: {:?}",
+                                journal_ref, target_height, err
+                            )
+                        })?;
+                let journal = serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode runtime journal failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+                (journal, None)
+            }
+            None => {
+                let journal =
+                    self.recover_runtime_journal_from_loaded_world(&snapshot, target_height)?;
+                let journal_bytes = super::to_cbor(journal.clone())?;
+                let recovered_ref = self
+                    .execution_store
+                    .put_bytes(journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver recover journal CAS put failed at height {}: {:?}",
+                            target_height, err
+                        )
+                    })?;
+                (journal, Some(recovered_ref))
+            }
+        };
+        let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal).map_err(|err| {
+            format!(
+                "execution driver rebuild runtime world failed at height {}: {:?}",
+                target_height, err
+            )
+        })?;
         restored_world.set_release_security_policy(world_policy);
         persist_execution_world(self.world_dir.as_path(), &restored_world)?;
         self.execution_world = restored_world;
@@ -336,6 +384,22 @@ impl NodeRuntimeExecutionDriver {
             self.simulator_mirror = restored_simulator;
         }
 
+        if record.latest_state_ref.is_none()
+            || record.snapshot_ref.is_none()
+            || record.journal_ref.is_none()
+        {
+            if record.latest_state_ref.is_none() {
+                record.latest_state_ref = Some(snapshot_ref.clone());
+            }
+            if record.snapshot_ref.is_none() {
+                record.snapshot_ref = Some(snapshot_ref.clone());
+            }
+            if record.journal_ref.is_none() {
+                record.journal_ref = recovered_journal_ref;
+            }
+            persist_execution_bridge_record_only(self.records_dir.as_path(), &record)?;
+        }
+
         self.state.last_applied_committed_height = record.height;
         self.state.last_execution_block_hash = Some(record.execution_block_hash);
         self.state.last_execution_state_root = Some(record.execution_state_root);
@@ -353,10 +417,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
     ) -> Result<NodeExecutionCommitResult, String> {
         if context.height < self.state.last_applied_committed_height {
             let stale_state_height = self.state.last_applied_committed_height;
-            if !self.restore_execution_head_from_record(
-                context.world_id.as_str(),
-                context.height,
-            )? {
+            if !self
+                .restore_execution_head_from_record(context.world_id.as_str(), context.height)?
+            {
                 return Err(format!(
                     "execution driver received stale height: context={} state={}",
                     context.height, stale_state_height

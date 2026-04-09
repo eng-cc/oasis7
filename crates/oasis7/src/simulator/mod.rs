@@ -24,12 +24,12 @@ mod llm_agent;
 mod llm_defaults;
 mod memory;
 mod module_visual;
+pub(crate) mod persist;
+mod power;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_http;
-pub(crate) mod persist;
-mod power;
 mod runner;
 mod runtime_perf;
 mod scenario;
@@ -98,21 +98,21 @@ pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,
 };
 pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
+pub use persist::{
+    PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
+    PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayGoalKind,
+    PlayerGameplayRecentFeedback, PlayerGameplaySnapshot, PlayerGameplayStageId,
+    PlayerGameplayStageStatus, WorldJournal, WorldSnapshot,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_adapter::ProviderLoopbackAdapter;
 #[cfg(not(target_arch = "wasm32"))]
 pub use provider_loopback_http::{
     evaluate_provider_compatibility, provider_phase1_required_actions,
     provider_phase1_required_capabilities, validate_provider_loopback_http_base_url,
-    ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
-    ProviderCompatibilityReport, ProviderCompatibilityStatus,
-    ProviderHealth, ProviderInfo, PROVIDER_PHASE1_ACTION_SET_ALIAS,
-};
-pub use persist::{
-    PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
-    PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayGoalKind,
-    PlayerGameplayRecentFeedback, PlayerGameplaySnapshot, PlayerGameplayStageId,
-    PlayerGameplayStageStatus, WorldJournal, WorldSnapshot,
+    ProviderCompatibilityReport, ProviderCompatibilityStatus, ProviderFeedbackAck, ProviderHealth,
+    ProviderInfo, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
+    PROVIDER_PHASE1_ACTION_SET_ALIAS,
 };
 pub use runner::{
     AgentQuota, AgentRunner, AgentStats, AgentTickResult, RateLimitPolicy, RateLimitState,

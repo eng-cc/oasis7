@@ -81,6 +81,21 @@ fn dht_get_providers_collects_results() {
 }
 
 #[test]
+fn build_swarm_supports_more_than_default_max_provider_records() {
+    let keypair = Keypair::generate_ed25519();
+    let mut swarm = super::swarm_behaviour::build_swarm(&keypair, false);
+
+    for idx in 0..1100 {
+        let key = RecordKey::new(&format!("provider-key-{idx}"));
+        swarm
+            .behaviour_mut()
+            .kademlia
+            .start_providing(key)
+            .unwrap_or_else(|err| panic!("start_providing should exceed default 1024 cap: {err}"));
+    }
+}
+
+#[test]
 fn dht_get_world_head_decodes_record() {
     let head = WorldHeadAnnounce {
         world_id: "w1".to_string(),

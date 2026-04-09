@@ -27,7 +27,10 @@ fn parse_options_accepts_provider_loopback_http() {
         options.provider_base_url.as_deref(),
         Some("http://127.0.0.1:5841")
     );
-    assert_eq!(options.agent_provider_profile, DEFAULT_PROVIDER_AGENT_PROFILE);
+    assert_eq!(
+        options.agent_provider_profile,
+        DEFAULT_PROVIDER_AGENT_PROFILE
+    );
 }
 
 #[test]

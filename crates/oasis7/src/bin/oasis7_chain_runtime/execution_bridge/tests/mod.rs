@@ -236,6 +236,28 @@ fn execution_bridge_record_legacy_payload_defaults_latest_state_ref() {
 }
 
 #[test]
+fn execution_bridge_record_recovery_snapshot_ref_falls_back_to_execution_state_root() {
+    let malformed_v2 = serde_json::json!({
+        "schema_version": 2,
+        "world_id": "w1",
+        "height": 1,
+        "node_block_hash": "node-h1",
+        "execution_block_hash": "exec-h1",
+        "execution_state_root": "state-r1",
+        "journal_len": 1,
+        "external_effect_ref": "cas:effect-1",
+        "timestamp_ms": 1000
+    });
+    let record: ExecutionBridgeRecord =
+        serde_json::from_value(malformed_v2).expect("parse malformed v2 execution bridge record");
+
+    assert!(record.latest_state_ref.is_none());
+    assert!(record.snapshot_ref.is_none());
+    assert!(record.journal_ref.is_none());
+    assert_eq!(record.recovery_snapshot_ref(), Some("state-r1"));
+}
+
+#[test]
 fn persist_execution_bridge_record_only_migrates_legacy_record_to_v2() {
     let dir = temp_dir("execution-bridge-legacy-migrate");
     let records_dir = dir.join("records");

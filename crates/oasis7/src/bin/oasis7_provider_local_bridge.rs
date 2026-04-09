@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use oasis7::simulator::{
-    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderHealth,
-    ProviderInfo, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
-    ProviderTokenUsage, ProviderTraceEnvelope, ProviderTranscriptEntry,
+    Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision,
+    ProviderDiagnostics, ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage,
+    ProviderTraceEnvelope, ProviderTranscriptEntry,
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
@@ -35,7 +35,6 @@ fn default_provider_cli_bin() -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| ["open", "claw"].concat())
 }
-
 
 #[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
@@ -532,7 +531,8 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 options.bind_addr = required_value(&mut iter, "--bind")?.to_string();
             }
             "--provider-cli-bin" => {
-                options.provider_cli_bin = required_value(&mut iter, "--provider-cli-bin")?.to_string();
+                options.provider_cli_bin =
+                    required_value(&mut iter, "--provider-cli-bin")?.to_string();
             }
             "--provider-agent" => {
                 options.provider_agent_id =
@@ -1167,14 +1167,11 @@ fn summarize_text(text: &str, max_chars: usize) -> String {
 }
 
 fn default_gateway_health_url() -> String {
-    let config_path = env::var("HOME")
-        .ok()
-        .map(PathBuf::from)
-        .map(|home| {
-            let dir = [".open", "claw"].concat();
-            let file = ["open", "claw", ".json"].concat();
-            home.join(dir).join(file)
-        });
+    let config_path = env::var("HOME").ok().map(PathBuf::from).map(|home| {
+        let dir = [".open", "claw"].concat();
+        let file = ["open", "claw", ".json"].concat();
+        home.join(dir).join(file)
+    });
     if let Some(config_path) = config_path {
         if let Ok(raw) = fs::read_to_string(config_path) {
             if let Ok(value) = serde_json::from_str::<Value>(raw.as_str()) {

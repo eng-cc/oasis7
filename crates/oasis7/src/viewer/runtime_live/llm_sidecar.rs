@@ -9,12 +9,12 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, ChunkRuntimeConfig, LlmAgentBehavior,
-    OpenAiChatCompletionClient, ProviderLoopbackAdapter, ProviderBackedAgentBehavior,
-    ProviderExecutionMode, ProviderLoopbackHttpClient, ResourceOwner, WorldConfig, WorldEvent,
-    WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
-    SNAPSHOT_VERSION, evaluate_provider_compatibility,
+    evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
+    AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
+    LlmAgentBehavior, OpenAiChatCompletionClient, ProviderBackedAgentBehavior,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
+    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot,
+    CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -86,18 +86,23 @@ enum RuntimeDecisionRunner {
 }
 
 fn env_requests_provider_backend() -> bool {
-    named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
-        .map(|value| value.trim().to_string())
-        .as_deref()
-        .and_then(canonical_agent_decision_source)
-        .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
+    named_env_var_any(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ])
+    .map(|value| value.trim().to_string())
+    .as_deref()
+    .and_then(canonical_agent_decision_source)
+    .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
 }
 
 pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
 ) -> Result<Option<ProviderDecisionSettings>, String> {
-    let decision_source =
-        named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
-            .unwrap_or_default();
+    let decision_source = named_env_var_any(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ])
+    .unwrap_or_default();
     let decision_source = decision_source.trim();
     if decision_source.is_empty() || decision_source == BUILTIN_LLM_DECISION_SOURCE {
         return Ok(None);
@@ -108,9 +113,11 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         ));
     };
 
-    let backend =
-        named_env_var_any(&[VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV])
-            .unwrap_or_else(|| LOCAL_BRIDGE_PROVIDER_BACKEND.to_string());
+    let backend = named_env_var_any(&[
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ])
+    .unwrap_or_else(|| LOCAL_BRIDGE_PROVIDER_BACKEND.to_string());
     let Some(_) = canonical_agent_provider_backend(backend.as_str()) else {
         return Err(format!(
             "unsupported agent provider backend `{backend}`; expected provider_local_bridge"
@@ -137,9 +144,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         ));
     };
 
-    let base_url =
-        named_env_var_any(&[VIEWER_AGENT_PROVIDER_URL_ENV])
-            .unwrap_or_default();
+    let base_url = named_env_var_any(&[VIEWER_AGENT_PROVIDER_URL_ENV]).unwrap_or_default();
     let base_url = base_url.trim();
     if base_url.is_empty() {
         return Err(format!(
@@ -147,9 +152,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         ));
     }
 
-    let connect_timeout_ms = named_env_var_any(&[
-        VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-    ])
+    let connect_timeout_ms = named_env_var_any(&[VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV])
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .map(|value| {
@@ -167,8 +170,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         ));
     }
 
-    let agent_profile =
-        named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV])
+    let agent_profile = named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV])
         .unwrap_or_else(|| DEFAULT_PROVIDER_AGENT_PROFILE.to_string());
     let agent_profile = agent_profile.trim();
     if agent_profile.is_empty() {
@@ -177,9 +179,7 @@ pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
         ));
     }
 
-    let auth_token = named_env_var_any(&[
-        VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
-    ])
+    let auth_token = named_env_var_any(&[VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV])
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
@@ -247,7 +247,9 @@ fn canonical_agent_provider_transport(raw: &str) -> Option<&'static str> {
 }
 
 fn named_env_var_any(env_names: &[&str]) -> Option<String> {
-    env_names.iter().find_map(|env_name| env::var(env_name).ok())
+    env_names
+        .iter()
+        .find_map(|env_name| env::var(env_name).ok())
 }
 
 fn provider_mode_fallback_reason(provider_mode: &str) -> Option<String> {

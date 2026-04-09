@@ -242,7 +242,10 @@ impl fmt::Display for ProviderLoopbackHttpError {
                 path,
                 status_code,
                 body,
-            } => write!(f, "provider request {path} returned HTTP {status_code}: {body}"),
+            } => write!(
+                f,
+                "provider request {path} returned HTTP {status_code}: {body}"
+            ),
             Self::DecodeFailed { path, detail } => {
                 write!(f, "decode provider response {path} failed: {detail}")
             }
@@ -381,9 +384,11 @@ impl ProviderLoopbackHttpClient {
                 body: String::from_utf8_lossy(body.as_ref()).trim().to_string(),
             });
         }
-        serde_json::from_slice(body.as_ref()).map_err(|err| ProviderLoopbackHttpError::DecodeFailed {
-            path: path.to_string(),
-            detail: err.to_string(),
+        serde_json::from_slice(body.as_ref()).map_err(|err| {
+            ProviderLoopbackHttpError::DecodeFailed {
+                path: path.to_string(),
+                detail: err.to_string(),
+            }
         })
     }
 }

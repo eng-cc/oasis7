@@ -158,6 +158,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_fe194839357843bb813face2c42bb218.yaml
+  - task_uid: task_9dab2aa9246b465c805f5e59ffb08cba
+    title: "Close triad fetch-commit startup ordering gap"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+    acceptance:
+      - "storage startup no longer sticks at committed_height=0 after an early fetch-commit no-connected-peers window."
+      - "Runtime retries or refreshes replication peer selection so fetch-commit can recover once sequencer/storage connectivity converges."
+      - "Task docs capture validation in the existing 1 local + 2 ECS triad environment and any residual risks."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_9dab2aa9246b465c805f5e59ffb08cba.yaml
   - task_uid: task_5013d728670c5d9aa3f634ca6e665fab
     title: "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播"
     priority: P2

@@ -197,7 +197,10 @@ fn provider_loopback_http_client_surfaces_http_401_on_decision() {
     let err = client
         .request_decision(&request)
         .expect_err("401 should surface");
-    assert!(matches!(err, ProviderLoopbackHttpError::Unauthorized { .. }));
+    assert!(matches!(
+        err,
+        ProviderLoopbackHttpError::Unauthorized { .. }
+    ));
     assert!(err.to_string().contains("unauthorized"));
 }
 

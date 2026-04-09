@@ -1,7 +1,7 @@
 use super::{
     Action, DecisionProvider, DecisionProviderError, DecisionRequest, DecisionResponse,
-    FeedbackEnvelope, ProviderFeedbackAck, ProviderLoopbackHttpClient, ProviderLoopbackHttpError,
-    ProviderDecision,
+    FeedbackEnvelope, ProviderDecision, ProviderFeedbackAck, ProviderLoopbackHttpClient,
+    ProviderLoopbackHttpError,
 };
 
 const DEFAULT_PROVIDER_LOOPBACK_ADAPTER_PROVIDER_ID: &str = "provider_loopback_http";

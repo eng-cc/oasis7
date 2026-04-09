@@ -373,12 +373,12 @@ struct LaunchConfig {
     agent_provider_contract: String,
     #[serde(default = "default_agent_provider_transport")]
     agent_provider_transport: String,
-        agent_provider_url: String,
-        agent_provider_auth_token: String,
-        agent_provider_connect_timeout_ms: String,
+    agent_provider_url: String,
+    agent_provider_auth_token: String,
+    agent_provider_connect_timeout_ms: String,
     #[serde(default = "default_agent_execution_lane")]
     agent_execution_lane: String,
-        agent_provider_profile: String,
+    agent_provider_profile: String,
     llm_enabled: bool,
     provider_auto_discover: bool,
     chain_enabled: bool,

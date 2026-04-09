@@ -28,7 +28,8 @@ mod url_encoding;
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use hosted_player_session::HostedPlayerSessionIssuer;
 use runtime_paths::{
-    resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary, resolve_viewer_static_dir,
+    resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary,
+    resolve_viewer_static_dir,
 };
 #[cfg(test)]
 use runtime_paths::{resolve_viewer_static_dir_with_override, viewer_dev_dist_candidates};
@@ -383,7 +384,10 @@ fn apply_viewer_live_env_overrides(
             VIEWER_AGENT_DECISION_SOURCE_ENV,
             PROVIDER_BACKED_DECISION_SOURCE,
         );
-        command.env(VIEWER_AGENT_PROVIDER_BACKEND_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND);
+        command.env(
+            VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+            LOCAL_BRIDGE_PROVIDER_BACKEND,
+        );
         command.env(
             VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
             WORLDSIM_PROVIDER_CONTRACT,
@@ -956,7 +960,8 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--agent-provider-mode" => {
                 options.agent_decision_source =
                     parse_required_value(&mut iter, "--agent-provider-mode")?;
-            }            "--no-open-browser" => {
+            }
+            "--no-open-browser" => {
                 options.open_browser = false;
             }
             "--chain-enable" => {
@@ -1075,10 +1080,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             canonical_agent_provider_backend(options.agent_provider_backend.as_str()).to_string();
         options.agent_provider_contract =
             canonical_agent_provider_contract(options.agent_provider_contract.as_str()).to_string();
-        options.agent_provider_transport = canonical_agent_provider_transport(
-            options.agent_provider_transport.as_str(),
-        )
-        .to_string();
+        options.agent_provider_transport =
+            canonical_agent_provider_transport(options.agent_provider_transport.as_str())
+                .to_string();
         if options.agent_provider_url.trim().is_empty() {
             return Err("--agent-provider-url requires a non-empty value".to_string());
         }
@@ -1139,9 +1143,7 @@ fn validate_agent_decision_source(raw: &str) -> Result<(), String> {
         | PROVIDER_BACKED_DECISION_SOURCE
         | PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION
         | AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS => Ok(()),
-        _ => Err(
-            "--agent-decision-source must be builtin_llm or provider_backed".to_string(),
-        ),
+        _ => Err("--agent-decision-source must be builtin_llm or provider_backed".to_string()),
     }
 }
 

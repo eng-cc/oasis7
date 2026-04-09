@@ -153,9 +153,8 @@ impl ClientLauncherApp {
         label: &str,
         stack_text_fields: bool,
     ) {
-        let current =
-            canonical_provider_execution_mode(self.config.agent_execution_lane.as_str())
-                .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE);
+        let current = canonical_provider_execution_mode(self.config.agent_execution_lane.as_str())
+            .unwrap_or(DEFAULT_AGENT_EXECUTION_LANE);
         if self.config.agent_execution_lane != current {
             self.config.agent_execution_lane = current.to_string();
             self.config_dirty = true;
@@ -804,8 +803,7 @@ impl ClientLauncherApp {
         let base_url = match effective_provider_base_url(&self.config) {
             Ok(value) => value,
             Err(err) => {
-                self.provider_check_status =
-                    ProviderCheckStatus::InvalidConfig(err.clone());
+                self.provider_check_status = ProviderCheckStatus::InvalidConfig(err.clone());
                 self.append_log(format!("provider check invalid config: {err}"));
                 return;
             }
@@ -813,8 +811,7 @@ impl ClientLauncherApp {
         let timeout_ms = match parse_agent_provider_connect_timeout_ms(&self.config) {
             Ok(value) => value,
             Err(err) => {
-                self.provider_check_status =
-                    ProviderCheckStatus::InvalidConfig(err.clone());
+                self.provider_check_status = ProviderCheckStatus::InvalidConfig(err.clone());
                 self.append_log(format!("provider check invalid timeout: {err}"));
                 return;
             }
@@ -825,7 +822,8 @@ impl ClientLauncherApp {
             timeout_ms,
         ) {
             Ok(mut snapshot) => {
-                if self.config.agent_decision_source.trim() == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
+                if self.config.agent_decision_source.trim()
+                    == AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS
                 {
                     snapshot.fallback_reason = snapshot
                         .fallback_reason
@@ -837,9 +835,7 @@ impl ClientLauncherApp {
                 let compatibility_status = snapshot.compatibility_status;
                 let fallback_reason = snapshot.fallback_reason.clone();
                 self.provider_check_status = match compatibility_status {
-                    ProviderCompatibilityStatus::Ready => {
-                        ProviderCheckStatus::Ready(snapshot)
-                    }
+                    ProviderCompatibilityStatus::Ready => ProviderCheckStatus::Ready(snapshot),
                     ProviderCompatibilityStatus::Degraded => {
                         ProviderCheckStatus::Degraded(snapshot)
                     }
@@ -856,18 +852,15 @@ impl ClientLauncherApp {
                 ));
             }
             Err(ProviderCheckError::InvalidConfig(detail)) => {
-                self.provider_check_status =
-                    ProviderCheckStatus::InvalidConfig(detail.clone());
+                self.provider_check_status = ProviderCheckStatus::InvalidConfig(detail.clone());
                 self.append_log(format!("provider check invalid config: {detail}"));
             }
             Err(ProviderCheckError::Unauthorized(detail)) => {
-                self.provider_check_status =
-                    ProviderCheckStatus::Unauthorized(detail.clone());
+                self.provider_check_status = ProviderCheckStatus::Unauthorized(detail.clone());
                 self.append_log(format!("provider check unauthorized: {base_url}"));
             }
             Err(ProviderCheckError::Unreachable(detail)) => {
-                self.provider_check_status =
-                    ProviderCheckStatus::Unreachable(detail.clone());
+                self.provider_check_status = ProviderCheckStatus::Unreachable(detail.clone());
                 self.append_log(format!("provider check failed: {detail}"));
             }
         }

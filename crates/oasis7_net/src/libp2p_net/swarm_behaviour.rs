@@ -4,7 +4,10 @@ use libp2p::core::transport::OrTransport;
 use libp2p::dcutr;
 use libp2p::gossipsub::{self, MessageAuthenticity};
 use libp2p::identity::Keypair;
-use libp2p::kad::{self, store::MemoryStore};
+use libp2p::kad::{
+    self,
+    store::{MemoryStore, MemoryStoreConfig},
+};
 use libp2p::multiaddr::Protocol;
 use libp2p::noise;
 use libp2p::relay;
@@ -16,6 +19,8 @@ use libp2p::{Multiaddr, PeerId, StreamProtocol, Transport as _};
 
 use oasis7_proto::distributed::RR_PROTOCOL_PREFIX;
 use oasis7_proto::distributed_net::{NetworkRequest, NetworkResponse};
+
+pub(super) const KAD_MAX_PROVIDED_KEYS: usize = 65_536;
 
 #[derive(NetworkBehaviour)]
 #[behaviour(
@@ -103,7 +108,9 @@ pub(super) fn build_swarm(keypair: &Keypair, enable_rendezvous: bool) -> Swarm<B
     let request_response =
         request_response::cbor::Behaviour::new(protocols, request_response::Config::default());
 
-    let store = MemoryStore::new(peer_id);
+    let mut store_config = MemoryStoreConfig::default();
+    store_config.max_provided_keys = KAD_MAX_PROVIDED_KEYS;
+    let store = MemoryStore::with_config(peer_id, store_config);
     let kademlia = kad::Behaviour::new(peer_id, store);
     let (relay_transport, relay_client) = relay::client::new(peer_id);
 

@@ -10,8 +10,8 @@ use oasis7::simulator::{
     evaluate_provider_compatibility, initialize_kernel, provider_phase1_required_actions,
     provider_phase1_required_capabilities, Action, ActionCatalogEntry, ActionResult, AgentBehavior,
     AgentDecision, AgentDecisionTrace, AgentRunner, LlmAgentBehavior, Observation,
-    OpenAiChatCompletionClient, ProviderLoopbackAdapter, ProviderLoopbackHttpClient,
-    ProviderCompatibilityStatus, ProviderExecutionMode, RuntimePerfSnapshot, WorldConfig,
+    OpenAiChatCompletionClient, ProviderCompatibilityStatus, ProviderExecutionMode,
+    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, RuntimePerfSnapshot, WorldConfig,
     WorldEvent, WorldInitConfig, WorldScenario, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
@@ -36,9 +36,7 @@ impl BenchProviderKind {
     fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "builtin" => Some(Self::Builtin),
-            "provider_loopback_http" | "provider_local_bridge" => {
-                Some(Self::ProviderLoopbackHttp)
-            }
+            "provider_loopback_http" | "provider_local_bridge" => Some(Self::ProviderLoopbackHttp),
             _ => None,
         }
     }
@@ -695,9 +693,7 @@ fn prepare_provider_info(options: &CliOptions) -> Result<ProviderRunInfo, String
             provider_version: "builtin_llm_env".to_string(),
             adapter_version: options.adapter_version.clone(),
             protocol_version: options.protocol_version.clone(),
-            compatibility_status: ProviderCompatibilityStatus::Ready
-                .as_str()
-                .to_string(),
+            compatibility_status: ProviderCompatibilityStatus::Ready.as_str().to_string(),
             fallback_reason: None,
             capabilities: provider_phase1_required_capabilities()
                 .iter()
@@ -800,9 +796,9 @@ fn build_behavior(
             if let Some(memory_summary) = parity_memory_summary(options.scenario_id.as_str()) {
                 behavior = behavior.with_memory_summary(memory_summary);
             }
-            Ok(BenchBehavior::ProviderBacked(ProviderBackedLoopbackBehavior {
-                inner: behavior,
-            }))
+            Ok(BenchBehavior::ProviderBacked(
+                ProviderBackedLoopbackBehavior { inner: behavior },
+            ))
         }
     }
 }

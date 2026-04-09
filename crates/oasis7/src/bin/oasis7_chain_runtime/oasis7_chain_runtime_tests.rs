@@ -1,14 +1,13 @@
+use super::cli::parse_validator_signer_public_key_spec;
 use super::{
     build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
     build_node_replication_config, build_replication_remote_writer_allowlist,
-    build_validator_signer_public_keys,
-    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
-    node_keypair_config, parse_options, parse_validator_spec,
-    release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
+    build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
+    derive_node_libp2p_identity_keypair_config, node_keypair_config, parse_options,
+    parse_validator_spec, release_security_policy_for_storage_profile, CliOptions, DEFAULT_NODE_ID,
     DEFAULT_REPLICATION_NETWORK_LISTEN, DEFAULT_STATUS_BIND,
 };
-use super::cli::parse_validator_signer_public_key_spec;
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
@@ -610,11 +609,7 @@ fn build_node_replication_config_uses_storage_profile_budget() {
 
 #[test]
 fn build_replication_remote_writer_allowlist_combines_validator_and_explicit_keys() {
-    let validator_signers = [
-        "bbbb".to_string(),
-        "aaaa".to_string(),
-        "bbbb".to_string(),
-    ];
+    let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
     let explicit = vec!["cccc".to_string(), "aaaa".to_string()];
 
     let allowlist =
@@ -666,9 +661,8 @@ fn build_validator_signer_public_keys_prefers_explicit_overrides() {
     let mut overrides = BTreeMap::new();
     overrides.insert("node-b".to_string(), "deadbeef".to_string());
 
-    let bindings =
-        build_validator_signer_public_keys(validators.as_slice(), &keypair, &overrides)
-            .expect("bindings should build");
+    let bindings = build_validator_signer_public_keys(validators.as_slice(), &keypair, &overrides)
+        .expect("bindings should build");
 
     assert_eq!(bindings.get("node-b").map(String::as_str), Some("deadbeef"));
     assert_ne!(bindings.get("node-a"), bindings.get("node-b"));

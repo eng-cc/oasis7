@@ -86,8 +86,8 @@ fn provider_loopback_adapter_decides_and_pushes_feedback_via_local_http() {
         }
     });
 
-    let mut adapter =
-        ProviderLoopbackAdapter::new(base_url.as_str(), Some("secret-token"), 200).expect("adapter");
+    let mut adapter = ProviderLoopbackAdapter::new(base_url.as_str(), Some("secret-token"), 200)
+        .expect("adapter");
     assert_eq!(adapter.provider_id(), "provider_loopback_http");
 
     let decided = adapter.decide(&request).expect("decision response");
@@ -279,7 +279,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_move_and_records_
             .with_fixture_id("fixture.adapter.move")
             .with_replay_id("replay.adapter.move")
             .with_memory_summary("goal=move");
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
+        AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -340,7 +341,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_speak_action() {
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
+        AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -389,7 +391,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_inspect_action() 
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
+        AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -439,7 +442,8 @@ fn provider_backed_behavior_executes_provider_loopback_adapter_simple_interact_a
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
+        AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");
@@ -475,7 +479,8 @@ fn provider_backed_behavior_downgrades_provider_loopback_adapter_unsupported_sem
     let adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
     let behavior =
         ProviderBackedAgentBehavior::new("agent-1", adapter, provider_phase1_action_catalog());
-    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> = AgentRunner::new();
+    let mut runner: AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>> =
+        AgentRunner::new();
     runner.register(behavior);
 
     let tick = runner.tick(&mut kernel).expect("runner tick");

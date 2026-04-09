@@ -16,18 +16,16 @@ use super::{
     sanitize_relative_request_path, viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap,
     BUILTIN_LLM_DECISION_SOURCE, DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS,
     DEFAULT_AGENT_PROVIDER_PROFILE, DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NODE_ID,
-    DEFAULT_CHAIN_STATUS_BIND,
-    DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS, DEFAULT_LIVE_BIND,
-    DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV, LLM_TIMEOUT_MS_ENV,
-    LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
-    PROVIDER_BACKED_DECISION_SOURCE,
-    VIEWER_AGENT_DECISION_SOURCE_ENV, VIEWER_AGENT_EXECUTION_LANE_ENV,
-    VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV, VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-    VIEWER_AGENT_PROVIDER_CONTRACT_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-    VIEWER_AGENT_PROVIDER_MODE_ENV, VIEWER_AGENT_PROVIDER_PROFILE_ENV,
-    VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, VIEWER_AGENT_PROVIDER_URL_ENV,
-    VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV, VIEWER_AUTH_PUBLIC_KEY_ENV,
-    VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
+    DEFAULT_CHAIN_STATUS_BIND, DEFAULT_DEPLOYMENT_MODE, DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS,
+    DEFAULT_LIVE_BIND, DEFAULT_SCENARIO, DEFAULT_VIEWER_STATIC_DIR, GAME_STATIC_DIR_ENV,
+    LLM_TIMEOUT_MS_ENV, LOCAL_BRIDGE_PROVIDER_BACKEND, LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+    PROVIDER_BACKED_DECISION_SOURCE, VIEWER_AGENT_DECISION_SOURCE_ENV,
+    VIEWER_AGENT_EXECUTION_LANE_ENV, VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
+    VIEWER_AGENT_PROVIDER_BACKEND_ENV, VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
+    VIEWER_AGENT_PROVIDER_CONTRACT_ENV, VIEWER_AGENT_PROVIDER_MODE_ENV,
+    VIEWER_AGENT_PROVIDER_PROFILE_ENV, VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+    VIEWER_AGENT_PROVIDER_URL_ENV, VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV,
+    VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
 };
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
@@ -71,13 +69,25 @@ fn parse_options_defaults() {
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
     assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
+    assert_eq!(
+        options.agent_provider_backend,
+        LOCAL_BRIDGE_PROVIDER_BACKEND
+    );
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
-    assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
+    assert_eq!(
+        options.agent_provider_transport,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+    );
     assert_eq!(options.agent_provider_url, DEFAULT_AGENT_PROVIDER_URL);
     assert_eq!(options.agent_provider_auth_token, "");
-    assert_eq!(options.agent_provider_profile, DEFAULT_AGENT_PROVIDER_PROFILE);
-    assert_eq!(options.agent_execution_lane, ProviderExecutionMode::HeadlessAgent);
+    assert_eq!(
+        options.agent_provider_profile,
+        DEFAULT_AGENT_PROVIDER_PROFILE
+    );
+    assert_eq!(
+        options.agent_execution_lane,
+        ProviderExecutionMode::HeadlessAgent
+    );
     assert_eq!(
         options.agent_provider_connect_timeout_ms,
         DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS
@@ -201,15 +211,27 @@ fn parse_options_accepts_overrides() {
         vec!["chain-a:55".to_string()]
     );
     assert!(options.with_llm);
-    assert_eq!(options.agent_decision_source, PROVIDER_BACKED_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
+    assert_eq!(
+        options.agent_decision_source,
+        PROVIDER_BACKED_DECISION_SOURCE
+    );
+    assert_eq!(
+        options.agent_provider_backend,
+        LOCAL_BRIDGE_PROVIDER_BACKEND
+    );
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
-    assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
+    assert_eq!(
+        options.agent_provider_transport,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+    );
     assert_eq!(options.agent_provider_url, "http://127.0.0.1:5841");
     assert_eq!(options.agent_provider_auth_token, "secret-token");
     assert_eq!(options.agent_provider_connect_timeout_ms, 3000);
     assert_eq!(options.agent_provider_profile, "oasis7_p0_low_freq_npc");
-    assert_eq!(options.agent_execution_lane, ProviderExecutionMode::PlayerParity);
+    assert_eq!(
+        options.agent_execution_lane,
+        ProviderExecutionMode::PlayerParity
+    );
     assert!(!options.open_browser);
 }
 
@@ -235,10 +257,19 @@ fn parse_options_accepts_agent_direct_connect_alias() {
     )
     .expect("parse should succeed");
 
-    assert_eq!(options.agent_decision_source, PROVIDER_BACKED_DECISION_SOURCE);
-    assert_eq!(options.agent_provider_backend, LOCAL_BRIDGE_PROVIDER_BACKEND);
+    assert_eq!(
+        options.agent_decision_source,
+        PROVIDER_BACKED_DECISION_SOURCE
+    );
+    assert_eq!(
+        options.agent_provider_backend,
+        LOCAL_BRIDGE_PROVIDER_BACKEND
+    );
     assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
-    assert_eq!(options.agent_provider_transport, LOOPBACK_HTTP_PROVIDER_TRANSPORT);
+    assert_eq!(
+        options.agent_provider_transport,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+    );
 }
 
 #[test]
@@ -323,7 +354,10 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
             ProviderExecutionMode::PlayerParity.as_str().to_string()
         ))
     );
-    assert_eq!(command_env_value(&command, VIEWER_AGENT_PROVIDER_MODE_ENV), Some(None));
+    assert_eq!(
+        command_env_value(&command, VIEWER_AGENT_PROVIDER_MODE_ENV),
+        Some(None)
+    );
 }
 
 #[test]

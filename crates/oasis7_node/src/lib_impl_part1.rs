@@ -823,6 +823,10 @@ impl PosNodeEngine {
         let Some(endpoint) = network_endpoint else {
             return Ok(());
         };
+        if self.committed_height < STORAGE_GATE_NETWORK_WARMUP_HEIGHT && self.peer_heads.is_empty()
+        {
+            return Ok(());
+        }
         let primary_samples = replication
             .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
         if primary_samples.is_empty() {
@@ -854,7 +858,12 @@ impl PosNodeEngine {
             }
         }
 
-        let required_matches = required_network_blob_matches(primary_samples.len());
+        let mut required_matches = required_network_blob_matches(primary_samples.len());
+        if self.committed_height < STORAGE_GATE_NETWORK_WARMUP_HEIGHT
+            || (self.require_peer_execution_hashes && self.peer_heads.is_empty())
+        {
+            required_matches = required_matches.min(1);
+        }
         if successful_matches >= required_matches {
             return Ok(());
         }

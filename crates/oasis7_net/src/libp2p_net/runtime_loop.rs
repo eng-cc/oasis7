@@ -511,7 +511,7 @@ pub(super) fn handle_command(
             peer,
             response,
         }) => {
-            if !peers.contains(&peer) {
+            if !peers.contains(&peer) && !swarm.is_connected(&peer) {
                 let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
                     protocol: format!("peer {peer} is not connected for protocol {protocol}"),
                 }));

@@ -101,6 +101,22 @@ impl From<ExecutionBridgeRecordWire> for ExecutionBridgeRecord {
 }
 
 impl ExecutionBridgeRecord {
+    pub(super) fn recovery_snapshot_ref(&self) -> Option<&str> {
+        self.latest_state_ref
+            .as_deref()
+            .or(self.snapshot_ref.as_deref())
+            .or_else(|| {
+                if self.latest_state_ref.is_none()
+                    && self.snapshot_ref.is_none()
+                    && !self.execution_state_root.trim().is_empty()
+                {
+                    Some(self.execution_state_root.as_str())
+                } else {
+                    None
+                }
+            })
+    }
+
     pub(super) fn new_v2(
         world_id: String,
         height: u64,

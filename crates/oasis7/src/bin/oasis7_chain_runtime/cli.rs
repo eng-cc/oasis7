@@ -217,13 +217,17 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--p2p-source-operator" => {
                 let raw = parse_required_value(&mut iter, "--p2p-source-operator")?;
-                options.p2p_source_operator =
-                    Some(normalize_p2p_metadata_label(raw.as_str(), "--p2p-source-operator")?);
+                options.p2p_source_operator = Some(normalize_p2p_metadata_label(
+                    raw.as_str(),
+                    "--p2p-source-operator",
+                )?);
             }
             "--p2p-source-asn" => {
                 let raw = parse_required_value(&mut iter, "--p2p-source-asn")?;
-                options.p2p_source_asn =
-                    Some(normalize_p2p_metadata_label(raw.as_str(), "--p2p-source-asn")?);
+                options.p2p_source_asn = Some(normalize_p2p_metadata_label(
+                    raw.as_str(),
+                    "--p2p-source-asn",
+                )?);
             }
             "--node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--node-tick-ms")?;
@@ -283,8 +287,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     .push(parse_validator_spec(raw.as_str())?);
             }
             "--node-validator-signer-public-key" => {
-                let raw =
-                    parse_required_value(&mut iter, "--node-validator-signer-public-key")?;
+                let raw = parse_required_value(&mut iter, "--node-validator-signer-public-key")?;
                 let (validator_id, public_key_hex) =
                     parse_validator_signer_public_key_spec(raw.as_str())?;
                 options
