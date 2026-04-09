@@ -16,8 +16,6 @@ tasks:
     task_path: .pm/tasks/task_f13275ba1efc4a12b0724d0ae7272f90.yaml
   - task_uid: task_6a5ec3f5819240d6ac60adbde70b63b1
     title: "修复 oasis7 provider smoke 自动 bootstrap 权限阻塞"
-  - task_uid: task_043d5f6220444641942e631c193b5549
-    title: "忽略 repo-owned provider workspace 下的 OpenClaw 本地状态目录"
     priority: P1
     source_signal: null
     related_prd:

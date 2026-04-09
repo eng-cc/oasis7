@@ -1,6 +1,6 @@
 # 小红书运营 Runbook（2026-03-23）
 
-审计轮次: 2
+审计轮次: 3
 
 ## Meta
 - Owner Role: `liveops_community`
@@ -23,6 +23,7 @@
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
   - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
+  - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在小红书进入“持续发帖与持续看反馈”阶段后的日常运营。

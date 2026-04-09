@@ -1,8 +1,8 @@
 # readme PRD 文件级索引
 
-审计轮次: 10
+审计轮次: 11
 
-更新时间：2026-04-06
+更新时间：2026-04-08
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -55,6 +55,7 @@
 | `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
 | `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` | `runbook` | 小红书持续运营 SOP |
+| `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md` | `material` | 小红书 AI 时代岗位穿越周期主题帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-intro-post-pack-2026-03-22.md` | `material` | 小红书首篇自我介绍帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-team-roster-post-pack-2026-03-22.md` | `material` | 小红书团队阵容帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-game-intro-post-pack-2026-03-24.md` | `material` | 小红书游戏介绍帖素材包 |
