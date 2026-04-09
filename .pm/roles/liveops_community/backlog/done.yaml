@@ -145,6 +145,18 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_041066a6fd9644778e67b485b35fcdaa.yaml
+  - task_uid: task_f401369ce2514a529c00bb63ba463ae8
+    title: "Triage Moltbook notifications and reply if needed on 2026-04-09"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/readme/prd.md
+    acceptance:
+      - "Unread Moltbook notifications are classified, and any comment or DM that needs a reply is either answered or explicitly left for no-reply with reason."
+      - "Task execution log records checked surfaces, replies sent or withheld, and any remaining follow-up."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_f401369ce2514a529c00bb63ba463ae8.yaml
   - task_uid: task_cd0753c5c26c5caebf06f653bef1b435
     title: "Triage remaining Moltbook follower and DM notifications"
     priority: P3
