@@ -23,6 +23,7 @@
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-carousel-pack-2026-04-03.md`
   - `doc/readme/governance/readme-xiaohongshu-offer-choice-post-pack-2026-04-03.md`
   - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
+  - `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
   - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
 
 ## 1. 适用范围

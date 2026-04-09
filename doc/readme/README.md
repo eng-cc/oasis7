@@ -34,6 +34,7 @@
   - `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
 - material：
+  - `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
   - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
   - `doc/readme/governance/readme-xiaohongshu-kaifeng-rpg-post-pack-2026-04-06.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
@@ -65,6 +66,7 @@
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
 - material / execution：
+- `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
 - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`
 - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`

@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Cycle Crossing Carousel</title>
+    <style>
+      :root {
+        --paper: #f4ecdf;
+        --paper-warm: #fbf5ec;
+        --paper-deep: #e4d6c5;
+        --ink: #171310;
+        --ink-soft: rgba(23, 19, 16, 0.72);
+        --line: rgba(23, 19, 16, 0.11);
+        --accent: #b24a34;
+        --accent-soft: rgba(178, 74, 52, 0.14);
+        --olive: #5a5844;
+        --olive-soft: rgba(90, 88, 68, 0.14);
+        --panel: #201a16;
+        --panel-text: #f6efe5;
+        --shadow: 0 28px 72px rgba(23, 19, 16, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 14% 14%, rgba(178, 74, 52, 0.15), transparent 22%),
+          radial-gradient(circle at 82% 18%, rgba(90, 88, 68, 0.12), transparent 24%),
+          linear-gradient(160deg, #f7f0e5 0%, #efe3d3 52%, #ece1d5 100%);
+        color: var(--ink);
+        font-family: "Noto Sans SC", sans-serif;
+      }
+
+      .gallery {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 28px 0 80px;
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        border-radius: 30px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 18%),
+          radial-gradient(circle at 12% 14%, rgba(178, 74, 52, 0.12), transparent 22%),
+          radial-gradient(circle at 86% 18%, rgba(90, 88, 68, 0.12), transparent 20%),
+          linear-gradient(180deg, var(--paper-warm) 0%, var(--paper) 58%, var(--paper-deep) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .grain,
+      .grid,
+      .frame,
+      .wash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.12;
+        background-image:
+          radial-gradient(circle at 18% 20%, rgba(0, 0, 0, 0.56) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 76% 30%, rgba(0, 0, 0, 0.34) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 42% 78%, rgba(0, 0, 0, 0.28) 0.8px, transparent 0.9px);
+        background-size: 28px 28px, 38px 38px, 46px 46px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.35), transparent 90%);
+      }
+
+      .frame::before,
+      .frame::after {
+        content: "";
+        position: absolute;
+        inset: 34px;
+        border: 1px solid rgba(23, 19, 16, 0.08);
+        border-radius: 24px;
+      }
+
+      .frame::after {
+        inset: 54px;
+        border-style: dashed;
+        border-color: rgba(23, 19, 16, 0.05);
+        border-radius: 18px;
+      }
+
+      .wash::before,
+      .wash::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(2px);
+      }
+
+      .wash::before {
+        left: -80px;
+        top: 180px;
+        width: 240px;
+        height: 240px;
+        background: rgba(178, 74, 52, 0.08);
+      }
+
+      .wash::after {
+        right: -70px;
+        bottom: 200px;
+        width: 220px;
+        height: 220px;
+        background: rgba(90, 88, 68, 0.08);
+      }
+
+      .header,
+      .footer {
+        position: absolute;
+        left: 70px;
+        right: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .header {
+        top: 58px;
+      }
+
+      .footer {
+        bottom: 48px;
+      }
+
+      .brand,
+      .meta,
+      .tag,
+      .chip,
+      .footer-note,
+      .step-index {
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .meta,
+      .footer-note {
+        color: var(--ink-soft);
+        font-size: 16px;
+      }
+
+      .brand,
+      .tag,
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .brand::before,
+      .tag::before,
+      .chip::before,
+      .step-index::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--accent);
+        box-shadow: 4px 4px 0 rgba(178, 74, 52, 0.14);
+      }
+
+      .progress {
+        display: flex;
+        gap: 10px;
+      }
+
+      .progress span {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(23, 19, 16, 0.12);
+      }
+
+      .progress span.active {
+        width: 44px;
+        background: var(--accent);
+      }
+
+      .canvas {
+        position: absolute;
+        inset: 128px 72px 110px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .card,
+      .dark-card,
+      .soft-card {
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+
+      .card,
+      .soft-card {
+        background: rgba(255, 251, 245, 0.88);
+        border: 1px solid rgba(23, 19, 16, 0.1);
+      }
+
+      .soft-card {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 251, 245, 0.84));
+      }
+
+      .dark-card {
+        background: linear-gradient(180deg, rgba(32, 26, 22, 0.98), rgba(28, 23, 20, 0.98));
+        color: var(--panel-text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .card::before,
+      .soft-card::before,
+      .dark-card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--accent), var(--olive), rgba(178, 74, 52, 0.35));
+      }
+
+      .tag,
+      .chip {
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .dark-card .tag,
+      .dark-card .chip {
+        color: rgba(246, 239, 229, 0.72);
+      }
+
+      .slide-1 .canvas {
+        display: grid;
+        grid-template-columns: 1.06fr 0.94fr;
+        gap: 28px;
+      }
+
+      .hero-card {
+        padding: 40px 40px 34px;
+      }
+
+      .hero-card .tag {
+        margin-bottom: 34px;
+      }
+
+      .hero-card h1 {
+        font-family: "Noto Serif SC", serif;
+        font-size: 102px;
+        line-height: 1.01;
+        letter-spacing: -0.085em;
+        font-weight: 900;
+      }
+
+      .hero-card h1 span {
+        display: block;
+      }
+
+      .hero-card h1 .accent {
+        color: var(--accent);
+      }
+
+      .hero-divider {
+        width: 162px;
+        height: 6px;
+        margin: 42px 0 28px;
+        background: linear-gradient(90deg, var(--accent), var(--olive));
+      }
+
+      .hero-card p {
+        max-width: 430px;
+        font-size: 31px;
+        line-height: 1.62;
+        color: var(--ink-soft);
+      }
+
+      .hero-note {
+        margin-top: 24px;
+        padding: 18px 20px;
+        background: var(--accent-soft);
+        border: 1px solid rgba(178, 74, 52, 0.12);
+      }
+
+      .hero-note strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1.34;
+      }
+
+      .hero-note span {
+        display: block;
+        margin-top: 8px;
+        font-size: 16px;
+        line-height: 1.65;
+        color: var(--ink-soft);
+      }
+
+      .stack {
+        display: grid;
+        grid-template-rows: auto auto 1fr;
+        gap: 22px;
+      }
+
+      .topic-card,
+      .step-card,
+      .step-footer {
+        padding: 28px 28px 26px;
+      }
+
+      .topic-card h2,
+      .step-footer h2 {
+        margin-top: 18px;
+        font-size: 36px;
+        line-height: 1.28;
+      }
+
+      .topic-card p,
+      .step-footer p {
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+
+      .layer-stack {
+        position: relative;
+        min-height: 700px;
+        padding-top: 12px;
+      }
+
+      .layer-card {
+        position: absolute;
+        right: 0;
+        left: 0;
+        padding: 22px 22px 20px;
+        border: 1px solid rgba(23, 19, 16, 0.1);
+        background: rgba(255, 251, 245, 0.84);
+        box-shadow: var(--shadow);
+      }
+
+      .layer-card strong {
+        display: block;
+        margin-top: 14px;
+        font-size: 34px;
+        line-height: 1.2;
+      }
+
+      .layer-card p {
+        margin-top: 10px;
+        font-size: 19px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .layer-card.top {
+        top: 34px;
+        left: 88px;
+      }
+
+      .layer-card.middle {
+        top: 226px;
+        left: 48px;
+      }
+
+      .layer-card.bottom {
+        top: 432px;
+        left: 0;
+      }
+
+      .layer-stack::before {
+        content: "";
+        position: absolute;
+        left: 72px;
+        top: 88px;
+        width: 1px;
+        height: 520px;
+        background: rgba(23, 19, 16, 0.12);
+      }
+
+      .step-index {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .slide-2 .canvas,
+      .slide-3 .canvas,
+      .slide-4 .canvas {
+        display: grid;
+        gap: 24px;
+      }
+
+      .lead {
+        padding: 34px 36px 32px;
+      }
+
+      .lead h2 {
+        margin-top: 18px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 70px;
+        line-height: 1.12;
+        letter-spacing: -0.06em;
+      }
+
+      .lead p {
+        margin-top: 18px;
+        max-width: 760px;
+        font-size: 27px;
+        line-height: 1.65;
+        color: var(--ink-soft);
+      }
+
+      .dark-card.lead p {
+        color: rgba(246, 239, 229, 0.8);
+      }
+
+      .question-grid {
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 22px;
+      }
+
+      .question-main,
+      .quote-card,
+      .compression-note {
+        padding: 28px 28px 26px;
+      }
+
+      .question-main h3,
+      .quote-card h3,
+      .compression-note h3 {
+        margin-top: 18px;
+        font-size: 40px;
+        line-height: 1.28;
+      }
+
+      .question-main p,
+      .quote-card p,
+      .compression-note p {
+        margin-top: 14px;
+        font-size: 22px;
+        line-height: 1.72;
+        color: var(--ink-soft);
+      }
+
+      .quote-card {
+        background: linear-gradient(180deg, rgba(178, 74, 52, 0.1), rgba(255, 251, 245, 0.84));
+      }
+
+      .compression-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .compression-item {
+        padding: 22px 20px 20px;
+        background: rgba(90, 88, 68, 0.08);
+        border: 1px solid rgba(90, 88, 68, 0.12);
+      }
+
+      .compression-item strong {
+        display: block;
+        font-size: 34px;
+        line-height: 1.2;
+      }
+
+      .compression-item span {
+        display: block;
+        margin-top: 10px;
+        font-size: 18px;
+        line-height: 1.6;
+        color: var(--ink-soft);
+      }
+
+      .action-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+
+      .action-card,
+      .summary-card {
+        padding: 26px 24px 24px;
+      }
+
+      .action-num {
+        font-family: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+        font-size: 48px;
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .action-card h3,
+      .summary-card h3 {
+        margin-top: 12px;
+        font-size: 34px;
+        line-height: 1.2;
+      }
+
+      .action-card p,
+      .summary-card p {
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.68;
+        color: var(--ink-soft);
+      }
+
+      .summary-strip {
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 22px;
+      }
+
+      .summary-card {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 251, 245, 0.82));
+      }
+
+      .summary-card.accent {
+        background: linear-gradient(180deg, rgba(178, 74, 52, 0.1), rgba(255, 251, 245, 0.86));
+      }
+
+      .dark-card.summary-card {
+        background: linear-gradient(180deg, rgba(32, 26, 22, 0.98), rgba(28, 23, 20, 0.98));
+      }
+
+      .dark-card.summary-card p {
+        color: rgba(246, 239, 229, 0.82);
+      }
+
+      .move-grid {
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 22px;
+      }
+
+      .move-lead {
+        padding: 34px 34px 30px;
+      }
+
+      .move-lead h2 {
+        margin-top: 18px;
+        font-family: "Noto Serif SC", serif;
+        font-size: 78px;
+        line-height: 1.08;
+        letter-spacing: -0.06em;
+      }
+
+      .move-lead p {
+        margin-top: 18px;
+        font-size: 25px;
+        line-height: 1.68;
+        color: rgba(246, 239, 229, 0.8);
+      }
+
+      .move-panel {
+        display: grid;
+        gap: 16px;
+      }
+
+      .move-card {
+        padding: 24px 22px 22px;
+        background: rgba(255, 251, 245, 0.9);
+        border: 1px solid rgba(23, 19, 16, 0.1);
+        box-shadow: var(--shadow);
+      }
+
+      .move-card strong {
+        display: block;
+        margin-top: 12px;
+        font-size: 34px;
+        line-height: 1.22;
+      }
+
+      .move-card p {
+        margin-top: 12px;
+        font-size: 20px;
+        line-height: 1.65;
+        color: var(--ink-soft);
+      }
+
+      .prompt {
+        padding: 26px 28px;
+        background: rgba(255, 251, 245, 0.86);
+        border: 1px solid rgba(23, 19, 16, 0.08);
+        box-shadow: var(--shadow);
+      }
+
+      .prompt strong {
+        display: block;
+        font-size: 34px;
+        line-height: 1.4;
+      }
+
+      .prompt p {
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide slide-1" data-slide="1">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 01 / hook</span>
+        </header>
+        <div class="canvas">
+          <article class="card hero-card">
+            <div class="tag">cycle crossing</div>
+            <h1>
+              <span class="accent">AI改写的</span>
+              <span>不是岗位</span>
+              <span>是你那层工作</span>
+              <span>先变了</span>
+            </h1>
+            <div class="hero-divider"></div>
+            <p>
+              真正该警惕的，
+              <br />
+              往往不是岗位名突然消失。
+              <br />
+              更早变化的，是岗位里最熟的那层工作。
+            </p>
+            <div class="hero-note">
+              <strong>先别急着问“岗位会不会没了”。</strong>
+              <span>先回头看一眼，你每天最常做的那部分事，是不是已经在变。</span>
+            </div>
+          </article>
+          <div class="stack">
+            <article class="soft-card topic-card">
+              <div class="chip">topic anchor</div>
+              <h2>这篇讲的不是岗位恐慌，是工作分层。</h2>
+              <p>岗位名可能暂时还在，先被压缩的却常常是重复、标准、低判断的执行层。</p>
+            </article>
+            <div class="layer-stack">
+              <article class="layer-card top">
+                <div class="step-index">layer 03</div>
+                <strong>结果负责</strong>
+                <p>越往上，越接近判断、收口和对结果负责。</p>
+              </article>
+              <article class="layer-card middle">
+                <div class="step-index">layer 02</div>
+                <strong>流程重构</strong>
+                <p>开始改流程、改协作方式，而不只是把旧动作做快一点。</p>
+              </article>
+              <article class="layer-card bottom">
+                <div class="step-index">layer 01</div>
+                <strong>重复执行</strong>
+                <p>最先变化的，往往就是这层你已经做熟了的日常工作。</p>
+              </article>
+            </div>
+            <article class="dark-card step-footer">
+              <div class="tag">page stop</div>
+              <h2>岗位不会先没，先变的是岗位里的工作层。</h2>
+              <p>把这一点看清，比泛泛地讨论“AI 发展太快了”更有用。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span class="active"></span><span></span><span></span><span></span></div>
+          <span class="footer-note">hook first</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-2" data-slide="2">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 02 / diagnosis</span>
+        </header>
+        <div class="canvas">
+          <article class="dark-card lead">
+            <div class="tag">the real question</div>
+            <h2>真正该问的，不是“我会不会失业”。</h2>
+            <p>更该问的是: 我每天最常做的那部分事，到底还值不值钱。</p>
+          </article>
+          <div class="question-grid">
+            <article class="card question-main">
+              <div class="chip">false question</div>
+              <h3>只盯岗位名，通常会把问题看得太粗。</h3>
+              <p>
+                很多变化发生得没那么戏剧化。
+                <br />
+                岗位名还在，但岗位里最容易标准化的那层工作，已经开始被压缩。
+              </p>
+            </article>
+            <article class="soft-card quote-card">
+              <div class="chip">better lens</div>
+              <h3>先看你最常做的那部分事，是不是已经不再稀缺。</h3>
+              <p>
+                如果它主要是流程性劳动，
+                <br />
+                那它比岗位名更早受到冲击。
+              </p>
+            </article>
+          </div>
+          <article class="card compression-note">
+            <div class="chip">what gets compressed first</div>
+            <h3>AI 先压缩的，往往不是岗位名。</h3>
+            <div class="compression-list">
+              <div class="compression-item">
+                <strong>重复</strong>
+                <span>反复做、路径稳定、几乎不需要重新判断。</span>
+              </div>
+              <div class="compression-item">
+                <strong>标准</strong>
+                <span>格式固定、要求清楚、可以被流程化拆解。</span>
+              </div>
+              <div class="compression-item">
+                <strong>低判断</strong>
+                <span>更偏执行，不太需要定义问题或承担结果。</span>
+              </div>
+            </div>
+          </article>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span class="active"></span><span></span><span></span></div>
+          <span class="footer-note">diagnosis</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-3" data-slide="3">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 03 / action</span>
+        </header>
+        <div class="canvas">
+          <article class="card lead">
+            <div class="tag">dont wait</div>
+            <h2>别等工具来找你。主动把自己的工作拆开去试。</h2>
+            <p>更有用的动作，不是围观新闻，而是拿真实工作切片去试，看看它到底在改哪一层。</p>
+          </article>
+          <div class="action-grid">
+            <article class="card action-card">
+              <div class="action-num">01</div>
+              <h3>拆开去试</h3>
+              <p>不要只问“这个工具强不强”。把自己的真实任务拆成几段，逐段试。</p>
+            </article>
+            <article class="card action-card">
+              <div class="action-num">02</div>
+              <h3>看接走哪层</h3>
+              <p>看它是在替你接走收集、整理、生成，还是已经开始替你做判断。</p>
+            </article>
+            <article class="card action-card">
+              <div class="action-num">03</div>
+              <h3>看改的是流程还是速度</h3>
+              <p>有些工具不是帮你省 30 分钟，而是逼你重做原来的工作流。</p>
+            </article>
+          </div>
+          <div class="summary-strip">
+            <article class="soft-card summary-card accent">
+              <div class="chip">common mistake</div>
+              <h3>很多时候不是工具不行。</h3>
+              <p>而是人还在拿旧流程、旧问题、旧想象力去用新工具，所以只看到了“提速”，没看到“重构”。</p>
+            </article>
+            <article class="dark-card summary-card">
+              <div class="tag">my bias</div>
+              <h3>别等它证明自己，再决定要不要看。</h3>
+              <p>真等到所有人都在用了，很多时候已经不是你在挑工具，而是岗位在被重新定义。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span class="active"></span><span></span></div>
+          <span class="footer-note">action frame</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-4" data-slide="4">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 04 / prompt</span>
+        </header>
+        <div class="canvas">
+          <div class="move-grid">
+            <article class="dark-card move-lead">
+              <div class="tag">move upward</div>
+              <h2>生产力进步拦不住，所以你得尽快往上挪。</h2>
+              <p>
+                区别从来不只是会不会用工具，
+                <br />
+                而是你能不能把自己往更高判断密度的那层移动。
+              </p>
+            </article>
+            <div class="move-panel">
+              <article class="move-card">
+                <div class="chip">shift 01</div>
+                <strong>往问题定义挪</strong>
+                <p>别只接任务。开始问这件事真正要解决的是什么。</p>
+              </article>
+              <article class="move-card">
+                <div class="chip">shift 02</div>
+                <strong>往流程重构挪</strong>
+                <p>别只把旧动作做更快。开始重做流程、角色分工和交付方式。</p>
+              </article>
+              <article class="move-card">
+                <div class="chip">shift 03</div>
+                <strong>往结果负责挪</strong>
+                <p>别只完成动作。开始对质量、方向和最终结果承担判断。</p>
+              </article>
+            </div>
+          </div>
+          <article class="prompt">
+            <strong>如果现在就回头看你的工作，你最该主动拿 AI 重做的是哪一部分？</strong>
+            <p>这篇真正想推动的，不是焦虑，而是自查: 你最熟的那层工作，现在是不是已经值得重新拆一次了。</p>
+          </article>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span></span><span class="active"></span></div>
+          <span class="footer-note">comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slide = params.get("slide");
+      if (slide) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((node) => {
+          node.style.display = node.dataset.slide === slide ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>

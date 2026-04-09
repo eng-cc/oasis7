@@ -748,6 +748,26 @@
     - `file site/social/xiaohongshu-cycle-cover.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-066 (PRD-README-042) [test_tier_required]: 为小红书第十二篇补齐 4 页轮播版素材包与导出资产，采用 warm editorial diagnosis / work-layer ladder 方向，把“岗位名不会先变、先变的是岗位里那层工作”拆成更适合小红书滑读和评论的连续 4 页。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/README.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
+    - `site/social/xiaohongshu-cycle-carousel.html`
+    - `site/social/xiaohongshu-cycle-carousel-slide1.png`
+    - `site/social/xiaohongshu-cycle-carousel-slide2.png`
+    - `site/social/xiaohongshu-cycle-carousel-slide3.png`
+    - `site/social/xiaohongshu-cycle-carousel-slide4.png`
+    - `.pm/tasks/task_be881f951e774b80a634c3df767c4ab2.yaml`
+    - `.pm/tasks/task_be881f951e774b80a634c3df767c4ab2.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-042|AC-29|DEC-RM-038|TASK-README-066|xiaohongshu-cycle-carousel.html|warm editorial diagnosis|work-layer ladder" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md site/social/xiaohongshu-cycle-carousel.html .pm/tasks/task_be881f951e774b80a634c3df767c4ab2.yaml .pm/tasks/task_be881f951e774b80a634c3df767c4ab2.execution.md`
+    - `file site/social/xiaohongshu-cycle-carousel-slide1.png site/social/xiaohongshu-cycle-carousel-slide2.png site/social/xiaohongshu-cycle-carousel-slide3.png site/social/xiaohongshu-cycle-carousel-slide4.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
