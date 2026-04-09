@@ -109,7 +109,7 @@
 - [x] TASK-ENGINEERING-101 (PRD-ENGINEERING-021) [test_tier_required]: 新增 repo-local `.codex/config.toml`，默认 `sandbox_mode = "danger-full-access"`，并补齐 `.gitignore` 精确例外、engineering PRD/project 与 task execution log 追踪。
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-021) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
 - [x] TASK-ENGINEERING-103 (PRD-ENGINEERING-021/022) [test_tier_required]: 默认关闭同一/最近 live Codex session 的 working_memory 隐式自读；`codex-working-memory.sh` 改为默认要求显式 `--session-id`，仅在显式 `--allow-auto-session` 时允许 registry / worktree pattern 自动解析，并同步收口 `workflow-report`、README、self-evolution 专题与 smoke。
-- [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/003/005) [test_tier_required]: 恢复 `rust-oversized-file-baseline.tsv` 与仓库当前实况的一致性，修复 required gate 因空基线把全部存量超限 Rust 文件误报为“相对 HEAD 新增”的阻断，并重新打开 Rust 1200 行 burn-down 跟踪。
+- [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 回填 `rust-oversized-file-baseline.tsv` 真值、修复 `check-rust-file-size.sh` 在空 baseline 首次回填场景下把同提交基线更新误判为“新增超限文件”的 bootstrap 逻辑，并把 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，恢复 oversized Rust gate 的可执行性并清掉一份 viewer 热点超限文件。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -153,11 +153,14 @@
 ## 状态
 - 更新日期: 2026-04-09
 - 当前状态: active
-- 下一任务: 一边继续 `TASK-ENGINEERING-089/090` 的 `.codex -> working_memory -> reflection` 契约收口，一边按 Rust 1200 行专项重新启动当前 12 个生产文件 / 7 个测试文件的超限 burn-down；`TASK-ENGINEERING-104` 已先恢复 required gate 与 frozen baseline 的一致性。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
-- 最新完成: `TASK-ENGINEERING-104`（已将 2026-03-30 被清空成注释壳子的 `doc/.governance/rust-oversized-file-baseline.tsv` 回写为当前仓库真实超限快照，恢复 `scripts/check-rust-file-size.sh` / `scripts/ci-tests.sh required` 的 frozen baseline 语义，并明确 Rust 1200 行专项需继续消化当前 12 个生产文件与 7 个测试文件的尾债。）
+- 下一任务: 一边继续 `TASK-ENGINEERING-089/090` 的 `.codex -> working_memory -> reflection` 契约收口，一边按 Rust 1200 行专项继续处理当前 11 个生产文件 / 7 个测试文件的超限 burn-down，优先 `oasis7_game_launcher`、`runtime_live/llm_sidecar`、`client_launcher` 与 `oasis7_node` 侧热点。
+- PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
+- 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
+- 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-104`（已把 `doc/.governance/rust-oversized-file-baseline.tsv` 回写为当前仓库真实超限快照，恢复 `scripts/check-rust-file-size.sh` / `scripts/ci-tests.sh required` 的 frozen baseline 语义，并将 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，使 viewer 首批热点超限文件数下降。）
 - 最新完成: `TASK-ENGINEERING-102`（已清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。）
 - 最新完成: `TASK-ENGINEERING-101`（已新增 repo-local `.codex/config.toml` 并默认 `danger-full-access`，同时补齐 `.gitignore` 精确例外、engineering 主 PRD/project 与 task execution log 追踪。）
 - 最新完成: `TASK-ENGINEERING-097`（已收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界。）

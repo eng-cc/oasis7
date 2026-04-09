@@ -1,0 +1,25 @@
+task_uid: task_19e73f36db1040ccbf5eb579ade2e310
+title: "Restore oversized Rust gate baseline and shrink first high-risk files"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-rust-gate-batch-a
+execution_log_path: .pm/tasks/task_19e73f36db1040ccbf5eb579ade2e310.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-R1200-001
+  - PRD-ENGINEERING-R1200-002
+  - PRD-ENGINEERING-R1200-003
+  - PRD-ENGINEERING-R1200-004
+  - PRD-ENGINEERING-R1200-005
+acceptance:
+  - "Oversized Rust baseline matches current repo scan and required gate becomes truthful again."
+  - "At least one runtime/viewer/launcher hot file batch shrinks with tests."
+handoff_to: []
+updated_at: 2026-04-09T22:54:14+08:00
+last_started_at: 2026-04-09T21:50:01+08:00
+last_closed_at: 2026-04-09T22:54:14+08:00
