@@ -1,6 +1,6 @@
 # readme PRD Project
 
-审计轮次: 11
+审计轮次: 12
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-README-001 (PRD-README-001) [test_tier_required]: 完成 readme PRD 改写，建立对外口径主控入口。
@@ -734,6 +734,20 @@
     - `rg -n "PRD-README-040|AC-27|DEC-RM-036|TASK-README-064|AI来得这么快，怎么穿越周期|问题定义|流程重构|结果负责" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md .pm/tasks/task_041066a6fd9644778e67b485b35fcdaa.yaml .pm/tasks/task_041066a6fd9644778e67b485b35fcdaa.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-065 (PRD-README-041) [test_tier_required]: 为小红书第十二篇补齐独立封面图 HTML 与 PNG，采用 editorial 判断海报与层级抬升构图，既保留“穿越周期”题眼，也强化“AI改写的不是岗位，是你那层工作”的封面钩子。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
+    - `site/social/xiaohongshu-cycle-cover.html`
+    - `site/social/xiaohongshu-cycle-cover.png`
+    - `.pm/tasks/task_651d168ef3784868a11bbdb4c6b53c1c.yaml`
+    - `.pm/tasks/task_651d168ef3784868a11bbdb4c6b53c1c.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-041|AC-28|DEC-RM-037|TASK-README-065|xiaohongshu-cycle-cover.html|xiaohongshu-cycle-cover.png|editorial 判断海报|层级抬升构图" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md site/social/xiaohongshu-cycle-cover.html .pm/tasks/task_651d168ef3784868a11bbdb4c6b53c1c.yaml .pm/tasks/task_651d168ef3784868a11bbdb4c6b53c1c.execution.md`
+    - `file site/social/xiaohongshu-cycle-cover.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -749,6 +763,7 @@
 - 更新日期: 2026-04-08
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）
 - 最新完成: `TASK-README-064`（已为小红书第十二篇固定“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）
 - 最新完成: `TASK-README-063`（已按推荐发布版向 Moltbook `general` 发布 `repair certification` follow-up，并记录 `post_id`、验证结果与首轮读回状态。）
 - 最新完成: `TASK-README-062`（已把 Moltbook `Post 9` 从多备选草案收口成单一推荐发布版，固定推荐标题、主贴、首评策略与更轻的发布读感。）

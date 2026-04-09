@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Cycle Crossing Cover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f4ecdf;
+        --paper-deep: #e5d7c6;
+        --ink: #181411;
+        --muted: rgba(24, 20, 17, 0.56);
+        --line: rgba(24, 20, 17, 0.13);
+        --accent: #b53e2d;
+        --accent-soft: rgba(181, 62, 45, 0.12);
+        --shadow: rgba(24, 20, 17, 0.1);
+        --olive: #585640;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 16% 14%, rgba(181, 62, 45, 0.16), transparent 24%),
+          radial-gradient(circle at 82% 18%, rgba(88, 86, 64, 0.12), transparent 20%),
+          linear-gradient(180deg, #f7efe4 0%, #e8dccd 100%);
+        color: var(--ink);
+        font-family: "Noto Serif SC", serif;
+      }
+
+      .cover {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 22%),
+          linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+      }
+
+      .noise,
+      .grid,
+      .halo,
+      .rails,
+      .steps {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .noise {
+        opacity: 0.1;
+        background-image:
+          radial-gradient(circle at 22% 24%, rgba(0, 0, 0, 0.62) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 76% 68%, rgba(0, 0, 0, 0.28) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 38% 84%, rgba(0, 0, 0, 0.24) 0.8px, transparent 0.9px);
+        background-size: 30px 30px, 42px 42px, 54px 54px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 74px 74px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.28), transparent 86%);
+      }
+
+      .halo {
+        background:
+          radial-gradient(circle at 74% 34%, rgba(181, 62, 45, 0.12), transparent 26%),
+          radial-gradient(circle at 78% 72%, rgba(88, 86, 64, 0.08), transparent 24%);
+      }
+
+      .rails::before,
+      .rails::after {
+        content: "";
+        position: absolute;
+        background: var(--line);
+      }
+
+      .rails::before {
+        left: 144px;
+        top: 104px;
+        bottom: 128px;
+        width: 1px;
+      }
+
+      .rails::after {
+        left: 144px;
+        right: 92px;
+        bottom: 186px;
+        height: 1px;
+      }
+
+      .step {
+        position: absolute;
+        right: 122px;
+        width: 308px;
+        border: 1px solid rgba(24, 20, 17, 0.12);
+        border-radius: 28px 28px 18px 18px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.12)),
+          rgba(244, 236, 223, 0.66);
+        box-shadow: 0 26px 52px rgba(24, 20, 17, 0.05);
+      }
+
+      .step::before {
+        content: "";
+        position: absolute;
+        left: 28px;
+        right: 28px;
+        top: 24px;
+        height: 1px;
+        background: rgba(24, 20, 17, 0.08);
+      }
+
+      .step-1 {
+        bottom: 238px;
+        height: 160px;
+      }
+
+      .step-2 {
+        right: 186px;
+        bottom: 434px;
+        height: 140px;
+      }
+
+      .step-3 {
+        right: 250px;
+        bottom: 606px;
+        height: 120px;
+      }
+
+      .step-4 {
+        right: 314px;
+        bottom: 754px;
+        height: 104px;
+      }
+
+      .meta {
+        position: absolute;
+        top: 102px;
+        left: 168px;
+        right: 116px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .meta strong {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .topic-chip {
+        position: absolute;
+        right: 126px;
+        top: 162px;
+        padding: 22px 24px 20px;
+        border: 1px solid rgba(24, 20, 17, 0.14);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.18)),
+          rgba(244, 236, 223, 0.82);
+        box-shadow: 0 18px 44px rgba(24, 20, 17, 0.08);
+        transform: rotate(-7deg);
+      }
+
+      .topic-chip .label {
+        display: block;
+        margin-bottom: 8px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .topic-chip .value {
+        display: block;
+        font-size: 34px;
+        line-height: 1.18;
+        font-weight: 700;
+      }
+
+      .hero {
+        position: absolute;
+        left: 176px;
+        top: 286px;
+        width: 676px;
+      }
+
+      .eyebrow {
+        margin: 0 0 28px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 122px;
+        line-height: 1.02;
+        letter-spacing: -0.085em;
+        font-weight: 900;
+      }
+
+      h1 .line {
+        display: block;
+      }
+
+      h1 .shift {
+        margin-left: 112px;
+      }
+
+      .divider {
+        width: 178px;
+        height: 6px;
+        margin: 52px 0 34px;
+        background: linear-gradient(90deg, var(--ink), var(--accent));
+      }
+
+      .subcopy {
+        margin: 0;
+        max-width: 560px;
+        font-size: 34px;
+        line-height: 1.62;
+        color: rgba(24, 20, 17, 0.8);
+      }
+
+      .note {
+        position: absolute;
+        left: 176px;
+        bottom: 224px;
+        width: 360px;
+        padding: 28px 30px 30px;
+        border: 1px solid rgba(24, 20, 17, 0.14);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.2)),
+          rgba(244, 236, 223, 0.82);
+        box-shadow: 0 24px 52px rgba(24, 20, 17, 0.08);
+      }
+
+      .note-title {
+        margin: 0 0 18px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      .note-body {
+        margin: 0;
+        font-size: 32px;
+        line-height: 1.6;
+        font-weight: 700;
+      }
+
+      .footer {
+        position: absolute;
+        left: 176px;
+        right: 122px;
+        bottom: 112px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 24px;
+      }
+
+      .footer-copy {
+        max-width: 460px;
+        font-size: 26px;
+        line-height: 1.6;
+        color: rgba(24, 20, 17, 0.72);
+      }
+
+      .footer-mark {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--olive);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover">
+      <div class="noise"></div>
+      <div class="grid"></div>
+      <div class="halo"></div>
+      <div class="rails"></div>
+      <div class="steps">
+        <div class="step step-1"></div>
+        <div class="step step-2"></div>
+        <div class="step step-3"></div>
+        <div class="step step-4"></div>
+      </div>
+
+      <header class="meta">
+        <span><strong>OASIS7</strong> / XHS 12</span>
+        <span>cross the cycle</span>
+      </header>
+
+      <aside class="topic-chip">
+        <span class="label">topic</span>
+        <span class="value">怎么<br />穿越周期</span>
+      </aside>
+
+      <section class="hero">
+        <p class="eyebrow">Remake The Layer</p>
+        <h1>
+          <span class="line">AI改写的</span>
+          <span class="line shift">不是岗位</span>
+          <span class="line">是你那层工作</span>
+        </h1>
+        <div class="divider"></div>
+        <p class="subcopy">
+          别等工具来找你<br />
+          先主动重做你的工作
+        </p>
+      </section>
+
+      <aside class="note">
+        <p class="note-title">move upward</p>
+        <p class="note-body">
+          问题定义<br />
+          流程重构<br />
+          结果负责
+        </p>
+      </aside>
+
+      <footer class="footer">
+        <div class="footer-copy">
+          先看清，它正在接走哪层工作。<br />
+          然后把自己往上挪一层。
+        </div>
+        <div class="footer-mark">editorial judgment poster</div>
+      </footer>
+    </main>
+  </body>
+</html>

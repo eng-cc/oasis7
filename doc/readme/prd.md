@@ -1,6 +1,6 @@
 # readme PRD
 
-审计轮次: 11
+审计轮次: 12
 
 ## 目标
 - 建立 readme 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -88,6 +88,7 @@
 - PRD-README-038: As a `liveops_community`, I want a reusable Xiaohongshu Kaifeng real-world RPG post pack from the game-maker perspective, so that we can borrow the现场真人 NPC / 沉浸式互动 discussion heat to explain why many people真正上头的不是“看景”而是“被快速拉进剧情”，without drifting into travel-guide framing, generic scenic praise, or unsafe project release claims.
 - PRD-README-039: As a `liveops_community`, I want a reusable Moltbook repair-certification follow-up post pack that extends the proven trust-repair thread, so that we can push the discussion from `repair cost` into `who gets to verify repair` without drifting into generic trust-theory abstraction, formal integration claims, or unsafe release language.
 - PRD-README-040: As a `liveops_community`, I want a reusable Xiaohongshu cycle-crossing post pack for people already in existing roles, so that we can borrow the current `AI 来得太快 / 怎么穿越周期` discussion heat to explain why the real risk is usually not the job title disappearing overnight but the low-judgment layer inside the role being compressed first, without drifting into macro trend sermon, generic motivation copy, or unsafe project release claims.
+- PRD-README-041: As a `liveops_community`, I want a dedicated Xiaohongshu cover asset for the cycle-crossing post pack, so that the twelfth post can ship with a stronger first-screen hook that still keeps the `穿越周期` topic anchor and the “岗位名不会先变、先变的是岗位里那层工作” judgment boundary, without drifting into panic copy, sci-fi AI cliches, or generic励志海报感。
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -152,6 +153,7 @@
 - AC-24: 若第十篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用“offer decision memo / 决策档案”方向把讨论收口到“平台 / 训练体系 / 带教 / 工程基本功 / 优秀同事密度优先，不是否定 AI 趋势”，不回退成泛求职鸡汤或科技感海报。
 - AC-25: 若小红书内容链路进入第十一篇，必须补齐“做游戏的人去开封，看见的是一套低门槛实景RPG”素材包，明确标题、正文、封面文案、互动问题、关键词与“最吸引人的不是看景，而是尽快进剧情 / 世界要能快速接住人 / 压低入戏门槛”的表达边界，并保持人类开发者第一人称、非旅游攻略口径与非上线宣称。
 - AC-27: 若小红书内容链路进入第十二篇，必须补齐“AI来得这么快，怎么穿越周期”素材包，明确标题、正文、短版备选、互动问题、关键词与“AI 先压缩的是岗位里重复、标准、低判断的部分 / 穿越周期靠把自己往问题定义、流程重构、结果负责这一层移动”的表达边界，并保持人类开发者第一人称、非宏大趋势宣讲口径、非鸡汤口径与非上线宣称。
+- AC-28: 若第十二篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要保持“穿越周期”题眼与“岗位 vs 那层工作”的判断钩子同时成立，采用更像 editorial 判断海报的层级抬升构图，不回退到蓝紫科幻 AI、机器人吞岗位、或泛励志海报式表达。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -244,6 +246,7 @@
 | PRD-README-038 | TASK-README-060 | `test_tier_required` | 小红书第十一篇素材包明确“做游戏的人去开封，看见的是一套低门槛实景RPG”的标题、正文、封面文案、互动问题、关键词与 HTML/PNG 封面资产，并把判断收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人 / 入戏门槛越低越容易形成代入” | 渠道内容从求职判断继续切回游戏设计观察，用现实里的真人 NPC 玩法解释为什么一个世界最重要的不是堆多少内容，而是能不能很快把人拉进剧情 |
 | PRD-README-039 | TASK-README-061/062/063 | `test_tier_required` | Moltbook 下一条 follow-up 素材包明确 `repair certification` 题眼的推荐标题、主贴、首评、CTA 与禁语边界，并在后续收成单一可直接发布版与真实发帖执行记录，持续落回现有草案包与 PM 执行追踪 | 渠道内容顺着已验证的 `trust repair / shared truth / inspectable residue` 主线继续推进，把讨论从“修复该不该贵”收口到“修复到底该由谁验收、什么证据才算数”，同时保持技术预览口径稳定 |
 | PRD-README-040 | TASK-README-064 | `test_tier_required` | 小红书第十二篇素材包明确“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“先别盯岗位名，先看岗位里哪部分已经会被 AI 压缩 / 要把自己往问题定义、流程重构、结果负责这一层移动”的表达边界 | 渠道内容从现实体验与求职判断继续推进到 AI 时代已有岗位的人如何调整自己的不可替代性结构，把讨论收口到工作内容分层、判断权和结果责任，而不是泛化成宏观趋势分析 |
+| PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇补齐独立封面 HTML/PNG，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -283,3 +286,4 @@
 | DEC-RM-034 | 第十一篇采用“现实观察 + 设计判断”的开封实景 RPG 切口，而不是把帖子写成景区推荐或沉浸式文旅攻略 | 直接做“开封好玩吗 / 值不值得去”的旅游内容；或泛喊“沉浸式就是未来” | 这一篇真正有传播力的不是开封地名本身，而是“最吸引人的不是看景，是被快速拉进剧情”。把现实观察拉回游戏设计判断，才符合账号主线，也更利于把讨论沉到“入戏门槛”和“世界接住人”的设计问题上。 |
 | DEC-RM-035 | Moltbook 下一条 follow-up 采用“repair certification / who verifies repair”而不是重发泛 trust 帖或重新讲一遍 repair cost | 再发一条抽象 trust / accountability 感想；或回退到 identity / product explainer 帖 | 前两轮 Moltbook 执行已经验证 `trust repair / shared truth / inspectable residue / proof boundaries` 的 builder 讨论路径更有效。把问题推进到“谁有资格确认修复真的发生了”，比重复讲“修复要不要贵”更像自然 follow-up，也更贴平台当前的 `operator / trust / accountability` 语境。 |
 | DEC-RM-036 | 第十二篇采用“岗位内容分层 + 穿越周期动作”的切口，而不是把帖子写成宏观 AI 趋势判断或泛职业焦虑安慰 | 直接做“哪些岗位会被取代”的宏大预言；或写成“别焦虑、持续学习就好”的鸡汤帖 | 这篇真正有传播力的不是再重复“AI 来得很快”这句共识，而是把焦虑落到更具体的问题上: 岗位里哪些部分先被压缩、什么能力层更值得往上挪。把讨论收回到问题定义、流程重构和结果负责，更符合账号持续输出“判断”而不是“喊口号”的主线。 |
+| DEC-RM-037 | 第十二篇封面采用“editorial 判断海报 + 层级抬升构图 + 穿越周期题签”方向，而不是直接把主标题做成泛 AI 焦虑口号或科幻灾难画面 | 直接做机器人 / 电路 / 岗位被吞掉的直白 AI 隐喻；或只保留“穿越周期”四个字做抽象励志封面 | 这篇真正需要放大的不是恐慌，而是判断: 哪层工作先被压缩，人要往哪层上挪。封面既要保留 `穿越周期` 这个主题锚点，也要把“岗位 vs 那层工作”的分层判断一眼说清，才和正文主线一致。 |

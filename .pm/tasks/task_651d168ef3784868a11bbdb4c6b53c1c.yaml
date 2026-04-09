@@ -1,0 +1,24 @@
+task_uid: task_651d168ef3784868a11bbdb4c6b53c1c
+title: "Add cover art for Xiaohongshu cycle-crossing post"
+owner_role: viewer_engineer
+worktree_hint: oasis7-readme-xiaohongshu-cycle-cover
+execution_log_path: .pm/tasks/task_651d168ef3784868a11bbdb4c6b53c1c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md
+doc_refs:
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md
+  - site/social/xiaohongshu-cycle-cover.html
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "The twelfth Xiaohongshu post pack points to a dedicated cover HTML and PNG for the cycle-crossing topic."
+  - "The cover renders as an editorial judgment poster, matches the approved copy direction, and passes doc governance plus basic asset checks."
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-09T09:37:32+08:00
+last_started_at: 2026-04-08T22:58:59+08:00
+last_closed_at: 2026-04-09T09:37:32+08:00
