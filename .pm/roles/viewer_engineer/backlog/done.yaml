@@ -29,6 +29,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_3c5bd60eca214ead909f4ef67a139700.yaml
+  - task_uid: task_796226e14b9d4773be6e5828c4a2994e
+    title: "Reduce first-screen noise and surface player-facing consequences/rewards"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+    acceptance:
+      - "First screen defaults to player identity, current primary goal, dominant blocker, and immediate next step without operator/debug history crowding them out."
+      - "Mission HUD, summary, toast, and chatter surface accepted/executing/produced-or-resumed/cost-or-blocker feedback in player-facing language."
+      - "Viewer tests and execution log capture the first-screen noise reduction and consequence/reward visibility evidence."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_796226e14b9d4773be6e5828c4a2994e.yaml
   - task_uid: task_96b9784a063d4922a235dbc1e5ff2304
     title: "Implement provider execution lane passthrough and timeout policy for client launcher"
     priority: P1

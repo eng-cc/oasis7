@@ -34,6 +34,63 @@ fn player_selection_text(selection: &ViewerSelection, locale: crate::i18n::UiLoc
     format!("{} {id}", selection_kind_label(current.kind))
 }
 
+fn player_identity_text(
+    state: &ViewerState,
+    post_onboarding_ready: bool,
+    step: PlayerGuideStep,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    if let Some(claimer_agent_id) = state
+        .snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.player_gameplay.as_ref())
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .map(|claim| super::super::truncate_observe_text(&claim.claimer_agent_id, 16))
+    {
+        return if locale.is_zh() {
+            format!("{} 的首条产线负责人", claimer_agent_id)
+        } else {
+            format!("{claimer_agent_id}'s first-line lead")
+        };
+    }
+
+    if post_onboarding_ready {
+        return if locale.is_zh() {
+            "首条工业线负责人".to_string()
+        } else {
+            "First-line lead".to_string()
+        };
+    }
+
+    match (step, locale.is_zh()) {
+        (PlayerGuideStep::ConnectWorld, true) => "新到场玩家".to_string(),
+        (PlayerGuideStep::ConnectWorld, false) => "New arrival".to_string(),
+        (PlayerGuideStep::OpenPanel, true) | (PlayerGuideStep::SelectTarget, true) => {
+            "前线指挥员".to_string()
+        }
+        (PlayerGuideStep::OpenPanel, false) | (PlayerGuideStep::SelectTarget, false) => {
+            "Field commander".to_string()
+        }
+        (PlayerGuideStep::ExploreAction, true) => "行动指挥员".to_string(),
+        (PlayerGuideStep::ExploreAction, false) => "Action commander".to_string(),
+    }
+}
+
+fn player_objective_text(
+    state: &ViewerState,
+    post_onboarding_ready: bool,
+    step: PlayerGuideStep,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    if post_onboarding_ready {
+        return build_player_post_onboarding_snapshot(state, None, locale)
+            .title
+            .to_string();
+    }
+
+    player_goal_title(step, locale).to_string()
+}
+
 pub(super) fn player_current_tick(state: &ViewerState) -> u64 {
     state
         .snapshot
@@ -47,14 +104,16 @@ pub(super) fn build_player_hud_snapshot(
     state: &ViewerState,
     selection: &ViewerSelection,
     step: PlayerGuideStep,
+    post_onboarding_ready: bool,
     locale: crate::i18n::UiLocale,
 ) -> PlayerHudSnapshot {
     PlayerHudSnapshot {
+        role: player_identity_text(state, post_onboarding_ready, step, locale),
         connection: player_connection_text(&state.status, locale).to_string(),
         tick: player_current_tick(state),
         events: state.events.len(),
         selection: player_selection_text(selection, locale),
-        objective: player_goal_title(step, locale),
+        objective: player_objective_text(state, post_onboarding_ready, step, locale),
     }
 }
 
@@ -103,10 +162,11 @@ pub(super) fn render_player_compact_hud(
     state: &ViewerState,
     selection: &ViewerSelection,
     step: PlayerGuideStep,
+    post_onboarding_ready: bool,
     locale: crate::i18n::UiLocale,
     now_secs: f64,
 ) {
-    let snapshot = build_player_hud_snapshot(state, selection, step, locale);
+    let snapshot = build_player_hud_snapshot(state, selection, step, post_onboarding_ready, locale);
     let objective_color = player_goal_color(step);
     let pulse = ((now_secs * 1.6).sin() * 0.5 + 0.5) as f32;
     let accent = egui::Color32::from_rgba_unmultiplied(
@@ -129,6 +189,13 @@ pub(super) fn render_player_compact_hud(
                 .show(ui, |ui| {
                     ui.set_max_width(PLAYER_HUD_MAX_WIDTH);
                     ui.horizontal_wrapped(|ui| {
+                        render_hud_chip(
+                            ui,
+                            if locale.is_zh() { "身份" } else { "Role" },
+                            snapshot.role.as_str(),
+                            egui::Color32::from_rgb(206, 176, 92),
+                            false,
+                        );
                         render_hud_chip(
                             ui,
                             if locale.is_zh() { "连接" } else { "Conn" },
@@ -164,7 +231,7 @@ pub(super) fn render_player_compact_hud(
                             } else {
                                 "Objective"
                             },
-                            snapshot.objective,
+                            snapshot.objective.as_str(),
                             objective_color,
                             false,
                         );
@@ -329,11 +396,11 @@ pub(super) fn build_player_first_session_summary_snapshot(
             event_gain,
             title: "首局回顾：已进入 PostOnboarding 阶段",
             detail: format!(
-                "用时约 {} 秒，世界推进 +{} tick，新增 {} 条反馈事件。",
+                "用时约 {} 秒，世界推进 +{} tick，新增 {} 条反馈事件；你现在开始负责首条工业线。",
                 duration_secs, tick_gain, event_gain
             ),
             next_tip:
-                "下一阶段目标：建立第一项持续工业能力。优先做出首个产出、恢复一次停机，或让第一条产线稳定运转。"
+                "下一阶段目标：先看首屏主目标，再追首个产出奖励、一次恢复确认，或当前阻塞的真实代价。"
                     .to_string(),
         },
         false => PlayerFirstSessionSummarySnapshot {
@@ -342,11 +409,11 @@ pub(super) fn build_player_first_session_summary_snapshot(
             event_gain,
             title: "First Session Recap: PostOnboarding unlocked",
             detail: format!(
-                "About {}s, world advanced +{} ticks, and {} new feedback events.",
+                "About {}s, world advanced +{} ticks, and {} new feedback events; you now own the first industrial line.",
                 duration_secs, tick_gain, event_gain
             ),
             next_tip:
-                "Next stage goal: establish your first sustainable industrial capability by producing output, recovering one blocker, or stabilizing the first line."
+                "Next stage goal: read the first screen first, then chase the first output reward, one confirmed recovery, or the real cost behind the current blocker."
                     .to_string(),
         },
     })

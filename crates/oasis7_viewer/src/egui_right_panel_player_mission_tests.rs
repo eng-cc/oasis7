@@ -1,7 +1,8 @@
 use super::egui_right_panel_player_experience::PlayerGuideStep;
 use super::egui_right_panel_player_guide::{
     build_player_mission_loop_snapshot, build_player_mission_remaining_hint,
-    build_player_post_onboarding_snapshot, player_control_stage_color, player_control_stage_label,
+    build_player_post_onboarding_snapshot, player_control_result_summary,
+    player_control_stage_color, player_control_stage_label,
     player_control_stage_shows_recovery_actions, player_mission_hud_anchor_y,
     player_mission_hud_compact_mode, player_mission_hud_minimap_reserved_bottom,
     player_mission_hud_show_command_action, player_mission_hud_show_minimap,
@@ -227,6 +228,40 @@ fn player_control_stage_color_distinguishes_warning_and_positive_states() {
 }
 
 #[test]
+fn player_control_result_summary_uses_player_facing_language() {
+    let executing = player_control_result_summary(
+        &WebTestApiControlFeedbackSnapshot {
+            action: "step".to_string(),
+            stage: "executing".to_string(),
+            reason: None,
+            hint: None,
+            effect: "running".to_string(),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+            delta_trace_count: 0,
+        },
+        crate::i18n::UiLocale::EnUs,
+    );
+    let blocked = player_control_result_summary(
+        &WebTestApiControlFeedbackSnapshot {
+            action: "step".to_string(),
+            stage: "blocked".to_string(),
+            reason: Some("line stalled".to_string()),
+            hint: Some("restore energy".to_string()),
+            effect: "blocked".to_string(),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+            delta_trace_count: 0,
+        },
+        crate::i18n::UiLocale::ZhCn,
+    );
+
+    assert!(executing.contains("executing"));
+    assert!(blocked.contains("阻塞"));
+    assert!(blocked.contains("代价"));
+}
+
+#[test]
 fn player_micro_loop_snapshot_exposes_due_timer_lines() {
     let mut state = super::sample_viewer_state(
         crate::ConnectionStatus::Connected,
@@ -376,7 +411,10 @@ fn build_player_post_onboarding_snapshot_prefers_canonical_player_gameplay_snaps
     let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::BranchReady);
-    assert_eq!(snapshot.title, "Next Stage: Choose the First Expansion Tradeoff");
+    assert_eq!(
+        snapshot.title,
+        "Next Stage: Choose the First Expansion Tradeoff"
+    );
     assert_eq!(snapshot.objective, "canonical objective");
     assert_eq!(snapshot.progress_detail, "canonical progress");
     assert_eq!(snapshot.next_step, "canonical next step");

@@ -2,8 +2,9 @@ use super::egui_right_panel_player_card_motion::{
     build_player_card_transition_snapshot, sync_player_guide_transition, PlayerGuideTransitionState,
 };
 use super::egui_right_panel_player_guide::{
-    build_player_guide_progress_snapshot, player_goal_badge, player_goal_color, player_goal_detail,
-    player_goal_title, player_mission_hud_minimap_reserved_bottom, player_onboarding_dismiss,
+    build_player_guide_progress_snapshot, build_player_post_onboarding_snapshot, player_goal_badge,
+    player_goal_color, player_goal_detail, player_goal_title,
+    player_mission_hud_minimap_reserved_bottom, player_onboarding_dismiss,
     player_onboarding_primary_action, player_onboarding_title, render_player_cinematic_intro,
     render_player_guide_progress_lines, render_player_layout_preset_strip,
     render_player_mission_hud, PlayerGuideProgressSnapshot,
@@ -127,11 +128,12 @@ struct PlayerNoProgressWatch {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct PlayerHudSnapshot {
+    pub role: String,
     pub connection: String,
     pub tick: u64,
     pub events: usize,
     pub selection: String,
-    pub objective: &'static str,
+    pub objective: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -703,49 +705,52 @@ fn runtime_feedback_line(
 
     let line = match (kind, locale.is_zh()) {
         ("runtime.economy.recipe_started", true) => {
-            format!("已接受并执行中 {} @ {}", recipe, factory)
+            format!("指令已接收：{} 正在执行 {}", factory, recipe)
         }
         ("runtime.economy.recipe_started", false) => {
-            format!("Accepted and executing {} @ {}", recipe, factory)
+            format!("Order accepted: {factory} is executing {recipe}")
         }
         ("runtime.economy.recipe_completed", true) => {
-            format!("制成品已产出 {} @ {}", outputs, factory)
+            format!("奖励已到账：{} 产出 {}", factory, outputs)
         }
         ("runtime.economy.recipe_completed", false) => {
-            format!("Produced {} @ {}", outputs, factory)
+            format!("Reward earned: {factory} produced {outputs}")
         }
         ("runtime.economy.factory_production_blocked", true) => match detail {
             Some(detail) if detail != reason => {
-                format!("产线停机 {}：{} ({detail})", factory, reason)
+                format!("代价已显现：{} 停机，{} ({detail})", factory, reason)
             }
-            _ => format!("产线停机 {}：{}", factory, reason),
+            _ => format!("代价已显现：{} 停机，{}", factory, reason),
         },
         ("runtime.economy.factory_production_blocked", false) => match detail {
             Some(detail) if detail != reason => {
-                format!("Line blocked {}: {} ({detail})", factory, reason)
+                format!("Cost surfaced: {factory} is blocked by {reason} ({detail})")
             }
-            _ => format!("Line blocked {}: {}", factory, reason),
+            _ => format!("Cost surfaced: {factory} is blocked by {reason}"),
         },
         ("runtime.economy.factory_production_resumed", true) => match previous_reason {
             Some(previous_reason) if previous_reason != "none" => {
                 format!(
-                    "产线恢复 {}：继续 {}，解除 {}",
+                    "恢复已确认：{} 恢复 {}，已解除 {}",
                     factory, recipe, previous_reason
                 )
             }
-            _ => format!("产线恢复 {}：继续 {}", factory, recipe),
+            _ => format!("恢复已确认：{} 恢复 {}", factory, recipe),
         },
         ("runtime.economy.factory_production_resumed", false) => match previous_reason {
             Some(previous_reason) if previous_reason != "none" => {
-                format!(
-                    "Line resumed {}: continuing {} after {}",
-                    factory, recipe, previous_reason
-                )
+                format!("Recovery confirmed: {factory} resumed {recipe} after {previous_reason}",)
             }
-            _ => format!("Line resumed {}: continuing {}", factory, recipe),
+            _ => {
+                format!("Recovery confirmed: {factory} resumed {recipe}")
+            }
         },
-        ("runtime.economy.factory_built", true) => format!("工厂落成 {}", factory),
-        ("runtime.economy.factory_built", false) => format!("Factory ready {}", factory),
+        ("runtime.economy.factory_built", true) => {
+            format!("能力已解锁：{} 已就绪", factory)
+        }
+        ("runtime.economy.factory_built", false) => {
+            format!("Capability unlocked: {factory} is ready")
+        }
         _ => return None,
     };
 
@@ -905,10 +910,15 @@ pub(super) fn build_player_hud_snapshot(
     state: &ViewerState,
     selection: &ViewerSelection,
     step: PlayerGuideStep,
+    post_onboarding_ready: bool,
     locale: crate::i18n::UiLocale,
 ) -> PlayerHudSnapshot {
     egui_right_panel_player_experience_hud::build_player_hud_snapshot(
-        state, selection, step, locale,
+        state,
+        selection,
+        step,
+        post_onboarding_ready,
+        locale,
     )
 }
 
@@ -1134,7 +1144,15 @@ pub(super) fn render_player_experience_layers(
         !guide_progress.explore_ready && should_show_player_onboarding_card(onboarding, guide_step);
     sync_player_guide_transition(&mut onboarding.guide_transition, guide_step, now_secs);
     render_player_cinematic_intro(context, state, guide_step, locale, now_secs);
-    render_player_compact_hud(context, state, selection, guide_step, locale, now_secs);
+    render_player_compact_hud(
+        context,
+        state,
+        selection,
+        guide_step,
+        guide_progress.explore_ready,
+        locale,
+        now_secs,
+    );
     render_player_mission_hud(
         context,
         state,

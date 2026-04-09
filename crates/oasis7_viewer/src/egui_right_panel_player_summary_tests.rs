@@ -86,7 +86,6 @@ fn first_session_summary_snapshot_reports_duration_and_gains() {
         snapshot.title,
         "First Session Recap: PostOnboarding unlocked"
     );
-    assert!(snapshot
-        .next_tip
-        .contains("sustainable industrial capability"));
+    assert!(snapshot.detail.contains("first industrial line"));
+    assert!(snapshot.next_tip.contains("output reward"));
 }

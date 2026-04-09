@@ -44,6 +44,13 @@ tasks:
     priority: P0
     source_signal: null
     updated_at: 2026-04-09T16:10:05+08:00
+  - task_uid: task_796226e14b9d4773be6e5828c4a2994e
+    owner_role: viewer_engineer
+    task_path: .pm/tasks/task_796226e14b9d4773be6e5828c4a2994e.yaml
+    status: done
+    priority: P0
+    source_signal: null
+    updated_at: 2026-04-09T16:49:58+08:00
   - task_uid: task_3eb31966906e5ae7b8b8676d756c5510
     owner_role: producer_system_designer
     task_path: .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.yaml

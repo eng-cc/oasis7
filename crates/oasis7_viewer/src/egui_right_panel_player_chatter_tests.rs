@@ -62,7 +62,32 @@ fn sync_agent_chatter_bubbles_formats_runtime_industry_feedback() {
     assert_eq!(snapshot.0, 2);
     assert_eq!(snapshot.1, FeedbackTone::Warning);
     assert!(snapshot.2.contains("factory.alpha"));
-    assert!(snapshot.3.contains("产线停机"));
+    assert!(snapshot.3.contains("代价已显现"));
+}
+
+#[test]
+fn sync_agent_chatter_bubbles_surfaces_recovery_confirmation() {
+    let mut achievements = PlayerAchievementState::default();
+    let mut state = sample_viewer_state(
+        crate::ConnectionStatus::Connected,
+        vec![sample_agent_moved_event(1, 1)],
+    );
+    let locale = crate::i18n::UiLocale::EnUs;
+
+    sync_agent_chatter_bubbles(&mut achievements, &state, 10.0, locale);
+    state.events.push(sample_runtime_event(
+        2,
+        2,
+        "runtime.economy.factory_production_resumed",
+        "factory=factory.alpha recipe=recipe.motor requester=agent.alpha previous_reason=material_shortage",
+    ));
+    sync_agent_chatter_bubbles(&mut achievements, &state, 11.0, locale);
+
+    let snapshot = player_agent_chatter_snapshot(&achievements, 0)
+        .expect("expected one chatter bubble after resume event");
+    assert_eq!(snapshot.1, FeedbackTone::Positive);
+    assert!(snapshot.3.contains("Recovery confirmed"));
+    assert!(snapshot.3.contains("resumed"));
 }
 
 #[test]

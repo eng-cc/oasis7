@@ -5,7 +5,10 @@ use crate::right_panel_module_visibility::RightPanelModuleVisibilityState;
 use crate::ViewerControl;
 use egui_kittest::{kittest::Queryable as _, Harness};
 use egui_wgpu::wgpu;
-use oasis7::simulator::{RejectReason, WorldEvent, WorldEventKind};
+use oasis7::simulator::{
+    PlayerGameplayGoalKind, PlayerGameplaySnapshot, PlayerGameplayStageId,
+    PlayerGameplayStageStatus, RejectReason, WorldEvent, WorldEventKind,
+};
 use std::iter::once;
 use std::mem::size_of;
 use std::sync::mpsc::channel;
@@ -739,8 +742,26 @@ fn push_feedback_toast_uses_runtime_industry_friendly_detail() {
         Some((9, FeedbackTone::Warning, "操作受阻"))
     );
     let detail = feedback_toast_detail(&feedback, 0).expect("runtime toast detail");
-    assert!(detail.contains("产线停机"));
+    assert!(detail.contains("代价已显现"));
     assert!(detail.contains("factory.alpha"));
+}
+
+#[test]
+fn push_feedback_toast_surfaces_reward_language_for_completed_output() {
+    let mut feedback = FeedbackToastState::default();
+    let locale = crate::i18n::UiLocale::EnUs;
+    let event = sample_runtime_event(
+        10,
+        10,
+        "runtime.economy.recipe_completed",
+        "factory=factory.alpha recipe=recipe.motor requester=agent.alpha outputs=motor_mk1x2",
+    );
+
+    push_feedback_toast(&mut feedback, &event, 13.0, locale);
+
+    let detail = feedback_toast_detail(&feedback, 0).expect("runtime reward toast detail");
+    assert!(detail.contains("Reward earned"));
+    assert!(detail.contains("produced"));
 }
 
 #[test]
@@ -897,10 +918,12 @@ fn build_player_hud_snapshot_formats_connected_selected_state() {
         &state,
         &selection,
         PlayerGuideStep::ExploreAction,
+        false,
         crate::i18n::UiLocale::EnUs,
     );
 
     assert_eq!(snapshot.connection, "Connected");
+    assert_eq!(snapshot.role, "Action commander");
     assert_eq!(snapshot.tick, 0);
     assert_eq!(snapshot.events, 2);
     assert_eq!(snapshot.objective, "Advance The Run");
@@ -915,14 +938,93 @@ fn build_player_hud_snapshot_uses_unselected_fallback_text() {
         &state,
         &selection,
         PlayerGuideStep::OpenPanel,
+        false,
         crate::i18n::UiLocale::ZhCn,
     );
 
     assert_eq!(snapshot.connection, "连接中");
+    assert_eq!(snapshot.role, "前线指挥员");
     assert_eq!(snapshot.tick, 0);
     assert_eq!(snapshot.events, 0);
     assert_eq!(snapshot.selection, "未选择");
     assert_eq!(snapshot.objective, "展开操作面板");
+}
+
+#[test]
+fn build_player_hud_snapshot_prefers_post_onboarding_goal_and_role() {
+    let mut state = sample_viewer_state(crate::ConnectionStatus::Connected, Vec::new());
+    state.snapshot = Some(oasis7::simulator::WorldSnapshot {
+        version: oasis7::simulator::SNAPSHOT_VERSION,
+        chunk_generation_schema_version: oasis7::simulator::CHUNK_GENERATION_SCHEMA_VERSION,
+        time: 42,
+        config: oasis7::simulator::WorldConfig::default(),
+        model: oasis7::simulator::WorldModel::default(),
+        runtime_snapshot: None,
+        player_gameplay: Some(PlayerGameplaySnapshot {
+            stage_id: PlayerGameplayStageId::PostOnboarding,
+            stage_status: PlayerGameplayStageStatus::BranchReady,
+            goal_id: "post_onboarding.choose_first_expansion_tradeoff".to_string(),
+            goal_kind: PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff,
+            goal_title: "Choose the first expansion tradeoff".to_string(),
+            objective: "canonical objective".to_string(),
+            progress_detail: "canonical progress".to_string(),
+            progress_percent: 92,
+            blocker_kind: None,
+            blocker_detail: None,
+            next_step_hint: "canonical next step".to_string(),
+            branch_hint: Some("Tradeoffs unlocked: throughput expansion".to_string()),
+            available_actions: Vec::new(),
+            recent_feedback: None,
+            agent_claim: None,
+        }),
+        chunk_runtime: oasis7::simulator::ChunkRuntimeConfig::default(),
+        next_event_id: 1,
+        next_action_id: 1,
+        pending_actions: Vec::new(),
+        journal_len: 0,
+    });
+
+    let snapshot = build_player_hud_snapshot(
+        &state,
+        &crate::ViewerSelection::default(),
+        PlayerGuideStep::ExploreAction,
+        true,
+        crate::i18n::UiLocale::EnUs,
+    );
+
+    assert_eq!(snapshot.role, "First-line lead");
+    assert_eq!(
+        snapshot.objective,
+        "Next Stage: Choose the First Expansion Tradeoff"
+    );
+    assert_eq!(snapshot.tick, 42);
+}
+
+#[test]
+fn build_player_hud_snapshot_uses_post_onboarding_fallback_without_gameplay_snapshot() {
+    let state = sample_viewer_state(
+        crate::ConnectionStatus::Connected,
+        vec![sample_runtime_event(
+            7,
+            7,
+            "runtime.economy.recipe_started",
+            "factory=factory.alpha recipe=recipe.motor requester=agent.alpha outputs=motor_mk1x2",
+        )],
+    );
+
+    let snapshot = build_player_hud_snapshot(
+        &state,
+        &crate::ViewerSelection::default(),
+        PlayerGuideStep::ExploreAction,
+        true,
+        crate::i18n::UiLocale::EnUs,
+    );
+
+    assert_eq!(snapshot.role, "First-line lead");
+    assert_eq!(
+        snapshot.objective,
+        "PostOnboarding: Stabilize Your First Line"
+    );
 }
 
 #[test]

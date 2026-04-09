@@ -265,19 +265,23 @@ fn render_player_control_result_strip(
         .inner_margin(egui::Margin::same(7))
         .show(ui, |ui| {
             ui.small(if locale.is_zh() {
-                "控制结果"
+                "最新指令"
             } else {
-                "Control Result"
+                "Latest Order"
             });
             ui.small(
-                egui::RichText::new(format!(
-                    "{} · {}",
-                    feedback.action,
-                    player_control_stage_label(feedback.stage.as_str(), locale)
-                ))
-                .color(stage_color)
-                .strong(),
+                egui::RichText::new(player_control_result_summary(feedback, locale))
+                    .color(stage_color)
+                    .strong(),
             );
+            ui.small(format!(
+                "{} · {}",
+                feedback.action,
+                player_control_stage_label(feedback.stage.as_str(), locale)
+            ));
+            if !feedback.effect.is_empty() {
+                ui.small(feedback.effect.as_str());
+            }
             ui.small(if locale.is_zh() {
                 format!(
                     "增量: tick +{} · event +{} · trace +{}",
@@ -293,7 +297,96 @@ fn render_player_control_result_strip(
                     feedback.delta_trace_count
                 )
             });
-            ui.small(feedback.effect.as_str());
+        });
+}
+
+pub(crate) fn player_control_result_summary(
+    feedback: &WebTestApiControlFeedbackSnapshot,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    match (feedback.stage.as_str(), locale.is_zh()) {
+        ("received", true) => "指令已接收，世界正在应用。".to_string(),
+        ("received", false) => "Order received and queued into the world.".to_string(),
+        ("executing", true) => "指令执行中，继续观察前台反馈。".to_string(),
+        ("executing", false) => "Order executing now; watch the world-facing feedback.".to_string(),
+        ("blocked", true) => "指令遇到阻塞，先处理当前代价。".to_string(),
+        ("blocked", false) => "Order hit a blocker; resolve the current cost first.".to_string(),
+        ("completed_no_progress", true) => "指令已结束，但还没有形成有效推进。".to_string(),
+        ("completed_no_progress", false) => {
+            "Order completed, but it did not create useful forward progress.".to_string()
+        }
+        ("completed_advanced" | "applied", true) => "指令已推进世界状态。".to_string(),
+        ("completed_advanced" | "applied", false) => "Order advanced the world state.".to_string(),
+        (_, true) => format!(
+            "指令状态：{}",
+            player_control_stage_label(feedback.stage.as_str(), locale)
+        ),
+        (_, false) => format!(
+            "Order status: {}",
+            player_control_stage_label(feedback.stage.as_str(), locale)
+        ),
+    }
+}
+
+fn player_identity_line(
+    state: &crate::ViewerState,
+    progress: PlayerGuideProgressSnapshot,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    if let Some(claimer_agent_id) = state
+        .snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.player_gameplay.as_ref())
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .map(|claim| super::super::truncate_observe_text(&claim.claimer_agent_id, 18))
+    {
+        return if locale.is_zh() {
+            format!("你正在负责 {} 的首条产线。", claimer_agent_id)
+        } else {
+            format!("You are directing {claimer_agent_id}'s first industrial line.")
+        };
+    }
+
+    if progress.explore_ready {
+        if locale.is_zh() {
+            "你当前是首条工业线的负责人。".to_string()
+        } else {
+            "You are the lead for the first industrial line.".to_string()
+        }
+    } else if locale.is_zh() {
+        "你当前在建立首局行动闭环。".to_string()
+    } else {
+        "You are still establishing the first action loop.".to_string()
+    }
+}
+
+fn render_player_next_step_card(
+    ui: &mut egui::Ui,
+    next_step: &str,
+    locale: crate::i18n::UiLocale,
+    tone: egui::Color32,
+) {
+    egui::Frame::group(ui.style())
+        .fill(egui::Color32::from_rgba_unmultiplied(
+            tone.r(),
+            tone.g(),
+            tone.b(),
+            24,
+        ))
+        .stroke(egui::Stroke::new(1.0, tone))
+        .corner_radius(egui::CornerRadius::same(7))
+        .inner_margin(egui::Margin::same(7))
+        .show(ui, |ui| {
+            ui.small(if locale.is_zh() {
+                "下一步"
+            } else {
+                "Immediate Next Step"
+            });
+            ui.small(
+                egui::RichText::new(next_step)
+                    .color(egui::Color32::from_rgb(212, 228, 246))
+                    .strong(),
+            );
         });
 }
 
@@ -345,6 +438,8 @@ pub(crate) fn render_player_mission_hud(
     let control_feedback_needs_recovery = control_feedback.as_ref().is_some_and(|feedback| {
         player_control_stage_shows_recovery_actions(feedback.stage.as_str())
     });
+    let identity_line = player_identity_line(state, progress, locale);
+    let show_secondary_signals = post_onboarding.is_none() || !compact_mode;
     egui::Area::new(egui::Id::new("viewer-player-mission-hud"))
         .anchor(egui::Align2::LEFT_TOP, egui::vec2(14.0, mission_anchor_y))
         .movable(false)
@@ -366,6 +461,16 @@ pub(crate) fn render_player_mission_hud(
                 .show(ui, |ui| {
                     ui.set_max_width(if compact_mode { 280.0 } else { 320.0 });
                     if let Some(post_onboarding) = post_onboarding.as_ref() {
+                        ui.small(if locale.is_zh() {
+                            "玩家身份"
+                        } else {
+                            "Player Role"
+                        });
+                        ui.small(
+                            egui::RichText::new(identity_line.as_str())
+                                .color(egui::Color32::from_rgb(222, 198, 120))
+                                .strong(),
+                        );
                         ui.small(
                             egui::RichText::new(player_post_onboarding_status_label(
                                 post_onboarding.status,
@@ -375,18 +480,24 @@ pub(crate) fn render_player_mission_hud(
                             .strong(),
                         );
                         ui.small(if locale.is_zh() {
-                            "阶段目标"
+                            "当前主目标"
                         } else {
-                            "Stage Goal"
+                            "Primary Goal"
                         });
                         ui.strong(post_onboarding.title);
                         ui.label(post_onboarding.objective.as_str());
-                        ui.small(
-                            egui::RichText::new(post_onboarding.progress_detail.as_str())
-                                .color(egui::Color32::from_rgb(186, 206, 238)),
-                        );
                     } else {
                         ui.small(egui::RichText::new(snapshot.title).color(tone).strong());
+                        ui.small(if locale.is_zh() {
+                            "玩家身份"
+                        } else {
+                            "Player Role"
+                        });
+                        ui.small(
+                            egui::RichText::new(identity_line.as_str())
+                                .color(egui::Color32::from_rgb(222, 198, 120))
+                                .strong(),
+                        );
                         ui.small(if locale.is_zh() {
                             "主目标"
                         } else {
@@ -403,7 +514,6 @@ pub(crate) fn render_player_mission_hud(
                     if let Some(feedback) = control_feedback.as_ref() {
                         render_player_control_result_strip(ui, feedback, locale, pulse);
                     }
-                    render_player_micro_loop_summary(ui, &micro_loop_snapshot, locale);
                     if let Some(post_onboarding) = post_onboarding.as_ref() {
                         if let Some(blocker_detail) = post_onboarding.blocker_detail.as_ref() {
                             egui::Frame::group(ui.style())
@@ -423,7 +533,16 @@ pub(crate) fn render_player_mission_hud(
                                     );
                                 });
                         }
-                        ui.small(post_onboarding.next_step.as_str());
+                        render_player_next_step_card(
+                            ui,
+                            post_onboarding.next_step.as_str(),
+                            locale,
+                            reward_tone,
+                        );
+                        ui.small(
+                            egui::RichText::new(post_onboarding.progress_detail.as_str())
+                                .color(egui::Color32::from_rgb(186, 206, 238)),
+                        );
                         if let Some(branch_hint) = post_onboarding.branch_hint.as_ref() {
                             egui::Frame::group(ui.style())
                                 .fill(egui::Color32::from_rgba_unmultiplied(
@@ -445,6 +564,7 @@ pub(crate) fn render_player_mission_hud(
                                 });
                         }
                     } else {
+                        render_player_micro_loop_summary(ui, &micro_loop_snapshot, locale);
                         egui::CollapsingHeader::new(if locale.is_zh() {
                             "展开短目标"
                         } else {
@@ -468,6 +588,17 @@ pub(crate) fn render_player_mission_hud(
                         if !compact_mode {
                             ui.small(player_goal_detail(step, locale));
                         }
+                    }
+                    if post_onboarding.is_some() && show_secondary_signals {
+                        egui::CollapsingHeader::new(if locale.is_zh() {
+                            "次级世界线索"
+                        } else {
+                            "Secondary World Cues"
+                        })
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            render_player_micro_loop_summary(ui, &micro_loop_snapshot, locale);
+                        });
                     }
                     if let Some(stuck_hint) = stuck_hint {
                         egui::Frame::group(ui.style())
@@ -604,35 +735,6 @@ pub(crate) fn render_player_mission_hud(
                     );
                     if compact_mode && post_onboarding.is_none() {
                         ui.small(egui::RichText::new(reward.badge).color(reward_tone));
-                    } else if let Some(post_onboarding) = post_onboarding.as_ref() {
-                        egui::Frame::group(ui.style())
-                            .fill(egui::Color32::from_rgba_unmultiplied(
-                                reward_tone.r(),
-                                reward_tone.g(),
-                                reward_tone.b(),
-                                if matches!(
-                                    post_onboarding.status,
-                                    PlayerPostOnboardingStatus::BranchReady
-                                ) {
-                                    54
-                                } else {
-                                    28
-                                },
-                            ))
-                            .stroke(egui::Stroke::new(1.0, reward_tone))
-                            .corner_radius(egui::CornerRadius::same(8))
-                            .inner_margin(egui::Margin::same(8))
-                            .show(ui, |ui| {
-                                ui.small(
-                                    egui::RichText::new(player_post_onboarding_status_label(
-                                        post_onboarding.status,
-                                        locale,
-                                    ))
-                                    .color(reward_tone),
-                                );
-                                ui.strong(post_onboarding.title);
-                                ui.small(post_onboarding.next_step.as_str());
-                            });
                     } else {
                         egui::Frame::group(ui.style())
                             .fill(egui::Color32::from_rgba_unmultiplied(
