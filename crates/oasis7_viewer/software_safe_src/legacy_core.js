@@ -1361,6 +1361,38 @@ function sendJson(payload) {
   socket.send(JSON.stringify(payload));
 }
 
+function gameplayActionByProtocolAction(protocolAction) {
+  const actions = state.snapshot?.player_gameplay?.available_actions;
+  if (!Array.isArray(actions)) {
+    return null;
+  }
+  return actions.find((action) => action?.protocol_action === protocolAction) || null;
+}
+
+function viewerControlGate(normalizedAction) {
+  const protocolAction =
+    state.controlProfile === "live"
+      ? normalizedAction === "play"
+        ? "live_control.play"
+        : normalizedAction === "step"
+          ? "live_control.step"
+          : null
+      : null;
+  if (!protocolAction) {
+    return null;
+  }
+  const gameplayAction = gameplayActionByProtocolAction(protocolAction);
+  const disabledReason = String(gameplayAction?.disabled_reason || "").trim();
+  if (!disabledReason) {
+    return null;
+  }
+  return {
+    reason: disabledReason,
+    effect: `control blocked by gameplay gate: ${disabledReason}`,
+    hint: state.snapshot?.player_gameplay?.next_step_hint || null,
+  };
+}
+
 function sendViewerControl(action, payload) {
   const normalized = String(action || "").trim().toLowerCase();
   const currentRequestId = nextRequestId();
@@ -1398,6 +1430,17 @@ function sendViewerControl(action, payload) {
   } else {
     feedback.reason = `unsupported action: ${normalized}`;
     feedback.effect = "request rejected before send";
+    state.lastControlFeedback = feedback;
+    render();
+    return snapshotControlFeedback(feedback);
+  }
+
+  const gate = viewerControlGate(normalized);
+  if (gate) {
+    feedback.stage = "blocked";
+    feedback.reason = gate.reason;
+    feedback.hint = gate.hint;
+    feedback.effect = gate.effect;
     state.lastControlFeedback = feedback;
     render();
     return snapshotControlFeedback(feedback);
@@ -1501,13 +1544,20 @@ function handleControlCompletionAck(ack) {
   if (!feedback) return;
   feedback.deltaLogicalTime = Number(ack?.delta_logical_time || 0);
   feedback.deltaEventSeq = Number(ack?.delta_event_seq || 0);
-  feedback.stage = ack?.status === "advanced" ? "completed_advanced" : "completed_timeout";
-  feedback.effect =
-    ack?.status === "advanced"
-      ? `control ack advanced: logicalTime +${feedback.deltaLogicalTime}, eventSeq +${feedback.deltaEventSeq}`
-      : "control ack timed out without progress";
-  if (ack?.status !== "advanced") {
+  if (ack?.status === "advanced") {
+    feedback.stage = "completed_advanced";
+    feedback.effect = `control ack advanced: logicalTime +${feedback.deltaLogicalTime}, eventSeq +${feedback.deltaEventSeq}`;
+    feedback.reason = null;
+  } else if (ack?.status === "blocked") {
+    feedback.stage = "blocked";
+    feedback.reason =
+      ack?.error_message || ack?.error_code || "control was blocked before runtime advance";
+    feedback.hint = state.snapshot?.player_gameplay?.next_step_hint || feedback.hint;
+    feedback.effect = `gameplay blocked before requested advance completed: logicalTime +${feedback.deltaLogicalTime}, eventSeq +${feedback.deltaEventSeq}`;
+  } else {
+    feedback.stage = "completed_no_progress";
     feedback.reason = "timeout_no_progress";
+    feedback.effect = `no visible world delta: logicalTime +${feedback.deltaLogicalTime}, eventSeq +${feedback.deltaEventSeq}`;
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
@@ -3629,6 +3679,7 @@ export {
   fillControlExample,
   focus,
   getState,
+  handleControlCompletionAck,
   hostedActionPolicy,
   modelLists,
   refreshHostedAdmissionState,

@@ -107,4 +107,102 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
 }
 
+{
+  core.state.snapshot = {
+    player_gameplay: {
+      next_step_hint: "Enable LLM access before retrying world controls.",
+      available_actions: [
+        {
+          action_id: "advance_step",
+          label: "Advance 1 step",
+          protocol_action: "live_control.step",
+          target_agent_id: null,
+          disabled_reason: "missing env variable: OASIS7_LLM_MODEL",
+        },
+        {
+          action_id: "resume_play",
+          label: "Resume live play",
+          protocol_action: "live_control.play",
+          target_agent_id: null,
+          disabled_reason: "missing env variable: OASIS7_LLM_MODEL",
+        },
+      ],
+    },
+  };
+  core.state.controlProfile = "live";
+  const feedback = core.sendControl("step");
+  assert.equal(feedback.accepted, false);
+  assert.equal(feedback.stage, "blocked");
+  assert.equal(feedback.reason, "missing env variable: OASIS7_LLM_MODEL");
+  assert.match(feedback.effect, /control blocked by gameplay gate/i);
+  assert.equal(feedback.hint, "Enable LLM access before retrying world controls.");
+}
+
+{
+  core.state.snapshot = {
+    player_gameplay: {
+      next_step_hint: "Recover the lane before retrying world controls.",
+      available_actions: [],
+    },
+  };
+  core.state.lastControlFeedback = {
+    id: 41,
+    action: "step",
+    accepted: true,
+    stage: "queued",
+    reason: null,
+    hint: null,
+    effect: "queued",
+    baselineLogicalTime: 7,
+    baselineEventSeq: 3,
+    deltaLogicalTime: 0,
+    deltaEventSeq: 0,
+    requestId: 41,
+  };
+  core.handleControlCompletionAck({
+    request_id: 41,
+    status: "blocked",
+    delta_logical_time: 0,
+    delta_event_seq: 0,
+    error_code: "llm_init_failed",
+    error_message: "gameplay requires a configured and reachable LLM provider",
+  });
+  assert.equal(core.state.lastControlFeedback.stage, "blocked");
+  assert.equal(
+    core.state.lastControlFeedback.reason,
+    "gameplay requires a configured and reachable LLM provider",
+  );
+  assert.equal(
+    core.state.lastControlFeedback.hint,
+    "Recover the lane before retrying world controls.",
+  );
+  assert.match(core.state.lastControlFeedback.effect, /blocked before requested advance/i);
+}
+
+{
+  core.state.lastControlFeedback = {
+    id: 42,
+    action: "step",
+    accepted: true,
+    stage: "queued",
+    reason: null,
+    hint: null,
+    effect: "queued",
+    baselineLogicalTime: 7,
+    baselineEventSeq: 3,
+    deltaLogicalTime: 0,
+    deltaEventSeq: 0,
+    requestId: 42,
+  };
+  core.handleControlCompletionAck({
+    request_id: 42,
+    status: "timeout_no_progress",
+    delta_logical_time: 0,
+    delta_event_seq: 0,
+  });
+  assert.equal(core.state.lastControlFeedback.stage, "completed_no_progress");
+  assert.equal(core.state.lastControlFeedback.reason, "timeout_no_progress");
+  assert.match(core.state.lastControlFeedback.effect, /no visible world delta/i);
+}
+
 console.log("software-safe feedback contract tests passed");

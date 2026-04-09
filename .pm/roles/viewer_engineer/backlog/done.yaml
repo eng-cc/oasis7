@@ -15,6 +15,20 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_a2a5c83cb80f4a6f9deb3dfcb5ca8377.yaml
+  - task_uid: task_3c5bd60eca214ead909f4ef67a139700
+    title: "Stabilize first-session control floor across headed Web/UI and software_safe"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+      - doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md
+    acceptance:
+      - "Headed Web/UI and software_safe formal entry both reach connected and accept play/step/select without manual recovery."
+      - "The weakest entry path no longer times out with control ack without progress on the primary step action."
+      - "Docs and execution log record the verified blocker, fix scope, and required/full evidence."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_3c5bd60eca214ead909f4ef67a139700.yaml
   - task_uid: task_96b9784a063d4922a235dbc1e5ff2304
     title: "Implement provider execution lane passthrough and timeout policy for client launcher"
     priority: P1
