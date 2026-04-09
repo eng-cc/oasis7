@@ -8,9 +8,9 @@
 ## 任务拆解
 
 - [x] TASK-GAMEPLAY-RR-001 (`PRD-GAME-012`) [test_tier_required]: `producer_system_designer` 已冻结未来两周只优先推进 5 条 retention lane，并完成 `game` 根入口、`gameplay` 主文档与当前 task execution log 挂载。
-- [ ] TASK-GAMEPLAY-RR-002 (`PRD-GAME-012`) [test_tier_required + test_tier_full]: `viewer_engineer` / `runtime_engineer` 收口首次进入与最小控制地板，让 headed Web/UI 与 `software_safe` 正式入口都稳定达到 `open -> connected -> play/step/select`。
-- [ ] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` / `viewer_engineer` 将 `PostOnboarding` 后 10 分钟工业中循环加厚为“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的可复跑目标包。
-- [ ] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` / `agent_engineer` 收口首屏噪音、玩家身份和后果可见化，把当前主目标、阻塞、代价与奖励节奏做成前台主语义。
+- [x] TASK-GAMEPLAY-RR-002 (`PRD-GAME-012`) [test_tier_required + test_tier_full]: `viewer_engineer` 已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 provider timeout blocker 由 `TASK-GAMEPLAY-RR-005` 继续记录为 `hold`。
+- [x] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` 已将 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
+- [x] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到前台主语义。
 - [x] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在当前切片 fresh rerun 中确认 `software_safe` formal floor 仍被 LLM provider timeout 阻断；`producer_system_designer` 已据此给出 `hold` 决策。
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
@@ -65,15 +65,15 @@
   - [x] 根任务编号、owner role、test tier 与建议标题已冻结
   - [x] 当前阶段仍明确为 `internal_playable_alpha_late`
 - `TASK-GAME-062`
-  - [ ] 首次进入不再依赖手动 reopen/reload 才可控
-  - [ ] `software_safe` 不再出现 `control ack timed out without progress` 的主路径 blocker
-  - [ ] headed Web/UI 与 `software_safe` 均有 required-tier 证据
+  - [x] 首次进入不再依赖手动 reopen/reload 才可控
+  - [x] `software_safe` 不再把明确 `blocked` / `timeout_no_progress` 压扁成伪 timeout，前台会回填正确控制反馈
+  - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 由 `TASK-GAME-065` 复核后维持 `hold`
 - `TASK-GAME-063`
-  - [ ] 10 分钟工业中循环包可在同一会话完成
-  - [ ] 建厂/首产出/停机恢复/扩产取舍均有状态与前台反馈
+  - [x] 10 分钟工业中循环包可在同一会话完成
+  - [x] 建厂/首产出/停机恢复/扩产取舍均有 canonical 状态与前台反馈锚点
 - `TASK-GAME-064`
-  - [ ] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
-  - [ ] 玩家能直接读到代价、阻塞、恢复和奖励
+  - [x] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
+  - [x] 玩家能直接读到代价、阻塞、恢复和奖励
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
   - [x] producer 已给出 continue / hold 结论并回写根项目文档
@@ -92,10 +92,11 @@
 ## 状态
 
 - 更新日期: 2026-04-09
-- 当前状态: in_progress
+- 当前状态: completed
 - 当前 owner: `producer_system_designer`
-- 下一任务: `TASK-GAMEPLAY-RR-002`
+- 下一任务: `无（TASK-GAMEPLAY-RR-001~005 已全部收口；producer 结论为 hold）`
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
-  - `TASK-GAME-065` 已在当前切片给出 `hold`：fresh active-LLM `software_safe` floor 仍因 `Responses API` 10 秒超时卡在第一步，正式 10 分钟样本收集暂缓，优先回到 `TASK-GAME-062` 修 floor。
+  - `TASK-GAMEPLAY-RR-001~005` 已全部完成并回写 `.pm`；其中 `TASK-GAMEPLAY-RR-002/003/004` 分别收口了控制门控与 ack 语义、工业中循环 canonical 包，以及首屏噪音/后果可见化。
+  - `TASK-GAME-065` 已在当前切片给出 `hold`：fresh active-LLM `software_safe` formal floor 仍因 `Responses API` 10 秒超时卡在第一步，因此本专题以 `hold` 收口，不宣称 formal gameplay PASS。

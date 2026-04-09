@@ -57,10 +57,10 @@
 
 ### T8 10 分钟留存修复（2026-04-09）
 - [x] 冻结“未来两周只优先做 5 条 retention lane”的专题 PRD / design / project，并完成根入口挂载。
-- [ ] `viewer_engineer` / `runtime_engineer`：收口首次进入与最小控制地板，让 headed Web/UI 与 `software_safe` 正式入口都稳定达到 `open -> connected -> play/step/select`。
-- [ ] `runtime_engineer` / `viewer_engineer`：把 `PostOnboarding` 后 10 分钟工业中循环加厚为“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的目标包。
-- [ ] `viewer_engineer` / `agent_engineer`：继续收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
-- [ ] `qa_engineer`：建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论。
+- [x] `viewer_engineer` / `runtime_engineer`：已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM provider timeout blocker 另由 QA gate 维持 `hold`。
+- [x] `runtime_engineer` / `viewer_engineer`：已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的目标包。
+- [x] `viewer_engineer` / `agent_engineer`：已收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
+- [x] `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；当前 producer verdict 为 `hold`。
 
 ## 依赖
 
