@@ -1,0 +1,23 @@
+task_uid: task_dcd011f0e4a84239a148c44d86c3097a
+title: "Restore broken GitHub CI gate"
+owner_role: qa_engineer
+worktree_hint: engineering-github-ci-fix-2026-04-09
+execution_log_path: .pm/tasks/task_dcd011f0e4a84239a148c44d86c3097a.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - .github/workflows/rust.yml
+  - scripts/ci-tests.sh
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - doc/engineering/prd.md
+acceptance:
+  - "GitHub required CI failure is reproducible locally with a concrete signature and the root cause is identified."
+  - "The relevant GitHub Actions path passes again locally with targeted verification."
+  - "Engineering tracking and task execution log capture the blocker, fix scope, and verification evidence."
+handoff_to: []
+updated_at: 2026-04-09T22:47:19+08:00
+last_started_at: 2026-04-09T21:26:47+08:00
+last_closed_at: 2026-04-09T22:47:19+08:00

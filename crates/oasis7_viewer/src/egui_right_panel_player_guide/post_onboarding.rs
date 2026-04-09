@@ -346,9 +346,10 @@ fn build_player_post_onboarding_snapshot_from_gameplay(
     } else {
         gameplay.next_step_hint.clone()
     };
-    let branch_hint = gameplay.branch_hint.as_ref().map(|_| {
-        localized_post_onboarding_branch_hint_for_goal(gameplay.goal_kind, locale)
-    });
+    let branch_hint = gameplay
+        .branch_hint
+        .as_ref()
+        .map(|_| localized_post_onboarding_branch_hint_for_goal(gameplay.goal_kind, locale));
 
     PlayerPostOnboardingSnapshot {
         status,

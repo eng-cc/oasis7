@@ -61,6 +61,11 @@ sort_tsv_file() {
   sort -t $'\t' -k1,1 -k2,2 "$file"
 }
 
+sort_tsv_prefix_file() {
+  local file="$1"
+  cut -f1-2 "$file" | sort -t $'\t' -k1,1 -k2,2
+}
+
 strip_comment_and_blank_lines() {
   local input_file="$1"
   local output_file="$2"
@@ -96,6 +101,21 @@ scan_current_oversized_files() {
   done < <(git ls-files 'crates/**/*.rs')
 }
 
+scan_ref_oversized_files() {
+  local ref="$1"
+  local path line_count kind
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    [[ "$path" == crates/*.rs ]] || continue
+    line_count=$(git show "${ref}:${path}" | wc -l)
+    line_count=${line_count//[[:space:]]/}
+    if (( line_count > RUST_FILE_LINE_LIMIT )); then
+      kind=$(classify_rust_file_kind "$path")
+      printf '%s\t%s\t%s\n' "$kind" "$path" "$line_count"
+    fi
+  done < <(git ls-tree -r --name-only "$ref")
+}
+
 scan_current_structural_slice_entries() {
   local path line include_target
   while IFS= read -r path; do
@@ -114,6 +134,28 @@ scan_current_structural_slice_entries() {
       fi
     done < "$path"
   done < <(git ls-files 'crates/**/*.rs')
+}
+
+scan_ref_structural_slice_entries() {
+  local ref="$1"
+  local path line include_target
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    [[ "$path" == crates/*.rs ]] || continue
+
+    if path_matches_structural_slice_pattern "$path"; then
+      printf 'slice_file\t%s\t-\n' "$path"
+    fi
+
+    while IFS= read -r line; do
+      if [[ "$line" =~ include!\(\"([^\"]+)\"\) ]]; then
+        include_target="${BASH_REMATCH[1]}"
+        if path_matches_structural_slice_pattern "$include_target"; then
+          printf 'include_target\t%s\t%s\n' "$path" "$include_target"
+        fi
+      fi
+    done < <(git show "${ref}:${path}")
+  done < <(git ls-tree -r --name-only "$ref")
 }
 
 resolve_compare_ref() {
@@ -154,11 +196,15 @@ current_sorted_tmp=$(mktemp)
 baseline_tmp=$(mktemp)
 baseline_sorted_tmp=$(mktemp)
 previous_baseline_tmp=$(mktemp)
+previous_scan_tmp=$(mktemp)
+previous_scan_sorted_tmp=$(mktemp)
 current_structural_tmp=$(mktemp)
 current_structural_sorted_tmp=$(mktemp)
 structural_baseline_tmp=$(mktemp)
 structural_baseline_sorted_tmp=$(mktemp)
 previous_structural_baseline_tmp=$(mktemp)
+previous_structural_scan_tmp=$(mktemp)
+previous_structural_scan_sorted_tmp=$(mktemp)
 cleanup() {
   rm -f \
     "$current_scan_tmp" \
@@ -166,11 +212,15 @@ cleanup() {
     "$baseline_tmp" \
     "$baseline_sorted_tmp" \
     "$previous_baseline_tmp" \
+    "$previous_scan_tmp" \
+    "$previous_scan_sorted_tmp" \
     "$current_structural_tmp" \
     "$current_structural_sorted_tmp" \
     "$structural_baseline_tmp" \
     "$structural_baseline_sorted_tmp" \
-    "$previous_structural_baseline_tmp"
+    "$previous_structural_baseline_tmp" \
+    "$previous_structural_scan_tmp" \
+    "$previous_structural_scan_sorted_tmp"
 }
 trap cleanup EXIT
 
@@ -256,15 +306,17 @@ else
   compare_ref=""
 fi
 
-if extract_previous_baseline_file "$compare_ref" "$OVERSIZED_BASELINE_FILE" "$previous_baseline_tmp"; then
-  new_oversized=$(comm -23 "$current_sorted_tmp" <(sort_tsv_file "$previous_baseline_tmp") || true)
+if [[ -n "$compare_ref" ]]; then
+  scan_ref_oversized_files "$compare_ref" > "$previous_scan_tmp"
+  sort_tsv_file "$previous_scan_tmp" > "$previous_scan_sorted_tmp"
+  new_oversized=$(comm -23 <(sort_tsv_prefix_file "$current_sorted_tmp") <(sort_tsv_prefix_file "$previous_scan_sorted_tmp") || true)
   if [[ -n "$new_oversized" ]]; then
     echo "check-rust-file-size: newly introduced oversized Rust files relative to ${compare_ref}:"
     echo "$new_oversized"
     fail "new oversized Rust files are not allowed"
   fi
 else
-  echo "check-rust-file-size: bootstrap mode (no previous baseline found)"
+  echo "check-rust-file-size: bootstrap mode (no compare ref found)"
 fi
 
 if [[ -n "$compare_ref" ]]; then
@@ -306,15 +358,17 @@ if [[ -n "$compare_ref" ]]; then
   done < <(git diff --name-status --find-renames "$compare_ref" -- 'crates/**/*.rs')
 fi
 
-if extract_previous_baseline_file "$compare_ref" "$STRUCTURAL_SLICE_BASELINE_FILE" "$previous_structural_baseline_tmp"; then
-  new_structural=$(comm -23 "$current_structural_sorted_tmp" <(sort_tsv_file "$previous_structural_baseline_tmp") || true)
+if [[ -n "$compare_ref" ]]; then
+  scan_ref_structural_slice_entries "$compare_ref" > "$previous_structural_scan_tmp"
+  sort_tsv_file "$previous_structural_scan_tmp" > "$previous_structural_scan_sorted_tmp"
+  new_structural=$(comm -23 "$current_structural_sorted_tmp" "$previous_structural_scan_sorted_tmp" || true)
   if [[ -n "$new_structural" ]]; then
     echo "check-rust-file-size: newly introduced structural slicing entries relative to ${compare_ref}:"
     echo "$new_structural"
     fail "new split_part/include!-based structural slicing entries are not allowed"
   fi
 else
-  echo "check-rust-file-size: structural slicing bootstrap mode (no previous baseline found)"
+  echo "check-rust-file-size: structural slicing bootstrap mode (no compare ref found)"
 fi
 
 code_count=$(awk -F '\t' '$1 == "code" {count++} END {print count + 0}' "$current_sorted_tmp")

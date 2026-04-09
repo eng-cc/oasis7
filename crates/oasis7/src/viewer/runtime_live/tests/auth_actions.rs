@@ -127,6 +127,38 @@ fn complete_smelter_iron_ingot_jobs(
     }
 }
 
+fn setup_industrial_gameplay_with_completed_jobs(
+    signer_seed: u8,
+    jobs: u64,
+) -> ViewerRuntimeLiveServer {
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(signer_seed);
+    let build_nonce = u64::from(signer_seed);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce,
+    );
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce + 1,
+        jobs,
+    );
+    server
+}
+
+fn expect_player_gameplay(
+    server: &mut ViewerRuntimeLiveServer,
+    context: &'static str,
+) -> crate::simulator::PlayerGameplaySnapshot {
+    server.compat_snapshot().player_gameplay.expect(context)
+}
+
 #[test]
 fn runtime_agent_chat_script_mode_requires_llm_mode() {
     let mut server = ViewerRuntimeLiveServer::new(
@@ -775,33 +807,16 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
 #[test]
 fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal() {
     let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(31);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        31,
-    );
-    complete_smelter_iron_ingot_jobs(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        32,
-        1,
-    );
-
-    let snapshot = server.compat_snapshot();
-    let gameplay = snapshot
-        .player_gameplay
-        .expect("player gameplay after industrial progress");
+    let mut server = setup_industrial_gameplay_with_completed_jobs(31, 1);
+    let gameplay = expect_player_gameplay(&mut server, "player gameplay after industrial progress");
     assert_eq!(
         gameplay.goal_id,
         "post_onboarding.stabilize_first_line_after_output"
     );
-    assert_eq!(gameplay.goal_title, "Harden your first output into resilient production");
+    assert_eq!(
+        gameplay.goal_title,
+        "Harden your first output into resilient production"
+    );
     assert_eq!(gameplay.progress_percent, 80);
     assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
 }
@@ -809,28 +824,8 @@ fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal(
 #[test]
 fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
     let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(41);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        41,
-    );
-    complete_smelter_iron_ingot_jobs(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        42,
-        3,
-    );
-
-    let snapshot = server.compat_snapshot();
-    let gameplay = snapshot
-        .player_gameplay
-        .expect("player gameplay after scale-out");
+    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 3);
+    let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
     assert_eq!(
         gameplay.goal_id,
         "post_onboarding.choose_first_expansion_tradeoff"
@@ -839,7 +834,10 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         gameplay.goal_kind,
         PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
     );
-    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::BranchReady);
+    assert_eq!(
+        gameplay.stage_status,
+        PlayerGameplayStageStatus::BranchReady
+    );
     assert_eq!(gameplay.progress_percent, 92);
     assert!(gameplay
         .branch_hint
@@ -850,30 +848,14 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
 #[test]
 fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
     let _guard = lock_test_llm_env();
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(51);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        51,
-    );
-    complete_smelter_iron_ingot_jobs(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        52,
-        6,
-    );
-
-    let snapshot = server.compat_snapshot();
-    let gameplay = snapshot
-        .player_gameplay
-        .expect("player gameplay after governance-ready output");
+    let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
+    let gameplay =
+        expect_player_gameplay(&mut server, "player gameplay after governance-ready output");
     assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
-    assert_eq!(gameplay.goal_kind, PlayerGameplayGoalKind::ChooseMidLoopPath);
+    assert_eq!(
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::ChooseMidLoopPath
+    );
     assert_eq!(gameplay.progress_percent, 100);
 }
 
