@@ -706,6 +706,12 @@ fn localized_post_onboarding_title_for_goal(
     locale: crate::i18n::UiLocale,
 ) -> &'static str {
     match (goal_kind, status, locale.is_zh()) {
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, true) => {
+            "下一阶段：第一次扩产取舍"
+        }
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, false) => {
+            "Next Stage: Choose the First Expansion Tradeoff"
+        }
         (PlayerGameplayGoalKind::ChooseMidLoopPath, _, true) => "下一阶段：选择中循环方向",
         (PlayerGameplayGoalKind::ChooseMidLoopPath, _, false) => {
             "Next Stage: Choose Your Mid-loop Path"
@@ -753,6 +759,13 @@ fn localized_post_onboarding_objective_for_goal(
     locale: crate::i18n::UiLocale,
 ) -> String {
     match (goal_kind, status, locale.is_zh()) {
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, true) => {
+            "第一条产线已经够稳，可以开始第一次扩产取舍：补吞吐、补韧性，或拉开物流覆盖。"
+                .to_string()
+        }
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, false) => {
+            "The first line is stable enough to grow. Choose whether the next investment should buy more throughput, stronger resilience, or wider logistics reach.".to_string()
+        }
         (PlayerGameplayGoalKind::ChooseMidLoopPath, _, true) => {
             "第一项持续工业能力已建立，开始把它扩张成稳定组织能力。".to_string()
         }
@@ -803,6 +816,13 @@ fn localized_post_onboarding_progress_detail_for_goal(
     locale: crate::i18n::UiLocale,
 ) -> String {
     match (goal_kind, status, locale.is_zh()) {
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, true) => {
+            "阶段进展：已越过 bootstrap，第一次扩产建议已经解锁。".to_string()
+        }
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, _, false) => {
+            "Stage progress: bootstrap is complete and the first expansion tradeoff is now unlocked."
+                .to_string()
+        }
         (PlayerGameplayGoalKind::ChooseMidLoopPath, _, true) => {
             "阶段进展：已完成首个可见产出/稳定产线里程碑。".to_string()
         }
@@ -858,6 +878,14 @@ fn localized_post_onboarding_next_step_for_goal(
     locale: crate::i18n::UiLocale,
 ) -> String {
     match (goal_kind, locale.is_zh()) {
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, true) => {
+            "下一步：保持 Command 视图，再推进 1~2 次，并在扩吞吐、补上游韧性或拓展物流覆盖之间做第一次取舍。"
+                .to_string()
+        }
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, false) => {
+            "Next: stay in Command view, advance 1-2 more times, and choose between more throughput, stronger upstream resilience, or wider logistics reach."
+                .to_string()
+        }
         (PlayerGameplayGoalKind::ChooseMidLoopPath, true) => {
             "下一步：保持 Command 视图，继续扩产、推进治理提案，或为关键节点补防护。"
                 .to_string()
@@ -896,6 +924,26 @@ fn localized_post_onboarding_next_step_for_goal(
         }
         (_, false) => {
             "Next: stay in Command view and advance 2-3 more times, prioritizing the first industrial output, the first stable line, or one clear recovery signal."
+                .to_string()
+        }
+    }
+}
+
+fn localized_post_onboarding_branch_hint_for_goal(
+    goal_kind: PlayerGameplayGoalKind,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    match (goal_kind, locale.is_zh()) {
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, true) => {
+            "已解锁取舍：扩产吞吐 / 上游韧性 / 物流覆盖".to_string()
+        }
+        (PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff, false) => {
+            "Tradeoffs unlocked: throughput expansion / input resilience / logistics reach"
+                .to_string()
+        }
+        (_, true) => "已解锁分支：生产扩张 / 治理影响 / 冲突安全".to_string(),
+        (_, false) => {
+            "Branches unlocked: production expansion / governance influence / conflict security"
                 .to_string()
         }
     }

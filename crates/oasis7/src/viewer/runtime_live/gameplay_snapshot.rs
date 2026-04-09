@@ -1,4 +1,4 @@
-use crate::runtime::{FactoryProductionStatus, WorldState};
+use crate::runtime::{FactoryProductionStatus, IndustryStage, WorldState};
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayGoalKind,
     PlayerGameplayRecentFeedback, PlayerGameplaySnapshot, PlayerGameplayStageId,
@@ -149,6 +149,15 @@ pub(super) fn build_player_gameplay_snapshot(
         .values()
         .any(|factory| factory.production.status == FactoryProductionStatus::Running);
     let has_first_output = state.industry_progress.completed_recipe_jobs > 0;
+    let has_blocked_history = state
+        .factories
+        .values()
+        .any(|factory| factory.production.last_blocked_at.is_some());
+    let has_recovery_history = state
+        .factories
+        .values()
+        .any(|factory| factory.production.last_resumed_at.is_some());
+    let industry_stage = state.industry_progress.stage;
 
     if !has_first_session_feedback
         && !has_material_flow
@@ -178,30 +187,20 @@ pub(super) fn build_player_gameplay_snapshot(
         };
     }
 
-    if has_first_output {
-        return PlayerGameplaySnapshot {
-            stage_id: PlayerGameplayStageId::PostOnboarding,
-            stage_status: PlayerGameplayStageStatus::BranchReady,
-            goal_id: "post_onboarding.choose_midloop_path".to_string(),
-            goal_kind: PlayerGameplayGoalKind::ChooseMidLoopPath,
-            goal_title: "Choose your mid-loop path".to_string(),
-            objective: "Your first sustainable industrial capability is online. Expand it into stable organizational momentum.".to_string(),
-            progress_detail: "Stage progress: the first visible output or stable line milestone is complete.".to_string(),
-            progress_percent: 100,
-            blocker_kind: None,
-            blocker_detail: None,
-            next_step_hint: "Keep advancing and either expand production, push governance, or secure a critical node.".to_string(),
-            branch_hint: Some(
-                "Branches unlocked: production expansion / governance influence / conflict security"
-                    .to_string(),
-            ),
-            available_actions,
-            recent_feedback: recent_feedback.cloned(),
-            agent_claim,
-        };
-    }
-
     if let Some((blocker_kind, blocker_detail)) = latest_blocker.or(blocked_feedback) {
+        let (progress_detail, progress_percent) = if has_first_output {
+            (
+                "Stage progress: the first line already produced output, but the current stoppage still blocks resilient production."
+                    .to_string(),
+                84,
+            )
+        } else {
+            (
+                "Stage progress: you are in the management phase, but the primary line is blocked."
+                    .to_string(),
+                68,
+            )
+        };
         return PlayerGameplaySnapshot {
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Blocked,
@@ -211,10 +210,8 @@ pub(super) fn build_player_gameplay_snapshot(
             objective:
                 "Recover the blocked line or capability chain instead of repeating one-off actions."
                     .to_string(),
-            progress_detail:
-                "Stage progress: you are in the management phase, but the primary line is blocked."
-                    .to_string(),
-            progress_percent: 68,
+            progress_detail,
+            progress_percent,
             blocker_kind: Some(blocker_kind.clone()),
             blocker_detail: Some(blocker_detail.clone()),
             next_step_hint: blocker_next_step(blocker_kind.as_str(), blocker_detail.as_str()),
@@ -223,6 +220,99 @@ pub(super) fn build_player_gameplay_snapshot(
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
         };
+    }
+
+    if has_first_output {
+        match industry_stage {
+            IndustryStage::Bootstrap => {
+                let (progress_detail, next_step_hint, progress_percent) = if has_recovery_history {
+                    (
+                        "Stage progress: the first line already recovered once; keep it producing until the first expansion tradeoff is justified."
+                            .to_string(),
+                        "Advance again and decide whether the next gain should come from more throughput, stronger inputs, or wider logistics reach."
+                            .to_string(),
+                        88,
+                    )
+                } else if has_blocked_history {
+                    (
+                        "Stage progress: the first line produced output, but it still needs one clean recovery beat before expansion becomes the right call."
+                            .to_string(),
+                        "Keep advancing until the line recovers from the next stoppage and proves it can resume without manual babysitting."
+                            .to_string(),
+                        82,
+                    )
+                } else {
+                    (
+                        "Stage progress: the first output exists; now harden the line until it survives its first real stoppage or exposes a repeatable recovery loop."
+                            .to_string(),
+                        "Advance 1-2 more times and watch whether the line stays stable, stalls, or recovers into repeatable output."
+                            .to_string(),
+                        80,
+                    )
+                };
+                return PlayerGameplaySnapshot {
+                    stage_id: PlayerGameplayStageId::PostOnboarding,
+                    stage_status: PlayerGameplayStageStatus::Active,
+                    goal_id: "post_onboarding.stabilize_first_line_after_output".to_string(),
+                    goal_kind: PlayerGameplayGoalKind::StabilizeFirstLine,
+                    goal_title: "Harden your first output into resilient production".to_string(),
+                    objective: "One visible output is not enough. Keep the first line alive until it survives interruption and resumes as a repeatable capability.".to_string(),
+                    progress_detail,
+                    progress_percent,
+                    blocker_kind: None,
+                    blocker_detail: None,
+                    next_step_hint,
+                    branch_hint: None,
+                    available_actions,
+                    recent_feedback: recent_feedback.cloned(),
+                    agent_claim,
+                };
+            }
+            IndustryStage::ScaleOut => {
+                return PlayerGameplaySnapshot {
+                    stage_id: PlayerGameplayStageId::PostOnboarding,
+                    stage_status: PlayerGameplayStageStatus::BranchReady,
+                    goal_id: "post_onboarding.choose_first_expansion_tradeoff".to_string(),
+                    goal_kind: PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff,
+                    goal_title: "Choose the first expansion tradeoff".to_string(),
+                    objective: "The first line is stable enough to grow. Pick whether the next investment should buy more throughput, stronger resilience, or wider logistics reach.".to_string(),
+                    progress_detail: "Stage progress: bootstrap is complete and the first expansion tradeoff is now unlocked.".to_string(),
+                    progress_percent: 92,
+                    blocker_kind: None,
+                    blocker_detail: None,
+                    next_step_hint: "Advance again and commit to one tradeoff: add capacity, protect upstream inputs, or widen distribution coverage.".to_string(),
+                    branch_hint: Some(
+                        "Tradeoffs unlocked: throughput expansion / input resilience / logistics reach"
+                            .to_string(),
+                    ),
+                    available_actions,
+                    recent_feedback: recent_feedback.cloned(),
+                    agent_claim,
+                };
+            }
+            IndustryStage::Governance => {
+                return PlayerGameplaySnapshot {
+                    stage_id: PlayerGameplayStageId::PostOnboarding,
+                    stage_status: PlayerGameplayStageStatus::BranchReady,
+                    goal_id: "post_onboarding.choose_midloop_path".to_string(),
+                    goal_kind: PlayerGameplayGoalKind::ChooseMidLoopPath,
+                    goal_title: "Choose your mid-loop path".to_string(),
+                    objective: "Your first sustainable industrial capability is online. Expand it into stable organizational momentum.".to_string(),
+                    progress_detail: "Stage progress: the first expansion tradeoff is behind you and wider mid-loop branches are now meaningful.".to_string(),
+                    progress_percent: 100,
+                    blocker_kind: None,
+                    blocker_detail: None,
+                    next_step_hint: "Keep advancing and either expand production, push governance, or secure a critical node.".to_string(),
+                    branch_hint: Some(
+                        "Branches unlocked: production expansion / governance influence / conflict security"
+                            .to_string(),
+                    ),
+                    available_actions,
+                    recent_feedback: recent_feedback.cloned(),
+                    agent_claim,
+                };
+            }
+        }
     }
 
     if has_recipe_running {

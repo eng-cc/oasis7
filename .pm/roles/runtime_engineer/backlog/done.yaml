@@ -2,6 +2,19 @@ version: 1
 role: runtime_engineer
 status: done
 tasks:
+  - task_uid: task_197de2871b0b439690d52af81366654a
+    title: "Ship the first 10-minute industrial midloop package after PostOnboarding"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+    acceptance:
+      - "PostOnboarding 10-minute industrial loop covers first factory unit, first product, one recovery beat, and one expansion tradeoff in canonical runtime gameplay state."
+      - "Runtime/player_gameplay semantics expose the current industrial milestone, blocker/recovery state, and next-step tradeoff without requiring viewer-specific inference."
+      - "Tests and execution log capture the new midloop package and required evidence."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_197de2871b0b439690d52af81366654a.yaml
   - task_uid: task_0e8cdcdddb7553a2a007ff14fefd79b5
     title: "Fix GitHub CI rust-size gate, m4 template drift, and builtin wasm manifest drift"
     priority: P1

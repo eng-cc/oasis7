@@ -1,0 +1,22 @@
+task_uid: task_197de2871b0b439690d52af81366654a
+title: "Ship the first 10-minute industrial midloop package after PostOnboarding"
+owner_role: runtime_engineer
+worktree_hint: oasis7-gameplay-ten-minute-retention-plan
+execution_log_path: .pm/tasks/task_197de2871b0b439690d52af81366654a.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/game/project.md
+doc_refs:
+  - doc/game/project.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+acceptance:
+  - "PostOnboarding 10-minute industrial loop covers first factory unit, first product, one recovery beat, and one expansion tradeoff in canonical runtime gameplay state."
+  - "Runtime/player_gameplay semantics expose the current industrial milestone, blocker/recovery state, and next-step tradeoff without requiring viewer-specific inference."
+  - "Tests and execution log capture the new midloop package and required evidence."
+handoff_to: []
+updated_at: 2026-04-09T16:10:05+08:00
+last_started_at: 2026-04-09T15:30:11+08:00
+last_closed_at: 2026-04-09T16:09:53+08:00

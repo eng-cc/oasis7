@@ -66,6 +66,7 @@ pub enum PlayerGameplayGoalKind {
     StartFactoryRun,
     StabilizeFirstLine,
     RecoverCapability,
+    ChooseFirstExpansionTradeoff,
     ChooseMidLoopPath,
 }
 

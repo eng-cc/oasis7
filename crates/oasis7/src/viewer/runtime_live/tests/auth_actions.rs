@@ -1,7 +1,131 @@
 use super::*;
+use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+
+fn setup_runtime_industrial_gameplay_session(
+    signer_seed: u8,
+) -> (ViewerRuntimeLiveServer, String, String, String) {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(signer_seed);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        u64::from(signer_seed.saturating_sub(1)),
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    (server, agent_id, public_key, private_key)
+}
+
+fn build_first_smelter_via_gameplay_action(
+    server: &mut ViewerRuntimeLiveServer,
+    agent_id: &str,
+    public_key: &str,
+    private_key: &str,
+    nonce: u64,
+) {
+    let build_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id.to_string(),
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        nonce,
+        public_key,
+        private_key,
+    );
+    let build_ack = server
+        .handle_gameplay_action(build_request)
+        .expect("queue smelter build");
+    assert_eq!(build_ack.action_id, "build_factory_smelter_mk1");
+    for _ in 0..2 {
+        server.world.step().expect("settle smelter build");
+    }
+    assert!(server.world.has_factory("factory.smelter.mk1"));
+    let factory = server
+        .world
+        .state()
+        .factories
+        .get("factory.smelter.mk1")
+        .expect("smelter factory state");
+    let site_ledger = crate::runtime::MaterialLedgerId::site(factory.site_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 400)
+        .expect("seed iron ore for repeated recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "carbon_fuel", 120)
+        .expect("seed carbon fuel for repeated recipes");
+    server
+        .world
+        .set_material_balance("hardware_part", 200)
+        .expect("seed maintenance parts for repeated recipes");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 2_000);
+}
+
+fn complete_smelter_iron_ingot_jobs(
+    server: &mut ViewerRuntimeLiveServer,
+    agent_id: &str,
+    public_key: &str,
+    private_key: &str,
+    start_nonce: u64,
+    jobs: u64,
+) {
+    for offset in 0..jobs {
+        let recipe_request = signed_gameplay_action_request(
+            crate::viewer::GameplayActionRequest {
+                action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
+                target_agent_id: agent_id.to_string(),
+                player_id: "player-a".to_string(),
+                public_key: None,
+                auth: None,
+            },
+            start_nonce + offset,
+            public_key,
+            private_key,
+        );
+        let recipe_ack = server
+            .handle_gameplay_action(recipe_request)
+            .expect("queue iron ingot recipe");
+        assert_eq!(recipe_ack.action_id, "schedule_recipe_smelter_iron_ingot");
+
+        let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
+        for _ in 0..12 {
+            server.world.step().expect("settle recipe");
+            if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
+                break;
+            }
+        }
+        assert!(
+            server.world.state().industry_progress.completed_recipe_jobs > completed_before,
+            "expected one more completed recipe job"
+        );
+    }
+}
 
 #[test]
 fn runtime_agent_chat_script_mode_requires_llm_mode() {
@@ -649,85 +773,107 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
 }
 
 #[test]
-fn runtime_gameplay_action_can_reach_first_capability_milestone_without_ui() {
+fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal() {
     let _guard = lock_test_llm_env();
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
-    )
-    .expect("runtime server");
-    let agent_id = server
-        .world
-        .state()
-        .agents
-        .keys()
-        .next()
-        .cloned()
-        .expect("seed agent");
-    let (public_key, private_key) = test_signer(31);
-
-    let build_request = signed_gameplay_action_request(
-        crate::viewer::GameplayActionRequest {
-            action_id: "build_factory_smelter_mk1".to_string(),
-            target_agent_id: agent_id.clone(),
-            player_id: "player-a".to_string(),
-            public_key: None,
-            auth: None,
-        },
-        31,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    let register_ack = register_runtime_session(
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(31);
+    build_first_smelter_via_gameplay_action(
         &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        30,
+        agent_id.as_str(),
         public_key.as_str(),
         private_key.as_str(),
+        31,
     );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-    let build_ack = server
-        .handle_gameplay_action(build_request)
-        .expect("queue smelter build");
-    assert_eq!(build_ack.action_id, "build_factory_smelter_mk1");
-    for _ in 0..2 {
-        server.world.step().expect("settle smelter build");
-    }
-    assert!(server.world.has_factory("factory.smelter.mk1"));
-
-    let recipe_request = signed_gameplay_action_request(
-        crate::viewer::GameplayActionRequest {
-            action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
-            target_agent_id: agent_id,
-            player_id: "player-a".to_string(),
-            public_key: None,
-            auth: None,
-        },
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
         32,
-        public_key.as_str(),
-        private_key.as_str(),
+        1,
     );
-    let recipe_ack = server
-        .handle_gameplay_action(recipe_request)
-        .expect("queue iron ingot recipe");
-    assert_eq!(recipe_ack.action_id, "schedule_recipe_smelter_iron_ingot");
-    for _ in 0..4 {
-        server.world.step().expect("settle recipe");
-        if server.world.material_balance("iron_ingot") > 0 {
-            break;
-        }
-    }
 
-    assert!(server.world.material_balance("iron_ingot") > 0);
     let snapshot = server.compat_snapshot();
     let gameplay = snapshot
         .player_gameplay
         .expect("player gameplay after industrial progress");
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.stabilize_first_line_after_output"
+    );
+    assert_eq!(gameplay.goal_title, "Harden your first output into resilient production");
+    assert_eq!(gameplay.progress_percent, 80);
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
+}
+
+#[test]
+fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(41);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        41,
+    );
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        42,
+        3,
+    );
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .expect("player gameplay after scale-out");
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.choose_first_expansion_tradeoff"
+    );
+    assert_eq!(
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+    );
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::BranchReady);
+    assert_eq!(gameplay.progress_percent, 92);
+    assert!(gameplay
+        .branch_hint
+        .as_deref()
+        .is_some_and(|hint| hint.contains("throughput expansion")));
+}
+
+#[test]
+fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(51);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        51,
+    );
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        52,
+        6,
+    );
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .expect("player gameplay after governance-ready output");
     assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
+    assert_eq!(gameplay.goal_kind, PlayerGameplayGoalKind::ChooseMidLoopPath);
     assert_eq!(gameplay.progress_percent, 100);
 }
 

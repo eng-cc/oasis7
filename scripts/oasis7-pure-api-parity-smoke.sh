@@ -17,7 +17,7 @@ Default flow:
 3. capture initial player_gameplay snapshot
 4. submit canonical `gameplay_action` to build the first smelter
 5. advance until the smelter is ready, then submit the first iron-ingot recipe
-6. advance until the first sustainable capability milestone is visible
+6. advance until the first resilient production milestone is visible
 7. capture reconnect-sync recovery ack
 6. emit JSON/Markdown summary plus raw command outputs
 
@@ -390,8 +390,8 @@ checks = {
     "recipe_action_ack": (recipe_ack or {}).get("ack", {}).get("action_id") == "schedule_recipe_smelter_iron_ingot",
     "step_b_advanced": (step_b_ack or {}).get("ack", {}).get("status") == "advanced",
     "followup_stage_post_onboarding": followup_stage == "post_onboarding",
-    "followup_goal_midloop_ready": followup_gameplay.get("goal_id") == "post_onboarding.choose_midloop_path",
-    "followup_progress_complete": followup_gameplay.get("progress_percent") == 100,
+    "followup_goal_resilient_production": followup_gameplay.get("goal_id") == "post_onboarding.stabilize_first_line_after_output",
+    "followup_progress_midloop_floor": (followup_gameplay.get("progress_percent") or 0) >= 80,
     "followup_has_next_step": bool(followup_gameplay.get("next_step_hint")),
     "followup_has_recent_feedback": bool(followup_feedback.get("stage")),
     "reconnect_sync_ack": (recovery_ack or {}).get("ack", {}).get("status") == "catch_up_ready",

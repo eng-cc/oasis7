@@ -346,14 +346,9 @@ fn build_player_post_onboarding_snapshot_from_gameplay(
     } else {
         gameplay.next_step_hint.clone()
     };
-    let branch_hint = if locale.is_zh() {
-        gameplay
-            .branch_hint
-            .as_ref()
-            .map(|_| "已解锁分支：生产扩张 / 治理影响 / 冲突安全".to_string())
-    } else {
-        gameplay.branch_hint.clone()
-    };
+    let branch_hint = gameplay.branch_hint.as_ref().map(|_| {
+        localized_post_onboarding_branch_hint_for_goal(gameplay.goal_kind, locale)
+    });
 
     PlayerPostOnboardingSnapshot {
         status,

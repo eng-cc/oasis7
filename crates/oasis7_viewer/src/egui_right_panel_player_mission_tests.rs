@@ -359,16 +359,16 @@ fn build_player_post_onboarding_snapshot_prefers_canonical_player_gameplay_snaps
     let state = sample_post_onboarding_viewer_state(PlayerGameplaySnapshot {
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::BranchReady,
-        goal_id: "post_onboarding.choose_midloop_path".to_string(),
-        goal_kind: PlayerGameplayGoalKind::ChooseMidLoopPath,
-        goal_title: "Choose your mid-loop path".to_string(),
+        goal_id: "post_onboarding.choose_first_expansion_tradeoff".to_string(),
+        goal_kind: PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff,
+        goal_title: "Choose the first expansion tradeoff".to_string(),
         objective: "canonical objective".to_string(),
         progress_detail: "canonical progress".to_string(),
-        progress_percent: 100,
+        progress_percent: 92,
         blocker_kind: None,
         blocker_detail: None,
         next_step_hint: "canonical next step".to_string(),
-        branch_hint: Some("Branches unlocked: production expansion".to_string()),
+        branch_hint: Some("Tradeoffs unlocked: throughput expansion".to_string()),
         available_actions: Vec::new(),
         recent_feedback: None,
         agent_claim: None,
@@ -376,10 +376,14 @@ fn build_player_post_onboarding_snapshot_prefers_canonical_player_gameplay_snaps
     let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::BranchReady);
-    assert_eq!(snapshot.title, "Next Stage: Choose Your Mid-loop Path");
+    assert_eq!(snapshot.title, "Next Stage: Choose the First Expansion Tradeoff");
     assert_eq!(snapshot.objective, "canonical objective");
     assert_eq!(snapshot.progress_detail, "canonical progress");
     assert_eq!(snapshot.next_step, "canonical next step");
+    assert_eq!(
+        snapshot.branch_hint.as_deref(),
+        Some("Tradeoffs unlocked: throughput expansion / input resilience / logistics reach")
+    );
 }
 
 #[test]
