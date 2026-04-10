@@ -1,0 +1,24 @@
+task_uid: task_6e8b18f491a548dd8d3e1c8387ebdf65
+title: "Remove viewer test and wasm check from default pre-commit commit baseline"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_6e8b18f491a548dd8d3e1c8387ebdf65.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/scripts/precommit/pre-commit.prd.md
+  - scripts/ci-tests.sh
+doc_refs:
+  - doc/scripts/precommit/pre-commit.project.md
+related_prd:
+  - doc/scripts/prd.md
+  - doc/scripts/precommit/pre-commit.prd.md
+acceptance:
+  - "Remove cargo test -p oasis7_viewer and cargo check -p oasis7_viewer --target wasm32-unknown-unknown from the default pre-commit commit tier."
+  - "Keep an explicit documented path to run the removed viewer checks before landing/CI via heavier manual gates."
+  - "Update scripts/testing/scripts-governance docs so commit, required, and full boundaries remain consistent after the split."
+handoff_to: []
+updated_at: 2026-04-10T20:53:24+08:00
+last_started_at: 2026-04-10T19:59:42+08:00
+last_closed_at: 2026-04-10T20:53:24+08:00

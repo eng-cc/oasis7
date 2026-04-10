@@ -44,6 +44,20 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_50239fbcd8bd470685ac673b3cf9adf7.yaml
+  - task_uid: task_6e8b18f491a548dd8d3e1c8387ebdf65
+    title: "Remove viewer test and wasm check from default pre-commit commit baseline"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/scripts/prd.md
+      - doc/scripts/precommit/pre-commit.prd.md
+    acceptance:
+      - "Remove cargo test -p oasis7_viewer and cargo check -p oasis7_viewer --target wasm32-unknown-unknown from the default pre-commit commit tier."
+      - "Keep an explicit documented path to run the removed viewer checks before landing/CI via heavier manual gates."
+      - "Update scripts/testing/scripts-governance docs so commit, required, and full boundaries remain consistent after the split."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_6e8b18f491a548dd8d3e1c8387ebdf65.yaml
   - task_uid: task_3eb31966906e5ae7b8b8676d756c5510
     title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
     priority: P1

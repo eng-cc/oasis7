@@ -75,10 +75,8 @@
   - `cargo fmt --check`
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
-  - `cargo test -p oasis7_viewer`
   - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-  - `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
-  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`
+  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`、`cargo test -p oasis7_viewer`、`cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-rust-file-size.sh`
@@ -178,12 +176,11 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 覆盖重点：
   - 文档治理、Rust 文件体量、`cargo fmt --check`
   - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
-  - `oasis7_viewer` 全量单测
   - `software_safe` feedback contract regression
-  - `oasis7_viewer` wasm32 编译检查
 - 边界：
   - 默认 `pre-commit` 走这一层。
-  - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`；若改动触达 runtime / simulator 主链或需要补跑较重核心 shard，显式执行 S1。
+  - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`。
+  - 这一层也不包含 `cargo test -p oasis7_viewer` 与 `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`；若改动触达 runtime / simulator 主链，或需要补跑 viewer Rust 长跑，显式执行 S1。
 
 ### S1：核心 required 套件（L1）
 ```bash
@@ -195,7 +192,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
   - `oasis7_viewer` 全量单测 + wasm 编译检查
-  - 适用场景：PR/CI required gate，以及本地需要显式补跑 `oasis7 --tests` required shard 的改动
+  - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 或 viewer Rust 长跑的改动
 
 ### S2：核心 full 套件（L1 + L2）
 ```bash

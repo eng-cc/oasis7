@@ -26,7 +26,7 @@
   - 发布负责人：希望 full 回归仍覆盖主干风险。
 - User Scenarios & Frequency:
   - 本地提交：每次提交执行 `commit` baseline。
-  - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard 时，手动执行 `required`。
+  - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard 或 viewer Rust 长跑时，手动执行 `required`。
   - PR 门禁：每次 push/PR 执行 required。
   - 每日回归：schedule 执行 full。
 - User Stories:
@@ -67,6 +67,7 @@
   - `doc/testing/ci/ci-test-coverage.prd.md`
 - Edge Cases & Error Handling:
   - commit 覆盖过窄：可能把 runtime/simulator 回归延后到显式 required 或 CI required gate 暴露，需结合缺陷复盘补齐。
+  - commit 误挂重型 viewer Rust 校验：会重新拉长默认提交耗时，需把 `oasis7_viewer` 全量单测与 wasm32 编译检查限制在显式 `required` / CI required gate。
   - required 覆盖过窄：可能延后发现问题，需结合每日 full 和缺陷复盘补齐。
   - full 仅定时执行：发现延迟增加，需保留手动触发路径。
   - 旧命令调用习惯：不带参数调用时需定义默认行为避免误解。

@@ -125,9 +125,7 @@ run_commit_gate_checks() {
   run_required_gate_checks
   run_oasis7_consensus_tests
   run_oasis7_distfs_tests
-  run_oasis7_viewer_tests
   run_oasis7_viewer_software_safe_feedback_contract_tests
-  run_oasis7_viewer_wasm_check
 }
 
 run_full_core_tier_tests() {

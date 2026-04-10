@@ -28,4 +28,4 @@
 - 阻塞项：无
 - 下一步：无（当前专题已收口）
 - 审计备注（2026-03-05 ROUND-002）：本文件仅保留执行任务记录；规则定义以 `ci-tiered-execution.prd.md` 为准。
-- 补充备注（2026-04-10）：默认本地提交路径已从 `required` 收紧为 `commit` baseline；`required` 继续保留为显式本地重门禁与 PR/CI required gate。
+- 补充备注（2026-04-10）：默认本地提交路径已从 `required` 收紧为 `commit` baseline；其后又进一步移出 `oasis7_viewer` 全量单测与 wasm32 编译检查，只保留治理/format/support crate 与 software-safe contract。`required` 继续保留为显式本地重门禁与 PR/CI required gate。

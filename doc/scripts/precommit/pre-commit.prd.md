@@ -11,7 +11,7 @@
 - 以单一脚本形式减少重复维护，降低遗漏风险。
 
 ## 范围
-- **范围内**：执行本地提交前格式化（仅格式化已暂存 Rust 文件）、`commit` 级别测试（文档治理 + 格式校验 + 轻量 support/viewer 套件）以及 viewer 的 `wasm32` 编译检查。
+- **范围内**：执行本地提交前格式化（仅格式化已暂存 Rust 文件）与 `commit` 级别测试（文档治理 + 格式校验 + 轻量 support/viewer 套件）。
 - **范围内**：`required` 继续保留核心 runtime/simulator shard；凡是需要注册或执行 builtin wasm artifact 的 runtime 闭环用例，统一下放到 `test_tier_full`。
 - **范围外**：lint 或其它包的静态检查。
 - **范围外**：`libp2p`/`wasmtime` 特性回归与 viewer 在线/离线联测（由 `full` 级别承担）。
@@ -22,8 +22,8 @@
 - 执行内容：
   - 先通过 `git diff --cached --name-only --diff-filter=ACMR -- '*.rs'` 收集已暂存 Rust 文件，再执行 `env -u RUSTC_WRAPPER rustfmt --edition 2021 <files>`，并自动 `git add` 回暂存区。
   - 调用统一测试清单脚本：`./scripts/ci-tests.sh commit`。
-    - `commit` tier 固定覆盖 `doc-governance + rust-size + fmt --check + oasis7_consensus --lib + oasis7_distfs --lib + oasis7_viewer + software-safe feedback contract + oasis7_viewer wasm32 check`。
-    - `cargo test -p oasis7 --tests --features test_tier_required` 不再进入默认提交路径；该 shard 继续保留在显式 `./scripts/ci-tests.sh required` 与 CI required gate 中。
+    - `commit` tier 固定覆盖 `doc-governance + rust-size + fmt --check + oasis7_consensus --lib + oasis7_distfs --lib + software-safe feedback contract`。
+    - `cargo test -p oasis7 --tests --features test_tier_required` 与 `cargo test -p oasis7_viewer` / `cargo check -p oasis7_viewer --target wasm32-unknown-unknown` 都不进入默认提交路径；这些较重校验继续保留在显式 `./scripts/ci-tests.sh required` 与 CI required gate 中，本地 landing 前若需要兜底 viewer Rust 回归，也应显式执行该命令。
 - 规则归属：
   - commit baseline 定义：本文件与 `scripts/ci-tests.sh`
   - required/full 覆盖命令矩阵：`doc/testing/ci/ci-test-coverage.prd.md` 与 `scripts/ci-tests.sh`
@@ -65,7 +65,7 @@ test -x .git/hooks/pre-commit && echo "pre-commit hook installed"
 - **M3**：补充“新仓库需重新注册 hook”文档与操作步骤。
 
 ## 风险
-- **覆盖时延**：`cargo test -p oasis7 --tests --features test_tier_required` 从默认提交路径移出后，相关问题会延后到显式 `required` / CI required gate 暴露。
+- **覆盖时延**：`cargo test -p oasis7 --tests --features test_tier_required` 与 viewer Rust 长跑从默认提交路径移出后，相关问题会延后到显式 `required` / CI required gate 暴露。
 - **环境差异**：本地与 CI 依赖不同可能造成结果不一致。
 
 ## 原文约束点映射（内容保真）
