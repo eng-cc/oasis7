@@ -348,6 +348,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_5de9ab15e0de40fcb331745f093a0d99.yaml
+  - task_uid: task_bcf53cee3ee04b6d9de9a6723ad8c313
+    title: "TASK-ENGINEERING-113 将默认最终合流从本地 landing 切到 GitHub PR"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+    acceptance:
+      - "AGENTS.md/.pm/engineering/self-evolution/scripts docs stop treating local landing into local main as the default final integration path"
+      - "A GitHub PR preflight path exists and becomes the default final integration contract"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_bcf53cee3ee04b6d9de9a6723ad8c313.yaml
   - task_uid: task_beeef4125cfc4809b1babcacd8ae833f
     title: "收紧 core 活跃阅读面入口"
     priority: P1

@@ -1,0 +1,23 @@
+task_uid: task_bcf53cee3ee04b6d9de9a6723ad8c313
+title: "TASK-ENGINEERING-113 将默认最终合流从本地 landing 切到 GitHub PR"
+owner_role: producer_system_designer
+worktree_hint: engineering-github-pr-landing-governance
+execution_log_path: .pm/tasks/task_bcf53cee3ee04b6d9de9a6723ad8c313.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+acceptance:
+  - "AGENTS.md/.pm/engineering/self-evolution/scripts docs stop treating local landing into local main as the default final integration path"
+  - "A GitHub PR preflight path exists and becomes the default final integration contract"
+handoff_to: []
+updated_at: 2026-04-10T18:12:42+08:00
+last_started_at: 2026-04-10T17:41:43+08:00
+last_closed_at: 2026-04-10T18:12:19+08:00

@@ -9,7 +9,11 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/land-task-worktree.sh [source-branch] [options]
 
+Compatibility helper for local-only landing.
+
 Rebase one task branch onto a checked-out target branch and fast-forward land it.
+This is no longer the default final integration path; standard closure should go
+through `./scripts/prepare-task-pr.sh` and a GitHub PR into protected `main`.
 
 Default conventions:
 - source branch: current branch
@@ -220,7 +224,7 @@ if [[ "$OUTPUT_JSON" == "1" ]]; then
 fi
 
 cat <<INFO
-Task worktree landing summary:
+Local task worktree landing summary:
 - source branch: $SOURCE_BRANCH
 - source worktree: $SOURCE_WORKTREE
 - target branch: $TARGET_BRANCH

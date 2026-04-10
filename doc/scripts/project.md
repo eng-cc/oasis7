@@ -225,6 +225,29 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full,wasmtime runtime::tests::rules::m1_move_rule_rejects_when_insufficient_resources -- --exact`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SCRIPTS-024 (PRD-SCRIPTS-007/008) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题收口为 compatibility / fallback 文档。
+  - 产物文件:
+    - `scripts/prepare-task-pr.sh`
+    - `scripts/land-task-worktree.sh`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.design.md`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
+    - `doc/scripts/governance/task-worktree-landing-2026-03-27.design.md`
+    - `doc/scripts/governance/task-worktree-landing-2026-03-27.project.md`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/prd.index.md`
+    - `doc/scripts/README.md`
+    - `AGENTS.md`
+    - `.pm/README.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/prepare-task-pr.sh scripts/land-task-worktree.sh`
+    - `./scripts/prepare-task-pr.sh --help`
+    - `./scripts/prepare-task-pr.sh --json`
+    - `./scripts/land-task-worktree.sh --help`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -238,6 +261,7 @@
 - 更新日期: 2026-04-10
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-024`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题统一降级为 compatibility / fallback。）
 - 最新完成: `TASK-SCRIPTS-023`（builtin wasm-heavy runtime 闭环已从 required/pre-commit 路径下放到 `test_tier_full`，required 重新只承载轻量核心基线。）
 - 最新完成: `TASK-SCRIPTS-022`（已把根 `AGENTS.md` 的 cargo 规则补齐到与 `scripts/cargo-dev.sh` / `testing-manual.md` 一致，明确原始 cargo 入口与开发态共享缓存入口的边界。）
 - 最新完成: `TASK-SCRIPTS-021`（已新增 `scripts/cargo-dev.sh` 作为开发态共享 cargo target 入口，并把 scripts/testing 文档明确切分为“开发态共享缓存”与“deterministic wasm/release 不共享”的双轨口径。）

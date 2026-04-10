@@ -7,7 +7,7 @@
 - 想看当前脚本治理任务与最近完成项：`doc/scripts/project.md`
 - 想按专题文件名精确查 precommit / wasm / viewer-tools / governance 文档：`doc/scripts/prd.index.md`
 - 想直接为新需求开独立 worktree：`scripts/new-task-worktree.sh` + `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
-- 想把已完成任务标准化合入本地 `main`：`scripts/land-task-worktree.sh` + `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
+- 想把已完成任务标准化通过 GitHub PR 合入 `main`：`scripts/prepare-task-pr.sh` + `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 - 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - 想让多个 worktree 复用 Rust 开发态编译缓存：`scripts/cargo-dev.sh`
 
@@ -22,12 +22,12 @@
 - `prd.md` 是脚本模块的权威规格入口，适合先理解主入口分层、参数契约、稳定性趋势与隔离约束。
 - `project.md` 是执行台账，适合确认当前 worktree、landing、harness 等治理任务的完成状态。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 scripts 模块时的首读入口。
-- 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`land-task-worktree.sh` 负责标准 landing，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
+- 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`prepare-task-pr.sh` 负责默认 GitHub PR 收口，`land-task-worktree.sh` 只保留给 local-only / fallback，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
 
 ## 模块职责
 - 维护仓内高频脚本的主入口、参数契约与 fallback 围栏口径。
 - 维护 worktree 级隔离 harness，让 agent / QA 能并行起栈并读取稳定状态文件。
-- 维护标准化 task worktree bootstrap 与 landing 入口，让每个新需求按统一 branch/path 命名落到独立 worktree，并可选直接检查模块文档、预热 harness、标准化合入本地 `main`。
+- 维护标准化 task worktree bootstrap 与 GitHub PR 收口入口，让每个新需求按统一 branch/path 命名落到独立 worktree，并可选直接检查模块文档、预热 harness、标准化通过 PR 合入 `main`。
 - 维护 repo-family 共享的 cargo 开发态缓存入口，减少多 worktree 并行时的重复编译。
 - 汇总 precommit、viewer-tools、wasm 与治理专题文档。
 - 承接脚本稳定性趋势、文档门禁与运行约束收口。
@@ -44,6 +44,7 @@
 - `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
 - `doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
+- `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 - `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
 - `doc/scripts/precommit/pre-commit.prd.md`
 - `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
@@ -56,6 +57,7 @@
 - 脚本行为变化需同步更新对应文档、测试口径与参数契约说明。
 - 新增专题后，需同步回写 `doc/scripts/prd.index.md` 与本目录索引。
 - `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project / 当日 devlog，`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up --no-llm`。
-- `scripts/land-task-worktree.sh` 为任务完成后的默认 landing 入口；负责在干净 task worktree 与干净本地 `main` worktree 之间执行标准化 rebase + fast-forward 合入，并输出必须执行的回收命令。
+- `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并输出 PR 合入后的本地同步与回收命令。
+- `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
 - `scripts/cargo-dev.sh` 只用于本地开发态 `cargo check/test/run/build` 的 shared target 复用；要求 deterministic wasm / release 的脚本继续走原始 cargo 入口，保持 `CARGO_TARGET_DIR` 为空。
 - 若默认高频脚本入口变化，需同步回写本目录“从这里开始”，避免 README 退化回纯专题目录页。

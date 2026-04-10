@@ -11,14 +11,15 @@
 - Scope: `scripts/land-task-worktree.sh`、`AGENTS.md`、`doc/scripts/**`
 - PRD-ID: `PRD-SCRIPTS-WTL-001`
 - Related Module PRD: `doc/scripts/prd.md` (`PRD-SCRIPTS-007`)
+- 当前定位: 兼容 / fallback 专题；默认最终合流已迁到 `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 
 ## 1. Executive Summary
 - Problem Statement: 仓库已经要求“每个需求默认新开一个 task worktree”，但任务完成后如何把结果稳定回流到本地 `main` 仍停留在人工 `git checkout` / `git rebase` / `git merge` 组合拳。不同执行者容易混用 merge 策略、跳过 clean-state 检查、在错误 worktree 上操作，导致 `main` 真值不稳定，也让后续 task worktree 的回收时机缺少统一口径。
-- Proposed Solution: 新增 `scripts/land-task-worktree.sh` 作为标准 landing 入口。默认以当前 task branch 为 source、本地 `main` 为 target；脚本在 source worktree 上执行 clean-state 检查与 rebase，在 target worktree 上执行 fast-forward merge，并输出结构化摘要与必须执行的 cleanup 命令。
+- Proposed Solution: 保留 `scripts/land-task-worktree.sh` 作为 local-only / fallback 兼容入口。默认最终合流迁到 GitHub PR；本脚本仅在用户显式要求本地合流、离线应急或 PR 路径不可用时使用，仍提供 clean-state 检查、线性历史整理与 cleanup 命令输出。
 - Success Criteria:
   - SC-1: task branch 可通过单一入口而非手写 git 序列合入本地 `main`。
   - SC-2: source / target 任一 worktree 脏时，脚本快速失败并给出修复建议。
-  - SC-3: 默认 landing 策略为“rebase target -> fast-forward target”，确保线性历史与可审计性。
+  - SC-3: local-only landing 策略保持“rebase target -> fast-forward target”，确保线性历史与可审计性。
   - SC-4: agent 可通过 `--json` 读取 landing 前后提交、source/target worktree 路径与结果状态。
   - SC-5: landing 成功后，source task `worktree` / branch 必须被回收，不再以“可选 cleanup”表述。
 
@@ -51,7 +52,7 @@
   - AC-5: `--json` 至少输出 `source_branch`、`source_worktree`、`target_branch`、`target_worktree`、`source_head_before`、`source_head_after`、`target_head_after`、`result`。
   - AC-6: landing 成功后必须输出 cleanup 命令，并明确该 task worktree / branch 需要被删除；默认仍不自动删除，避免脚本在 source worktree 内自删当前目录。
 - Non-Goals:
-  - 不负责 push remote、开 PR 或处理代码评审状态。
+  - 不负责默认最终合流到受保护 `main`；该职责已迁到 `prepare-task-pr.sh`。
   - 不自动解决 rebase 冲突。
   - 不默认自动 cleanup。
 
@@ -60,7 +61,7 @@
 - Evaluation Strategy: 以“landing 到本地 `main` 的步骤数、失败语义清晰度、是否保持线性历史”评估落地效果。
 
 ## 4. Technical Specifications
-- Architecture Overview: landing 入口复用当前仓库 `git-common-dir` 作为真值，通过 branch -> worktree 映射定位 source/target，再把“rebase source”与“ff merge target”拆成两个明确阶段。
+- Architecture Overview: local-only landing 入口复用当前仓库 `git-common-dir` 作为真值，通过 branch -> worktree 映射定位 source/target，再把“rebase source”与“ff merge target”拆成两个明确阶段。
 - Integration Points:
   - `scripts/land-task-worktree.sh`
   - `scripts/new-task-worktree.sh`
@@ -77,7 +78,7 @@
 - Non-Functional Requirements:
   - NFR-WTL-1: 流程必须非交互，适合 agent 调用。
   - NFR-WTL-2: `--json` stdout 契约必须保持纯净。
-  - NFR-WTL-3: 默认 landing 策略必须保持线性历史。
+  - NFR-WTL-3: local-only landing 策略必须保持线性历史。
   - NFR-WTL-4: 失败提示必须指出哪一个 worktree/branch 需要修复。
 - Security & Privacy:
   - 不泄漏敏感配置。
@@ -90,7 +91,7 @@
   - 风险-3: 若 landing 成功后 task worktree 不及时删除，本地 branch/worktree 清单会逐渐失真。
   - 风险-4: 若未来需要 squash / merge-commit 策略，本轮线性历史假设需要重新评估。
 - Roadmap:
-  - v1: 默认合入本地 `main` 的 landing 标准化。
+  - v1: local-only 合入本地 `main` 的 landing 标准化。
   - v1.1: 视需要补 `--cleanup` 或远端 push/PR 辅助，但不在本轮实现。
 
 ## 6. Validation & Decision Record
@@ -101,5 +102,5 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-WTL-001 | 默认采用 `rebase target -> merge --ff-only source` | 直接 `merge --no-ff` 或手工要求用户自己选策略 | 当前仓库强调一任务一 worktree/branch，线性 landing 更利于审计与回滚。 |
-| DEC-WTL-002 | 默认不自动 cleanup，但 cleanup 仍是 landing 成功后的必做步骤 | landing 成功后立刻删除 source worktree/branch | 脚本常从 source worktree 内执行，自动删除当前工作目录风险过高；因此保留手动删除，但不允许长期跳过。 |
+| DEC-WTL-001 | local-only 兼容路径采用 `rebase target -> merge --ff-only source` | 直接 `merge --no-ff` 或手工要求用户自己选策略 | 当前仓库强调一任务一 worktree/branch，线性 landing 更利于审计与回滚。 |
+| DEC-WTL-002 | local-only 兼容路径仍不自动 cleanup，但 cleanup 仍是 landing 成功后的必做步骤 | landing 成功后立刻删除 source worktree/branch | 脚本常从 source worktree 内执行，自动删除当前工作目录风险过高；因此保留手动删除，但不允许长期跳过。 |
