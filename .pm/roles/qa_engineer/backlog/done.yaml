@@ -27,6 +27,21 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_fbf26487f0804cf48de7e52aca625088.yaml
+  - task_uid: task_29327fae434f463cab3ecf9c9a3bee2a
+    title: "Re-run software_safe formal lane against real main config"
+    priority: P0
+    source_signal: SIG-PM-0026
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+      - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
+      - doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md
+    acceptance:
+      - "software_safe formal lane is rerun in a fresh task worktree using the same real config.toml as main, with reproducible artifacts."
+      - "QA records whether the real provider restores first-step progress or still blocks, with exact failure signature and lane verdict."
+      - "Project/task docs are updated so TASK-GAME-065 can continue from a current factual PASS/HOLD input."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_29327fae434f463cab3ecf9c9a3bee2a.yaml
   - task_uid: task_f2e680d768844eff8232de25ba172a29
     title: "Audit software_safe end-to-end playability with browser screenshots"
     priority: P1
