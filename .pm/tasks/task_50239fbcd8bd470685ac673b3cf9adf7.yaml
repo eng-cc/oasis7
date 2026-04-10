@@ -1,0 +1,23 @@
+task_uid: task_50239fbcd8bd470685ac673b3cf9adf7
+title: "Lighten pre-commit by removing oasis7 required test shard from default commit path"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_50239fbcd8bd470685ac673b3cf9adf7.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/scripts/precommit/pre-commit.prd.md
+doc_refs:
+  - doc/scripts/precommit/pre-commit.project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/scripts/precommit/pre-commit.prd.md
+acceptance:
+  - "Update engineering and pre-commit docs so the default commit path no longer requires cargo test -p oasis7 --tests --features test_tier_required."
+  - "Adjust scripts/pre-commit.sh and any required helper entrypoints so heavyweight required-tier verification moves to an explicit command outside git commit."
+  - "Preserve a documented explicit path to run the full required verification before landing/CI and add focused regression checks for the new split."
+handoff_to: []
+updated_at: 2026-04-10T18:09:38+08:00
+last_started_at: 2026-04-10T17:16:44+08:00
+last_closed_at: 2026-04-10T18:09:26+08:00

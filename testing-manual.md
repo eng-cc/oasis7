@@ -69,6 +69,16 @@
 
 ### 当前 CI/脚本已覆盖
 - 入口 A：`scripts/ci-tests.sh`（主流程）
+- `commit`：
+  - `./scripts/doc-governance-check.sh`
+  - `./scripts/check-rust-file-size.sh`
+  - `cargo fmt --check`
+  - `cargo test -p oasis7_consensus --lib`
+  - `cargo test -p oasis7_distfs --lib`
+  - `cargo test -p oasis7_viewer`
+  - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+  - `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
+  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-rust-file-size.sh`
@@ -104,6 +114,7 @@
 - runtime builtin wasm bootstrap / default-module / body-action 闭环（已从 required 下放到 `test_tier_full`）。
 
 结论：
+- `commit` 是默认本地提交基线，目标是尽快暴露格式/治理/viewer-support 回归，但不承担 `oasis7 --tests` required shard；
 - `required/full` 是“核心链路测试层”的主入口（required 含 `oasis7 + consensus + distfs + viewer`，full 追加 `node + net/libp2p`）；
 - `required-gate` 已补充 viewer 视觉基线脚本（snapshot 基线 + 定向测试）；
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
@@ -160,6 +171,20 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - 本地非 `--check` 仅允许显式维护清单（需设置 `OASIS7_WASM_SYNC_WRITE_ALLOW=local-dev`），不属于生产发布路径。
   - `CI=true` 不再作为生产发布写入/激活授权条件；CI 产物仅用于开发回归和可审计对账证据。
 
+### S0.5：本地提交 commit baseline（L0 + 轻量 support/viewer）
+```bash
+./scripts/ci-tests.sh commit
+```
+- 覆盖重点：
+  - 文档治理、Rust 文件体量、`cargo fmt --check`
+  - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
+  - `oasis7_viewer` 全量单测
+  - `software_safe` feedback contract regression
+  - `oasis7_viewer` wasm32 编译检查
+- 边界：
+  - 默认 `pre-commit` 走这一层。
+  - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`；若改动触达 runtime / simulator 主链或需要补跑较重核心 shard，显式执行 S1。
+
 ### S1：核心 required 套件（L1）
 ```bash
 ./scripts/ci-tests.sh required
@@ -170,6 +195,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
   - `oasis7_viewer` 全量单测 + wasm 编译检查
+  - 适用场景：PR/CI required gate，以及本地需要显式补跑 `oasis7 --tests` required shard 的改动
 
 ### S2：核心 full 套件（L1 + L2）
 ```bash

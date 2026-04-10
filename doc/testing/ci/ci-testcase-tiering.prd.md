@@ -8,11 +8,11 @@
 
 ## ROUND-002 口径归属（2026-03-05）
 - 本文档是 `test_tier_required` / `test_tier_full` 标签语义与分配规则的权威入口。
-- 其它文档只引用标签语义，不重复描述 case 标签边界。
+- 其它文档只引用标签语义，不重复描述 case 标签边界；命令级 `commit` / `required` / `full` 触发策略以 `ci-tiered-execution.prd.md` 为准。
 
 ## 1. Executive Summary
 - Problem Statement: 仅以“整套 `cargo test`”作为门禁粒度会拉长反馈链路，难以在 required 阶段快速定位关键回归。
-- Proposed Solution: 将 CI 分层细化到 test case 级别，使用 `test_tier_required`/`test_tier_full` 标签驱动 required/full 执行路径。
+- Proposed Solution: 将 CI 分层细化到 test case 级别，使用 `test_tier_required`/`test_tier_full` 标签驱动 `required` / `full` 执行路径，并让默认 `commit` baseline 保持命令级轻量门禁。
 - Success Criteria:
   - SC-1: `required` 门禁聚焦最小 smoke case 且执行时长下降。
   - SC-2: `full` 继续覆盖重型特性与联测，保持回归深度。
@@ -25,7 +25,8 @@
   - 开发者：需要更快获得 required 反馈。
   - 发布负责人：需要 full 回归不缩水。
 - User Scenarios & Frequency:
-  - 日常 PR 提交：每次执行 required 门禁。
+  - 日常本地提交：每次执行 `commit` baseline。
+  - PR 门禁：每次执行 required 门禁。
   - 分支合并前回归：高风险变更执行 full。
   - 策略维护：测试新增/迁移时同步更新标签与脚本。
 - User Stories:
@@ -35,17 +36,18 @@
 - Critical User Flows:
   1. Flow-TIER-001: `为测试打标签 -> required 执行 --tests + feature 过滤 -> 输出门禁结论`
   2. Flow-TIER-002: `触发 full -> 运行扩展回归（wasmtime/libp2p/viewer）-> 汇总结果`
-  3. Flow-TIER-003: `新增测试 -> 选择 required/full 标签 -> 更新文档与脚本 -> 验证一致性`
+  3. Flow-TIER-003: `新增测试 -> 选择 required/full 标签 -> 更新文档与脚本 -> 验证一致性，并确认是否需要进入默认 commit baseline`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 测试分级标签 | `test_tier_required` / `test_tier_full` | 用 `#[cfg(feature = ...)]` 标记用例 | `unlabeled -> labeled -> validated` | required 为最小闭环，full 追加重型场景 | 测试维护者审核分级 |
-| required 执行路径 | `scripts/ci-tests.sh required` | 执行静态门禁 + `--tests` + required feature | `queued -> running -> passed/failed` | 优先速度与关键覆盖 | 开发者/CI 自动触发 |
+| 命令级基线分流 | `commit` / `required` / `full` | `pre-commit` 默认执行 `commit`，PR/CI 执行 `required`，重型回归执行 `full` | `queued -> running -> passed/failed` | 先压缩默认提交耗时，再把 case 标签用于较重回归分层 | 开发者/CI 可触发 |
+| required 执行路径 | `scripts/ci-tests.sh required` | 执行静态门禁 + `--tests` + required feature | `queued -> running -> passed/failed` | 优先速度与关键覆盖 | 开发者按需触发，CI 自动触发 |
 | full 执行路径 | `scripts/ci-tests.sh full` | 在 required 基础上执行扩展回归 | `queued -> running -> passed/failed` | 覆盖优先于耗时 | 发布前必须通过 |
 - Acceptance Criteria:
   - AC-1: `required` 由 feature 标签筛选 smoke case，不再硬编码 `--test` 清单。
   - AC-2: `full` 保持 `libp2p`、`wasmtime`、viewer 联测路径。
-  - AC-3: 文档明确“命令级分层 + case 级筛选”策略。
+- AC-3: 文档明确“`commit` 命令级轻量基线 + `required/full` case 级筛选”策略。
   - AC-4: 回归验证与任务日志完整可追溯。
 - Non-Goals:
   - 不做 changed-files 动态选测。
@@ -57,7 +59,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 在既有 required/full 门禁框架内，把 case 选择逻辑从脚本硬编码迁移到测试标签。
+- Architecture Overview: 在既有 `commit` / `required` / `full` 门禁框架内，把较重回归的 case 选择逻辑从脚本硬编码迁移到测试标签，同时让默认 `commit` baseline 保持不依赖 `oasis7 --tests` heavy shard 的命令级轻量路径。
 - Integration Points:
   - `scripts/ci-tests.sh`
   - `.github/workflows/rust.yml`

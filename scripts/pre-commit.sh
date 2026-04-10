@@ -18,6 +18,4 @@ else
   echo "+ no staged Rust files, skip rustfmt"
 fi
 
-./scripts/ci-tests.sh required
-echo "+ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown"
-env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
+./scripts/ci-tests.sh commit

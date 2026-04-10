@@ -30,6 +30,20 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_b380bf462b7044e69c1d3f1d2b3d951a.yaml
+  - task_uid: task_50239fbcd8bd470685ac673b3cf9adf7
+    title: "Lighten pre-commit by removing oasis7 required test shard from default commit path"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/scripts/precommit/pre-commit.prd.md
+    acceptance:
+      - "Update engineering and pre-commit docs so the default commit path no longer requires cargo test -p oasis7 --tests --features test_tier_required."
+      - "Adjust scripts/pre-commit.sh and any required helper entrypoints so heavyweight required-tier verification moves to an explicit command outside git commit."
+      - "Preserve a documented explicit path to run the full required verification before landing/CI and add focused regression checks for the new split."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_50239fbcd8bd470685ac673b3cf9adf7.yaml
   - task_uid: task_3eb31966906e5ae7b8b8676d756c5510
     title: "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程"
     priority: P1

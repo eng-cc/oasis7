@@ -8,9 +8,10 @@ tier="${1:-full}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [required|full|full-core|full-support]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support]
 
-  required      Run fast required checks for local commit and PR gate.
+  commit        Run the lightweight local commit gate used by pre-commit.
+  required      Run the explicit heavier required gate for local validation and PR gate.
   full          Run required checks plus all extended feature/integration tests.
   full-core     Run doc/fmt plus the heaviest `oasis7 --tests` full-tier shard.
   full-support  Run the remaining support crates/viewer shard plus `oasis7 --lib --bins`.
@@ -25,7 +26,7 @@ if [[ $# -gt 1 ]]; then
 fi
 
 case "$tier" in
-  required|full|full-core|full-support) ;;
+  commit|required|full|full-core|full-support) ;;
   *)
     usage
     exit 1
@@ -120,6 +121,15 @@ run_required_gate_checks() {
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
 }
 
+run_commit_gate_checks() {
+  run_required_gate_checks
+  run_oasis7_consensus_tests
+  run_oasis7_distfs_tests
+  run_oasis7_viewer_tests
+  run_oasis7_viewer_software_safe_feedback_contract_tests
+  run_oasis7_viewer_wasm_check
+}
+
 run_full_core_tier_tests() {
   run_required_gate_checks
   run_oasis7_full_tier_tests
@@ -140,6 +150,9 @@ run_full_support_tier_tests() {
 
 echo "+ ci test tier: $tier"
 case "$tier" in
+  commit)
+    run_commit_gate_checks
+    ;;
   required)
     run_required_gate_checks
     run_oasis7_required_tier_tests
