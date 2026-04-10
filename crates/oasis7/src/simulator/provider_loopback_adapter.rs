@@ -49,6 +49,14 @@ impl ProviderLoopbackAdapter {
         PHASE1_ALLOWED_ACTION_REFS
     }
 
+    fn request_advertises_action_ref(request: &DecisionRequest, action_ref: &str) -> bool {
+        request
+            .observation
+            .action_catalog
+            .iter()
+            .any(|entry| entry.action_ref == action_ref)
+    }
+
     fn validate_response(
         &self,
         request: &DecisionRequest,
@@ -64,6 +72,13 @@ impl ProviderLoopbackAdapter {
         match &response.decision {
             ProviderDecision::Wait => Ok(()),
             ProviderDecision::WaitTicks { .. } => {
+                if !Self::request_advertises_action_ref(request, "wait_ticks") {
+                    return Err(DecisionProviderError::new(
+                        "action_ref_not_in_catalog",
+                        "action_ref `wait_ticks` is not present in request action_catalog",
+                        false,
+                    ));
+                }
                 if Self::phase1_allowed_action_refs().contains(&"wait_ticks") {
                     Ok(())
                 } else {
@@ -75,12 +90,7 @@ impl ProviderLoopbackAdapter {
                 }
             }
             ProviderDecision::Act { action_ref, action } => {
-                if !request
-                    .observation
-                    .action_catalog
-                    .iter()
-                    .any(|entry| entry.action_ref == *action_ref)
-                {
+                if !Self::request_advertises_action_ref(request, action_ref) {
                     return Err(DecisionProviderError::new(
                         "action_ref_not_in_catalog",
                         format!(
