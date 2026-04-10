@@ -272,6 +272,18 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_1d9e5664c0114ab9b33365b1a8b6a7b0.yaml
+  - task_uid: task_63bc00b7cc084542bacc309ab97fd84f
+    title: "将文档体量治理升级为正式专题并冻结分层收敛方案"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+      - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+    acceptance:
+      - "文档体量治理专题 prd/design/project、engineering 主 PRD/project 与 execution log 已回写，且文档治理检查通过"
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_63bc00b7cc084542bacc309ab97fd84f.yaml
   - task_uid: task_231ca618613d564ca2c9ec758253c7b7
     title: "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题"
     priority: P2

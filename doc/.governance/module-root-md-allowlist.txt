@@ -33,6 +33,9 @@ doc/core/release-candidate-version-escalation-2026-03-11.prd.md
 doc/core/release-candidate-version-escalation-2026-03-11.project.md
 doc/engineering/README.md
 doc/engineering/design.md
+doc/engineering/doc-surface-area-governance-2026-04-10.design.md
+doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+doc/engineering/doc-surface-area-governance-2026-04-10.project.md
 doc/engineering/doc-structure-standard.design.md
 doc/engineering/doc-structure-standard.prd.md
 doc/engineering/doc-structure-standard.project.md

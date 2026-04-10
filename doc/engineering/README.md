@@ -25,6 +25,7 @@
 - `self-evolution/`：仓库内文件化项目管理、自我进化 memory/backlog、signal inbox 与 stage/gate 专题。
 
 ## 近期专题
+- `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md`
 - `doc/engineering/doc-structure-standard.prd.md`
 - `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`

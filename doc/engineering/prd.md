@@ -59,6 +59,7 @@
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
   - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
   - SC-28: `codex-working-memory.sh` 默认不得隐式读取当前/最近 Codex live session；若 owner 确实需要从 `.codex` transcript 提炼 working_memory，必须显式提供 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。
+  - SC-29: 文档体量治理必须具备正式专题口径，明确 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型；高密度模块的默认阅读面只保留“what / where / next / risk”所需入口，不再把审计与归档材料直接暴露为主入口。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -89,6 +90,7 @@
   - PRD-ENGINEERING-021: As a 协作 owner, I want a file-based self-evolution management layer inside the repo, so that long-term role memory/backlog and stage inputs no longer depend on rereading scattered daily logs.
   - PRD-ENGINEERING-022: As a `producer_system_designer`, I want external memory and reflection patterns benchmarked against our file-native governance model, so that future self-evolution upgrades borrow structure without replacing repo-native truth.
   - PRD-ENGINEERING-023: As a `.pm` workflow owner, I want task identity to be a merge-stable `task_uid` instead of a sequential display number, so that task creation in parallel worktrees no longer collides during rebase/landing.
+  - PRD-ENGINEERING-024: As a 项目经理/模块 owner, I want doc surface area governance formalized, so that I can distinguish active reading surfaces from audit/archive material and keep the default reading path usable even when `doc/` keeps growing.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行脚本 -> 通过 codex-review-snapshot 在临时隔离快照中执行 codex exec review --uncommitted review 当前 diff -> 修复 findings 并复测 -> 进入 CI`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -101,6 +103,7 @@
   9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
   10. Flow-ENG-010: `评估外部 memory/reflective-agent 方案 -> 冻结 adopted/rejected/deferred 边界 -> 将可借鉴对象映射到 .pm/doc 现有结构 -> 再拆实现任务`
   11. Flow-ENG-011: `owner 创建 `.pm` task -> 系统本地生成 merge-stable task_uid -> task file / execution log / working_memory / stage blocker 全部按 task_uid 引用 -> registry/backlog 视图由扫描重建 -> rebase/landing 不再因顺序 task id 分配产生结构性冲突`
+  12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -112,6 +115,7 @@
 | PRD 文件级索引 | 模块名、专题PRD路径、专题project路径 | 生成/更新模块索引并回写入口引用 | `missing -> indexed -> verified` | 活跃文档优先，按路径稳定排序 | 维护者可更新，所有贡献者可读 |
 | 依赖路径可达门禁 | 引用文档路径、引用来源、豁免列表 | 校验 `doc/...*.md` 引用目标是否存在 | `pass/fail` | 默认全量校验，通配符/模板与白名单文件豁免 | 维护者维护豁免，提交者必须修复断链 |
 | 文档分工与组织规范 | 对象层级（模块/专题/分册）、职责后缀（PRD/Design/Project/Runbook/Manual） | 为新主题选择落点并按规则建档 | `unclassified -> classified -> indexed -> reviewed` | 目录按领域/专题，文件按职责，优先同名三件套 | 作者可建档，评审者可裁定例外 |
+| 文档体量治理 | 文档总量、模块/子目录密度、消费层类型（活跃真值/审计留痕/历史归档/兼容跳转）、默认入口面 | 先冻结默认阅读面，再决定哪些文档只保留可检索性与定向引用，不再进入根入口/模块入口的主列表 | `unbounded -> classified -> reduced -> monitored` | 默认优先压缩阅读面而不是立即迁移文件；高密度模块优先按 `world-simulator -> p2p -> testing -> readme/core` 排查 | `producer_system_designer` 裁定消费层，模块 owner 回写入口与索引，评审者复核 |
 | 任务测试分层标注 | 任务ID、PRD-ID、test tier | 在模块 `project.md` 显式写 tier | `unspecified -> specified -> audited` | 先模块主项目，再专题项目 | 模块维护者审核，贡献者执行 |
 | 全量 PRD 审读清单 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 逐篇阅读后更新清单并回写偏差 | `unread -> read -> aligned` | 入口优先、风险优先 | 维护者与评审者可写，贡献者可读 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
@@ -151,6 +155,7 @@
   - AC-24: `.pm/registry/tasks.yaml` 与 role backlog 若保留，必须退化为由 canonical task 对象扫描重建的视图，且重建过程不要求 `next_sequence`、不要求中心抢号。
   - AC-25: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 只允许引用 task execution log、`doc/devlog/**` 之外的正式文档或其他显式 evidence；若仍指向 `doc/devlog/*.md`，lint/promote/set-stage 必须阻断。
   - AC-26: 仓库若显式提交 `.codex/config.toml` 作为 repo-local Codex 默认执行配置，则该文件必须可被 Git 追踪，且默认 `sandbox_mode` 需以仓库工作流要求的显式值落盘，不得依赖用户本机全局配置隐式兜底。
+  - AC-27: engineering 模块需存在一份正式“文档体量治理”专题，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的判定标准、默认入口面收敛规则、密度触发条件和首批高风险模块优先级。
 - Non-Goals:
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
@@ -179,6 +184,9 @@
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
+  - `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md`
+  - `doc/engineering/doc-surface-area-governance-2026-04-10.design.md`
+  - `doc/engineering/doc-surface-area-governance-2026-04-10.project.md`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
   - `testing-manual.md`
@@ -263,6 +271,7 @@
 | PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、快照式 `codex exec review --uncommitted` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091/103 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、默认禁用当前 live session 隐式自读、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
+| PRD-ENGINEERING-024 | TASK-ENGINEERING-106 | `test_tier_required` | 文档体量治理专题三件套、engineering 根入口/主项目/索引回写、module-root allowlist 更新与 `doc-governance-check` 通过；人工核对默认阅读面不再把 `doc/devlog` / round reviews / evidence 直接提升为主入口 | 仓库文档消费层、项目经理视角导航效率与后续减重批次规划 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
@@ -291,3 +300,4 @@
 | DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
 | DEC-ENG-022 | `doc/devlog/*.md` 仅保留历史归档职责，`.pm` runtime `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence | 继续让 `doc/devlog/*.md` 同时承担归档与 `.pm` 运行态真值 | 集中式日表已退役为归档层；若继续把它写进 stage/signal/task/memory 的 runtime 引用，会让 `.pm` 当前态重新依赖历史流水，削弱 worktree 隔离、lint 可判定性与 task-local traceability。 |
+| DEC-ENG-023 | 先冻结“阅读面分层”而不是立刻重组目录树；`活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的差异先体现在 root README、模块 README、`prd.index.md` 与专题互链上 | 立即重引入 `archive/` 树或直接批量移动 `reviews/governance/evidence` 文件 | 当前问题首先是默认阅读面过宽，而不是路径本身不可存放；先压缩入口和消费层，风险最小，也不破坏现有引用稳定性。 |

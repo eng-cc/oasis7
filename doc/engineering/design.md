@@ -17,7 +17,7 @@
 2. `doc/engineering/design.md`：工程治理的结构设计、规则载体与执行链路。
 3. `doc/engineering/project.md`：工程任务拆解、治理批次与状态。
 4. `doc/engineering/prd.index.md`：活跃专题入口。
-5. 下钻专题：`doc-structure-standard`、`prd-review`、`doc-migration` 等。
+5. 下钻专题：`doc-structure-standard`、`doc-surface-area-governance-2026-04-10`、`prd-review`、`doc-migration` 等。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
@@ -25,6 +25,7 @@
 - `design.md`：定义规则如何组织、如何落地、由哪些脚本与文档承接。
 - `project.md`：定义治理任务、批次、owner 与验证口径。
 - `doc-structure-standard.*`：定义 `doc/` 文档树的组织规范与裁定依据。
+- `doc-surface-area-governance-2026-04-10.*`：定义默认阅读面如何从活跃真值中分离审计、归档与兼容跳转材料。
 - `prd-review/*`：定义全量审读/治理台账与进度追踪。
 
 ### 3.2 工程治理执行链路

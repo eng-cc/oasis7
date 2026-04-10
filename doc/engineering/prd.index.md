@@ -2,7 +2,7 @@
 
 审计轮次: 6
 
-更新时间：2026-03-31
+更新时间：2026-04-10
 
 ## 入口
 - 模块 PRD：`doc/engineering/prd.md`
@@ -11,6 +11,7 @@
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
+| `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md` | `doc/engineering/doc-surface-area-governance-2026-04-10.design.md` | `doc/engineering/doc-surface-area-governance-2026-04-10.project.md` |
 | `doc/engineering/doc-structure-standard.prd.md` | `doc/engineering/doc-structure-standard.design.md` | `doc/engineering/doc-structure-standard.project.md` |
 | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md` | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.design.md` | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md` |
 | `doc/engineering/documentation-governance-engineering-closure-2026-02-27.prd.md` | `doc/engineering/documentation-governance-engineering-closure-2026-02-27.design.md` | `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md` |
