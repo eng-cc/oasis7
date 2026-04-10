@@ -1,0 +1,20 @@
+task_uid: task_9eeeedd9fbaf43859d1241728bd3dd12
+title: "Fix provider loopback wait_ticks catalog validation"
+owner_role: agent_engineer
+worktree_hint: world-simulator-provider-wait-ticks-catalog-bug
+execution_log_path: .pm/tasks/task_9eeeedd9fbaf43859d1241728bd3dd12.execution.md
+status: committed
+priority: P1
+source_signal: null
+source_refs:
+  - crates/oasis7/src/simulator/provider_loopback_adapter.rs
+doc_refs:
+  - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-037
+acceptance:
+  - "ProviderLoopbackAdapter must reject wait_ticks when request action_catalog does not advertise it; add regression test and keep targeted provider_loopback_adapter tests green."
+handoff_to: []
+updated_at: 2026-04-09T23:43:33+08:00
+last_started_at: 2026-04-09T23:21:41+08:00
+last_closed_at: 2026-04-09T23:35:12+08:00

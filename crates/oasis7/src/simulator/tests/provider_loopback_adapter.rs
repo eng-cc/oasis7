@@ -160,6 +160,37 @@ fn provider_loopback_adapter_maps_provider_error_envelope_to_decision_provider_e
     assert!(err.retryable);
 }
 
+#[test]
+fn provider_loopback_adapter_rejects_wait_ticks_when_request_catalog_omits_it() {
+    let mut request = golden_decision_provider_fixtures()
+        .into_iter()
+        .next()
+        .expect("fixture")
+        .request;
+    request
+        .observation
+        .action_catalog
+        .retain(|entry| entry.action_ref != "wait_ticks");
+    let wait_ticks_response = DecisionResponse {
+        decision: ProviderDecision::WaitTicks { ticks: 2 },
+        provider_error: None,
+        diagnostics: ProviderDiagnostics::default(),
+        trace_payload: ProviderTraceEnvelope::default(),
+        memory_write_intents: vec![],
+    };
+    let base_url = spawn_mock_http_server(1, move |_| MockHttpResponse {
+        status_code: 200,
+        body: serde_json::to_string(&wait_ticks_response).expect("encode response"),
+    });
+
+    let mut adapter = ProviderLoopbackAdapter::new(base_url.as_str(), None, 200).expect("adapter");
+    let err = adapter
+        .decide(&request)
+        .expect_err("wait_ticks outside action_catalog should be rejected");
+    assert_eq!(err.code, "action_ref_not_in_catalog");
+    assert!(err.message.contains("wait_ticks"));
+}
+
 fn setup_kernel_with_provider_agent(agent_id: &str) -> WorldKernel {
     let mut kernel = WorldKernel::with_config(WorldConfig {
         move_cost_per_km_electricity: 0,
