@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 任务拆解
 
@@ -11,7 +11,7 @@
 - [x] TASK-GAMEPLAY-RR-002 (`PRD-GAME-012`) [test_tier_required + test_tier_full]: `viewer_engineer` 已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 floor blocker 与恢复状态由 `TASK-GAMEPLAY-RR-005` 持续跟踪。
 - [x] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` 已将 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到前台主语义。
-- [x] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后复跑 `software_safe` formal lane，确认正式入口首个 `step` 已恢复 `logicalTimeAdvanced=true`；当前 gate 更新为 `watch`，下一步继续补 3 条 active-LLM retention samples，而不是继续停在 floor blocker `hold`。
+- [x] TASK-GAMEPLAY-RR-005 (`PRD-GAME-012`) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；当前 gate 已从 `watch` 收口为 `hold`，因为 formal lane 虽恢复 `software_safe` first-step floor，但仍卡在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本回退到 `first_session_loop.create_first_world_feedback / 0%` 并伴随 `logicalTime/eventSeq` 冻结。
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -76,7 +76,8 @@
   - [x] 玩家能直接读到代价、阻塞、恢复和奖励
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
-  - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复，producer 当前 gate 输入已更新为 `watch` 并回写根项目文档
+  - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
+  - [x] 已完成 `3` 条 active-LLM 10 分钟正式样本与最终 `hold` 裁决回写
 
 ## 依赖
 
@@ -91,12 +92,12 @@
 
 ## 状态
 
-- 更新日期: 2026-04-09
+- 更新日期: 2026-04-10
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: 由 `qa_engineer` 在当前 real-provider + main config 环境下继续补 3 条 active-LLM retention samples，并据此更新最终 `continue_playing / hold` 裁决。
+- 下一任务: 由 `producer_system_designer` 按 `TASK-GAME-065` 的正式阻断签名拆出下一轮 runtime/viewer 修复切片，再重新申请 formal retention 复验。
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
   - `TASK-GAMEPLAY-RR-001~004` 已完成并回写 `.pm`；其中 `TASK-GAMEPLAY-RR-002/003/004` 分别收口了控制门控与 ack 语义、工业中循环 canonical 包，以及首屏噪音/后果可见化。
-  - `TASK-GAME-065` 的最新 real-main-config rerun 已恢复 active-LLM `software_safe` formal floor，不再以 `Responses API` 10 秒超时作为当前阻断项；本专题现处于 `watch`，等待 3 条 active-LLM retention samples 后再决定 `continue_playing / hold`。
+  - `TASK-GAME-065` 的最新正式结论是：active-LLM `software_safe` formal floor 已恢复，不再以 `Responses API` 10 秒超时作为当前阻断项；但 `3` 条 10 分钟正式样本均未支持 `continue_playing`，其中 `1` 条长期停在 `post_onboarding.establish_first_capability / 20%`，另 `2` 条出现 `post_onboarding -> first_session_loop` 回退并冻结世界时间，因此当前 producer verdict 为 `hold`。

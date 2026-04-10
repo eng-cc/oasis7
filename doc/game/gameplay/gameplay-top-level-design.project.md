@@ -2,7 +2,7 @@
 
 - 对应设计文档: `doc/game/gameplay/gameplay-top-level-design.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-top-level-design.prd.md`
-审计轮次: 8
+审计轮次: 9
 
 ## ROUND-002 主从口径
 - 本文件为 gameplay 项目主入口，其余 gameplay project 为增量计划。
@@ -57,10 +57,10 @@
 
 ### T8 10 分钟留存修复（2026-04-09）
 - [x] 冻结“未来两周只优先做 5 条 retention lane”的专题 PRD / design / project，并完成根入口挂载。
-- [x] `viewer_engineer` / `runtime_engineer`：已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 floor blocker 已由 QA gate 更新为 `watch`，等待继续采样。
+- [x] `viewer_engineer` / `runtime_engineer`：已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 runtime floor 已恢复，但 retention gate 仍被 `TASK-GAME-065` 判定为 `hold`。
 - [x] `runtime_engineer` / `viewer_engineer`：已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的目标包。
 - [x] `viewer_engineer` / `agent_engineer`：已收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
-- [x] `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；当前 producer verdict 为 `watch`，仍待 3 条 active-LLM retention samples 决定最终 `continue_playing / hold`。
+- [x] `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；当前 producer verdict 为 `hold`，因为 `3` 条 active-LLM 10 分钟正式样本均未形成“首个可持续能力”闭环，且其中 `2` 条样本出现阶段回退并冻结世界时间。
 
 ## 依赖
 

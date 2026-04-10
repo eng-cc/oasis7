@@ -42,6 +42,19 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_29327fae434f463cab3ecf9c9a3bee2a.yaml
+  - task_uid: task_b8fa67f360c4487c803b70b80dfefe40
+    title: "Collect post-recovery active-LLM retention samples for TASK-GAME-065"
+    priority: P0
+    source_signal: SIG-PM-0027
+    related_prd:
+      - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+    acceptance:
+      - "Collect at least 3 active-LLM 10-minute retention samples after the software_safe formal floor recovery, using the same real-provider config path validated in the rerun."
+      - "Update playability cards, retention evidence, and game project docs with a factual continue_playing/hold verdict or an exact re-block signature if the lane regresses."
+      - "Keep debug/probe evidence separate from formal active-LLM samples and write the producer-ready gate recommendation into .pm task logs and formal docs."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_b8fa67f360c4487c803b70b80dfefe40.yaml
   - task_uid: task_f2e680d768844eff8232de25ba172a29
     title: "Audit software_safe end-to-end playability with browser screenshots"
     priority: P1

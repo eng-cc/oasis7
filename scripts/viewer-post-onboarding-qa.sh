@@ -23,6 +23,7 @@ Options:
   --url <url>               Reuse an existing Viewer URL instead of bootstrapping a stack
   --out-dir <path>          Artifact root (default: output/playwright/playability)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
+  --feedback-timeout-ms <n> Wait timeout for step feedback completion (default: 10000)
   --session <name>          agent-browser session name prefix
   -h, --help                Show this help
 
@@ -50,6 +51,7 @@ normalize_eval_token() {
 game_url=""
 out_root="output/playwright/playability"
 startup_timeout_secs=240
+feedback_timeout_ms=10000
 session_prefix="post-onboarding-qa"
 stack_args=()
 
@@ -65,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --startup-timeout)
       startup_timeout_secs="${2:-}"
+      shift 2
+      ;;
+    --feedback-timeout-ms)
+      feedback_timeout_ms="${2:-}"
       shift 2
       ;;
     --session)
@@ -85,6 +91,10 @@ done
 [[ -n "$out_root" ]] || { echo "error: --out-dir cannot be empty" >&2; exit 2; }
 [[ "$startup_timeout_secs" =~ ^[0-9]+$ ]] && [[ "$startup_timeout_secs" -gt 0 ]] || {
   echo "error: --startup-timeout must be a positive integer" >&2
+  exit 2
+}
+[[ "$feedback_timeout_ms" =~ ^[0-9]+$ ]] && [[ "$feedback_timeout_ms" -gt 0 ]] || {
+  echo "error: --feedback-timeout-ms must be a positive integer" >&2
   exit 2
 }
 
@@ -299,7 +309,7 @@ ab_screenshot "$session" "$shot_initial" >>"$ab_log" 2>&1
 
 log_note step_feedback
 ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 8})" >>"$ab_log" 2>&1
-feedback_state=$(wait_for_feedback_stage "completed_advanced" 10000) || {
+feedback_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
   echo "error: step(8) did not produce completed_advanced feedback" >&2
   exit 1
 }
@@ -317,7 +327,7 @@ ab_screenshot "$session" "$shot_entry" >>"$ab_log" 2>&1
 
 log_note followup_step
 ab_eval "$session" "window.__AW_TEST__.sendControl('step', {count: 24})" >>"$ab_log" 2>&1
-followup_state=$(wait_for_feedback_stage "completed_advanced" 10000) || {
+followup_state=$(wait_for_feedback_stage "completed_advanced" "$feedback_timeout_ms") || {
   echo "error: follow-up step(24) did not produce completed_advanced feedback" >&2
   exit 1
 }

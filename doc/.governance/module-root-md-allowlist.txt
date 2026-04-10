@@ -84,6 +84,9 @@ doc/playability_test_result/card_2026_03_19_13_25_04.md
 doc/playability_test_result/card_2026_03_22_15_56_13.md
 doc/playability_test_result/card_2026_04_03_14_59_24.md
 doc/playability_test_result/card_2026_04_09_17_26_18.md
+doc/playability_test_result/card_2026_04_10_12_58_29.md
+doc/playability_test_result/card_2026_04_10_13_28_58.md
+doc/playability_test_result/card_2026_04_10_13_43_23.md
 doc/playability_test_result/design.md
 doc/playability_test_result/game-test.design.md
 doc/playability_test_result/game-test.prd.md

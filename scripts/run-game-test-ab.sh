@@ -22,6 +22,8 @@ Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
   --out-dir <path>          Artifact root (default: output/playwright/playability)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
+  --progress-timeout-ms <n> Wait timeout for play/step probes that require world progress
+                            (default: 12000)
   --headed                  Open browser in headed mode (default, recommended for Viewer Web);
                             defaults to `--use-angle=gl,--ignore-gpu-blocklist` unless
                             `AGENT_BROWSER_ARGS` overrides it
@@ -60,6 +62,7 @@ PY
 GAME_URL=""
 OUT_ROOT="output/playwright/playability"
 STARTUP_TIMEOUT_SECS=240
+PROGRESS_TIMEOUT_MS=12000
 HEADED=1
 STACK_ARGS=()
 
@@ -75,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --startup-timeout)
       STARTUP_TIMEOUT_SECS="${2:-}"
+      shift 2
+      ;;
+    --progress-timeout-ms)
+      PROGRESS_TIMEOUT_MS="${2:-}"
       shift 2
       ;;
     --headed)
@@ -98,6 +105,7 @@ done
 
 [[ -n "$OUT_ROOT" ]] || { echo "error: --out-dir cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be a positive integer" >&2; exit 2; }
+[[ "$PROGRESS_TIMEOUT_MS" =~ ^[0-9]+$ ]] && [[ "$PROGRESS_TIMEOUT_MS" -gt 0 ]] || { echo "error: --progress-timeout-ms must be a positive integer" >&2; exit 2; }
 
 require_cmd python3
 require_cmd rg
@@ -513,13 +521,13 @@ if ab_cmd "$SESSION" record start "$OUT_DIR/playthrough.webm" >>"$AB_LOG" 2>&1; 
   RECORDING_ACTIVE=0
 fi
 
-phaseA_play=$(send_control_probe phase_a_play play '{}' true 12000)
+phaseA_play=$(send_control_probe phase_a_play play '{}' true "$PROGRESS_TIMEOUT_MS")
 no_progress_observation=$(observe_no_progress_window 6000)
 phaseA_pause=$(send_control_probe phase_a_pause pause '{}' false 2500)
 ab_screenshot "$SESSION" "$OUT_DIR/step1-phase-a.png" >>"$AB_LOG" 2>&1 || true
 
-phaseB_step_primary=$(send_control_probe phase_b_step_primary step '{"count":8}' true 6000)
-phaseB_step_followup=$(send_control_probe phase_b_step_followup step '{"count":2}' true 6000)
+phaseB_step_primary=$(send_control_probe phase_b_step_primary step '{"count":8}' true "$PROGRESS_TIMEOUT_MS")
+phaseB_step_followup=$(send_control_probe phase_b_step_followup step '{"count":2}' true "$PROGRESS_TIMEOUT_MS")
 ab_screenshot "$SESSION" "$OUT_DIR/step2-phase-b.png" >>"$AB_LOG" 2>&1 || true
 
 set +e
