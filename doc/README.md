@@ -16,7 +16,7 @@
 7. 继续读 `doc/<module>/project.md`，确认任务拆解、PRD-ID 映射、依赖与状态。
 8. 按需下钻模块子文档（`doc/<module>/**/*.md`）。
 9. 对照系统测试策略：`testing-manual.md` 与 `doc/testing/prd.md`。
-10. 回溯过程记录：`doc/devlog/YYYY-MM-DD.md`。
+10. 若已知 `task_uid`，读取对应 `.pm/tasks/task_<32hex>.execution.md`；未知具体任务时，先看模块 `project.md`。
 
 ## 按目标进入
 | 你的目标 | 第一入口 | 第二入口 | 说明 |
@@ -25,15 +25,14 @@
 | 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + `doc/<module>/project.md` | 先看全局目标，再进入目标模块 |
 | 想做本地验证、回归或验收 | `testing-manual.md` | `doc/testing/prd.md` | 手册负责 suite 选择，testing 模块负责测试体系建模 |
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
-| 想补过程上下文或追溯当天决策 | `doc/devlog/YYYY-MM-DD.md` | `doc/core/project.md` | devlog 看过程，project 看正式追踪 |
+| 想补过程上下文或追溯具体任务决策 | `doc/<module>/project.md` | `.pm/tasks/task_<32hex>.execution.md` | 先靠正式追踪定位任务，再看 task-scoped execution log |
 
 ## 根目录入口说明
-- 以下文件为兼容跳转入口（legacy redirect），正文已迁移到模块目录：
+- 根目录 legacy redirect 仅保留兼容跳转；正文与执行状态统一回收到各模块目录。
+- 高频兼容入口示例：
   - `doc/viewer-manual.md` -> `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/game-test.prd.md` -> `doc/playability_test_result/game-test.prd.md`
-  - `doc/game-test.project.md` -> `doc/playability_test_result/game-test.project.md`
   - `doc/playability_test_card.md` -> `doc/playability_test_result/playability_test_card.md`
-  - `doc/playability_test_manual.md` -> `doc/playability_test_result/playability_test_manual.md`
 
 ## 模块入口矩阵
 | 模块 | PRD 主文档 | 设计主文档 | 项目管理文档 | 设计关注点 |
@@ -58,12 +57,12 @@
 - `doc/<module>/prd.index.md`：模块文件级 PRD 索引（活跃专题文档可达入口）。
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。
-- `doc/devlog/`：按日任务日志（时刻、完成内容、遗留事项）。
+- `.pm/tasks/task_<32hex>.execution.md`：按任务维护的 canonical 过程日志。
+- `doc/devlog/`：历史归档，仅作回溯参考，不再作为运行态真值。
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
 - `doc/**/archive/` 目录已移除；历史专题仅在模块目录内保留并在索引中标注。
 
-## 维护约定（摘要）
+## 共享规则
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 `project.md`，最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。
-- 单个 `prd.md` 文档不超过 1000 行；`prd.md` 超限时拆分为 `doc/<module>/prd/*.md`，并保留 `prd.md` 作为总览入口。
-- 非白名单场景禁止新增 `doc/*.md` 与 `doc/<module>/*.md` 平铺文档；需优先落位到模块子目录并更新模块 `README.md` 索引。
+- 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-structure-standard.design.md` 为准。

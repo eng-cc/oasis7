@@ -184,96 +184,13 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 | 想参与开发或继续治理文档/代码 | [`doc/README.md`](./doc/README.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
 
 
-## 世界设定与运行机制补充说明
+## 深入阅读
 
-本章统一作为**导航级摘要**。  
-`README` 负责快速对齐口径，细则统一维护在权威文档中，避免多处重复维护：
+`README` 只负责快速对齐项目定位与入口，不再在这里重复维护世界规则摘要。继续深入时，直接进入对应权威文档：
 
-- 世界规则细则：[`world-rule.md`](./world-rule.md)
-- Viewer/运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
+- 世界规则与系统边界：[`world-rule.md`](./world-rule.md)
+- 玩家访问模式与技术预览边界：[`doc/core/player-access-mode-contract-2026-03-19.prd.md`](./doc/core/player-access-mode-contract-2026-03-19.prd.md)
+- Viewer / Web / 运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - 闭环测试与套件矩阵：[`testing-manual.md`](./testing-manual.md)
-- 游戏可玩性顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
-- 游戏玩法工程架构设计：[`doc/game/gameplay/gameplay-engineering-architecture.md`](./doc/game/gameplay/gameplay-engineering-architecture.md)
-
----
-
-## 一、世界设定（Default World Configuration）
-
-### 摘要
-
-- 世界是受空间约束的小行星文明环境，移动与空间占用需通过规则校验。
-- Agent 为硅基智能体，玩家只能通过提示词与目标间接引导，不直接操控行为。
-- 世界以离散 Tick 推进，时间不可回退/暂停，LLM 推理与执行行为均有成本。
-- 资源遵循守恒原则，电力/数据/计算等资源存在获取、消耗、维护与衰减。
-- WASM 模块负责扩展制度与产业行为，共识与治理层负责状态收敛与升级边界。
-
-细则入口：[`world-rule.md`](./world-rule.md)
-
----
-
-## 二、模拟机制
-
-### 摘要
-
-- Agent 行为必须走“规则校验 -> 资源消耗 -> 事件记录 -> 状态反馈”的闭环。
-- Agent 具备长期记忆并形成动态社会关系，关系会影响协作、声誉与交易条件。
-- 系统仅内置基础规则，更复杂制度由 Agent 通过 WASM 模块创造并演化。
-- 多玩家场景下制度可能冲突，稳定性取决于效率、激励与共识成本。
-
-细则入口：[`world-rule.md`](./world-rule.md)
-
----
-
-## 三、WASM 模块运行机制
-
-### 摘要
-
-- 模块开发链路为 Rust 编写、WASM 编译、部署、安装（Agent 或基础设施）。
-- 模块是世界内实体，具备构建/运行成本、升级、交易与销毁属性。
-- 模块按模拟周期运行，输出请求必须经过运行时验证，不可绕过世界规则。
-
-细则入口：[`world-rule.md`](./world-rule.md)
-
----
-
-## 四、当前预览访问面
-
-### 摘要
-
-- 当前技术预览对齐三种访问面：`standard_3d`、`software_safe`、`pure_api`。
-- `standard_3d`：面向标准 3D / headed Web 验证路径，用于高保真交互、截图语义与视觉验收；当前仍属于技术预览验证面，不代表已开放玩家版本。
-- `software_safe`：面向弱图形或无 GPU 硬件依赖环境的 Web 安全入口，用于最小玩法闭环与调试兜底，不代表标准 3D 画面通过。
-- `pure_api`：面向无 UI 的正式接口入口，用于 canonical 玩家语义与持续推进；正式游玩要求已配置且可连通的 LLM，`--no-llm` 仅保留观战/调试，不承诺可玩性放行。
-- 离线回放、在线 live runtime、LLM / script 决策，以及 `player_parity / headless_agent / debug_viewer` 等字段，属于验证链路或 execution lane，不是额外的对外玩家访问模式。
-
-细则入口：
-
-- [`doc/core/player-access-mode-contract-2026-03-19.prd.md`](./doc/core/player-access-mode-contract-2026-03-19.prd.md)
-- [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
-- [`testing-manual.md`](./testing-manual.md)
-
----
-
-## 五、开放沙盒特性
-
-### 摘要
-
-- 通过 WASM 扩展与 Agent 自主组织，世界可涌现自动化、市场、联盟与技术竞争等结构。
-- 这些形态不是预设玩法，而是规则和资源约束共同驱动的自然结果。
-
-细则入口：[`world-rule.md`](./world-rule.md)
-
----
-
-## 六、系统边界
-
-### 摘要
-
-- 当前系统不追求低层物理写实与真实轨道动力学，只要求宏观因果一致。
-- 系统不强制预设社会结构，也不提供主线剧情。
-- 目标是在抽象层维持资源约束与可演化性，让规则持续生成故事。
-
-边界与规则入口：
-
-- [`world-rule.md`](./world-rule.md)
-- [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
+- 游戏玩法顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
+- 游戏玩法工程架构：[`doc/game/gameplay/gameplay-engineering-architecture.md`](./doc/game/gameplay/gameplay-engineering-architecture.md)

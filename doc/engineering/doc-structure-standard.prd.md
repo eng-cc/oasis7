@@ -49,6 +49,8 @@
   - SC-3: 模块入口文档能为评审者提供稳定阅读顺序：`PRD -> Design -> Project -> Topic Docs`。
   - SC-4: 同一专题在目录内可通过同名文档 `PRD / Design / Project` 形成可发现的配套关系。
   - SC-5: 规范正文本身可被直接引用为后续文档治理评审的裁定依据。
+  - SC-6: 模块 `README.md` 仅保留模块特有的阅读路径、高频专题与例外入口，不再在各模块重复散写共享治理规则。
+  - SC-7: root-level legacy redirect 文档仅保留兼容跳转所需的最小信息，不再扩展为重复的 `目标/范围/状态` 壳文档。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -64,6 +66,7 @@
   - PRD-ENGINEERING-015-002: As a 模块负责人, I want fixed module-level entry files, so that readers always know where to start.
   - PRD-ENGINEERING-015-003: As a 评审者, I want topic docs to use the same basename across PRD/Design/Project, so that related documents are discoverable at a glance.
   - PRD-ENGINEERING-015-004: As a 运维/测试人员, I want runbook/manual to be separated from design, so that operational steps do not overwrite technical rationale.
+  - PRD-ENGINEERING-015-005: As a 读者, I want README and legacy redirect pages to stay thin, so that I can reach canonical docs without rereading shared governance boilerplate.
 - Critical User Flows:
   1. Flow-DOC-001（模块级建档）:
      `确定需求所属模块 -> 进入 doc/<module>/ -> 阅读 prd.md / design.md / project.md -> 决定是否新增专题目录`
@@ -75,6 +78,8 @@
      `作者准备写内容 -> 先判断是 Why/What/Done 还是 How/Structure/Contract 还是 How/When/Who -> 分别落到 PRD/Design/Project`
   5. Flow-DOC-005（操作文档建档）:
      `若内容是操作步骤 -> 判断是常规使用还是发布/故障处置 -> 分别落到 *.manual.md / *.runbook.md`
+  6. Flow-DOC-006（入口减重）:
+     `判断信息是否为模块特有 -> 若是则保留在 README -> 若是共享结构规则则回链到规范正文 -> 若仅为历史兼容则保留最小 redirect 页`
 - Functional Specification Matrix:
 
 | 对象/能力 | 字段定义 | 动作/行为 | 状态转换 | 排序/归类规则 | 权限逻辑 |
@@ -84,6 +89,7 @@
 | 设计正文 | 架构、组件、接口、状态机、异常、NFR | 解释系统如何工作 | `implicit -> explicit` | `*.design.md` 为首选正式载体 | 设计 owner 维护，相关模块 reviewer 复核 |
 | 操作文档 | 使用步骤或值班剧本 | 区分 `manual` 与 `runbook` | `ad-hoc -> standardized` | 使用/测试走 `manual`，发布/故障走 `runbook` | 操作 owner 维护，执行者可读 |
 | 目录分层 | 模块 / 专题 / 分册 | 根据对象大小决定是否拆层 | `flat -> topicized -> partitioned` | 优先模块级，再专题级，最后分册级 | 作者提议，评审者裁定例外 |
+| 入口减重 | `README` 路由、共享规则回链、legacy redirect 目标 | 删除重复治理话术，只保留模块特有入口或兼容跳转 | `verbose -> routed` | 共享规则集中到规范正文，兼容页最小化 | 模块 owner 维护，评审者裁定是否仍有重复 |
 - Acceptance Criteria:
   - AC-1: 规范明确给出模块级固定入口文件集合。
   - AC-2: 规范明确给出专题级推荐目录结构与同名配套规则。
@@ -91,6 +97,8 @@
   - AC-4: 规范明确说明“目录按对象、文件按职责”的原则。
   - AC-5: 规范明确给出阅读顺序与文档间引用关系。
   - AC-6: 规范明确给出允许的例外场景与约束，避免过度模板化。
+  - AC-7: 模块 `README.md` 允许保留“从这里开始”、高频专题与模块特有例外，但共享目录规则、根入口收口与通用维护约定应集中到规范正文，不在各模块重复散写。
+  - AC-8: root-level legacy redirect 文档只保留当前主入口、相关入口与只读声明，不再复制业务目标、范围、任务状态或设计壳。
 - Non-Goals:
   - 不在本规范中规划历史文档迁移批次。
   - 不在本规范中直接修改 `scripts/doc-governance-check.sh` 门禁逻辑。
@@ -119,6 +127,8 @@
   - 纯操作文档：若目标仅是“怎么执行”，应直接使用 `*.manual.md` 或 `*.runbook.md`，不要伪装成设计文档。
   - 模块总设计缺失：不阻断本规范成立，但后续新模块应优先补 `doc/<module>/design.md`。
   - 历史自由命名文档：本规范不要求立刻迁移，但新增文档不再复制旧命名分叉。
+  - 高体量模块入口：允许保留模块特有的“从这里开始”和高频专题，但不再把 repo-wide 结构规则重复写进每个模块 README。
+  - legacy redirect：若文件仅承担兼容跳转，就不再补齐完整 PRD/Design/Project 壳；最小可读声明优先于形式完整。
 - Non-Functional Requirements:
   - NFR-1: 新增文档的职责应能在 5 分钟内被评审者判定。
   - NFR-2: 模块级固定入口数量保持稳定，不因专题膨胀而改变阅读起点。

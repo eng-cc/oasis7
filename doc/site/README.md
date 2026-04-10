@@ -31,11 +31,6 @@
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档按主题下沉到 `github-pages/`、`manual/`。
-
-## 维护约定
-- 站点信息架构、公开状态口径与发布说明变更需同步更新 PRD、项目状态与公开页面。
-- 新增 `github-pages` / `manual` 专题后，需同步回写 `doc/site/prd.index.md` 与本目录索引。
-- 若公开 docs hub 的入口分流或 Viewer 镜像链接变化，需同时核对 `site/doc/{cn,en}/index.html`、`doc/site/README.md` 与仓库内 canonical 手册入口是否仍一致。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 站点信息架构、公开状态口径或镜像入口变化时，优先更新 `doc/site/prd.md` / `doc/site/project.md`，并同步核对 `site/doc/{cn,en}/index.html` 与仓库内 canonical 手册入口。

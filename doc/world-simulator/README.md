@@ -43,10 +43,6 @@
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.prd.md`
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档已迁移到对应主题目录（`viewer/`、`llm/`、`launcher/`、`scenario/`、`kernel/`、`m4/`）。
-
 ## 专项手册
 - Viewer 使用手册：`doc/world-simulator/viewer/viewer-manual.manual.md`
 - 公开静态镜像：`site/doc/cn/viewer-manual.html` / `site/doc/en/viewer-manual.html`
@@ -55,8 +51,6 @@
 - `doc/world-simulator.prd.md`
 - `doc/world-simulator.project.md`
 
-## 维护约定
-- 新文档按主题目录落位，不再默认平铺在模块根目录。
-- 模块行为、Web 闭环或启动器体验口径变化时，需同步更新 `prd.md` 与 `project.md`。
-- 新增专题后，需同步回写 `doc/world-simulator/prd.index.md` 与本目录索引。
-- 若手册步骤改动，先更新仓库内 `viewer-manual.manual.md`，再评估是否需要同步静态镜像；公开镜像默认跟随仓库权威手册，而不是独立演化。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块行为、Web 闭环或启动器体验口径变化时，优先更新 `doc/world-simulator/prd.md` / `doc/world-simulator/project.md`；手册步骤改动时，先更新仓库内 `viewer-manual.manual.md`，再评估是否同步静态镜像。

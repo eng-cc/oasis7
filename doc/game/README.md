@@ -43,12 +43,6 @@
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
 - `doc/game/gameplay/gameplay-release-production-closure.prd.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档按主题下沉到 `gameplay/`。
-
-## 维护约定
-- 新玩法需求先落 PRD，再拆到项目管理文档。
-- 玩法行为、发布门禁或体验验收变化需同步回写验收口径与测试引用。
-- 新增 gameplay 专题后，需同步回写 `doc/game/prd.index.md` 与本目录索引。
-- README 只负责给读者选入口，不替代 `prd.index.md` 的全量专题清单。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 玩法行为、发布门禁或体验验收变化时，优先更新 `doc/game/prd.md` 与 `doc/game/project.md`；新增 gameplay 专题时，再同步回写 `doc/game/prd.index.md`。

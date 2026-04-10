@@ -110,6 +110,7 @@
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-021) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
 - [x] TASK-ENGINEERING-103 (PRD-ENGINEERING-021/022) [test_tier_required]: 默认关闭同一/最近 live Codex session 的 working_memory 隐式自读；`codex-working-memory.sh` 改为默认要求显式 `--session-id`，仅在显式 `--allow-auto-session` 时允许 registry / worktree pattern 自动解析，并同步收口 `workflow-report`、README、self-evolution 专题与 smoke。
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 回填 `rust-oversized-file-baseline.tsv` 真值、修复 `check-rust-file-size.sh` 在空 baseline 首次回填场景下把同提交基线更新误判为“新增超限文件”的 bootstrap 逻辑，并把 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，恢复 oversized Rust gate 的可执行性并清掉一份 viewer 热点超限文件。
+- [x] TASK-ENGINEERING-105 (PRD-ENGINEERING-015) [test_tier_required]: 收口仓库入口、模块 README、legacy redirect 与 engineering 项目状态中的重复治理话术，统一改为“共享规则集中维护，入口页只保留特有分流”。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -151,84 +152,13 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-09
+- 更新日期: 2026-04-10
 - 当前状态: active
+- 下一任务: 回到 `TASK-ENGINEERING-089/090`，继续收口 `.codex -> working_memory -> reflection` 契约与质量回归，并按 Rust 1200 行专项继续处理当前 11 个生产文件 / 7 个测试文件的超限 burn-down。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
-- 下一任务: 一边继续 `TASK-ENGINEERING-089/090` 的 `.codex -> working_memory -> reflection` 契约收口，一边按 Rust 1200 行专项继续处理当前 11 个生产文件 / 7 个测试文件的超限 burn-down，优先 `oasis7_game_launcher`、`runtime_live/llm_sidecar`、`client_launcher` 与 `oasis7_node` 侧热点。
-- PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
-- 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
+- 最新完成: `TASK-ENGINEERING-105`（已收口 repo README、`doc/README.md`、主要模块 README、root legacy redirect 与 engineering 状态栏中的重复治理话术，统一改成“共享规则集中维护，入口页只保留特有分流”。）
 - 最新完成: `TASK-ENGINEERING-104`（已把 `doc/.governance/rust-oversized-file-baseline.tsv` 回写为当前仓库真实超限快照，恢复 `scripts/check-rust-file-size.sh` / `scripts/ci-tests.sh required` 的 frozen baseline 语义，并将 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，使 viewer 首批热点超限文件数下降。）
-- 最新完成: `TASK-ENGINEERING-102`（已清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。）
-- 最新完成: `TASK-ENGINEERING-101`（已新增 repo-local `.codex/config.toml` 并默认 `danger-full-access`，同时补齐 `.gitignore` 精确例外、engineering 主 PRD/project 与 task execution log 追踪。）
-- 最新完成: `TASK-ENGINEERING-097`（已收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界。）
-- 最新完成: `TASK-ENGINEERING-098`（已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。）
-- 最新完成: `TASK-ENGINEERING-099`（已将 `.pm` task identity 收敛为 `task_uid` 单一真值，移除顺序 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并完成 lint/smoke 与正式文档迁移收口。）
-- 最新完成: `TASK-ENGINEERING-100`（已明确 `doc/devlog/*.md` 仅作历史归档，`.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence，并补齐 lint / promote-signal / set-stage 阻断。）
-- 最新完成: `TASK-ENGINEERING-096`（已将执行日志 canonical 路径切到 `.pm/tasks/task_<32hex>.execution.md`，并把 AGENTS / `.pm/README` / `workflow-report` / task lint / smoke 一并收口到按任务归档模型。）
-- 最新完成: `TASK-ENGINEERING-095`（已将 `memory-regression-smoke` 的 blocked-task fixture 改为按 `committed -> workflow-report start -> blocked -> set-stage` 的正式 `.pm` 状态机构造，恢复 full-tier smoke 通过。）
-- 最新完成: `TASK-ENGINEERING-094`（已将 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪中的 commit 前 review 规则统一收口为仓库默认流程。）
-- 最新完成: `TASK-ENGINEERING-049`（根 `AGENTS.md` 顶部协作执行语义收敛为角色视角切换）。
-- 最新完成: `TASK-ENGINEERING-050`（engineering 模块仍可读治理专题标题统一切到 `oasis7` 品牌）。
-- 最新完成: `TASK-ENGINEERING-051`（Rust 1200 行根治治理专题三件套与模块入口回写）。
-- 最新完成: `TASK-ENGINEERING-052`（Rust 文件体量检查脚本、冻结超限基线与 required gate 接入）。
-- 最新完成: `TASK-ENGINEERING-053`（`touch-and-shrink`、结构切片基线与 `split_part/include!` 完成态阻断规则接入 Rust 文件体量检查脚本）。
-- 最新完成: `TASK-ENGINEERING-054/055/056/057`（Rust 1200 行专项四项执行任务已在专项 project 进入 `verified`，主项目状态已同步追平；`egui_right_panel_tests.rs`、`viewer/live/tests.rs`、`module_action_loop_split_part1.rs`、`persistence.rs`、`gameplay_protocol_split_part1.rs`、`tests_split_part1.rs`、`tests_split_part2.rs`、`main_tests.rs`、`tests_action_payload.rs`、`transfer_submit_api_tests.rs`、`economy.rs`、`economy_priority_logistics.rs` 与 `module_action_loop_split_part3.rs` 已于 2026-03-30 完成进一步拆分，本轮冻结测试尾债已清零）。
-- 最新完成: `TASK-ENGINEERING-058`（ROUND-009 以小分母方式挂靠到既有文档治理轮模式，并冻结 focused scope / 问题池 / 清单骨架）。
-- 最新完成: `TASK-ENGINEERING-059`（已落地首批 canonical `*.manual.md` 载体，并将高频手册从 legacy `.md` / `*.prd.md` 壳子收口到兼容双入口模式。）
-- 最新完成: `TASK-ENGINEERING-060`（已为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径，首批收口 `I9-001` 的高频入口失焦问题。）
-- 最新完成: `TASK-ENGINEERING-061`（已为 `readme` 模块入口显式拆分 `canonical / runbook / material / execution_log` 四层消费语义，降低模块索引混用。）
-- 最新完成: `TASK-ENGINEERING-062`（已明确 `doc/ui_review_result/` 是活跃评审样本池，不再把其视作正式模块级入口。）
-- 最新完成: `TASK-ENGINEERING-063`（已为 `world-simulator` README 增加任务导向分流，并明确仓库权威入口与公开静态镜像的职责边界。）
-- 最新完成: `TASK-ENGINEERING-064`（已为 `site` README 明确模块治理入口、公开 docs hub 与静态手册镜像之间的职责分工。）
-- 最新完成: `TASK-ENGINEERING-065`（ROUND-009 已完成 QA 复审与关轮，focused scope 终态冻结为 `15 aligned + 8 deferred`，无新增工程阻断。）
-- 最新完成: `TASK-ENGINEERING-066`（已建立 ROUND-010 小分母治理台账，准备继续处理 ROUND-009 延期的 6 个模块 README 入口问题。）
-- 最新完成: `TASK-ENGINEERING-067`（已为 `world-runtime` README 增加任务导向入口，并明确 README / `prd.index.md` / 高频专题的职责边界。）
-- 最新完成: `TASK-ENGINEERING-068`（已为 `p2p` README 增加任务导向入口，并明确 README / `prd.index.md` / 主链安全 / hosted world / token-governance signer 高频专题的职责边界。）
-- 最新完成: `TASK-ENGINEERING-069`（已为 `scripts` README 增加 task-worktree bootstrap / landing / harness 的轻量入口，并明确 README / `prd.index.md` / 高频脚本专题的职责边界。）
-- 最新完成: `TASK-ENGINEERING-070`（已为 `game` README 增加轻量“从这里开始”，明确产品目标、执行追踪、玩法总览、试玩口径与高频 claim 专题的阅读顺序，避免 README 继续膨胀成第二份专题索引。）
-- 最新完成: `TASK-ENGINEERING-071`（已为 `playability_test_result` README 增加 evidence-first 入口，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代详细证据目录。）
-- 最新完成: `TASK-ENGINEERING-072`（已为 `headless-runtime` README 增加命名迁移后的轻量入口，明确历史 `nonviewer` 专题、检查清单、模板目录与执行追踪的阅读顺序，并保持 README 不替代详细子目录。）
-- 最新完成: `TASK-ENGINEERING-073`（ROUND-010 已完成 QA 复审与关轮，focused scope 终态冻结为 `6 aligned + 0 deferred`，无新增工程阻断。）
-- 最新完成: `TASK-ENGINEERING-084`（已落地 `role-report.sh`、按角色 backlog+memory 汇总视图，以及真实 blocked task/stale memory/role-expansion smoke。）
-- 最新完成: `TASK-ENGINEERING-085`（已补齐 `set-stage` / `stage-lint` 当前态治理、`workflow-report --task-uid` 的 start/close 留痕，并把 AGENTS / 角色职责卡 / `new-task-worktree` / `.pm/README` / required-tier smoke 全部切到显式 task 绑定口径。）
-- 最新完成: `TASK-ENGINEERING-086`（已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的借鉴边界，并将 recall/reflection 的后续补强正式挂入 engineering 入口与 task execution log 追踪。）
-- 最新完成: `TASK-ENGINEERING-091`（已将“会话记录 -> task-scoped working_memory -> reflection signal”补入记忆启发式补强专题，明确 Codex/engineering task phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若缺失则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时通过 `last_extracted_ts/captured_until_ts` 水位把当前 live session 固定为“首轮快照、后续增量”，避免提炼过程自污染，且过程记忆只作为中间层，不直接进入长期 memory。）
-- 最新完成: `TASK-ENGINEERING-103`（已将 `codex-working-memory.sh` 默认行为收敛为显式 session 选择：默认不再隐式读取当前/最近 live Codex session；若 owner 确实需要从 `.codex` transcript 提炼 task-scoped `working_memory`，必须显式给出 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。对应的 `workflow-report` close checklist、`.pm/README`、记忆启发式专题与 smoke 断言已同步更新。）
-- 最新完成: `TASK-ENGINEERING-092`（已为 7 个标准角色起草 `topic` allowlist 与 `promotion_reason` 草案，新增 `.pm/templates/role-memory-policy.yaml`，扩展 `pm_store.py` 的长期 memory promotion 白名单，并把 close-phase 记忆抽取三问补入 `workflow-report` 与 7 张角色职责卡。）
-- 最新完成: `TASK-ENGINEERING-083`（已落地 `memory-report.sh`、7 天 stale review 口径、`PM_ROOT_DIR` 兼容 lint/scaffold，以及 stale/conflict/superseded-chain/role-expansion full-tier smoke。）
-- 最新完成: `TASK-ENGINEERING-082`（已落地 `promote-memory.sh`、signal `memory_promotion_state` 决策回写、promotion/reject 白名单，以及 accepted/rejected promotion smoke。）
-- 最新完成: `TASK-ENGINEERING-081`（已为 producer/qa/liveops/shared 落地首批长期 memory 样例，覆盖阶段结论、QA failure signature、community messaging boundary 与 shared claim envelope。）
-- 最新完成: `TASK-ENGINEERING-079`（已落地 `required-tier-smoke.sh`，可在临时 PM 根目录内跑通 `task execution log / evidence -> signal -> task/memory -> stage report` 验证链，并记录角色扩容 / 多 worktree 并发评估结论。）
-- 最新完成: `TASK-ENGINEERING-078`（已落地 `stage-report.sh`，可汇总 stage/gate、blocked tasks、按角色 backlog 计数以及 producer/shared active memory，为阶段评审提供统一输入。）
-- 最新完成: `TASK-ENGINEERING-077`（已落地 `move-task.sh`、`supersede-memory.sh`、`memory-lint.sh` 与统一 `pm_store.py`，补齐 backlog 状态迁移、memory superseded 生命周期和 task/backlog/memory 一致性 lint。）
-- 最新完成: `TASK-ENGINEERING-076`（已落地 `.pm/inbox/signals.jsonl`、`promote-signal.sh`、`new-task.sh` 与 task/backlog registry 写入链路，首批覆盖 `qa_engineer` / `liveops_community` 信号回流。）
-- 最新完成: `TASK-ENGINEERING-075`（已建立 `.pm/` 运行层骨架、registry/template、stage/shared 容器、7 个标准角色 memory/backlog 文件，以及 `scripts/pm` Phase 1 入口与结构 lint。）
-- 最新完成: `TASK-ENGINEERING-074`（已建立 `self-evolution` 专题三件套，并将“仓库内文件化项目管理 / 自我进化运行层”挂入 engineering 根入口、索引、主项目与 task execution log 规则，冻结后续 `.pm` / signal / stage 实施任务。）
-- 最新完成: `TASK-ENGINEERING-080`（已建立长期 memory 自建专题三件套，并把 active/superseded schema、promotion / supersede 规则和 memory lint/report 契约从总专题中单独冻结。）
-- 最新完成: `TASK-ENGINEERING-030`（角色职责卡收口与根 `AGENTS.md` 入口改造）。
-- 最新完成: `TASK-ENGINEERING-031`（角色统一交接模板建档与入口接入）。
-- 最新完成: `TASK-ENGINEERING-032`（开发工作流升级为角色协作版）。
-- 最新完成: `TASK-ENGINEERING-033`（devlog 改为按日期存档、按条目标角色）。
-- 最新完成: `TASK-ENGINEERING-034`（角色名白名单门禁与模板枚举接入）。
-- 最新完成: `TASK-ENGINEERING-035`（ROUND-006 改为按 `doc-structure-standard` 逐文档治理的执行轮）。
-- 最新完成: `TASK-ENGINEERING-036`（角色职责卡补齐推荐技能与角色/技能关系口径）。
-- 最新完成: `TASK-ENGINEERING-037`（engineering 模块 README / PRD 索引入口同步）。
-- 最新完成: `TASK-ENGINEERING-038`（跨模块 prd.index 配对规则文案统一）。
-- 最新完成: `TASK-ENGINEERING-039`（readme/site 状态栏最新完成摘要对齐）。
-- 最新完成: `TASK-ENGINEERING-040`（跨模块 handoff 标题层级统一）。
-- 最新完成: `TASK-ENGINEERING-041`（跨模块 handoff 子标题层级统一）。
-- 最新完成: `TASK-ENGINEERING-042`（模块 README 根目录收口口径统一补入 design.md）。
-- 最新完成: `TASK-ENGINEERING-043`（跨模块 README 重复兼容执行入口去重）。
-- 最新完成: `TASK-ENGINEERING-044`（跨模块 project 审计轮次标记统一到 ROUND-006）。
-- 最新完成: `TASK-ENGINEERING-045`（跨模块主 PRD 审计轮次标记统一到 ROUND-006）。
-- 最新完成: `TASK-ENGINEERING-046`（engineering 主项目补齐 TASK-ENGINEERING-045 任务映射）。
-- 最新完成: `TASK-ENGINEERING-047`（跨模块主 PRD 文件级索引路径格式统一）。
-- 最新完成: `TASK-ENGINEERING-048`（模块根级 allowlist 补齐近期新增文档路径）。
-- 最新完成: `TASK-ENGINEERING-015`（legacy 文档迁移专项完成全量收口复核）。
-- 最新完成: `TASK-ENGINEERING-003`（工程门禁趋势统计与首份 baseline）。
-- 最新完成: `TASK-ENGINEERING-004`（engineering 季度治理审查流程与模板）。
-- 最新完成: `TASK-ENGINEERING-009`（活跃老格式文档分批迁移 umbrella 收口）。
-- 说明: 本文档仅维护 engineering 设计执行状态；当前过程记录统一在 `.pm/tasks/task_<32hex>.execution.md`，历史 `doc/devlog/*.md` 保留为归档。
+- 近期完成: `TASK-ENGINEERING-103/102/101/100/096` 已分别完成 working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
+- 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。

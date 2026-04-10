@@ -22,7 +22,6 @@
 - `doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - `doc/core/reviews/consistency-review-round-009.md`
 
-## 维护约定
-- 跨模块边界、候选级入口或主链路变化时，优先更新 core PRD。
-- 新增专题后，需同步回写 `doc/core/prd.index.md` 与本目录索引。
-- 不在本目录重复维护各模块实现细节。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 跨模块边界、候选级入口或主链路变化时，优先更新 `doc/core/prd.md`；新增专题时，再同步回写 `doc/core/prd.index.md` 与本目录索引。

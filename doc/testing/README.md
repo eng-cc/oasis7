@@ -30,10 +30,6 @@
 - `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档按主题下沉到 `ci/`、`launcher/`、`longrun/`、`performance/`、`manual/`、`governance/`。
-
-## 维护约定
-- 测试门禁变更需同步 required/full 分层口径、对应脚本与证据模板。
-- 新增专题后，需同步回写 `doc/testing/prd.index.md` 与本目录索引。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 测试门禁、required/full 分层口径或证据模板变化时，优先更新 `doc/testing/prd.md` 与 `doc/testing/project.md`；新增专题时，再同步回写 `doc/testing/prd.index.md`。

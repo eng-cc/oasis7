@@ -8,6 +8,11 @@
 - 标准执行入口: `doc/engineering/project.md`
 - 文件级索引: `doc/engineering/prd.index.md`
 
+## 从这里开始
+- 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
+- 想看当前工程治理任务、最近完成项与下一步：`doc/engineering/project.md`
+- 想精确定位某个治理专题：`doc/engineering/prd.index.md`
+
 ## 模块职责
 - 维护工程治理规则、文档组织标准与执行门禁。
 - 跟踪文档迁移、文件级索引可达性与角色协作规范。
@@ -30,11 +35,6 @@
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档按主题下沉到 `governance/`、`doc-migration/`、`prd-review/`、`self-evolution/`。
-
-## 维护约定
-- 工程治理规则、目录标准或角色协作口径变化时，优先更新 engineering PRD。
-- 新增专题后，需同步回写 `doc/engineering/prd.index.md` 与本目录索引。
-- 不再保留 `doc/engineering/archive/` 归档目录。
+## 共享约定
+- 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 工程治理规则、目录标准或角色协作口径变化时，优先更新 `doc/engineering/prd.md`；新增专题时，再同步回写 `doc/engineering/prd.index.md` 与本目录索引。

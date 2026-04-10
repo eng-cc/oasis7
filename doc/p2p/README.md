@@ -62,12 +62,6 @@
 - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 - `doc/p2p/distfs/distfs-feedback-node-runtime-integration-2026-03-01.prd.md`
 
-## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
-- 其余专题文档按主题下沉到 `blockchain/`、`distfs/`、`node/`、`observer/`、`token/`、`viewer-live/`、`consensus/`、`distributed/`、`network/`。
-
-## 维护约定
-- 新文档按主题目录落位，不再默认平铺在模块根目录。
-- 模块行为、默认参数或跨模块分布式口径变化时，需同步更新 `prd.md` 与 `project.md`。
-- 新增专题后，需同步回写 `doc/p2p/prd.index.md` 与本目录索引。
-- 若主链安全、hosted world 或 token/governance signer 的高频入口变化，需同步回写本目录“从这里开始”，避免 README 重新退化成长表前置页。
+## 共享约定
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块行为、默认参数或跨模块分布式口径变化时，优先更新 `doc/p2p/prd.md` / `doc/p2p/project.md`；高频入口变化时，再同步回写本目录“从这里开始”与 `doc/p2p/prd.index.md`。
