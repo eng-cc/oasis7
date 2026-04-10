@@ -4,7 +4,7 @@
 
 ## 1. Context
 - 上游前提：每个需求默认新开独立 task worktree，并通过 `scripts/new-task-worktree.sh` 建立统一 branch/path。
-- 当前缺口：任务完成后回流本地 `main` 的 landing 仍靠人工 git 序列，缺少统一失败语义与 JSON 契约。
+- 当前定位：该专题现仅保留 local-only / fallback 兼容路径；默认最终合流已经迁到 GitHub PR 收口。
 
 ## 2. Architecture
 - branch 解析层：识别 source branch（默认当前 branch）和 target branch（默认本地 `main`）。
@@ -48,5 +48,5 @@
 - `already_landed`: target 已经包含 source，返回 no-op。
 
 ## 6. Rationale
-- 选择在 source worktree rebase，而不是在 target worktree merge 后再修线性历史，是因为 task worktree 模型天然适合“每个需求自己整理历史，再进入本地 `main`”。
-- 默认不自动 cleanup，是为了避免脚本在 source worktree 内自删当前目录，也保留 landing 后即时复核的余地；但 cleanup 仍被视为 landing 成功后的必做步骤，而非可选建议。
+- 该脚本保留是为了覆盖用户显式要求的 local-only 合流、离线演练或 PR 路径暂不可用的情况，而不是继续承担默认最终合流职责。
+- 默认不自动 cleanup，是为了避免脚本在 source worktree 内自删当前目录，也保留 landing 后即时复核的余地；但 cleanup 仍被视为完成 fallback 流程后的必做步骤，而非可选建议。

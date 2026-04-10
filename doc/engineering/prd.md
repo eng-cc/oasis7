@@ -55,6 +55,7 @@
   - SC-24: commit 前快照式 `codex exec review --uncommitted` 在仓库流程层面属于默认执行步骤，不需要因为“只是执行这条既有流程”再单独向用户申请一次。
   - SC-24A: 根 `AGENTS.md`、engineering 主 PRD 与 `self-evolution` 正式追踪必须对该流程维持单一口径：commit 前先通过 `./scripts/pm/codex-review-snapshot.sh` 触发隔离快照 review，再处理 findings 后提交。
   - SC-24B: 若快照式 `codex exec review --uncommitted` 因运行环境或工具失败无法执行，必须显式记录为运行环境阻断，而不是静默跳过或降级。
+  - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；正式流程需统一要求在 commit 后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并把 required checks + review/approval 作为 `main` 的默认保护边界。
   - SC-25: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
   - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
@@ -92,7 +93,7 @@
   - PRD-ENGINEERING-023: As a `.pm` workflow owner, I want task identity to be a merge-stable `task_uid` instead of a sequential display number, so that task creation in parallel worktrees no longer collides during rebase/landing.
   - PRD-ENGINEERING-024: As a 项目经理/模块 owner, I want doc surface area governance formalized, so that I can distinguish active reading surfaces from audit/archive material and keep the default reading path usable even when `doc/` keeps growing.
 - Critical User Flows:
-  1. Flow-ENG-001: `提交前执行脚本 -> 通过 codex-review-snapshot 在临时隔离快照中执行 codex exec review --uncommitted review 当前 diff -> 修复 findings 并复测 -> 进入 CI`
+  1. Flow-ENG-001: `提交前执行脚本 -> 通过 codex-review-snapshot 在临时隔离快照中执行 codex exec review --uncommitted review 当前 diff -> 修复 findings 并复测 -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
   3. Flow-ENG-003: `季度复盘 -> 汇总违规趋势 -> 调整门禁阈值 -> 发布新治理基线`
   4. Flow-ENG-004: `逐篇阅读旧文档 -> 按 strict schema 重写 -> 内容保真复核 -> 更新任务与执行日志追踪`
@@ -268,7 +269,7 @@
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且 commit 前 review 需显式落到 `codex exec review --uncommitted` | 协作流程稳定性与执行确定性 |
 | PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
 | PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、快照式 `codex exec review --uncommitted` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103/109 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、快照式 `codex exec review --uncommitted` 默认流程文案一致性、GitHub PR preflight/create 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求与 task identity 迁移/重建视图验证 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091/103 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、默认禁用当前 live session 隐式自读、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 | PRD-ENGINEERING-024 | TASK-ENGINEERING-106/107/108/109/110/111/112 | `test_tier_required` | 文档体量治理专题三件套、engineering 根入口/主项目/索引回写、`world-simulator` / `p2p` / `testing` / `readme` / `core` / `world-runtime` / `game` 模块 `README.md` / `prd.index.md` 的默认阅读面收紧、module-root allowlist 更新与 `doc-governance-check` 通过；人工核对默认阅读面不再把 `doc/devlog` / round reviews / evidence 直接提升为主入口，也不再把高密度模块近期专题长名单平铺在模块 README 首屏 | 仓库文档消费层、项目经理视角导航效率与后续减重批次规划 |

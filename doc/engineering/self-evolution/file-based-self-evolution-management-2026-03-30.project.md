@@ -24,6 +24,7 @@
 - [x] TASK-ENGINEERING-099 (PRD-ENGINEERING-SE-004/006/007/008) [test_tier_required] + [test_tier_full]: 将 `.pm` task identity 重构为 `task_uid` 单一真值，移除 `TASK-PM-xxxx`、`next_sequence` 与强同步 task registry/backlog 主键依赖，并补齐 task/state/source_ref 迁移脚本与回归验证。
 - [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-SE-001/004/007) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 `source_ref(s)` / `updated_from` 的残留口径，补齐 stage/signal/task/memory 门禁与正式文档回写。
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-SE-007) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 self-evolution / engineering 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
+- [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、self-evolution / engineering 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -44,12 +45,13 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-04-08
+- 更新日期: 2026-04-10
 - 当前阶段: active
-- 当前任务: 回到 `TASK-ENGINEERING-089/090` 的 recall / reflection 契约与质量回归；`TASK-ENGINEERING-099` 已完成 `.pm` task identity 向 `task_uid` 单一真值的收敛，`TASK-ENGINEERING-100` 已完成 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
+- 当前任务: 回到 `TASK-ENGINEERING-089/090` 的 recall / reflection 契约与质量回归；`TASK-ENGINEERING-113` 已把默认最终合流切到 GitHub PR，`TASK-ENGINEERING-099/100` 分别完成 `task_uid` 单一真值与 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
+  - `TASK-ENGINEERING-113`：已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `AGENTS.md`、`.pm/README`、self-evolution / engineering 正式追踪与 scripts 模块文档统一改成“PR 是默认最终保护边界，本地 landing 仅保留给 compatibility / fallback”。
   - `TASK-ENGINEERING-102`：已清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 self-evolution / engineering 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
   - `TASK-ENGINEERING-097`：已收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界。
   - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。

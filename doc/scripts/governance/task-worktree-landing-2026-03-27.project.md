@@ -40,7 +40,7 @@
 - `doc/scripts/project.md`
 
 ## 状态
-- 更新日期：2026-03-27
+- 更新日期：2026-04-10
 - 当前阶段：已完成
 - 阻塞项：无
-- 下一步：若后续要补远端 `push`、PR 创建、review gate 或 landing 后自动 cleanup，应新开下一轮交付专题；本轮仅冻结“默认合入本地 `main` 且 landing 后必须手动 cleanup”的契约。
+- 下一步：默认最终合流已迁到 `task-worktree-github-pr-closure-2026-04-10`；本专题仅保留给 local-only / fallback 兼容场景，继续冻结“本地 landing 后必须 cleanup”的契约。

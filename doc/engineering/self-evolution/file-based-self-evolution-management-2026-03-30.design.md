@@ -180,7 +180,7 @@
 3. owner 开发完成后执行 `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`，按 checklist 回写 task execution log、signal、memory 与 backlog；其中 working_memory 提示按当前 task 统计，零条目时先暴露 `codex-working-memory` bootstrap 入口，再在 commit 前通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review 当前 diff
 4. 该 review 属于仓库默认 close 流程，不需要仅因执行这一步再单独向用户申请
 5. 若快照式 `codex exec review --uncommitted` 因当前运行环境或工具状态失败，owner 必须把它记录为运行环境阻断，不能静默跳过该步骤
-6. owner 先处理或记录 codex review findings，再提交 commit
+6. owner 先处理或记录 codex review findings，再提交 commit，并通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create；默认最终保护边界是 GitHub PR + required checks + review/approval，本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景
 7. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
 
 ## 分阶段实施

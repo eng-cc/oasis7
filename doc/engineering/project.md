@@ -118,6 +118,7 @@
 - [x] TASK-ENGINEERING-110 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `core` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 review/audit/活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-111 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `world-runtime` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 runtime/wasm/module 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-112 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `game` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 gameplay 活跃专题与补充材料长名单的默认暴露。
+- [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -169,6 +170,8 @@
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
+- 最新完成: `TASK-ENGINEERING-112`（已继续对 `game` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单与补充入口后置为精确检索层。）
+- 最新完成: `TASK-ENGINEERING-113`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪与 scripts 模块文档统一改成“PR 是默认最终保护边界，本地 landing 仅保留给 compatibility / fallback”。）
 - 最新完成: `TASK-ENGINEERING-112`（已继续对 `game` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单与补充入口后置为精确检索层。）
 - 最新完成: `TASK-ENGINEERING-111`（已继续对 `world-runtime` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单后置为精确检索层。）
 - 最新完成: `TASK-ENGINEERING-110`（已继续对 `core` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单后置为精确检索层。）

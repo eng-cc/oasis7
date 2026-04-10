@@ -68,11 +68,12 @@
 
 11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
 
-12. 任务完成后必须标准化合入本地 `main`
-   1. 合入前先确认任务 `worktree` 与 `main` 所在 `worktree` 都是干净状态
-   2. 优先通过 `./scripts/land-task-worktree.sh` 执行标准化 landing，而不是手写 `git rebase` / `git merge`
-   3. landing 成功后，必须立即回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
-   4. 若失败，先在任务 `worktree` 解决冲突/补验证，再重试
+12. 任务完成后必须标准化通过 GitHub PR 合入 `main`
+   1. 发起 PR 前先确认任务 `worktree` 干净、snapshot review findings 已处理或显式记录、对应测试已完成
+   2. 优先通过 `./scripts/prepare-task-pr.sh` 执行标准化 PR preflight / create，而不是直接本地 `landing` 到 `main`
+   3. 默认最终合流路径是 GitHub PR + required checks + review/approval；`./scripts/land-task-worktree.sh` 仅用于用户明确要求的本地合流、离线应急或 PR 路径不可用且已显式说明的场景
+   4. PR 合入后，必须立即同步本地 `main` 并回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
+   5. 若 PR preflight / create 失败，先在任务 `worktree` 解决分支落后、push 或验证问题，再重试
 
 13. 当前 `project.md` 还有后续任务时，不要中断；完成一个任务后继续下一个
 

@@ -64,10 +64,12 @@
 - 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - 提交前 review：`./scripts/pm/codex-review-snapshot.sh`
+- PR 收口 preflight：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
-- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 landing 前的最后一条 PM 自检命令。
+- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 `prepare-task-pr.sh` 前的最后一条 PM 自检命令。
+- 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
