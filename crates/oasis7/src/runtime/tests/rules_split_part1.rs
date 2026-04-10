@@ -7,17 +7,17 @@ use oasis7_wasm_abi::{
     ModuleSandbox,
 };
 use oasis7_wasm_executor::FixedSandbox;
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use std::collections::BTreeMap;
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn register_m1_builtin_wasm_artifact(world: &mut World, module_id: &str) -> String {
     super::super::register_m1_builtin_wasm_module_artifact(world, module_id)
         .expect("register embedded m1 builtin wasm module artifact")
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn install_m1_move_rule(world: &mut World) {
     let wasm_hash = register_m1_builtin_wasm_artifact(world, M1_MOVE_RULE_MODULE_ID);
 
@@ -87,7 +87,7 @@ fn install_m1_move_rule(world: &mut World) {
     world.apply_proposal(proposal_id).unwrap();
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn install_m1_visibility_rule(world: &mut World) {
     let wasm_hash = register_m1_builtin_wasm_artifact(world, M1_VISIBILITY_RULE_MODULE_ID);
 
@@ -157,7 +157,7 @@ fn install_m1_visibility_rule(world: &mut World) {
     world.apply_proposal(proposal_id).unwrap();
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn install_m1_transfer_rule(world: &mut World) {
     let wasm_hash = register_m1_builtin_wasm_artifact(world, M1_TRANSFER_RULE_MODULE_ID);
 
@@ -676,7 +676,7 @@ fn rule_decision_cost_overflow_rejected_without_partial_apply() {
     }
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_move_rule_rejects_when_insufficient_resources() {
     let mut world = World::new();
@@ -708,7 +708,7 @@ fn m1_move_rule_rejects_when_insufficient_resources() {
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 0);
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_move_rule_denies_same_position() {
     let mut world = World::new();
@@ -740,7 +740,7 @@ fn m1_move_rule_denies_same_position() {
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 10);
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_visibility_rule_emits_observation() {
     let mut world = World::new();
@@ -775,7 +775,7 @@ fn m1_visibility_rule_emits_observation() {
     }
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_visibility_rule_denies_when_missing_agent() {
     let mut world = World::new();
@@ -798,7 +798,7 @@ fn m1_visibility_rule_denies_when_missing_agent() {
     }
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_transfer_rule_moves_resources() {
     let mut world = World::new();
@@ -859,7 +859,7 @@ fn m1_transfer_rule_moves_resources() {
     );
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_transfer_rule_rejects_when_insufficient() {
     let mut world = World::new();
@@ -899,7 +899,7 @@ fn m1_transfer_rule_rejects_when_insufficient() {
     }
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn m1_transfer_rule_denies_when_not_colocated() {
     let mut world = World::new();

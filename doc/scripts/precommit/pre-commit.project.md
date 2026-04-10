@@ -25,6 +25,7 @@
 - [x] 修复 CI `cargo fmt --check` 漂移并恢复门禁通过（`oasis7_viewer_live*` / `oasis7_node*`，2026-02-17）
 - [x] 清理 required 门禁 warning（`oasis7_viewer_live*` DistFS/Node 导入与测试辅助函数，2026-02-17）
 - [x] required 门禁口径同步到当前实现：`doc-governance + fmt + required tier + consensus/distfs/viewer + viewer wasm check`（2026-03-04）
+- [x] builtin wasm-heavy runtime 用例从 required 移到 `test_tier_full`，恢复 pre-commit 轻量 required 口径（2026-04-10）
 
 ## 依赖
 - `rustfmt`（staged `.rs`）/ `cargo fmt -- --check`
@@ -33,7 +34,7 @@
 
 ## 状态
 - 当前阶段：已提交
-- 最近更新：required 门禁文档回写到 `scripts/ci-tests.sh` 当前口径（2026-03-04）
+- 最近更新：builtin wasm-heavy runtime 用例已从 required 下放到 `test_tier_full`，pre-commit 重新只承载轻量 required 基线（2026-04-10）
 - 审计备注（2026-03-05 ROUND-002）：本文件仅保留执行记录；required/full 规则定义与命令矩阵以 `ci-tiered-execution`、`ci-testcase-tiering`、`ci-test-coverage` 及 `scripts/ci-tests.sh` 为准。
 
 ## 迁移记录（2026-03-03）

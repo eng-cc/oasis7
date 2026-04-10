@@ -111,6 +111,20 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_dcd011f0e4a84239a148c44d86c3097a.yaml
+  - task_uid: task_93c2de2956874b4ab180a801d71e6deb
+    title: "Trim builtin wasm-heavy coverage out of pre-commit required gate"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - PRD-SCRIPTS-001
+      - PRD-SCRIPTS-002
+    acceptance:
+      - "./scripts/ci-tests.sh required no longer triggers builtin wasm-heavy test paths via the oasis7 required shard."
+      - "pre-commit docs and scripts stay aligned on required-tier scope after the change."
+      - "Required-tier validation still covers doc/fmt/core required regression plus viewer wasm check without regressing existing deterministic contract hooks."
+    handoff_to: []
+    status: done
+    task_path: .pm/tasks/task_93c2de2956874b4ab180a801d71e6deb.yaml
   - task_uid: task_f5ff387007264254b4cafde421f34e10
     title: "Implement P2PARCH-6 mixed-topology validation matrix"
     priority: P2

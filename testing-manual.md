@@ -74,6 +74,7 @@
   - `./scripts/check-rust-file-size.sh`
   - `cargo fmt --check`
   - `cargo test -p oasis7 --tests --features test_tier_required`
+    - 该 shard 现在只覆盖轻量核心基线；需要注册或执行 builtin wasm artifact 的 runtime 闭环用例已下放到 `test_tier_full`。
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
   - `cargo test -p oasis7_viewer`
@@ -100,6 +101,7 @@
 ### 当前 CI 未直接覆盖（需手册补齐）
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。
 - `m4/m5` builtin wasm hash 校验（`scripts/ci-tests.sh` 已移除 `sync-m4/m5 --check`）。
+- runtime builtin wasm bootstrap / default-module / body-action 闭环（已从 required 下放到 `test_tier_full`）。
 
 结论：
 - `required/full` 是“核心链路测试层”的主入口（required 含 `oasis7 + consensus + distfs + viewer`，full 追加 `node + net/libp2p`）；

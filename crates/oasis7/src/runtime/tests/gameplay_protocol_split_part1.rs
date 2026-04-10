@@ -1,6 +1,7 @@
 use super::super::*;
 use super::pos;
 use crate::simulator::ResourceKind;
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use oasis7_wasm_abi::{
     ModuleCallFailure, ModuleCallRequest, ModuleEmit, ModuleOutput, ModuleSandbox,
     ModuleTickLifecycleDirective,
@@ -12,10 +13,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[path = "gameplay_protocol_policy_tests.rs"]
 mod policy_tests;
 
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 struct GameplayDirectiveSandbox {
     governance_directives: Vec<serde_json::Value>,
 }
 
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 impl GameplayDirectiveSandbox {
     fn empty() -> Self {
         Self {
@@ -30,6 +33,7 @@ impl GameplayDirectiveSandbox {
     }
 }
 
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 impl ModuleSandbox for GameplayDirectiveSandbox {
     fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
         let mut emits = Vec::new();

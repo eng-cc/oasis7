@@ -451,6 +451,7 @@ fn economic_contract_expires_and_penalizes_reputation() {
     assert!(has_expired_event, "expected EconomicContractExpired event");
 }
 
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn step_with_modules_uses_gameplay_tick_modules_without_fallback() {
     let mut world = World::new();
@@ -474,6 +475,7 @@ fn step_with_modules_uses_gameplay_tick_modules_without_fallback() {
     assert_eq!(proposal.status, GovernanceProposalStatus::Open);
 }
 
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn step_with_modules_applies_gameplay_directive_emits_to_domain_events() {
     let mut world = World::new();

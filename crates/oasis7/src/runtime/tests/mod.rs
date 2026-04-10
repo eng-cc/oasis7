@@ -50,6 +50,7 @@ fn test_module_artifact_signing_key() -> SigningKey {
 }
 
 mod agent_claims;
+#[cfg(feature = "test_tier_full")]
 mod agent_default_modules;
 mod apply_domain_event_guards;
 mod audit;
@@ -75,6 +76,7 @@ mod module_runtime_metering;
 mod modules;
 mod operability_release_gate;
 mod persistence;
+#[cfg(feature = "test_tier_full")]
 mod power_bootstrap;
 mod power_bootstrap_release_manifest_full;
 mod reward_asset;

@@ -1,4 +1,4 @@
-#[cfg(all(test, feature = "wasmtime"))]
+#[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 use super::world::World;
 use super::{
     builtin_wasm_materializer::builtin_wasm_distfs_root, load_builtin_wasm_with_fetch_fallback,
@@ -9,7 +9,7 @@ const M1_BUILTIN_HASH_MANIFEST: &str = include_str!("world/artifacts/m1_builtin_
 const M1_BUILTIN_IDENTITY_MANIFEST: &str =
     include_str!("world/artifacts/m1_builtin_modules.identity.json");
 
-#[cfg(all(test, feature = "wasmtime"))]
+#[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 pub(crate) fn m1_builtin_module_ids_manifest() -> Vec<&'static str> {
     include_str!("world/artifacts/m1_builtin_module_ids.txt")
         .lines()
@@ -52,7 +52,7 @@ fn hash_manifest_for_module(module_id: &str) -> Option<Vec<&'static str>> {
     None
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "test_tier_full"))]
 pub(crate) fn m1_builtin_manifest_hash_tokens(module_id: &str) -> Option<Vec<String>> {
     hash_manifest_for_module(module_id)
         .map(|tokens| tokens.into_iter().map(str::to_string).collect())
@@ -90,7 +90,7 @@ pub(crate) fn m1_builtin_module_artifact_identity(
     )
 }
 
-#[cfg(all(test, feature = "wasmtime"))]
+#[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 pub(crate) fn register_m1_builtin_wasm_module_artifact(
     world: &mut World,
     module_id: &str,

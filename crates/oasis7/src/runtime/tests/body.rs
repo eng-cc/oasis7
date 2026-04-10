@@ -1,12 +1,12 @@
 use super::super::*;
 use super::pos;
 use crate::models::{BodyKernelView, BodySlotType, CargoEntityEntry, CargoEntityKind};
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use crate::simulator::ResourceKind;
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 fn install_m1_body_module(world: &mut World) {
     let wasm_hash =
         super::super::register_m1_builtin_wasm_module_artifact(world, M1_BODY_MODULE_ID)
@@ -223,7 +223,7 @@ fn record_body_attributes_update_rejects_on_rate_violation() {
     }
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn body_action_updates_view_and_costs_resources() {
     let mut world = World::new();
@@ -261,7 +261,7 @@ fn body_action_updates_view_and_costs_resources() {
     );
 }
 
-#[cfg(feature = "wasmtime")]
+#[cfg(all(feature = "wasmtime", feature = "test_tier_full"))]
 #[test]
 fn body_action_rejects_when_insufficient_resources() {
     let mut world = World::new();

@@ -209,6 +209,22 @@
     - `rg -n "cargo-dev\\.sh|env -u RUSTC_WRAPPER cargo|CARGO_TARGET_DIR" AGENTS.md doc/scripts/prd.md doc/scripts/project.md testing-manual.md scripts/cargo-dev.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SCRIPTS-023 (PRD-SCRIPTS-001/002) [test_tier_required]: 将 builtin wasm-heavy runtime 闭环从 required/pre-commit 路径下放到 `test_tier_full`，恢复 required 只承载轻量核心基线的口径。
+  - 产物文件:
+    - `crates/oasis7/src/runtime/tests/mod.rs`
+    - `crates/oasis7/src/runtime/tests/body.rs`
+    - `crates/oasis7/src/runtime/tests/rules_split_part1.rs`
+    - `doc/scripts/precommit/pre-commit.prd.md`
+    - `doc/scripts/precommit/pre-commit.project.md`
+    - `doc/scripts/project.md`
+    - `testing-manual.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_required -- --list | rg 'runtime::tests::(agent_default_modules::default_sensor_module_emits_observation|power_bootstrap::install_power_bootstrap_modules_registers_and_activates|body::body_action_updates_view_and_costs_resources|rules::m1_move_rule_rejects_when_insufficient_resources|gameplay_protocol::step_with_modules_)'`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full,wasmtime -- --list | rg 'runtime::tests::(agent_default_modules::default_sensor_module_emits_observation|power_bootstrap::install_power_bootstrap_modules_registers_and_activates|body::body_action_updates_view_and_costs_resources|rules::m1_move_rule_rejects_when_insufficient_resources|gameplay_protocol::step_with_modules_)'`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full,wasmtime runtime::tests::agent_default_modules::default_sensor_module_emits_observation -- --exact`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib --features test_tier_full,wasmtime runtime::tests::rules::m1_move_rule_rejects_when_insufficient_resources -- --exact`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -219,9 +235,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-03
+- 更新日期: 2026-04-10
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SCRIPTS-023`（builtin wasm-heavy runtime 闭环已从 required/pre-commit 路径下放到 `test_tier_full`，required 重新只承载轻量核心基线。）
 - 最新完成: `TASK-SCRIPTS-022`（已把根 `AGENTS.md` 的 cargo 规则补齐到与 `scripts/cargo-dev.sh` / `testing-manual.md` 一致，明确原始 cargo 入口与开发态共享缓存入口的边界。）
 - 最新完成: `TASK-SCRIPTS-021`（已新增 `scripts/cargo-dev.sh` 作为开发态共享 cargo target 入口，并把 scripts/testing 文档明确切分为“开发态共享缓存”与“deterministic wasm/release 不共享”的双轨口径。）
 - 最新完成: `TASK-SCRIPTS-020`（已统一收紧 worktree 例外授权口径，明确文档/脚本/测试/话术改动也算新需求，且发现切错 worktree 后必须立即切走。）
