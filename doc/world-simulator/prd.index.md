@@ -2,18 +2,60 @@
 
 审计轮次: 7
 
-更新时间：2026-04-01
+更新时间：2026-04-10
 
 ## 入口
 - 模块 PRD：`doc/world-simulator/prd.md`
 - 模块设计总览：`doc/world-simulator/design.md`
 - 模块标准执行入口：`doc/world-simulator/project.md`
 
+## 首读分流
+- 想先回答模块在做什么、能力边界是什么：先读 `doc/world-simulator/prd.md`
+- 想先回答当前在推进什么、谁在负责、哪里被阻断：先读 `doc/world-simulator/project.md`
+- 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
+- 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
+
+## 密度快照（2026-04-10）
+- `doc/world-simulator/`：547 份文件
+- `doc/world-simulator/viewer/`：296 份文件
+- `doc/world-simulator/launcher/`：81 份文件
+- `doc/world-simulator/llm/`：54 份文件
+- `doc/world-simulator/kernel/`：36 份文件
+- `doc/world-simulator/m4/`：36 份文件
+- `doc/world-simulator/scenario/`：30 份文件
+- `doc/world-simulator/prd/`：9 份文件
+
+## 热点子域导航
+| 子域 | 文件数 | 适合回答的问题 |
+| --- | --- | --- |
+| `viewer/` | 296 | Viewer UI、Web 闭环、`software_safe`、2D/3D、操作手册与 QA/发布闭环 |
+| `launcher/` | 81 | 启动器、控制面、链上转账、explorer、自引导体验 |
+| `llm/` | 54 | provider、本地桥接、direct-connect、体验等价与双模式策略 |
+| `kernel/` | 36 | 规则桥接、WASM 执行、runtime 约束、资源与制度规则 |
+| `m4/` | 36 | M4 路线、阶段拆分与配套设计 |
+| `scenario/` | 30 | 场景定义、初始化、配置模板与环境准备 |
+| `prd/` | 9 | 验收模板、评分卡、质量趋势与补充附件 |
+
+## 活跃补充文档
+- `doc/world-simulator/viewer/viewer-manual.manual.md`：Viewer / Web 闭环 / operator 手册，不在下方 PRD 三件套长表中展开。
+- `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
+- `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
+- `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
+
+## 默认阅读面边界
+- 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
+- 审计记录、历史背景与低频专题继续保留可检索性，但不在模块 README 中平铺成“近期专题”列表。
+- 下方完整清单仍保留，用于精确文件名检索和互链可达性，不再承担新读者首读入口职责。
+
 ## 覆盖规则（ROUND-005 统一）
 - 纳入规则：纳入 `doc/world-simulator/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
+- 活跃补充：`*.manual.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如临时草稿/日志快照）。
+- 按需进入：复签结论、状态收口、evidence、report、template 等审计留痕保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 - 历史入口：根目录 `doc/world-simulator.prd.md` 与 `doc/world-simulator.project.md` 仅保留兼容跳转语义，不作为主索引分母。
 - 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
+
+## 完整活跃专题清单（按文件名精确检索）
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
@@ -195,6 +237,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。
 - ROUND-002 物理合并（gameplay release）：`viewer-gameplay-release-experience-overhaul` 为主文档，`immersion-phase8~10` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 - ROUND-002 物理合并（live event-driven）：`viewer-live-full-event-driven-phase10-2026-02-27` 为主文档，`phase8/9` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 

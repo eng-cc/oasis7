@@ -112,6 +112,7 @@
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 回填 `rust-oversized-file-baseline.tsv` 真值、修复 `check-rust-file-size.sh` 在空 baseline 首次回填场景下把同提交基线更新误判为“新增超限文件”的 bootstrap 逻辑，并把 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，恢复 oversized Rust gate 的可执行性并清掉一份 viewer 热点超限文件。
 - [x] TASK-ENGINEERING-105 (PRD-ENGINEERING-015) [test_tier_required]: 收口仓库入口、模块 README、legacy redirect 与 engineering 项目状态中的重复治理话术，统一改为“共享规则集中维护，入口页只保留特有分流”。
 - [x] TASK-ENGINEERING-106 (PRD-ENGINEERING-024) [test_tier_required]: 建立“文档体量治理与活跃阅读面收敛”专题 `prd/design/project`，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型、默认阅读面减重规则与高密度模块优先级，并同步回写 engineering 主入口、allowlist 与 task execution log。
+- [x] TASK-ENGINEERING-107 (PRD-ENGINEERING-024) [test_tier_required]: 先对 `world-simulator` 执行首批活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航与密度提示，去掉模块入口对近期专题长名单的默认暴露。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -158,13 +159,13 @@
 ## 状态
 - 更新日期: 2026-04-10
 - 当前状态: active
-- 下一任务: 基于 `TASK-ENGINEERING-106` 冻结的分层规则，为 `world-simulator / p2p / testing` 拆首批活跃阅读面收敛任务；入口面收紧完成后，再决定是否需要路径级治理或 round 追加。
+- 下一任务: 基于 `TASK-ENGINEERING-107` 已完成的 `world-simulator` 入口减重结果，继续为 `p2p / testing` 执行同一批次的活跃阅读面收敛；三块入口面收紧完成后，再决定是否需要路径级治理或 round 追加。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
+- 最新完成: `TASK-ENGINEERING-107`（已先对 `world-simulator` 执行入口减重，把模块 README 收紧为首读分流与热点子域导航，并把 `prd.index.md` 的首屏改为分流/密度提示/子域导航，完整长表后置为精确检索层。）
 - 最新完成: `TASK-ENGINEERING-106`（已建立“文档体量治理与活跃阅读面收敛”专题，回写 engineering 主 PRD/project/README/索引与 allowlist；后续高密度模块将按该专题优先压缩默认入口面，而不是立刻批量迁移文件路径。）
 - 最新完成: `TASK-ENGINEERING-105`（已收口 repo README、`doc/README.md`、主要模块 README、root legacy redirect 与 engineering 状态栏中的重复治理话术，统一改成“共享规则集中维护，入口页只保留特有分流”。）
-- 最新完成: `TASK-ENGINEERING-104`（已把 `doc/.governance/rust-oversized-file-baseline.tsv` 回写为当前仓库真实超限快照，恢复 `scripts/check-rust-file-size.sh` / `scripts/ci-tests.sh required` 的 frozen baseline 语义，并将 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，使 viewer 首批热点超限文件数下降。）
-- 近期完成: `TASK-ENGINEERING-103/102/101/100/096` 已分别完成 working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
+- 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。
