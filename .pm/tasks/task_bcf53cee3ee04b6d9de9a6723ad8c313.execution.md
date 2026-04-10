@@ -23,3 +23,8 @@ Example:
 - 完成内容: 已把 `prepare-task-pr.sh` 的 `cleanup_commands` JSON 契约与 PR 专题文档重新对齐，并补充 `post_merge_commands` 字段说明；同时更新旧 landing compatibility 专题 project 状态日期。
 - 完成内容: 复跑 `bash -n scripts/prepare-task-pr.sh scripts/land-task-worktree.sh`、`./scripts/prepare-task-pr.sh --help`、`./scripts/land-task-worktree.sh --help`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 均通过；快照里复跑 `./scripts/prepare-task-pr.sh --json` 时只剩“source worktree is dirty”这一本就应存在的阻断，未再出现 detached HEAD 误判。
 - 遗留事项: 运行 `workflow-report --phase close` 收口 `.pm`，提交当前任务 commit，并在提交后的干净 task worktree 上补跑 `./scripts/prepare-task-pr.sh --json` 成功路径。
+
+## 2026-04-10 21:27:00 CST / producer_system_designer
+- 完成内容: 提交后在干净 task worktree 补跑 `./scripts/prepare-task-pr.sh --json` 成功路径时，发现 `git rev-list --left-right --count` 返回制表符分隔，原脚本按空格拆分 `ahead/behind` 和 `remote/local` 计数会触发 `ValueError`。
+- 完成内容: 已把 `prepare-task-pr.sh` 的计数字段解析改为 `read -r ... <<< "$(git rev-list ...)"`，避免空格/制表符分隔差异导致的成功路径崩溃。
+- 遗留事项: 重新执行 snapshot review 与提交后验证，确认 `prepare-task-pr.sh --json` 在干净 worktree 上稳定输出结构化结果。

@@ -239,9 +239,7 @@ if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
 fi
 
-COUNTS="$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
-BEHIND_COUNT="${COUNTS%% *}"
-AHEAD_COUNT="${COUNTS##* }"
+read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
 if git merge-base --is-ancestor "$COMPARISON_REF" "$SOURCE_BRANCH"; then
   REBASE_REQUIRED=0
 else
@@ -257,9 +255,7 @@ UPSTREAM_REF="$(git rev-parse --abbrev-ref --symbolic-full-name "$SOURCE_BRANCH@
 LOCAL_ONLY_COUNT="$AHEAD_COUNT"
 REMOTE_ONLY_COUNT=0
 if [[ -n "$REMOTE_SOURCE_REF" ]]; then
-  SOURCE_REMOTE_COUNTS="$(git rev-list --left-right --count "$REMOTE_SOURCE_REF...$SOURCE_BRANCH")"
-  REMOTE_ONLY_COUNT="${SOURCE_REMOTE_COUNTS%% *}"
-  LOCAL_ONLY_COUNT="${SOURCE_REMOTE_COUNTS##* }"
+  read -r REMOTE_ONLY_COUNT LOCAL_ONLY_COUNT <<<"$(git rev-list --left-right --count "$REMOTE_SOURCE_REF...$SOURCE_BRANCH")"
 fi
 
 CREATE_CMD=("gh" "pr" "create" "--base" "$BASE_BRANCH" "--head" "$SOURCE_BRANCH")
