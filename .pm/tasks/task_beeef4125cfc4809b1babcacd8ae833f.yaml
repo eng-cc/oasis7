@@ -1,0 +1,21 @@
+task_uid: task_beeef4125cfc4809b1babcacd8ae833f
+title: "收紧 core 活跃阅读面入口"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-core-active-reading-surface
+execution_log_path: .pm/tasks/task_beeef4125cfc4809b1babcacd8ae833f.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/doc-surface-area-governance-2026-04-10.project.md
+related_prd:
+  - PRD-ENGINEERING-024
+acceptance:
+  - "core README/prd.index 首屏改为首读分流、密度提示、热点子域导航与活跃补充文档边界，不再默认平铺高密度专题长名单"
+  - "engineering 主 PRD/project 与 task execution log 同步回写，并通过 doc-governance-check 与 pm lint"
+handoff_to: []
+updated_at: 2026-04-10T19:13:38+08:00
+last_started_at: 2026-04-10T19:07:50+08:00
+last_closed_at: 2026-04-10T19:13:32+08:00
