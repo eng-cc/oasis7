@@ -2,19 +2,60 @@
 
 审计轮次: 12
 
-更新时间：2026-04-02
+更新时间：2026-04-10
 
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
 - 模块设计总览：`doc/p2p/design.md`
 - 模块标准执行入口：`doc/p2p/project.md`
 
+## 首读分流
+- 想先回答模块在做什么、主链和 DistFS 的统一边界是什么：先读 `doc/p2p/prd.md`
+- 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
+- 想先看主链安全、hosted world 接入或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
+- 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
+
+## 密度快照（2026-04-10）
+- `doc/p2p/`：269 份文件
+- `doc/p2p/node/`：68 份文件
+- `doc/p2p/distfs/`：66 份文件
+- `doc/p2p/blockchain/`：62 份文件
+- `doc/p2p/observer/`：15 份文件
+- `doc/p2p/token/`：14 份文件
+- `doc/p2p/network/`：12 份文件
+- `doc/p2p/distributed/`：12 份文件
+- `doc/p2p/viewer-live/`：9 份文件
+- `doc/p2p/consensus/`：6 份文件
+
+## 热点子域导航
+| 子域 | 文件数 | 适合回答的问题 |
+| --- | --- | --- |
+| `node/` | 68 | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
+| `distfs/` | 66 | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成 |
+| `blockchain/` | 62 | 主链安全、mainnet readiness、signer custody、hosted world 接入 |
+| `observer/` | 15 | 观察者同步模式、指标与可观测性 |
+| `token/` | 14 | 创世分配、签名授权、治理分发与流通边界 |
+| `network/` | 12 | reachability、mobile light client、runtime bridge 与 mixed-topology |
+| `distributed/` | 12 | 分布式 runtime / consensus / hard split 路线 |
+| `viewer-live/` | 9 | viewer-live 发行、开关与观察服务边界 |
+| `consensus/` | 6 | 共识实现与内建 wasm 身份口径 |
+
+## 活跃补充文档
+- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
+
+## 默认阅读面边界
+- 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
+- README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
+- runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
+
 ## 覆盖规则（ROUND-005 统一）
 - 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 与同名 `*.project.md`。
+- 活跃补充：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如 `*.release.md` 补充材料）。
 - 历史入口：根目录历史入口文件（`p2p.prd.md` / `p2p.project.md`）仅保留兼容跳转语义，不作为主索引分母。
 - 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
 
+## 完整活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.prd.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.design.md` | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2.project.md` |

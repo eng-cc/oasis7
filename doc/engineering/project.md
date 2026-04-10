@@ -113,6 +113,7 @@
 - [x] TASK-ENGINEERING-105 (PRD-ENGINEERING-015) [test_tier_required]: 收口仓库入口、模块 README、legacy redirect 与 engineering 项目状态中的重复治理话术，统一改为“共享规则集中维护，入口页只保留特有分流”。
 - [x] TASK-ENGINEERING-106 (PRD-ENGINEERING-024) [test_tier_required]: 建立“文档体量治理与活跃阅读面收敛”专题 `prd/design/project`，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型、默认阅读面减重规则与高密度模块优先级，并同步回写 engineering 主入口、allowlist 与 task execution log。
 - [x] TASK-ENGINEERING-107 (PRD-ENGINEERING-024) [test_tier_required]: 先对 `world-simulator` 执行首批活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航与密度提示，去掉模块入口对近期专题长名单的默认暴露。
+- [x] TASK-ENGINEERING-108 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `p2p / testing` 执行同批次活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航、密度提示与活跃补充文档边界，去掉模块入口对近期专题长名单的默认暴露。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -159,11 +160,12 @@
 ## 状态
 - 更新日期: 2026-04-10
 - 当前状态: active
-- 下一任务: 基于 `TASK-ENGINEERING-107` 已完成的 `world-simulator` 入口减重结果，继续为 `p2p / testing` 执行同一批次的活跃阅读面收敛；三块入口面收紧完成后，再决定是否需要路径级治理或 round 追加。
+- 下一任务: 基于 `TASK-ENGINEERING-107/108` 已完成的 `world-simulator / p2p / testing` 入口减重结果，评估是否需要进入路径级治理、round 追加，或继续选择下一批高密度模块做默认阅读面收紧。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
+- 最新完成: `TASK-ENGINEERING-108`（已继续对 `p2p / testing` 执行入口减重，把两个模块 README 收紧为首读分流与热点子域导航，并把 `prd.index.md` 的首屏改为分流/密度提示/子域导航/活跃补充文档，完整长表后置为精确检索层。）
 - 最新完成: `TASK-ENGINEERING-107`（已先对 `world-simulator` 执行入口减重，把模块 README 收紧为首读分流与热点子域导航，并把 `prd.index.md` 的首屏改为分流/密度提示/子域导航，完整长表后置为精确检索层。）
 - 最新完成: `TASK-ENGINEERING-106`（已建立“文档体量治理与活跃阅读面收敛”专题，回写 engineering 主 PRD/project/README/索引与 allowlist；后续高密度模块将按该专题优先压缩默认入口面，而不是立刻批量迁移文件路径。）
 - 最新完成: `TASK-ENGINEERING-105`（已收口 repo README、`doc/README.md`、主要模块 README、root legacy redirect 与 engineering 状态栏中的重复治理话术，统一改成“共享规则集中维护，入口页只保留特有分流”。）
