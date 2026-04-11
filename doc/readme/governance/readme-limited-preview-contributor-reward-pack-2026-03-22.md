@@ -55,6 +55,18 @@ Each recommendation should include:
 Missing any key evidence field means default `no-token-recommendation` until completed.
 If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before entering this sheet.
 
+## 3.1 GitHub PR Intake
+If the contribution source is a GitHub PR, the author can keep the reward intake block in `.github/pull_request_template.md`. Authors who are not requesting reward review should delete that entire section before opening the PR.
+
+Recommended PR fields:
+- `Request reward review`
+- `Oasis ID`
+- `Reward Account`
+- `Evidence / context link`
+- `Notes`
+
+If the PR does not include this block, treat it as "no reward review requested" unless `liveops_community` later backfills the fields from an approved follow-up channel.
+
 ## 4. Band Rules
 - `<20`: `no-token-recommendation`
 - `20-49`: `eligible-small`
