@@ -25,6 +25,7 @@
 - [x] TASK-ENGINEERING-100 (PRD-ENGINEERING-SE-001/004/007) [test_tier_required]: 清理 `doc/devlog/*.md` 作为 `.pm` 运行态 `source_ref(s)` / `updated_from` 的残留口径，补齐 stage/signal/task/memory 门禁与正式文档回写。
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-SE-007) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 self-evolution / engineering 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-SE-007) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、self-evolution / engineering 正式追踪、scripts 模块文档与旧 landing 兼容边界。
+- [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-SE-004/007/008) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 lint/report/read-path 在缺失时自动重建；同时收口根 engineering 项目页的热点写法与 topic-scoped task id 口径。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -52,6 +53,7 @@
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:
   - `TASK-ENGINEERING-113`：已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `AGENTS.md`、`.pm/README`、self-evolution / engineering 正式追踪与 scripts 模块文档统一改成“PR 是默认最终保护边界，本地 landing 仅保留给 compatibility / fallback”。
+  - `TASK-ENGINEERING-PMVIEW-001`：已新增 `sync-views` 入口，并把 `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 降级为 git-ignored 本地生成视图；PM lint/report/read-path 在缺失时可自动重建，根 engineering project 也已停止手工维护“最新完成”长列表，改为以 topic project 与 `.pm/tasks/*.yaml` 追溯近期收口。
   - `TASK-ENGINEERING-102`：已清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 self-evolution / engineering 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
   - `TASK-ENGINEERING-097`：已收紧 commit 前 review 话术，补齐快照式 `codex exec review --uncommitted` 与旧口径之间的边界说明，并补齐运行环境阻断边界。
   - `TASK-ENGINEERING-098`：已将 `workflow-report --phase close --task-uid` 的 working_memory 提示改为按当前 task 计数，并在零条目时提示 `codex-working-memory` bootstrap 入口，同时补齐 smoke 断言。
@@ -73,5 +75,5 @@
   - `TASK-ENGINEERING-074`：已建立 `self-evolution` 专题三件套，并将文件化项目管理目标态正式挂入 engineering 根入口、主项目、索引与 task execution log 规则。
   - `TASK-ENGINEERING-080`：已将长期 memory 从总专题里拆成独立子专题，单独冻结 active/superseded schema、promotion 规则和 memory 脚本契约。
 - 下一步:
-- 转入 `TASK-ENGINEERING-087~090` 的 recall / reflection 增量补强；
-  - 之后若要推进 overdue SLA、跨角色 review board 或 shared dashboard，再单列新治理任务。
+- 转回 `TASK-ENGINEERING-087~090` 的 recall / reflection 增量补强；
+  - 之后若要继续推进 overdue SLA、跨角色 review board、shared dashboard 或新的 `.pm` 低热点治理，再单列后续治理任务。

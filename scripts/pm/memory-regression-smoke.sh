@@ -111,6 +111,12 @@ for memory_path in list((root / ".pm/roles").glob("*/memory/*.yaml")) + list((ro
         for source_ref in record.get("source_refs") or []:
             mirror_source_ref(str(source_ref))
 
+for working_memory_path in (root / ".pm/working_memory").glob("*.yaml"):
+    payload = yaml.safe_load(working_memory_path.read_text(encoding="utf-8")) or {}
+    for entry in payload.get("entries") or []:
+        for source_ref in entry.get("source_refs") or []:
+            mirror_source_ref(str(source_ref))
+
 for stage_path in (root / ".pm/stage").glob("*.yaml"):
     payload = yaml.safe_load(stage_path.read_text(encoding="utf-8")) or {}
     for source_ref in payload.get("updated_from") or []:
@@ -125,10 +131,12 @@ for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
 PY
 
 python3 - "$TMPDIR" <<'PY'
+from datetime import datetime
 from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
+fresh_ts = datetime.now().astimezone().isoformat(timespec="seconds")
 
 for active_path in (root / ".pm/roles").glob("*/memory/active.yaml"):
     role = active_path.parts[-3]
@@ -202,7 +210,7 @@ records:
     encoding="utf-8",
 )
 (root / ".pm/roles/producer_system_designer/memory/active.yaml").write_text(
-    """version: 1
+    f"""version: 1
 role: producer_system_designer
 kind: memory_active
 records:
@@ -214,8 +222,8 @@ records:
       - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - stage
-    effective_at: 2026-03-31T10:00:00+08:00
-    last_reviewed_at: 2026-03-31T10:00:00+08:00
+    effective_at: {fresh_ts}
+    last_reviewed_at: {fresh_ts}
     status: active
     confidence: confirmed
     promotion_reason: stage_decision
@@ -223,7 +231,7 @@ records:
     encoding="utf-8",
 )
 (root / ".pm/shared/memory/active.yaml").write_text(
-    """version: 1
+    f"""version: 1
 scope: shared
 kind: memory_active
 records:
@@ -235,8 +243,8 @@ records:
       - .pm/tasks/__FIXTURE_TASK_UID__.execution.md
     tags:
       - claim_envelope
-    effective_at: 2026-03-31T10:00:00+08:00
-    last_reviewed_at: 2026-03-31T10:00:00+08:00
+    effective_at: {fresh_ts}
+    last_reviewed_at: {fresh_ts}
     status: active
     confidence: confirmed
     promotion_reason: stage_decision
@@ -328,23 +336,30 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
 
-REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json)"
-QA_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --role qa_engineer --no-shared --json)"
-ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --json)"
-QA_ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
-EXPANDED_WORKFLOW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role report_smoke_engineer --phase start --json)"
+REPORT_JSON_PATH="$TMPDIR/report.json"
+QA_REPORT_JSON_PATH="$TMPDIR/qa-report.json"
+ROLE_REPORT_JSON_PATH="$TMPDIR/role-report.json"
+QA_ROLE_REPORT_JSON_PATH="$TMPDIR/qa-role-report.json"
+EXPANDED_WORKFLOW_JSON_PATH="$TMPDIR/expanded-workflow.json"
 
-python3 - "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$EXPANDED_WORKFLOW_JSON" "$TASK_UID" <<'PY'
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json > "$REPORT_JSON_PATH"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --role qa_engineer --no-shared --json > "$QA_REPORT_JSON_PATH"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --json > "$ROLE_REPORT_JSON_PATH"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json > "$QA_ROLE_REPORT_JSON_PATH"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role report_smoke_engineer --phase start --json > "$EXPANDED_WORKFLOW_JSON_PATH"
+
+python3 - "$REPORT_JSON_PATH" "$QA_REPORT_JSON_PATH" "$ROLE_REPORT_JSON_PATH" "$QA_ROLE_REPORT_JSON_PATH" "$EXPANDED_WORKFLOW_JSON_PATH" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 
-report = json.loads(sys.argv[1])
-qa_report = json.loads(sys.argv[2])
-role_report = json.loads(sys.argv[3])
-qa_role_report = json.loads(sys.argv[4])
-expanded_workflow = json.loads(sys.argv[5])
+report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+qa_report = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+role_report = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+qa_role_report = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+expanded_workflow = json.loads(Path(sys.argv[5]).read_text(encoding="utf-8"))
 task_uid = sys.argv[6]
 
 if report["counts"] != {"active": 3, "needs_review": 1, "superseded": 1}:
@@ -486,20 +501,21 @@ if [[ "$CHAIN_OUTPUT" != *"superseded_by missing target"* ]] || [[ "$CHAIN_OUTPU
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON" "$QA_REPORT_JSON" "$ROLE_REPORT_JSON" "$QA_ROLE_REPORT_JSON" "$TASK_UID" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$REPORT_JSON_PATH" "$QA_REPORT_JSON_PATH" "$ROLE_REPORT_JSON_PATH" "$QA_ROLE_REPORT_JSON_PATH" "$TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 
 print(
     json.dumps(
         {
             "temp_root": sys.argv[1],
-            "report": json.loads(sys.argv[2]),
-            "qa_report": json.loads(sys.argv[3]),
-            "role_report": json.loads(sys.argv[4]),
-            "qa_role_report": json.loads(sys.argv[5]),
+            "report": json.loads(Path(sys.argv[2]).read_text(encoding="utf-8")),
+            "qa_report": json.loads(Path(sys.argv[3]).read_text(encoding="utf-8")),
+            "role_report": json.loads(Path(sys.argv[4]).read_text(encoding="utf-8")),
+            "qa_role_report": json.loads(Path(sys.argv[5]).read_text(encoding="utf-8")),
             "blocked_task_uid": sys.argv[6],
             "conflict_failure": "active memory topic conflict",
             "chain_failure": "superseded_by missing target",
