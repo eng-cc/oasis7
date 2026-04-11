@@ -118,6 +118,7 @@
 - [x] TASK-ENGINEERING-110 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `core` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 review/audit/活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-111 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `world-runtime` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 runtime/wasm/module 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-112 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `game` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 gameplay 活跃专题与补充材料长名单的默认暴露。
+- [x] TASK-ENGINEERING-114 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `site` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 github-pages/manual 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 
@@ -164,9 +165,9 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-10
+- 更新日期: 2026-04-11
 - 当前状态: active
-- 下一任务: 基于 `TASK-ENGINEERING-107/108/109/110/111/112` 已完成的 `world-simulator / p2p / testing / readme / core / world-runtime / game` 入口减重结果，评估是否需要进入路径级治理、round 追加，或继续选择下一批高密度模块做默认阅读面收紧。
+- 下一任务: 基于 `TASK-ENGINEERING-107/108/109/110/111/112/114` 已完成的 `world-simulator / p2p / testing / readme / core / world-runtime / game / site` 入口减重结果，评估是否继续对 `engineering / scripts / playability_test_result / headless-runtime` 做同类默认阅读面收紧；若剩余模块入口已能稳定回答 `what / where / next / risk`，再决定是否进入路径级治理、round 追加或脚本门禁扩展。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
