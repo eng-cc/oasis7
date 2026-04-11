@@ -281,7 +281,7 @@ CLEANUP_CMD_2="git -C $CANONICAL_REPO_ROOT branch -D $SOURCE_BRANCH"
 
 PR_URL=""
 if [[ "$CREATE_PR" == "1" ]]; then
-  command -v gh >/dev/null 2>&1 || die "`gh` not found in PATH"
+  command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ "$REBASE_REQUIRED" == "1" ]]; then
     die "source branch is behind $COMPARISON_REF; rebase before creating the PR"
   fi
