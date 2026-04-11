@@ -22,6 +22,8 @@ require_dir() {
   [[ -d "$path" ]] || fail "missing directory: $path"
 }
 
+./scripts/pm/sync-views.sh >/dev/null
+
 require_dir ".pm"
 require_file ".pm/README.md"
 require_file ".pm/registry/roles.yaml"
@@ -65,6 +67,7 @@ require_file "scripts/pm/set-stage.sh"
 require_file "scripts/pm/stage-lint.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
+require_file "scripts/pm/sync-views.sh"
 require_file "scripts/pm/task-execution-log-lint.sh"
 require_file "scripts/pm/working-memory-lint.sh"
 require_file "scripts/pm/working-memory-report.sh"

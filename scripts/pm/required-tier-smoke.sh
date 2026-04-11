@@ -417,6 +417,53 @@ if payload.get("last_closed_at") not in (None, ""):
 PY
 mv "$BROKEN_BACKLOG.bak" "$BROKEN_BACKLOG"
 
+python3 - "$TMPDIR" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+
+registry_path = root / ".pm/registry/tasks.yaml"
+if registry_path.exists():
+    registry_path.unlink()
+
+for backlog_path in (root / ".pm/roles").glob("*/backlog/*.yaml"):
+    backlog_path.unlink()
+PY
+
+REGEN_ROLE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json)"
+
+python3 - "$TMPDIR" "$TASK_UID" "$REGEN_ROLE_REPORT_JSON" <<'PY'
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+report = json.loads(sys.argv[3])
+
+registry_path = root / ".pm/registry/tasks.yaml"
+if not registry_path.exists():
+    raise SystemExit("role-report should regenerate .pm/registry/tasks.yaml when it is missing")
+
+for role_dir in sorted((root / ".pm/roles").glob("*")):
+    if not role_dir.is_dir():
+        continue
+    for lane in ("candidate", "committed", "blocked", "done"):
+        backlog_path = role_dir / "backlog" / f"{lane}.yaml"
+        if not backlog_path.exists():
+            raise SystemExit(f"role-report should regenerate missing backlog view: {backlog_path}")
+
+qa_payload = report["roles"]["qa_engineer"]
+if qa_payload["backlog_counts"]["blocked"] != 1:
+    raise SystemExit("role-report should still report one blocked qa task after regenerating views")
+blocked_tasks = qa_payload["tasks"]["blocked"]
+if len(blocked_tasks) != 1 or blocked_tasks[0]["task_uid"] != task_uid:
+    raise SystemExit("role-report regenerated views but lost the blocked qa task entry")
+PY
+
 WORKFLOW_START_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json)"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
@@ -443,7 +490,7 @@ WORKFLOW_CLOSE_WITH_WM_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workf
 WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -459,11 +506,12 @@ liveops_signal = json.loads(sys.argv[8])
 set_stage = json.loads(sys.argv[9])
 memory_report = json.loads(sys.argv[10])
 role_report = json.loads(sys.argv[11])
-workflow_start = json.loads(sys.argv[12])
-workflow_close = json.loads(sys.argv[13])
-workflow_close_with_wm = json.loads(sys.argv[14])
-workflow_review = json.loads(sys.argv[15])
-stage_report = json.loads(sys.argv[16])
+regen_role_report = json.loads(sys.argv[12])
+workflow_start = json.loads(sys.argv[13])
+workflow_close = json.loads(sys.argv[14])
+workflow_close_with_wm = json.loads(sys.argv[15])
+workflow_review = json.loads(sys.argv[16])
+stage_report = json.loads(sys.argv[17])
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -508,6 +556,8 @@ if not any(item.get("id") == "review-working-memory" for item in workflow_close_
     raise SystemExit("workflow close with seeded working_memory should suggest reviewing task-scoped working_memory")
 if not any(item.get("id") == "autoflow-working-memory" for item in workflow_close_with_wm["checklist"]):
     raise SystemExit("workflow close with seeded working_memory should suggest autoflow for task-scoped working_memory")
+if regen_role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
+    raise SystemExit("regenerated role report should keep qa blocked count")
 
 print(
     json.dumps(
@@ -523,6 +573,7 @@ print(
             "set_stage": set_stage,
             "memory_report": memory_report,
             "role_report": role_report,
+            "regen_role_report": regen_role_report,
             "workflow_start": workflow_start,
             "workflow_close": workflow_close,
             "workflow_close_with_wm": workflow_close_with_wm,

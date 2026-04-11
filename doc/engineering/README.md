@@ -10,7 +10,7 @@
 
 ## 从这里开始
 - 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
-- 想看当前工程治理任务、最近完成项与下一步：`doc/engineering/project.md`
+- 想看当前工程治理任务、当前收口策略与下一步：`doc/engineering/project.md`
 - 想精确定位某个治理专题：`doc/engineering/prd.index.md`
 
 ## 模块职责
@@ -39,3 +39,4 @@
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
 - 工程治理规则、目录标准或角色协作口径变化时，优先更新 `doc/engineering/prd.md`；新增专题时，再同步回写 `doc/engineering/prd.index.md` 与本目录索引。
+- 最近完成的细粒度治理任务默认回写对应 topic `*.project.md` 与 `.pm/tasks/*.yaml`；根 `doc/engineering/project.md` 不再手工维护按时间排序的 `最新完成` 长列表。

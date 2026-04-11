@@ -14,7 +14,7 @@
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
 - `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
-- task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图。
+- task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担仓库提交真值。
 - stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
@@ -54,6 +54,7 @@
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
+- `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
 - `./scripts/pm/codex-review-snapshot.sh`：在临时隔离 Git 快照中重放当前未提交 diff，并在该快照内执行 `codex exec review --uncommitted`，避免 review 过程改动源 worktree 的 `.pm` 或其他文件。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
@@ -70,6 +71,7 @@
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 `prepare-task-pr.sh` 前的最后一条 PM 自检命令。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
+- `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`

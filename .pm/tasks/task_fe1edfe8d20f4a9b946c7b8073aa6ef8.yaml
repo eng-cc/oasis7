@@ -1,0 +1,24 @@
+task_uid: task_fe1edfe8d20f4a9b946c7b8073aa6ef8
+title: "TASK-ENGINEERING-PMVIEW-001 将 .pm registry/backlog 改为本地生成视图并收紧 engineering 根项目热点"
+owner_role: producer_system_designer
+worktree_hint: engineering-github-pr-landing-governance
+execution_log_path: .pm/tasks/task_fe1edfe8d20f4a9b946c7b8073aa6ef8.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+acceptance:
+  - "`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 改为 git-ignored 的本地生成视图，PM 命令在缺失时可自动重建"
+  - "`pm_store.py`/`pm lint`/workflow report 不再依赖仓库提交这些视图文件也能工作并通过 smoke"
+  - "engineering 正式文档冻结新口径：根 project 不再承担手工 latest-completed 热点，新工程治理任务使用 topic-scoped task id"
+handoff_to: []
+updated_at: 2026-04-11T12:50:41+08:00
+last_started_at: 2026-04-10T22:59:15+08:00
+last_closed_at: 2026-04-11T12:50:41+08:00

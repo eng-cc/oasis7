@@ -21,6 +21,7 @@
   - 没有 role backlog/source signal/stage gate 的统一运行态结构。
   - QA/liveops 信号仍主要依赖人工阅读日志或正式文档后再整理。
   - 阶段评审输入分散在多个文档与证据文件中，无法一键汇总。
+  - `.pm/registry/tasks.yaml` 与 role backlog 虽然在口径上已经是“扫描重建视图”，但此前仍作为 Git 跟踪文件提交，导致多 worktree 并发时继续形成热点冲突。
 
 ## 目标完成态
 - 在仓库根目录建立 `.pm/`：
@@ -62,6 +63,7 @@
   - `scaffold.sh`
   - `new-task.sh`
   - `promote-signal.sh`
+  - `sync-views.sh`
   - `lint.sh`
   - `stage-report.sh`
   - `role-report.sh`
@@ -97,6 +99,7 @@
 
 ### 3. Role Backlog
 - 文件：`.pm/roles/<role>/backlog/{candidate,committed,blocked,done}.yaml`
+- Git 策略：这些文件是 git-ignored 的本地生成视图；不存在时由 `sync-views.sh` / PM 读写命令自动重建。
 - 状态固定：
   - `candidate`
   - `committed`
@@ -133,6 +136,7 @@
   - canonical task object 只存在于 `.pm/tasks/<task_uid>.yaml`。
   - `task_uid` 由本地生成，不依赖中心分配器或顺序号。
   - registry/backlog 只做扫描重建视图，不再承担任务主键真值。
+  - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 改为 git-ignored 本地生成文件；它们可以被删掉并按需重建，Git rebase 不再需要人工合并这些视图。
 - 最小字段：
   - `task_uid`
   - `owner_role`
@@ -182,6 +186,7 @@
 5. 若快照式 `codex exec review --uncommitted` 因当前运行环境或工具状态失败，owner 必须把它记录为运行环境阻断，不能静默跳过该步骤
 6. owner 先处理或记录 codex review findings，再提交 commit，并通过 `./scripts/prepare-task-pr.sh` 执行 GitHub PR preflight / create；默认最终保护边界是 GitHub PR + required checks + review/approval，本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景
 7. producer 或 owner 在阶段评审前执行 `workflow-report.sh --phase review --role <owner>`，作为统一评审入口；其中 producer 的 review 额外聚合全部角色 pending signals，而已 `promoted/rejected/deferred` 的 signal 不再计入 pending
+8. `sync-views.sh` 或任一 PM 读路径在需要时自动从 canonical task files 重建本地 registry/backlog 视图；若这些视图文件缺失，不视为仓库损坏，只视为本地缓存待重建。
 
 ## 分阶段实施
 ### Phase 1: 骨架

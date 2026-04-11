@@ -119,6 +119,7 @@
 - [x] TASK-ENGINEERING-111 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `world-runtime` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 runtime/wasm/module 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-112 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `game` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 gameplay 活跃专题与补充材料长名单的默认暴露。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
+- [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -170,15 +171,7 @@
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
-- 最新完成: `TASK-ENGINEERING-112`（已继续对 `game` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单与补充入口后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-113`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪与 scripts 模块文档统一改成“PR 是默认最终保护边界，本地 landing 仅保留给 compatibility / fallback”。）
-- 最新完成: `TASK-ENGINEERING-112`（已继续对 `game` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单与补充入口后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-111`（已继续对 `world-runtime` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-110`（已继续对 `core` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整主题清单后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-109`（已继续对 `readme/core` 执行入口减重，把模块 README 收紧为首读分流、热点子域导航与高密度提示，并把 `prd.index.md` 的首屏改为分流/密度快照/子域导航/活跃补充文档边界，完整长表后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-108`（已继续对 `p2p / testing` 执行入口减重，把两个模块 README 收紧为首读分流与热点子域导航，并把 `prd.index.md` 的首屏改为分流/密度提示/子域导航/活跃补充文档，完整长表后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-107`（已先对 `world-simulator` 执行入口减重，把模块 README 收紧为首读分流与热点子域导航，并把 `prd.index.md` 的首屏改为分流/密度提示/子域导航，完整长表后置为精确检索层。）
-- 最新完成: `TASK-ENGINEERING-106`（已建立“文档体量治理与活跃阅读面收敛”专题，回写 engineering 主 PRD/project/README/索引与 allowlist；后续高密度模块将按该专题优先压缩默认入口面，而不是立刻批量迁移文件路径。）
-- 最新完成: `TASK-ENGINEERING-105`（已收口 repo README、`doc/README.md`、主要模块 README、root legacy redirect 与 engineering 状态栏中的重复治理话术，统一改成“共享规则集中维护，入口页只保留特有分流”。）
+- 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
+- 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。

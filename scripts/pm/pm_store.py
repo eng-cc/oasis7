@@ -351,6 +351,14 @@ def task_order_key(fields: OrderedDict[str, object]) -> tuple[object, object, ob
     )
 
 
+def task_registry_path(root: pathlib.Path) -> pathlib.Path:
+    return root / ".pm/registry/tasks.yaml"
+
+
+def role_backlog_path(root: pathlib.Path, role: str, file_status: str) -> pathlib.Path:
+    return root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+
+
 def rebuild_task_views(root: pathlib.Path) -> None:
     task_records = []
     for path, fields in iter_task_files(root):
@@ -383,11 +391,13 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                 ]
             )
         )
-    dump_list_document(root / ".pm/registry/tasks.yaml", registry_header, "tasks", registry_entries)
+    registry_path = task_registry_path(root)
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    dump_list_document(registry_path, registry_header, "tasks", registry_entries)
 
     for role in sorted(load_roles(root)):
         for file_status in ("candidate", "committed", "blocked", "done"):
-            backlog_path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            backlog_path = role_backlog_path(root, role, file_status)
             if backlog_path.exists():
                 header, _ = load_list_document(backlog_path, "tasks")
             else:
@@ -414,11 +424,22 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                         ]
                     )
                 )
+            backlog_path.parent.mkdir(parents=True, exist_ok=True)
             dump_list_document(backlog_path, header, "tasks", items)
 
 
+def sync_task_views(root: pathlib.Path) -> dict[str, object]:
+    rebuild_task_views(root)
+    return {
+        "task_registry_path": str(task_registry_path(root).relative_to(root)),
+        "task_count": sum(1 for _ in iter_task_files(root)),
+        "role_count": len(load_roles(root)),
+    }
+
+
 def find_registry_task(root: pathlib.Path, task_uid: str) -> tuple[OrderedDict[str, object], list[OrderedDict[str, object]], OrderedDict[str, object], pathlib.Path]:
-    registry_path = root / ".pm/registry/tasks.yaml"
+    sync_task_views(root)
+    registry_path = task_registry_path(root)
     header, tasks = load_list_document(registry_path, "tasks")
     for entry in tasks:
         if entry.get("task_uid") == task_uid:
@@ -2144,6 +2165,7 @@ def normalize_list_field(value: object) -> list[object]:
 
 
 def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_days: int) -> dict[str, object]:
+    sync_task_views(root)
     roles = sorted(load_roles(root))
     if role_filter and role_filter not in roles:
         raise ValueError(f"unknown role: {role_filter}")
@@ -2156,7 +2178,7 @@ def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_d
         stale_after_days=stale_after_days,
     )
 
-    registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
     del registry_header
     registry_by_id: dict[str, OrderedDict[str, object]] = {
         str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
@@ -2215,7 +2237,7 @@ def build_role_report(root: pathlib.Path, role_filter: str | None, stale_after_d
         )
 
         for file_status in ("candidate", "committed", "blocked", "done"):
-            path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            path = role_backlog_path(root, role, file_status)
             _, entries = load_list_document(path, "tasks")
             for entry in entries:
                 shaped = shape_backlog_task(role, entry)
@@ -2312,11 +2334,12 @@ def build_signal_summary(root: pathlib.Path, role_filter: str | None) -> dict[st
 
 
 def build_reflection_summary(root: pathlib.Path, role_filter: str | None) -> dict[str, object]:
+    sync_task_views(root)
     roles = load_roles(root)
     if role_filter and role_filter not in roles:
         raise ValueError(f"unknown role: {role_filter}")
 
-    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    _, registry_entries = load_list_document(task_registry_path(root), "tasks")
     tasks_by_signal: dict[str, list[dict[str, object]]] = {}
     for entry in registry_entries:
         source_signal = str(entry.get("source_signal") or "")
@@ -2619,6 +2642,7 @@ def build_workflow_report(
 
 
 def run_task_backlog_lint(root: pathlib.Path) -> None:
+    sync_task_views(root)
     roles = load_roles(root)
     failures: list[str] = []
 
@@ -2714,7 +2738,7 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
                     + ", ".join(missing_deferred_keys)
                 )
 
-    registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
     if str(registry_header.get("identity_key") or "") != "task_uid":
         fail("tasks registry identity_key mismatch: expected task_uid")
 
@@ -2880,7 +2904,7 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
     backlog_membership: dict[str, list[tuple[str, str, OrderedDict[str, object]]]] = {}
     for role in sorted(roles):
         for file_status in ("candidate", "committed", "blocked", "done"):
-            path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            path = role_backlog_path(root, role, file_status)
             header, entries = load_list_document(path, "tasks")
             if header.get("role") != role:
                 fail(f"{path.relative_to(root)} role header mismatch: {header.get('role')} != {role}")
@@ -2937,6 +2961,7 @@ def run_task_backlog_lint(root: pathlib.Path) -> None:
 
 
 def run_stage_lint(root: pathlib.Path) -> None:
+    sync_task_views(root)
     failures: list[str] = []
 
     def fail(message: str) -> None:
@@ -2944,7 +2969,7 @@ def run_stage_lint(root: pathlib.Path) -> None:
 
     stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
     gate = load_mapping_document(root / ".pm/stage/gate.yaml")
-    _, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    _, registry_entries = load_list_document(task_registry_path(root), "tasks")
     task_uids = {str(entry.get("task_uid")) for entry in registry_entries if entry.get("task_uid")}
 
     def require_keys(doc_name: str, payload: OrderedDict[str, object], required: set[str]) -> None:
@@ -3063,6 +3088,18 @@ def cmd_task_lint(args: argparse.Namespace) -> int:
 def cmd_task_execution_log_lint(args: argparse.Namespace) -> int:
     run_task_backlog_lint(args.root)
     print("task-execution-log-lint: OK")
+    return 0
+
+
+def cmd_sync_views(args: argparse.Namespace) -> int:
+    result = sync_task_views(args.root)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(
+            "sync-views: refreshed "
+            f"{result['task_registry_path']} from {result['task_count']} canonical task files"
+        )
     return 0
 
 
@@ -3775,7 +3812,8 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
 
 
 def build_stage_report(root: pathlib.Path) -> dict[str, object]:
-    registry_header, registry_entries = load_list_document(root / ".pm/registry/tasks.yaml", "tasks")
+    sync_task_views(root)
+    registry_header, registry_entries = load_list_document(task_registry_path(root), "tasks")
     del registry_header
     tasks_by_id: dict[str, OrderedDict[str, object]] = {
         str(entry["task_uid"]): entry for entry in registry_entries if entry.get("task_uid")
@@ -3787,7 +3825,7 @@ def build_stage_report(root: pathlib.Path) -> dict[str, object]:
             (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
         )
         for file_status in ("candidate", "committed", "blocked", "done"):
-            path = root / f".pm/roles/{role}/backlog/{file_status}.yaml"
+            path = role_backlog_path(root, role, file_status)
             _, entries = load_list_document(path, "tasks")
             for entry in entries:
                 status = str(entry.get("status"))
@@ -3960,6 +3998,11 @@ def add_task_uid_argument(parser: argparse.ArgumentParser, *, required: bool = F
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="oasis7 .pm store helper")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    sync_views = subparsers.add_parser("sync-views")
+    sync_views.add_argument("root", type=pathlib.Path)
+    sync_views.add_argument("--json", action="store_true")
+    sync_views.set_defaults(func=cmd_sync_views)
 
     task_lint = subparsers.add_parser("task-lint")
     task_lint.add_argument("root", type=pathlib.Path)
