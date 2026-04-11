@@ -125,7 +125,6 @@ done
 
 ab_require
 require_cmd rg
-require_cmd stdbuf
 
 stamp="$(date +%Y%m%d-%H%M%S)-$$"
 run_id="${run_id_override:-active-llm-retention-${stamp}}"
