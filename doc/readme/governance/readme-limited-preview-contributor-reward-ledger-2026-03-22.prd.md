@@ -10,7 +10,7 @@
 - Proposed Solution: 新增 round-based contributor reward ledger 专题，固定 round meta、逐条贡献记录、producer 审批状态、实际发放引用与归档字段，让 limited preview 的真实贡献奖励具备可复用、可复核、可归档的台账模板。
 - Success Criteria:
   - SC-1: 每轮真实贡献奖励都能用同一份 ledger 模板记录 `Round ID / Candidate ID / Window / Status`。
-  - SC-2: 每条奖励建议都必须含 contributor、evidence link、score、recommended band、review status。
+  - SC-2: 每条奖励建议都必须含 contributor、`Oasis ID`、`Reward Account`、evidence link、score、recommended band、review status。
   - SC-3: 审批后的真实发放必须回填 `Approval ID / Actual Amount / Distribution Ref`，不允许只停留在“口头批准”。
   - SC-4: 归档前必须输出 round summary、band summary 与 unresolved items，保证后续治理复盘可追溯。
 
@@ -37,13 +37,13 @@
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Round Meta | `round_id`、`candidate_id`、`window`、`status`、`owner_role` | 初始化本轮 ledger 头部信息 | `planned -> draft -> under_review -> closed` | 每轮只能有 1 个主 ledger | `liveops_community` 维护 |
-| Ledger Row | `ledger_id`、`contributor`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
+| Ledger Row | `ledger_id`、`contributor`、`oasis_id`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 用户侧领取身份统一写 `Oasis ID`；同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
 | Producer Review | `review_status`、`producer_decision`、`approval_id` | 审阅并批准/拒绝/延后 | `reviewed -> approved/rejected/deferred` | 缺证据默认不得批准 | `producer_system_designer` 决策 |
 | Distribution Closure | `actual_amount`、`distribution_ref`、`distribution_date` | 回填真实执行引用 | `approved -> distributed` | 未执行前允许留空；执行后必须补全 | execution owner 回填 |
 | Round Summary | `band_totals`、`approved_rows`、`distributed_rows`、`unresolved_items` | 输出本轮汇总与遗留事项 | `draft -> summarized -> archived` | 汇总值按 ledger rows 聚合 | `liveops_community` 汇总，producer 审核 |
 - Acceptance Criteria:
   - AC-1: ledger 模板必须包含 `Meta`、`Ledger`、`Band Summary`、`Approval Summary`、`Distribution Closure`、`Next Actions` 六个区块。
-  - AC-2: 每条 ledger row 必须至少包含 `Ledger ID`、`Contributor`、`Reward Account`、`Source Link`、`Contribution Type`、`Total Score`、`Recommended Band`、`Review Status`。
+  - AC-2: 每条 ledger row 必须至少包含 `Ledger ID`、`Contributor`、`Oasis ID`、`Reward Account`、`Source Link`、`Contribution Type`、`Total Score`、`Recommended Band`、`Review Status`。
   - AC-3: 任何 `approved` row 在后续实际发放后都必须回填 `Approval ID / Actual Amount / Distribution Ref`。
   - AC-4: 模板必须允许 `rejected / deferred / distributed / archived` 等状态，而不是只记录“建议发放”。
   - AC-5: 模板不得包含任何固定 token/point 汇率、公开营销文案或 `play-to-earn` 叙事。
@@ -68,13 +68,14 @@
   - 同一 contributor 有多条有效贡献：允许多行，但每行必须独立 `Ledger ID`。
   - producer 已批准但发放尚未执行：`Actual Amount / Distribution Ref` 可暂空，但 `Review Status` 不能写成 `distributed`。
   - 没有链上 reward account：允许先 `deferred`，不得跳过账户字段直接执行。
+  - 若只拿到 raw `public key` 或账户派生材料，必须先收口为 `Oasis ID + Reward Account`，不得把 raw `public key` 直接作为台账名称层字段。
   - 证据链接失效：该 row 退回 `draft` 或 `deferred`，不得进入正式批准。
 - Non-Functional Requirements:
   - NFR-LTRL-1: 每轮 ledger 的 `Round ID / Candidate ID / Window / Status` 完整率必须为 `100%`。
   - NFR-LTRL-2: 每条非 `rejected` row 至少包含 1 个有效 evidence/source link。
   - NFR-LTRL-3: 每条 `distributed` row 必须具备 `Approval ID` 与 `Distribution Ref`。
   - NFR-LTRL-4: ledger 模板必须可直接复制复用到下一轮，而无需重新设计字段。
-- Security & Privacy: ledger 只记录公开 handle、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。
+- Security & Privacy: ledger 只记录公开 handle、`Oasis ID`、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励台账名称字段。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
@@ -98,3 +99,4 @@
 | DEC-LTRL-001 | 用独立 round ledger 承接真实贡献奖励结算 | 继续把真实发放散落在 issue、聊天和临时表格 | 没有统一 ledger 就没有统一审计面。 |
 | DEC-LTRL-002 | ledger 行同时记录建议档位与真实执行引用 | 只记录建议档位，不记录后续发放引用 | 不记录执行引用就无法形成完整闭环。 |
 | DEC-LTRL-003 | 允许 `deferred / rejected / distributed` 多状态 | 所有 row 只有“推荐/未推荐”二元状态 | 真实执行一定存在待补资料、被拒或已执行三类分叉。 |
+| DEC-LTRL-004 | reward claimant 的用户侧身份统一写为 `Oasis ID`，`Reward Account` 只保留为执行字段 | 直接把 raw `public key` 或账户派生材料写进台账名称层 | 台账要先服务审核与归档阅读，claimant identity 必须可读；底层签名材料应继续留在技术专题。 |

@@ -30,7 +30,8 @@ Default non-countable examples:
 | --- | --- |
 | Contributor |  |
 | Public Handle / GitHub |  |
-| Chain Account / Reward Account |  |
+| Oasis ID |  |
+| Reward Account |  |
 | Contribution Type |  |
 | Base Score |  |
 | Quality Modifier |  |
@@ -38,6 +39,8 @@ Default non-countable examples:
 | Recommended Band | `no-token-recommendation / eligible-small / eligible-medium / eligible-large` |
 | Reviewer |  |
 | Review Date |  |
+
+`Oasis ID` 是 reward claimant 的用户侧身份字段；`Reward Account` 仅用于实际发放与台账执行，不用 raw `public key` 作为展示名称。
 
 ## 3. Evidence Fields
 Each recommendation should include:
@@ -50,6 +53,7 @@ Each recommendation should include:
 - `reviewer_note`
 
 Missing any key evidence field means default `no-token-recommendation` until completed.
+If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before entering this sheet.
 
 ## 4. Band Rules
 - `<20`: `no-token-recommendation`

@@ -244,6 +244,23 @@
     - `rg -n "eligible-small|eligible-medium|eligible-large|no fixed token/point ratio|play-to-earn|login reward|time played = token" doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-067 (PRD-README-020/022) [test_tier_required]: 将 reward claimant 的用户侧命名统一收口为 `Oasis ID`，保留 `Reward Account` 作为执行字段，不在奖励模板里把 raw `public key` 当作名称。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.design.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "Oasis ID|oasis_id|Reward Account|raw public key" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-README-031 (PRD-README-021) [test_tier_required]: 记录小红书账号第一篇自我介绍帖的标题、正文、封面文案、标签和使用说明，固定“人类开发者 + agent 队友”的首帖叙事。
   - 产物文件:
     - `doc/readme/prd.md`

@@ -1,0 +1,25 @@
+task_uid: task_b944d616e6c447deb6e498d369b170f6
+title: "Rename reward claimant user-facing identity to Oasis ID"
+owner_role: producer_system_designer
+worktree_hint: oasis7-readme-reward-oasis-id-naming
+execution_log_path: .pm/tasks/task_b944d616e6c447deb6e498d369b170f6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+doc_refs:
+  - doc/readme/project.md
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md
+  - doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "Reward claimant user-facing naming in readme reward docs uses Oasis ID instead of public key naming."
+  - "Reward docs keep Reward Account as execution field and do not relabel low-level transfer/signature public_key contracts."
+  - "Readme and p2p governance docs stay aligned on user-facing reward identity terminology."
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-11T23:53:21+08:00
+last_started_at: 2026-04-11T23:40:28+08:00
+last_closed_at: 2026-04-11T23:53:21+08:00
