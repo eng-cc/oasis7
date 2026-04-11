@@ -124,7 +124,7 @@
 | Closed Beta Candidate Runbook | `candidate_signal`、`release_gate_link`、`response_template`、`incident_level` | 招募、反馈、事故模板、FAQ | `tech_preview -> candidate_runbook -> gate_ready` | runbook步骤优先，监测其次 | `liveops_community` 维护，`producer_system_designer` 决定口径 |
 | 实战运营经验 | `post_id`、`working_hook`、`spam_trigger`、`next_adjustment` | 把真实发帖结果沉淀成后续可复用规则 | `observed -> distilled -> adopted` | 先记录高信号模式，再记录高风险模式 | `liveops_community` 维护 |
 | 受控预览执行包 | `round_id`、`callout_copy`、`check_slot`、`signal_bucket`、`claim_drift_flag`、`summary_field` | 把 limited preview 第一轮执行压成可直接照跑的操作包 | `draft -> execution_ready -> reused` | 先冻结文案，再冻结巡检，再冻结回流摘要 | `liveops_community` 维护，`producer_system_designer` 审核边界 |
-| 早期贡献奖励操作包 | `oasis_id`、`reward_account`、`contribution_type`、`score_band`、`evidence_field`、`reward_recommendation`、`forbidden_phrase` | 按贡献评分模板判断是否进入奖励建议池，并约束对外表达 | `signal -> scored -> reviewed -> recommended` | 用户侧领取身份统一写 `Oasis ID`，`Reward Account` 仅作执行字段；不公布固定 token/point 比率；仅按贡献审计后给 `eligible-small/medium/large` 建议 | `liveops_community` 记录与初评，`producer_system_designer` 最终审批 |
+| 早期贡献奖励操作包 | `oasis_id`、`reward_account`、`contribution_type`、`score_band`、`evidence_field`、`reward_recommendation`、`forbidden_phrase`、`intake_surface` | 按贡献评分模板判断是否进入奖励建议池，并约束对外表达 | `signal -> scored -> reviewed -> recommended` | 用户侧领取身份统一写 `Oasis ID`，`Reward Account` 仅作执行字段；若来源是 GitHub PR，则通过可选 PR intake block 收集 `Oasis ID + Reward Account`；不公布固定 token/point 比率；仅按贡献审计后给 `eligible-small/medium/large` 建议 | `liveops_community` 记录与初评，`producer_system_designer` 最终审批 |
 | 贡献奖励台账 | `round_id`、`candidate_id`、`ledger_id`、`oasis_id`、`reward_account`、`recommended_band`、`review_status`、`approval_id`、`distribution_ref` | 将真实贡献逐条编目、审批、回填发放记录并归档 | `draft -> reviewed -> approved/rejected -> distributed -> archived` | 同一轮按 contributor、`Oasis ID` 与 ledger id 去重；缺证据默认不得进入审批 | `liveops_community` 维护，`producer_system_designer` 审核，execution owner 回填发放记录 |
 | 小红书帖子素材包 | `post_goal`、`title`、`body`、`cover_copy`、`carousel_outline`、`interaction_prompt`、`forbidden_phrase` | 固化单篇小红书可复用文案与轮播结构 | `draft -> reviewed -> ready_for_publish -> published` | 先确定单一帖子目标，再冻结标题/正文/互动问题；正文先给人可理解轮廓，再避免 world-rule dump 与上线口径 | `liveops_community` 起草，`producer_system_designer` 审核边界 |
 - Acceptance Criteria:
@@ -140,8 +140,8 @@
 - AC-10: 已新建 `closed beta candidate` runbook与 incident template，供招募/反馈/事故信号在 `limited playable technical preview` claim envelope 内沟通并可直接回流 unified release gate。
   - AC-11: Moltbook runbook 至少记录一轮真实执行后的“有效讨论钩子”和“高风险 spam 触发模式”，并明确下一轮如何调整。
 - AC-12: 若团队进入 `limited playable technical preview` 的 invite-only 执行阶段，必须补齐受控执行包，明确 callout 文案、巡检窗口、信号分桶、claim drift 纠偏与 producer 摘要字段。
-- AC-13: 若团队决定在 limited preview 阶段使用 early contributor reward，必须补齐独立操作包，明确 `Oasis ID` 作为用户侧领取身份、`Reward Account` 作为执行字段、评分模板、证据字段、审阅链、禁语与“无固定 token/point 汇率”边界。
-- AC-14: 若团队开始记录真实贡献奖励轮次，必须补齐 round-based ledger，明确 round meta、`Oasis ID`、`Reward Account`、逐条 row 状态、producer 审批引用、distribution ref 与 archive note。
+- AC-13: 若团队决定在 limited preview 阶段使用 early contributor reward，必须补齐独立操作包，明确 `Oasis ID` 作为用户侧领取身份、`Reward Account` 作为执行字段、评分模板、证据字段、审阅链、禁语与“无固定 token/point 汇率”边界；若贡献来源是 GitHub PR，则必须提供可选 intake block 收集 `Oasis ID + Reward Account`。
+- AC-14: 若团队开始记录真实贡献奖励轮次，必须补齐 round-based ledger，明确 round meta、`Oasis ID`、`Reward Account`、逐条 row 状态、producer 审批引用、distribution ref 与 archive note；PR 来源行必须能追溯到 PR intake 中的 `Oasis ID + Reward Account` 或显式补录记录。
 - AC-15: 若小红书内容链路进入第四篇，必须补齐“玩家控制边界”素材包，明确标题、正文、轮播结构、互动问题，并把“玩家不能直接控制角色，但能给方向”的正式口径收进人类开发者叙事。
 - AC-16: 若小红书内容链路进入第五篇，必须补齐“AI时代，你变"懒"了么”素材包，明确如何从 AI 使用习惯切到游戏模式讨论，并保持人类开发者视角与 `limited playable technical preview` 边界。
 - AC-17: 若小红书内容链路进入第六篇，必须补齐“作为游戏工作室主理人，今年的春招视角”素材包，明确标题、正文、封面、互动问题、关键词与禁滑坡边界，并把春招热点收口到团队判断、完成度、AI 使用方式与玩家感觉；若平台标题长度受限，最终发布标题必须优先保留“游戏工作室主理人”和“春招”识别点。
@@ -276,6 +276,7 @@
 | DEC-RM-021 | 第二篇采用“团队 roster 轮播卡”而非长文解释 | 继续用长文解释 agent 协作或直接贴角色职责原文 | 用户第二篇更需要快速理解“有哪些队友、为什么重要”，轮播卡比长文更适合这一层信息。 |
 | DEC-RM-022 | 用 round-based reward ledger 承接真实贡献奖励结算 | 继续靠 issue 评论、聊天记录或零散表格临场结算 | 真实发放前必须把评分、审批、执行引用和归档收进统一模板，才能保持可审计性。 |
 | DEC-RM-039 | reward claimant 的用户侧身份统一写为 `Oasis ID`，`Reward Account` 只保留为执行字段 | 在领取模板里直接用 raw `public key` 或把账户派生材料当作展示名称 | 奖励审核和对外沟通应先围绕可读的 claimant identity 收口；底层 `public_key` 只留在签名/账户绑定专题，避免把技术派生材料误当作用户名称。 |
+| DEC-RM-040 | GitHub PR 作为贡献证据入口时，使用可选 reward intake block 收集 `Oasis ID + Reward Account` | 继续让 PR 作者在评论或私聊里零散补身份字段，或在 PR 模板里直接索要 raw `public_key` | PR 已是公开贡献入口；把 claimant 字段收进同一模板更利于 liveops/producer 复核，同时继续把底层 `public_key` 留在技术专题。 |
 | DEC-RM-023 | 小红书持续运营细节独立沉淀为 runbook，而不是继续只留在素材包和角色卡 | 只补几条角色卡示例或继续靠帖子素材包驱动 | 小红书已经进入持续发帖和看反馈阶段，需要和 Moltbook 一样有稳定 SOP，才能复盘互动和误解模式。 |
 | DEC-RM-024 | 第三篇采用“轻量游戏介绍 + 猜类型互动”而非完整设定说明书 | 直接把世界规则、技术架构与完整玩法一次讲清 | 用户到了第三篇需要先建立“这是什么游戏”的可想象轮廓，而不是被文档级信息密度劝退；同时仍要保持技术预览边界。 |
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |

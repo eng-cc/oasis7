@@ -16,6 +16,7 @@
 - Only record contribution-based rows.
 - Use the scoring rules from `readme-limited-preview-contributor-reward-pack-2026-03-22.md`.
 - Use `Oasis ID` as the claimant-facing identity field; keep `Reward Account` as the execution field.
+- If `Source Type=PR`, first read the optional reward intake block from `.github/pull_request_template.md`.
 - Do not include signup, login, casual play, online time, AFK, or vague praise as rewardable rows.
 - Missing key evidence means default `deferred` or `no-token-recommendation`.
 
@@ -35,6 +36,7 @@ Each non-rejected row should include:
 - `reviewer_note`
 
 If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before filling the ledger.
+If a PR source has no reward intake block, treat it as "no reward review requested". Only create or advance a reward row after `Oasis ID + Reward Account` are backfilled from an approved follow-up channel.
 
 ## 4. Band Summary
 | Band | Row Count | Contributor Count | Status |

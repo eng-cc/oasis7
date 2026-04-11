@@ -1,0 +1,22 @@
+task_uid: task_1fe9a9436db34d589b985684aabed882
+title: "Add PR reward intake fields using Oasis ID and Reward Account"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-readme-reward-pr-intake-oasis-id
+execution_log_path: .pm/tasks/task_1fe9a9436db34d589b985684aabed882.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/readme/project.md
+doc_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md
+related_prd:
+  - PRD-README-020
+  - PRD-README-022
+acceptance:
+  - "GitHub PR intake offers an optional reward-claim block using Oasis ID and Reward Account rather than public key naming."
+  - "README reward docs describe PR intake as a valid contributor reward evidence path without relabeling low-level public_key contracts."
+handoff_to: []
+updated_at: 2026-04-12T00:13:05+08:00
+last_started_at: 2026-04-12T00:00:54+08:00
+last_closed_at: 2026-04-12T00:13:05+08:00
