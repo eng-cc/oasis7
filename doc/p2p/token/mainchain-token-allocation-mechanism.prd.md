@@ -66,6 +66,7 @@ MainTokenConfig {
   - `min_rate_bps <= base_rate_bps <= max_rate_bps`；
   - `epochs_per_year > 0`；
   - `max_supply >= initial_supply`（若设置）。
+  - 当前链上代币的正式产品命名固定为“绿洲币 / Oasis Coin”；`symbol` 字段当前只承接 runtime symbol/ticker 语义，默认仍为 `AWT`，不因本次命名冻结自动改写。
 
 ### 2) 动作与事件
 ```rust

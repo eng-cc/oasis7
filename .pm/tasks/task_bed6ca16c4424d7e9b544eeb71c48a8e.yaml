@@ -1,0 +1,22 @@
+task_uid: task_bed6ca16c4424d7e9b544eeb71c48a8e
+title: "冻结链上代币正式命名为绿洲币 / Oasis Coin"
+owner_role: producer_system_designer
+worktree_hint: p2p-oasis-coin-naming
+execution_log_path: .pm/tasks/task_bed6ca16c4424d7e9b544eeb71c48a8e.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+doc_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md
+related_prd:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+acceptance:
+  - "p2p token 专题与模块入口明确声明当前链上代币的正式产品名为绿洲币 / Oasis Coin"
+  - "保持 runtime 内部 main_token 语义不变，同时补清对外命名与 ticker/symbol 的边界说明"
+  - "doc-governance-check、git diff --check 与 pm close 流程通过"
+handoff_to: []
+updated_at: 2026-04-11T23:57:46+08:00
+last_started_at: 2026-04-11T23:47:17+08:00
+last_closed_at: 2026-04-11T23:57:46+08:00

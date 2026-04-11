@@ -12,6 +12,7 @@
 - [x] TIGR-4 (PRD-P2P-TOKEN-INIT-002/003) [test_tier_required]: 由 `producer_system_designer` 基于 `TIGR-1~3` 做最终发行前评审，决定 early contributor reserve 在 limited preview 阶段保持多签治理执行，不并入 `ecosystem_pool`，并把“后续是否 fully on-chain”留给未来专题重审。
 - [x] TIGR-5 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 由 `runtime_engineer` 将 `TIGR-1` 草案收成正式执行清单，固定 slot registry、控制主体、签名规则、runtime 落点、amount rounding 规则与 pre-mint freeze gate。
 - [ ] TIGR-6 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并用 QA 模板输出最终 `pass` 或 `block`。
+- [x] TIGR-7 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，避免把现有 `AWT` symbol 误写成产品名或误宣称本轮已完成 ticker 改名。
 
 ## TIGR-1 产物（本地草案，待 review）
 | bucket_id | ratio_bps | recipient | start_epoch | cliff_epochs | linear_unlock_epochs | genesis_liquid | ownership_note |
@@ -54,6 +55,14 @@
   - 审批链、台账与 QA 审计能稳定复用。
   - 再由新专题评估是否迁移到 proposal-bound / treasury-bound 执行路径。
 
+## TIGR-7 命名结论
+- 正式产品名：`绿洲币 / Oasis Coin`
+- 当前 runtime symbol/ticker：`AWT`
+- 边界说明：
+  - `绿洲币 / Oasis Coin` 是当前链上代币的 public naming，适用于专题文档、模块入口与后续运营口径。
+  - `AWT` 仍仅表示 runtime `main_token.symbol` / ticker 字段真值；本轮没有改动链上字段、API schema、客户端展示值或测试断言。
+  - 若后续需要把 `AWT` 一并替换成新的 ticker/symbol，必须另开专题评估 runtime、launcher、viewer、API 与兼容性影响。
+
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
 - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
@@ -73,5 +82,5 @@
 ## 状态
 - 当前阶段：active
 - 下一步：执行 `TIGR-6`，绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并基于 QA 模板输出最终 `pass/block`。
-- 最近更新：2026-03-22
-- 备注：`TIGR-1~5` 已完成并形成当前发行前冻结结论与正式执行清单；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
+- 最近更新：2026-04-11
+- 备注：`TIGR-1~5` 与 `TIGR-7` 已完成并形成当前发行前冻结结论、正式执行清单与正式命名口径；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
