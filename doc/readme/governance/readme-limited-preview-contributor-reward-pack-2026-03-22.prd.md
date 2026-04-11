@@ -10,7 +10,7 @@
 - Proposed Solution: 建立一份 limited preview early contributor reward pack，固定贡献类型、评分规则、证据字段、奖励建议档位与禁语清单，并明确“不依赖 invite-only、也不公开固定 token/point 汇率”。
 - Success Criteria:
   - SC-1: 模板明确区分可计分贡献与不可计分行为，单纯登录/在线时长/试玩不计分。
-  - SC-2: 每条奖励建议都必须附带证据字段与 reviewer。
+  - SC-2: 每条奖励建议都必须附带 `Oasis ID`、`Reward Account`、证据字段与 reviewer。
   - SC-3: 奖励输出只使用 `eligible-small / eligible-medium / eligible-large / no-token-recommendation`，不公开固定 token 数额。
   - SC-4: 对外禁语清单明确阻断 `play-to-earn`、`login reward`、`time played = token` 等说法。
 
@@ -34,12 +34,12 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 贡献评分 | `contribution_type`、`base_score`、`quality_modifier`、`duplicate_flag` | 按模板打分 | `captured -> scored -> reviewed` | 只计算可审计贡献；重复低价值反馈降权 | `liveops_community` 记录，producer 审核 |
+| 贡献评分 | `oasis_id`、`reward_account`、`contribution_type`、`base_score`、`quality_modifier`、`duplicate_flag` | 按模板打分 | `captured -> scored -> reviewed` | 用户侧领取身份统一写 `Oasis ID`；`Reward Account` 仅作执行字段；重复低价值反馈降权 | `liveops_community` 记录，producer 审核 |
 | 证据字段 | `proof_link`、`build_id`、`repro_steps`、`duration_sample`、`reviewer` | 填充证据并核验完整性 | `missing -> complete` | 缺关键证据不得进入奖励建议池 | `liveops_community` 维护 |
 | 奖励建议档位 | `eligible-small`、`eligible-medium`、`eligible-large`、`no-token-recommendation` | 根据总分给出建议档位 | `scored -> recommended` | 只给档位，不给固定 token 数额 | `producer_system_designer` 决定是否批准 |
 | 禁语清单 | `forbidden_phrase`、`safe_phrase` | 审核对外 copy | `draft -> safe/block` | 命中禁语即阻断 | `liveops_community` 起草，producer 审核 |
 - Acceptance Criteria:
-  - AC-1: 操作包至少包含 `贡献类型表`、`评分模板`、`证据字段`、`奖励建议档位` 与 `禁语清单`。
+  - AC-1: 操作包至少包含 `Oasis ID / Reward Account` 字段、`贡献类型表`、`评分模板`、`证据字段`、`奖励建议档位` 与 `禁语清单`。
   - AC-2: 以下行为必须显式标记为 `no-token-recommendation` 默认项：登录、注册、浏览帖子、单纯试玩、在线时长、挂机时长。
   - AC-3: 对外模板必须明确“不依赖 invite-only，贡献审核也不等于公开发币活动”。
   - AC-4: 对外模板不得出现 `play-to-earn`、`login reward`、`time played = token`、`come play to earn`、`airdrop for players`。
@@ -64,12 +64,13 @@
   - 多人重复提交同一 bug：只给首个高质量提交 full 分，后续重复只保留低分或不计分。
   - 只有情绪反馈、没有证据：记录但不进入 token 建议池。
   - PR 未合并但价值高：可给 `eligible-small` 或 `eligible-medium` 建议，但必须说明状态。
+  - 若贡献者只提供 raw `public key` 派生材料，进入奖励模板前必须先收口为 `Oasis ID + Reward Account`，不得把 raw `public key` 直接当作领取名称展示。
   - 对外问“玩多久能拿多少 token”：必须明确回答“没有固定时长换算，不按在线时长发放”。
 - Non-Functional Requirements:
   - NFR-LTPR-1: 每条奖励建议记录都必须能追溯到至少 1 条证据链接。
   - NFR-LTPR-2: 对外 copy 中禁语命中率必须为 `0`。
   - NFR-LTPR-3: 模板必须可在一个 limited preview round 内重复使用，不依赖 invite-only 工具链。
-- Security & Privacy: 贡献模板只记录必要的公开标识、证据链接与链上账户，不要求暴露私密身份信息。
+- Security & Privacy: 贡献模板只记录必要的 `Oasis ID`、公开标识、证据链接与链上账户，不要求暴露私密身份信息；raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励领取名称对外展示。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
@@ -93,6 +94,7 @@
 | DEC-LTPR-001 | 奖励模板按贡献评分，不按游玩时长 | time-play mining | 当前阶段仍是技术预览，不适合做时长挖矿叙事。 |
 | DEC-LTPR-002 | 只输出奖励建议档位，不公开固定 token 数额 | 直接公布每种贡献对应多少 token | 先控制承诺，再决定实际分发。 |
 | DEC-LTPR-003 | 模板不依赖 invite-only | 把奖励资格绑定到 invite-only 名单 | 用户已经确认不做 product-level invite-only，模板必须与此一致。 |
+| DEC-LTPR-004 | reward claimant 的用户侧身份统一写为 `Oasis ID`，`Reward Account` 只保留为执行字段 | 直接把 raw `public key` 或账户派生材料当作领取名称写进模板 | 奖励审核和对外说明要先围绕可读的 claimant identity 收口；底层签名材料应继续留在技术专题。 |
 
 ## 7. 执行模板（执行版）
 

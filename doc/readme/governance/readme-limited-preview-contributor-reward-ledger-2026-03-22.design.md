@@ -8,7 +8,7 @@
 
 ## 2. 设计结构
 - Round 层：固定 `round_id/candidate_id/window/status`。
-- Ledger 层：逐条记录 contributor、证据、分数、档位与审核状态。
+- Ledger 层：逐条记录 contributor、`Oasis ID`、`Reward Account`、证据、分数、档位与审核状态。
 - Approval 层：记录 producer 审批结果与审批引用。
 - Distribution 层：回填实际发放数量、执行时间与引用。
 - Archive 层：汇总 band summary、未解决项与下轮动作。
@@ -22,6 +22,8 @@
 ## 4. 约束与边界
 - ledger 不定义固定 token 档位额度。
 - ledger 不替代评分规则，只承接真实 round 的结算记录。
+- 用户侧身份统一写 `Oasis ID`；raw `public key` 不进入奖励台账名称层。
+- `Reward Account` 只作执行/发放字段，不替代 claimant 的用户侧命名。
 - 任何 `distributed` 状态都必须能指回真实执行引用。
 
 ## 5. 设计演进计划
