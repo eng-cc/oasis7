@@ -67,7 +67,7 @@
 - `TASK-GAME-062`
   - [x] 首次进入不再依赖手动 reopen/reload 才可控
   - [x] `software_safe` 不再把明确 `blocked` / `timeout_no_progress` 压扁成伪 timeout，前台会回填正确控制反馈
-  - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 由 `TASK-GAME-065` 复核后更新为 `watch`
+  - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核并形成当前 `hold` 裁决
 - `TASK-GAME-063`
   - [x] 10 分钟工业中循环包可在同一会话完成
   - [x] 建厂/首产出/停机恢复/扩产取舍均有 canonical 状态与前台反馈锚点
