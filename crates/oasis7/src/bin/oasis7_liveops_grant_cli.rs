@@ -869,7 +869,7 @@ mod tests {
                 "--world-dir",
                 "/tmp/world",
                 "--beneficiary-account-id",
-                "awt:pk:test",
+                "oc:pk:test",
                 "--amount",
                 "300",
                 "--issuance-reason",
@@ -892,7 +892,7 @@ mod tests {
         let command = IssueCommand {
             world_dir: world_dir.clone(),
             issuer_account_id: DEFAULT_ISSUER_ID.to_string(),
-            beneficiary_account_id: "awt:pk:beneficiary".to_string(),
+            beneficiary_account_id: "oc:pk:beneficiary".to_string(),
             amount: 300,
             issuance_reason: "preview_allowlist".to_string(),
             expires_at_epoch: 5,
@@ -912,7 +912,7 @@ mod tests {
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
-            .restricted_starter_claim_grant("awt:pk:beneficiary")
+            .restricted_starter_claim_grant("oc:pk:beneficiary")
             .expect("grant exists");
         assert_eq!(grant.issued_amount, 300);
         assert_eq!(grant.status, RestrictedStarterClaimGrantStatus::Issued);
@@ -924,7 +924,7 @@ mod tests {
         execute_issue(&IssueCommand {
             world_dir: world_dir.clone(),
             issuer_account_id: DEFAULT_ISSUER_ID.to_string(),
-            beneficiary_account_id: "awt:pk:beneficiary".to_string(),
+            beneficiary_account_id: "oc:pk:beneficiary".to_string(),
             amount: 300,
             issuance_reason: "qa_seed".to_string(),
             expires_at_epoch: 6,
@@ -936,7 +936,7 @@ mod tests {
         let report = execute_revoke(&RevokeCommand {
             world_dir: world_dir.clone(),
             issuer_account_id: DEFAULT_ISSUER_ID.to_string(),
-            beneficiary_account_id: "awt:pk:beneficiary".to_string(),
+            beneficiary_account_id: "oc:pk:beneficiary".to_string(),
             revoke_reason: "qa_window_closed".to_string(),
             dry_run: false,
             json: false,
@@ -952,7 +952,7 @@ mod tests {
 
         let restored = World::load_from_dir(world_dir.as_path()).expect("reload world");
         let grant = restored
-            .restricted_starter_claim_grant("awt:pk:beneficiary")
+            .restricted_starter_claim_grant("oc:pk:beneficiary")
             .expect("grant exists");
         assert_eq!(grant.status, RestrictedStarterClaimGrantStatus::Revoked);
         assert_eq!(grant.status_reason.as_deref(), Some("qa_window_closed"));
@@ -964,7 +964,7 @@ mod tests {
         execute_issue(&IssueCommand {
             world_dir: world_dir.clone(),
             issuer_account_id: DEFAULT_ISSUER_ID.to_string(),
-            beneficiary_account_id: "awt:pk:beneficiary".to_string(),
+            beneficiary_account_id: "oc:pk:beneficiary".to_string(),
             amount: 300,
             issuance_reason: "liveops_campaign".to_string(),
             expires_at_epoch: 7,
@@ -976,7 +976,7 @@ mod tests {
         let report = execute_status(&StatusCommand {
             world_dir,
             issuer_account_id: DEFAULT_ISSUER_ID.to_string(),
-            beneficiary_account_id: Some("awt:pk:beneficiary".to_string()),
+            beneficiary_account_id: Some("oc:pk:beneficiary".to_string()),
             json: false,
         })
         .expect("status");

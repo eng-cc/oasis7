@@ -331,7 +331,7 @@ mod tests {
     fn build_transfer_submit_request_parses_trimmed_values() {
         let (public_key, private_key) = transfer_test_signer(41);
         let draft = TransferDraft {
-            from_account_id: format!(" awt:pk:{public_key} "),
+            from_account_id: format!(" oc:pk:{public_key} "),
             to_account_id: "protocol:treasury".to_string(),
             amount: "7".to_string(),
             nonce: "3".to_string(),
@@ -339,12 +339,12 @@ mod tests {
         std::env::set_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY", public_key.as_str());
         std::env::set_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY", private_key.as_str());
         let request = build_transfer_submit_request(&draft).expect("request");
-        assert_eq!(request.from_account_id, format!("awt:pk:{public_key}"));
+        assert_eq!(request.from_account_id, format!("oc:pk:{public_key}"));
         assert_eq!(request.to_account_id, "protocol:treasury");
         assert_eq!(request.amount, 7);
         assert_eq!(request.nonce, 3);
         assert_eq!(request.public_key, public_key);
-        assert!(request.signature.starts_with("awttransferauth:v1:"));
+        assert!(request.signature.starts_with("octransferauth:v1:"));
         std::env::remove_var("OASIS7_VIEWER_AUTH_PUBLIC_KEY");
         std::env::remove_var("OASIS7_VIEWER_AUTH_PRIVATE_KEY");
     }
@@ -371,7 +371,7 @@ mod tests {
         let (public_key, private_key) = transfer_test_signer(43);
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock chain server");
         let bind = listener.local_addr().expect("read local addr");
-        let expected_from = format!("awt:pk:{public_key}");
+        let expected_from = format!("oc:pk:{public_key}");
         let public_key_for_server = public_key.clone();
         let server = std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept launcher request");
@@ -383,7 +383,7 @@ mod tests {
             assert!(request_text.contains("\"amount\":7"));
             assert!(request_text.contains("\"nonce\":9"));
             assert!(request_text.contains(&format!("\"public_key\":\"{public_key_for_server}\"")));
-            assert!(request_text.contains("\"signature\":\"awttransferauth:v1:"));
+            assert!(request_text.contains("\"signature\":\"octransferauth:v1:"));
 
             write_http_json_response(
                 &mut stream,
@@ -393,7 +393,7 @@ mod tests {
         });
 
         let draft = TransferDraft {
-            from_account_id: format!("awt:pk:{public_key}"),
+            from_account_id: format!("oc:pk:{public_key}"),
             to_account_id: "protocol:treasury".to_string(),
             amount: "7".to_string(),
             nonce: "9".to_string(),
@@ -428,7 +428,7 @@ mod tests {
         });
 
         let draft = TransferDraft {
-            from_account_id: format!("awt:pk:{public_key}"),
+            from_account_id: format!("oc:pk:{public_key}"),
             to_account_id: "protocol:treasury".to_string(),
             amount: "7".to_string(),
             nonce: "9".to_string(),

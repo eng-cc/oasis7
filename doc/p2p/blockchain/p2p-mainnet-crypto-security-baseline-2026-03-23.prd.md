@@ -50,7 +50,7 @@
   - AC-2: 必须把“原语层可用”与“系统级安全可对标主流公链”明确拆开，不允许混写。
   - AC-3: 必须列出当前至少 4 个硬阻断项，并为每项给出对应代码或现有文档依据。
   - AC-4: 必须明确 `viewer` 鉴权与 `replication` 鉴权属于局部正向信号，但不能覆盖 `main token` 交易授权缺失这一系统级 blocker。
-  - AC-5: 必须明确 `awt:pk:<public_key_hex>` 当前仍属于 runtime 内部账户派生语义，不等同于成熟外部钱包地址体系。
+  - AC-5: 必须明确 `oc:pk:<public_key_hex>` 当前仍属于 runtime 内部账户派生语义，不等同于成熟外部钱包地址体系。
   - AC-6: 必须明确本地固定 seed governance signer 与明文 `config.toml` keypair 不得计为主流公链生产级 signer/keystore。
   - AC-7: 必须输出一个 mainnet-ready 路线图，且第一个优先级必须是“主链 Token 资产动作签名交易模型”。
   - AC-8: 必须给出对外口径边界：在 P0 blocker 清零前，只能使用 `limited playable technical preview` 级别的安全表述，不得宣称“对标主流公链安全”。

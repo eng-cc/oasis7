@@ -26,7 +26,7 @@
 | Replication / Fetch 鉴权 | request 签名 + writer allowlist + writer/public_key binding | `crates/oasis7_node/src/replication.rs` | 正向信号，属于网络面 preview hardening |
 | 主链 Token transfer submit | 接收未签名 JSON，请求侧只做字段/余额/nonce 预检 | `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api.rs` | 系统级 blocker |
 | Consensus action payload | payload envelope 无统一签名交易字段 | `crates/oasis7/src/consensus_action_payload.rs` | 系统级 blocker |
-| Main token 账户模型 | `recipient` 是 runtime 内字符串；公钥派生为 `awt:pk:<public_key_hex>` | `crates/oasis7/src/runtime/main_token.rs` | 可运行，但不等于成熟外部钱包地址体系 |
+| Main token 账户模型 | `recipient` 是 runtime 内字符串；公钥派生为 `oc:pk:<public_key_hex>` | `crates/oasis7/src/runtime/main_token.rs` | 可运行，但不等于成熟外部钱包地址体系 |
 | 节点 keypair | 自动生成并明文写入 `config.toml` | `crates/oasis7/src/bin/oasis7_chain_runtime/node_keypair_config.rs` | preview convenience，不算生产级 keystore |
 | 治理 finality signer | 仍存在 deterministic local seed signer 路径 | `crates/oasis7/src/runtime/world/governance.rs` | local/test convenience，不算生产治理 signer |
 | 创世执行控制 | freeze sheet 仍有 `TBD_BEFORE_MINT` / `pending_binding` | `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md` | not ready for mint |

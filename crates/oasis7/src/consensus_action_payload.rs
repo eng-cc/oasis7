@@ -5,14 +5,14 @@ use serde::{Deserialize, Serialize};
 
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
-const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:";
-const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
-const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
-const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
+const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "occlaimauth:v1:";
+const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "ocgenesisauth:v1:";
+const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "octreasuryauth:v1:";
 const MAIN_TOKEN_RESTRICTED_CLAIM_LIVEOPS_POOL_TOP_UP_AUTH_SIGNATURE_V1_PREFIX: &str =
-    "awtrestrictedclaimliveopspoolauth:v1:";
+    "ocrestrictedclaimliveopspoolauth:v1:";
 const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
-    "awtrestrictedgrantadminauth:v1:";
+    "ocrestrictedgrantadminauth:v1:";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusActionPayloadEnvelope {
@@ -547,10 +547,10 @@ fn validate_main_token_action_account_binding(
                     beneficiary.trim()
                 )));
             }
-            if beneficiary.trim().starts_with("awt:pk:") {
+            if beneficiary.trim().starts_with("oc:pk:") {
                 let public_key = public_key.ok_or_else(|| {
                     MainTokenActionAuthError::InvalidRequest(
-                        "main token auth public key is required for awt:pk claim binding"
+                        "main token auth public key is required for oc:pk claim binding"
                             .to_string(),
                     )
                 })?;

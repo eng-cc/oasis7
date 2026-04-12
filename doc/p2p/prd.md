@@ -47,7 +47,7 @@
   - SC-15: 主链 Token 创世分配与早期贡献奖励口径具备可审计分桶、低流通边界、单人直持上限与贡献制发放约束，能够直接映射到现有 runtime 创世/金库机制。
   - SC-16: hosted world 网页远程接入具备明确的 `public player plane / private control plane / signer plane` 分层、`guest/player/strong-auth` 授权梯度、公开 join admission control 与 `gui-agent` surface split 策略，且浏览器不再被视为可持有 host 节点长期私钥的受信环境。
   - SC-17: p2p 模块具备一份 public-chain-grade 的“非全公网依赖”覆盖网络目标态，明确 `public/hybrid/private/relay_only/validator_hidden` 多部署模式、`validator core/sentry/relay` 角色分离，以及 `peer record + discovery + reachability + traffic lanes` 的统一框架边界。
-  - SC-18: 当前链上代币的正式产品命名固定为“绿洲币 / Oasis Coin”；该命名与 runtime `main_token.symbol` / ticker 字段分层治理，不因本次命名冻结而自动改写现有 `AWT` symbol。
+  - SC-18: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一迁移到“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`；对外 API、viewer/client、脚本与测试不得再把 `AWT` / `awt:pk:` 当作现行真值。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -107,7 +107,7 @@
   12. Flow-P2P-012: `执行历史文档巡检 -> 替换已删除源码路径到当前入口路径 -> 文档门禁 + grep 零残留校验`
   13. Flow-P2P-013: `制作人冻结创世分配表 -> runtime 映射创世桶与 vesting 参数 -> liveops/QA 审核早期贡献奖励边界 -> 创世配置与低流通门禁共同放行`
   14. Flow-P2P-014: `盘点签名/地址/交易授权/keystore/治理 signer/创世控制真值 -> 形成 red/yellow/green 矩阵 -> producer 输出总 verdict 与 P0 blocker`
-  15. Flow-P2P-015: `客户端为 transfer submit 构造 canonical payload 并签名 -> runtime 验签并比对 awt:pk 账户绑定 -> 通过后才进入余额/nonce 预检与 consensus submit`
+  15. Flow-P2P-015: `客户端为 transfer submit 构造 canonical payload 并签名 -> runtime 验签并比对 oc:pk 账户绑定 -> 通过后才进入余额/nonce 预检与 consensus submit`
   16. Flow-P2P-016: `STRAUTH-3 收口后复盘剩余安全缺口 -> 冻结 MAINNET-1~4 readiness gate -> signer custody/governance signer/genesis ceremony 逐项过门禁 -> producer 再决定是否重评阶段`
   17. Flow-P2P-017: `盘点 node/viewer/governance signer 来源 -> 冻结 preview-only bootstrap 与 production target backend 边界 -> rotation/revocation/audit policy 入门禁`
   18. Flow-P2P-018: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> failover/rotation/revocation 进入治理门禁`
@@ -127,9 +127,9 @@
 | PoS 控制面参数对齐 | `node_tick_ms`（轮询）+ `slot_duration_ms`、`ticks_per_slot`、`proposal_tick_phase`、`adaptive_tick_scheduler_enabled`、`slot_clock_genesis_unix_ms`、`max_past_slot_lag` | runtime/game/web/client launcher/scripts 显式暴露并校验参数，状态接口回显观测字段 | `configured -> running -> audited` | `node_tick_ms` 不参与出块时间计算，仅作为 worker 轮询/回退间隔 | 运维可配置；非法值必须启动前拒绝 |
 | 时序语义残留收敛 | `worker_poll_count`、`consensus.last_observed_tick`、`consensus.committed_height`、`slot_duration_ms` | 更新状态字段命名/文档叙述并修复过时控制面假设 | `legacy -> aligned` | 轮询指标与共识指标分离，不混用同一“tick”语义 | 运维/QA 只读；配置前必须通过校验 |
 | Viewer 控制面边界收敛 | `oasis7_viewer_live` CLI（`--bind`/`--web-bind`/`--llm`/`--no-llm`） | 仅保留观察服务参数；误传 `--release-config`、`--runtime-world`、`--node-*` 与其他 legacy 控制面参数直接拒绝 | `legacy_mixed -> observer_only_strict` | CLI 白名单固定；错误信息必须包含迁移目标 `oasis7_chain_runtime` | 运行链控制面仅限受信运维入口 |
-| Token 创世分配与低流通 | `display_name_cn`、`display_name_en`、`symbol`、`allocation_bps`、`bucket_id`、`recipient`、`cliff_epochs`、`linear_unlock_epochs`、`founder_direct_cap_bps`、`circulation_cap_bps` | 冻结正式命名、创世分配表、设定 vesting 与金库控制边界、审计早期贡献奖励准入 | `draft -> named -> frozen -> auditable` | 正式产品名固定为“绿洲币 / Oasis Coin”；分配总和必须 `10000 bps`；项目战略控制目标 `5000 bps`；协议奖励池 `3500 bps`；单人直持硬上限 `1500 bps`；runtime `symbol` 仍单独治理 | 制作人定义口径；runtime 按创世配置落地；liveops/QA 仅可在已定义边界内执行与验收 |
+| Token 创世分配与低流通 | `display_name_cn`、`display_name_en`、`symbol`、`account_prefix`、`allocation_bps`、`bucket_id`、`recipient`、`cliff_epochs`、`linear_unlock_epochs`、`founder_direct_cap_bps`、`circulation_cap_bps` | 冻结正式命名、创世分配表、设定 vesting 与金库控制边界、审计早期贡献奖励准入，并统一 runtime/account 派生真值 | `draft -> named -> symbol_migrated -> auditable` | 正式产品名固定为“绿洲币 / Oasis Coin”；当前 `symbol=OC`、`account_prefix=oc:pk:`；分配总和必须 `10000 bps`；项目战略控制目标 `5000 bps`；协议奖励池 `3500 bps`；单人直持硬上限 `1500 bps` | 制作人定义口径；runtime 按创世配置落地；liveops/QA 仅可在已定义边界内执行与验收 |
 | 密码学安全基线评估 | `primitive_status`、`transaction_auth_status`、`account_model_status`、`key_custody_status`、`governance_signer_status`、`genesis_control_status`、`overall_verdict` | 盘点代码/文档真值并输出 system-level verdict；若 blocker 未清零则拒绝高级安全口径 | `unknown -> inventoried -> verdict_frozen` | 只要资产动作缺统一签名交易模型，整体必须保持 `not_mainnet_grade` | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer` 联审 |
-| 主链 Token 签名交易鉴权 | `from_account_id/to_account_id/amount/nonce/public_key/signature` | runtime 先验签并校验 `awt:pk:` 账户绑定，再进入既有余额/nonce 预检与 consensus submit | `unsigned_surface -> transfer_signed_surface` | transfer submit 必须带固定版本签名；`from_account_id` 必须等于 `awt:pk:<public_key_hex>`；其他资产动作仍待后续专题 | `runtime_engineer` 牵头实现，`viewer_engineer`/`qa_engineer` 跟进客户端与回归 |
+| 主链 Token 签名交易鉴权 | `from_account_id/to_account_id/amount/nonce/public_key/signature` | runtime 先验签并校验 `oc:pk:` 账户绑定，再进入既有余额/nonce 预检与 consensus submit | `unsigned_surface -> transfer_signed_surface` | transfer submit 必须带固定版本签名；`from_account_id` 必须等于 `oc:pk:<public_key_hex>`；其他资产动作仍待后续专题 | `runtime_engineer` 牵头实现，`viewer_engineer`/`qa_engineer` 跟进客户端与回归 |
 | 主流公链测试体系对标 | `layer_id/current_coverage/evidence_paths/gap_status/next_action` | 将 oasis7 suites/evidence 对位到主流公链测试分层，并冻结缺口矩阵与执行优先级 | `draft -> mapped -> prioritized` | 若缺共享网络、真实 drill 证据或 fuzz/property gate，则不得宣称“主流公链级测试成熟度” | `producer_system_designer` 拍板，`qa_engineer` 联审 |
 | Hosted world 玩家接入与 session auth | `deployment_mode/session_id/session_level/capability_set/control_plane_scope/strong_auth_state/admission_policy/player_safe_agent_surface` | 将网页远程玩家面、host 控制面与 signer plane 分层；签发 guest/player session，并对敏感动作要求 strong auth | `specified_not_implemented -> trusted_local_only -> hosted_ready` | 只要浏览器仍依赖 `node.private_key` bootstrap、可命中 host 控制面路由或未冻结 admission / `gui-agent` split，就不得判为 hosted-ready | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
 - 三线联合验收清单（TASK-P2P-002）:
@@ -159,7 +159,7 @@
   - AC-18: `doc/p2p/**` 仍可读历史专题的首行标题必须统一使用 `oasis7 Runtime` 或 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文、证据原文与兼容说明中。
   - AC-19: `mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22` 专题文档落盘并映射任务链 `TASK-P2P-031`，明确 `10000 bps` 创世分配表、项目战略控制 `5000 bps`、协议奖励池 `3500 bps`、单人直持目标/上限、低流通边界与“贡献制奖励而非 P2E”口径。
   - AC-20: `p2p-mainnet-crypto-security-baseline-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-032`，明确当前整体 verdict 为 `not_mainnet_grade`，固定交易授权、keystore、治理 signer 与创世控制 blocker，并给出 mainnet-ready 路线图。
-  - AC-21: `mainchain-token-signed-transaction-authorization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-033`；`POST /v1/chain/transfer/submit` 必须新增 `public_key/signature` 鉴权、绑定 `awt:pk:<public_key_hex>` 并完成 required 回归。
+  - AC-21: `mainchain-token-signed-transaction-authorization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-033`；`POST /v1/chain/transfer/submit` 必须新增 `public_key/signature` 鉴权、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归。
   - AC-22: `p2p-mainnet-grade-readiness-hardening-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
   - AC-23: `p2p-production-signer-custody-keystore-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
   - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 deterministic local seed 与 `NodeConfig` 本地 controller signer policy 只属于 preview/local truth，不得作为 production governance truth。
@@ -169,7 +169,8 @@
   - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-040`，明确 `shared_devnet/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 `specified_not_executed` 结论。
   - AC-29: `p2p-hosted-world-player-access-and-session-auth-2026-03-25` 专题文档落盘并映射任务链 `TASK-P2P-041`，明确 hosted world 的 `public player plane / private control plane / signer plane`、`guest/player/strong-auth` 会话梯度、`gui-agent` surface split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界。
   - AC-30: `p2p-mainnet-private-reachability-architecture-2026-04-01` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
-  - AC-31: `TASK-P2P-045` 必须把当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，并明确这是 public naming，而不是自动改写 runtime `main_token.symbol` / ticker；若未来需要修改 symbol，必须另开专题评审。
+  - AC-31: `TASK-P2P-045` 必须把当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，作为后续 runtime 符号与账户派生迁移的前置口径。
+  - AC-32: `TASK-P2P-046` 必须把当前链上代币的 runtime `main_token.symbol`、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 当作现行真值。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -258,7 +259,7 @@
   - NFR-P2P-25: hosted world public player plane 在任何 HTML/JS/bootstrap/API 响应中都不得暴露长期 signer 私钥、seed 或等价真值。
   - NFR-P2P-26: hosted world public join origin 默认不得暴露 world start/stop、chain start/stop 或 operator-only GUI action 入口；能力不足时前后端都必须拒绝。
   - NFR-P2P-27: hosted world public join 必须具备有界 admission control，至少冻结 `max_guest_sessions/max_player_sessions/issue_rate_limit/world_full_policy`，且超限时返回结构化拒绝。
-  - NFR-P2P-28: `doc/p2p/**` 活跃文档、token 专题与模块入口对外提到当前链上代币时，必须统一使用“绿洲币 / Oasis Coin”作为正式产品名；`AWT` 仅能在 symbol/ticker/runtime 字段语境下出现，禁止把 symbol 误写成产品名。
+  - NFR-P2P-28: `doc/p2p/**` 活跃文档、token 专题、模块入口与 runtime/account 相关实现提到当前链上代币时，必须统一使用“绿洲币 / Oasis Coin” / `OC` / `oc:pk:` 作为现行真值；`AWT` / `awt:pk:` 仅允许保留在明确标注的历史语境或兼容说明中。
 - Security & Privacy: 需保证节点身份、签名、账本与反馈数据链路的完整性；所有关键动作必须具备可审计记录。
 
 ## 5. Risks & Roadmap
@@ -288,7 +289,8 @@
 | PRD-P2P-011 | TASK-P2P-015 | `test_tier_required` | `oasis7_viewer_live` 删除 `--runtime-world` 兼容别名、移除旧 split CLI 路径并回归手册/测试口径 | CLI 单一事实源与维护成本收敛 |
 | PRD-P2P-012 | TASK-P2P-016/018 | `test_tier_required` | 历史文档旧路径替换、历史专题标题零残留校验 + 文档门禁（过程日志除外） | 文档可追溯性与维护效率 |
 | PRD-P2P-013 | TASK-P2P-031 | `test_tier_required` | 创世分配专题 PRD/project/design 建档、模块入口映射、文档门禁与差异检查 | Token 创世口径、低流通边界与早期贡献奖励策略 |
-| PRD-P2P-013 | TASK-P2P-045 | `test_tier_required` | 正式命名冻结、symbol/ticker 边界说明、模块入口与 token 专题口径同步、文档门禁与差异检查 | 链上代币 public naming、一致性与后续 ticker 变更边界 |
+| PRD-P2P-013 | TASK-P2P-045 | `test_tier_required` | 正式命名冻结、symbol/ticker 边界说明、模块入口与 token 专题口径同步、文档门禁与差异检查 | 链上代币 public naming 与后续迁移前置边界 |
+| PRD-P2P-013/015 | TASK-P2P-046 | `test_tier_required` | `OC` / `oc:pk:` 迁移、签名鉴权前缀同步、API/viewer/client/liveops/tests/docs 回写、文档门禁与差异检查 | 链上代币 runtime/account 当前真值统一 |
 | PRD-P2P-014 | TASK-P2P-032 | `test_tier_required` | 密码学安全基线专题 PRD/project/design 建档、代码真值盘点、模块入口映射、文档门禁与差异检查 | 安全口径、mainnet-ready blocker 与优先级治理 |
 | PRD-P2P-015 | TASK-P2P-033 | `test_tier_required` | 签名交易鉴权专题 PRD/project/design 建档、transfer submit 鉴权实现、control-plane schema 同步与定向回归 | 主链 Token 首个公开资产面签名化 |
 | PRD-P2P-016 | TASK-P2P-034 | `test_tier_required` | mainnet-grade readiness 硬化专题 PRD/project/design 建档、剩余 P1/P2 gate 冻结、模块入口映射与文档门禁 | signer custody、治理 signer、创世 ceremony 与 public claims gate |
@@ -350,4 +352,5 @@
 | DEC-P2P-015 | 统一将历史文档中的 `oasis7_viewer_live` 旧文件路径替换为当前源码布局路径（`oasis7_viewer_live.rs` / `oasis7_chain_runtime/*`） | 保留旧路径并依赖读者自行映射 | 降低审计误导与排障成本，确保文档可直接定位现行实现。 |
 | DEC-P2P-016 | 先冻结“项目战略控制 50% + 协议奖励池 35% + 低流通 + 贡献制奖励”口径，再决定具体创世账户与执行节奏 | 先广泛发币或直接采用开放式 play-to-earn | 当前阶段仍是 `limited playable technical preview`，需要先守住低流通、可审计与反滥用边界。 |
 | DEC-P2P-017 | hosted world 采用 `public player plane / private control plane / signer plane` + `guest/player/strong-auth` 梯度 | 继续把 join/control/signer 混在单一 web bootstrap 里，或用 invite-only 代替安全边界 | hosted world 的核心问题是信任面混层，不先拆平面和能力就无法安全支持“一个玩家部署、另一个玩家通过网页进入”。 |
-| DEC-P2P-018 | 当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，并把 `AWT` 保留为 runtime symbol/ticker 语义 | 直接把 `AWT` 当正式产品名，或在未评审 symbol 影响前顺手改 ticker | 产品名、symbol、链上字段和客户端展示面属于不同治理层；先冻结 public naming，才能避免在未评审 API/UI/兼容性影响时误做 runtime 破坏性改动。 |
+| DEC-P2P-018 | 先冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime/account 真值 | 在未评审 API/UI/兼容性影响前直接顺手改 runtime symbol / account prefix | 产品名、symbol、链上字段和客户端展示面属于不同治理层；先冻结 public naming，才能把后续 runtime 改动收成独立可审计任务。 |
+| DEC-P2P-019 | 在独立迁移专题中，把当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值，或只改产品名不改 runtime/account | 当前 public naming 已冻结，继续双轨会让 API、viewer/client、liveops 与审计口径长期分叉；需要一次把 runtime/account 当前真值收口。 |

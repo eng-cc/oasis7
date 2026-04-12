@@ -81,7 +81,7 @@ fn submit_chain_transfer_remote_posts_expected_payload_and_reads_success() {
         assert!(request_text.contains(
             "\"public_key\":\"1111111111111111111111111111111111111111111111111111111111111111\""
         ));
-        assert!(request_text.contains("\"signature\":\"awttransferauth:v1:"));
+        assert!(request_text.contains("\"signature\":\"octransferauth:v1:"));
         write_http_json_response(
             &mut stream,
             "200 OK",
@@ -96,7 +96,7 @@ fn submit_chain_transfer_remote_posts_expected_payload_and_reads_success() {
         nonce: 2,
         public_key: "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
         signature: concat!(
-            "awttransferauth:v1:",
+            "octransferauth:v1:",
             "2222222222222222222222222222222222222222222222222222222222222222",
             "2222222222222222222222222222222222222222222222222222222222222222"
         )
@@ -132,7 +132,7 @@ fn submit_chain_transfer_remote_returns_rejected_payload_for_http_400() {
         nonce: 2,
         public_key: "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
         signature: concat!(
-            "awttransferauth:v1:",
+            "octransferauth:v1:",
             "2222222222222222222222222222222222222222222222222222222222222222",
             "2222222222222222222222222222222222222222222222222222222222222222"
         )
@@ -160,13 +160,13 @@ fn submit_chain_transfer_requires_strong_auth_for_hosted_public_join() {
         },
     );
     let request = ChainTransferSubmitRequest {
-        from_account_id: "awt:pk:alice".to_string(),
+        from_account_id: "oc:pk:alice".to_string(),
         to_account_id: "protocol:treasury".to_string(),
         amount: 7,
         nonce: 2,
         public_key: "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
         signature: concat!(
-            "awttransferauth:v1:",
+            "octransferauth:v1:",
             "2222222222222222222222222222222222222222222222222222222222222222",
             "2222222222222222222222222222222222222222222222222222222222222222"
         )

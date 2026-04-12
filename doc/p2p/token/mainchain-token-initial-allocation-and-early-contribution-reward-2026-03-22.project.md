@@ -12,7 +12,8 @@
 - [x] TIGR-4 (PRD-P2P-TOKEN-INIT-002/003) [test_tier_required]: 由 `producer_system_designer` 基于 `TIGR-1~3` 做最终发行前评审，决定 early contributor reserve 在 limited preview 阶段保持多签治理执行，不并入 `ecosystem_pool`，并把“后续是否 fully on-chain”留给未来专题重审。
 - [x] TIGR-5 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 由 `runtime_engineer` 将 `TIGR-1` 草案收成正式执行清单，固定 slot registry、控制主体、签名规则、runtime 落点、amount rounding 规则与 pre-mint freeze gate。
 - [ ] TIGR-6 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并用 QA 模板输出最终 `pass` 或 `block`。
-- [x] TIGR-7 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，避免把现有 `AWT` symbol 误写成产品名或误宣称本轮已完成 ticker 改名。
+- [x] TIGR-7 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，避免把当时旧 runtime symbol 误写成产品名或误宣称本轮已完成 ticker 改名。
+- [x] TIGR-8 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与专题文档，清理 `AWT` / `awt:pk:` 的现行真值残留。
 
 ## TIGR-1 产物（本地草案，待 review）
 | bucket_id | ratio_bps | recipient | start_epoch | cliff_epochs | linear_unlock_epochs | genesis_liquid | ownership_note |
@@ -57,11 +58,19 @@
 
 ## TIGR-7 命名结论
 - 正式产品名：`绿洲币 / Oasis Coin`
-- 当前 runtime symbol/ticker：`AWT`
+- 备注：`TIGR-7` 仅冻结 public naming，本身不直接改写 runtime symbol/account 真值；当前实现迁移见下方 `TIGR-8`。
 - 边界说明：
   - `绿洲币 / Oasis Coin` 是当前链上代币的 public naming，适用于专题文档、模块入口与后续运营口径。
-  - `AWT` 仍仅表示 runtime `main_token.symbol` / ticker 字段真值；本轮没有改动链上字段、API schema、客户端展示值或测试断言。
-  - 若后续需要把 `AWT` 一并替换成新的 ticker/symbol，必须另开专题评估 runtime、launcher、viewer、API 与兼容性影响。
+  - `TIGR-7` 的目标是先把 public naming 固定下来，再由后续专题统一迁移 runtime/account 当前真值。
+
+## TIGR-8 迁移结论
+- 正式产品名：`绿洲币 / Oasis Coin`
+- 当前 runtime symbol/ticker：`OC`
+- 当前公钥派生账户前缀：`oc:pk:`
+- 边界说明：
+  - `绿洲币 / Oasis Coin` 是当前链上代币的 public naming，现已和 runtime/account 当前真值统一。
+  - `OC` 是当前 `main_token.symbol` / ticker 真值，`oc:pk:` 是当前公钥派生账户前缀，签名鉴权前缀也已同步切换到 `oc*auth:v1:`。
+  - `AWT` / `awt:pk:` 不再是当前实现真值；若未来需要再次调整 symbol/account 前缀，必须另开专题评估 runtime、launcher、viewer、API 与兼容性影响。
 
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
@@ -82,5 +91,5 @@
 ## 状态
 - 当前阶段：active
 - 下一步：执行 `TIGR-6`，绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并基于 QA 模板输出最终 `pass/block`。
-- 最近更新：2026-04-11
-- 备注：`TIGR-1~5` 与 `TIGR-7` 已完成并形成当前发行前冻结结论、正式执行清单与正式命名口径；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
+- 最近更新：2026-04-12
+- 备注：`TIGR-1~5`、`TIGR-7` 与 `TIGR-8` 已完成并形成当前发行前冻结结论、正式执行清单与当前 runtime/account 真值；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。

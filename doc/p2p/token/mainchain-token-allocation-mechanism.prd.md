@@ -50,7 +50,7 @@
 ### 1) 主配置与边界
 ```rust
 MainTokenConfig {
-  symbol: String,                // 默认 "AWT"
+  symbol: String,                // 默认 "OC"
   decimals: u8,                  // 默认 9
   initial_supply: u64,
   max_supply: Option<u64>,
@@ -66,7 +66,7 @@ MainTokenConfig {
   - `min_rate_bps <= base_rate_bps <= max_rate_bps`；
   - `epochs_per_year > 0`；
   - `max_supply >= initial_supply`（若设置）。
-  - 当前链上代币的正式产品命名固定为“绿洲币 / Oasis Coin”；`symbol` 字段当前只承接 runtime symbol/ticker 语义，默认仍为 `AWT`，不因本次命名冻结自动改写。
+  - 当前链上代币的正式产品命名固定为“绿洲币 / Oasis Coin”；`symbol` 字段当前承接 runtime symbol/ticker 语义，现行默认值为 `OC`；公钥派生账户前缀同步为 `oc:pk:`。
 
 ### 2) 动作与事件
 ```rust

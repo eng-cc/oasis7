@@ -9,7 +9,7 @@
 - Proposed Solution: 在保留 transfer HTTP 鉴权与 shared payload submit-layer gating 的前提下，把主链 Token 资产动作的签名模型继续接到 `oasis7_client_launcher` 的 Web/native 转账窗口；native 复用现有 Rust signer helper，wasm 复刻同一份 transfer canonical payload 签名协议，并让 `oasis7_web_launcher` 在受信本地环境把 viewer auth bootstrap 注入到 HTML，确保浏览器端也能产出与 runtime 契约一致的 signed request。
 - Success Criteria:
   - SC-1: `/v1/chain/transfer/submit` 不再接受未签名请求；缺少 `public_key` 或 `signature` 的请求必须被拒绝。
-  - SC-2: 只有当 `from_account_id == awt:pk:<normalized_public_key_hex>` 且 `ed25519` 签名校验通过时，转账请求才允许继续进入余额/nonce 预检与共识提交。
+  - SC-2: 只有当 `from_account_id == oc:pk:<normalized_public_key_hex>` 且 `ed25519` 签名校验通过时，转账请求才允许继续进入余额/nonce 预检与共识提交。
   - SC-3: `ConsensusActionPayloadEnvelope` 必须支持主链 Token auth proof，且 `NodeRuntime` 对 transfer/claim/genesis/treasury/restricted-admin-registry 提交时强制要求对应 proof。
   - SC-4: claim/genesis/treasury/restricted-admin-registry 即使没有公开 HTTP submit surface，也必须在共享提交层具备“无 proof 直接拒绝”的门禁。
   - SC-5: `genesis/treasury/restricted-admin-registry/liveops-pool-top-up` 的 `auth.account_id` 必须绑定到正式 controller slot；其中 `UpdateRestrictedStarterClaimAdminRegistry` 与 `TopUpRestrictedStarterClaimLiveopsPool` 都固定绑定 `ecosystem_pool` treasury controller slot，不能继续接受任意命名 controller label。
@@ -38,7 +38,7 @@
 - Critical User Flows:
   1. Flow-P2P-TXAUTH-001: `客户端构造 transfer request -> 使用 ed25519 对 canonical payload 签名 -> 提交 public_key/signature -> runtime 验证 -> 通过后继续余额/nonce 预检 -> 写入 signed consensus payload`
   2. Flow-P2P-TXAUTH-002: `请求缺少签名或签名格式非法 -> runtime 直接返回 invalid_request/invalid_signature -> 不进入余额检查与提交流程`
-  3. Flow-P2P-TXAUTH-003: `public_key 签名有效但 from_account_id 不等于 awt:pk:<public_key_hex> -> runtime 返回 account_auth_mismatch -> 不允许冒用其他账户`
+  3. Flow-P2P-TXAUTH-003: `public_key 签名有效但 from_account_id 不等于 oc:pk:<public_key_hex> -> runtime 返回 account_auth_mismatch -> 不允许冒用其他账户`
   4. Flow-P2P-TXAUTH-004: `caller 构造 claim/genesis/treasury/restricted-admin-registry runtime action -> 在 consensus payload envelope 附带 auth proof -> NodeRuntime 先验签再入队 -> 未附 proof 时直接拒绝`
   5. Flow-P2P-TXAUTH-005: `producer 复核专题状态 -> 看到 transfer HTTP 与 payload 层都已签名化 -> 仍保留 genesis/treasury controller binding 与 signer ceremony 为后续任务 -> 继续维持 not_mainnet_grade 口径`
 - Functional Specification Matrix:
@@ -46,12 +46,12 @@
 | --- | --- | --- | --- | --- | --- |
 | Transfer submit 鉴权请求 | `from_account_id/to_account_id/amount/nonce/public_key/signature` | runtime 解析 JSON 并校验字段完整性 | `raw_request -> parsed_request` | `amount > 0`、`nonce > 0`、字段不可空、账户 ID 仍遵守现有格式约束 | 任何公开调用方都必须显式提供签名材料 |
 | Transfer canonical signing payload | `version/operation/from_account_id/to_account_id/amount/nonce/public_key` | 以固定字段顺序编码为 canonical JSON，并加固定域前缀后验签 | `parsed_request -> auth_verified/auth_rejected` | 签名域固定为 transfer submit，避免与 viewer/chat auth 混用 | 仅持有对应私钥的请求方可生成有效签名 |
-| 账户所有权绑定 | `derived_from_account_id = awt:pk:<public_key_hex>` | runtime 比对 `request.from_account_id` 与派生账户 | `auth_verified -> bound/rejected` | 若不相等则返回 `account_auth_mismatch` | 请求人只能提交自己公钥派生的主链账户 |
+| 账户所有权绑定 | `derived_from_account_id = oc:pk:<public_key_hex>` | runtime 比对 `request.from_account_id` 与派生账户 | `auth_verified -> bound/rejected` | 若不相等则返回 `account_auth_mismatch` | 请求人只能提交自己公钥派生的主链账户 |
 | Shared consensus auth envelope | `auth.scheme/auth.account_id/auth.public_key/auth.signature` | caller 将主链 Token auth proof 附加到 `ConsensusActionPayloadEnvelope` | `unsigned_payload -> signed_payload -> runtime_verified/rejected` | transfer/claim/genesis/treasury/restricted-admin-registry 进入 `NodeRuntime` 前必须带 proof；proof 验签失败直接拒绝 | 所有未来 submit surface 统一走该提交层校验 |
-| Claim / Genesis / Treasury / Restricted Registry 扩展位 | `action_surface/account_binding/controller_binding/status` | claim 绑定 beneficiary；genesis/treasury/restricted-admin-registry 从 slot registry 继续升级到 threshold controller signer policy | `planned -> payload_signed -> slot_bound -> signer_policy_enforced -> ceremony_pending` | claim 若为 `awt:pk:` 需可推导；controller-bound 动作的 `auth.account_id` 必须命中正式 controller slot，且 proof signer 必须命中 allowlist / threshold | 后续仍需 producer/QA 收口外部 signer 与 ceremony |
+| Claim / Genesis / Treasury / Restricted Registry 扩展位 | `action_surface/account_binding/controller_binding/status` | claim 绑定 beneficiary；genesis/treasury/restricted-admin-registry 从 slot registry 继续升级到 threshold controller signer policy | `planned -> payload_signed -> slot_bound -> signer_policy_enforced -> ceremony_pending` | claim 若为 `oc:pk:` 需可推导；controller-bound 动作的 `auth.account_id` 必须命中正式 controller slot，且 proof signer 必须命中 allowlist / threshold | 后续仍需 producer/QA 收口外部 signer 与 ceremony |
 - Acceptance Criteria:
   - AC-1: `oasis7_chain_runtime` 的 `ChainTransferSubmitRequest` 必须新增 `public_key` 与 `signature` 字段，并在缺失时拒绝请求。
-  - AC-2: runtime 必须验证 `ed25519` 签名，且 `from_account_id` 必须严格等于 `awt:pk:<normalized_public_key_hex>`。
+  - AC-2: runtime 必须验证 `ed25519` 签名，且 `from_account_id` 必须严格等于 `oc:pk:<normalized_public_key_hex>`。
   - AC-3: 签名无效、签名格式非法、公钥格式非法、账户绑定不匹配必须返回结构化错误，不得继续进入 `preflight_validate_transfer_request`。
   - AC-4: 有效签名请求仍必须保留现有 `same account / amount / nonce / insufficient balance / nonce replay` 行为和错误语义。
   - AC-5: `oasis7_web_launcher` 的控制面请求结构、序列化与代理测试必须同步更新到新字段集合。
@@ -104,7 +104,7 @@
   - 若签名通过但 `from_account_id` 不是该公钥派生账户，按 `account_auth_mismatch` 拒绝。
   - 若 Web 端未注入 signer bootstrap，前端必须在本地提示 `transfer signing failed`，而不是继续提交裸请求。
   - 若本地 env/config 只配置了单边 key（只有 public 或只有 private），前端必须在本地提示 signer bootstrap 缺失，不得静默降级成 unsigned submit。
-  - 若 claim 的 `beneficiary` 为 `awt:pk:` 账户，则必须可由 `public_key` 推导；若是 `protocol:*` 等命名控制账户，则当前仅要求 proof 中的 `account_id` 与 `beneficiary` 一致并通过签名校验。
+  - 若 claim 的 `beneficiary` 为 `oc:pk:` 账户，则必须可由 `public_key` 推导；若是 `protocol:*` 等命名控制账户，则当前仅要求 proof 中的 `account_id` 与 `beneficiary` 一致并通过签名校验。
   - 若 genesis/treasury/restricted-admin-registry payload 使用单签 proof，但 controller signer policy 的 threshold > 1，则必须拒绝，不能以单签冒充多签治理。
   - 若 genesis/treasury/restricted-admin-registry payload 带有效 threshold proof，但对应 signer list 仍是本地配置而非 ceremony freeze 的最终真值，不得误解为 ceremony 已完成。
   - 若鉴权通过但余额不足或 nonce 回放，继续返回现有业务错误，不改变既有预检规则。
@@ -142,7 +142,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-P2P-TXAUTH-001 | 先关闭公开 transfer submit 的无签名入口 | 一次性同时改 transfer/claim/genesis/treasury/restricted-admin-registry | 当前公开攻击面首先在 transfer submit；先关最暴露入口能最快实质降低风险。 |
-| DEC-P2P-TXAUTH-002 | `from_account_id` 绑定为 `awt:pk:<public_key_hex>` | 继续接受任意字符串账户并只验“有签名即可” | 当前唯一已有明确公钥到账户派生语义的主链账户模型就是 `awt:pk:`。 |
+| DEC-P2P-TXAUTH-002 | `from_account_id` 绑定为 `oc:pk:<public_key_hex>` | 继续接受任意字符串账户并只验“有签名即可” | 当前唯一已有明确公钥到账户派生语义的主链账户模型就是 `oc:pk:`。 |
 | DEC-P2P-TXAUTH-003 | runtime 请求层先验签，再进入余额/nonce 预检 | 继续沿用“先业务预检，最后再验签” | 未通过签名的请求不应消耗任何资产语义校验路径。 |
 | DEC-P2P-TXAUTH-004 | 先把 signed transaction model 上提到 shared payload / NodeRuntime 层，再继续补治理控制绑定 | 为了找不到公开入口而暂缓 claim/genesis/treasury/restricted-admin-registry 的提交层签名化 | 所有未来 submit surface 都会汇合到 `ConsensusActionPayloadEnvelope` 与 `NodeRuntime`，先收口汇合点收益最高。 |
 | DEC-P2P-TXAUTH-005 | `genesis/treasury/restricted-admin-registry` 现阶段先要求 signed controller metadata，不假装已完成 governance allowlist | 直接把 signed metadata 视为治理安全闭环完成 | 真实 controller slot、signer list 与 ceremony 仍在 freeze sheet/治理专题里待绑定，不能提前升级口径。 |

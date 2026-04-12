@@ -6,7 +6,7 @@
 审计轮次: 3
 ## 任务拆解（含 PRD-ID 映射）
 - [x] STRAUTH-0 (PRD-P2P-TXAUTH-001/002/003) [test_tier_required]: 新建“主链 Token 签名交易鉴权”专题 PRD / design / project，并接入 `doc/p2p` 模块主追踪。
-- [x] STRAUTH-1 (PRD-P2P-TXAUTH-001/002) [test_tier_required]: 由 `runtime_engineer` 为 `POST /v1/chain/transfer/submit` 实现 `public_key + signature` 鉴权、`awt:pk:` 账户绑定、控制面请求结构同步与定向回归。
+- [x] STRAUTH-1 (PRD-P2P-TXAUTH-001/002) [test_tier_required]: 由 `runtime_engineer` 为 `POST /v1/chain/transfer/submit` 实现 `public_key + signature` 鉴权、`oc:pk:` 账户绑定、控制面请求结构同步与定向回归。
 - [x] STRAUTH-2 (PRD-P2P-TXAUTH-001/003) [test_tier_required]: 由 `runtime_engineer` 继续把 `ClaimMainTokenVesting / InitializeMainTokenGenesis / DistributeMainTokenTreasury / UpdateRestrictedStarterClaimAdminRegistry / TopUpRestrictedStarterClaimLiveopsPool` 纳入统一 signed transaction envelope。
   - [x] STRAUTH-2A [test_tier_required]: 为 `ConsensusActionPayloadEnvelope` 增加主链 Token auth proof，并让 `NodeRuntime` 对 transfer/claim/genesis/treasury/restricted-admin-registry 在提交层强制验签。
   - [x] STRAUTH-2B [test_tier_required]: 将 controller-bound 资产动作的治理控制从“signed metadata”推进到正式 controller slot binding，并继续保留 signer allowlist / ceremony 后续任务。
@@ -21,7 +21,7 @@
 ## 当前切片结论
 - 已收口:
   - `TransferMainToken` 公开 HTTP submit 不再接受未签名请求。
-  - `from_account_id` 已绑定到 `awt:pk:<public_key_hex>`。
+  - `from_account_id` 已绑定到 `oc:pk:<public_key_hex>`。
   - `oasis7_web_launcher` 代理请求结构已同步到新字段集合。
   - `ConsensusActionPayloadEnvelope` 已支持 shared main-token auth proof，`NodeRuntime` 提交层已对 transfer/claim/genesis/treasury/restricted-admin-registry/liveops-pool-top-up 统一做 signed payload gating。
   - `InitializeMainTokenGenesis / DistributeMainTokenTreasury` 已进入正式 controller slot registry，submit-layer 不再接受任意 controller label。
