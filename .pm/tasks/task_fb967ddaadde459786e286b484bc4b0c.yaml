@@ -1,0 +1,23 @@
+task_uid: task_fb967ddaadde459786e286b484bc4b0c
+title: "Investigate post-onboarding logicalTime freeze in active-LLM retention lane"
+owner_role: runtime_engineer
+worktree_hint: oasis7-game-post-onboarding-freeze-root-cause
+execution_log_path: .pm/tasks/task_fb967ddaadde459786e286b484bc4b0c.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+doc_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+acceptance:
+  - "Runtime investigation explains why active-LLM formal retention samples can freeze logicalTime/eventSeq after entering post_onboarding and distinguishes true runtime stall from snapshot/UI-only regressions."
+  - "A regression test or focused runtime verification covers the identified freeze path and prevents the same logicalTime/eventSeq stall signature from reappearing unnoticed."
+  - "Task log and gameplay project docs capture the remaining relationship between the freeze blocker and the separate post_onboarding.establish_first_capability / 20% stall."
+handoff_to: []
+updated_at: 2026-04-12T13:07:35+08:00
+last_started_at: 2026-04-12T12:45:11+08:00
+last_closed_at: 2026-04-12T13:07:04+08:00

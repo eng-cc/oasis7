@@ -173,6 +173,8 @@ pub struct ViewerRuntimeLiveServer {
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
 }
 
+const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 3;
+
 impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
@@ -481,19 +483,23 @@ impl ViewerRuntimeLiveServer {
             ViewerControl::Pause => {
                 session.playing = false;
                 session.next_play_step_at = None;
+                session.transient_play_failures = 0;
             }
             ViewerControl::Play => {
                 session.playing = true;
                 session.next_play_step_at = None;
+                session.transient_play_failures = 0;
             }
             ViewerControl::Step { count } => {
                 session.playing = false;
                 session.next_play_step_at = None;
+                session.transient_play_failures = 0;
                 self.advance_runtime(session, writer, "step", count.max(1), request_id, true)?;
             }
             ViewerControl::Seek { tick } => {
                 session.playing = false;
                 session.next_play_step_at = None;
+                session.transient_play_failures = 0;
                 eprintln!(
                     "viewer runtime live: ignore seek control in live mode (target_tick={tick})"
                 );
@@ -521,6 +527,17 @@ impl ViewerRuntimeLiveServer {
             {
                 let (delta_logical_time, delta_event_seq) =
                     self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                if self.tolerate_background_play_gameplay_block(
+                    session,
+                    writer,
+                    action,
+                    "runtime play loop hit a transient LLM access failure; will retry on the next play tick",
+                    reason.clone(),
+                    delta_logical_time,
+                    delta_event_seq,
+                )? {
+                    return Ok(());
+                }
                 return self.block_gameplay_control(
                     session,
                     writer,
@@ -560,6 +577,17 @@ impl ViewerRuntimeLiveServer {
                                 "gameplay requires a configured and reachable LLM provider"
                                     .to_string()
                             });
+                            if self.tolerate_background_play_gameplay_block(
+                                session,
+                                writer,
+                                action,
+                                "runtime play loop hit a transient LLM decision failure; will retry on the next play tick",
+                                reason.clone(),
+                                delta_logical_time,
+                                delta_event_seq,
+                            )? {
+                                return Ok(());
+                            }
                             return self.block_gameplay_control(
                                 session,
                                 writer,
@@ -591,6 +619,7 @@ impl ViewerRuntimeLiveServer {
                     true,
                 );
             }
+            session.transient_play_failures = 0;
 
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
             let mut mapped_events = Vec::new();
@@ -717,6 +746,41 @@ impl ViewerRuntimeLiveServer {
         }
 
         Ok(())
+    }
+
+    fn tolerate_background_play_gameplay_block(
+        &mut self,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+        action: &str,
+        effect: &str,
+        reason: String,
+        delta_logical_time: u64,
+        delta_event_seq: u64,
+    ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        let confirmed_runtime_progress = self.world.state().time > self.initial_world_time;
+        let is_background_play = action == "play" && session.playing;
+        if !is_background_play || !confirmed_runtime_progress {
+            return Ok(false);
+        }
+        session.transient_play_failures = session.transient_play_failures.saturating_add(1);
+        if session.transient_play_failures >= BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET {
+            return Ok(false);
+        }
+        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+            action: action.to_string(),
+            stage: "blocked".to_string(),
+            effect: effect.to_string(),
+            reason: Some(reason),
+            hint: Some(LLM_GAMEPLAY_REQUIRED_HINT.to_string()),
+            delta_logical_time,
+            delta_event_seq,
+        });
+        if session.subscribed.contains(&ViewerStream::Snapshot) {
+            let snapshot = self.compat_snapshot();
+            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+        }
+        Ok(true)
     }
 
     fn flush_pending_virtual_events(
