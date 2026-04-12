@@ -1,4 +1,56 @@
 #[test]
+fn schedule_recipe_accepts_smelter_recipe_on_smelter_factory() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 0;
+    config.economy.recipe_hardware_cost_per_batch = 0;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0.0, 0.0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    kernel.submit_action(Action::BuildFactory {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-smelter".to_string(),
+        },
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+
+    kernel.submit_action(Action::ScheduleRecipe {
+        owner: ResourceOwner::Agent {
+            agent_id: "agent-smelter".to_string(),
+        },
+        factory_id: "factory.smelter.alpha".to_string(),
+        recipe_id: "recipe.smelter.iron_ingot".to_string(),
+        batches: 1,
+    });
+    let event = kernel.step().expect("schedule smelter recipe");
+    match event.kind {
+        WorldEventKind::RecipeScheduled {
+            recipe_id,
+            finished_product_id,
+            ..
+        } => {
+            assert_eq!(recipe_id, "recipe.smelter.iron_ingot");
+            assert_eq!(finished_product_id, "iron_ingot");
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+}
+
+#[test]
 fn schedule_recipe_rejects_incompatible_factory_kind() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;

@@ -139,22 +139,21 @@ fn completion_result_from_sdk_stream_events_uses_completed_response() {
 
 #[test]
 fn completion_result_from_sdk_stream_events_uses_output_item_done_when_completed_output_is_empty() {
-    let output_item_done =
-        serde_json::from_value::<async_openai::types::responses::ResponseStreamEvent>(
-            serde_json::json!({
-                "type": "response.output_item.done",
-                "sequence_number": 14,
-                "output_index": 0,
-                "item": {
-                    "type": "function_call",
-                    "call_id": "call_decision",
-                    "name": OPENAI_TOOL_AGENT_SUBMIT_DECISION,
-                    "arguments": "{\"decision\":\"wait_ticks\",\"ticks\":2}",
-                    "status": "completed"
-                }
-            }),
-        )
-        .expect("output item done event");
+    let output_item_done = serde_json::from_value::<
+        async_openai::types::responses::ResponseStreamEvent,
+    >(serde_json::json!({
+        "type": "response.output_item.done",
+        "sequence_number": 14,
+        "output_index": 0,
+        "item": {
+            "type": "function_call",
+            "call_id": "call_decision",
+            "name": OPENAI_TOOL_AGENT_SUBMIT_DECISION,
+            "arguments": "{\"decision\":\"wait_ticks\",\"ticks\":2}",
+            "status": "completed"
+        }
+    }))
+    .expect("output item done event");
     let completed = serde_json::from_value::<async_openai::types::responses::ResponseStreamEvent>(
         serde_json::json!({
             "type": "response.completed",
@@ -477,6 +476,51 @@ fn llm_agent_parse_build_factory_action() {
             factory_kind: "factory.assembler.mk1".to_string(),
         })
     );
+}
+
+#[test]
+fn llm_agent_infers_build_factory_kind_from_supported_factory_id() {
+    let client = MockClient {
+        output: Some(
+            "{\"decision\":\"build_factory\",\"owner\":\"self\",\"location_id\":\"loc-1\",\"factory_id\":\"factory.smelter.mk1\"}".to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let decision = behavior.decide(&make_observation());
+
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::BuildFactory {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            location_id: "loc-2".to_string(),
+            factory_id: "factory.smelter.mk1".to_string(),
+            factory_kind: "factory.smelter.mk1".to_string(),
+        })
+    );
+}
+
+#[test]
+fn llm_agent_rejects_build_factory_without_factory_kind() {
+    let client = MockClient {
+        output: Some(
+            "{\"decision\":\"build_factory\",\"owner\":\"self\",\"location_id\":\"loc-1\",\"factory_id\":\"factory.alpha\"}".to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    let decision = behavior.decide(&make_observation());
+
+    assert_eq!(decision, AgentDecision::Wait);
+
+    let trace = behavior.take_decision_trace().expect("trace exists");
+    assert!(trace
+        .parse_error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("build_factory missing `factory_kind`"));
 }
 
 #[test]

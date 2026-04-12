@@ -835,7 +835,12 @@ fn parse_llm_decision_value_with_error(
             }
             let factory_kind = parsed
                 .factory_kind
-                .unwrap_or_else(|| "factory.assembler.mk1".to_string());
+                .unwrap_or_else(|| match factory_id.trim() {
+                    "factory.smelter.mk1"
+                    | "factory.assembler.mk1"
+                    | "factory.power.radiation.mk1" => factory_id.clone(),
+                    _ => String::new(),
+                });
             if factory_kind.trim().is_empty() {
                 return (
                     AgentDecision::Wait,

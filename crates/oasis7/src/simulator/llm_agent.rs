@@ -190,7 +190,10 @@ const DEFAULT_MINE_ELECTRICITY_COST_PER_KG: i64 = 1;
 const DEFAULT_MINE_DEPLETED_LOCATION_COOLDOWN_TICKS: u64 = 6;
 const DEFAULT_MINE_FAILURE_STREAK_WINDOW_TICKS: u64 = 24;
 const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
-const TRACKED_RECIPE_IDS: [&str; 3] = [
+const TRACKED_RECIPE_IDS: [&str; 6] = [
+    "recipe.smelter.iron_ingot",
+    "recipe.smelter.copper_wire",
+    "recipe.smelter.polymer_resin",
     "recipe.assembler.control_chip",
     "recipe.assembler.motor_mk1",
     "recipe.assembler.logistics_drone",
@@ -224,6 +227,16 @@ struct RecipeCoverageProgress {
 }
 
 impl RecipeCoverageProgress {
+    fn tracked_factory_kind(recipe_id: &str) -> Option<&'static str> {
+        match recipe_id.trim() {
+            recipe_id if recipe_id.starts_with("recipe.smelter.") => Some("factory.smelter.mk1"),
+            recipe_id if recipe_id.starts_with("recipe.assembler.") => {
+                Some("factory.assembler.mk1")
+            }
+            _ => None,
+        }
+    }
+
     fn is_tracked(recipe_id: &str) -> bool {
         TRACKED_RECIPE_IDS
             .iter()
@@ -249,11 +262,16 @@ impl RecipeCoverageProgress {
             .collect()
     }
 
-    fn next_uncovered_recipe_excluding(&self, current_recipe_id: &str) -> Option<String> {
+    fn next_uncovered_recipe_for_factory_kind_excluding(
+        &self,
+        factory_kind: &str,
+        current_recipe_id: &str,
+    ) -> Option<String> {
         let current_recipe_id = current_recipe_id.trim();
-        self.missing_recipe_ids()
-            .into_iter()
-            .find(|recipe_id| recipe_id.as_str() != current_recipe_id)
+        self.missing_recipe_ids().into_iter().find(|recipe_id| {
+            recipe_id.as_str() != current_recipe_id
+                && Self::tracked_factory_kind(recipe_id.as_str()) == Some(factory_kind)
+        })
     }
 
     fn summary_json(&self) -> serde_json::Value {
@@ -954,6 +972,7 @@ pub struct LlmAgentBehavior<C: LlmCompletionClient> {
     last_action_summary: Option<PromptLastActionSummary>,
     pending_decision_rewrite: Option<DecisionRewriteReceipt>,
     known_factory_locations: BTreeMap<String, String>,
+    known_factory_kinds_by_id: BTreeMap<String, String>,
     known_factory_kind_aliases: BTreeMap<String, String>,
     known_module_artifacts: BTreeMap<String, KnownModuleArtifactRecord>,
     known_installed_modules: BTreeMap<String, KnownInstalledModuleRecord>,
@@ -1009,6 +1028,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             last_action_summary: None,
             pending_decision_rewrite: None,
             known_factory_locations: BTreeMap::new(),
+            known_factory_kinds_by_id: BTreeMap::new(),
             known_factory_kind_aliases: BTreeMap::new(),
             known_module_artifacts: BTreeMap::new(),
             known_installed_modules: BTreeMap::new(),
