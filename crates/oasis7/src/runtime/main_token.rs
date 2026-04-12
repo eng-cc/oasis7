@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_MAIN_TOKEN_SYMBOL: &str = "AWT";
+const DEFAULT_MAIN_TOKEN_SYMBOL: &str = "OC";
 const DEFAULT_MAIN_TOKEN_DECIMALS: u8 = 9;
 const DEFAULT_MAIN_TOKEN_BASE_RATE_BPS: u32 = 400;
 const DEFAULT_MAIN_TOKEN_MIN_RATE_BPS: u32 = 200;
@@ -16,7 +16,7 @@ const DEFAULT_MAIN_TOKEN_GAS_BASE_FEE_BURN_BPS: u32 = 3_000;
 const DEFAULT_MAIN_TOKEN_SLASH_BURN_BPS: u32 = 5_000;
 const DEFAULT_MAIN_TOKEN_MODULE_FEE_BURN_BPS: u32 = 2_000;
 pub const MAIN_TOKEN_BPS_DENOMINATOR: u32 = 10_000;
-pub const MAIN_TOKEN_NODE_ACCOUNT_PREFIX: &str = "awt:pk:";
+pub const MAIN_TOKEN_NODE_ACCOUNT_PREFIX: &str = "oc:pk:";
 
 pub const MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD: &str = "staking_reward_pool";
 pub const MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD: &str = "node_service_reward_pool";

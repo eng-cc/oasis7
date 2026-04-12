@@ -231,7 +231,7 @@ else
       if .slot_id == $slot and .signer_id == $signer then
         .signer_id = $replacement_signer
         | .public_key_hex = $replacement_public_key
-        | .awt_account_id = ("awt:pk:" + $replacement_public_key)
+        | .oc_account_id = ("oc:pk:" + $replacement_public_key)
       else
         .
       end

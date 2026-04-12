@@ -12,7 +12,7 @@ use super::WebTransferSubmitRequest;
 #[cfg(target_arch = "wasm32")]
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 #[cfg(target_arch = "wasm32")]
-const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:";
+const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 #[cfg(not(target_arch = "wasm32"))]
@@ -35,18 +35,17 @@ struct TransferAuthSigner {
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug, Serialize)]
 struct TransferActionData<'a> {
-    amount: u64,
     from_account_id: &'a str,
-    nonce: u64,
     to_account_id: &'a str,
+    amount: u64,
+    nonce: u64,
 }
 
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug, Serialize)]
-struct TransferActionEnvelope<'a> {
-    data: TransferActionData<'a>,
-    #[serde(rename = "type")]
-    action_type: &'static str,
+#[serde(tag = "type", content = "data")]
+enum TransferActionEnvelope<'a> {
+    TransferMainToken(TransferActionData<'a>),
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -236,7 +235,7 @@ fn sign_transfer_request(
             "main token auth signer public key does not match private key: expected={expected_public_key} actual={public_key}"
         ));
     }
-    let expected_account_id = format!("awt:pk:{public_key}");
+    let expected_account_id = format!("oc:pk:{public_key}");
     if from_account_id.trim() != expected_account_id {
         return Err(format!(
             "main token auth account_id does not match signer public key: expected={expected_account_id} actual={}",
@@ -274,15 +273,12 @@ fn build_transfer_signing_payload(
         operation: "transfer_main_token",
         account_id: from_account_id,
         public_key,
-        action: TransferActionEnvelope {
-            data: TransferActionData {
-                amount,
-                nonce,
-                from_account_id,
-                to_account_id,
-            },
-            action_type: "TransferMainToken",
-        },
+        action: TransferActionEnvelope::TransferMainToken(TransferActionData {
+            from_account_id,
+            to_account_id,
+            amount,
+            nonce,
+        }),
     };
     serde_json::to_vec(&envelope)
         .map_err(|err| format!("encode main token auth signing payload failed: {err}"))
@@ -321,7 +317,6 @@ mod tests {
     };
     use oasis7::runtime::Action;
     use serde::Serialize;
-    use serde_json::Value as JsonValue;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -351,17 +346,16 @@ mod tests {
 
     #[derive(Debug, Serialize)]
     struct WasmTransferActionData<'a> {
-        amount: u64,
         from_account_id: &'a str,
-        nonce: u64,
         to_account_id: &'a str,
+        amount: u64,
+        nonce: u64,
     }
 
     #[derive(Debug, Serialize)]
-    struct WasmTransferActionEnvelope<'a> {
-        data: WasmTransferActionData<'a>,
-        #[serde(rename = "type")]
-        action_type: &'static str,
+    #[serde(tag = "type", content = "data")]
+    enum WasmTransferActionEnvelope<'a> {
+        TransferMainToken(WasmTransferActionData<'a>),
     }
 
     #[derive(Debug, Serialize)]
@@ -374,12 +368,26 @@ mod tests {
     }
 
     #[derive(Debug, Serialize)]
+    struct NativeTransferActionData<'a> {
+        from_account_id: &'a str,
+        to_account_id: &'a str,
+        amount: u64,
+        nonce: u64,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(tag = "type", content = "data")]
+    enum NativeTransferActionEnvelope<'a> {
+        TransferMainToken(NativeTransferActionData<'a>),
+    }
+
+    #[derive(Debug, Serialize)]
     struct NativeMainTokenTransferSigningEnvelope<'a> {
         version: u8,
         operation: &'static str,
         account_id: &'a str,
         public_key: &'a str,
-        action: &'a JsonValue,
+        action: NativeTransferActionEnvelope<'a>,
     }
 
     #[test]
@@ -408,7 +416,7 @@ mod tests {
     #[test]
     fn build_signed_web_transfer_submit_request_includes_auth_fields() {
         let (public_key, private_key) = test_signer(21);
-        let from_account_id = format!("awt:pk:{public_key}");
+        let from_account_id = format!("oc:pk:{public_key}");
         let action = Action::TransferMainToken {
             from_account_id: from_account_id.clone(),
             to_account_id: "protocol:treasury".to_string(),
@@ -445,7 +453,7 @@ mod tests {
     #[test]
     fn wasm_transfer_signing_payload_matches_runtime_helper_shape() {
         let (public_key, private_key) = test_signer(23);
-        let from_account_id = format!("awt:pk:{public_key}");
+        let from_account_id = format!("oc:pk:{public_key}");
         let action = Action::TransferMainToken {
             from_account_id: from_account_id.clone(),
             to_account_id: "protocol:treasury".to_string(),
@@ -460,13 +468,17 @@ mod tests {
         )
         .expect("native proof");
 
-        let native_action_json = serde_json::to_value(&action).expect("native action json");
         let native_payload = serde_json::to_vec(&NativeMainTokenTransferSigningEnvelope {
             version: 1,
             operation: "transfer_main_token",
             account_id: from_account_id.as_str(),
             public_key: public_key.as_str(),
-            action: &native_action_json,
+            action: NativeTransferActionEnvelope::TransferMainToken(NativeTransferActionData {
+                from_account_id: from_account_id.as_str(),
+                to_account_id: "protocol:treasury",
+                amount: 7,
+                nonce: 9,
+            }),
         })
         .expect("native payload");
 
@@ -475,15 +487,12 @@ mod tests {
             operation: "transfer_main_token",
             account_id: from_account_id.as_str(),
             public_key: public_key.as_str(),
-            action: WasmTransferActionEnvelope {
-                data: WasmTransferActionData {
-                    amount: 7,
-                    from_account_id: from_account_id.as_str(),
-                    nonce: 9,
-                    to_account_id: "protocol:treasury",
-                },
-                action_type: "TransferMainToken",
-            },
+            action: WasmTransferActionEnvelope::TransferMainToken(WasmTransferActionData {
+                from_account_id: from_account_id.as_str(),
+                to_account_id: "protocol:treasury",
+                amount: 7,
+                nonce: 9,
+            }),
         })
         .expect("wasm payload");
 
@@ -494,7 +503,7 @@ mod tests {
 
         let signature = proof.signature.expect("signature");
         let signature_hex = signature
-            .strip_prefix("awttransferauth:v1:")
+            .strip_prefix("octransferauth:v1:")
             .expect("transfer prefix");
         let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(
             &hex::decode(public_key.as_str())

@@ -3,7 +3,7 @@ fn main_token_queries_return_defaults_when_uninitialized() {
     let world = World::new();
 
     let config = world.main_token_config();
-    assert_eq!(config.symbol, "AWT");
+    assert_eq!(config.symbol, "OC");
     assert_eq!(config.decimals, 9);
     assert_eq!(config.initial_supply, 0);
     assert_eq!(world.main_token_liquid_balance("missing-account"), 0);
@@ -19,7 +19,7 @@ fn main_token_queries_return_defaults_when_uninitialized() {
 fn main_token_snapshot_roundtrip_persists_state() {
     let mut world = World::new();
     world.set_main_token_config(MainTokenConfig {
-        symbol: "AWT".to_string(),
+        symbol: "OC".to_string(),
         decimals: 9,
         initial_supply: 1_000_000_000,
         max_supply: Some(5_000_000_000),

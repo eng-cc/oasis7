@@ -14,7 +14,7 @@
   - SC-4: 创世液态流通硬上限 `500 bps`；首 12 个月非团队外部释放目标 `100~200 bps`、硬上限 `500 bps`。
   - SC-5: 早期奖励只允许按可审计贡献发放，不允许 `play-to-earn`、`login reward`、`time played = token` 或对外宣传“来玩就有币”。
   - SC-6: `TIGR-5` 必须把创世参数草案收成正式执行清单，固定每个 bucket 的 slot id、控制主体、签名规则、runtime 落点、amount rounding 规则与 pre-mint freeze gate。
-  - SC-7: 当前链上代币的正式产品命名固定为“绿洲币 / Oasis Coin”；该命名与 runtime `main_token.symbol` / ticker 分层治理，当前默认 symbol 仍为 `AWT`。
+  - SC-7: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -57,7 +57,7 @@
 | 安全储备 | `bucket_id=security_reserve_emergency`、`allocation_bps=1000` | 仅用于安全事故、应急补偿或协议防御 | `frozen -> emergency_only` | 占总量 `10%`；常态不可外发 | 仅受限治理或安全委员会可动用 |
 | 基金会/运营储备 | `bucket_id=foundation_ops_reserve`、`allocation_bps=500`、`recipient=ops multisig` | 用于基础运营与合规/基础设施费用 | `frozen -> vested_ops` | 占总量 `5%`；建议同步锁仓 | 仅运营多签可按规则动用 |
 | 单人直持边界 | `founder_direct_target_bps=500~1000`、`founder_direct_cap_bps=1500` | 创世前检查任一自然人直接受益份额是否超限 | `candidate -> approved/rejected` | 超过 `15%` 直接拒绝；目标区间 `5%~10%` | producer 与 QA 共同审计 |
-| 正式命名与 symbol 边界 | `display_name_cn=绿洲币`、`display_name_en=Oasis Coin`、`symbol=AWT`（当前） | 冻结 public naming，并在文档/运营口径中统一使用正式产品名；symbol 继续作为 runtime/ticker 语义单独治理 | `unnamed -> named -> consistent` | 正式产品名固定；若未来要调整 `symbol`，必须另开专题评估 API/UI/兼容性影响 | `producer_system_designer` 定义口径；runtime/viewer/liveops 只按边界消费 |
+| 正式命名、symbol 与账户前缀 | `display_name_cn=绿洲币`、`display_name_en=Oasis Coin`、`symbol=OC`、`account_prefix=oc:pk:` | 冻结 public naming，并统一 runtime/account 当前真值与文档/运营口径 | `unnamed -> named -> migrated` | 正式产品名固定，当前 runtime symbol 为 `OC`，公钥派生账户前缀为 `oc:pk:`；若未来再次调整，必须另开专题评估 API/UI/兼容性影响 | `producer_system_designer` 定义口径；runtime/viewer/liveops 只按边界消费 |
 - Acceptance Criteria:
   - AC-1: 创世分配表固定为以下比例，且总和必须为 `10000 bps`：
     - 核心团队长期锁仓 `2000 bps`
@@ -78,7 +78,7 @@
   - AC-10: `TIGR-4` 必须冻结当前执行路径为“`early_contributor_reward_reserve` 在 limited preview 期间保持 `protocol:early-contributor-reward` 多签治理执行，不并入 `ecosystem_pool`”；只有在真实奖励轮次、审计台账与治理成熟度都跑出来后，才允许另开专题重审是否合并。
   - AC-11: `TIGR-5` 必须输出正式执行清单，至少包含 `recipient_slot_id/controller_slot_id/signer_policy/runtime_target/allocated_amount_rule/freeze_status` 六类字段，并明确当前哪些 slot 仍待真实地址绑定。
   - AC-12: 创世金额换算必须固定为 runtime 真值：先按 `floor(initial_supply * ratio_bps / 10000)` 计算每个 bucket 的 `allocated_amount`，再按 `ratio_bps` 降序、`bucket_id` 升序分配 remainder；执行清单不得使用与 runtime 不一致的手工舍入规则。
-  - AC-13: token 相关活跃文档、运营口径与模块入口必须统一把当前链上代币称为“绿洲币 / Oasis Coin”；`AWT` 仅允许保留在 runtime `symbol` / ticker 语境，不能再被当作正式产品名单独对外使用。
+  - AC-13: token 相关活跃文档、运营口径、模块入口与 runtime/account 派生实现必须统一把当前链上代币称为“绿洲币 / Oasis Coin”，并以 `OC` / `oc:pk:` 作为当前 symbol/account 真值；`AWT` / `awt:pk:` 仅允许保留在历史语境或兼容说明中。
 - Non-Goals:
   - 本专题不决定总供应量绝对数值（如 `1e8` 或 `1e9`），只冻结比例和控制边界。
   - 不在本专题给出法律意见、证券属性判断、税务结论或上市计划。
@@ -125,7 +125,7 @@
   - NFR-TOKEN-INIT-5: 任何早期奖励发放记录都必须可追溯到贡献证据、审批人、数量和发放日期。
   - NFR-TOKEN-INIT-6: 若后续需要修改上述比例或控盘上限，必须新开专题 PRD，不允许只在聊天、海报或运营帖中变更口径。
   - NFR-TOKEN-INIT-7: limited preview 阶段任何 early contributor reward 执行都必须走独立 reward reserve 审批链，`ecosystem_pool` 的治理 grant 流程不得被拿来替代或掩盖贡献奖励发放。
-  - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker 与 runtime 字段语义必须分层表达；未经过专题评审，不得把“命名冻结”外推成“ticker 已改”“symbol 已迁移”或“客户端/API 已自动切换”。
+  - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker、账户前缀与 runtime 字段语义必须保持单一当前真值；现行口径固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`，不得再把旧值写成当前实现。
 - Security & Privacy: 创世分配配置、控制账户与奖励记录必须可审计；安全储备不得与运营或个人钱包混用；涉及个人身份映射时只记录必要的链上账户与贡献证据，不在文档中暴露敏感个人信息。
 
 ## 5. Risks & Roadmap
@@ -156,4 +156,5 @@
 | DEC-TOKEN-INIT-004 | 协议奖励池与项目战略控制分开记账和对外表述 | 将 treasury custody 与团队库存混用 | 避免治理资产与个人/团队资产混淆。 |
 | DEC-TOKEN-INIT-005 | limited preview 期间保持 `early_contributor_reward_reserve` 独立多签治理执行，不并入 `ecosystem_pool` | 现在就把贡献奖励储备并入 `ecosystem_pool` | 当前 runtime 创世语义仍以 custody account 为主，且真实奖励轮次与治理成熟度尚不足以支撑立即合并。 |
 | DEC-TOKEN-INIT-006 | 用 slot-based 正式执行清单冻结创世参数，并把真实地址绑定留到 mint 前最后一步 | 继续只保留逻辑草案，等执行当天再临场补账号与舍入 | 创世参数一旦进入执行，需要预先冻结 slot、签名要求、runtime 落点和 rounding 规则，减少临场错误面。 |
-| DEC-TOKEN-INIT-007 | 当前链上代币正式产品名冻结为“绿洲币 / Oasis Coin”，`AWT` 继续仅表示 runtime symbol/ticker | 继续让 `AWT` 同时承担产品名与 symbol，或在未评审兼容性影响前直接改 runtime symbol | 产品名与 ticker 的治理半径不同；先冻结 public naming，既能统一运营/文档口径，也能避免误触 API、客户端和测试兼容面。 |
+| DEC-TOKEN-INIT-007 | 先冻结当前链上代币正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime symbol/account 真值 | 在未评审兼容性影响前直接改 runtime symbol / 账户前缀 | 产品名、ticker 与账户派生的治理半径不同；先冻结 public naming，才能把后续 runtime 迁移收成独立可审计任务。 |
+| DEC-TOKEN-INIT-008 | 在独立迁移专题中，把当前 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值 | public naming 已冻结后，继续双轨会让 runtime、API、viewer/client 与 liveops 口径长期分叉；应尽快完成单一当前真值迁移。 |

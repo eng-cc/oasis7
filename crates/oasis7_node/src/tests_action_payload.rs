@@ -15,12 +15,12 @@ use serde_json::{json, Value as JsonValue};
 #[path = "tests_action_payload_consensus_auth.rs"]
 mod consensus_auth_tests;
 
-const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "awttransferauth:v1:";
-const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "awtclaimauth:v1:";
-const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "awtgenesisauth:v1:";
-const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "awttreasuryauth:v1:";
+const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
+const MAIN_TOKEN_CLAIM_AUTH_SIGNATURE_V1_PREFIX: &str = "occlaimauth:v1:";
+const MAIN_TOKEN_GENESIS_AUTH_SIGNATURE_V1_PREFIX: &str = "ocgenesisauth:v1:";
+const MAIN_TOKEN_TREASURY_AUTH_SIGNATURE_V1_PREFIX: &str = "octreasuryauth:v1:";
 const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str =
-    "awtrestrictedgrantadminauth:v1:";
+    "ocrestrictedgrantadminauth:v1:";
 const DEFAULT_GENESIS_CONTROLLER_SLOT: &str = "msig.genesis.v1";
 const DEFAULT_ECOSYSTEM_TREASURY_CONTROLLER_SLOT: &str = "msig.ecosystem_governance.v1";
 
@@ -187,7 +187,7 @@ fn test_main_token_action_operation(action_kind: &str) -> &'static str {
 }
 
 fn main_token_account_id_from_public_key(public_key_hex: &str) -> String {
-    format!("awt:pk:{}", public_key_hex.trim().to_ascii_lowercase())
+    format!("oc:pk:{}", public_key_hex.trim().to_ascii_lowercase())
 }
 
 fn test_main_token_signing_action(action: &JsonValue) -> TestMainTokenActionSigningPayload<'_> {

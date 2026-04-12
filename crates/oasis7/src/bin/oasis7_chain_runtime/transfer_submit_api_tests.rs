@@ -181,7 +181,7 @@ fn serialize_transfer_request(request: &ChainTransferSubmitRequest) -> Vec<u8> {
 fn seed_world_for_explorer_p1(temp_dir: &Path) {
     let mut state = WorldState::default();
     state.main_token_config = MainTokenConfig {
-        symbol: "AWT".to_string(),
+        symbol: "OC".to_string(),
         decimals: 9,
         ..MainTokenConfig::default()
     };
@@ -282,16 +282,16 @@ fn verify_transfer_submit_request_auth_accepts_live_browser_captured_signature()
     let _guard = lock_transfer_test_state();
     let request = ChainTransferSubmitRequest {
         from_account_id:
-            "awt:pk:fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3"
+            "oc:pk:fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3"
                 .to_string(),
-        to_account_id: "awt:pk:1111111111111111111111111111111111111111111111111111111111111111"
+        to_account_id: "oc:pk:1111111111111111111111111111111111111111111111111111111111111111"
             .to_string(),
         amount: 1,
         nonce: 1,
         public_key: "fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3"
             .to_string(),
         signature:
-            "awttransferauth:v1:72145a059bbadeec75091f9aeca47d0ee0c7c1682e311785ed808e6f6125ad5918df0c05a6fdc3cd8bb8065fae31e30eca397d4dd0ede44fde78d4dac5998c06"
+            "octransferauth:v1:9200ab505c80b5d27fb1a4e79624a083f2047669404d8c7d562e7d6b7da9154fcf7b85e96ab4c02bd5f2910845e4a7ce791d87398e0e3b9004bb022749d6830b"
                 .to_string(),
     };
     let body = serialize_transfer_request(&request);
@@ -535,7 +535,7 @@ fn transfer_submit_handler_rejects_invalid_signature() {
     )));
 
     let mut request = build_signed_transfer_request(13, 14, 7, 2);
-    request.signature = format!("{}{}", "awttransferauth:v1:", "f".repeat(128));
+    request.signature = format!("{}{}", "octransferauth:v1:", "f".repeat(128));
     let body = serde_json::to_string(&request).expect("serialize request");
 
     let (mut server_stream, mut client_stream) = tcp_stream_pair();

@@ -6,7 +6,7 @@
 审计轮次: 2
 ## 设计目标
 - 在不重做整个资产动作协议的前提下，先关闭当前公开 `transfer submit` 面的未签名提交漏洞。
-- 复用现有 `ed25519` 原语与 `awt:pk:<public_key_hex>` 账户派生规则，把请求级鉴权前置到 HTTP submit 入口。
+- 复用现有 `ed25519` 原语与 `oc:pk:<public_key_hex>` 账户派生规则，把请求级鉴权前置到 HTTP submit 入口。
 - 把 signed transaction model 上提到 shared `ConsensusActionPayloadEnvelope` / `NodeRuntime` 提交层，避免未来新 submit surface 再次绕过。
 - 明确这是统一 signed transaction model 的推进切片；`STRAUTH-2B1` 只做 controller slot binding，`STRAUTH-2B2` 再把 genesis/treasury 升级到 threshold signer allowlist enforcement，但仍不伪造 ceremony 已完成。
 - 在 `STRAUTH-3A` 把 `oasis7_client_launcher` 的 Web/native 转账窗口补到“本地产签再提交”，并让 `oasis7_web_launcher` 为 wasm 注入受信本地 signer bootstrap。
@@ -14,7 +14,7 @@
 ## 请求契约
 | 字段 | 含义 | 规则 |
 | --- | --- | --- |
-| `from_account_id` | 主链转出账户 | 必须等于 `awt:pk:<normalized_public_key_hex>` |
+| `from_account_id` | 主链转出账户 | 必须等于 `oc:pk:<normalized_public_key_hex>` |
 | `to_account_id` | 主链转入账户 | 沿用现有账户格式规则 |
 | `amount` | 转账数量 | `> 0` |
 | `nonce` | 转账 nonce | `> 0`，通过现有 runtime 规则做 anti-replay |
@@ -85,8 +85,8 @@
 ## 提交层校验规则
 | action | 提交层规则 | 当前安全结论 |
 | --- | --- | --- |
-| `TransferMainToken` | `auth.account_id == from_account_id` 且必须等于 `awt:pk:<public_key_hex>` | 账户绑定成立 |
-| `ClaimMainTokenVesting` | `auth.account_id == beneficiary`；若 beneficiary 为 `awt:pk:`，需校验公钥派生；若为 `protocol:*` 等命名账户，只要求签名与 account_id 一致 | 已签名化，但命名控制账户的真实 controller binding 仍待治理专题 |
+| `TransferMainToken` | `auth.account_id == from_account_id` 且必须等于 `oc:pk:<public_key_hex>` | 账户绑定成立 |
+| `ClaimMainTokenVesting` | `auth.account_id == beneficiary`；若 beneficiary 为 `oc:pk:`，需校验公钥派生；若为 `protocol:*` 等命名账户，只要求签名与 account_id 一致 | 已签名化，但命名控制账户的真实 controller binding 仍待治理专题 |
 | `InitializeMainTokenGenesis` | 必须带 signed controller metadata，`auth.account_id` 命中 `genesis_controller_account_id`，并通过该 slot 的 signer allowlist / threshold 校验 | 已完成代码级 signer policy enforcement，但真实创世 ceremony 仍待治理专题 |
 | `DistributeMainTokenTreasury` | 必须带 signed controller metadata，`auth.account_id` 命中 `bucket_id -> controller slot`，并通过该 slot 的 signer allowlist / threshold 校验 | 已完成代码级 signer policy enforcement，但真实 treasury governance ceremony 仍待治理专题 |
 

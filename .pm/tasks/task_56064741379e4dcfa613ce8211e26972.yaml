@@ -1,0 +1,25 @@
+task_uid: task_56064741379e4dcfa613ce8211e26972
+title: "彻底迁移链上代币正式命名与 symbol 到绿洲币 / Oasis Coin"
+owner_role: runtime_engineer
+worktree_hint: p2p-oasis-coin-full-migration
+execution_log_path: .pm/tasks/task_56064741379e4dcfa613ce8211e26972.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+  - doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md
+doc_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md
+  - doc/p2p/project.md
+related_prd:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+  - doc/p2p/prd.md
+acceptance:
+  - "当前链上代币在 runtime 主配置、对外 API、viewer/client 展示与测试断言中统一迁移到绿洲币 / Oasis Coin 的正式命名与新 symbol，不再把 AWT 当现行真值"
+  - "文档、PRD、project、release/manual 以及代码注释中与当前 token 真值相关的 AWT 残留完成清理；必要时仅保留迁移兼容或历史语境说明"
+  - "required 验证、文档治理、PM close 与 snapshot review 全部通过"
+handoff_to: []
+updated_at: 2026-04-12T11:23:27+08:00
+last_started_at: 2026-04-12T00:33:54+08:00
+last_closed_at: 2026-04-12T11:23:18+08:00

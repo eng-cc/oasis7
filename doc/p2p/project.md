@@ -302,7 +302,7 @@
     - `git diff --check`
 - [x] TASK-P2P-031 (PRD-P2P-013) [test_tier_required]: 新增“主链 Token 初始分配与早期贡献奖励口径”专题 PRD / design / project，并把项目战略控制比例、单人直持上限、低流通与 contribution-based reward 口径纳入模块追踪。
 - [x] TASK-P2P-032 (PRD-P2P-014) [test_tier_required]: 新增“主链/共识密码学安全基线评估”专题 PRD / design / project，并把当前整体 verdict、系统级 blocker 与 mainnet-ready 路线图纳入模块追踪。
-- [x] TASK-P2P-033 (PRD-P2P-015) [test_tier_required]: 新增“主链 Token 签名交易鉴权”专题 PRD / design / project，并收口 `POST /v1/chain/transfer/submit` 的 `public_key/signature` 鉴权、`awt:pk:` 账户绑定与控制面请求结构同步。
+- [x] TASK-P2P-033 (PRD-P2P-015) [test_tier_required]: 新增“主链 Token 签名交易鉴权”专题 PRD / design / project，并收口 `POST /v1/chain/transfer/submit` 的 `public_key/signature` 鉴权与账户绑定、控制面请求结构同步；当前现行账户前缀真值已由 `TASK-P2P-046` 统一迁移到 `oc:pk:`。
 - [x] TASK-P2P-034 (PRD-P2P-016) [test_tier_required]: 新增“主链 mainnet-grade readiness 硬化路线”专题 PRD / design / project，并把 post-STRAUTH 剩余的 signer custody、治理 signer、创世 ceremony 与 public claims gate 纳入模块追踪。
 - [x] TASK-P2P-035 (PRD-P2P-017) [test_tier_required]: 新增“生产级 signer custody / keystore 基线”专题 PRD / design / project，并冻结 node/viewer/governance signer 的 preview-only bootstrap 边界、rotation/revocation/audit gate 与环境策略。
 - [x] TASK-P2P-036 (PRD-P2P-018) [test_tier_required]: 新增“治理 signer 外部化与轮换门禁”专题 PRD / design / project，并冻结 finality/controller signer 的 preview/local 真值边界、externalized source-of-truth、failover/rotation/revocation 与 operator ownership。
@@ -413,7 +413,7 @@
     - `./scripts/check-rust-file-size.sh`
     - `cargo fmt --all -- --check`
     - `./scripts/ci-tests.sh required`
-- [x] TASK-P2P-045 (PRD-P2P-013) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，不把现有 `AWT` symbol 误当成自动随本次命名改写的实现字段。
+- [x] TASK-P2P-045 (PRD-P2P-013) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，不把当时旧 runtime symbol 误当成会自动随本次命名改写的实现字段。
   - 产物文件:
     - `doc/p2p/prd.md`
     - `doc/p2p/project.md`
@@ -424,6 +424,40 @@
     - `.pm/tasks/task_bed6ca16c4424d7e9b544eeb71c48a8e.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "绿洲币|Oasis Coin|symbol|AWT" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/token/mainchain-token-allocation-mechanism.prd.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+- [x] TASK-P2P-046 (PRD-P2P-013/015) [test_tier_required]: 将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，清理 `AWT` / `awt:pk:` 的现行真值残留。
+  - 产物文件:
+    - `doc/p2p/README.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+    - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
+    - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.design.md`
+    - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.project.md`
+    - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
+    - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.design.md`
+    - `crates/oasis7/src/runtime/main_token.rs`
+    - `crates/oasis7/src/consensus_action_payload.rs`
+    - `crates/oasis7_node/src/node_runtime_core.rs`
+    - `crates/oasis7_client_launcher/src/transfer_auth.rs`
+    - `crates/oasis7_client_launcher/src/transfer_entry.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/transfer_submit_api_explorer_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs`
+    - `crates/oasis7/src/bin/oasis7_liveops_grant_cli.rs`
+    - `scripts/governance-registry-drill.sh`
+    - `scripts/governance-registry-live-drill.sh`
+    - `.pm/tasks/task_56064741379e4dcfa613ce8211e26972.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "OC|oc:pk:|octransferauth|occlaimauth|ocgenesisauth|octreasuryauth" crates/oasis7 crates/oasis7_node crates/oasis7_client_launcher doc/p2p scripts/governance-registry*.sh`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 transfer_submit --bin oasis7_chain_runtime`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 submit_chain_transfer_remote --bin oasis7_web_launcher`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher transfer_auth -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher transfer_entry -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node tests_action_payload -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 
@@ -460,10 +494,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-11
+- 更新日期: 2026-04-12
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
-- 最新完成: `TASK-P2P-045`（已冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确这是 public naming；`AWT` 仍保留为 runtime symbol/ticker 语义，后续若需改 symbol 必须另开专题评审。）
+- 最新完成: `TASK-P2P-046`（已将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 作为现行真值。）
+- 最新完成: `TASK-P2P-045`（已冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，作为后续 runtime/account 真值迁移的前置口径。）
 - 最新完成: `TASK-P2P-044`（已拆分 `crates/oasis7_net/src/libp2p_net.rs` 中的 command/runtime loop 与 peer-manager runtime helpers，恢复 1200 行门禁；同时按当前 stable rustfmt 回写 workspace 格式，避免 required CI 在 file-size gate 通过后卡死在 `cargo fmt --all --check`。）
 - 最新完成: `TASK-P2P-043`（已完成“主链级非全公网 P2P 覆盖网络架构”专题建档，正式冻结 `public/hybrid/private/relay_only/validator_hidden`、`validator core/sentry/relay/full-storage/observer-light`、`peer record/discovery/reachability/traffic lanes` 与 mixed-topology claims gate。）
 - 最新完成: `TASK-P2P-042`（已恢复 2026-03-27 p2p required 编译/CI 主链路：`cargo check -p oasis7 --bins`、`cargo check -p oasis7_viewer --target wasm32-unknown-unknown`、`cargo test -p oasis7 --bin oasis7_chain_runtime -- --nocapture`、`cargo test -p oasis7 --bin oasis7_game_launcher -- --nocapture` 与 `./scripts/ci-tests.sh required` 全部通过；剩余仅为若干 warning，不再阻断当前任务 landing。）

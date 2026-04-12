@@ -446,7 +446,7 @@ fn explorer_p1_endpoints_return_expected_payloads() {
     let (_, assets): (u16, ExplorerAssetsResponse) =
         decode_http_json_response(&assets_response_bytes);
     assert!(assets.ok);
-    assert_eq!(assets.token_symbol, "AWT");
+    assert_eq!(assets.token_symbol, "OC");
     assert!(assets
         .holders
         .iter()
