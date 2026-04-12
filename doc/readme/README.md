@@ -8,7 +8,7 @@
 - 想按子域或文件名继续下钻，而不是从长名单里逐条找：`doc/readme/prd.index.md`
 - 想直接看当前高频 liveops/operator 入口：`doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`
 - 想直接看当前小红书持续运营入口：`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
-- 想直接看当前媒体推广者绿洲币激励入口：`doc/readme/governance/readme-media-promoter-oasis-coin-incentive-pack-2026-04-12.md`
+- 想直接看当前小红书博主 / 微信公众号绿洲币激励入口：`doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 
 ## 入口
 - PRD: `doc/readme/prd.md`
