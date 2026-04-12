@@ -92,7 +92,7 @@
 
 ## 状态
 
-- 更新日期: 2026-04-10
+- 更新日期: 2026-04-12
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
 - 下一任务: 由 `producer_system_designer` 按 `TASK-GAME-065` 的正式阻断签名拆出下一轮 runtime/viewer 修复切片，再重新申请 formal retention 复验。
@@ -100,4 +100,6 @@
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
   - `TASK-GAMEPLAY-RR-001~004` 已完成并回写 `.pm`；其中 `TASK-GAMEPLAY-RR-002/003/004` 分别收口了控制门控与 ack 语义、工业中循环 canonical 包，以及首屏噪音/后果可见化。
+  - runtime follow-up `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 formal lane 在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时被错误映射回 `first_session_loop` 的问题；这说明样本 B/C 里的“掉回新手态”至少有一部分是快照阶段机口径缺口，而不是完整的真实阶段回滚。
   - `TASK-GAME-065` 的最新正式结论是：active-LLM `software_safe` formal floor 已恢复，不再以 `Responses API` 10 秒超时作为当前阻断项；但 `3` 条 10 分钟正式样本均未支持 `continue_playing`，其中 `1` 条长期停在 `post_onboarding.establish_first_capability / 20%`，另 `2` 条出现 `post_onboarding -> first_session_loop` 回退并冻结世界时间，因此当前 producer verdict 为 `hold`。
+  - 即便去掉上述快照误回退，本专题仍未解决 `post_onboarding.establish_first_capability / 20%` 长停与真实 `logicalTime/eventSeq` 冻结；在这些 blocker 消失前，formal retention gate 仍不得回收 `hold`。

@@ -172,10 +172,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-10
+- 更新日期: 2026-04-12
 - 当前状态: in_progress
 - 下一任务: 由 `producer_system_designer` 基于 `TASK-GAME-065` 的正式样本阻断签名，拆出下一轮 runtime/viewer 修复切片，优先解释并修复 `post_onboarding.establish_first_capability / 20%` 长停，以及 `post_onboarding -> first_session_loop` 回退伴随 `logicalTime/eventSeq` 冻结的问题。
 - 已登记待排任务: 若后续 formal lane 再次回退到 provider timeout / latency / prompt budget blocker，则继续按 run id 追加失败签名；在当前两个 progression blocker 修复前，不得把 active-LLM retention gate 对外表述为 `continue_playing`。
+- 当前切片进展: `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 runtime-live 快照在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时误回退到 `first_session_loop` 的映射缺口；当前剩余真实 blocker 仍是 `post_onboarding.establish_first_capability / 20%` 长停，以及部分样本里的 `logicalTime/eventSeq` 冻结。
 - 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 完成 `3` 条 active-LLM 10 分钟正式样本与 `3` 条 300 秒对照样本回写；当前结论不是 runtime timeout blocker，而是 formal lane 虽已恢复 `software_safe` floor，但仍停在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本会回退到 `first_session_loop.create_first_world_feedback / 0%` 并冻结世界时间，因此 producer verdict 已收口为 `hold`。）
 - 最新完成: `TASK-GAME-064`（`viewer_engineer` 已收口首屏信息层级与玩家口吻反馈，把玩家身份、当前主目标、主阻塞、立即下一步以及奖励/恢复/阻塞语义抬到首层，并补齐对应 Viewer 测试。）
 - 最新完成: `TASK-GAME-063`（`runtime_engineer` 已把 `PostOnboarding` canonical 中循环扩成“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的三段包，补齐首产出后的停机恢复与扩产取舍状态语义。）
