@@ -9,10 +9,9 @@ Delete this entire section if you do not want this PR to be considered in the ea
 Set `Request reward review` to `yes` only when you want this PR to enter reward review.
 
 - Request reward review:
-- Oasis ID:
 - Reward Account:
 - Evidence / context link:
 - Notes:
 
-Use `Oasis ID` as the claimant-facing identity and `Reward Account` as the execution field.
+`Reward Account` is the only reward payout field required in this PR template.
 Do not use raw `public_key` as the claimant/display name in this PR template.

@@ -33,7 +33,7 @@
   - PRD-P2P-TOKEN-INIT-003: As a `liveops_community` owner, I want early contributor rewards to require reviewed evidence, so that oasis7 does not accidentally become a marketing airdrop or play-to-earn loop.
 - Critical User Flows:
   1. Flow-TOKEN-INIT-001: `制作人冻结分配表 -> runtime/治理维护者映射 bucket_id/recipient/vesting -> QA 审核控盘与流通边界 -> 创世配置进入候选`
-  2. Flow-TOKEN-INIT-002: `limited preview 参与者提交 bug/长时游玩样本/高价值反馈 -> liveops 记录 Oasis ID + Reward Account + 贡献证据 -> producer 或治理维护者审核 -> 按规则从奖励储备发放`
+  2. Flow-TOKEN-INIT-002: `limited preview 参与者提交 bug/长时游玩样本/高价值反馈 -> liveops 记录 Reward Account + 贡献证据 -> producer 或治理维护者审核 -> 按规则从奖励储备发放`
   3. Flow-TOKEN-INIT-003: `团队或基金会到达解锁窗口 -> 按 vesting 领取 -> QA 复核 circulating 与单人持仓上限 -> 若越界则阻断后续释放`
   4. Flow-TOKEN-INIT-004: `外部提议给“早期玩游戏的人”发币 -> 对照 PRD 检查是否为贡献制 -> 若仅按登录/时长/开放引流，则直接驳回`
 - 创世参数表（TIGR-1 草案，假设 `genesis_epoch=0`，并以 `1 epoch ~= 1 day` 作为当前锁仓换算口径；若最终链上 epoch 节奏不同，需在创世冻结前按同等自然时间重算）：
@@ -113,7 +113,7 @@
   - 若 execution sheet 的 `recipient_slot_id` 已冻结，但真实 `recipient_account_id` 未绑定，则最多只能给 `conditional_draft_only`，不得进入最终 mint 执行。
   - 若 execution sheet 使用与 runtime 不一致的 rounding 规则，则必须退回；不得靠人工补差额绕过 `allocated_sum == total_supply` 约束。
   - 若某奖励提案无法附带可审计贡献证据，则不得发放。
-  - 若奖励记录把 raw `public key` 直接当作 claimant 名称层字段，则必须退回；用户侧奖励身份统一写 `Oasis ID`，底层 `public_key` 仅保留在签名/账户绑定专题。
+  - 若奖励记录把 raw `public key` 直接当作领取名称或执行字段原文暴露在对外文案中，则必须退回；底层 `public_key` 仅保留在签名/账户绑定专题。
   - 若外部文案把奖励描述为 `play-to-earn`、`airdrop for playing` 或“来玩就有币”，则 `liveops_community` 必须退回改稿。
   - 若产品仍无 invite-only 功能，则 reward eligibility 只能依赖运营筛选与贡献审核，不得宣称链上准入门槛已存在。
   - 若有人主张把 early contributor reserve 立即并入 `ecosystem_pool`，但拿不出真实贡献轮次数据、治理审批节奏与 runtime 映射方案，则该提案直接退回；当前 producer 决策是继续保持独立多签执行。
@@ -128,7 +128,7 @@
   - NFR-TOKEN-INIT-7: limited preview 阶段任何 early contributor reward 执行都必须走独立 reward reserve 审批链，`ecosystem_pool` 的治理 grant 流程不得被拿来替代或掩盖贡献奖励发放。
   - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker、账户前缀与 runtime 字段语义必须保持单一当前真值；现行口径固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`，不得再把旧值写成当前实现。
   - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker 与 runtime 字段语义必须分层表达；未经过专题评审，不得把“命名冻结”外推成“ticker 已改”“symbol 已迁移”或“客户端/API 已自动切换”。
-- Security & Privacy: 创世分配配置、控制账户与奖励记录必须可审计；安全储备不得与运营或个人钱包混用；涉及个人身份映射时只记录必要的 `Oasis ID`、链上账户与贡献证据，不在文档中暴露敏感个人信息；raw `public_key` 仅保留在签名/账户绑定流程中。
+- Security & Privacy: 创世分配配置、控制账户与奖励记录必须可审计；安全储备不得与运营或个人钱包混用；涉及个人身份映射时只记录必要的链上账户与贡献证据，不在文档中暴露敏感个人信息；raw `public_key` 仅保留在签名/账户绑定流程中。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:

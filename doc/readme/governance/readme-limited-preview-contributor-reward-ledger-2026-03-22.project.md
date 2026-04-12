@@ -9,8 +9,8 @@
 - [x] LTRL-1 (PRD-README-LTRL-001): 完成专题 PRD / design / project 建档，明确 round ledger 的结构、状态与边界。
 - [x] LTRL-2 (PRD-README-LTRL-001/002): 输出执行版 ledger 模板，覆盖 round meta、ledger rows、band summary、approval 与 distribution closure。
 - [x] LTRL-3 (PRD-README-LTRL-002/003): 对齐 `readme` 模块主追踪与 `p2p token` 项目互链，并完成 devlog / 门禁收口。
-- [x] LTRL-4 (PRD-README-LTRL-001/002): 将 reward claimant 的用户侧身份命名统一收口为 `Oasis ID`，保留 `Reward Account` 作为执行字段，不把 raw `public key` 写进台账名称层。
-- [x] LTRL-5 (PRD-README-LTRL-001/002): 对于 GitHub PR 来源的贡献，优先从可选 PR reward intake block 导入 `Oasis ID + Reward Account`，缺字段则保持 `deferred`。
+- [x] LTRL-4 (PRD-README-LTRL-001/002): 将 reward intake 与台账执行层的必填字段收口为 `Reward Account`，不把 raw `public key` 写进台账名称层。
+- [x] LTRL-5 (PRD-README-LTRL-001/002): 对于 GitHub PR 来源的贡献，优先从可选 PR reward intake block 导入 `Reward Account`，缺字段则保持 `deferred`。
 - [x] LTRL-6 (PRD-README-LTRL-001/002): 新增 PR intake import 脚本，输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row 草案，减少手工抄写。
 
 ## 依赖

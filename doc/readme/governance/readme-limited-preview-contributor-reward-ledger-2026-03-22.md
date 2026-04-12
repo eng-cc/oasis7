@@ -15,15 +15,15 @@
 ## 1. Intake Rules
 - Only record contribution-based rows.
 - Use the scoring rules from `readme-limited-preview-contributor-reward-pack-2026-03-22.md`.
-- Use `Oasis ID` as the claimant-facing identity field; keep `Reward Account` as the execution field.
+- Use `Contributor` and `Public Handle / GitHub` for review identity; keep `Reward Account` as the execution field.
 - If `Source Type=PR`, first read the optional reward intake block from `.github/pull_request_template.md`.
 - Do not include signup, login, casual play, online time, AFK, or vague praise as rewardable rows.
 - Missing key evidence means default `deferred` or `no-token-recommendation`.
 
 ## 2. Ledger
-| Ledger ID | Contributor | Public Handle / GitHub | Oasis ID | Reward Account | Source Type | Source Link | Contribution Type | Base Score | Quality Modifier | Total Score | Recommended Band | Duplicate Check | Reviewer | Review Status | Producer Decision | Approval ID | Actual Amount | Distribution Ref | Distribution Date | Notes |
+| Ledger ID | Contributor | Public Handle / GitHub | Reward Account | Source Type | Source Link | Contribution Type | Base Score | Quality Modifier | Total Score | Recommended Band | Duplicate Check | Reviewer | Review Status | Producer Decision | Approval ID | Actual Amount | Distribution Ref | Distribution Date | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LTRL-001 |  |  |  |  | `issue / PR / DM / content / session summary` |  | `C-01..C-07` |  |  |  | `no-token-recommendation / eligible-small / eligible-medium / eligible-large` | `unique / duplicate / superseded` |  | `draft / reviewed / approved / rejected / deferred / distributed` |  |  |  |  |  |  |
+| LTRL-001 |  |  |  | `issue / PR / DM / content / session summary` |  | `C-01..C-07` |  |  |  | `no-token-recommendation / eligible-small / eligible-medium / eligible-large` | `unique / duplicate / superseded` |  | `draft / reviewed / approved / rejected / deferred / distributed` |  |  |  |  |  |  |
 
 ## 3. Evidence Checklist
 Each non-rejected row should include:
@@ -35,8 +35,8 @@ Each non-rejected row should include:
 - `duplicate_check`
 - `reviewer_note`
 
-If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before filling the ledger.
-If a PR source has no reward intake block, treat it as "no reward review requested". Only create or advance a reward row after `Oasis ID + Reward Account` are backfilled from an approved follow-up channel.
+If a contributor only provides raw account derivation material, normalize it to `Reward Account` before filling the ledger.
+If a PR source has no reward intake block, treat it as "no reward review requested". Only create or advance a reward row after `Reward Account` is backfilled from an approved follow-up channel.
 
 ## 3.1 Scripted Import
 Use the repo script before copying PR-sourced rows into the ledger:
