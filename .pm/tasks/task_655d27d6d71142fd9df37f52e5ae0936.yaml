@@ -18,6 +18,6 @@ acceptance:
   - "readme 模块 PRD/project 与专题文档完成追踪闭环，可被 liveops_community 直接执行。"
 handoff_to:
   - liveops_community
-updated_at: 2026-04-12T13:05:04+08:00
-last_started_at: 2026-04-12T12:57:44+08:00
-last_closed_at: 2026-04-12T13:05:04+08:00
+updated_at: 2026-04-12T19:51:59+08:00
+last_started_at: 2026-04-12T15:51:12+08:00
+last_closed_at: 2026-04-12T19:51:59+08:00
