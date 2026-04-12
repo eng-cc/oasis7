@@ -36,7 +36,7 @@
 - SC-4: readme 相关变更全部具备 PRD-ID 与 devlog 追踪。
 - SC-5: Closed beta candidate 的 liveops runbook与模板能直接维持 `limited playable technical preview` 口径，并服务 `prg-game-009` 的 evidence gate。
 - SC-6: limited preview 贡献奖励流程必须具备可直接复用的 round ledger 模板，能够承接评分、审批、发放记录与归档。
-- SC-7: 小红书博主 / 微信公众号激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，而不是按播放量粗放买量。
+- SC-7: 小红书博主 / 微信公众号激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，固定映射 `300 / 800 / 1500 OC` 档位，而不是按播放量粗放买量。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -129,7 +129,7 @@
 | 受控预览执行包 | `round_id`、`callout_copy`、`check_slot`、`signal_bucket`、`claim_drift_flag`、`summary_field` | 把 limited preview 第一轮执行压成可直接照跑的操作包 | `draft -> execution_ready -> reused` | 先冻结文案，再冻结巡检，再冻结回流摘要 | `liveops_community` 维护，`producer_system_designer` 审核边界 |
 | 早期贡献奖励操作包 | `reward_account`、`contribution_type`、`score_band`、`evidence_field`、`reward_recommendation`、`forbidden_phrase`、`intake_surface`、`import_script` | 按贡献评分模板判断是否进入奖励建议池，并约束对外表达 | `signal -> scored -> reviewed -> recommended` | `Reward Account` 仅作执行字段；若来源是 GitHub PR，则通过可选 PR intake block 收集 `Reward Account`，并允许导入脚本直接解析；不公布固定 token/point 比率；仅按贡献审计后给 `eligible-small/medium/large` 建议 | `liveops_community` 记录与初评，`producer_system_designer` 最终审批 |
 | 贡献奖励台账 | `round_id`、`candidate_id`、`ledger_id`、`reward_account`、`recommended_band`、`review_status`、`approval_id`、`distribution_ref`、`import_status` | 将真实贡献逐条编目、审批、回填发放记录并归档 | `draft -> reviewed -> approved/rejected -> distributed -> archived` | 同一轮按 contributor 与 ledger id 去重；缺证据默认不得进入审批；PR import 至少区分 `ready / deferred / no_reward_review_requested / invalid_intake` | `liveops_community` 维护，`producer_system_designer` 审核，execution owner 回填发放记录 |
-| 小红书博主 / 微信公众号绿洲币激励包 | `channel_type`、`asset_url`、`claim_safety_status`、`proof_bundle`、`reach_quality`、`ecosystem_return`、`fraud_flag`、`recommended_band` | 将小红书笔记与微信公众号文章按质量、准确性、讨论转化与生态回流纳入奖励审核 | `captured -> screened -> scored -> reviewed -> approved/rejected -> distributed` | 原始阅读量或播放量不能单独触发奖励；必须先过事实边界与反作弊检查，再按内容深度和回流质量给档位 | `liveops_community` 记录与初审，`producer_system_designer` 审批，distribution owner 回填发放记录 |
+| 小红书博主 / 微信公众号绿洲币激励包 | `channel_type`、`asset_url`、`claim_safety_status`、`proof_bundle`、`reach_quality`、`ecosystem_return`、`fraud_flag`、`recommended_band`、`actual_amount` | 将小红书笔记与微信公众号文章按质量、准确性、讨论转化与生态回流纳入奖励审核 | `captured -> screened -> scored -> reviewed -> approved/rejected -> distributed` | 原始阅读量或播放量不能单独触发奖励；必须先过事实边界与反作弊检查，再按内容深度和回流质量给档位，并固定映射 `eligible-small=300 OC`、`eligible-medium=800 OC`、`eligible-large=1500 OC` | `liveops_community` 记录与初审，`producer_system_designer` 审批，distribution owner 回填发放记录 |
 | 小红书帖子素材包 | `post_goal`、`title`、`body`、`cover_copy`、`carousel_outline`、`interaction_prompt`、`forbidden_phrase` | 固化单篇小红书可复用文案与轮播结构 | `draft -> reviewed -> ready_for_publish -> published` | 先确定单一帖子目标，再冻结标题/正文/互动问题；正文先给人可理解轮廓，再避免 world-rule dump 与上线口径 | `liveops_community` 起草，`producer_system_designer` 审核边界 |
 - Acceptance Criteria:
   - AC-1: readme PRD 明确入口文档职责边界。
@@ -161,7 +161,7 @@
 - AC-27: 若小红书内容链路进入第十二篇，必须补齐“AI来得这么快，怎么穿越周期”素材包，明确标题、正文、短版备选、互动问题、关键词与“AI 先压缩的是岗位里重复、标准、低判断的部分 / 穿越周期靠把自己往问题定义、流程重构、结果负责这一层移动”的表达边界，并保持人类开发者第一人称、非宏大趋势宣讲口径、非鸡汤口径与非上线宣称。
 - AC-28: 若第十二篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要保持“穿越周期”题眼与“岗位 vs 那层工作”的判断钩子同时成立，采用更像 editorial 判断海报的层级抬升构图，不回退到蓝紫科幻 AI、机器人吞岗位、或泛励志海报式表达。
 - AC-29: 若第十二篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用“暖纸面 + editorial 诊断卡 + 层级上移提示”的视觉语言，把讨论收口到“别等工具来找你 / 先看清岗位里哪层工作在变 / 人要往更高判断层移动”，不回退成恐慌式 AI 预言或泛职场鸡汤。
-- AC-30: 若团队要对小红书博主或微信公众号启用绿洲币激励，必须补齐独立激励包，明确两类对象的可计分/不可计分行为、证据字段、档位建议、审批链、发放回填、反作弊与禁语边界，并明确“宣传方是生态参与者与受益者，但激励不按阅读量、播放量或买量口径粗放发放”。
+- AC-30: 若团队要对小红书博主或微信公众号启用绿洲币激励，必须补齐独立激励包，明确两类对象的可计分/不可计分行为、证据字段、固定档位金额、审批链、发放回填、反作弊与禁语边界，并明确“宣传方是生态参与者与受益者，但激励不按阅读量、播放量或买量口径粗放发放”。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -259,7 +259,7 @@
 | PRD-README-040 | TASK-README-064 | `test_tier_required` | 小红书第十二篇素材包明确“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“先别盯岗位名，先看岗位里哪部分已经会被 AI 压缩 / 要把自己往问题定义、流程重构、结果负责这一层移动”的表达边界 | 渠道内容从现实体验与求职判断继续推进到 AI 时代已有岗位的人如何调整自己的不可替代性结构，把讨论收口到工作内容分层、判断权和结果责任，而不是泛化成宏观趋势分析 |
 | PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇补齐独立封面 HTML/PNG，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
 | PRD-README-042 | TASK-README-066 | `test_tier_required` | 第十二篇补齐独立轮播版素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用暖纸面 editorial 诊断卡 + 层级上移提示的发布视觉 | 第十二篇从长文版与单图封面进一步扩展到更适合小红书滑读、停留和评论的 4 页轮播版，同时保持“先别盯岗位名，先看岗位里哪层工作在变”的判断主线 |
-| PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
+| PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -304,4 +304,4 @@
 | DEC-RM-036 | 第十二篇采用“岗位内容分层 + 穿越周期动作”的切口，而不是把帖子写成宏观 AI 趋势判断或泛职业焦虑安慰 | 直接做“哪些岗位会被取代”的宏大预言；或写成“别焦虑、持续学习就好”的鸡汤帖 | 这篇真正有传播力的不是再重复“AI 来得很快”这句共识，而是把焦虑落到更具体的问题上: 岗位里哪些部分先被压缩、什么能力层更值得往上挪。把讨论收回到问题定义、流程重构和结果负责，更符合账号持续输出“判断”而不是“喊口号”的主线。 |
 | DEC-RM-037 | 第十二篇封面采用“editorial 判断海报 + 层级抬升构图 + 穿越周期题签”方向，而不是直接把主标题做成泛 AI 焦虑口号或科幻灾难画面 | 直接做机器人 / 电路 / 岗位被吞掉的直白 AI 隐喻；或只保留“穿越周期”四个字做抽象励志封面 | 这篇真正需要放大的不是恐慌，而是判断: 哪层工作先被压缩，人要往哪层上挪。封面既要保留 `穿越周期` 这个主题锚点，也要把“岗位 vs 那层工作”的分层判断一眼说清，才和正文主线一致。 |
 | DEC-RM-038 | 第十二篇轮播版采用“warm editorial diagnosis / work-layer ladder”方向，而不是把 4 张图做成重复封面、蓝紫科技卡或信息过满的长文截图 | 4 张都重复封面主钩子；或做成密密麻麻的文字截图；或回退到机器人吞岗位的 panic 视觉 | 轮播版的价值不在于再重复一次封面，而在于把判断拆成 4 个停顿点: 先停住、再诊断、再给动作、最后把问题抛回给读者。用暖纸面和诊断卡结构，更符合第十二篇“判断比情绪更重要”的主线，也更接近小红书原生滑读体验。 |
-| DEC-RM-039 | 当前先把宣传激励收窄到“小红书博主 + 微信公众号”，并采用“内容深度 + 事实准确 + 讨论转化 + 生态回流”的绿洲币审核模型，而不是泛化到所有媒体对象或按流量做 flat buyout | 一次覆盖所有媒体/KOL/搬运号；或直接按 CPM/播放量发币 | 用户已明确当前版本“先精简和具体化”。先收口到两类最清晰、最常用的对象，更利于执行、举证和风控，也避免文档过宽导致操作层混乱。 |
+| DEC-RM-039 | 当前先把宣传激励收窄到“小红书博主 + 微信公众号”，并采用“内容深度 + 事实准确 + 讨论转化 + 生态回流”的绿洲币审核模型，固定映射 `300 / 800 / 1500 OC` 档位，而不是泛化到所有媒体对象或按流量做 flat buyout | 一次覆盖所有媒体/KOL/搬运号；或直接按 CPM/播放量发币 | 用户已明确当前版本“先精简和具体化”，并进一步要求直接写明不同价值内容获得多少绿洲币。先收口到两类最清晰的对象，再给固定档位金额，更利于执行、举证和对外解释。 |

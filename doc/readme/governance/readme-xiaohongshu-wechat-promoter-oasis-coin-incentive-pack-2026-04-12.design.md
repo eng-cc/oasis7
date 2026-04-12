@@ -11,7 +11,7 @@
 - 资产 intake 层：统一记录 `asset_url`、归档证据、发布时间、奖励账户和 audience fit。
 - 审核层：先过事实边界与反作弊，再进入评分。
 - 评分层：基础分 + 质量/讨论/回流加分 + 作弊/重复/越界扣分。
-- 发放层：继续使用 `eligible-small / eligible-medium / eligible-large / no-token-recommendation` 建议档位，并在 producer 审批后回填 `distribution_ref`。
+- 发放层：继续使用 `eligible-small / eligible-medium / eligible-large / no-token-recommendation` 档位，但固定映射为 `300 / 800 / 1500 / 0 OC`，并在 producer 审批后回填 `actual_amount` 与 `distribution_ref`。
 
 ## 3. 关键接口 / 入口
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -20,7 +20,7 @@
 - `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 
 ## 4. 约束与边界
-- 不公开固定绿洲币数额，也不公开“阅读量/播放量 -> 绿洲币”的固定换算。
+- 当前专题公开固定档位金额 `300 / 800 / 1500 OC`，但不公开“阅读量/播放量 -> 绿洲币”的固定换算。
 - 不把宣传激励写成 `广告投放价目表` 或 `保底发币承诺`。
 - 不奖励买量、互刷、抄袭搬运、截图造假或越界宣传。
 - 官方正式产品名使用 `绿洲币 / Oasis Coin`；如涉及 runtime symbol/ticker，不在本专题中展开。
