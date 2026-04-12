@@ -62,6 +62,30 @@ impl WorldKernel {
         let economy = &self.config.economy;
         let normalized = recipe_id.trim().to_ascii_lowercase();
         match normalized.as_str() {
+            "recipe.smelter.iron_ingot" | "recipe.iron_ingot" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_SMELTER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch,
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch,
+                data_output_per_batch: economy.recipe_data_output_per_batch,
+                finished_product_id: "iron_ingot",
+                finished_product_units_per_batch: 1,
+            }),
+            "recipe.smelter.copper_wire" | "recipe.copper_wire" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_SMELTER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch,
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch,
+                data_output_per_batch: economy.recipe_data_output_per_batch,
+                finished_product_id: "copper_wire",
+                finished_product_units_per_batch: 1,
+            }),
+            "recipe.smelter.polymer_resin" | "recipe.polymer_resin" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_SMELTER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch,
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch,
+                data_output_per_batch: economy.recipe_data_output_per_batch,
+                finished_product_id: "polymer_resin",
+                finished_product_units_per_batch: 1,
+            }),
             "recipe.assembler.control_chip" | "recipe.control_chip" => Some(RecipePlan {
                 required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
                 electricity_per_batch: economy.recipe_electricity_cost_per_batch,

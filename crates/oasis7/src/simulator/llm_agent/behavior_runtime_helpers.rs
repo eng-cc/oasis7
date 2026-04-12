@@ -3,6 +3,9 @@ use super::*;
 impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
     pub(super) fn required_factory_kind_for_recipe(recipe_id: &str) -> Option<&'static str> {
         match recipe_id.trim() {
+            "recipe.smelter.iron_ingot"
+            | "recipe.smelter.copper_wire"
+            | "recipe.smelter.polymer_resin" => Some("factory.smelter.mk1"),
             "recipe.assembler.control_chip"
             | "recipe.assembler.motor_mk1"
             | "recipe.assembler.logistics_drone" => Some("factory.assembler.mk1"),
@@ -12,6 +15,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 
     pub(super) fn default_recipe_hardware_cost_per_batch(recipe_id: &str) -> Option<i64> {
         match recipe_id.trim() {
+            "recipe.smelter.iron_ingot"
+            | "recipe.smelter.copper_wire"
+            | "recipe.smelter.polymer_resin" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
             "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
             "recipe.assembler.motor_mk1" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 2),
             "recipe.assembler.logistics_drone" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 4),
@@ -21,6 +27,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 
     pub(super) fn default_recipe_electricity_cost_per_batch(recipe_id: &str) -> Option<i64> {
         match recipe_id.trim() {
+            "recipe.smelter.iron_ingot"
+            | "recipe.smelter.copper_wire"
+            | "recipe.smelter.polymer_resin" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
             "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
             "recipe.assembler.motor_mk1" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 2),
             "recipe.assembler.logistics_drone" => {
@@ -84,6 +93,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         let factory_id = factory_id.trim();
         if factory_id.is_empty() {
             return None;
+        }
+        if let Some(factory_kind) = self.known_factory_kinds_by_id.get(factory_id) {
+            return Some(factory_kind.clone());
         }
         self.known_factory_kind_aliases
             .iter()
@@ -552,6 +564,8 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             .map(str::trim)
             .filter(|factory_kind| !factory_kind.is_empty())
         {
+            self.known_factory_kinds_by_id
+                .insert(factory_id.to_string(), factory_kind.to_string());
             self.known_factory_kind_aliases
                 .insert(factory_kind.to_string(), factory_id.to_string());
         }
@@ -721,12 +735,13 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                         "steps": [
                             "mine_compound 获取可精炼原料。",
                             "refine_compound 产出 hardware/data。",
-                            "build_factory(factory.assembler.mk1) 建立生产节点。",
-                            "schedule_recipe 覆盖 control_chip/motor/logistics_drone。"
+                            "post_onboarding 优先 build_factory(factory.smelter.mk1) 作为第一条可持续产线。",
+                            "先 schedule_recipe 覆盖 iron_ingot/copper_wire/polymer_resin，再在原料稳定后补 factory.assembler.mk1 与 control_chip/motor/logistics_drone。"
                         ],
                         "success_signals": [
                             "action_kind_build_factory >= 1",
-                            "action_kind_schedule_recipe >= 1"
+                            "action_kind_schedule_recipe >= 1",
+                            "known_factory_kind_aliases contains factory.smelter.mk1"
                         ]
                     }),
                     "governance" => serde_json::json!({
@@ -759,7 +774,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                         "by_reject_reason": {
                             "insufficient_resource.data": "优先 mine_compound 补 data 前置，再 refine_compound。",
                             "insufficient_resource.electricity": "先 harvest_radiation，必要时 transfer_resource(kind=electricity)。",
-                            "factory_not_found": "先 build_factory，再 schedule_recipe。",
+                            "factory_not_found": "smelter 配方先 build_factory(factory.smelter.mk1)，assembler 配方先 build_factory(factory.assembler.mk1)。",
                             "location_not_found": "仅使用 visible_locations 中的 location_id。",
                             "agent_already_at_location": "不要重复 move_agent，改为生产/采集动作。"
                         }
@@ -958,5 +973,59 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                 self.conversation_trace_cursor.saturating_sub(overflow);
         }
         Some(trace)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct DummyClient;
+
+    impl LlmCompletionClient for DummyClient {
+        fn complete(
+            &self,
+            _request: &LlmCompletionRequest,
+        ) -> Result<LlmCompletionResult, LlmClientError> {
+            unreachable!("helper mapping tests never call the completion client");
+        }
+    }
+
+    #[test]
+    fn smelter_recipes_map_to_smelter_factory_kind() {
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::required_factory_kind_for_recipe(
+                "recipe.smelter.iron_ingot"
+            ),
+            Some("factory.smelter.mk1")
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::required_factory_kind_for_recipe(
+                "recipe.smelter.copper_wire"
+            ),
+            Some("factory.smelter.mk1")
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::required_factory_kind_for_recipe(
+                "recipe.smelter.polymer_resin"
+            ),
+            Some("factory.smelter.mk1")
+        );
+    }
+
+    #[test]
+    fn smelter_recipes_expose_default_cost_fallbacks() {
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_hardware_cost_per_batch(
+                "recipe.smelter.iron_ingot"
+            ),
+            Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_electricity_cost_per_batch(
+                "recipe.smelter.iron_ingot"
+            ),
+            Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH)
+        );
     }
 }

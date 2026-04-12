@@ -624,6 +624,81 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     }
                 }
 
+                if self.recipe_coverage.is_completed(recipe_id.as_str()) {
+                    if let Some(factory_kind) = self
+                        .known_factory_kind_for_id(factory_id.as_str())
+                        .or_else(|| {
+                            Self::required_factory_kind_for_recipe(recipe_id.as_str())
+                                .map(str::to_string)
+                        })
+                    {
+                        if let Some(next_recipe_id) = self
+                            .recipe_coverage
+                            .next_uncovered_recipe_for_factory_kind_excluding(
+                                factory_kind.as_str(),
+                                recipe_id.as_str(),
+                            )
+                        {
+                            schedule_notes.push(format!(
+                                "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={} switch_factory_id={} target_factory_kind={}",
+                                recipe_id, next_recipe_id, factory_id, factory_kind
+                            ));
+                            recipe_id = next_recipe_id;
+                            if let Some(next_cost_per_batch) =
+                                Self::default_recipe_hardware_cost_per_batch(recipe_id.as_str())
+                            {
+                                cost_per_batch = next_cost_per_batch;
+                            }
+                            electricity_cost_per_batch =
+                                Self::default_recipe_electricity_cost_per_batch(recipe_id.as_str())
+                                    .unwrap_or(0);
+                        } else if let Some((next_recipe_id, required_factory_kind)) =
+                            self.next_missing_recipe_requirement()
+                        {
+                            if required_factory_kind != factory_kind {
+                                if let Some(next_factory_id) = self
+                                    .canonical_factory_id_for_kind(required_factory_kind.as_str())
+                                {
+                                    schedule_notes.push(format!(
+                                        "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={} switch_factory_id={} target_factory_kind={}",
+                                        recipe_id, next_recipe_id, next_factory_id, required_factory_kind
+                                    ));
+                                    factory_id = next_factory_id;
+                                    recipe_id = next_recipe_id;
+                                    if let Some(next_cost_per_batch) =
+                                        Self::default_recipe_hardware_cost_per_batch(
+                                            recipe_id.as_str(),
+                                        )
+                                    {
+                                        cost_per_batch = next_cost_per_batch;
+                                    }
+                                    electricity_cost_per_batch =
+                                        Self::default_recipe_electricity_cost_per_batch(
+                                            recipe_id.as_str(),
+                                        )
+                                        .unwrap_or(0);
+                                } else if let Some(current_location_id) =
+                                    Self::current_location_id_from_observation(observation)
+                                {
+                                    let mut notes = schedule_notes.clone();
+                                    notes.push(format!(
+                                        "schedule_recipe coverage hard-switch rerouted to build_factory: completed_recipe={} next_uncovered_recipe={} required_factory_kind={} build_location={}",
+                                        recipe_id, next_recipe_id, required_factory_kind, current_location_id
+                                    ));
+                                    return (
+                                        Action::BuildFactory {
+                                            owner,
+                                            location_id: current_location_id.to_string(),
+                                            factory_id: required_factory_kind.clone(),
+                                            factory_kind: required_factory_kind,
+                                        },
+                                        Some(notes.join("; ")),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
                 if let Some(factory_location_id) =
                     self.known_factory_locations.get(factory_id.as_str())
                 {
@@ -649,26 +724,6 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                                 notes,
                             );
                         }
-                    }
-                }
-                if self.recipe_coverage.is_completed(recipe_id.as_str()) {
-                    if let Some(next_recipe_id) = self
-                        .recipe_coverage
-                        .next_uncovered_recipe_excluding(recipe_id.as_str())
-                    {
-                        schedule_notes.push(format!(
-                            "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={}",
-                            recipe_id, next_recipe_id
-                        ));
-                        recipe_id = next_recipe_id;
-                        if let Some(next_cost_per_batch) =
-                            Self::default_recipe_hardware_cost_per_batch(recipe_id.as_str())
-                        {
-                            cost_per_batch = next_cost_per_batch;
-                        }
-                        electricity_cost_per_batch =
-                            Self::default_recipe_electricity_cost_per_batch(recipe_id.as_str())
-                                .unwrap_or(0);
                     }
                 }
 

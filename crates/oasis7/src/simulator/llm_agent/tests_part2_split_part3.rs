@@ -147,6 +147,12 @@ fn llm_agent_hard_switches_schedule_recipe_to_next_uncovered_recipe() {
         err: None,
     };
     let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.alpha",
+        "factory.smelter.mk1",
+        "loc-home",
+    );
 
     behavior.on_action_result(&ActionResult {
         action: Action::ScheduleRecipe {
@@ -201,13 +207,512 @@ fn llm_agent_hard_switches_schedule_recipe_to_next_uncovered_recipe() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            recipe_id: "recipe.smelter.iron_ingot".to_string(),
             batches: 1,
         })
     );
 
     let trace = behavior.take_decision_trace().expect("trace");
     assert!(!trace.llm_step_trace.is_empty());
+}
+
+#[test]
+fn llm_agent_keeps_hard_switch_within_current_factory_kind() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.alpha","recipe_id":"recipe.assembler.control_chip","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.alpha",
+        "factory.assembler.mk1",
+        "loc-home",
+    );
+
+    behavior.on_action_result(&ActionResult {
+        action: Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+        },
+        action_id: 560,
+        success: true,
+        event: WorldEvent {
+            id: 660,
+            time: 130,
+            kind: WorldEventKind::RecipeScheduled {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.alpha".to_string(),
+                recipe_id: "recipe.assembler.control_chip".to_string(),
+                batches: 1,
+                electricity_cost: 6,
+                hardware_cost: 2,
+                data_output: 1,
+                finished_product_id: "product.component.control_chip".to_string(),
+                finished_product_units: 1,
+            },
+            runtime_event: None,
+        },
+    });
+
+    let mut observation = make_observation();
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            batches: 1,
+        })
+    );
+}
+
+#[test]
+fn llm_agent_hands_off_coverage_to_known_assembler_after_last_smelter_recipe() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.smelter.1","recipe_id":"recipe.smelter.polymer_resin","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.smelter.1",
+        "factory.smelter.mk1",
+        "loc-home",
+    );
+    seed_known_factory(
+        &mut behavior,
+        "factory.assembler.1",
+        "factory.assembler.mk1",
+        "loc-home",
+    );
+
+    for (offset, recipe_id, finished_product_id) in [
+        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
+        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
+        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+    ] {
+        behavior.on_action_result(&ActionResult {
+            action: Action::ScheduleRecipe {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.smelter.1".to_string(),
+                recipe_id: recipe_id.to_string(),
+                batches: 1,
+            },
+            action_id: 700 + offset,
+            success: true,
+            event: WorldEvent {
+                id: 800 + offset,
+                time: 200 + offset,
+                kind: WorldEventKind::RecipeScheduled {
+                    owner: ResourceOwner::Agent {
+                        agent_id: "agent-1".to_string(),
+                    },
+                    factory_id: "factory.smelter.1".to_string(),
+                    recipe_id: recipe_id.to_string(),
+                    batches: 1,
+                    electricity_cost: 6,
+                    hardware_cost: 2,
+                    data_output: 1,
+                    finished_product_id: finished_product_id.to_string(),
+                    finished_product_units: 1,
+                },
+                runtime_event: None,
+            },
+        });
+    }
+
+    let mut observation = make_observation();
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.assembler.1".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+        })
+    );
+}
+
+#[test]
+fn llm_agent_moves_before_cross_factory_coverage_handoff() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.smelter.1","recipe_id":"recipe.smelter.polymer_resin","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.smelter.1",
+        "factory.smelter.mk1",
+        "loc-smelter",
+    );
+    seed_known_factory(
+        &mut behavior,
+        "factory.assembler.1",
+        "factory.assembler.mk1",
+        "loc-assembler",
+    );
+
+    for (offset, recipe_id, finished_product_id) in [
+        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
+        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
+        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+    ] {
+        behavior.on_action_result(&ActionResult {
+            action: Action::ScheduleRecipe {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.smelter.1".to_string(),
+                recipe_id: recipe_id.to_string(),
+                batches: 1,
+            },
+            action_id: 900 + offset,
+            success: true,
+            event: WorldEvent {
+                id: 1_000 + offset,
+                time: 230 + offset,
+                kind: WorldEventKind::RecipeScheduled {
+                    owner: ResourceOwner::Agent {
+                        agent_id: "agent-1".to_string(),
+                    },
+                    factory_id: "factory.smelter.1".to_string(),
+                    recipe_id: recipe_id.to_string(),
+                    batches: 1,
+                    electricity_cost: 6,
+                    hardware_cost: 2,
+                    data_output: 1,
+                    finished_product_id: finished_product_id.to_string(),
+                    finished_product_units: 1,
+                },
+                runtime_event: None,
+            },
+        });
+    }
+
+    let mut observation = make_observation();
+    observation.visible_locations = vec![
+        ObservedLocation {
+            location_id: "loc-smelter".to_string(),
+            name: "smelter".to_string(),
+            pos: GeoPos {
+                x_cm: 0.0,
+                y_cm: 0.0,
+                z_cm: 0.0,
+            },
+            profile: Default::default(),
+            distance_cm: 0,
+        },
+        ObservedLocation {
+            location_id: "loc-assembler".to_string(),
+            name: "assembler".to_string(),
+            pos: GeoPos {
+                x_cm: 500.0,
+                y_cm: 0.0,
+                z_cm: 0.0,
+            },
+            profile: Default::default(),
+            distance_cm: 500,
+        },
+    ];
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::MoveAgent {
+            agent_id: "agent-1".to_string(),
+            to: "loc-assembler".to_string(),
+        })
+    );
+}
+
+#[test]
+fn llm_agent_hard_switches_with_factory_kind_inferred_from_recipe_hint() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.alpha","recipe_id":"recipe.assembler.control_chip","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    behavior.remember_factory_location_hint("factory.alpha", "loc-home", None);
+
+    behavior.on_action_result(&ActionResult {
+        action: Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+        },
+        action_id: 1_060,
+        success: true,
+        event: WorldEvent {
+            id: 1_160,
+            time: 240,
+            kind: WorldEventKind::RecipeScheduled {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.alpha".to_string(),
+                recipe_id: "recipe.assembler.control_chip".to_string(),
+                batches: 1,
+                electricity_cost: 6,
+                hardware_cost: 2,
+                data_output: 1,
+                finished_product_id: "control_chip".to_string(),
+                finished_product_units: 1,
+            },
+            runtime_event: None,
+        },
+    });
+
+    let mut observation = make_observation();
+    observation.visible_locations = vec![ObservedLocation {
+        location_id: "loc-home".to_string(),
+        name: "home".to_string(),
+        pos: GeoPos {
+            x_cm: 0.0,
+            y_cm: 0.0,
+            z_cm: 0.0,
+        },
+        profile: Default::default(),
+        distance_cm: 0,
+    }];
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            batches: 1,
+        })
+    );
+}
+
+#[test]
+fn llm_agent_builds_missing_factory_before_cross_stage_coverage_handoff() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.smelter.1","recipe_id":"recipe.smelter.polymer_resin","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.smelter.1",
+        "factory.smelter.mk1",
+        "loc-home",
+    );
+
+    for (offset, recipe_id, finished_product_id) in [
+        (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
+        (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
+        (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+    ] {
+        behavior.on_action_result(&ActionResult {
+            action: Action::ScheduleRecipe {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.smelter.1".to_string(),
+                recipe_id: recipe_id.to_string(),
+                batches: 1,
+            },
+            action_id: 1_200 + offset,
+            success: true,
+            event: WorldEvent {
+                id: 1_300 + offset,
+                time: 260 + offset,
+                kind: WorldEventKind::RecipeScheduled {
+                    owner: ResourceOwner::Agent {
+                        agent_id: "agent-1".to_string(),
+                    },
+                    factory_id: "factory.smelter.1".to_string(),
+                    recipe_id: recipe_id.to_string(),
+                    batches: 1,
+                    electricity_cost: 6,
+                    hardware_cost: 2,
+                    data_output: 1,
+                    finished_product_id: finished_product_id.to_string(),
+                    finished_product_units: 1,
+                },
+                runtime_event: None,
+            },
+        });
+    }
+
+    let mut observation = make_observation();
+    observation.visible_locations = vec![ObservedLocation {
+        location_id: "loc-home".to_string(),
+        name: "home".to_string(),
+        pos: GeoPos {
+            x_cm: 0.0,
+            y_cm: 0.0,
+            z_cm: 0.0,
+        },
+        profile: Default::default(),
+        distance_cm: 0,
+    }];
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::BuildFactory {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            location_id: "loc-home".to_string(),
+            factory_id: "factory.assembler.mk1".to_string(),
+            factory_kind: "factory.assembler.mk1".to_string(),
+        })
+    );
+}
+
+#[test]
+fn llm_agent_preserves_hard_switch_on_noncanonical_same_kind_factory() {
+    let client = MockClient {
+        output: Some(
+            r#"{"decision":"schedule_recipe","owner":"self","factory_id":"factory.assembler.legacy","recipe_id":"recipe.assembler.control_chip","batches":1}"#.to_string(),
+        ),
+        err: None,
+    };
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
+    seed_known_factory(
+        &mut behavior,
+        "factory.assembler.legacy",
+        "factory.assembler.mk1",
+        "loc-home",
+    );
+    seed_known_factory(
+        &mut behavior,
+        "factory.assembler.current",
+        "factory.assembler.mk1",
+        "loc-home",
+    );
+
+    behavior.on_action_result(&ActionResult {
+        action: Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.assembler.legacy".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+        },
+        action_id: 860,
+        success: true,
+        event: WorldEvent {
+            id: 960,
+            time: 220,
+            kind: WorldEventKind::RecipeScheduled {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.assembler.legacy".to_string(),
+                recipe_id: "recipe.assembler.control_chip".to_string(),
+                batches: 1,
+                electricity_cost: 6,
+                hardware_cost: 2,
+                data_output: 1,
+                finished_product_id: "control_chip".to_string(),
+                finished_product_units: 1,
+            },
+            runtime_event: None,
+        },
+    });
+
+    let mut observation = make_observation();
+    observation
+        .self_resources
+        .add(ResourceKind::Data, 24)
+        .expect("add test hardware");
+    observation
+        .self_resources
+        .add(ResourceKind::Electricity, 100)
+        .expect("add test electricity");
+
+    let decision = behavior.decide(&observation);
+    assert_eq!(
+        decision,
+        AgentDecision::Act(Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.assembler.legacy".to_string(),
+            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            batches: 1,
+        })
+    );
 }
 
 #[test]
@@ -247,6 +752,24 @@ fn llm_agent_rewrites_wait_ticks_to_sustained_schedule_after_full_recipe_coverag
     });
 
     let coverage_events = [
+        (
+            "recipe.smelter.iron_ingot",
+            6_i64,
+            2_i64,
+            "product.material.iron_ingot",
+        ),
+        (
+            "recipe.smelter.copper_wire",
+            6_i64,
+            2_i64,
+            "product.material.copper_wire",
+        ),
+        (
+            "recipe.smelter.polymer_resin",
+            6_i64,
+            2_i64,
+            "product.material.polymer_resin",
+        ),
         (
             "recipe.assembler.control_chip",
             6_i64,
@@ -384,6 +907,9 @@ fn llm_agent_rewrites_wait_to_recovery_action_after_full_recipe_coverage() {
     });
 
     let covered_recipe_ids = [
+        "recipe.smelter.iron_ingot",
+        "recipe.smelter.copper_wire",
+        "recipe.smelter.polymer_resin",
         "recipe.assembler.control_chip",
         "recipe.assembler.motor_mk1",
         "recipe.assembler.logistics_drone",
@@ -498,6 +1024,7 @@ fn llm_agent_user_prompt_includes_recipe_coverage_summary() {
 
     let prompt = behavior.user_prompt(&make_observation(), &[], 0, 4);
     assert!(prompt.contains("\"recipe_coverage\""));
+    assert!(prompt.contains("\"recipe.smelter.iron_ingot\"") || prompt.contains("...(truncated)"));
     assert!(
         prompt.contains("\"recipe.assembler.control_chip\"") || prompt.contains("...(truncated)")
     );
@@ -658,235 +1185,4 @@ fn llm_agent_clamps_mine_compound_mass_by_known_location_availability() {
     assert!(trace.llm_step_trace.iter().any(|step| step
         .output_summary
         .contains("clamped by known_location_compound_available")));
-}
-
-#[test]
-fn llm_agent_reroutes_mine_compound_from_depleted_location_to_alternative_location() {
-    let client = MockClient {
-        output: Some(
-            r#"{"decision":"mine_compound","owner":"self","location_id":"loc-home","compound_mass_g":3000}"#
-                .to_string(),
-        ),
-        err: None,
-    };
-    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
-    behavior.on_action_result(&ActionResult {
-        action: Action::MineCompound {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            location_id: "loc-home".to_string(),
-            compound_mass_g: 3_000,
-        },
-        action_id: 613,
-        success: false,
-        event: WorldEvent {
-            id: 713,
-            time: 162,
-            kind: WorldEventKind::ActionRejected {
-                reason: RejectReason::InsufficientResource {
-                    owner: ResourceOwner::Location {
-                        location_id: "loc-home".to_string(),
-                    },
-                    kind: ResourceKind::Data,
-                    requested: 3_000,
-                    available: 0,
-                },
-            },
-            runtime_event: None,
-        },
-    });
-
-    let mut observation = make_observation();
-    observation.visible_locations = vec![
-        ObservedLocation {
-            location_id: "loc-home".to_string(),
-            name: "home".to_string(),
-            pos: GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
-            profile: Default::default(),
-            distance_cm: 0,
-        },
-        ObservedLocation {
-            location_id: "loc-alt".to_string(),
-            name: "alt".to_string(),
-            pos: GeoPos {
-                x_cm: 700_000.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
-            profile: Default::default(),
-            distance_cm: 700_000,
-        },
-    ];
-    observation.time = 163;
-
-    let decision = behavior.decide(&observation);
-    assert_eq!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: "agent-1".to_string(),
-            to: "loc-alt".to_string(),
-        })
-    );
-
-    let trace = behavior.take_decision_trace().expect("trace");
-    assert!(trace
-        .llm_step_trace
-        .iter()
-        .any(|step| step.output_summary.contains("rerouted to move_agent")));
-}
-
-#[test]
-fn llm_agent_skips_depleted_location_during_cooldown_window() {
-    let client = MockClient {
-        output: Some(
-            r#"{"decision":"mine_compound","owner":"self","location_id":"loc-home","compound_mass_g":3000}"#
-                .to_string(),
-        ),
-        err: None,
-    };
-    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
-
-    behavior.on_action_result(&ActionResult {
-        action: Action::MineCompound {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            location_id: "loc-home".to_string(),
-            compound_mass_g: 3_000,
-        },
-        action_id: 1_000,
-        success: false,
-        event: WorldEvent {
-            id: 1_001,
-            time: 220,
-            kind: WorldEventKind::ActionRejected {
-                reason: RejectReason::InsufficientResource {
-                    owner: ResourceOwner::Location {
-                        location_id: "loc-home".to_string(),
-                    },
-                    kind: ResourceKind::Data,
-                    requested: 3_000,
-                    available: 0,
-                },
-            },
-            runtime_event: None,
-        },
-    });
-
-    let mut observation = make_observation();
-    observation.time = 221;
-    observation.visible_locations = vec![
-        ObservedLocation {
-            location_id: "loc-home".to_string(),
-            name: "home".to_string(),
-            pos: GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
-            profile: Default::default(),
-            distance_cm: 0,
-        },
-        ObservedLocation {
-            location_id: "loc-alt".to_string(),
-            name: "alt".to_string(),
-            pos: GeoPos {
-                x_cm: 700_000.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
-            profile: Default::default(),
-            distance_cm: 700_000,
-        },
-    ];
-
-    let decision = behavior.decide(&observation);
-    assert_eq!(
-        decision,
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: "agent-1".to_string(),
-            to: "loc-alt".to_string(),
-        })
-    );
-
-    let trace = behavior.take_decision_trace().expect("trace");
-    assert!(trace.llm_step_trace.iter().any(|step| step
-        .output_summary
-        .contains("cooldown guardrail rerouted to move_agent")));
-}
-
-#[test]
-fn llm_agent_allows_retry_depleted_location_after_cooldown_expires() {
-    let client = MockClient {
-        output: Some(
-            r#"{"decision":"mine_compound","owner":"self","location_id":"loc-home","compound_mass_g":3000}"#
-                .to_string(),
-        ),
-        err: None,
-    };
-    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), client);
-
-    behavior.on_action_result(&ActionResult {
-        action: Action::MineCompound {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            location_id: "loc-home".to_string(),
-            compound_mass_g: 3_000,
-        },
-        action_id: 1_002,
-        success: false,
-        event: WorldEvent {
-            id: 1_003,
-            time: 230,
-            kind: WorldEventKind::ActionRejected {
-                reason: RejectReason::InsufficientResource {
-                    owner: ResourceOwner::Location {
-                        location_id: "loc-home".to_string(),
-                    },
-                    kind: ResourceKind::Data,
-                    requested: 3_000,
-                    available: 0,
-                },
-            },
-            runtime_event: None,
-        },
-    });
-
-    let mut observation = make_observation();
-    observation.time = 240;
-    observation.visible_locations = vec![ObservedLocation {
-        location_id: "loc-home".to_string(),
-        name: "home".to_string(),
-        pos: GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
-        },
-        profile: Default::default(),
-        distance_cm: 0,
-    }];
-
-    let decision = behavior.decide(&observation);
-    assert_eq!(
-        decision,
-        AgentDecision::Act(Action::MineCompound {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            location_id: "loc-home".to_string(),
-            compound_mass_g: 3_000,
-        })
-    );
-
-    let trace = behavior.take_decision_trace().expect("trace");
-    assert!(!trace
-        .llm_step_trace
-        .iter()
-        .any(|step| step.output_summary.contains("cooldown guardrail rerouted")));
 }

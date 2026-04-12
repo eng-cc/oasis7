@@ -23,6 +23,7 @@ struct RecipePlan {
 }
 
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";
+const FACTORY_KIND_SMELTER_MK1: &str = "factory.smelter.mk1";
 const FACTORY_KIND_ASSEMBLER_MK1: &str = "factory.assembler.mk1";
 const FACTORY_KIND_RADIATION_POWER_MK1: &str = "factory.power.radiation.mk1";
 
