@@ -817,7 +817,7 @@
     - `file site/social/xiaohongshu-cycle-carousel-slide1.png site/social/xiaohongshu-cycle-carousel-slide2.png site/social/xiaohongshu-cycle-carousel-slide3.png site/social/xiaohongshu-cycle-carousel-slide4.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] TASK-README-067 (PRD-README-043) [test_tier_required]: 为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分维度、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象。
+- [x] TASK-README-067 (PRD-README-043) [test_tier_required]: 为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象。
   - 产物文件:
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
@@ -830,7 +830,7 @@
     - `.pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml`
     - `.pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "PRD-README-043|AC-30|DEC-RM-039|TASK-README-067|小红书博主|微信公众号|绿洲币|流量买量" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
+    - `rg -n "PRD-README-043|AC-30|DEC-RM-039|TASK-README-067|小红书博主|微信公众号|绿洲币|300 OC|800 OC|1500 OC|流量买量" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 
@@ -848,7 +848,7 @@
 - 更新日期: 2026-04-12
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
-- 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
+- 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
 - 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）
 - 最新完成: `TASK-README-064`（已为小红书第十二篇固定“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）
 - 最新完成: `TASK-README-063`（已按推荐发布版向 Moltbook `general` 发布 `repair certification` follow-up，并记录 `post_id`、验证结果与首轮读回状态。）
