@@ -274,6 +274,25 @@
     - `rg -n "Reward Review Intake|Oasis ID|Reward Account|public_key|public key" .github/pull_request_template.md doc/readme/prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-069 (PRD-README-020/022) [test_tier_required]: 为 GitHub PR reward intake 补齐脚本化导入入口，支持解析 PR body 并输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row，不再靠 liveops 手工抄字段。
+  - 产物文件:
+    - `scripts/readme-reward-pr-intake-import.py`
+    - `scripts/readme-reward-pr-intake-import-smoke.sh`
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.design.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+  - 验收命令 (`test_tier_required`):
+    - `python3 -m py_compile scripts/readme-reward-pr-intake-import.py`
+    - `./scripts/readme-reward-pr-intake-import-smoke.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-README-031 (PRD-README-021) [test_tier_required]: 记录小红书账号第一篇自我介绍帖的标题、正文、封面文案、标签和使用说明，固定“人类开发者 + agent 队友”的首帖叙事。
   - 产物文件:
     - `doc/readme/prd.md`

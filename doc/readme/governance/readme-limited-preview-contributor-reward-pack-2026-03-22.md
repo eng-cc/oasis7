@@ -67,6 +67,24 @@ Recommended PR fields:
 
 If the PR does not include this block, treat it as "no reward review requested" unless `liveops_community` later backfills the fields from an approved follow-up channel.
 
+## 3.2 Scripted Import
+Use the repo script when `liveops_community` wants to import PR intake without manually copying fields:
+
+```bash
+./scripts/readme-reward-pr-intake-import.py --pr 123
+./scripts/readme-reward-pr-intake-import.py \
+  --body-file /tmp/pr-body.md \
+  --source-link https://github.com/<owner>/<repo>/pull/123 \
+  --public-handle builder01 \
+  --contributor @builder01
+```
+
+Status meanings:
+- `ready`: reward review explicitly requested and both `Oasis ID` and `Reward Account` are present.
+- `deferred`: reward review requested, but required claimant fields are incomplete.
+- `no_reward_review_requested`: PR body does not contain the intake block.
+- `invalid_intake`: intake block exists, but `Request reward review` is not explicit `yes`.
+
 ## 4. Band Rules
 - `<20`: `no-token-recommendation`
 - `20-49`: `eligible-small`

@@ -23,6 +23,7 @@
   - 每轮 limited preview 结束时汇总一次贡献评分。
   - 每次出现高价值 bug、PR、长时样本或内容贡献时追加评分记录。
   - 每次贡献者希望让某个 GitHub PR 直接进入奖励审核时，在 PR intake 中补齐 `Oasis ID + Reward Account`。
+  - 每次 `liveops_community` 需要把 PR intake 批量导入台账时，通过仓库脚本解析 PR body，而不是手工抄字段。
   - 每次准备对外说明奖励机制时，先用禁语清单复核文案。
 - User Stories:
   - PRD-README-LTPR-001: As a `liveops_community`, I want a contribution scoring template, so that reward review is auditable.
@@ -33,12 +34,14 @@
   2. Flow-LTPR-002: `对外准备奖励说明 -> 用禁语清单复核 -> 删除任何 P2E / login reward 表述 -> 再交 producer 审核`
   3. Flow-LTPR-003: `producer 审核奖励建议档位 -> 决定是否批准 -> 若批准则进入后续链上/多签执行`
   4. Flow-LTPR-004: `贡献者提交 GitHub PR -> 如需进入奖励审核则填写可选 reward intake block -> liveops 从 PR 中读取 Oasis ID / Reward Account / evidence link -> 再进入评分模板`
+  5. Flow-LTPR-005: `liveops 运行导入脚本 -> 脚本输出 ready/deferred/no_reward_review_requested 与 ledger-ready 字段 -> 再决定是否进入 reward ledger`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 贡献评分 | `oasis_id`、`reward_account`、`contribution_type`、`base_score`、`quality_modifier`、`duplicate_flag` | 按模板打分 | `captured -> scored -> reviewed` | 用户侧领取身份统一写 `Oasis ID`；`Reward Account` 仅作执行字段；重复低价值反馈降权 | `liveops_community` 记录，producer 审核 |
 | 证据字段 | `proof_link`、`build_id`、`repro_steps`、`duration_sample`、`reviewer` | 填充证据并核验完整性 | `missing -> complete` | 缺关键证据不得进入奖励建议池 | `liveops_community` 维护 |
 | GitHub PR Intake | `reward_review_request`、`oasis_id`、`reward_account`、`evidence_link`、`notes` | 在 PR 模板中按需保留 reward intake block | `deleted -> submitted -> imported` | 不申请 reward review 的作者应删除整个区块；不得在该区块使用 raw `public_key` 作为名称 | PR 作者填写，`liveops_community` 导入 |
+| PR Intake Import Script | `import_status`、`validation_error`、`missing_fields`、`ledger_row` | 解析 PR body 并输出 ledger-ready 结构化结果 | `parsed -> ready/deferred/no_reward_review_requested/invalid_intake` | `Request reward review` 必须显式为 `yes`；`Oasis ID` / `Reward Account` 缺失时返回 `deferred`，未请求或 intake 无效时不建 row | `liveops_community` 执行 |
 | 奖励建议档位 | `eligible-small`、`eligible-medium`、`eligible-large`、`no-token-recommendation` | 根据总分给出建议档位 | `scored -> recommended` | 只给档位，不给固定 token 数额 | `producer_system_designer` 决定是否批准 |
 | 禁语清单 | `forbidden_phrase`、`safe_phrase` | 审核对外 copy | `draft -> safe/block` | 命中禁语即阻断 | `liveops_community` 起草，producer 审核 |
 - Acceptance Criteria:
@@ -48,6 +51,7 @@
   - AC-4: 对外模板不得出现 `play-to-earn`、`login reward`、`time played = token`、`come play to earn`、`airdrop for players`。
   - AC-5: 奖励建议档位只允许使用 `eligible-small / eligible-medium / eligible-large / no-token-recommendation`，不得公开固定 token 数额或固定 token/point 比率。
   - AC-6: 若 GitHub PR 被视作贡献证据入口，默认 PR 模板必须提供可选 reward intake block，字段统一为 `Oasis ID + Reward Account`，不得把 raw `public key` 当作 claimant 名称字段。
+  - AC-7: 仓库必须提供可执行导入脚本，至少支持 `--body-file` 离线解析，并能输出 `ready / deferred / no_reward_review_requested / invalid_intake` 四类状态。
 - Non-Goals:
   - 本专题不决定具体 token 发放数量。
   - 不替代 `qa_engineer` 的创世配置审计职责。
@@ -64,11 +68,13 @@
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
+  - `scripts/readme-reward-pr-intake-import.py`
 - Edge Cases & Error Handling:
   - 多人重复提交同一 bug：只给首个高质量提交 full 分，后续重复只保留低分或不计分。
   - 只有情绪反馈、没有证据：记录但不进入 token 建议池。
   - PR 未合并但价值高：可给 `eligible-small` 或 `eligible-medium` 建议，但必须说明状态。
   - PR 作者删除了 reward intake block：视为该 PR 未申请 reward review；若后续要进入奖励审核，必须补齐 `Oasis ID + Reward Account` 或由 liveops 补录后标记来源。
+  - PR 作者保留 intake block 但 `Request reward review` 不是显式 `yes`：导入脚本应返回 `invalid_intake`，不得默认为已申请。
   - 若贡献者只提供 raw `public key` 派生材料，进入奖励模板前必须先收口为 `Oasis ID + Reward Account`，不得把 raw `public key` 直接当作领取名称展示。
   - 对外问“玩多久能拿多少 token”：必须明确回答“没有固定时长换算，不按在线时长发放”。
 - Non-Functional Requirements:
@@ -101,6 +107,7 @@
 | DEC-LTPR-003 | 模板不依赖 invite-only | 把奖励资格绑定到 invite-only 名单 | 用户已经确认不做 product-level invite-only，模板必须与此一致。 |
 | DEC-LTPR-004 | reward claimant 的用户侧身份统一写为 `Oasis ID`，`Reward Account` 只保留为执行字段 | 直接把 raw `public key` 或账户派生材料当作领取名称写进模板 | 奖励审核和对外说明要先围绕可读的 claimant identity 收口；底层签名材料应继续留在技术专题。 |
 | DEC-LTPR-005 | GitHub PR 如要直接进入奖励审核，使用可选 reward intake block 收集 `Oasis ID + Reward Account` | 继续要求 liveops 在评论/私聊里二次追问身份字段，或在 PR 模板里直接索要 raw `public_key` | PR 已是公开贡献面；把 reward intake 做成可选结构化区块，既方便导入台账，也能保持 claimant-facing 命名一致。 |
+| DEC-LTPR-006 | 用仓库脚本解析 PR intake block 并输出结构化导入状态 | 继续靠 liveops 人工抄 PR body、口头判断 `ready/deferred/no_reward_review_requested` | 脚本化导入能把重复劳动和判定歧义收掉，同时保留 `Oasis ID + Reward Account` 的命名边界。 |
 
 ## 7. 执行模板（执行版）
 

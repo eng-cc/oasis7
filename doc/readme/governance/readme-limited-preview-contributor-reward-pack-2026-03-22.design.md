@@ -10,6 +10,7 @@
 - 贡献定义层：明确什么可以计分，什么默认不计分。
 - 领取身份层：用户侧统一使用 `Oasis ID`，并把 `Reward Account` 保留为执行字段。
 - PR intake 层：当贡献来源是 GitHub PR 时，允许作者通过可选 reward intake block 直接提交 `Oasis ID + Reward Account`。
+- 脚本导入层：由仓库脚本解析 PR body，并输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready 字段。
 - 评分层：基础分 + 质量修正 + 奖励建议档位。
 - 证据层：为每条建议固定 proof 字段。
 - 沟通层：为所有对外说明固定 safe phrase / forbidden phrase。
@@ -19,11 +20,13 @@
 - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
 - `.github/pull_request_template.md`
+- `scripts/readme-reward-pr-intake-import.py`
 
 ## 4. 约束与边界
 - 不把 raw `public key` 当作奖励领取名称；用户侧统一写 `Oasis ID`。
 - `Reward Account` 只作执行/发放字段，不替代 claimant 的用户侧命名。
 - GitHub PR intake block 只在作者主动申请 reward review 时填写，不强制所有 PR 都填奖励字段。
+- 脚本导入只接受显式 `Request reward review: yes`；其它占位或残留块不自动视作已申请。
 - 不公开固定 token 数额或固定 token/point 汇率。
 - 不把奖励资格绑定到 product-level invite-only。
 - 默认不奖励登录、试玩或在线时长。

@@ -38,6 +38,26 @@ Each non-rejected row should include:
 If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before filling the ledger.
 If a PR source has no reward intake block, treat it as "no reward review requested". Only create or advance a reward row after `Oasis ID + Reward Account` are backfilled from an approved follow-up channel.
 
+## 3.1 Scripted Import
+Use the repo script before copying PR-sourced rows into the ledger:
+
+```bash
+./scripts/readme-reward-pr-intake-import.py --pr 123
+./scripts/readme-reward-pr-intake-import.py \
+  --body-file /tmp/pr-body.md \
+  --source-link https://github.com/<owner>/<repo>/pull/123 \
+  --public-handle builder01 \
+  --contributor @builder01 \
+  --ledger-id LTRL-PR-001 \
+  --format ledger-md
+```
+
+Recommended handling:
+- `ready`: import the emitted row as `draft`.
+- `deferred`: keep the row deferred until claimant fields are completed.
+- `no_reward_review_requested`: do not create a ledger row.
+- `invalid_intake`: ask the PR author to fix or delete the intake block before import.
+
 ## 4. Band Summary
 | Band | Row Count | Contributor Count | Status |
 | --- | --- | --- | --- |
