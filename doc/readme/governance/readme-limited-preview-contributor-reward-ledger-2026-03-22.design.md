@@ -10,6 +10,7 @@
 - Round 层：固定 `round_id/candidate_id/window/status`。
 - Ledger 层：逐条记录 contributor、`Oasis ID`、`Reward Account`、证据、分数、档位与审核状态。
 - PR intake import 层：对于 GitHub PR 来源的贡献，优先从 PR reward intake block 导入 `Oasis ID + Reward Account`。
+- 脚本导入层：由仓库脚本输出 `ready/deferred/no_reward_review_requested` 与可直接落表的 ledger row 草案。
 - Approval 层：记录 producer 审批结果与审批引用。
 - Distribution 层：回填实际发放数量、执行时间与引用。
 - Archive 层：汇总 band summary、未解决项与下轮动作。
@@ -20,6 +21,7 @@
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
 - `.github/pull_request_template.md`
+- `scripts/readme-reward-pr-intake-import.py`
 
 ## 4. 约束与边界
 - ledger 不定义固定 token 档位额度。
@@ -27,6 +29,7 @@
 - 用户侧身份统一写 `Oasis ID`；raw `public key` 不进入奖励台账名称层。
 - `Reward Account` 只作执行/发放字段，不替代 claimant 的用户侧命名。
 - PR intake import 只适用于 `Source Type=PR` 的 row，不替代其它来源的证据补录。
+- 脚本导入结果至少要区分 `ready / deferred / no_reward_review_requested / invalid_intake`，避免普通 PR、待补资料 PR 与错误保留的模板块混在一起。
 - 任何 `distributed` 状态都必须能指回真实执行引用。
 
 ## 5. 设计演进计划
