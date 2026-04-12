@@ -34,7 +34,7 @@ struct PublicManifestEntry {
     public_key_hex: String,
     #[serde(default)]
     threshold: Option<u16>,
-    #[serde(default, alias = "awt_account_id")]
+    #[serde(default)]
     oc_account_id: String,
 }
 

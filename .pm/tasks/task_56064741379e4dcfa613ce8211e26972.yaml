@@ -20,6 +20,6 @@ acceptance:
   - "文档、PRD、project、release/manual 以及代码注释中与当前 token 真值相关的 AWT 残留完成清理；必要时仅保留迁移兼容或历史语境说明"
   - "required 验证、文档治理、PM close 与 snapshot review 全部通过"
 handoff_to: []
-updated_at: 2026-04-12T11:23:27+08:00
-last_started_at: 2026-04-12T00:33:54+08:00
-last_closed_at: 2026-04-12T11:23:18+08:00
+updated_at: 2026-04-12T11:33:16+08:00
+last_started_at: 2026-04-12T11:30:23+08:00
+last_closed_at: 2026-04-12T11:33:16+08:00
