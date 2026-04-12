@@ -8,6 +8,7 @@
 - 想按子域或文件名继续下钻，而不是从长名单里逐条找：`doc/readme/prd.index.md`
 - 想直接看当前高频 liveops/operator 入口：`doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`
 - 想直接看当前小红书持续运营入口：`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+- 想直接看当前媒体推广者绿洲币激励入口：`doc/readme/governance/readme-media-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 
 ## 入口
 - PRD: `doc/readme/prd.md`
@@ -32,13 +33,13 @@
 - 跟踪 README 与设计/实现的一致性缺口。
 - 承接 release communication、公告底稿、运营 runbook 与根 README 状态同步等对外口径闭环。
 
-## 热点子域导航（2026-04-10 快照）
-- `governance/`（89）：根 README 对齐、release communication、渠道运营 runbook、奖励与 invite 包。
+## 热点子域导航（2026-04-12 快照）
+- `governance/`（93）：根 README 对齐、release communication、渠道运营 runbook、奖励与 invite 包。
 - `gap/`（27）：README 与实现/流程间差距闭环，适合 owner 排查口径或能力缺口时进入。
 - `production/`（12）：生产收口、阶段边界与 readiness 主题。
 
 ## 高密度提示
-- `doc/readme/` 当前共有 133 份文件；默认入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
+- `doc/readme/` 当前共有 137 份文件；默认入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；需要素材包、执行记录或历史专题时，再按具体子域进入。
 
 ## 根目录收口
