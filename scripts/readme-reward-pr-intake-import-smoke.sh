@@ -29,7 +29,6 @@ cat >"$ready_body" <<'EOF'
 Delete this entire section if you do not want this PR to be considered in the early contributor reward review.
 
 - Request reward review: `yes`
-- Oasis ID: `oasis-builder-01`
 - Reward Account: `awt:reward:builder01`
 - Evidence / context link: `https://example.com/evidence/123`
 - Notes: `Merged after reviewer feedback`
@@ -46,7 +45,6 @@ ready_json="$tmpdir/ready.json"
   >"$ready_json"
 
 ensure_file_contains "$ready_json" '"import_status": "ready"'
-ensure_file_contains "$ready_json" '"oasis_id": "oasis-builder-01"'
 ensure_file_contains "$ready_json" '"reward_account": "awt:reward:builder01"'
 ensure_file_contains "$ready_json" '"source_link": "https://github.com/example/oasis7/pull/123"'
 
@@ -62,7 +60,6 @@ ready_row="$tmpdir/ready-row.md"
   >"$ready_row"
 
 ensure_file_contains "$ready_row" 'LTRL-PR-001'
-ensure_file_contains "$ready_row" 'oasis-builder-01'
 ensure_file_contains "$ready_row" 'awt:reward:builder01'
 ensure_file_contains "$ready_row" 'draft'
 
@@ -88,7 +85,6 @@ invalid_body="$tmpdir/invalid.md"
 cat >"$invalid_body" <<'EOF'
 ## Reward Review Intake
 - Request reward review: `true`
-- Oasis ID: `oasis-builder-03`
 - Reward Account: `awt:reward:builder03`
 EOF
 
@@ -143,7 +139,6 @@ cat >"$missing_body" <<'EOF'
 Delete this entire section if you do not want this PR to be considered in the early contributor reward review.
 
 - Request reward review: `yes`
-- Oasis ID: `oasis-builder-02`
 - Reward Account:
 - Evidence / context link: `https://example.com/evidence/456`
 EOF

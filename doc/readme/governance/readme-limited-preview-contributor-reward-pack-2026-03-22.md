@@ -30,7 +30,6 @@ Default non-countable examples:
 | --- | --- |
 | Contributor |  |
 | Public Handle / GitHub |  |
-| Oasis ID |  |
 | Reward Account |  |
 | Contribution Type |  |
 | Base Score |  |
@@ -40,7 +39,7 @@ Default non-countable examples:
 | Reviewer |  |
 | Review Date |  |
 
-`Oasis ID` 是 reward claimant 的用户侧身份字段；`Reward Account` 仅用于实际发放与台账执行，不用 raw `public key` 作为展示名称。
+`Reward Account` 仅用于实际发放与台账执行；reward review 的名称层继续依赖 `Contributor` / `Public Handle / GitHub`，不用 raw `public key` 作为展示名称。
 
 ## 3. Evidence Fields
 Each recommendation should include:
@@ -53,14 +52,13 @@ Each recommendation should include:
 - `reviewer_note`
 
 Missing any key evidence field means default `no-token-recommendation` until completed.
-If a contributor only provides raw account derivation material, normalize it to `Oasis ID + Reward Account` before entering this sheet.
+If a contributor only provides raw account derivation material, normalize it to `Reward Account` before entering this sheet.
 
 ## 3.1 GitHub PR Intake
 If the contribution source is a GitHub PR, the author can keep the reward intake block in `.github/pull_request_template.md`. Authors who are not requesting reward review should delete that entire section before opening the PR.
 
 Recommended PR fields:
 - `Request reward review`
-- `Oasis ID`
 - `Reward Account`
 - `Evidence / context link`
 - `Notes`
@@ -80,8 +78,8 @@ Use the repo script when `liveops_community` wants to import PR intake without m
 ```
 
 Status meanings:
-- `ready`: reward review explicitly requested and both `Oasis ID` and `Reward Account` are present.
-- `deferred`: reward review requested, but required claimant fields are incomplete.
+- `ready`: reward review explicitly requested and `Reward Account` is present.
+- `deferred`: reward review requested, but the required payout field is incomplete.
 - `no_reward_review_requested`: PR body does not contain the intake block.
 - `invalid_intake`: intake block exists, but `Request reward review` is not explicit `yes`.
 

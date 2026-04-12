@@ -10,7 +10,7 @@
 - Proposed Solution: 新增 round-based contributor reward ledger 专题，固定 round meta、逐条贡献记录、producer 审批状态、实际发放引用与归档字段，让 limited preview 的真实贡献奖励具备可复用、可复核、可归档的台账模板。
 - Success Criteria:
   - SC-1: 每轮真实贡献奖励都能用同一份 ledger 模板记录 `Round ID / Candidate ID / Window / Status`。
-  - SC-2: 每条奖励建议都必须含 contributor、`Oasis ID`、`Reward Account`、evidence link、score、recommended band、review status。
+  - SC-2: 每条奖励建议都必须含 contributor、`Reward Account`、evidence link、score、recommended band、review status。
   - SC-3: 审批后的真实发放必须回填 `Approval ID / Actual Amount / Distribution Ref`，不允许只停留在“口头批准”。
   - SC-4: 归档前必须输出 round summary、band summary 与 unresolved items，保证后续治理复盘可追溯。
 
@@ -24,7 +24,7 @@
   - 每轮 limited preview 结束后至少维护 1 份 ledger。
   - 每次 producer 完成一轮审批时，更新 review status 与 approval 字段。
   - 每次实际发放完成时，补回 distribution ref 并关闭本轮 ledger。
-  - 每次某条贡献来自 GitHub PR 时，优先从 PR intake block 导入 `Oasis ID + Reward Account`，减少后补沟通。
+  - 每次某条贡献来自 GitHub PR 时，优先从 PR intake block 导入 `Reward Account`，减少后补沟通。
   - 每次 liveops 需要批量判断 PR 来源条目是否可入账时，用导入脚本直接区分 `ready / deferred / no_reward_review_requested / invalid_intake`。
 - User Stories:
   - PRD-README-LTRL-001: As a `liveops_community`, I want one round-based ledger template, so that real contribution review no longer depends on ad-hoc notes.
@@ -35,25 +35,25 @@
   2. Flow-LTRL-002: `producer 审阅逐条 recommended band -> 标记 approved/rejected/deferred -> 输出 round summary`
   3. Flow-LTRL-003: `execution owner 根据 approved rows 执行发放 -> 回填 actual amount / distribution ref -> 标记 distributed`
   4. Flow-LTRL-004: `本轮关闭 -> 记录 unresolved items / next action -> 归档供 future governance review`
-  5. Flow-LTRL-005: `某条贡献来自 GitHub PR -> 从 PR reward intake block 读取 Oasis ID / Reward Account / evidence link -> 生成或补齐 ledger row -> 再进入 producer review`
+  5. Flow-LTRL-005: `某条贡献来自 GitHub PR -> 从 PR reward intake block 读取 Reward Account / evidence link -> 生成或补齐 ledger row -> 再进入 producer review`
   6. Flow-LTRL-006: `运行导入脚本 -> 若结果为 ready 则生成 draft row；若为 deferred 则生成 deferred row；若为 no_reward_review_requested 则不建 row`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Round Meta | `round_id`、`candidate_id`、`window`、`status`、`owner_role` | 初始化本轮 ledger 头部信息 | `planned -> draft -> under_review -> closed` | 每轮只能有 1 个主 ledger | `liveops_community` 维护 |
-| Ledger Row | `ledger_id`、`contributor`、`oasis_id`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 用户侧领取身份统一写 `Oasis ID`；同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
-| PR Intake Import | `reward_review_request`、`oasis_id`、`reward_account`、`evidence_link` | 从 GitHub PR reward intake block 导入或补齐身份字段 | `deleted -> submitted -> imported -> reviewed` | 仅当 source type=`PR` 且作者保留该区块并主动申请 reward review 时使用；raw `public key` 不进入名称层 | `liveops_community` 导入 |
+| Ledger Row | `ledger_id`、`contributor`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
+| PR Intake Import | `reward_review_request`、`reward_account`、`evidence_link` | 从 GitHub PR reward intake block 导入或补齐执行字段 | `deleted -> submitted -> imported -> reviewed` | 仅当 source type=`PR` 且作者保留该区块并主动申请 reward review 时使用；raw `public key` 不进入名称层 | `liveops_community` 导入 |
 | PR Import Script | `import_status`、`missing_fields`、`validation_error`、`ledger_row` | 解析 PR body 并输出 ledger-ready 结果 | `parsed -> ready/deferred/no_reward_review_requested/invalid_intake` | `Request reward review` 必须显式为 `yes`；未请求或 intake 无效时不建 row | `liveops_community` 执行 |
 | Producer Review | `review_status`、`producer_decision`、`approval_id` | 审阅并批准/拒绝/延后 | `reviewed -> approved/rejected/deferred` | 缺证据默认不得批准 | `producer_system_designer` 决策 |
 | Distribution Closure | `actual_amount`、`distribution_ref`、`distribution_date` | 回填真实执行引用 | `approved -> distributed` | 未执行前允许留空；执行后必须补全 | execution owner 回填 |
 | Round Summary | `band_totals`、`approved_rows`、`distributed_rows`、`unresolved_items` | 输出本轮汇总与遗留事项 | `draft -> summarized -> archived` | 汇总值按 ledger rows 聚合 | `liveops_community` 汇总，producer 审核 |
 - Acceptance Criteria:
   - AC-1: ledger 模板必须包含 `Meta`、`Ledger`、`Band Summary`、`Approval Summary`、`Distribution Closure`、`Next Actions` 六个区块。
-  - AC-2: 每条 ledger row 必须至少包含 `Ledger ID`、`Contributor`、`Oasis ID`、`Reward Account`、`Source Link`、`Contribution Type`、`Total Score`、`Recommended Band`、`Review Status`。
+  - AC-2: 每条 ledger row 必须至少包含 `Ledger ID`、`Contributor`、`Reward Account`、`Source Link`、`Contribution Type`、`Total Score`、`Recommended Band`、`Review Status`。
   - AC-3: 任何 `approved` row 在后续实际发放后都必须回填 `Approval ID / Actual Amount / Distribution Ref`。
   - AC-4: 模板必须允许 `rejected / deferred / distributed / archived` 等状态，而不是只记录“建议发放”。
   - AC-5: 模板不得包含任何固定 token/point 汇率、公开营销文案或 `play-to-earn` 叙事。
-  - AC-6: 若 row 来源是 GitHub PR，ledger 必须能回溯到 PR intake block 里的 `Oasis ID + Reward Account`，或显式记录为何改为 `deferred`。
+  - AC-6: 若 row 来源是 GitHub PR，ledger 必须能回溯到 PR intake block 里的 `Reward Account`，或显式记录为何改为 `deferred`。
   - AC-7: 仓库必须提供可执行导入脚本，至少支持 `--body-file` 离线解析，并在脚本输出里显式返回 `ready / deferred / no_reward_review_requested / invalid_intake`。
 - Non-Goals:
   - 本专题不决定每个档位对应的具体 token 数量。
@@ -77,16 +77,16 @@
   - 同一 contributor 有多条有效贡献：允许多行，但每行必须独立 `Ledger ID`。
   - producer 已批准但发放尚未执行：`Actual Amount / Distribution Ref` 可暂空，但 `Review Status` 不能写成 `distributed`。
   - 没有链上 reward account：允许先 `deferred`，不得跳过账户字段直接执行。
-  - PR 来源且已删除 reward intake block：视为未申请 reward review；若后续要进入台账，必须补齐 `Oasis ID + Reward Account` 并保留 approved follow-up 记录，否则不进入 producer 审批。
+  - PR 来源且已删除 reward intake block：视为未申请 reward review；若后续要进入台账，必须补齐 `Reward Account` 并保留 approved follow-up 记录，否则不进入 producer 审批。
   - PR 来源且 intake block 保留但 `Request reward review` 不是显式 `yes`：导入脚本返回 `invalid_intake`，liveops 需先纠正 PR body，再决定是否入账。
-  - 若只拿到 raw `public key` 或账户派生材料，必须先收口为 `Oasis ID + Reward Account`，不得把 raw `public key` 直接作为台账名称层字段。
+  - 若只拿到 raw `public key` 或账户派生材料，必须先收口为 `Reward Account`，不得把 raw `public key` 直接作为台账名称层字段。
   - 证据链接失效：该 row 退回 `draft` 或 `deferred`，不得进入正式批准。
 - Non-Functional Requirements:
   - NFR-LTRL-1: 每轮 ledger 的 `Round ID / Candidate ID / Window / Status` 完整率必须为 `100%`。
   - NFR-LTRL-2: 每条非 `rejected` row 至少包含 1 个有效 evidence/source link。
   - NFR-LTRL-3: 每条 `distributed` row 必须具备 `Approval ID` 与 `Distribution Ref`。
   - NFR-LTRL-4: ledger 模板必须可直接复制复用到下一轮，而无需重新设计字段。
-- Security & Privacy: ledger 只记录公开 handle、`Oasis ID`、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励台账名称字段。
+- Security & Privacy: ledger 只记录公开 handle、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励台账名称字段。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
@@ -110,6 +110,6 @@
 | DEC-LTRL-001 | 用独立 round ledger 承接真实贡献奖励结算 | 继续把真实发放散落在 issue、聊天和临时表格 | 没有统一 ledger 就没有统一审计面。 |
 | DEC-LTRL-002 | ledger 行同时记录建议档位与真实执行引用 | 只记录建议档位，不记录后续发放引用 | 不记录执行引用就无法形成完整闭环。 |
 | DEC-LTRL-003 | 允许 `deferred / rejected / distributed` 多状态 | 所有 row 只有“推荐/未推荐”二元状态 | 真实执行一定存在待补资料、被拒或已执行三类分叉。 |
-| DEC-LTRL-004 | reward claimant 的用户侧身份统一写为 `Oasis ID`，`Reward Account` 只保留为执行字段 | 直接把 raw `public key` 或账户派生材料写进台账名称层 | 台账要先服务审核与归档阅读，claimant identity 必须可读；底层签名材料应继续留在技术专题。 |
-| DEC-LTRL-005 | 对于 GitHub PR 来源的贡献，优先从 PR intake block 导入 `Oasis ID + Reward Account` | 继续在 ledger 建档后再到评论/私聊里补身份字段 | 让 PR 在提交时就带齐 claimant-facing 字段，可以减少二次追问，并让 ledger 更快形成可审阅条目。 |
+| DEC-LTRL-004 | reward intake 与台账执行层统一只要求 `Reward Account` | 在台账里继续要求独立 claimant 字段 | 这条链路的目标是形成可执行分发行；review 名称层已有 contributor/public handle，可不再追加一层 claimant 字段。 |
+| DEC-LTRL-005 | 对于 GitHub PR 来源的贡献，优先从 PR intake block 导入 `Reward Account` | 继续在 ledger 建档后再到评论/私聊里补账户字段 | 让 PR 在提交时就带齐 payout 字段，可以减少二次追问，并让 ledger 更快形成可审阅条目。 |
 | DEC-LTRL-006 | 用仓库脚本输出 PR intake 的导入状态与 ledger-ready row | 继续靠 liveops 在每轮 ledger 时手工判断是否 ready/deferred | ledger 的价值是减少临时表格与口头判断；如果 PR import 还靠人工猜，就没有真正形成可复用入口。 |

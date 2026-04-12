@@ -14,7 +14,6 @@ from typing import Any
 
 FIELD_ALIASES = {
     "request reward review": "reward_review_request",
-    "oasis id": "oasis_id",
     "reward account": "reward_account",
     "evidence / context link": "evidence_context_link",
     "notes": "notes",
@@ -24,7 +23,6 @@ LEDGER_HEADERS = [
     "Ledger ID",
     "Contributor",
     "Public Handle / GitHub",
-    "Oasis ID",
     "Reward Account",
     "Source Type",
     "Source Link",
@@ -177,8 +175,6 @@ def build_result(
             "Reward Review Intake block is present but `Request reward review` is not explicit `yes`."
         )
     else:
-        if not fields.get("oasis_id", ""):
-            missing_fields.append("oasis_id")
         if not fields.get("reward_account", ""):
             missing_fields.append("reward_account")
         import_status = "ready" if not missing_fields else "deferred"
@@ -208,7 +204,6 @@ def build_result(
             "ledger_id": ledger_id,
             "contributor": contributor,
             "public_handle_or_github": public_handle,
-            "oasis_id": fields.get("oasis_id", ""),
             "reward_account": fields.get("reward_account", ""),
             "source_type": "PR",
             "source_link": row_source_link,
@@ -229,7 +224,6 @@ def build_result(
         "title": title,
         "contributor": contributor,
         "public_handle_or_github": public_handle,
-        "oasis_id": fields.get("oasis_id", ""),
         "reward_account": fields.get("reward_account", ""),
         "evidence_context_link": evidence_context_link,
         "notes": intake_notes,
@@ -250,7 +244,6 @@ def render_ledger_row(result: dict[str, Any]) -> str:
         row["ledger_id"],
         row["contributor"],
         row["public_handle_or_github"],
-        row["oasis_id"],
         row["reward_account"],
         row["source_type"],
         row["source_link"],
@@ -279,11 +272,7 @@ def render_summary(result: dict[str, Any]) -> str:
     if status == "no_reward_review_requested":
         return "status=no_reward_review_requested"
     if status == "ready":
-        return (
-            "status=ready "
-            f"oasis_id={result['oasis_id']} "
-            f"reward_account={result['reward_account']}"
-        )
+        return f"status=ready reward_account={result['reward_account']}"
     missing = ",".join(result["missing_fields"])
     if missing:
         return f"status={status} missing_fields={missing}"

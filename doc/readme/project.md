@@ -244,7 +244,7 @@
     - `rg -n "eligible-small|eligible-medium|eligible-large|no fixed token/point ratio|play-to-earn|login reward|time played = token" doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] TASK-README-067 (PRD-README-020/022) [test_tier_required]: 将 reward claimant 的用户侧命名统一收口为 `Oasis ID`，保留 `Reward Account` 作为执行字段，不在奖励模板里把 raw `public key` 当作名称。
+- [x] TASK-README-067 (PRD-README-020/022) [test_tier_required]: 将 reward intake 与台账执行层的必填字段收口为 `Reward Account`，不在奖励模板里把 raw `public key` 当作名称。
   - 产物文件:
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
@@ -258,10 +258,10 @@
     - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
     - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "Oasis ID|oasis_id|Reward Account|raw public key" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+    - `rg -n "Reward Account|raw public key" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] TASK-README-068 (PRD-README-020/022) [test_tier_required]: 为 GitHub PR 补齐可选 reward intake block，统一收集 `Oasis ID + Reward Account`，并把该入口登记到 reward pack / ledger，而不是在 PR 模板里索要 raw `public_key` 名称。
+- [x] TASK-README-068 (PRD-README-020/022) [test_tier_required]: 为 GitHub PR 补齐可选 reward intake block，统一收集 `Reward Account`，并把该入口登记到 reward pack / ledger，而不是在 PR 模板里索要 raw `public_key` 名称。
   - 产物文件:
     - `.github/pull_request_template.md`
     - `doc/readme/prd.md`
@@ -271,7 +271,7 @@
     - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
     - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "Reward Review Intake|Oasis ID|Reward Account|public_key|public key" .github/pull_request_template.md doc/readme/prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `rg -n "Reward Review Intake|Reward Account|public_key|public key" .github/pull_request_template.md doc/readme/prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-README-069 (PRD-README-020/022) [test_tier_required]: 为 GitHub PR reward intake 补齐脚本化导入入口，支持解析 PR body 并输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row，不再靠 liveops 手工抄字段。
