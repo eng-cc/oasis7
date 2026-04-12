@@ -36,6 +36,7 @@
 - SC-4: readme 相关变更全部具备 PRD-ID 与 devlog 追踪。
 - SC-5: Closed beta candidate 的 liveops runbook与模板能直接维持 `limited playable technical preview` 口径，并服务 `prg-game-009` 的 evidence gate。
 - SC-6: limited preview 贡献奖励流程必须具备可直接复用的 round ledger 模板，能够承接评分、审批、发放记录与归档。
+- SC-7: 媒体推广者激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，而不是按播放量粗放买量。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -90,6 +91,7 @@
 - PRD-README-040: As a `liveops_community`, I want a reusable Xiaohongshu cycle-crossing post pack for people already in existing roles, so that we can borrow the current `AI 来得太快 / 怎么穿越周期` discussion heat to explain why the real risk is usually not the job title disappearing overnight but the low-judgment layer inside the role being compressed first, without drifting into macro trend sermon, generic motivation copy, or unsafe project release claims.
 - PRD-README-041: As a `liveops_community`, I want a dedicated Xiaohongshu cover asset for the cycle-crossing post pack, so that the twelfth post can ship with a stronger first-screen hook that still keeps the `穿越周期` topic anchor and the “岗位名不会先变、先变的是岗位里那层工作” judgment boundary, without drifting into panic copy, sci-fi AI cliches, or generic励志海报感。
 - PRD-README-042: As a `liveops_community`, I want a reusable Xiaohongshu cycle-crossing carousel pack derived from the approved twelfth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “岗位名不会先变”“真正该问什么”“别等工具来找你” and the final comment hook, instead of only one cover plus long caption.
+- PRD-README-043: As a `liveops_community`, I want a reusable media-promoter Oasis Coin incentive pack that covers media, KOLs, creators, reposters, and ordinary宣传参与者, so that anyone who genuinely helps build the publicity ecosystem can be reviewed as a participant and beneficiary through auditable contribution records rather than flat buyout or raw-view payouts.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -112,6 +114,7 @@
   19. Flow-RM-019: `确定第七篇“AI人格很火，但我不想做陪聊搭子”表达 -> 借 AI人格 热词讲清“人格不只是会聊天，而是会在世界里行动、判断、协作和承担后果” -> 冻结标题/正文/互动问题并避免滑向情感陪伴产品讨论或完整可玩承诺`
   20. Flow-RM-020: `将第七篇长文版压成 4 页轮播版 -> 拆成封面/核心判断/行为例子/评论区站队页 -> 导出逐页 PNG -> 保持标题、边界与互动问题一致`
   21. Flow-RM-021: `将第十篇长文版压成 4 页轮播版 -> 拆成封面冲突/优先级判断/成熟团队价值/评论区站队页 -> 导出逐页 PNG -> 保持“平台优先、不反 AI、趋势会快速扩散”的边界一致`
+  22. Flow-RM-022: `收集媒体推广资产 -> 按深度报道/原创创作/社区扩散/普通宣传参与分类 -> 校验事实边界与反作弊信号 -> 计算绿洲币奖励建议档位 -> producer 审核 -> 回填 distribution ref 并归档`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -126,6 +129,7 @@
 | 受控预览执行包 | `round_id`、`callout_copy`、`check_slot`、`signal_bucket`、`claim_drift_flag`、`summary_field` | 把 limited preview 第一轮执行压成可直接照跑的操作包 | `draft -> execution_ready -> reused` | 先冻结文案，再冻结巡检，再冻结回流摘要 | `liveops_community` 维护，`producer_system_designer` 审核边界 |
 | 早期贡献奖励操作包 | `reward_account`、`contribution_type`、`score_band`、`evidence_field`、`reward_recommendation`、`forbidden_phrase`、`intake_surface`、`import_script` | 按贡献评分模板判断是否进入奖励建议池，并约束对外表达 | `signal -> scored -> reviewed -> recommended` | `Reward Account` 仅作执行字段；若来源是 GitHub PR，则通过可选 PR intake block 收集 `Reward Account`，并允许导入脚本直接解析；不公布固定 token/point 比率；仅按贡献审计后给 `eligible-small/medium/large` 建议 | `liveops_community` 记录与初评，`producer_system_designer` 最终审批 |
 | 贡献奖励台账 | `round_id`、`candidate_id`、`ledger_id`、`reward_account`、`recommended_band`、`review_status`、`approval_id`、`distribution_ref`、`import_status` | 将真实贡献逐条编目、审批、回填发放记录并归档 | `draft -> reviewed -> approved/rejected -> distributed -> archived` | 同一轮按 contributor 与 ledger id 去重；缺证据默认不得进入审批；PR import 至少区分 `ready / deferred / no_reward_review_requested / invalid_intake` | `liveops_community` 维护，`producer_system_designer` 审核，execution owner 回填发放记录 |
+| 媒体推广者绿洲币激励包 | `promoter_lane`、`asset_url`、`claim_safety_status`、`proof_bundle`、`reach_quality`、`ecosystem_return`、`fraud_flag`、`recommended_band` | 将媒体推广资产按质量、准确性、讨论转化与生态回流纳入奖励审核 | `captured -> screened -> scored -> reviewed -> approved/rejected -> distributed` | 原始播放量不能单独触发奖励；必须先过事实边界与反作弊检查，再按贡献深度和回流质量给档位 | `liveops_community` 记录与初审，`producer_system_designer` 审批，distribution owner 回填发放记录 |
 | 小红书帖子素材包 | `post_goal`、`title`、`body`、`cover_copy`、`carousel_outline`、`interaction_prompt`、`forbidden_phrase` | 固化单篇小红书可复用文案与轮播结构 | `draft -> reviewed -> ready_for_publish -> published` | 先确定单一帖子目标，再冻结标题/正文/互动问题；正文先给人可理解轮廓，再避免 world-rule dump 与上线口径 | `liveops_community` 起草，`producer_system_designer` 审核边界 |
 - Acceptance Criteria:
   - AC-1: readme PRD 明确入口文档职责边界。
@@ -157,6 +161,7 @@
 - AC-27: 若小红书内容链路进入第十二篇，必须补齐“AI来得这么快，怎么穿越周期”素材包，明确标题、正文、短版备选、互动问题、关键词与“AI 先压缩的是岗位里重复、标准、低判断的部分 / 穿越周期靠把自己往问题定义、流程重构、结果负责这一层移动”的表达边界，并保持人类开发者第一人称、非宏大趋势宣讲口径、非鸡汤口径与非上线宣称。
 - AC-28: 若第十二篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要保持“穿越周期”题眼与“岗位 vs 那层工作”的判断钩子同时成立，采用更像 editorial 判断海报的层级抬升构图，不回退到蓝紫科幻 AI、机器人吞岗位、或泛励志海报式表达。
 - AC-29: 若第十二篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用“暖纸面 + editorial 诊断卡 + 层级上移提示”的视觉语言，把讨论收口到“别等工具来找你 / 先看清岗位里哪层工作在变 / 人要往更高判断层移动”，不回退成恐慌式 AI 预言或泛职场鸡汤。
+- AC-30: 若团队要对媒体、KOL、自媒体创作者、社区搬运号或普通宣传参与者启用绿洲币激励，必须补齐独立媒体推广者激励包，明确覆盖对象、可计分/不可计分行为、证据字段、档位建议、审批链、发放回填、反作弊与禁语边界，并明确“宣传方是生态参与者与受益者，但激励不按播放量或买量口径粗放发放”。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -177,6 +182,7 @@
 - `doc/README.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+  - `doc/readme/governance/readme-media-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
 - Edge Cases & Error Handling:
   - 链接失效：断链必须在巡检报告中暴露并进入修复队列。
@@ -186,6 +192,7 @@
   - 并发编辑：同文件并发更新时需合并后重跑链接检查。
   - 历史重定向：legacy redirect 必须保留指向并声明主入口。
   - 过度承诺：若对外文案把贡献奖励写成 `play-to-earn`、`airdrop for players`、`just play and earn token`，必须阻断发布。
+  - 刷量或搬运：若媒体推广资产存在买量、互刷、抄袭搬运、截图造假或多账号重复申报，默认不得进入奖励审批。
 - Non-Functional Requirements:
   - NFR-RM-1: 顶层入口链接可用率 100%。
   - NFR-RM-2: 术语冲突修复 SLA <= 1 个工作日。
@@ -194,6 +201,7 @@
   - NFR-RM-5: 对外文档不得暴露敏感配置信息。
   - NFR-RM-6: 早期贡献奖励模板不得公开固定 token 数额、固定 token/point 比率或“玩多久给多少”的承诺。
   - NFR-RM-7: 真实贡献奖励 ledger 中每条非拒绝记录必须至少有 1 个有效 source/evidence link，且每条已发放记录都必须具备 `Approval ID` 与 `Distribution Ref`。
+  - NFR-RM-8: 媒体推广者绿洲币激励记录中每条非拒绝记录都必须同时具备资产链接、截图或归档证据、事实边界检查结果与反作弊结论；任何仅有播放量而无质量和回流证据的记录不得进入审批。
 - Security & Privacy: 对外文档不得暴露敏感配置与密钥信息；示例配置需使用脱敏样例。
 
 ## 5. Risks & Roadmap
@@ -251,6 +259,7 @@
 | PRD-README-040 | TASK-README-064 | `test_tier_required` | 小红书第十二篇素材包明确“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“先别盯岗位名，先看岗位里哪部分已经会被 AI 压缩 / 要把自己往问题定义、流程重构、结果负责这一层移动”的表达边界 | 渠道内容从现实体验与求职判断继续推进到 AI 时代已有岗位的人如何调整自己的不可替代性结构，把讨论收口到工作内容分层、判断权和结果责任，而不是泛化成宏观趋势分析 |
 | PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇补齐独立封面 HTML/PNG，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
 | PRD-README-042 | TASK-README-066 | `test_tier_required` | 第十二篇补齐独立轮播版素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用暖纸面 editorial 诊断卡 + 层级上移提示的发布视觉 | 第十二篇从长文版与单图封面进一步扩展到更适合小红书滑读、停留和评论的 4 页轮播版，同时保持“先别盯岗位名，先看岗位里哪层工作在变”的判断主线 |
+| PRD-README-043 | TASK-README-067 | `test_tier_required` | 媒体推广者绿洲币激励包明确覆盖对象、计分维度、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按播放量买量对象 | 跨渠道宣传生态激励的执行性、风控性与口径稳定性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -295,3 +304,4 @@
 | DEC-RM-036 | 第十二篇采用“岗位内容分层 + 穿越周期动作”的切口，而不是把帖子写成宏观 AI 趋势判断或泛职业焦虑安慰 | 直接做“哪些岗位会被取代”的宏大预言；或写成“别焦虑、持续学习就好”的鸡汤帖 | 这篇真正有传播力的不是再重复“AI 来得很快”这句共识，而是把焦虑落到更具体的问题上: 岗位里哪些部分先被压缩、什么能力层更值得往上挪。把讨论收回到问题定义、流程重构和结果负责，更符合账号持续输出“判断”而不是“喊口号”的主线。 |
 | DEC-RM-037 | 第十二篇封面采用“editorial 判断海报 + 层级抬升构图 + 穿越周期题签”方向，而不是直接把主标题做成泛 AI 焦虑口号或科幻灾难画面 | 直接做机器人 / 电路 / 岗位被吞掉的直白 AI 隐喻；或只保留“穿越周期”四个字做抽象励志封面 | 这篇真正需要放大的不是恐慌，而是判断: 哪层工作先被压缩，人要往哪层上挪。封面既要保留 `穿越周期` 这个主题锚点，也要把“岗位 vs 那层工作”的分层判断一眼说清，才和正文主线一致。 |
 | DEC-RM-038 | 第十二篇轮播版采用“warm editorial diagnosis / work-layer ladder”方向，而不是把 4 张图做成重复封面、蓝紫科技卡或信息过满的长文截图 | 4 张都重复封面主钩子；或做成密密麻麻的文字截图；或回退到机器人吞岗位的 panic 视觉 | 轮播版的价值不在于再重复一次封面，而在于把判断拆成 4 个停顿点: 先停住、再诊断、再给动作、最后把问题抛回给读者。用暖纸面和诊断卡结构，更符合第十二篇“判断比情绪更重要”的主线，也更接近小红书原生滑读体验。 |
+| DEC-RM-039 | 媒体推广者激励采用“贡献深度 + 事实准确 + 讨论转化 + 生态回流”的绿洲币审核模型，而不是按播放量、转发量或单次发帖做 flat buyout | 直接按 CPM/播放量发币；或把宣传方排除在生态激励之外，只作为外包投放对象 | 用户目标是把宣传方也纳入参与者和受益者，但宣传生态如果只按流量粗放结算，必然被买量、刷量和越界宣传侵蚀。把奖励建立在可审计贡献和生态回流上，才能同时保留激励、治理和可信度。 |

@@ -1,0 +1,23 @@
+task_uid: task_655d27d6d71142fd9df37f52e5ae0936
+title: "制定媒体推广者绿洲币激励方案"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-readme-media-promoter-incentive
+execution_log_path: .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md
+doc_refs:
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "媒体推广者激励方案明确覆盖外部媒体、KOL、自媒体创作者、社区搬运号和普通宣传参与者，并给出分层准入与禁入边界。"
+  - "方案明确绿洲币激励的计分、证据、审批、发放、反作弊与禁语边界，且把宣传方定义为宣传生态参与者和受益者。"
+  - "readme 模块 PRD/project 与专题文档完成追踪闭环，可被 liveops_community 直接执行。"
+handoff_to:
+  - liveops_community
+updated_at: 2026-04-12T12:22:01+08:00
+last_started_at: 2026-04-12T12:11:49+08:00
+last_closed_at: 2026-04-12T12:21:34+08:00
