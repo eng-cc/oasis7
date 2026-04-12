@@ -155,6 +155,7 @@ impl From<RuntimeWorldError> for ViewerRuntimeLiveServerError {
 pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
+    initial_world_time: u64,
     snapshot_config: WorldConfig,
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
@@ -178,11 +179,13 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
         let (world, snapshot_config) =
             bootstrap_runtime_world(config.scenario).map_err(ViewerRuntimeLiveServerError::Init)?;
+        let initial_world_time = world.state().time;
         let llm_sidecar = RuntimeLlmSidecar::new(config.decision_mode);
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
         Ok(Self {
             config,
             world,
+            initial_world_time,
             snapshot_config,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
@@ -802,6 +805,7 @@ impl ViewerRuntimeLiveServer {
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: Some(build_player_gameplay_snapshot(
                 self.world.state(),
+                self.initial_world_time,
                 self.latest_player_gameplay_feedback.as_ref(),
                 gameplay_gate.is_none(),
                 gameplay_gate.as_deref(),

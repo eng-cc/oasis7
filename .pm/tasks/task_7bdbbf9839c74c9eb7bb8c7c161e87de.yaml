@@ -1,0 +1,24 @@
+task_uid: task_7bdbbf9839c74c9eb7bb8c7c161e87de
+title: "Fix post-onboarding gameplay snapshot regression after blocked retention runs"
+owner_role: runtime_engineer
+worktree_hint: oasis7-game-post-onboarding-snapshot-regression
+execution_log_path: .pm/tasks/task_7bdbbf9839c74c9eb7bb8c7c161e87de.execution.md
+status: done
+priority: P0
+source_signal: SIG-PM-0029
+source_refs:
+  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+  - doc/game/project.md
+doc_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+acceptance:
+  - "Player gameplay snapshot does not regress from post_onboarding back to first_session_loop solely because the latest formal-lane feedback is blocked or no_progress after prior forward progress."
+  - "Runtime-live regression tests cover post_onboarding blocked/no-progress snapshots and preserve explicit blocker semantics instead of first-session fallback."
+  - "Task log and project docs capture the fixed regression boundary and any remaining retention blockers."
+handoff_to: []
+updated_at: 2026-04-12T12:37:55+08:00
+last_started_at: 2026-04-12T12:04:42+08:00
+last_closed_at: 2026-04-12T12:37:55+08:00
