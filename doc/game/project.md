@@ -174,9 +174,11 @@
 ## 状态
 - 更新日期: 2026-04-12
 - 当前状态: in_progress
-- 下一任务: 由 `producer_system_designer` 基于 `TASK-GAME-065` 的正式样本阻断签名，拆出下一轮 runtime/viewer 修复切片，优先解释并修复 `post_onboarding.establish_first_capability / 20%` 长停，以及 `post_onboarding -> first_session_loop` 回退伴随 `logicalTime/eventSeq` 冻结的问题。
+- 下一任务: 由 `producer_system_designer` 基于 `TASK-GAME-065` 与后续 runtime 切片的正式阻断签名，继续拆出下一轮 runtime/viewer 修复切片，优先解释并修复 `post_onboarding.establish_first_capability / 20%` 长停；若 formal lane 仍再现 `logicalTime/eventSeq` 冻结，则继续按 run id 细分真实 stall 与 provider/decision 瞬时失败的剩余签名。
 - 已登记待排任务: 若后续 formal lane 再次回退到 provider timeout / latency / prompt budget blocker，则继续按 run id 追加失败签名；在当前两个 progression blocker 修复前，不得把 active-LLM retention gate 对外表述为 `continue_playing`。
-- 当前切片进展: `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 runtime-live 快照在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时误回退到 `first_session_loop` 的映射缺口；当前剩余真实 blocker 仍是 `post_onboarding.establish_first_capability / 20%` 长停，以及部分样本里的 `logicalTime/eventSeq` 冻结。
+- 当前切片进展: `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 runtime-live 快照在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时误回退到 `first_session_loop` 的映射缺口；该结论只说明部分“掉回新手态”是快照口径问题，不等于真实 retention blocker 已消失。
+- 当前切片进展: `task_fb967ddaadde459786e286b484bc4b0c` 已确认 runtime-live 后台 `play` 在 prior progress 之后会把第一次瞬时 LLM access / decision failure 直接升级为永久停机，从而放大成 `logicalTime/eventSeq` 停止前进的冻结签名；当前已改成有限预算重试，并以 `auth_actions` 回归覆盖“短暂失败可重试、预算耗尽仍停机”的边界。
+- 当前切片进展: 上述 runtime hardening 不等于 formal retention gate 已恢复。当前最新 `240s` active-LLM 对照样本未复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`，因此主 blocker 依旧是长停，不得因为 freeze amplifier 已缓解就撤销 `hold`。
 - 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 完成 `3` 条 active-LLM 10 分钟正式样本与 `3` 条 300 秒对照样本回写；当前结论不是 runtime timeout blocker，而是 formal lane 虽已恢复 `software_safe` floor，但仍停在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本会回退到 `first_session_loop.create_first_world_feedback / 0%` 并冻结世界时间，因此 producer verdict 已收口为 `hold`。）
 - 最新完成: `TASK-GAME-064`（`viewer_engineer` 已收口首屏信息层级与玩家口吻反馈，把玩家身份、当前主目标、主阻塞、立即下一步以及奖励/恢复/阻塞语义抬到首层，并补齐对应 Viewer 测试。）
 - 最新完成: `TASK-GAME-063`（`runtime_engineer` 已把 `PostOnboarding` canonical 中循环扩成“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的三段包，补齐首产出后的停机恢复与扩产取舍状态语义。）

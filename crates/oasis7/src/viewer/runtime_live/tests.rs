@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 mod auth_actions;
 mod authoritative;
+mod background_play;
 mod prompt_control;
 mod snapshot_progress;
 

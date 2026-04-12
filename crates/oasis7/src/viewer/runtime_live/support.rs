@@ -101,6 +101,7 @@ pub(super) struct RuntimeLiveSession {
     pub(super) playing: bool,
     pub(super) next_play_step_at: Option<Instant>,
     pub(super) metrics: RunnerMetrics,
+    pub(super) transient_play_failures: u8,
 }
 
 impl RuntimeLiveSession {
@@ -111,6 +112,7 @@ impl RuntimeLiveSession {
             playing: false,
             next_play_step_at: None,
             metrics: RunnerMetrics::default(),
+            transient_play_failures: 0,
         }
     }
 
