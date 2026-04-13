@@ -1,0 +1,24 @@
+task_uid: task_b21f68180cf64edb9ab5dc50bb896ed5
+title: "TASK-README-070 为已合入 PR 奖励 intake 增加按轮扫描脚本"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-reward-merged-pr-round-scan
+execution_log_path: .pm/tasks/task_b21f68180cf64edb9ab5dc50bb896ed5.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md
+  - scripts/readme-reward-pr-intake-import.py
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "仓库提供按 merged PR 时间窗批量扫描 reward intake 的脚本入口，而不是只支持单 PR 导入。"
+  - "批量脚本复用现有 intake contract，显式输出 ready/deferred/no_reward_review_requested/invalid_intake，并保留每条 PR 的来源链接与作者信息。"
+  - "readme PRD/project 与 reward ledger 专题同步登记该批量扫描流程和验证命令。"
+handoff_to: []
+updated_at: 2026-04-13T10:31:27+08:00
+last_started_at: 2026-04-13T00:02:39+08:00
+last_closed_at: 2026-04-13T10:31:27+08:00

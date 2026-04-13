@@ -12,6 +12,7 @@
 - [x] LTRL-4 (PRD-README-LTRL-001/002): 将 reward intake 与台账执行层的必填字段收口为 `Reward Account`，不把 raw `public key` 写进台账名称层。
 - [x] LTRL-5 (PRD-README-LTRL-001/002): 对于 GitHub PR 来源的贡献，优先从可选 PR reward intake block 导入 `Reward Account`，缺字段则保持 `deferred`。
 - [x] LTRL-6 (PRD-README-LTRL-001/002): 新增 PR intake import 脚本，输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row 草案，减少手工抄写。
+- [x] LTRL-7 (PRD-README-LTRL-001/002): 新增 merged PR round scan 脚本，按时间窗批量扫描已合入 PR，复用单 PR intake contract 输出窗口级状态汇总与 ledger-ready 候选。
 
 ## 依赖
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -21,7 +22,7 @@
 - `doc/devlog/2026-03-22.md`
 
 ## 状态
-- 更新日期: 2026-04-12
+- 更新日期: 2026-04-13
 - 当前阶段: 已完成
 - 阻塞项: 无
-- 下一步: 用导入脚本批量准备首轮真实 limited preview contributor reward ledger，再补 producer 审批与 distribution ref。
+- 下一步: 用 merged PR round scan 先按窗口生成 `ready/deferred` 候选，再将其抄入首轮真实 limited preview contributor reward ledger，补 producer 审批与 distribution ref。

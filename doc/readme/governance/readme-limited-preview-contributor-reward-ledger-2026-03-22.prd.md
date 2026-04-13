@@ -37,6 +37,7 @@
   4. Flow-LTRL-004: `本轮关闭 -> 记录 unresolved items / next action -> 归档供 future governance review`
   5. Flow-LTRL-005: `某条贡献来自 GitHub PR -> 从 PR reward intake block 读取 Reward Account / evidence link -> 生成或补齐 ledger row -> 再进入 producer review`
   6. Flow-LTRL-006: `运行导入脚本 -> 若结果为 ready 则生成 draft row；若为 deferred 则生成 deferred row；若为 no_reward_review_requested 则不建 row`
+  7. Flow-LTRL-007: `进入一轮 merged PR 奖励复核 -> 按 merged 时间窗运行 round scan -> 保留窗口级 status_counts 与逐条来源 -> 再把 ready/deferred 行导入本轮 ledger`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -44,6 +45,7 @@
 | Ledger Row | `ledger_id`、`contributor`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
 | PR Intake Import | `reward_review_request`、`reward_account`、`evidence_link` | 从 GitHub PR reward intake block 导入或补齐执行字段 | `deleted -> submitted -> imported -> reviewed` | 仅当 source type=`PR` 且作者保留该区块并主动申请 reward review 时使用；raw `public key` 不进入名称层 | `liveops_community` 导入 |
 | PR Import Script | `import_status`、`missing_fields`、`validation_error`、`ledger_row` | 解析 PR body 并输出 ledger-ready 结果 | `parsed -> ready/deferred/no_reward_review_requested/invalid_intake` | `Request reward review` 必须显式为 `yes`；未请求或 intake 无效时不建 row | `liveops_community` 执行 |
+| Merged PR Round Scan | `merged_after`、`merged_before`、`entry.pr_number`、`entry.merged_at`、`entry.import_status`、`status_counts` | 批量扫描一轮 merged PR 的 reward intake，并输出 ledger 候选 | `window_selected -> scanned -> triaged -> imported` | round scan 只能复用单 PR import contract；`ready/deferred` 才能推进到 ledger，`no_reward_review_requested/invalid_intake` 仅保留在报告 | `liveops_community` 执行 |
 | Producer Review | `review_status`、`producer_decision`、`approval_id` | 审阅并批准/拒绝/延后 | `reviewed -> approved/rejected/deferred` | 缺证据默认不得批准 | `producer_system_designer` 决策 |
 | Distribution Closure | `actual_amount`、`distribution_ref`、`distribution_date` | 回填真实执行引用 | `approved -> distributed` | 未执行前允许留空；执行后必须补全 | execution owner 回填 |
 | Round Summary | `band_totals`、`approved_rows`、`distributed_rows`、`unresolved_items` | 输出本轮汇总与遗留事项 | `draft -> summarized -> archived` | 汇总值按 ledger rows 聚合 | `liveops_community` 汇总，producer 审核 |
@@ -55,6 +57,7 @@
   - AC-5: 模板不得包含任何固定 token/point 汇率、公开营销文案或 `play-to-earn` 叙事。
   - AC-6: 若 row 来源是 GitHub PR，ledger 必须能回溯到 PR intake block 里的 `Reward Account`，或显式记录为何改为 `deferred`。
   - AC-7: 仓库必须提供可执行导入脚本，至少支持 `--body-file` 离线解析，并在脚本输出里显式返回 `ready / deferred / no_reward_review_requested / invalid_intake`。
+  - AC-8: 若某轮 ledger 以 merged GitHub PR 为主要来源，仓库必须提供按 merged 时间窗批量扫描的脚本入口，输出窗口级 `status_counts` 与逐条 `pr_number / merged_at / source_link / import_status`，并保持与单 PR import 相同的状态 contract。
 - Non-Goals:
   - 本专题不决定每个档位对应的具体 token 数量。
   - 不替代 `readme-limited-preview-contributor-reward-pack-2026-03-22` 的评分规则定义。
@@ -72,6 +75,7 @@
   - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
   - `scripts/readme-reward-pr-intake-import.py`
+  - `scripts/readme-reward-pr-intake-round-scan.py`
 - Edge Cases & Error Handling:
   - 同一贡献被多人重复提交：只保留主记录 full row，其余记录在 `Notes` 标记 duplicate。
   - 同一 contributor 有多条有效贡献：允许多行，但每行必须独立 `Ledger ID`。
@@ -81,11 +85,13 @@
   - PR 来源且 intake block 保留但 `Request reward review` 不是显式 `yes`：导入脚本返回 `invalid_intake`，liveops 需先纠正 PR body，再决定是否入账。
   - 若只拿到 raw `public key` 或账户派生材料，必须先收口为 `Reward Account`，不得把 raw `public key` 直接作为台账名称层字段。
   - 证据链接失效：该 row 退回 `draft` 或 `deferred`，不得进入正式批准。
+  - round scan 未限定 merged 时间窗：该结果只能算 ad hoc exploration，不得直接当作本轮正式 ledger import。
 - Non-Functional Requirements:
   - NFR-LTRL-1: 每轮 ledger 的 `Round ID / Candidate ID / Window / Status` 完整率必须为 `100%`。
   - NFR-LTRL-2: 每条非 `rejected` row 至少包含 1 个有效 evidence/source link。
   - NFR-LTRL-3: 每条 `distributed` row 必须具备 `Approval ID` 与 `Distribution Ref`。
   - NFR-LTRL-4: ledger 模板必须可直接复制复用到下一轮，而无需重新设计字段。
+  - NFR-LTRL-5: merged PR round scan 输出的状态分类必须与单 PR import 完全一致，不允许单独发明另一套 `ready/deferred` 判定逻辑。
 - Security & Privacy: ledger 只记录公开 handle、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励台账名称字段。
 
 ## 5. Risks & Roadmap
@@ -113,3 +119,4 @@
 | DEC-LTRL-004 | reward intake 与台账执行层统一只要求 `Reward Account` | 在台账里继续要求独立 claimant 字段 | 这条链路的目标是形成可执行分发行；review 名称层已有 contributor/public handle，可不再追加一层 claimant 字段。 |
 | DEC-LTRL-005 | 对于 GitHub PR 来源的贡献，优先从 PR intake block 导入 `Reward Account` | 继续在 ledger 建档后再到评论/私聊里补账户字段 | 让 PR 在提交时就带齐 payout 字段，可以减少二次追问，并让 ledger 更快形成可审阅条目。 |
 | DEC-LTRL-006 | 用仓库脚本输出 PR intake 的导入状态与 ledger-ready row | 继续靠 liveops 在每轮 ledger 时手工判断是否 ready/deferred | ledger 的价值是减少临时表格与口头判断；如果 PR import 还靠人工猜，就没有真正形成可复用入口。 |
+| DEC-LTRL-007 | merged PR 的周期性奖励归集继续复用单 PR intake contract，并以时间窗批量扫描包装 | 为 round scan 再定义另一套字段或状态；或每轮继续逐个点开 merged PR 肉眼判断 | 周期性归集的价值在于省去重复人工判断，而不是发明第二套 contract；只要 PR template 已固定，batch scan 就应严格复用同一套判定。 |
