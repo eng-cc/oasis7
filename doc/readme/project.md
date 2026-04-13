@@ -293,6 +293,27 @@
     - `./scripts/readme-reward-pr-intake-import-smoke.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-070 (PRD-README-020/022/044) [test_tier_required]: 为 merged GitHub PR 的 reward review 归集补齐按轮扫描脚本，复用既有 reward intake template contract 输出逐条状态与 ledger-ready row，不再按窗口手工逐个打开 PR 判断。
+  - 产物文件:
+    - `scripts/readme_reward_pr_intake_lib.py`
+    - `scripts/readme-reward-pr-intake-import.py`
+    - `scripts/readme-reward-pr-intake-round-scan.py`
+    - `scripts/readme-reward-pr-intake-round-scan-smoke.sh`
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `.pm/tasks/task_b21f68180cf64edb9ab5dc50bb896ed5.yaml`
+    - `.pm/tasks/task_b21f68180cf64edb9ab5dc50bb896ed5.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `python3 -m py_compile scripts/readme_reward_pr_intake_lib.py scripts/readme-reward-pr-intake-import.py scripts/readme-reward-pr-intake-round-scan.py`
+    - `./scripts/readme-reward-pr-intake-import-smoke.sh`
+    - `./scripts/readme-reward-pr-intake-round-scan-smoke.sh`
+    - `rg -n "PRD-README-044|Flow-RM-023|AC-31|DEC-RM-042|TASK-README-070|merged PR reward round scan" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-README-031 (PRD-README-021) [test_tier_required]: 记录小红书账号第一篇自我介绍帖的标题、正文、封面文案、标签和使用说明，固定“人类开发者 + agent 队友”的首帖叙事。
   - 产物文件:
     - `doc/readme/prd.md`
@@ -857,6 +878,7 @@
 - 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
 - 最新完成: `TASK-README-060`（已为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面 HTML/PNG，并把观察收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人”。）
 - 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
+- 最新完成: `TASK-README-070`（已为 merged GitHub PR 奖励归集补齐按轮扫描脚本，复用既有 reward intake contract 输出窗口级状态汇总与 ledger-ready 候选，避免每轮手工逐个打开 PR 判断。）
 - 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
 - 最新完成: `TASK-README-055`（已为小红书第十篇固定“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“先拿平台和训练体系”的表达边界。）

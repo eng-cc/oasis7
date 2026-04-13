@@ -83,6 +83,24 @@ Status meanings:
 - `no_reward_review_requested`: PR body does not contain the intake block.
 - `invalid_intake`: intake block exists, but `Request reward review` is not explicit `yes`.
 
+## 3.3 Merged PR Round Scan
+When one reward review window wants to triage many merged PRs at once, use the round scan wrapper instead of opening each PR manually:
+
+```bash
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --use-gh \
+  --repo <owner>/<repo> \
+  --merged-after 2026-04-01 \
+  --merged-before 2026-04-12 \
+  --format json
+```
+
+Recommended handling:
+- scan one explicit merged window at a time; do not treat an unbounded merged PR search as a review round.
+- only `ready` and `deferred` rows should move into the current ledger draft.
+- keep `no_reward_review_requested` and `invalid_intake` in the scan report for auditability, but do not auto-create ledger rows from them.
+- round scan must reuse the same status contract as single PR import; it is a batching wrapper, not a second scoring path.
+
 ## 4. Band Rules
 - `<20`: `no-token-recommendation`
 - `20-49`: `eligible-small`

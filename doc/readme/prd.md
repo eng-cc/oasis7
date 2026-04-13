@@ -92,6 +92,7 @@
 - PRD-README-041: As a `liveops_community`, I want a dedicated Xiaohongshu cover asset for the cycle-crossing post pack, so that the twelfth post can ship with a stronger first-screen hook that still keeps the `穿越周期` topic anchor and the “岗位名不会先变、先变的是岗位里那层工作” judgment boundary, without drifting into panic copy, sci-fi AI cliches, or generic励志海报感。
 - PRD-README-042: As a `liveops_community`, I want a reusable Xiaohongshu cycle-crossing carousel pack derived from the approved twelfth post, so that the same topic can publish as a 4-page mobile-native swipe deck with clearer pauses between “岗位名不会先变”“真正该问什么”“别等工具来找你” and the final comment hook, instead of only one cover plus long caption.
 - PRD-README-043: As a `liveops_community`, I want a reusable Xiaohongshu blogger and WeChat official account Oasis Coin incentive pack, so that these two priority channel types can be reviewed as participants and beneficiaries through auditable contribution records rather than flat buyout or raw-view payouts.
+- PRD-README-044: As a `liveops_community`, I want a merged-PR reward round scan script, so that one reward review window can batch-import candidate PR rows from the existing template contract instead of reopening each PR manually.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -115,6 +116,7 @@
   20. Flow-RM-020: `将第七篇长文版压成 4 页轮播版 -> 拆成封面/核心判断/行为例子/评论区站队页 -> 导出逐页 PNG -> 保持标题、边界与互动问题一致`
   21. Flow-RM-021: `将第十篇长文版压成 4 页轮播版 -> 拆成封面冲突/优先级判断/成熟团队价值/评论区站队页 -> 导出逐页 PNG -> 保持“平台优先、不反 AI、趋势会快速扩散”的边界一致`
   22. Flow-RM-022: `收集小红书笔记或微信公众号文章 -> 按渠道与内容深度分类 -> 校验事实边界与反作弊信号 -> 计算绿洲币奖励建议档位 -> producer 审核 -> 回填 actual amount / distribution ref 并归档`
+  23. Flow-RM-023: `进入一轮 contributor reward review -> 按 merged 时间窗扫描已合入 PR -> 复用 reward intake contract 产出 ready/deferred/no_reward_review_requested/invalid_intake 候选 -> 再把 ready/deferred 行抄入 round ledger`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -129,6 +131,7 @@
 | 受控预览执行包 | `round_id`、`callout_copy`、`check_slot`、`signal_bucket`、`claim_drift_flag`、`summary_field` | 把 limited preview 第一轮执行压成可直接照跑的操作包 | `draft -> execution_ready -> reused` | 先冻结文案，再冻结巡检，再冻结回流摘要 | `liveops_community` 维护，`producer_system_designer` 审核边界 |
 | 早期贡献奖励操作包 | `reward_account`、`contribution_type`、`score_band`、`evidence_field`、`reward_recommendation`、`forbidden_phrase`、`intake_surface`、`import_script` | 按贡献评分模板判断是否进入奖励建议池，并约束对外表达 | `signal -> scored -> reviewed -> recommended` | `Reward Account` 仅作执行字段；若来源是 GitHub PR，则通过可选 PR intake block 收集 `Reward Account`，并允许导入脚本直接解析；不公布固定 token/point 比率；仅按贡献审计后给 `eligible-small/medium/large` 建议 | `liveops_community` 记录与初评，`producer_system_designer` 最终审批 |
 | 贡献奖励台账 | `round_id`、`candidate_id`、`ledger_id`、`reward_account`、`recommended_band`、`review_status`、`approval_id`、`distribution_ref`、`import_status` | 将真实贡献逐条编目、审批、回填发放记录并归档 | `draft -> reviewed -> approved/rejected -> distributed -> archived` | 同一轮按 contributor 与 ledger id 去重；缺证据默认不得进入审批；PR import 至少区分 `ready / deferred / no_reward_review_requested / invalid_intake` | `liveops_community` 维护，`producer_system_designer` 审核，execution owner 回填发放记录 |
+| Merged PR Reward Round Scan | `merged_after`、`merged_before`、`search_query`、`status_counts`、`entry.pr_number`、`entry.merged_at`、`entry.import_status` | 批量扫描一轮 merged PR，并把 template 中的 reward intake block 转成 ledger 候选 | `window_selected -> scanned -> triaged -> imported` | 必须复用单 PR intake contract；默认只把 `ready/deferred` 推进到 ledger，`no_reward_review_requested/invalid_intake` 只保留扫描报告 | `liveops_community` 执行，`producer_system_designer` 消费汇总结果 |
 | 小红书博主 / 微信公众号绿洲币激励包 | `channel_type`、`asset_url`、`claim_safety_status`、`proof_bundle`、`reach_quality`、`ecosystem_return`、`fraud_flag`、`recommended_band`、`actual_amount` | 将小红书笔记与微信公众号文章按质量、准确性、讨论转化与生态回流纳入奖励审核 | `captured -> screened -> scored -> reviewed -> approved/rejected -> distributed` | 原始阅读量或播放量不能单独触发奖励；必须先过事实边界与反作弊检查，再按内容深度和回流质量给档位，并固定映射 `eligible-small=300 OC`、`eligible-medium=800 OC`、`eligible-large=1500 OC` | `liveops_community` 记录与初审，`producer_system_designer` 审批，distribution owner 回填发放记录 |
 | 小红书帖子素材包 | `post_goal`、`title`、`body`、`cover_copy`、`carousel_outline`、`interaction_prompt`、`forbidden_phrase` | 固化单篇小红书可复用文案与轮播结构 | `draft -> reviewed -> ready_for_publish -> published` | 先确定单一帖子目标，再冻结标题/正文/互动问题；正文先给人可理解轮廓，再避免 world-rule dump 与上线口径 | `liveops_community` 起草，`producer_system_designer` 审核边界 |
 - Acceptance Criteria:
@@ -162,6 +165,7 @@
 - AC-28: 若第十二篇需要独立封面图，必须补齐 `1080x1440` 的 HTML 与 PNG，视觉上要保持“穿越周期”题眼与“岗位 vs 那层工作”的判断钩子同时成立，采用更像 editorial 判断海报的层级抬升构图，不回退到蓝紫科幻 AI、机器人吞岗位、或泛励志海报式表达。
 - AC-29: 若第十二篇需要轮播版，必须补齐独立轮播素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页分工，并沿用“暖纸面 + editorial 诊断卡 + 层级上移提示”的视觉语言，把讨论收口到“别等工具来找你 / 先看清岗位里哪层工作在变 / 人要往更高判断层移动”，不回退成恐慌式 AI 预言或泛职场鸡汤。
 - AC-30: 若团队要对小红书博主或微信公众号启用绿洲币激励，必须补齐独立激励包，明确两类对象的可计分/不可计分行为、证据字段、固定档位金额、审批链、发放回填、反作弊与禁语边界，并明确“宣传方是生态参与者与受益者，但激励不按阅读量、播放量或买量口径粗放发放”。
+- AC-31: 若 merged GitHub PR 已成为 reward ledger 的周期性来源，仓库必须提供按 merged 时间窗批量扫描的脚本入口，复用现有 reward intake template contract，并显式输出 `ready / deferred / no_reward_review_requested / invalid_intake` 汇总与逐条来源信息。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -184,6 +188,8 @@
   - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
   - `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+  - `scripts/readme-reward-pr-intake-import.py`
+  - `scripts/readme-reward-pr-intake-round-scan.py`
 - Edge Cases & Error Handling:
   - 链接失效：断链必须在巡检报告中暴露并进入修复队列。
   - 口径冲突：冲突出现时禁止发布“已同步”状态。
@@ -193,6 +199,7 @@
   - 历史重定向：legacy redirect 必须保留指向并声明主入口。
   - 过度承诺：若对外文案把贡献奖励写成 `play-to-earn`、`airdrop for players`、`just play and earn token`，必须阻断发布。
   - 刷量或搬运：若小红书笔记或微信公众号文章存在买量、互刷、抄袭搬运、截图造假或多账号重复申报，默认不得进入奖励审批。
+  - 扫描窗口失控：若 merged PR 扫描没有时间窗或搜索边界，默认不得作为正式 round import 结果使用，避免把历史旧 PR 全量混入新一轮 ledger。
 - Non-Functional Requirements:
   - NFR-RM-1: 顶层入口链接可用率 100%。
   - NFR-RM-2: 术语冲突修复 SLA <= 1 个工作日。
@@ -202,6 +209,7 @@
   - NFR-RM-6: 早期贡献奖励模板不得公开固定 token 数额、固定 token/point 比率或“玩多久给多少”的承诺。
   - NFR-RM-7: 真实贡献奖励 ledger 中每条非拒绝记录必须至少有 1 个有效 source/evidence link，且每条已发放记录都必须具备 `Approval ID` 与 `Distribution Ref`。
   - NFR-RM-8: 小红书博主 / 微信公众号绿洲币激励记录中每条非拒绝记录都必须同时具备资产链接、截图或归档证据、事实边界检查结果与反作弊结论；任何仅有阅读量或播放量而无质量和回流证据的记录不得进入审批。
+  - NFR-RM-9: merged PR reward round scan 必须输出逐条 `pr_number / merged_at / author / import_status / source_link` 与窗口级 `status_counts`，并保持 `ready/deferred/no_reward_review_requested/invalid_intake` 分类与单 PR 导入脚本一致。
 - Security & Privacy: 对外文档不得暴露敏感配置与密钥信息；示例配置需使用脱敏样例。
 
 ## 5. Risks & Roadmap
@@ -236,9 +244,9 @@
 | PRD-README-017 | TASK-README-026 | `test_tier_required` | Closed beta candidate runbook + incident templates cover recruitment, feedback, and incident guardrails | Closed beta candidate recruiting/feedback/technical preview messaging |
 | PRD-README-018 | TASK-README-027 | `test_tier_required` | Moltbook runbook 回写真实运营经验，明确哪些内容设计更易引发讨论、哪些自评动作更易触发 spam | 第三方渠道运营复用性与风控 |
 | PRD-README-019 | TASK-README-029 | `test_tier_required` | invite-only limited preview execution pack 明确 callout copy、check slots、signal buckets、summary fields | 受控预览执行性与回流一致性 |
-| PRD-README-020 | TASK-README-030/067/068/069 | `test_tier_required` | early contributor reward pack 明确 `Reward Account` 字段边界、评分模板、证据字段、奖励建议分级、PR intake import 路径与禁语清单 | limited preview 贡献奖励执行性与对外口径安全性 |
+| PRD-README-020 | TASK-README-030/067/068/069/070 | `test_tier_required` | early contributor reward pack 明确 `Reward Account` 字段边界、评分模板、证据字段、奖励建议分级、PR intake import 路径、merged PR round scan 与禁语清单 | limited preview 贡献奖励执行性与对外口径安全性 |
 | PRD-README-021 | TASK-README-031 | `test_tier_required` | 小红书首帖素材包明确标题、正文、封面文案、标签与“人类开发者视角”使用说明 | 新渠道冷启动识别度与口径稳定性 |
-| PRD-README-022 | TASK-README-032/067/068/069 | `test_tier_required` | reward ledger 模板明确 round meta、`Reward Account`、逐条贡献记录、PR import status、producer 审批、distribution ref 与归档字段 | limited preview 真实贡献奖励结算闭环 |
+| PRD-README-022 | TASK-README-032/067/068/069/070 | `test_tier_required` | reward ledger 模板明确 round meta、`Reward Account`、逐条贡献记录、PR import status、merged PR round scan、producer 审批、distribution ref 与归档字段 | limited preview 真实贡献奖励结算闭环 |
 | PRD-README-023 | TASK-README-033 | `test_tier_required` | 小红书第二帖素材包明确 7 位 agent 队友卡文案、收束页与可截图 HTML | 渠道内容连续性与“agent 队伍”概念可理解性 |
 | PRD-README-024 | TASK-README-034 | `test_tier_required` | 小红书 runbook 明确发帖前复核、发帖后 24h 巡检、评论分级、互动引导和 `devlog` 回写要求 | 人类向渠道的持续运营一致性 |
 | PRD-README-025 | TASK-README-035 | `test_tier_required` | 小红书第三帖素材包明确“游戏是什么”的标题、正文、轮播结构、互动问题与技术预览边界 | 渠道内容从“谁在做”过渡到“在做什么游戏”的可理解性 |
@@ -260,6 +268,7 @@
 | PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇补齐独立封面 HTML/PNG，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
 | PRD-README-042 | TASK-README-066 | `test_tier_required` | 第十二篇补齐独立轮播版素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用暖纸面 editorial 诊断卡 + 层级上移提示的发布视觉 | 第十二篇从长文版与单图封面进一步扩展到更适合小红书滑读、停留和评论的 4 页轮播版，同时保持“先别盯岗位名，先看岗位里哪层工作在变”的判断主线 |
 | PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
+| PRD-README-044 | TASK-README-070 | `test_tier_required` | merged PR reward round scan 脚本支持按时间窗批量扫描、离线 smoke 输入、状态汇总与 ledger-ready row 输出，并与单 PR intake contract 保持一致 | reward review 周期性归集与首轮台账准备效率 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -288,6 +297,7 @@
 | DEC-RM-039 | reward intake 与台账执行层统一只要求 `Reward Account` | 在领取模板里继续要求额外 claimant 字段 | 这条链路要先保证可执行收款，review 名称层已有 contributor/public handle，可不再额外要求 PR 作者维护独立 claimant 字段。 |
 | DEC-RM-040 | GitHub PR 作为贡献证据入口时，使用可选 reward intake block 收集 `Reward Account` | 继续让 PR 作者在评论或私聊里零散补账户字段，或在 PR 模板里直接索要 raw `public_key` | PR 已是公开贡献入口；把 payout 字段收进同一模板更利于 liveops/producer 复核，同时继续把底层 `public_key` 留在技术专题。 |
 | DEC-RM-041 | 为 GitHub PR reward intake 提供脚本化导入入口 | 继续让 liveops 手工抄 PR body，或在每轮 ledger 建档时重复肉眼判断 `ready/deferred/no_reward_review_requested` | PR intake 一旦进入重复使用阶段，就应收成可执行脚本；否则 contract 再清晰，也会退化回手工表格流程。 |
+| DEC-RM-042 | merged PR 的周期性奖励归集采用“时间窗扫描 + 复用现有 intake contract”的批量脚本，而不是把单 PR 导入逻辑复制成第二套规则 | 每轮靠 liveops 手工打开 merged PR 重复判断；或为 round scan 单独发明另一套字段/状态 contract | 模板既然已经固定在 PR body，就应把周期性归集也收口到同一 contract 上；否则一旦单 PR 和 batch scan 判定不同，ledger 会再次退回人工表格。 |
 | DEC-RM-023 | 小红书持续运营细节独立沉淀为 runbook，而不是继续只留在素材包和角色卡 | 只补几条角色卡示例或继续靠帖子素材包驱动 | 小红书已经进入持续发帖和看反馈阶段，需要和 Moltbook 一样有稳定 SOP，才能复盘互动和误解模式。 |
 | DEC-RM-024 | 第三篇采用“轻量游戏介绍 + 猜类型互动”而非完整设定说明书 | 直接把世界规则、技术架构与完整玩法一次讲清 | 用户到了第三篇需要先建立“这是什么游戏”的可想象轮廓，而不是被文档级信息密度劝退；同时仍要保持技术预览边界。 |
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |

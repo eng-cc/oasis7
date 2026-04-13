@@ -58,6 +58,24 @@ Recommended handling:
 - `no_reward_review_requested`: do not create a ledger row.
 - `invalid_intake`: ask the PR author to fix or delete the intake block before import.
 
+## 3.2 Merged PR Round Scan
+When one reward review round wants to review many merged PRs together, batch them through the round scan wrapper first:
+
+```bash
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --use-gh \
+  --repo <owner>/<repo> \
+  --merged-after 2026-04-01 \
+  --merged-before 2026-04-12 \
+  --format json
+```
+
+Round scan handling:
+- keep one explicit merged window per round.
+- only import `ready` and `deferred` results into the ledger table.
+- keep `no_reward_review_requested` and `invalid_intake` in the scan report, but do not auto-create ledger rows from them.
+- round scan is only a batching wrapper around the single PR import contract; do not let it drift into a second rule set.
+
 ## 4. Band Summary
 | Band | Row Count | Contributor Count | Status |
 | --- | --- | --- | --- |
