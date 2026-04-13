@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
 import shutil
@@ -266,7 +268,14 @@ def render_ledger_row(result: dict[str, Any]) -> str:
     row = result["ledger_row"]
     assert row is not None
 
-    values = [
+    values = ledger_row_values(row)
+    if len(values) != len(LEDGER_HEADERS):
+        fail("internal error: ledger row length mismatch")
+    return "| " + " | ".join(md_escape(value) for value in values) + " |"
+
+
+def ledger_row_values(row: dict[str, str]) -> list[str]:
+    return [
         row["ledger_id"],
         row["contributor"],
         row["public_handle_or_github"],
@@ -288,9 +297,20 @@ def render_ledger_row(result: dict[str, Any]) -> str:
         "",
         row["notes"],
     ]
-    if len(values) != len(LEDGER_HEADERS):
-        fail("internal error: ledger row length mismatch")
-    return "| " + " | ".join(md_escape(value) for value in values) + " |"
+
+
+def render_ledger_csv_row(row: dict[str, str]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="")
+    writer.writerow(ledger_row_values(row))
+    return output.getvalue()
+
+
+def render_ledger_csv_header() -> str:
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator="")
+    writer.writerow(LEDGER_HEADERS)
+    return output.getvalue()
 
 
 def render_summary(result: dict[str, Any]) -> str:

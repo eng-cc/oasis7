@@ -314,6 +314,22 @@
     - `rg -n "PRD-README-044|Flow-RM-023|AC-31|DEC-RM-042|TASK-README-070|merged PR reward round scan" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-071 (PRD-README-022/044) [test_tier_required]: 为 reward round scan 增加 ledger draft 导出，支持直接生成 round ledger markdown 草案与 csv 行导出，减少 liveops 首轮建账抄录成本，同时保持 producer/distribution 字段仍为空白占位。
+  - 产物文件:
+    - `scripts/readme_reward_pr_intake_lib.py`
+    - `scripts/readme-reward-pr-intake-round-scan.py`
+    - `scripts/readme-reward-pr-intake-round-scan-smoke.sh`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `.pm/tasks/task_ed73cdbf88b24025a532f46bfb4021d4.yaml`
+    - `.pm/tasks/task_ed73cdbf88b24025a532f46bfb4021d4.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `python3 -m py_compile scripts/readme_reward_pr_intake_lib.py scripts/readme-reward-pr-intake-round-scan.py`
+    - `./scripts/readme-reward-pr-intake-round-scan-smoke.sh`
+    - `rg -n "TASK-README-071|ledger-draft-md|ledger-csv|AC-9|DEC-LTRL-008|NFR-LTRL-6" doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-README-031 (PRD-README-021) [test_tier_required]: 记录小红书账号第一篇自我介绍帖的标题、正文、封面文案、标签和使用说明，固定“人类开发者 + agent 队友”的首帖叙事。
   - 产物文件:
     - `doc/readme/prd.md`
@@ -878,6 +894,7 @@
 - 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
 - 最新完成: `TASK-README-060`（已为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面 HTML/PNG，并把观察收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人”。）
 - 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
+- 最新完成: `TASK-README-071`（已为 reward round scan 补齐 `ledger-draft-md` 与 `ledger-csv` 导出，让 merged PR 扫描结果能直接转成 round ledger 草案和表格行。）
 - 最新完成: `TASK-README-070`（已为 merged GitHub PR 奖励归集补齐按轮扫描脚本，复用既有 reward intake contract 输出窗口级状态汇总与 ledger-ready 候选，避免每轮手工逐个打开 PR 判断。）
 - 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
 - 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
