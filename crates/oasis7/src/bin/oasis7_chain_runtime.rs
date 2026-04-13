@@ -52,10 +52,10 @@ mod p2p_status;
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
 mod reward_runtime_worker;
-#[path = "oasis7_chain_runtime/status_payload.rs"]
-mod status_payload;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
+#[path = "oasis7_chain_runtime/status_payload.rs"]
+mod status_payload;
 #[path = "oasis7_chain_runtime/storage_metrics.rs"]
 mod storage_metrics;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
@@ -536,10 +536,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 }
 
 fn feedback_p2p_config_for_role(node_role: NodeRole) -> Option<NodeFeedbackP2pConfig> {
-    match node_role {
-        NodeRole::Observer => None,
-        NodeRole::Sequencer | NodeRole::Storage => Some(NodeFeedbackP2pConfig::default()),
-    }
+    (!matches!(node_role, NodeRole::Observer)).then_some(NodeFeedbackP2pConfig::default())
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
