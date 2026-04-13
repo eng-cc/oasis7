@@ -1,6 +1,7 @@
 use super::cli::{p2p_auto_detection_from_options, CliOptions};
 use oasis7_node::{
-    Libp2pReachabilitySnapshot, LiveHolePunchState, NodeNetworkPolicy,
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
+    NodeAutoNatStatus, NodeNetworkPolicy, NodePublicPortReachability,
     NodeReachabilityAutoDetection, NodeUserModeRecommendation,
 };
 use oasis7_proto::distributed_dht::PeerReachabilityClass;
@@ -72,6 +73,16 @@ fn merged_p2p_auto_detection(
             LiveHolePunchState::Blocked => oasis7_node::NodeHolePunchViability::Blocked,
         };
     }
+    detection.autonat_status = match live_snapshot.autonat_status {
+        LiveAutoNatStatus::Unknown => NodeAutoNatStatus::Unknown,
+        LiveAutoNatStatus::Public => NodeAutoNatStatus::Public,
+        LiveAutoNatStatus::Private => NodeAutoNatStatus::Private,
+    };
+    detection.public_port_reachability = match live_snapshot.public_port_reachability {
+        LivePublicPortReachability::Unknown => NodePublicPortReachability::Unknown,
+        LivePublicPortReachability::Reachable => NodePublicPortReachability::Reachable,
+        LivePublicPortReachability::Unreachable => NodePublicPortReachability::Unreachable,
+    };
     if !options.p2p_detected_relay_available_explicit {
         detection.relay_available =
             live_snapshot.relay_reservation_active || live_snapshot.active_relay_path_count > 0;
@@ -86,6 +97,13 @@ fn merged_p2p_auto_detection(
 fn live_reachability_hint(
     live_snapshot: &Libp2pReachabilitySnapshot,
 ) -> Option<PeerReachabilityClass> {
+    if matches!(
+        live_snapshot.public_port_reachability,
+        LivePublicPortReachability::Reachable
+    ) || matches!(live_snapshot.autonat_status, LiveAutoNatStatus::Public)
+    {
+        return Some(PeerReachabilityClass::Public);
+    }
     if live_snapshot.active_hole_punch_path_count > 0
         || matches!(live_snapshot.hole_punch_state, LiveHolePunchState::Viable)
     {
@@ -93,6 +111,13 @@ fn live_reachability_hint(
     }
     if live_snapshot.active_relay_path_count > 0 {
         return Some(PeerReachabilityClass::RelayOnly);
+    }
+    if matches!(
+        live_snapshot.public_port_reachability,
+        LivePublicPortReachability::Unreachable
+    ) || matches!(live_snapshot.autonat_status, LiveAutoNatStatus::Private)
+    {
+        return Some(PeerReachabilityClass::Private);
     }
     None
 }

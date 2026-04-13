@@ -75,15 +75,18 @@ pub use libp2p_replication_network_wasm::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
-pub use oasis7_net::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
+pub use oasis7_net::{
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
+    LiveTransportKind,
+};
 pub use replication::NodeReplicationConfig;
 pub use types::{
-    NodeCommittedActionBatch, NodeConfig, NodeConsensusMode, NodeConsensusSnapshot,
-    NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
+    NodeAutoNatStatus, NodeCommittedActionBatch, NodeConfig, NodeConsensusMode,
+    NodeConsensusSnapshot, NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
     NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy,
-    NodePeerCommittedHead, NodePosConfig, NodeReachabilityAutoDetection,
-    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation,
-    PosConsensusStatus, PosValidator,
+    NodePeerCommittedHead, NodePosConfig, NodePublicPortReachability,
+    NodeReachabilityAutoDetection, NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot,
+    NodeUserMode, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 
 use feedback_runtime::{

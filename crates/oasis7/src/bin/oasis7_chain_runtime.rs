@@ -15,10 +15,11 @@ use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
 };
 use oasis7_node::{
-    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
-    NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy, NodePosConfig,
-    NodeReachabilityAutoDetection, NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole,
-    NodeRuntime, NodeSnapshot, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
+    derive_libp2p_identity_keypair, Libp2pReachabilitySnapshot, Libp2pReplicationNetwork,
+    Libp2pReplicationNetworkConfig, NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy,
+    NodePosConfig, NodeReachabilityAutoDetection, NodeReplicationConfig,
+    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, NodeUserModeRecommendation,
+    PosConsensusStatus, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -50,6 +51,8 @@ mod p2p_status;
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
 mod reward_runtime_worker;
+#[path = "oasis7_chain_runtime/status_payload.rs"]
+mod status_payload;
 #[path = "oasis7_chain_runtime/storage_metrics.rs"]
 mod storage_metrics;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
@@ -71,12 +74,13 @@ use feedback_submit_api::{
 };
 use p2p_status::{
     applied_runtime_user_mode_label, build_live_node_network_policy_recommendation,
-    build_node_network_policy, peer_reachability_as_str,
+    build_node_network_policy,
 };
 use reward_runtime_worker::{
     init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
+use status_payload::{build_chain_p2p_status, ChainP2pStatus};
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -186,22 +190,6 @@ struct ChainStatusResponse {
     reward_runtime: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage: storage_metrics::StorageMetricsSnapshot,
     replication: ChainReplicationDebugStatus,
-}
-
-#[derive(Debug, Serialize)]
-struct ChainP2pStatus {
-    requested_user_mode: String,
-    recommended_user_mode: String,
-    effective_user_mode: String,
-    applied_effective_user_mode: Option<String>,
-    requires_explicit_public_entry_confirmation: bool,
-    detected_reachability: Option<String>,
-    hole_punch_viability: String,
-    relay_available: bool,
-    probe_stable: bool,
-    deployment_mode: String,
-    node_role_claim: String,
-    rationale: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -859,6 +847,7 @@ fn handle_chain_status_connection(
                 &p2p_recommendation,
                 applied_effective_user_mode,
                 effective_p2p_policy,
+                &live_snapshot,
                 p2p_detection,
                 release_security_policy.clone(),
                 snapshot_metrics(&reward_runtime_metrics),
@@ -893,6 +882,7 @@ fn build_chain_status_payload(
     live_p2p_recommendation: &NodeUserModeRecommendation,
     applied_effective_user_mode: Option<String>,
     effective_p2p_policy: NodeNetworkPolicy,
+    live_snapshot: &Libp2pReachabilitySnapshot,
     p2p_detection: NodeReachabilityAutoDetection,
     release_security_policy: ReleaseSecurityPolicy,
     reward_runtime_metrics: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
@@ -936,33 +926,13 @@ fn build_chain_status_payload(
         },
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
-        p2p: ChainP2pStatus {
-            requested_user_mode: live_p2p_recommendation
-                .requested_user_mode
-                .as_str()
-                .to_string(),
-            recommended_user_mode: live_p2p_recommendation
-                .recommended_user_mode
-                .as_str()
-                .to_string(),
-            effective_user_mode: live_p2p_recommendation
-                .effective_user_mode
-                .as_str()
-                .to_string(),
+        p2p: build_chain_p2p_status(
+            live_p2p_recommendation,
             applied_effective_user_mode,
-            requires_explicit_public_entry_confirmation: live_p2p_recommendation
-                .requires_explicit_public_entry_confirmation,
-            detected_reachability: p2p_detection
-                .observed_reachability
-                .map(peer_reachability_as_str)
-                .map(str::to_string),
-            hole_punch_viability: p2p_detection.hole_punch_viability.to_string(),
-            relay_available: p2p_detection.relay_available,
-            probe_stable: p2p_detection.probe_stable,
-            deployment_mode: effective_p2p_policy.deployment_mode.as_str().to_string(),
-            node_role_claim: effective_p2p_policy.node_role_claim.as_str().to_string(),
-            rationale: live_p2p_recommendation.rationale.clone(),
-        },
+            effective_p2p_policy,
+            live_snapshot,
+            p2p_detection,
+        ),
         release_security_policy,
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,

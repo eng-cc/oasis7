@@ -1,4 +1,5 @@
 use futures::future::Either;
+use libp2p::autonat;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::OrTransport;
 use libp2p::dcutr;
@@ -31,6 +32,7 @@ pub(super) struct Behaviour {
     pub(super) gossipsub: gossipsub::Behaviour,
     pub(super) request_response: request_response::cbor::Behaviour<NetworkRequest, NetworkResponse>,
     pub(super) kademlia: kad::Behaviour<MemoryStore>,
+    pub(super) autonat: autonat::Behaviour,
     pub(super) relay_client: relay::client::Behaviour,
     pub(super) dcutr: dcutr::Behaviour,
     pub(super) rendezvous_client: Toggle<rendezvous_client::Behaviour>,
@@ -42,6 +44,7 @@ pub(super) enum BehaviourEvent {
     Gossipsub(gossipsub::Event),
     RequestResponse(request_response::Event<NetworkRequest, NetworkResponse>),
     Kademlia(kad::Event),
+    Autonat(autonat::Event),
     RelayClient(relay::client::Event),
     Dcutr(dcutr::Event),
     RendezvousClient(rendezvous_client::Event),
@@ -63,6 +66,12 @@ impl From<request_response::Event<NetworkRequest, NetworkResponse>> for Behaviou
 impl From<kad::Event> for BehaviourEvent {
     fn from(event: kad::Event) -> Self {
         BehaviourEvent::Kademlia(event)
+    }
+}
+
+impl From<autonat::Event> for BehaviourEvent {
+    fn from(event: autonat::Event) -> Self {
+        BehaviourEvent::Autonat(event)
     }
 }
 
@@ -118,6 +127,7 @@ pub(super) fn build_swarm(keypair: &Keypair, enable_rendezvous: bool) -> Swarm<B
         gossipsub,
         request_response,
         kademlia,
+        autonat: autonat::Behaviour::new(peer_id, Default::default()),
         relay_client,
         dcutr: dcutr::Behaviour::new(peer_id),
         rendezvous_client: Toggle::from(

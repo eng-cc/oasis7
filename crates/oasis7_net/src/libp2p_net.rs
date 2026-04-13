@@ -8,9 +8,11 @@ mod discovery;
 mod kad_queries;
 mod peer_manager;
 mod peer_record;
+mod peer_record_republish;
 mod reachability;
 mod runtime_loop;
 mod swarm_behaviour;
+mod swarm_reachability_events;
 mod transport_paths;
 mod utils;
 
@@ -52,16 +54,25 @@ pub use peer_manager::{
     PeerManagerPeerHealth, PeerManagerPolicy,
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
+use peer_record_republish::republish_local_peer_record;
 use reachability::{
     note_hole_punch_result, note_relay_reservation_accepted, refresh_active_transport_snapshot,
-    snapshot_clone, sync_relay_reservation_from_listening_addrs,
+    snapshot_clone,
 };
-pub use reachability::{Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind};
+pub use reachability::{
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
+    LiveTransportKind,
+};
 use runtime_loop::{
     enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
     CommandOutcome, CommandStateRefs,
 };
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
+use swarm_reachability_events::{
+    handle_autonat_event, handle_expired_listen_addr, handle_external_addr_candidate,
+    handle_external_addr_confirmed, handle_external_addr_expired, handle_listener_closed,
+    handle_new_listen_addr,
+};
 use transport_paths::{
     failover_transport_path, note_established_transport_path, retry_transport_path_after_error,
     TransportPath,
@@ -683,6 +694,14 @@ impl Libp2pNetwork {
                                         _ => {}
                                     }
                                 }
+                                SwarmEvent::Behaviour(BehaviourEvent::Autonat(event)) => {
+                                    push_bounded_clone(
+                                        &event_errors,
+                                        handle_autonat_event(&event_reachability, &event),
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
+                                }
                                 SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                                     match event {
                                         relay::client::Event::ReservationReqAccepted { relay_peer_id, renewal, .. } => {
@@ -695,22 +714,15 @@ impl Libp2pNetwork {
                                                 max_error_messages,
                                                 "lock errors",
                                             );
-                                            if let Some(template) = peer_record_template.as_ref() {
-                                                let _ = publish_configured_peer_record(
-                                                    &mut swarm,
-                                                    &mut pending_dht,
-                                                    &keypair_clone,
-                                                    template,
-                                                    &event_listening_addrs,
-                                                    None,
-                                                );
-                                                peer_record_last_published_at_ms = Some(now_ms());
-                                                publish_discovery_provider(
-                                                    &mut swarm,
-                                                    &mut provider_keys,
-                                                    template.world_id.as_str(),
-                                                );
-                                            }
+                                            republish_local_peer_record(
+                                                &mut swarm,
+                                                &mut pending_dht,
+                                                &mut provider_keys,
+                                                &keypair_clone,
+                                                peer_record_template.as_ref(),
+                                                &event_listening_addrs,
+                                                &mut peer_record_last_published_at_ms,
+                                            );
                                         }
                                         relay::client::Event::OutboundCircuitEstablished { relay_peer_id, .. } => {
                                             push_bounded_clone(
@@ -825,100 +837,87 @@ impl Libp2pNetwork {
                                         );
                                     }
                                 }
-                                SwarmEvent::NewListenAddr { address, .. } => {
-                                    swarm.add_external_address(address.clone());
+                                SwarmEvent::NewExternalAddrCandidate { address } => {
                                     push_bounded_clone(
+                                        &event_errors,
+                                        handle_external_addr_candidate(&address),
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
+                                }
+                                SwarmEvent::ExternalAddrConfirmed { address } => {
+                                    push_bounded_clone(
+                                        &event_errors,
+                                        handle_external_addr_confirmed(
+                                            &event_reachability,
+                                            &address,
+                                        ),
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
+                                }
+                                SwarmEvent::ExternalAddrExpired { address } => {
+                                    push_bounded_clone(
+                                        &event_errors,
+                                        handle_external_addr_expired(
+                                            &event_reachability,
+                                            &address,
+                                        ),
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
+                                }
+                                SwarmEvent::NewListenAddr { address, .. } => {
+                                    handle_new_listen_addr(
+                                        &mut swarm,
                                         &event_listening_addrs,
-                                        address.clone(),
-                                        max_listening_addrs,
-                                        "lock listening addrs",
-                                    );
-                                    let listening_addrs = event_listening_addrs
-                                        .lock()
-                                        .expect("lock listening addrs")
-                                        .clone();
-                                    sync_relay_reservation_from_listening_addrs(
                                         &event_reachability,
-                                        listening_addrs.as_slice(),
+                                        &address,
+                                        max_listening_addrs,
                                     );
-                                    if let Some(template) = peer_record_template.as_ref() {
-                                        let _ = publish_configured_peer_record(
-                                            &mut swarm,
-                                            &mut pending_dht,
-                                            &keypair_clone,
-                                            template,
-                                            &event_listening_addrs,
-                                            None,
-                                        );
-                                        peer_record_last_published_at_ms = Some(now_ms());
-                                        publish_discovery_provider(
-                                            &mut swarm,
-                                            &mut provider_keys,
-                                            template.world_id.as_str(),
-                                        );
-                                    }
+                                    republish_local_peer_record(
+                                        &mut swarm,
+                                        &mut pending_dht,
+                                        &mut provider_keys,
+                                        &keypair_clone,
+                                        peer_record_template.as_ref(),
+                                        &event_listening_addrs,
+                                        &mut peer_record_last_published_at_ms,
+                                    );
                                 }
                                 SwarmEvent::ExpiredListenAddr { address, .. } => {
-                                    swarm.remove_external_address(&address);
-                                    {
-                                        let mut listening_addrs = event_listening_addrs
-                                            .lock()
-                                            .expect("lock listening addrs");
-                                        listening_addrs.retain(|candidate| candidate != &address);
-                                        sync_relay_reservation_from_listening_addrs(
-                                            &event_reachability,
-                                            listening_addrs.as_slice(),
-                                        );
-                                    }
-                                    if let Some(template) = peer_record_template.as_ref() {
-                                        let _ = publish_configured_peer_record(
-                                            &mut swarm,
-                                            &mut pending_dht,
-                                            &keypair_clone,
-                                            template,
-                                            &event_listening_addrs,
-                                            None,
-                                        );
-                                        peer_record_last_published_at_ms = Some(now_ms());
-                                        publish_discovery_provider(
-                                            &mut swarm,
-                                            &mut provider_keys,
-                                            template.world_id.as_str(),
-                                        );
-                                    }
+                                    handle_expired_listen_addr(
+                                        &mut swarm,
+                                        &event_listening_addrs,
+                                        &event_reachability,
+                                        &address,
+                                    );
+                                    republish_local_peer_record(
+                                        &mut swarm,
+                                        &mut pending_dht,
+                                        &mut provider_keys,
+                                        &keypair_clone,
+                                        peer_record_template.as_ref(),
+                                        &event_listening_addrs,
+                                        &mut peer_record_last_published_at_ms,
+                                    );
                                 }
                                 SwarmEvent::ListenerClosed { addresses, .. } => {
-                                    for address in addresses.iter() {
-                                        swarm.remove_external_address(address);
-                                    }
-                                    {
-                                        let mut listening_addrs = event_listening_addrs
-                                            .lock()
-                                            .expect("lock listening addrs");
-                                        listening_addrs.retain(|candidate| {
-                                            !addresses.iter().any(|addr| addr == candidate)
-                                        });
-                                        sync_relay_reservation_from_listening_addrs(
-                                            &event_reachability,
-                                            listening_addrs.as_slice(),
-                                        );
-                                    }
-                                    if let Some(template) = peer_record_template.as_ref() {
-                                        let _ = publish_configured_peer_record(
-                                            &mut swarm,
-                                            &mut pending_dht,
-                                            &keypair_clone,
-                                            template,
-                                            &event_listening_addrs,
-                                            None,
-                                        );
-                                        peer_record_last_published_at_ms = Some(now_ms());
-                                        publish_discovery_provider(
-                                            &mut swarm,
-                                            &mut provider_keys,
-                                            template.world_id.as_str(),
-                                        );
-                                    }
+                                    handle_listener_closed(
+                                        &mut swarm,
+                                        &event_listening_addrs,
+                                        &event_reachability,
+                                        addresses.as_slice(),
+                                    );
+                                    republish_local_peer_record(
+                                        &mut swarm,
+                                        &mut pending_dht,
+                                        &mut provider_keys,
+                                        &keypair_clone,
+                                        peer_record_template.as_ref(),
+                                        &event_listening_addrs,
+                                        &mut peer_record_last_published_at_ms,
+                                    );
                                 }
                                 SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
                                     if !peers.contains(&peer_id) {

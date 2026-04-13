@@ -221,16 +221,16 @@
   - `oasis7_node` 新增用户层模式、reachability auto-detection、recommendation/effective-policy contract，并把 `public_entry` 自动升级收口为显式确认门
   - chain runtime CLI/status payload 已能承载 requested/recommended/effective user mode 与探测依据，且在未显式传入原始 `deployment_mode/node_role` 时默认走用户模式推荐
   - game launcher / web launcher / launcher UI schema 已统一透传 `chain_p2p_user_mode` 与 `chain_p2p_accept_public_entry`，为后续 viewer UX 接推荐态与确认态留好接口
-  - runtime status/recommender 现在会在 CLI 未显式覆盖对应字段时，自动吸收 libp2p live relay reservation、DCUtR success/failure 与 active transport path kind，作为 `auto_join / private_safe / public_entry` 默认推荐的 fallback 探测源
+  - runtime status/recommender 现在会在 CLI 未显式覆盖对应字段时，自动吸收 libp2p live AutoNAT status、confirmed external direct addr / public-port reachability、relay reservation、DCUtR success/failure 与 active transport path kind，作为 `auto_join / private_safe / public_entry` 默认推荐依据；`public_entry` 不再只靠 relay / hole-punch hint 做推断
   - runtime follow-up 已补 stale relay reservation 收口：live snapshot 现在会跟随 relayed listen addr 的 `new/expired` 生命周期重算 `relay_reservation_active`，不再把旧 reservation 证据永久滞留在 status/recommender
   - chain status 已把“实际运行态”与“当前 live 推荐态”拆开：保留 `effective_user_mode` 表示按实时 reachability snapshot 计算出的当前有效推荐态，并新增 `applied_effective_user_mode` 表示 runtime 在启动时实际应用的用户模式；若节点是通过底层 `deployment_mode/node_role` 显式 override 启动，则继续以 `deployment_mode/node_role_claim` 作为实际运行态真值
   - `viewer_engineer` 已将 chain status 的 P2P recommendation payload 接入 launcher：`oasis7_web_launcher` 会把 requested/recommended/applied user mode、reachability evidence、底层 role mapping 一起透传给 `oasis7_client_launcher`
   - `oasis7_client_launcher` 已新增用户可见 P2P 模式卡片，明确区分“请求模式 / 自动推荐 / 实际运行态”，并显示 reachability、hole-punch、relay、probe-stable 与 rationale 摘要
+  - chain runtime `/v1/chain/status` 现已额外暴露 `autonat_status/public_port_reachability/observed_public_addr/confirmed_external_direct_addrs`，便于 launcher / viewer 或运维脚本审计节点为何被判定为 `private_safe` 或 `public_entry`
   - launcher 高级配置已把 `chain_p2p_user_mode` 收口为 `auto_join / private_safe / public_entry` 三档 simple modes，并对 `public_entry` 增加显式确认门；未确认时拒绝启动高风险模式
   - `test_tier_full` 当前已以 `doc/testing/evidence/p2p-user-mode-launcher-ux-2026-04-07.md` 固化 launcher UX、confirm/reject 流程和用户模式语义对账
 - 遗留:
-  - 当前 runtime 已接入 relay / hole-punch / active-path live evidence，但仍未接入完整 AutoNAT / port reachability probe；CLI detection hint 继续保留为显式 override 通道，后续网络观测面仍需补齐真正的公网/NAT 探测源
-  - 当前 viewer UX 的检测依据仍来自 runtime 已暴露的 live snapshot / CLI hint；若后续接入真实 AutoNAT / public-port probe，需要继续把新增证据源并入口径回写到同一张 P2P 卡片
+  - CLI detection hint 继续保留为显式 override 通道；后续若 launcher/viewer 需要把 `autonat_status/public_port_reachability/observed_public_addr` 单独做成更强提示文案或图形标签，可在现有 status payload 基础上继续增强 UI，而不必再补底层探测链路
 - 完成定义:
   - 系统可在默认启动路径中自动选择用户模式，并给出可审计的探测依据
   - launcher/viewer 必须提供 `public_entry` 接受 / 拒绝路径，并保证最终运行态与用户确认结果一致可读

@@ -14,6 +14,20 @@ pub enum LiveHolePunchState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveAutoNatStatus {
+    Unknown,
+    Public,
+    Private,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LivePublicPortReachability {
+    Unknown,
+    Reachable,
+    Unreachable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiveTransportKind {
     Direct,
     HolePunched,
@@ -28,6 +42,10 @@ pub struct Libp2pReachabilitySnapshot {
     pub active_relay_path_count: usize,
     pub relay_reservation_active: bool,
     pub hole_punch_state: LiveHolePunchState,
+    pub autonat_status: LiveAutoNatStatus,
+    pub public_port_reachability: LivePublicPortReachability,
+    pub observed_public_addr: Option<String>,
+    pub confirmed_external_direct_addrs: Vec<String>,
 }
 
 impl Default for Libp2pReachabilitySnapshot {
@@ -39,6 +57,10 @@ impl Default for Libp2pReachabilitySnapshot {
             active_relay_path_count: 0,
             relay_reservation_active: false,
             hole_punch_state: LiveHolePunchState::Unknown,
+            autonat_status: LiveAutoNatStatus::Unknown,
+            public_port_reachability: LivePublicPortReachability::Unknown,
+            observed_public_addr: None,
+            confirmed_external_direct_addrs: Vec::new(),
         }
     }
 }
@@ -47,12 +69,22 @@ impl Libp2pReachabilitySnapshot {
     pub fn has_live_signal(&self) -> bool {
         self.relay_reservation_active
             || !matches!(self.hole_punch_state, LiveHolePunchState::Unknown)
+            || !matches!(self.autonat_status, LiveAutoNatStatus::Unknown)
+            || !matches!(
+                self.public_port_reachability,
+                LivePublicPortReachability::Unknown
+            )
             || self.active_transport_kind.is_some()
     }
 
     pub fn has_stable_signal(&self) -> bool {
         self.relay_reservation_active
             || matches!(self.hole_punch_state, LiveHolePunchState::Viable)
+            || !matches!(self.autonat_status, LiveAutoNatStatus::Unknown)
+            || !matches!(
+                self.public_port_reachability,
+                LivePublicPortReachability::Unknown
+            )
             || self.active_transport_kind.is_some()
     }
 }
@@ -91,6 +123,45 @@ pub(super) fn note_hole_punch_result(
     }
 }
 
+pub(super) fn note_autonat_status(
+    shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    status: LiveAutoNatStatus,
+    observed_public_addr: Option<&Multiaddr>,
+) {
+    let mut snapshot = shared.lock().expect("lock reachability snapshot");
+    snapshot.autonat_status = status;
+    snapshot.observed_public_addr = observed_public_addr.map(ToString::to_string);
+    recompute_public_port_reachability(&mut snapshot);
+}
+
+pub(super) fn note_external_addr_confirmed(
+    shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    address: &Multiaddr,
+) {
+    if !is_public_direct_addr(address) {
+        return;
+    }
+    let mut snapshot = shared.lock().expect("lock reachability snapshot");
+    let label = address.to_string();
+    if !snapshot.confirmed_external_direct_addrs.contains(&label) {
+        snapshot.confirmed_external_direct_addrs.push(label);
+        snapshot.confirmed_external_direct_addrs.sort();
+    }
+    recompute_public_port_reachability(&mut snapshot);
+}
+
+pub(super) fn note_external_addr_expired(
+    shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    address: &Multiaddr,
+) {
+    let mut snapshot = shared.lock().expect("lock reachability snapshot");
+    let label = address.to_string();
+    snapshot
+        .confirmed_external_direct_addrs
+        .retain(|candidate| candidate != &label);
+    recompute_public_port_reachability(&mut snapshot);
+}
+
 pub(super) fn refresh_active_transport_snapshot(
     shared: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
@@ -121,6 +192,42 @@ pub(super) fn refresh_active_transport_snapshot(
 fn is_relay_addr(addr: &Multiaddr) -> bool {
     addr.iter()
         .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
+}
+
+pub(super) fn is_public_direct_addr(addr: &Multiaddr) -> bool {
+    if is_relay_addr(addr) {
+        return false;
+    }
+    addr.iter().any(|protocol| match protocol {
+        Protocol::Ip4(ip) => {
+            !ip.is_private()
+                && !ip.is_loopback()
+                && !ip.is_link_local()
+                && !ip.is_broadcast()
+                && !ip.is_documentation()
+                && !ip.is_unspecified()
+        }
+        Protocol::Ip6(ip) => {
+            !ip.is_loopback()
+                && !ip.is_unspecified()
+                && !ip.is_unicast_link_local()
+                && !ip.is_unique_local()
+        }
+        Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_) => true,
+        _ => false,
+    })
+}
+
+fn recompute_public_port_reachability(snapshot: &mut Libp2pReachabilitySnapshot) {
+    snapshot.public_port_reachability = if !snapshot.confirmed_external_direct_addrs.is_empty() {
+        LivePublicPortReachability::Reachable
+    } else {
+        match snapshot.autonat_status {
+            LiveAutoNatStatus::Unknown => LivePublicPortReachability::Unknown,
+            LiveAutoNatStatus::Public => LivePublicPortReachability::Reachable,
+            LiveAutoNatStatus::Private => LivePublicPortReachability::Unreachable,
+        }
+    };
 }
 
 fn preferred_transport_kind(snapshot: &Libp2pReachabilitySnapshot) -> Option<LiveTransportKind> {
@@ -220,5 +327,44 @@ mod tests {
         sync_relay_reservation_from_listening_addrs(&shared, &[direct_addr]);
         assert!(!snapshot_clone(&shared).relay_reservation_active);
         assert_eq!(snapshot_clone(&shared).active_transport_kind, None);
+    }
+
+    #[test]
+    fn autonat_public_status_marks_public_port_reachable() {
+        let shared = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let public_addr: Multiaddr = "/dns4/public.example/tcp/4001"
+            .parse()
+            .expect("public addr");
+
+        note_autonat_status(&shared, LiveAutoNatStatus::Public, Some(&public_addr));
+
+        let snapshot = snapshot_clone(&shared);
+        assert_eq!(snapshot.autonat_status, LiveAutoNatStatus::Public);
+        assert_eq!(
+            snapshot.public_port_reachability,
+            LivePublicPortReachability::Reachable
+        );
+        assert_eq!(
+            snapshot.observed_public_addr.as_deref(),
+            Some("/dns4/public.example/tcp/4001")
+        );
+    }
+
+    #[test]
+    fn external_addr_confirmed_tracks_direct_public_port_reachability() {
+        let shared = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let public_addr: Multiaddr = "/dns4/public.example/tcp/443".parse().expect("public addr");
+
+        note_external_addr_confirmed(&shared, &public_addr);
+        assert_eq!(
+            snapshot_clone(&shared).public_port_reachability,
+            LivePublicPortReachability::Reachable
+        );
+
+        note_external_addr_expired(&shared, &public_addr);
+        assert_eq!(
+            snapshot_clone(&shared).public_port_reachability,
+            LivePublicPortReachability::Unknown
+        );
     }
 }

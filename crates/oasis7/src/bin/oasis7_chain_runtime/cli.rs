@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use oasis7::runtime::RewardAssetConfig;
 use oasis7_node::{
-    NodeHolePunchViability, NodeReachabilityAutoDetection, NodeRole, NodeUserMode, PosValidator,
+    NodeAutoNatStatus, NodeHolePunchViability, NodePublicPortReachability,
+    NodeReachabilityAutoDetection, NodeRole, NodeUserMode, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use oasis7_proto::storage_profile::StorageProfile;
@@ -420,6 +421,8 @@ pub(super) fn p2p_auto_detection_from_options(
     NodeReachabilityAutoDetection {
         observed_reachability: options.p2p_detected_reachability,
         hole_punch_viability: options.p2p_detected_hole_punch_viability,
+        autonat_status: NodeAutoNatStatus::Unknown,
+        public_port_reachability: NodePublicPortReachability::Unknown,
         relay_available: options.p2p_detected_relay_available,
         probe_stable: options.p2p_detected_probe_stable,
     }

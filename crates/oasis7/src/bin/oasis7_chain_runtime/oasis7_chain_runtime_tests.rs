@@ -11,8 +11,9 @@ use super::{
 use ed25519_dalek::SigningKey;
 use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
 use oasis7_node::{
-    Libp2pReachabilitySnapshot, LiveHolePunchState, LiveTransportKind, NodeConfig,
-    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
+    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
+    LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeConsensusSnapshot,
+    NodeHolePunchViability, NodeNetworkPolicy, NodePublicPortReachability,
     NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosValidator,
 };
 use oasis7_proto::distributed_dht::{
@@ -467,6 +468,7 @@ fn live_reachability_snapshot_upgrades_detection_when_cli_hints_are_absent() {
             active_relay_path_count: 0,
             relay_reservation_active: false,
             hole_punch_state: LiveHolePunchState::Viable,
+            ..Libp2pReachabilitySnapshot::default()
         }),
     )
     .expect("recommendation");
@@ -503,6 +505,7 @@ fn relay_reservation_without_active_relay_path_does_not_claim_relay_only_reachab
             active_relay_path_count: 0,
             relay_reservation_active: true,
             hole_punch_state: LiveHolePunchState::Unknown,
+            ..Libp2pReachabilitySnapshot::default()
         }),
     )
     .expect("recommendation");
@@ -524,6 +527,7 @@ fn failed_hole_punch_snapshot_does_not_force_blocked_viability() {
             active_relay_path_count: 0,
             relay_reservation_active: false,
             hole_punch_state: LiveHolePunchState::Unknown,
+            ..Libp2pReachabilitySnapshot::default()
         }),
     )
     .expect("recommendation");
@@ -560,6 +564,7 @@ fn explicit_cli_detection_hints_override_live_snapshot() {
             active_relay_path_count: 1,
             relay_reservation_active: true,
             hole_punch_state: LiveHolePunchState::Viable,
+            ..Libp2pReachabilitySnapshot::default()
         }),
     )
     .expect("recommendation");
@@ -604,6 +609,37 @@ fn build_node_replication_config_uses_storage_profile_budget() {
     assert_eq!(
         config.max_hot_commit_messages(),
         storage_profile.replication_max_hot_commit_messages
+    );
+}
+
+#[test]
+fn live_reachability_snapshot_promotes_public_entry_from_autonat_probe() {
+    let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
+    let (recommendation, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            autonat_status: LiveAutoNatStatus::Public,
+            public_port_reachability: LivePublicPortReachability::Reachable,
+            observed_public_addr: Some("/dns4/public.example/tcp/4001".to_string()),
+            confirmed_external_direct_addrs: vec!["/dns4/public.example/tcp/4001".to_string()],
+            ..Libp2pReachabilitySnapshot::default()
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(
+        detection.observed_reachability,
+        Some(PeerReachabilityClass::Public)
+    );
+    assert_eq!(detection.autonat_status, NodeAutoNatStatus::Public);
+    assert_eq!(
+        detection.public_port_reachability,
+        NodePublicPortReachability::Reachable
+    );
+    assert!(detection.probe_stable);
+    assert_eq!(
+        recommendation.recommended_user_mode,
+        NodeUserMode::PublicEntry
     );
 }
 
@@ -767,6 +803,8 @@ fn build_chain_status_payload_includes_storage_metrics() {
                 hole_punch_viability: NodeHolePunchViability::Viable,
                 relay_available: true,
                 probe_stable: true,
+                autonat_status: NodeAutoNatStatus::Public,
+                public_port_reachability: NodePublicPortReachability::Reachable,
             },
             false,
         )
@@ -776,11 +814,20 @@ fn build_chain_status_payload_includes_storage_metrics() {
             deployment_mode: PeerDeploymentMode::Private,
             node_role_claim: PeerNodeRole::FullStorage,
         },
+        &Libp2pReachabilitySnapshot {
+            autonat_status: LiveAutoNatStatus::Public,
+            public_port_reachability: LivePublicPortReachability::Reachable,
+            observed_public_addr: Some("/dns4/public.example/tcp/4001".to_string()),
+            confirmed_external_direct_addrs: vec!["/dns4/public.example/tcp/4001".to_string()],
+            ..Libp2pReachabilitySnapshot::default()
+        },
         NodeReachabilityAutoDetection {
             observed_reachability: Some(PeerReachabilityClass::Public),
             hole_punch_viability: NodeHolePunchViability::Viable,
             relay_available: true,
             probe_stable: true,
+            autonat_status: NodeAutoNatStatus::Public,
+            public_port_reachability: NodePublicPortReachability::Reachable,
         },
         ReleaseSecurityPolicy::default(),
         reward_runtime,
@@ -815,6 +862,16 @@ fn build_chain_status_payload_includes_storage_metrics() {
     );
     assert!(payload.p2p.requires_explicit_public_entry_confirmation);
     assert_eq!(payload.p2p.detected_reachability.as_deref(), Some("public"));
+    assert_eq!(payload.p2p.autonat_status, "public");
+    assert_eq!(payload.p2p.public_port_reachability, "reachable");
+    assert_eq!(
+        payload.p2p.observed_public_addr.as_deref(),
+        Some("/dns4/public.example/tcp/4001")
+    );
+    assert_eq!(
+        payload.p2p.confirmed_external_direct_addrs,
+        vec!["/dns4/public.example/tcp/4001".to_string()]
+    );
     assert_eq!(
         payload.release_security_policy,
         ReleaseSecurityPolicy::default()
@@ -887,6 +944,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
             deployment_mode: PeerDeploymentMode::Private,
             node_role_claim: PeerNodeRole::ValidatorCore,
         },
+        &Libp2pReachabilitySnapshot::default(),
         NodeReachabilityAutoDetection::default(),
         release_security_policy.clone(),
         reward_runtime,
@@ -970,6 +1028,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
             deployment_mode: PeerDeploymentMode::Public,
             node_role_claim: PeerNodeRole::Relay,
         },
+        &Libp2pReachabilitySnapshot::default(),
         NodeReachabilityAutoDetection::default(),
         ReleaseSecurityPolicy::default(),
         reward_runtime,
