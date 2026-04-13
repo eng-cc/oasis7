@@ -1,0 +1,26 @@
+task_uid: task_0abc42e0aa7c47d39972300f9ef9027b
+title: "Repair release S10 soak gate failure"
+owner_role: runtime_engineer
+worktree_hint: oasis7-testing-release-s10-soak-gate
+execution_log_path: .pm/tasks/task_0abc42e0aa7c47d39972300f9ef9027b.execution.md
+status: committed
+priority: P0
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/release-gate.sh
+  - scripts/s10-five-node-game-soak.sh
+doc_refs:
+  - doc/testing/project.md
+  - doc/world-runtime/project.md
+related_prd:
+  - doc/testing/prd.md
+  - doc/world-runtime/prd.md
+acceptance:
+  - "release-gate-soak no longer fails at s10 under the canonical release command path."
+  - "s10 failure signature is captured in task evidence and covered by a reproducible targeted regression path."
+  - "a rerun of Release Packages can advance past release-gate-soak on the repaired head."
+handoff_to: []
+updated_at: 2026-04-13T22:16:07+08:00
+last_started_at: 2026-04-13T21:03:11+08:00
+last_closed_at: 2026-04-13T22:16:07+08:00

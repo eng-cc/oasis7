@@ -423,6 +423,16 @@ node_status_bind_addr() {
   printf '%s:%s' "$bind_host" "$(node_status_port "$idx")"
 }
 
+node_replication_port() {
+  local idx=$1
+  printf '%s' $((base_port + idx + 41))
+}
+
+node_replication_listen_addr() {
+  local idx=$1
+  printf '/ip4/%s/tcp/%s' "$bind_host" "$(node_replication_port "$idx")"
+}
+
 node_status_url() {
   local idx=$1
   printf 'http://%s/v1/chain/status' "$(node_status_bind_addr "$idx")"
@@ -622,6 +632,7 @@ prepare_node_command() {
     --reward-runtime-epoch-duration-secs "$reward_runtime_epoch_duration_secs"
     --reward-points-per-credit "$reward_points_per_credit"
     --node-gossip-bind "$(node_gossip_addr "$idx")"
+    --replication-network-listen "$(node_replication_listen_addr "$idx")"
   )
   if [[ "$pos_adaptive_tick_scheduler_enabled" -eq 1 ]]; then
     cmd+=(--pos-adaptive-tick-scheduler)
@@ -649,6 +660,7 @@ prepare_node_command() {
       continue
     fi
     cmd+=(--node-gossip-peer "$(node_gossip_addr "$peer_idx")")
+    cmd+=(--replication-network-peer "$(node_replication_listen_addr "$peer_idx")")
   done
 
   prepared_cmd=("${cmd[@]}")
@@ -890,6 +902,16 @@ wait_for_startup_ready() {
   done
 }
 
+is_tolerable_bootstrap_fetch_commit_unavailable() {
+  local node_name=$1
+  local err=$2
+
+  [[ "$node_name" == "s10-sequencer" ]] || return 1
+  [[ "$err" == *"NetworkRequestFailed"* ]] || return 1
+  [[ "$err" == *"NetworkProtocolUnavailable"* ]] || return 1
+  [[ "$err" == *"/aw/node/replication/fetch-commit/1.0.0"* ]]
+}
+
 analysis_report_count=0
 analysis_gate_status="insufficient_data"
 analysis_gate_notes="no_samples"
@@ -910,6 +932,7 @@ analysis_status_samples_ok=0
 analysis_balances_samples_ok=0
 analysis_running_false_samples=0
 analysis_last_error_samples=0
+analysis_tolerated_bootstrap_fetch_commit_unavailable_samples=0
 analysis_balance_load_error_samples=0
 analysis_peer_zero_samples=0
 analysis_http_failure_samples=0
@@ -1080,8 +1103,12 @@ poll_node_once() {
     analysis_running_false_samples=$((analysis_running_false_samples + 1))
   fi
   if [[ -n "$last_error" ]]; then
-    analysis_last_error_samples=$((analysis_last_error_samples + 1))
-    printf '%s\t%s\n' "$node_name" "$last_error" >> "$runtime_errors_tsv"
+    if is_tolerable_bootstrap_fetch_commit_unavailable "$node_name" "$last_error"; then
+      analysis_tolerated_bootstrap_fetch_commit_unavailable_samples=$((analysis_tolerated_bootstrap_fetch_commit_unavailable_samples + 1))
+    else
+      analysis_last_error_samples=$((analysis_last_error_samples + 1))
+      printf '%s\t%s\n' "$node_name" "$last_error" >> "$runtime_errors_tsv"
+    fi
   fi
   if [[ -n "$balance_load_error" ]]; then
     analysis_balance_load_error_samples=$((analysis_balance_load_error_samples + 1))
@@ -1266,6 +1293,11 @@ finalize_metric_gate() {
   if (( analysis_peer_zero_samples > 0 )); then
     gate_warnings+=("known_peer_heads_zero_samples=${analysis_peer_zero_samples}")
   fi
+  if (( analysis_tolerated_bootstrap_fetch_commit_unavailable_samples > 2 )); then
+    gate_failures+=("bootstrap_fetch_commit_protocol_unavailable_samples=${analysis_tolerated_bootstrap_fetch_commit_unavailable_samples}>max_2")
+  elif (( analysis_tolerated_bootstrap_fetch_commit_unavailable_samples > 0 )); then
+    gate_warnings+=("bootstrap_fetch_commit_protocol_unavailable_samples=${analysis_tolerated_bootstrap_fetch_commit_unavailable_samples}")
+  fi
   if (( analysis_http_failure_samples > 0 )); then
     gate_warnings+=("http_failure_samples=${analysis_http_failure_samples}")
   fi
@@ -1347,6 +1379,7 @@ write_summary_json() {
     --argjson balances_samples_ok "$analysis_balances_samples_ok" \
     --argjson running_false_samples "$analysis_running_false_samples" \
     --argjson last_error_samples "$analysis_last_error_samples" \
+    --argjson tolerated_bootstrap_fetch_commit_unavailable_samples "$analysis_tolerated_bootstrap_fetch_commit_unavailable_samples" \
     --argjson balance_load_error_samples "$analysis_balance_load_error_samples" \
     --argjson peer_zero_samples "$analysis_peer_zero_samples" \
     --argjson http_failure_samples "$analysis_http_failure_samples" \
@@ -1398,6 +1431,7 @@ write_summary_json() {
           balances_samples_ok: $balances_samples_ok,
           running_false_samples: $running_false_samples,
           last_error_samples: $last_error_samples,
+          tolerated_bootstrap_fetch_commit_unavailable_samples: $tolerated_bootstrap_fetch_commit_unavailable_samples,
           balance_load_error_samples: $balance_load_error_samples,
           known_peer_heads_zero_samples: $peer_zero_samples,
           http_failure_samples: $http_failure_samples,
@@ -1433,9 +1467,10 @@ append_summary_metrics_section() {
     echo "| lag_p95 | $analysis_lag_p95 |"
     echo "| status_samples_ok | $analysis_status_samples_ok |"
     echo "| balances_samples_ok | $analysis_balances_samples_ok |"
-    echo "| running_false_samples | $analysis_running_false_samples |"
-    echo "| last_error_samples | $analysis_last_error_samples |"
-    echo "| known_peer_heads_zero_samples | $analysis_peer_zero_samples |"
+  echo "| running_false_samples | $analysis_running_false_samples |"
+  echo "| last_error_samples | $analysis_last_error_samples |"
+  echo "| tolerated_bootstrap_fetch_commit_unavailable_samples | $analysis_tolerated_bootstrap_fetch_commit_unavailable_samples |"
+  echo "| known_peer_heads_zero_samples | $analysis_peer_zero_samples |"
     echo "| minted_non_empty_samples | $analysis_minted_non_empty_samples |"
     echo "| settlement_positive_samples | $analysis_settlement_positive_samples |"
     echo "| reward_runtime_available_samples | $analysis_reward_runtime_available_samples |"

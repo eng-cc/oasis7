@@ -210,6 +210,17 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-TESTING-063 (PRD-TESTING-004) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Web UI 闭环补 canonical `*.manual.md` 操作手册，并同步主手册、模块入口与 PRD/project 职责边界。
+- [x] TASK-TESTING-064 (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-soak` 的 S10 误阻断，补齐 `scripts/s10-five-node-game-soak.sh` 的显式 replication listen/peer 拓扑，并把 `s10-sequencer` 上极少量 bootstrap `fetch-commit` protocol unavailable 收口为有上限的 warning（`>2` 仍然 fail），恢复 canonical 300 秒发布样本通过。
+  - 产物文件:
+    - `scripts/s10-five-node-game-soak.sh`
+    - `.pm/tasks/task_0abc42e0aa7c47d39972300f9ef9027b.yaml`
+    - `.pm/tasks/task_0abc42e0aa7c47d39972300f9ef9027b.execution.md`
+    - `doc/testing/project.md`
+    - `doc/world-runtime/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/s10-five-node-game-soak.sh`
+    - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
+    - `./scripts/s10-five-node-game-soak.sh --duration-secs 300 --base-port 7510 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --out-dir .tmp/release_gate_s10_fix_full_v5`
 
 - 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 
@@ -224,9 +235,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-04-13
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `TASK-TESTING-064`（已为 `release-gate-soak` 的 S10 五节点样本补齐显式 replication listen/peer 拓扑，并将 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 收口为 `<=2` warning；canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
 - 最新完成: `TASK-TESTING-063`（已为 Web UI 闭环建立 canonical `*.manual.md` 操作手册，并将 `testing-manual`、testing README 与 PRD/project 职责边界同步收口。）
 - 最新完成: `TASK-TESTING-062`（已建立 Token 创世分配 QA 审计清单专题与执行模板，冻结比例/个人上限/流通边界/custody 语义的 QA 门禁。）
 - 最新完成: `TASK-TESTING-061`（已清理 `doc/testing/{longrun,governance,performance,ci,manual}` 活跃专题中的旧品牌 crate/path/env 当前真值，统一到 `oasis7*` / `OASIS7_*`）。
