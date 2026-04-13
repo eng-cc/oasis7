@@ -1,6 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "libp2p")]
+#[cfg(feature = "libp2p")]
+#[path = "tests_libp2p_helpers.rs"]
+mod libp2p_test_helpers;
 use oasis7_proto::distributed as proto_distributed;
 use oasis7_proto::distributed_dht::DistributedDht as _;
 use oasis7_proto::distributed_dht::SignedPeerRecord;
@@ -11,6 +15,8 @@ use oasis7_wasm_abi::ModuleAbiContract;
 
 use super::*;
 use crate::util::to_canonical_cbor;
+#[cfg(feature = "libp2p")]
+use libp2p_test_helpers::{loopback_test_bootstrap, loopback_test_peer};
 
 #[test]
 fn net_exports_are_available() {
@@ -308,11 +314,7 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
         }
     }
 
-    let bootstrap = Libp2pNetwork::new(Libp2pNetworkConfig {
-        enable_rendezvous: true,
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        ..Libp2pNetworkConfig::default()
-    });
+    let bootstrap = loopback_test_bootstrap(true);
     let deadline = Instant::now() + Duration::from_secs(10);
     wait_until("bootstrap listening", deadline, || {
         !bootstrap.listening_addrs().is_empty()
@@ -324,24 +326,15 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
         .expect("bootstrap addr")
         .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
 
-    let publisher = Libp2pNetwork::new(Libp2pNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        bootstrap_peers: vec![bootstrap_addr.clone()],
-        peer_record: Some(default_peer_record("publisher")),
-        discovery_query_interval_ms: 100,
-        ..Libp2pNetworkConfig::default()
-    });
+    let publisher = loopback_test_peer(
+        vec![bootstrap_addr.clone()],
+        default_peer_record("publisher"),
+    );
     wait_until("publisher connected bootstrap", deadline, || {
         publisher.connected_peers().contains(&bootstrap.peer_id())
     });
 
-    let seeker = Libp2pNetwork::new(Libp2pNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        bootstrap_peers: vec![bootstrap_addr],
-        peer_record: Some(default_peer_record("seeker")),
-        discovery_query_interval_ms: 100,
-        ..Libp2pNetworkConfig::default()
-    });
+    let seeker = loopback_test_peer(vec![bootstrap_addr], default_peer_record("seeker"));
     wait_until("seeker connected bootstrap", deadline, || {
         seeker.connected_peers().contains(&bootstrap.peer_id())
     });
@@ -408,10 +401,7 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
         }
     }
 
-    let bootstrap = Libp2pNetwork::new(Libp2pNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        ..Libp2pNetworkConfig::default()
-    });
+    let bootstrap = loopback_test_bootstrap(true);
     let deadline = Instant::now() + Duration::from_secs(10);
     wait_until("bootstrap listening", deadline, || {
         !bootstrap.listening_addrs().is_empty()
@@ -423,24 +413,15 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
         .expect("bootstrap addr")
         .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
 
-    let seeker = Libp2pNetwork::new(Libp2pNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        bootstrap_peers: vec![bootstrap_addr.clone()],
-        peer_record: Some(rendezvous_peer_record("seeker")),
-        discovery_query_interval_ms: 100,
-        ..Libp2pNetworkConfig::default()
-    });
+    let seeker = loopback_test_peer(
+        vec![bootstrap_addr.clone()],
+        rendezvous_peer_record("seeker"),
+    );
     wait_until("seeker connected bootstrap", deadline, || {
         seeker.connected_peers().contains(&bootstrap.peer_id())
     });
 
-    let publisher = Libp2pNetwork::new(Libp2pNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
-        bootstrap_peers: vec![bootstrap_addr],
-        peer_record: Some(rendezvous_peer_record("publisher")),
-        discovery_query_interval_ms: 100,
-        ..Libp2pNetworkConfig::default()
-    });
+    let publisher = loopback_test_peer(vec![bootstrap_addr], rendezvous_peer_record("publisher"));
     wait_until("publisher connected bootstrap", deadline, || {
         publisher.connected_peers().contains(&bootstrap.peer_id())
     });

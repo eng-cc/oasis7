@@ -896,13 +896,8 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
 fn try_send_command_reports_queue_disconnect() {
     let (sender, receiver) = mpsc::channel(1);
     drop(receiver);
-    let err = try_send_command(
-        &sender,
-        Command::Subscribe {
-            topic: "topic-a".to_string(),
-        },
-    )
-    .expect_err("send must fail once receiver is dropped");
+    let err = try_send_command(&sender, Command::Subscribe("topic-a".to_string()))
+        .expect_err("send must fail once receiver is dropped");
     assert!(matches!(
         err,
         WorldError::NetworkProtocolUnavailable { ref protocol }

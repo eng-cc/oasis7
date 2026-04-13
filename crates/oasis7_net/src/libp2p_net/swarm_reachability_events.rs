@@ -5,8 +5,8 @@ use libp2p::swarm::Swarm;
 use libp2p::Multiaddr;
 
 use super::reachability::{
-    is_public_direct_addr, note_autonat_status, note_external_addr_confirmed,
-    note_external_addr_expired, sync_relay_reservation_from_listening_addrs,
+    note_autonat_status, note_external_addr_confirmed, note_external_addr_expired,
+    should_register_external_listen_addr, sync_relay_reservation_from_listening_addrs,
     Libp2pReachabilitySnapshot, LiveAutoNatStatus,
 };
 use super::swarm_behaviour::Behaviour;
@@ -55,9 +55,10 @@ pub(super) fn handle_new_listen_addr(
     listening_addrs_shared: &Arc<Mutex<Vec<Multiaddr>>>,
     reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     address: &Multiaddr,
+    allow_loopback_external_addrs_for_testing: bool,
     max_listening_addrs: usize,
 ) {
-    if !is_public_direct_addr(address) {
+    if should_register_external_listen_addr(address, allow_loopback_external_addrs_for_testing) {
         swarm.add_external_address(address.clone());
     }
     push_bounded_clone(
@@ -78,8 +79,9 @@ pub(super) fn handle_expired_listen_addr(
     listening_addrs_shared: &Arc<Mutex<Vec<Multiaddr>>>,
     reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     address: &Multiaddr,
+    allow_loopback_external_addrs_for_testing: bool,
 ) {
-    if !is_public_direct_addr(address) {
+    if should_register_external_listen_addr(address, allow_loopback_external_addrs_for_testing) {
         swarm.remove_external_address(address);
     }
     let mut listening_addrs = listening_addrs_shared.lock().expect("lock listening addrs");
@@ -92,9 +94,11 @@ pub(super) fn handle_listener_closed(
     listening_addrs_shared: &Arc<Mutex<Vec<Multiaddr>>>,
     reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
     addresses: &[Multiaddr],
+    allow_loopback_external_addrs_for_testing: bool,
 ) {
     for address in addresses {
-        if !is_public_direct_addr(address) {
+        if should_register_external_listen_addr(address, allow_loopback_external_addrs_for_testing)
+        {
             swarm.remove_external_address(address);
         }
     }

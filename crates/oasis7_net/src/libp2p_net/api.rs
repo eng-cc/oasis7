@@ -35,7 +35,7 @@ impl Libp2pNetwork {
     }
 
     pub fn dial(&self, addr: Multiaddr) -> Result<(), WorldError> {
-        self.enqueue_command(Command::Dial { addr })
+        self.enqueue_command(Command::Dial(addr))
     }
 
     pub fn listening_addrs(&self) -> Vec<Multiaddr> {
@@ -114,9 +114,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
     }
 
     fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
-        self.enqueue_command(Command::Subscribe {
-            topic: topic.to_string(),
-        })?;
+        self.enqueue_command(Command::Subscribe(topic.to_string()))?;
         Ok(NetworkSubscription::new(
             topic.to_string(),
             Arc::clone(&self.inbox),
@@ -175,10 +173,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     ) -> Result<(), WorldError> {
         let key = dht_provider_key(world_id, content_hash);
         let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::PublishProvider {
-            key,
-            response: sender,
-        })?;
+        self.enqueue_command(Command::PublishProvider(key, sender))?;
         futures::executor::block_on(receiver).map_err(|_| {
             WorldError::NetworkProtocolUnavailable {
                 protocol: "libp2p".to_string(),
@@ -193,10 +188,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     ) -> Result<Vec<ProviderRecord>, WorldError> {
         let key = dht_provider_key(world_id, content_hash);
         let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetProviders {
-            key,
-            response: sender,
-        })?;
+        self.enqueue_command(Command::GetProviders(key, sender))?;
         futures::executor::block_on(receiver).map_err(|_| {
             WorldError::NetworkProtocolUnavailable {
                 protocol: "libp2p".to_string(),
@@ -223,10 +215,7 @@ impl ProtoDistributedDht<WorldError> for Libp2pNetwork {
     fn get_world_head(&self, world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
         let key = dht_world_head_key(world_id);
         let (sender, receiver) = oneshot::channel();
-        self.enqueue_command(Command::GetWorldHead {
-            key,
-            response: sender,
-        })?;
+        self.enqueue_command(Command::GetWorldHead(key, sender))?;
         futures::executor::block_on(receiver).map_err(|_| {
             WorldError::NetworkProtocolUnavailable {
                 protocol: "libp2p".to_string(),

@@ -428,7 +428,7 @@ pub(super) fn handle_command(
                 .publish(topic_handle, payload);
             CommandOutcome::Continue
         }
-        Some(Command::Subscribe { topic }) => {
+        Some(Command::Subscribe(topic)) => {
             if subscriptions.insert(topic.clone()) {
                 let topic_handle = IdentTopic::new(topic.clone());
                 if swarm
@@ -446,7 +446,7 @@ pub(super) fn handle_command(
             }
             CommandOutcome::Continue
         }
-        Some(Command::Dial { addr }) => {
+        Some(Command::Dial(addr)) => {
             if let Err(err) = super::dial_addr_with_optional_peer_id(swarm, addr) {
                 push_bounded_clone(
                     ctx.event_errors,
@@ -533,7 +533,7 @@ pub(super) fn handle_command(
             let _ = response.send(Ok(()));
             CommandOutcome::Continue
         }
-        Some(Command::PublishProvider { key, response }) => {
+        Some(Command::PublishProvider(key, response)) => {
             let dht_key = RecordKey::new(&key);
             match swarm.behaviour_mut().kademlia.start_providing(dht_key) {
                 Ok(query_id) => {
@@ -553,7 +553,7 @@ pub(super) fn handle_command(
             }
             CommandOutcome::Continue
         }
-        Some(Command::GetProviders { key, response }) => {
+        Some(Command::GetProviders(key, response)) => {
             let dht_key = RecordKey::new(&key);
             let query_id = swarm.behaviour_mut().kademlia.get_providers(dht_key);
             pending_dht.insert(
@@ -599,7 +599,7 @@ pub(super) fn handle_command(
             }
             CommandOutcome::Continue
         }
-        Some(Command::GetWorldHead { key, response }) => {
+        Some(Command::GetWorldHead(key, response)) => {
             let dht_key = RecordKey::new(&key);
             let query_id = swarm.behaviour_mut().kademlia.get_record(dht_key);
             pending_dht.insert(
