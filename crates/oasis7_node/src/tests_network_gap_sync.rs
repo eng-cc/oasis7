@@ -250,10 +250,7 @@ fn runtime_network_replication_gap_sync_prefers_dht_blob_providers() {
         "observer-provider",
     ));
     for message in commit_map.values() {
-        dht.seed_provider(
-            message.record.content_hash.as_str(),
-            "storage-provider-1",
-        );
+        dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
     }
     let mut runtime_b = NodeRuntime::new(config_b)
         .with_replication_network(

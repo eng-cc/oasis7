@@ -23,6 +23,7 @@ use oasis7_node::{
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[path = "oasis7_chain_runtime/balances_api.rs"]
@@ -53,6 +54,8 @@ mod reward_runtime_settlement;
 mod reward_runtime_worker;
 #[path = "oasis7_chain_runtime/status_payload.rs"]
 mod status_payload;
+#[path = "oasis7_chain_runtime/runtime_status_util.rs"]
+mod runtime_status_util;
 #[path = "oasis7_chain_runtime/storage_metrics.rs"]
 mod storage_metrics;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
@@ -322,8 +325,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     config = config
         .with_pos_config(pos_config)
         .map_err(|err| format!("failed to apply node pos config: {err:?}"))?;
-    config = config.with_auto_attest_all_validators(options.node_auto_attest_all_validators);
-
+    config = config
+        .with_auto_attest_all_validators(options.node_auto_attest_all_validators)
+        .with_allow_local_proposals(matches!(options.node_role, NodeRole::Sequencer));
     let require_execution = matches!(options.node_role, NodeRole::Sequencer);
     config = config
         .with_require_execution_on_commit(require_execution)
@@ -1039,14 +1043,6 @@ fn write_json_response(
     Ok(())
 }
 
-fn consensus_status_to_string(status: PosConsensusStatus) -> String {
-    match status {
-        PosConsensusStatus::Pending => "pending".to_string(),
-        PosConsensusStatus::Committed => "committed".to_string(),
-        PosConsensusStatus::Rejected => "rejected".to_string(),
-    }
-}
-
 fn build_node_replication_config(
     node_id: &str,
     keypair: &node_keypair_config::NodeKeypairConfig,
@@ -1301,13 +1297,6 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
             err
         )
     })
-}
-
-fn now_unix_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

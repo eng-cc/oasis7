@@ -120,6 +120,9 @@ impl PosNodeEngine {
         world_id: &str,
         now_ms: i64,
     ) -> Result<(), NodeError> {
+        if !endpoint.allows_publish() {
+            return Ok(());
+        }
         let Some(proposal) = self.pending.as_ref() else {
             return Ok(());
         };
@@ -203,6 +206,9 @@ impl PosNodeEngine {
         world_id: &str,
         now_ms: i64,
     ) -> Result<(), NodeError> {
+        if !endpoint.allows_publish() {
+            return Ok(());
+        }
         let Some(proposal) = self.pending.as_ref() else {
             return Ok(());
         };
@@ -288,6 +294,9 @@ impl PosNodeEngine {
         now_ms: i64,
         decision: &PosDecision,
     ) -> Result<(), NodeError> {
+        if !endpoint.allows_publish() {
+            return Ok(());
+        }
         if !matches!(decision.status, PosConsensusStatus::Committed) {
             return Ok(());
         }

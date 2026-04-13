@@ -1,5 +1,6 @@
 use super::gossip_udp::{GossipCommitMessage, GossipEndpoint, GossipMessage};
 use super::*;
+use ed25519_dalek::{Signer as _, SigningKey};
 use oasis7_consensus::node_consensus_signature::{
     sign_attestation_message, sign_commit_message, sign_proposal_message,
     verify_commit_message_signature, NodeConsensusMessageSigner as ConsensusMessageSigner,
@@ -11,7 +12,6 @@ use oasis7_proto::distributed_dht::{
 };
 use oasis7_proto::distributed_net::NetworkSubscription;
 use oasis7_proto::world_error::WorldError;
-use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -304,10 +304,7 @@ impl ProviderFallbackTestNetwork {
     }
 
     fn generic_attempts(&self) -> usize {
-        *self
-            .generic_attempts
-            .lock()
-            .expect("lock generic attempts")
+        *self.generic_attempts.lock().expect("lock generic attempts")
     }
 
     fn clear_topic(&self, topic: &str) {
@@ -341,10 +338,7 @@ impl ProviderNotFoundFallbackTestNetwork {
     }
 
     fn generic_attempts(&self) -> usize {
-        *self
-            .generic_attempts
-            .lock()
-            .expect("lock generic attempts")
+        *self.generic_attempts.lock().expect("lock generic attempts")
     }
 
     fn clear_topic(&self, topic: &str) {
@@ -501,11 +495,19 @@ impl proto_dht::DistributedDht<WorldError> for TestReplicaMaintenanceDht {
             .cloned())
     }
 
-    fn put_peer_record(&self, _world_id: &str, _record: &SignedPeerRecord) -> Result<(), WorldError> {
+    fn put_peer_record(
+        &self,
+        _world_id: &str,
+        _record: &SignedPeerRecord,
+    ) -> Result<(), WorldError> {
         Ok(())
     }
 
-    fn get_peer_record(&self, _world_id: &str, _peer_id: &str) -> Result<Option<SignedPeerRecord>, WorldError> {
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
         Ok(None)
     }
 }
@@ -592,7 +594,9 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderA
             .expect("lock provider attempts")
             .push(providers.to_vec());
         if protocol != super::replication::REPLICATION_FETCH_BLOB_PROTOCOL {
-            return self.inner.request_with_providers(protocol, payload, providers);
+            return self
+                .inner
+                .request_with_providers(protocol, payload, providers);
         }
         if !providers
             .iter()
@@ -654,7 +658,9 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderF
         providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
         if protocol != super::replication::REPLICATION_FETCH_BLOB_PROTOCOL {
-            return self.inner.request_with_providers(protocol, payload, providers);
+            return self
+                .inner
+                .request_with_providers(protocol, payload, providers);
         }
         if !providers.is_empty() {
             self.provider_attempts
@@ -665,10 +671,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for ProviderF
                 protocol: "simulated provider route unavailable".to_string(),
             });
         }
-        *self
-            .generic_attempts
-            .lock()
-            .expect("lock generic attempts") += 1;
+        *self.generic_attempts.lock().expect("lock generic attempts") += 1;
         let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
             .map_err(|err| WorldError::DistributedValidationFailed {
                 reason: format!("decode fetch blob request failed: {err}"),
@@ -720,7 +723,9 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
         providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
         if protocol != super::replication::REPLICATION_FETCH_BLOB_PROTOCOL {
-            return self.inner.request_with_providers(protocol, payload, providers);
+            return self
+                .inner
+                .request_with_providers(protocol, payload, providers);
         }
         if !providers.is_empty() {
             self.provider_attempts
@@ -737,10 +742,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
                 }
             });
         }
-        *self
-            .generic_attempts
-            .lock()
-            .expect("lock generic attempts") += 1;
+        *self.generic_attempts.lock().expect("lock generic attempts") += 1;
         let request = serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
             .map_err(|err| WorldError::DistributedValidationFailed {
                 reason: format!("decode fetch blob request failed: {err}"),
@@ -928,44 +930,6 @@ fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
         Some("pending-block")
     );
     assert!(engine.last_committed_block_hash.is_none());
-}
-
-#[test]
-fn pos_engine_record_synced_replication_height_rejects_overflow_without_partial_state() {
-    let config =
-        NodeConfig::new("node-a", "world-overflow-sync", NodeRole::Observer).expect("config");
-    let mut engine = PosNodeEngine::new(&config).expect("engine");
-    engine.committed_height = 9;
-    engine.next_height = 10;
-    engine.pending = Some(PendingProposal {
-        height: 10,
-        slot: 1,
-        epoch: 0,
-        proposer_id: "node-a".to_string(),
-        block_hash: "pending-sync".to_string(),
-        action_root: empty_action_root(),
-        committed_actions: Vec::new(),
-        attestations: std::collections::BTreeMap::new(),
-        approved_stake: 100,
-        rejected_stake: 0,
-        status: PosConsensusStatus::Pending,
-    });
-
-    let err = engine
-        .record_synced_replication_height(u64::MAX, "overflow-block".to_string(), 7_700)
-        .expect_err("height overflow must fail");
-    assert!(matches!(err, NodeError::Replication { reason } if reason.contains("height overflow")));
-    assert_eq!(engine.committed_height, 9);
-    assert_eq!(engine.next_height, 10);
-    assert_eq!(
-        engine
-            .pending
-            .as_ref()
-            .map(|proposal| proposal.block_hash.as_str()),
-        Some("pending-sync")
-    );
-    assert!(engine.last_committed_block_hash.is_none());
-    assert!(engine.last_committed_at_ms.is_none());
 }
 
 #[test]

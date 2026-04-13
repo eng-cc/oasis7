@@ -968,10 +968,27 @@ fn runtime_network_consensus_syncs_peer_heads_without_udp_gossip() {
         .with_replication_network(NodeReplicationNetworkHandle::new(Arc::clone(&network)));
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(200));
+    let synced = wait_until(Instant::now() + Duration::from_secs(8), || {
+        let snapshot_a = runtime_a.snapshot();
+        let snapshot_b = runtime_b.snapshot();
+        snapshot_a.consensus.committed_height >= 1
+            && snapshot_b.consensus.network_committed_height >= 1
+            && snapshot_b.consensus.known_peer_heads >= 1
+    });
 
     let snapshot_a = runtime_a.snapshot();
     let snapshot_b = runtime_b.snapshot();
+    assert!(
+        synced,
+        "network consensus peer heads did not converge: a_committed={} a_last_error={:?} a_peer_heads={:?} b_network_committed={} b_known_peer_heads={} b_last_error={:?} b_peer_heads={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_a.last_error,
+        snapshot_a.consensus.peer_heads,
+        snapshot_b.consensus.network_committed_height,
+        snapshot_b.consensus.known_peer_heads,
+        snapshot_b.last_error,
+        snapshot_b.consensus.peer_heads
+    );
     assert!(snapshot_a.consensus.committed_height >= 1);
     assert!(snapshot_b.consensus.network_committed_height >= 1);
     assert!(snapshot_b.consensus.known_peer_heads >= 1);

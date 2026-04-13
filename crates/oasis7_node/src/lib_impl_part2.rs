@@ -32,10 +32,8 @@ impl PosNodeEngine {
 
         let blob_request =
             replication_runtime.build_fetch_blob_request(message.record.content_hash.as_str())?;
-        let provider_lookup = endpoint.lookup_provider_ids_for_content_hash(
-            world_id,
-            message.record.content_hash.as_str(),
-        )?;
+        let provider_lookup = endpoint
+            .lookup_provider_ids_for_content_hash(world_id, message.record.content_hash.as_str())?;
         let blob_response = request_fetch_blob_with_route_fallback(
             endpoint,
             world_id,
@@ -145,7 +143,7 @@ impl PosNodeEngine {
             checked_replication_successor(height, "height", "recording synced replication height")?;
         self.committed_height = height;
         self.last_committed_at_ms = Some(committed_at_ms);
-        self.next_height = self.next_height.max(next_synced_height);
+        self.next_height = next_synced_height;
         self.last_committed_block_hash = Some(block_hash);
         self.pending = None;
         Ok(())

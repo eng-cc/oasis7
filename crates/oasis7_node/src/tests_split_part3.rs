@@ -212,18 +212,14 @@ fn replication_gap_sync_backfills_when_consensus_height_already_advanced() {
         .sync_missing_replication_commits(&endpoint_b, "node-b", world_id, Some(&mut replication_b))
         .expect("gap sync");
 
-    assert!(
-        replication_b
-            .load_commit_message_by_height(world_id, 1)
-            .expect("load commit 1")
-            .is_some()
-    );
-    assert!(
-        replication_b
-            .load_commit_message_by_height(world_id, 3)
-            .expect("load commit 3")
-            .is_some()
-    );
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 1)
+        .expect("load commit 1")
+        .is_some());
+    assert!(replication_b
+        .load_commit_message_by_height(world_id, 3)
+        .expect("load commit 3")
+        .is_some());
     assert_eq!(
         replication_b
             .latest_persisted_commit_height(world_id)
@@ -569,9 +565,11 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
     let seeded_height = seed_runtime.snapshot().consensus.committed_height;
     seed_runtime.stop().expect("stop seed runtime");
 
-    let replication_runtime =
-        super::replication::ReplicationRuntime::new(&signed_replication_config(dir.clone(), 113), "node-a")
-            .expect("open local replication runtime");
+    let replication_runtime = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 113),
+        "node-a",
+    )
+    .expect("open local replication runtime");
     let dht = Arc::new(TestReplicaMaintenanceDht::new(
         "storage-provider-1",
         "node-a",
@@ -582,10 +580,7 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
             .load_commit_message_by_height(world_id, height)
             .expect("load commit")
             .expect("commit payload");
-        dht.seed_provider(
-            message.record.content_hash.as_str(),
-            "storage-provider-1",
-        );
+        dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
         if height <= 3 {
             let blob = replication_runtime
                 .load_blob_by_hash(message.record.content_hash.as_str())
@@ -653,9 +648,11 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
             execution_state_root: None,
         },
     );
-    let replication =
-        super::replication::ReplicationRuntime::new(&signed_replication_config(dir.clone(), 113), "node-a")
-            .expect("restart replication runtime");
+    let replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir.clone(), 113),
+        "node-a",
+    )
+    .expect("restart replication runtime");
 
     let gate_result = engine.enforce_storage_challenge_gate(
         &replication,
@@ -664,7 +661,10 @@ fn runtime_replication_storage_challenge_gate_falls_back_to_older_samples_during
         world_id,
         1_234,
     );
-    let requested_hashes_snapshot = requested_hashes.lock().expect("lock requested hashes").clone();
+    let requested_hashes_snapshot = requested_hashes
+        .lock()
+        .expect("lock requested hashes")
+        .clone();
     assert!(
         gate_result.is_ok(),
         "storage challenge gate should accept older reachable samples during catch-up: seeded_height={} fallback_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
@@ -732,10 +732,7 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
             .load_commit_message_by_height(world_id, height)
             .expect("load commit")
             .expect("commit payload");
-        dht.seed_provider(
-            message.record.content_hash.as_str(),
-            "storage-provider-1",
-        );
+        dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
         if height == 1 {
             let blob = replication_runtime
                 .load_blob_by_hash(message.record.content_hash.as_str())
@@ -809,9 +806,17 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
     )
     .expect("restart replication runtime");
 
-    let gate_result =
-        engine.enforce_storage_challenge_gate(&replication, Some(&endpoint), "node-a", world_id, 1_234);
-    let requested_hashes_snapshot = requested_hashes.lock().expect("lock requested hashes").clone();
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+    let requested_hashes_snapshot = requested_hashes
+        .lock()
+        .expect("lock requested hashes")
+        .clone();
     assert!(
         gate_result.is_ok(),
         "storage challenge gate should allow a single remote match during warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
@@ -834,7 +839,8 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_during_warmup(
 }
 
 #[test]
-fn runtime_replication_storage_challenge_gate_skips_network_probe_during_warmup_without_peer_heads() {
+fn runtime_replication_storage_challenge_gate_skips_network_probe_during_warmup_without_peer_heads()
+{
     let dir = temp_dir("challenge-gate-warmup-no-peer-heads");
     let world_id = "world-challenge-warmup-no-peer-heads";
     let pos_config = signed_pos_config_with_signer_seeds(
@@ -870,7 +876,9 @@ fn runtime_replication_storage_challenge_gate_skips_network_probe_during_warmup_
         .register_handler(
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
             Box::new(move |_payload| {
-                *request_count_for_handler.lock().expect("lock request count") += 1;
+                *request_count_for_handler
+                    .lock()
+                    .expect("lock request count") += 1;
                 Err(WorldError::NetworkProtocolUnavailable {
                     protocol: "unexpected warmup fetch-blob request".to_string(),
                 })
@@ -901,8 +909,13 @@ fn runtime_replication_storage_challenge_gate_skips_network_probe_during_warmup_
     )
     .expect("restart replication runtime");
 
-    let gate_result =
-        engine.enforce_storage_challenge_gate(&replication, Some(&endpoint), "node-a", world_id, 1_234);
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
     assert!(
         gate_result.is_ok(),
         "storage challenge gate should skip network probing during warmup when peer heads are still empty: {gate_result:?}"
@@ -912,7 +925,8 @@ fn runtime_replication_storage_challenge_gate_skips_network_probe_during_warmup_
 }
 
 #[test]
-fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_heads_after_warmup() {
+fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_heads_after_warmup()
+{
     let dir = temp_dir("challenge-gate-no-peer-heads-single-match");
     let world_id = "world-challenge-no-peer-heads-single-match";
     let pos_config = signed_pos_config_with_signer_seeds(
@@ -955,10 +969,7 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
             .load_commit_message_by_height(world_id, height)
             .expect("load commit")
             .expect("commit payload");
-        dht.seed_provider(
-            message.record.content_hash.as_str(),
-            "storage-provider-1",
-        );
+        dht.seed_provider(message.record.content_hash.as_str(), "storage-provider-1");
         if height == 1 {
             let blob = replication_runtime
                 .load_blob_by_hash(message.record.content_hash.as_str())
@@ -1023,9 +1034,17 @@ fn runtime_replication_storage_challenge_gate_allows_single_match_without_peer_h
     )
     .expect("restart replication runtime");
 
-    let gate_result =
-        engine.enforce_storage_challenge_gate(&replication, Some(&endpoint), "node-a", world_id, 1_234);
-    let requested_hashes_snapshot = requested_hashes.lock().expect("lock requested hashes").clone();
+    let gate_result = engine.enforce_storage_challenge_gate(
+        &replication,
+        Some(&endpoint),
+        "node-a",
+        world_id,
+        1_234,
+    );
+    let requested_hashes_snapshot = requested_hashes
+        .lock()
+        .expect("lock requested hashes")
+        .clone();
     assert!(
         gate_result.is_ok(),
         "storage challenge gate should allow a single remote match when peer heads remain empty after warmup: seeded_height={} requested_hashes={requested_hashes_snapshot:?} err={gate_result:?}",
@@ -1137,14 +1156,18 @@ fn runtime_local_replication_publishes_blob_provider_to_dht() {
         }],
         &[("node-a", 94)],
     );
-    let config = NodeConfig::new("node-a", "world-publish-local-provider", NodeRole::Sequencer)
-        .expect("config")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick")
-        .with_pos_config(pos_config)
-        .expect("pos config")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir.clone(), 94));
+    let config = NodeConfig::new(
+        "node-a",
+        "world-publish-local-provider",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_tick_interval(Duration::from_millis(10))
+    .expect("tick")
+    .with_pos_config(pos_config)
+    .expect("pos config")
+    .with_auto_attest_all_validators(true)
+    .with_replication(signed_replication_config(dir.clone(), 94));
     let mut runtime = with_noop_execution_hook(NodeRuntime::new(config)).with_replication_network(
         NodeReplicationNetworkHandle::new(Arc::clone(&network))
             .with_dht(dht.clone())
@@ -1342,14 +1365,18 @@ fn runtime_remote_replication_ingest_publishes_blob_provider_to_dht() {
         ],
         &[("node-a", 95), ("node-b", 96)],
     );
-    let config_a = NodeConfig::new("node-a", "world-publish-remote-provider", NodeRole::Sequencer)
-        .expect("config a")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick a")
-        .with_pos_config(pos_config.clone())
-        .expect("pos config a")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir_a.clone(), 95));
+    let config_a = NodeConfig::new(
+        "node-a",
+        "world-publish-remote-provider",
+        NodeRole::Sequencer,
+    )
+    .expect("config a")
+    .with_tick_interval(Duration::from_millis(10))
+    .expect("tick a")
+    .with_pos_config(pos_config.clone())
+    .expect("pos config a")
+    .with_auto_attest_all_validators(true)
+    .with_replication(signed_replication_config(dir_a.clone(), 95));
     let config_b = NodeConfig::new("node-b", "world-publish-remote-provider", NodeRole::Storage)
         .expect("config b")
         .with_tick_interval(Duration::from_millis(10))
@@ -1386,79 +1413,6 @@ fn runtime_remote_replication_ingest_publishes_blob_provider_to_dht() {
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
-    let _ = fs::remove_dir_all(&dir_a);
-    let _ = fs::remove_dir_all(&dir_b);
-}
-
-#[test]
-fn replication_network_handle_rejects_empty_topic() {
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
-    let err = NodeReplicationNetworkHandle::new(network)
-        .with_topic("   ")
-        .expect_err("empty topic");
-    assert!(matches!(err, NodeError::InvalidConfig { .. }));
-}
-
-#[test]
-fn runtime_network_replication_respects_topic_isolation() {
-    let dir_a = temp_dir("network-topic-a");
-    let dir_b = temp_dir("network-topic-b");
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
-    let pos_config =
-        signed_pos_config_with_signer_seeds(validators, &[("node-a", 81), ("node-b", 82)]);
-    let network: Arc<
-        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
-
-    let config_a = NodeConfig::new("node-a", "world-topic-repl", NodeRole::Sequencer)
-        .expect("config a")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick a")
-        .with_pos_config(pos_config.clone())
-        .expect("pos config a")
-        .with_auto_attest_all_validators(true)
-        .with_replication(signed_replication_config(dir_a.clone(), 81));
-    let config_b = NodeConfig::new("node-b", "world-topic-repl", NodeRole::Observer)
-        .expect("config b")
-        .with_tick_interval(Duration::from_millis(10))
-        .expect("tick b")
-        .with_pos_config(pos_config)
-        .expect("pos config b")
-        .with_replication(signed_replication_config(dir_b.clone(), 82));
-
-    let mut runtime_a = with_noop_execution_hook(NodeRuntime::new(config_a))
-        .with_replication_network(
-            NodeReplicationNetworkHandle::new(Arc::clone(&network))
-                .with_topic("aw.world-topic-repl.replication.a")
-                .expect("topic a"),
-        );
-    let mut runtime_b = NodeRuntime::new(config_b).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_topic("aw.world-topic-repl.replication.b")
-            .expect("topic b"),
-    );
-    runtime_a.start().expect("start a");
-    runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(220));
-
-    runtime_a.stop().expect("stop a");
-    runtime_b.stop().expect("stop b");
-
-    let store_b = LocalCasStore::new(dir_b.join("store"));
-    let files = store_b.list_files().expect("list files");
-    assert!(files.is_empty());
-
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);
 }

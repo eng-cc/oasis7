@@ -108,6 +108,14 @@ state_last_error() {
   json_get "$1" lastError
 }
 
+state_last_feedback_json() {
+  json_get "$1" lastControlFeedback
+}
+
+state_gameplay_summary_json() {
+  json_get "$1" gameplaySummary
+}
+
 state_selected_kind() {
   json_get "$1" selectedKind
 }
@@ -126,6 +134,33 @@ state_render_mode() {
 
 state_software_safe_reason() {
   json_get "$1" softwareSafeReason
+}
+
+feedback_stage() {
+  json_get "$1" stage
+}
+
+feedback_reason() {
+  json_get "$1" reason
+}
+
+gameplay_blocker_kind() {
+  json_get "$1" blockerKind
+}
+
+software_safe_llm_blocked_contract_ok() {
+  local state_json=$1
+  local feedback_json gameplay_json stage reason blocker_kind
+  feedback_json=$(state_last_feedback_json "$state_json")
+  gameplay_json=$(state_gameplay_summary_json "$state_json")
+  stage=$(feedback_stage "$feedback_json")
+  reason=$(feedback_reason "$feedback_json")
+  blocker_kind=$(gameplay_blocker_kind "$gameplay_json")
+  [[ "$(state_connection "$state_json")" == "connected" ]] || return 1
+  [[ "$stage" == "blocked" ]] || return 1
+  [[ "$blocker_kind" == "llm_required" ]] || return 1
+  [[ "$reason" == *"OASIS7_LLM_MODEL"* || "$reason" == *"LLM provider"* ]] || return 1
+  return 0
 }
 
 normalize_eval_token() {
@@ -389,15 +424,22 @@ paused_followup='null'
 selected_state='null'
 final_state='null'
 semantic_ok=1
+software_safe_llm_blocked=0
 
 log_note send_play
 ab_send_control play '{}' 2>&1 | tee -a "$pw_log" >/dev/null || true
 if ! after_play=$(wait_for_tick_advance "${initial_tick%%.*}" 3500); then
-  seek_target=$(( ${initial_tick%%.*} + 1 ))
-  log_note seek_fallback
-  ab_send_control seek "{\"tick\":${seek_target}}" 2>&1 | tee -a "$pw_log" >/dev/null || true
-  if ! after_play=$(wait_for_tick_advance "${initial_tick%%.*}" 6000); then
-    semantic_ok=0
+  after_play=$(ab_state)
+  if [[ "$software_safe_mode" -eq 1 ]] && software_safe_llm_blocked_contract_ok "$after_play"; then
+    software_safe_llm_blocked=1
+  else
+    seek_target=$(( ${initial_tick%%.*} + 1 ))
+    log_note seek_fallback
+    ab_send_control seek "{\"tick\":${seek_target}}" 2>&1 | tee -a "$pw_log" >/dev/null || true
+    if ! after_play=$(wait_for_tick_advance "${initial_tick%%.*}" 6000); then
+      after_play=$(ab_state)
+      semantic_ok=0
+    fi
   fi
 fi
 
@@ -432,7 +474,12 @@ if [[ "$software_safe_mode" -eq 1 ]]; then
   paused_followup_tick=$(state_tick "$paused_followup")
   paused_followup_tick=${paused_followup_tick:-0}
   if ! final_state=$(wait_for_tick_advance "${paused_followup_tick%%.*}" 6000); then
-    semantic_ok=0
+    final_state=$(ab_state)
+    if software_safe_llm_blocked_contract_ok "$final_state"; then
+      software_safe_llm_blocked=1
+    else
+      semantic_ok=0
+    fi
   fi
 else
   if ! final_state=$(wait_for_connected 6000); then
@@ -595,6 +642,9 @@ overall_pass=1
   echo "- Browser automation: \`agent-browser\`"
   echo "- Visual baseline: $visual_baseline_status"
   echo "- Semantic web gate: $([[ "$semantic_ok" -eq 1 ]] && echo passed || echo failed)"
+  if [[ "$software_safe_llm_blocked" -eq 1 ]]; then
+    echo "- Semantic gate note: accepted software_safe llm_required blocked contract (no formal play without LLM)"
+  fi
   echo "- Zoom texture gate: $([[ "$zoom_ok" -eq 1 ]] && echo "$zoom_status" || echo failed)"
   echo "- Screenshot artifact: $([[ "$screenshot_ok" -eq 1 ]] && echo passed || echo failed)"
   echo "- Bevy \`[ERROR]\` logs in console dump: $bevy_error_count"
