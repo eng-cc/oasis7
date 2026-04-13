@@ -3,18 +3,19 @@
 - 对应设计文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md`
 - 对应项目管理文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
 
-审计轮次: 2
+审计轮次: 3
 ## 1. Executive Summary
-- Problem Statement: oasis7 已具备主链 Token 创世分配、锁仓领取与 treasury 分发能力，但尚未冻结“创世怎么分、谁控制多少、何时释放、早期玩家是否发币”的统一口径。若继续口头决策，容易在 limited playable technical preview 阶段过早流通、单人过度控盘，或误滑向 `play-to-earn`。
-- Proposed Solution: 冻结一版 producer-owned 初始分配与早期贡献奖励 PRD，明确 `10000 bps` 创世分配表、项目战略控制比例、创始人个人直持上限、低流通门禁，以及“贡献制奖励而非时长挖矿”的发放规则，并映射到现有 runtime 创世/金库能力。
+- Problem Statement: oasis7 已具备主链 Token 创世分配、锁仓领取与 treasury 分发能力，但此前尚未冻结“创世怎么分、谁控制多少、绝对总量是多少、何时释放、早期玩家是否发币”的统一口径。若继续口头决策，容易在 limited playable technical preview 阶段过早流通、单人过度控盘，或误滑向 `play-to-earn`。
+- Proposed Solution: 冻结一版 producer-owned 初始分配与早期贡献奖励 PRD，明确 `10000 bps` 创世分配表、当前 `main_token_config.initial_supply = 10,000,000,000 OC`、项目战略控制比例、创始人个人直持上限、低流通门禁，以及“贡献制奖励而非时长挖矿”的发放规则，并映射到现有 runtime 创世/金库能力。
 - Success Criteria:
-  - SC-1: 创世分配表明确写出 `10000 bps` 总量分配、bucket、控制主体、锁仓方式与释放路径。
+  - SC-1: 创世分配表明确写出 `10000 bps` 总量分配、bucket、控制主体、锁仓方式与释放路径，且当前 `main_token_config.initial_supply` 固定为 `10,000,000,000 OC`。
   - SC-2: 项目战略控制口径固定为 `5000 bps`，其中单人直接受益控制目标 `500~1000 bps`、硬上限 `1500 bps`。
   - SC-3: 协议奖励池口径固定为 `3500 bps`，且不得被计入创始人或团队可自由处置库存。
-  - SC-4: 创世液态流通硬上限 `500 bps`；首 12 个月非团队外部释放目标 `100~200 bps`、硬上限 `500 bps`。
+  - SC-4: 创世液态流通硬上限 `500 bps`；按 `10,000,000,000 OC` 口径，首 12 个月非团队外部释放目标为 `100,000,000~200,000,000 OC`、硬上限 `500,000,000 OC`。
   - SC-5: 早期奖励只允许按可审计贡献发放，不允许 `play-to-earn`、`login reward`、`time played = token` 或对外宣传“来玩就有币”。
   - SC-6: `TIGR-5` 必须把创世参数草案收成正式执行清单，固定每个 bucket 的 slot id、控制主体、签名规则、runtime 落点、amount rounding 规则与 pre-mint freeze gate。
   - SC-7: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`。
+  - SC-8: 7 个 bucket 在 `10,000,000,000 OC` 口径下的绝对分配额、首年释放绝对边界与 freeze gate 已回写到正式文档，且不改变当前 `genesis_liquid=0` 与低流通治理约束。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -59,7 +60,7 @@
 | 单人直持边界 | `founder_direct_target_bps=500~1000`、`founder_direct_cap_bps=1500` | 创世前检查任一自然人直接受益份额是否超限 | `candidate -> approved/rejected` | 超过 `15%` 直接拒绝；目标区间 `5%~10%` | producer 与 QA 共同审计 |
 | 正式命名、symbol 与账户前缀 | `display_name_cn=绿洲币`、`display_name_en=Oasis Coin`、`symbol=OC`、`account_prefix=oc:pk:` | 冻结 public naming，并统一 runtime/account 当前真值与文档/运营口径 | `unnamed -> named -> migrated` | 正式产品名固定，当前 runtime symbol 为 `OC`，公钥派生账户前缀为 `oc:pk:`；若未来再次调整，必须另开专题评估 API/UI/兼容性影响 | `producer_system_designer` 定义口径；runtime/viewer/liveops 只按边界消费 |
 - Acceptance Criteria:
-  - AC-1: 创世分配表固定为以下比例，且总和必须为 `10000 bps`：
+  - AC-1: 创世分配表固定为以下比例，且总和必须为 `10000 bps`；当前 `main_token_config.initial_supply` 固定为 `10,000,000,000 OC`：
     - 核心团队长期锁仓 `2000 bps`
     - 早期贡献奖励储备 `1500 bps`
     - 节点服务奖励池 `2000 bps`
@@ -70,7 +71,7 @@
   - AC-2: 项目战略控制口径固定为 `5000 bps`，由 `team_long_term_vesting + early_contributor_reward_reserve + security_reserve_emergency + foundation_ops_reserve` 组成。
   - AC-3: 协议长期储备口径固定为 `3500 bps`，由 `node_service_genesis_custody + staking_genesis_custody` 组成，且不得对外表述为创始人/团队自由库存。
   - AC-4: 单个自然人的直接受益持仓目标为 `500~1000 bps`，硬上限 `1500 bps`；超过上限的部分必须转入团队锁仓、多签金库或协议池。
-  - AC-5: 创世液态流通不得超过总量 `500 bps`；首 12 个月非团队外部释放目标为总量 `100~200 bps`，硬上限 `500 bps`。
+  - AC-5: 创世液态流通不得超过总量 `500 bps`；按 `10,000,000,000 OC` 口径，创世液态流通理论硬上限为 `500,000,000 OC`，但当前 `TIGR-1` 参数表全部 bucket 仍必须保持 `genesis_liquid=0`；首 12 个月非团队外部释放目标为总量 `100~200 bps`（即 `100,000,000~200,000,000 OC`），硬上限 `500 bps`（即 `500,000,000 OC`）。
   - AC-6: 早期奖励只能按 bug、PR、长时有效游玩样本、结构化高价值反馈、内容建设或生态贡献发放，不得按登录、注册、在线时长或单纯“试玩”自动发放。
   - AC-7: 早期奖励口径不得依赖产品级 invite-only 机制；没有产品级准入控制时，仍可通过运营名单、贡献审核和多签审批执行。
   - AC-8: 分配表必须能映射到现有 runtime 能力：创世分配走 `InitializeMainTokenGenesis`，锁仓释放走 `ClaimMainTokenVesting`；`TIGR-1` 输出的 `protocol:*` recipient 当前表示 custody account，而不是直接初始化 `main_token_treasury_balances`。
@@ -78,9 +79,10 @@
   - AC-10: `TIGR-4` 必须冻结当前执行路径为“`early_contributor_reward_reserve` 在 limited preview 期间保持 `protocol:early-contributor-reward` 多签治理执行，不并入 `ecosystem_pool`”；只有在真实奖励轮次、审计台账与治理成熟度都跑出来后，才允许另开专题重审是否合并。
   - AC-11: `TIGR-5` 必须输出正式执行清单，至少包含 `recipient_slot_id/controller_slot_id/signer_policy/runtime_target/allocated_amount_rule/freeze_status` 六类字段，并明确当前哪些 slot 仍待真实地址绑定。
   - AC-12: 创世金额换算必须固定为 runtime 真值：先按 `floor(initial_supply * ratio_bps / 10000)` 计算每个 bucket 的 `allocated_amount`，再按 `ratio_bps` 降序、`bucket_id` 升序分配 remainder；执行清单不得使用与 runtime 不一致的手工舍入规则。
-  - AC-13: token 相关活跃文档、运营口径、模块入口与 runtime/account 派生实现必须统一把当前链上代币称为“绿洲币 / Oasis Coin”，并以 `OC` / `oc:pk:` 作为当前 symbol/account 真值；`AWT` / `awt:pk:` 仅允许保留在历史语境或兼容说明中。
+  - AC-13: `TIGR-9` 必须把 `10,000,000,000 OC` 口径下的 7 个 bucket 绝对分配额、首年外部释放绝对边界，以及“当前 rounding remainder = 0”的执行说明同步回写到专题 PRD / design / project 与 formal freeze sheet。
+  - AC-14: token 相关活跃文档、运营口径、模块入口与 runtime/account 派生实现必须统一把当前链上代币称为“绿洲币 / Oasis Coin”，并以 `OC` / `oc:pk:` 作为当前 symbol/account 真值；`AWT` / `awt:pk:` 仅允许保留在历史语境或兼容说明中。
 - Non-Goals:
-  - 本专题不决定总供应量绝对数值（如 `1e8` 或 `1e9`），只冻结比例和控制边界。
+  - 本专题不决定 `max_supply`、长期通胀终值、二级市场价格目标或 FDV 叙事；当前仅冻结创世 `initial_supply = 10,000,000,000 OC` 与对应 low-float 治理边界。
   - 不在本专题给出法律意见、证券属性判断、税务结论或上市计划。
   - 不在本专题启动公开空投、二级市场流动性、交易所上币或做市。
   - 不建设产品级 invite-only 准入系统，也不把“可玩技术预览”改写为 `closed beta`。
@@ -105,7 +107,7 @@
   - 若未来需要 fully on-chain、proposal-bound 的 contributor distribution，应在新的治理专题里同时回答“运行时映射”“审计透明度”“社区预期”三项问题后再迁移。
 - Formal Freeze Sheet Decision:
   - `TIGR-5` 使用 slot-based execution sheet 把逻辑账户、控制主体和签名要求冻结为正式执行清单；在真实地址未绑定前，允许 `ready_pending_address_binding`，但不得宣称可直接 mint。
-  - 由于本专题仍不决定总供应绝对值，执行清单固定的是 `allocated_amount` 算法与 slot registry，而不是提前伪造最终绝对金额。
+  - 当前创世绝对发行量已冻结为 `10,000,000,000 OC`；执行清单除固定 `allocated_amount` 算法与 slot registry 外，还必须提供 7 个 bucket 的绝对分配额与首年释放绝对边界。
 - Edge Cases & Error Handling:
   - 若创世 bucket 比例和不为 `10000 bps`，则候选配置直接拒绝。
   - 若任一自然人直接受益份额超过 `1500 bps`，则创世配置直接退回。
@@ -120,14 +122,16 @@
 - Non-Functional Requirements:
   - NFR-TOKEN-INIT-1: 创世分配表字段完整率 `100%`，至少包含 `bucket_id/allocation_bps/recipient/controller/vesting/release_path`。
   - NFR-TOKEN-INIT-2: 创世配置审计时必须同时输出三类汇总：项目战略控制比例、协议奖励池比例、单人直接受益比例。
+  - NFR-TOKEN-INIT-2A: 当前创世绝对发行量固定为 `10,000,000,000 OC`；若未来需要调整，必须另开专题并重跑 formal freeze sheet、QA checklist 与 module-level 追踪回写。
   - NFR-TOKEN-INIT-3: 创世液态流通硬上限为 `500 bps`；若超过即不允许进入发币执行。
   - NFR-TOKEN-INIT-3A: `TIGR-1` 参数表中的 `genesis_liquid` 必须全部为 `0`；任何 bucket 不得在创世时直接形成 liquid balance。
+  - NFR-TOKEN-INIT-3B: 按 `10,000,000,000 OC` 口径，首 12 个月非团队外部释放目标必须落在 `100,000,000~200,000,000 OC`，硬上限 `500,000,000 OC`；若计划值缺失或超限，创世准备直接阻断。
   - NFR-TOKEN-INIT-4: 早期奖励外部文案中，`play-to-earn`、`login reward`、`time played = token` 命中次数必须为 `0`。
   - NFR-TOKEN-INIT-5: 任何早期奖励发放记录都必须可追溯到贡献证据、审批人、数量和发放日期。
   - NFR-TOKEN-INIT-6: 若后续需要修改上述比例或控盘上限，必须新开专题 PRD，不允许只在聊天、海报或运营帖中变更口径。
   - NFR-TOKEN-INIT-7: limited preview 阶段任何 early contributor reward 执行都必须走独立 reward reserve 审批链，`ecosystem_pool` 的治理 grant 流程不得被拿来替代或掩盖贡献奖励发放。
   - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker、账户前缀与 runtime 字段语义必须保持单一当前真值；现行口径固定为“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`，不得再把旧值写成当前实现。
-  - NFR-TOKEN-INIT-8: 正式产品名、symbol/ticker 与 runtime 字段语义必须分层表达；未经过专题评审，不得把“命名冻结”外推成“ticker 已改”“symbol 已迁移”或“客户端/API 已自动切换”。
+  - NFR-TOKEN-INIT-8A: 正式产品名、symbol/ticker 与 runtime 字段语义必须分层表达；未经过专题评审，不得把“命名冻结”外推成“ticker 已改”“symbol 已迁移”或“客户端/API 已自动切换”。
 - Security & Privacy: 创世分配配置、控制账户与奖励记录必须可审计；安全储备不得与运营或个人钱包混用；涉及个人身份映射时只记录必要的链上账户与贡献证据，不在文档中暴露敏感个人信息；raw `public_key` 仅保留在签名/账户绑定流程中。
 
 ## 5. Risks & Roadmap
@@ -146,13 +150,13 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-P2P-TOKEN-INIT-001 | TIGR-0/TIGR-1/TIGR-5 | `test_tier_required` | 分配表、bucket/account/vesting 参数表、正式执行清单、比例求和、单人直持上限与 `genesis_liquid=0` 审计 | 创世配置与控盘边界 |
-| PRD-P2P-TOKEN-INIT-002 | TIGR-1/TIGR-2/TIGR-4/TIGR-5 | `test_tier_required` | runtime 映射检查、金库/多签控制路径检查、slot registry 与流通上限门禁 | 创世落地路径与 treasury 执行 |
+| PRD-P2P-TOKEN-INIT-001 | TIGR-0/TIGR-1/TIGR-5/TIGR-9 | `test_tier_required` | 分配表、bucket/account/vesting 参数表、正式执行清单、`10,000,000,000 OC` 口径下的绝对分配额、比例求和、单人直持上限与 `genesis_liquid=0` 审计 | 创世配置与控盘边界 |
+| PRD-P2P-TOKEN-INIT-002 | TIGR-1/TIGR-2/TIGR-4/TIGR-5/TIGR-9 | `test_tier_required` | runtime 映射检查、金库/多签控制路径检查、slot registry、`initial_supply` 冻结值与流通上限门禁 | 创世落地路径与 treasury 执行 |
 | PRD-P2P-TOKEN-INIT-003 | TIGR-2/TIGR-3/TIGR-4 | `test_tier_required` | 贡献证据模板、运营文案禁语检查、奖励台账抽检 | limited preview 奖励发放与外部口径 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-TOKEN-INIT-001 | 先冻结比例和控制边界，再决定绝对发行量与具体执行节奏 | 先发币再补规则 | 当前最需要先锁定的是边界，而不是营销节奏。 |
+| DEC-TOKEN-INIT-001 | 先冻结比例和控制边界，再在后续明确绝对发行量与执行节奏 | 先发币再补规则 | 当前最需要先锁定的是边界，而不是营销节奏。 |
 | DEC-TOKEN-INIT-002 | 项目战略控制目标设为 `5000 bps`，单人直持目标 `500~1000 bps`、硬上限 `1500 bps` | 创始人直接持有大比例流通筹码 | 降低个人过度控盘观感，保留项目推进所需控制力。 |
 | DEC-TOKEN-INIT-003 | 早期奖励采用 contribution-based reward | 开放式 play-to-earn / login reward / time-play mining | 当前阶段仍是技术预览，不能把代币激励建立在泛流量和挂机行为上。 |
 | DEC-TOKEN-INIT-004 | 协议奖励池与项目战略控制分开记账和对外表述 | 将 treasury custody 与团队库存混用 | 避免治理资产与个人/团队资产混淆。 |
@@ -160,3 +164,4 @@
 | DEC-TOKEN-INIT-006 | 用 slot-based 正式执行清单冻结创世参数，并把真实地址绑定留到 mint 前最后一步 | 继续只保留逻辑草案，等执行当天再临场补账号与舍入 | 创世参数一旦进入执行，需要预先冻结 slot、签名要求、runtime 落点和 rounding 规则，减少临场错误面。 |
 | DEC-TOKEN-INIT-007 | 先冻结当前链上代币正式产品名为“绿洲币 / Oasis Coin”，再单开专题迁移 runtime symbol/account 真值 | 在未评审兼容性影响前直接改 runtime symbol / 账户前缀 | 产品名、ticker 与账户派生的治理半径不同；先冻结 public naming，才能把后续 runtime 迁移收成独立可审计任务。 |
 | DEC-TOKEN-INIT-008 | 在独立迁移专题中，把当前 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一切到 `OC` / `oc:pk:` | 继续让 `AWT` / `awt:pk:` 作为现行真值 | public naming 已冻结后，继续双轨会让 runtime、API、viewer/client 与 liveops 口径长期分叉；应尽快完成单一当前真值迁移。 |
+| DEC-TOKEN-INIT-009 | 当前创世绝对发行量冻结为 `10,000,000,000 OC` | 改为 `100,000,000 OC` 或 `1,000,000,000 OC` | 该值保留大整数公开叙事空间，同时仍由 `genesis_liquid=0`、首年外部释放 `100~200 bps` 目标与 `<=500 bps` 硬上限约束低流通边界；在当前 7 个 bucket 比例下还能得到无需 remainder 的整数分配额。 |

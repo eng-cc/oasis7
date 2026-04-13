@@ -1,12 +1,12 @@
 # oasis7 主链 Token 创世参数正式执行清单（2026-03-22）
 
-审计轮次: 1
+审计轮次: 2
 
 ## Meta
 - Owner Role: `runtime_engineer`
 - Review Roles: `producer_system_designer`, `qa_engineer`
 - Source Topic: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
-- Freeze Status: `logic_frozen_address_binding_pending`
+- Freeze Status: `logic_frozen_supply_set_address_binding_pending`
 - Runtime Anchor:
   - `Action::InitializeMainTokenGenesis`
   - `MainTokenGenesisAllocationPlan`
@@ -14,7 +14,7 @@
   - recipient `vested_balance`
 
 ## 1. Freeze Gates
-- Gate-1: `main_token_config.initial_supply` 必须在 mint 前冻结为单一绝对值；本清单当前只冻结比例和算法，不伪造最终 absolute amount。
+- Gate-1: `main_token_config.initial_supply` 已冻结为 `10,000,000,000 OC`；若未来需要调整，必须重开治理专题并重跑 formal freeze / QA gate。
 - Gate-2: 所有 bucket `ratio_bps` 总和必须保持 `10000`。
 - Gate-3: 所有 bucket `genesis_liquid` 继续固定为 `0`；创世后只允许通过 `ClaimMainTokenVesting` 转成 liquid。
 - Gate-4: 所有 `recipient_account_id` / multisig 地址在真实 mint 前必须从 slot 升级为具体链上账户，否则 QA 结论最多为 `conditional_draft_only`。
@@ -25,6 +25,25 @@
 - Step-2: 将 remainder 按 `ratio_bps` 降序、`bucket_id` 升序逐个 `+1` 分配，直到 remainder 清零。
 - Step-3: 最终 `sum(allocated_amount)` 必须严格等于 `initial_supply`。
 - Step-4: event 应用后，每个 recipient 对应账户的 `vested_balance` 为其名下所有 bucket 的 `allocated_amount` 聚合值。
+
+## 2A. Frozen Reference Amounts At `10,000,000,000 OC`
+- 当前 `initial_supply` 冻结值：`10,000,000,000 OC`
+- 当前首 12 个月非团队外部释放边界：
+  - 目标：`100,000,000~200,000,000 OC`
+  - 硬上限：`500,000,000 OC`
+- 当前 bucket 绝对分配额：
+| bucket_id | ratio_bps | allocated_amount_at_10b |
+| --- | --- | --- |
+| `team_long_term_vesting` | `2000` | `2,000,000,000 OC` |
+| `early_contributor_reward_reserve` | `1500` | `1,500,000,000 OC` |
+| `node_service_genesis_custody` | `2000` | `2,000,000,000 OC` |
+| `staking_genesis_custody` | `1500` | `1,500,000,000 OC` |
+| `ecosystem_governance_reserve` | `1500` | `1,500,000,000 OC` |
+| `security_reserve_emergency` | `1000` | `1,000,000,000 OC` |
+| `foundation_ops_reserve` | `500` | `500,000,000 OC` |
+- 当前 rounding 结果：
+  - `remainder = 0`
+  - 无需按 `ratio_bps` / `bucket_id` 规则补差额；但 runtime 执行仍必须保留该算法，避免未来变更 supply 时出现手工舍入漂移。
 
 ## 3. Slot Registry
 | slot_id | expected_object | current_value | freeze_requirement | status |
@@ -74,7 +93,7 @@
 | `foundation_ops_reserve` | `500` | `acct.foundation_ops.v1` | `TBD_BEFORE_MINT` | `msig.foundation_ops.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `90` | `730` | monthly or quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> ops reserve vested_balance` | `ready_pending_address_binding` | 运营与基础设施盘 |
 
 ## 5. Pre-Mint Checklist
-- [ ] 冻结 `main_token_config.initial_supply`
+- [x] 冻结 `main_token_config.initial_supply = 10,000,000,000 OC`
 - [ ] 绑定全部 `recipient_account_id`
 - [ ] 绑定全部 `controller_slot_id` 对应真实 multisig / governance account
 - [x] 冻结全部 controller slot 的 `threshold / allowed_public_keys`（public-only；当前统一为 `2-of-3`）
@@ -84,16 +103,14 @@
 - [ ] 确认执行 payload 使用 runtime rounding 规则，而不是人工 spreadsheet 改写
 
 ## 6. Execution Order
-1. 冻结 `initial_supply`
-2. 绑定 slot registry 到真实链上账户
-3. 依据 runtime rounding 规则生成 7 条 `MainTokenGenesisAllocationPlan`
-4. 交 QA 填正式 audit template
-5. QA `pass` 后再准备 `InitializeMainTokenGenesis`
-6. 创世后抽查 recipient `vested_balance` 与 bucket `allocated_amount`
+1. 绑定 slot registry 到真实链上账户
+2. 依据 runtime rounding 规则生成 7 条 `MainTokenGenesisAllocationPlan`
+3. 交 QA 填正式 audit template
+4. QA `pass` 后再准备 `InitializeMainTokenGenesis`
+5. 创世后抽查 recipient `vested_balance` 与 bucket `allocated_amount`
 
 ## 7. Not Ready Conditions
 - 任何 `recipient_account_id = TBD_BEFORE_MINT`
 - 任何 controller multisig 未冻结 signer rule
 - 创始人个人受益拆分表缺失
-- `initial_supply` 仍未冻结
 - QA 仍为 `conditional_draft_only` 或 `block`

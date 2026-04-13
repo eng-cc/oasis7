@@ -1,0 +1,24 @@
+task_uid: task_daa6920df91d4df9807c6a04fd3cf3fc
+title: "冻结绿洲币创世绝对发行量为 100 亿 OC"
+owner_role: producer_system_designer
+worktree_hint: p2p-oc-10b-supply-freeze
+execution_log_path: .pm/tasks/task_daa6920df91d4df9807c6a04fd3cf3fc.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+doc_refs:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md
+  - doc/p2p/project.md
+related_prd:
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+  - doc/p2p/prd.md
+acceptance:
+  - "token 专题 PRD、project 与 freeze sheet 明确冻结 main_token_config.initial_supply=10,000,000,000 OC，并保留现有 10000 bps 分配结构"
+  - "bucket 绝对分配额、首年外部释放边界与治理说明基于 10B 口径回写到正式文档，不引入与现有低流通边界冲突的新承诺"
+  - "doc-governance-check、git diff --check、pm close 与 snapshot review 通过"
+handoff_to: []
+updated_at: 2026-04-13T22:41:08+08:00
+last_started_at: 2026-04-13T22:22:11+08:00
+last_closed_at: 2026-04-13T22:41:08+08:00
