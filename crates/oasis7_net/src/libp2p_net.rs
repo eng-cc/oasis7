@@ -103,6 +103,7 @@ pub struct Libp2pNetworkConfig {
     pub keypair: Option<Keypair>,
     pub peer_record: Option<PeerRecord>,
     pub enable_rendezvous: bool,
+    pub allow_loopback_external_addrs_for_testing: bool,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
     pub bootstrap_redial_interval_ms: i64,
@@ -121,6 +122,7 @@ impl Default for Libp2pNetworkConfig {
             keypair: None,
             peer_record: None,
             enable_rendezvous: false,
+            allow_loopback_external_addrs_for_testing: false,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
             bootstrap_redial_interval_ms: DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS,
@@ -157,12 +159,8 @@ enum Command {
         topic: String,
         payload: Vec<u8>,
     },
-    Subscribe {
-        topic: String,
-    },
-    Dial {
-        addr: Multiaddr,
-    },
+    Subscribe(String),
+    Dial(Multiaddr),
     Request {
         protocol: String,
         payload: Vec<u8>,
@@ -180,23 +178,20 @@ enum Command {
         handler: Handler,
         response: oneshot::Sender<Result<(), WorldError>>,
     },
-    PublishProvider {
-        key: String,
-        response: oneshot::Sender<Result<(), WorldError>>,
-    },
-    GetProviders {
-        key: String,
-        response: oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>,
-    },
+    PublishProvider(String, oneshot::Sender<Result<(), WorldError>>),
+    GetProviders(
+        String,
+        oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>,
+    ),
     PutWorldHead {
         key: String,
         payload: Vec<u8>,
         response: oneshot::Sender<Result<(), WorldError>>,
     },
-    GetWorldHead {
-        key: String,
-        response: oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>,
-    },
+    GetWorldHead(
+        String,
+        oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>,
+    ),
     PutMembershipDirectory {
         key: String,
         payload: Vec<u8>,
@@ -355,8 +350,7 @@ impl Libp2pNetwork {
                             bootstrap_redial_interval_ms as u64,
                         ));
                         for addr in &bootstrap_redial_peers {
-                            match bootstrap_redial_tx.try_send(Command::Dial { addr: addr.clone() })
-                            {
+                            match bootstrap_redial_tx.try_send(Command::Dial(addr.clone())) {
                                 Ok(()) => {}
                                 Err(err) if err.is_full() => break,
                                 Err(_) => return,
@@ -873,6 +867,7 @@ impl Libp2pNetwork {
                                         &event_listening_addrs,
                                         &event_reachability,
                                         &address,
+                                        config_clone.allow_loopback_external_addrs_for_testing,
                                         max_listening_addrs,
                                     );
                                     republish_local_peer_record(
@@ -891,6 +886,7 @@ impl Libp2pNetwork {
                                         &event_listening_addrs,
                                         &event_reachability,
                                         &address,
+                                        config_clone.allow_loopback_external_addrs_for_testing,
                                     );
                                     republish_local_peer_record(
                                         &mut swarm,
@@ -908,6 +904,7 @@ impl Libp2pNetwork {
                                         &event_listening_addrs,
                                         &event_reachability,
                                         addresses.as_slice(),
+                                        config_clone.allow_loopback_external_addrs_for_testing,
                                     );
                                     republish_local_peer_record(
                                         &mut swarm,
@@ -1233,7 +1230,7 @@ impl Libp2pNetwork {
         let mut bootstrap_tx = command_tx.clone();
         for addr in bootstrap_peers {
             // Best-effort: if the background task exits, dial requests can be dropped.
-            if bootstrap_tx.try_send(Command::Dial { addr }).is_err() {
+            if bootstrap_tx.try_send(Command::Dial(addr)).is_err() {
                 break;
             }
         }

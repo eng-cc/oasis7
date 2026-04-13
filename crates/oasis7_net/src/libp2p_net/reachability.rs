@@ -189,7 +189,7 @@ pub(super) fn refresh_active_transport_snapshot(
     snapshot.active_transport_kind = preferred_transport_kind(&snapshot);
 }
 
-fn is_relay_addr(addr: &Multiaddr) -> bool {
+pub(super) fn is_relay_addr(addr: &Multiaddr) -> bool {
     addr.iter()
         .any(|protocol| matches!(protocol, Protocol::P2pCircuit))
 }
@@ -216,6 +216,25 @@ pub(super) fn is_public_direct_addr(addr: &Multiaddr) -> bool {
         Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_) => true,
         _ => false,
     })
+}
+
+fn is_loopback_direct_addr(addr: &Multiaddr) -> bool {
+    if is_relay_addr(addr) {
+        return false;
+    }
+    addr.iter().any(|protocol| match protocol {
+        Protocol::Ip4(ip) => ip.is_loopback(),
+        Protocol::Ip6(ip) => ip.is_loopback(),
+        _ => false,
+    })
+}
+
+pub(super) fn should_register_external_listen_addr(
+    addr: &Multiaddr,
+    allow_loopback_external_addrs_for_testing: bool,
+) -> bool {
+    is_relay_addr(addr)
+        || (allow_loopback_external_addrs_for_testing && is_loopback_direct_addr(addr))
 }
 
 fn recompute_public_port_reachability(snapshot: &mut Libp2pReachabilitySnapshot) {
@@ -366,5 +385,45 @@ mod tests {
             snapshot_clone(&shared).public_port_reachability,
             LivePublicPortReachability::Unknown
         );
+    }
+
+    #[test]
+    fn external_listen_addr_registration_only_keeps_relay_addrs_by_default() {
+        let relay_addr: Multiaddr = format!(
+            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
+            PeerId::random()
+        )
+        .parse()
+        .expect("relay addr");
+        let loopback_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().expect("loopback addr");
+        let unspecified_addr: Multiaddr =
+            "/ip4/0.0.0.0/tcp/4001".parse().expect("unspecified addr");
+        let public_direct_addr: Multiaddr = "/dns4/node.example/tcp/4001"
+            .parse()
+            .expect("public direct addr");
+
+        assert!(should_register_external_listen_addr(&relay_addr, false));
+        assert!(!should_register_external_listen_addr(&loopback_addr, false));
+        assert!(!should_register_external_listen_addr(
+            &unspecified_addr,
+            false
+        ));
+        assert!(!should_register_external_listen_addr(
+            &public_direct_addr,
+            false
+        ));
+    }
+
+    #[test]
+    fn external_listen_addr_registration_allows_loopback_only_in_test_mode() {
+        let loopback_addr: Multiaddr = "/ip4/127.0.0.1/tcp/4001".parse().expect("loopback addr");
+        let unspecified_addr: Multiaddr =
+            "/ip4/0.0.0.0/tcp/4001".parse().expect("unspecified addr");
+
+        assert!(should_register_external_listen_addr(&loopback_addr, true));
+        assert!(!should_register_external_listen_addr(
+            &unspecified_addr,
+            true
+        ));
     }
 }
