@@ -38,6 +38,9 @@
   - `LTRL-PR-60` approved as `eligible-large` with approval id `APR-LTRL-2026-04-13-01` and round-specific amount decision `1500 OC`
   - `LTRL-PR-59` approved as `eligible-large` with approval id `APR-LTRL-2026-04-13-02` and round-specific amount decision `1500 OC`
   - 本轮 amount decision 只对 `ROUND-LTRL-2026-04-01_2026-04-13` 生效，不把 contributor reward 全局改成固定 `eligible-large=1500 OC` 映射。
+  - Producer 同步冻结当前 `main_token_config.initial_supply = 10,000,000,000 OC`；据此，`early_contributor_reward_reserve = 1,500,000,000 OC`。
+  - `1500 OC` 单笔发放占总发行量 `0.000015%`，占 early contributor reward reserve `0.0001%`。
+  - 本轮两笔合计 `3000 OC`，占总发行量 `0.00003%`，占 early contributor reward reserve `0.0002%`。
   - Distribution Ref / Distribution Date / Execution Owner 仍待 execution owner 回填。
 
 ## 5. Distribution Closure

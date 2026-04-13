@@ -25,4 +25,7 @@
 - `APR-LTRL-2026-04-13-01` corresponds to `LTRL-PR-60`.
 - `APR-LTRL-2026-04-13-02` corresponds to `LTRL-PR-59`.
 - This round-specific amount decision is `1500 OC` for each approved row and does not redefine the global contributor reward band mapping.
+- Producer 已同步冻结 `main_token_config.initial_supply = 10,000,000,000 OC`；`early_contributor_reward_reserve = 1,500,000,000 OC`。
+- Each `1500 OC` payout equals `0.000015%` of total supply and `0.0001%` of the early contributor reward reserve.
+- The full round total `3000 OC` equals `0.00003%` of total supply and `0.0002%` of the early contributor reward reserve.
 - `PR #56` is not approved in this round and must not appear in distribution execution.

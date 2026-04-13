@@ -37,7 +37,9 @@
 - 产物：
   - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
 - 已冻结内容：
+  - `main_token_config.initial_supply = 10,000,000,000 OC`
   - 7 个 bucket 的 `recipient_slot_id / controller_slot_id / signer_policy / start_epoch / cliff_epochs / linear_unlock_epochs / claim cadence`
+  - 7 个 bucket 的 absolute amount：`2,000,000,000 / 1,500,000,000 / 2,000,000,000 / 1,500,000,000 / 1,500,000,000 / 1,000,000,000 / 500,000,000 OC`
   - runtime 真值落点：`InitializeMainTokenGenesis -> MainTokenGenesisAllocationBucketState -> recipient.vested_balance`
   - `allocated_amount` 计算规则：先 `floor(initial_supply * ratio_bps / 10000)`，再按 `ratio_bps` 降序、`bucket_id` 升序分配 remainder
 - 仍待完成：
@@ -91,5 +93,5 @@
 ## 状态
 - 当前阶段：active
 - 下一步：执行 `TIGR-6`，绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并基于 QA 模板输出最终 `pass/block`。
-- 最近更新：2026-04-12
-- 备注：`TIGR-1~5`、`TIGR-7` 与 `TIGR-8` 已完成并形成当前发行前冻结结论、正式执行清单与当前 runtime/account 真值；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
+- 最近更新：2026-04-13
+- 备注：`TIGR-1~5`、`TIGR-7` 与 `TIGR-8` 已完成并形成当前发行前冻结结论、正式执行清单与当前 runtime/account 真值；本轮新增冻结 `main_token_config.initial_supply = 10,000,000,000 OC`，使 reward reserve 与 round payout 占比可以按单一绝对值核算；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。

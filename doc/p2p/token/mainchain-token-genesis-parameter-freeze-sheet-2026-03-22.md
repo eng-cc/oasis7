@@ -7,6 +7,7 @@
 - Review Roles: `producer_system_designer`, `qa_engineer`
 - Source Topic: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
 - Freeze Status: `logic_frozen_address_binding_pending`
+- Frozen `main_token_config.initial_supply`: `10,000,000,000 OC`
 - Runtime Anchor:
   - `Action::InitializeMainTokenGenesis`
   - `MainTokenGenesisAllocationPlan`
@@ -14,7 +15,7 @@
   - recipient `vested_balance`
 
 ## 1. Freeze Gates
-- Gate-1: `main_token_config.initial_supply` 必须在 mint 前冻结为单一绝对值；本清单当前只冻结比例和算法，不伪造最终 absolute amount。
+- Gate-1: `main_token_config.initial_supply` 已由 `producer_system_designer` 冻结为 `10,000,000,000 OC`；后续如需改动，必须新开治理专题重审，不得在执行清单里临时改值。
 - Gate-2: 所有 bucket `ratio_bps` 总和必须保持 `10000`。
 - Gate-3: 所有 bucket `genesis_liquid` 继续固定为 `0`；创世后只允许通过 `ClaimMainTokenVesting` 转成 liquid。
 - Gate-4: 所有 `recipient_account_id` / multisig 地址在真实 mint 前必须从 slot 升级为具体链上账户，否则 QA 结论最多为 `conditional_draft_only`。
@@ -63,18 +64,18 @@
 | `msig.foundation_ops.v1` | `2` | `c8f1638d96af35f906b19f980dbc9a58230ede673138718669313331d5e4d753`, `f49f6521a5c1bd48772ff35d6f9f62e1a25b9d5d1be02247f67fe27d3dfd2d4b`, `e4343b9228e33ffe773653b3caf056b28cc56888917deae63dacdbcf20f03516` | foundation ops controller slot |
 
 ## 4. Bucket Execution Sheet
-| bucket_id | ratio_bps | recipient_slot_id | recipient_account_id | controller_slot_id | signer_policy | start_epoch | cliff_epochs | linear_unlock_epochs | claim_cadence | runtime_target | freeze_status | notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `team_long_term_vesting` | `2000` | `acct.team_core_vesting.v1` | `TBD_BEFORE_MINT` | `msig.team_core.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A；另需团队受益拆分表 | `0` | `365` | `1095` | quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> team recipient vested_balance` | `ready_pending_address_binding` | 个人受益拆分表必须单列并接受 `<=1500 bps` 审计 |
-| `early_contributor_reward_reserve` | `1500` | `acct.early_contributor_reward.v1` | `TBD_BEFORE_MINT` | `msig.reward_reserve.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A；发放仍需 producer approval | `0` | `0` | `3650` | batch-by-batch only | `MainTokenGenesisAllocationPlan -> bucket state -> reward reserve vested_balance` | `ready_pending_address_binding` | limited preview 期间保持独立 reward reserve，不并入 `ecosystem_pool` |
-| `node_service_genesis_custody` | `2000` | `acct.node_service_custody.v1` | `TBD_BEFORE_MINT` | `msig.node_committee.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `180` | `1825` | governance batch | `MainTokenGenesisAllocationPlan -> bucket state -> node service custody vested_balance` | `ready_pending_address_binding` | 这是 custody account，不是 `node_service_reward_pool` |
-| `staking_genesis_custody` | `1500` | `acct.staking_custody.v1` | `TBD_BEFORE_MINT` | `msig.staking_governance.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `180` | `1825` | governance batch | `MainTokenGenesisAllocationPlan -> bucket state -> staking custody vested_balance` | `ready_pending_address_binding` | 这是 custody account，不是 `staking_reward_pool` |
-| `ecosystem_governance_reserve` | `1500` | `acct.ecosystem_governance.v1` | `TBD_BEFORE_MINT` | `msig.ecosystem_governance.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `90` | `1460` | quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> ecosystem governance vested_balance` | `ready_pending_address_binding` | 不等于公开营销池 |
-| `security_reserve_emergency` | `1000` | `acct.security_council_reserve.v1` | `TBD_BEFORE_MINT` | `msig.security_council.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `0` | `0` | emergency only | `MainTokenGenesisAllocationPlan -> bucket state -> security reserve vested_balance` | `ready_pending_address_binding` | 常态不 claim，仅事故或防御动作使用 |
-| `foundation_ops_reserve` | `500` | `acct.foundation_ops.v1` | `TBD_BEFORE_MINT` | `msig.foundation_ops.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `90` | `730` | monthly or quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> ops reserve vested_balance` | `ready_pending_address_binding` | 运营与基础设施盘 |
+| bucket_id | ratio_bps | allocated_amount | recipient_slot_id | recipient_account_id | controller_slot_id | signer_policy | start_epoch | cliff_epochs | linear_unlock_epochs | claim_cadence | runtime_target | freeze_status | notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `team_long_term_vesting` | `2000` | `2,000,000,000 OC` | `acct.team_core_vesting.v1` | `TBD_BEFORE_MINT` | `msig.team_core.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A；另需团队受益拆分表 | `0` | `365` | `1095` | quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> team recipient vested_balance` | `ready_pending_address_binding` | 个人受益拆分表必须单列并接受 `<=1500 bps` 审计 |
+| `early_contributor_reward_reserve` | `1500` | `1,500,000,000 OC` | `acct.early_contributor_reward.v1` | `TBD_BEFORE_MINT` | `msig.reward_reserve.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A；发放仍需 producer approval | `0` | `0` | `3650` | batch-by-batch only | `MainTokenGenesisAllocationPlan -> bucket state -> reward reserve vested_balance` | `ready_pending_address_binding` | limited preview 期间保持独立 reward reserve，不并入 `ecosystem_pool` |
+| `node_service_genesis_custody` | `2000` | `2,000,000,000 OC` | `acct.node_service_custody.v1` | `TBD_BEFORE_MINT` | `msig.node_committee.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `180` | `1825` | governance batch | `MainTokenGenesisAllocationPlan -> bucket state -> node service custody vested_balance` | `ready_pending_address_binding` | 这是 custody account，不是 `node_service_reward_pool` |
+| `staking_genesis_custody` | `1500` | `1,500,000,000 OC` | `acct.staking_custody.v1` | `TBD_BEFORE_MINT` | `msig.staking_governance.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `180` | `1825` | governance batch | `MainTokenGenesisAllocationPlan -> bucket state -> staking custody vested_balance` | `ready_pending_address_binding` | 这是 custody account，不是 `staking_reward_pool` |
+| `ecosystem_governance_reserve` | `1500` | `1,500,000,000 OC` | `acct.ecosystem_governance.v1` | `TBD_BEFORE_MINT` | `msig.ecosystem_governance.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `90` | `1460` | quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> ecosystem governance vested_balance` | `ready_pending_address_binding` | 不等于公开营销池 |
+| `security_reserve_emergency` | `1000` | `1,000,000,000 OC` | `acct.security_council_reserve.v1` | `TBD_BEFORE_MINT` | `msig.security_council.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `0` | `0` | emergency only | `MainTokenGenesisAllocationPlan -> bucket state -> security reserve vested_balance` | `ready_pending_address_binding` | 常态不 claim，仅事故或防御动作使用 |
+| `foundation_ops_reserve` | `500` | `500,000,000 OC` | `acct.foundation_ops.v1` | `TBD_BEFORE_MINT` | `msig.foundation_ops.v1` | `threshold_ed25519 2-of-3`；public-only signer set 见 §3A | `0` | `90` | `730` | monthly or quarterly | `MainTokenGenesisAllocationPlan -> bucket state -> ops reserve vested_balance` | `ready_pending_address_binding` | 运营与基础设施盘 |
 
 ## 5. Pre-Mint Checklist
-- [ ] 冻结 `main_token_config.initial_supply`
+- [x] 冻结 `main_token_config.initial_supply` 为 `10,000,000,000 OC`
 - [ ] 绑定全部 `recipient_account_id`
 - [ ] 绑定全部 `controller_slot_id` 对应真实 multisig / governance account
 - [x] 冻结全部 controller slot 的 `threshold / allowed_public_keys`（public-only；当前统一为 `2-of-3`）
@@ -95,5 +96,4 @@
 - 任何 `recipient_account_id = TBD_BEFORE_MINT`
 - 任何 controller multisig 未冻结 signer rule
 - 创始人个人受益拆分表缺失
-- `initial_supply` 仍未冻结
 - QA 仍为 `conditional_draft_only` 或 `block`

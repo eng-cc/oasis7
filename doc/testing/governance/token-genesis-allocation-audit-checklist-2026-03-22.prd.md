@@ -50,7 +50,7 @@
   - AC-3: checklist 模板可以直接填入 `TIGR-1` 参数表并给出 `pass/block` verdict。
   - AC-4: 专题必须与 `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md` 互链。
 - Non-Goals:
-  - 本专题不决定最终总供应量绝对值。
+  - 本专题不重新决定最终总供应量绝对值；当前 audit 只消费已冻结的 `main_token_config.initial_supply` 真值。
   - 不取代法律/税务/证券意见。
   - 不直接执行 mint，也不负责发放 early contributor reward。
 

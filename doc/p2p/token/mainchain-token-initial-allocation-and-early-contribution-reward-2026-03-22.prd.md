@@ -79,8 +79,8 @@
   - AC-11: `TIGR-5` 必须输出正式执行清单，至少包含 `recipient_slot_id/controller_slot_id/signer_policy/runtime_target/allocated_amount_rule/freeze_status` 六类字段，并明确当前哪些 slot 仍待真实地址绑定。
   - AC-12: 创世金额换算必须固定为 runtime 真值：先按 `floor(initial_supply * ratio_bps / 10000)` 计算每个 bucket 的 `allocated_amount`，再按 `ratio_bps` 降序、`bucket_id` 升序分配 remainder；执行清单不得使用与 runtime 不一致的手工舍入规则。
   - AC-13: token 相关活跃文档、运营口径、模块入口与 runtime/account 派生实现必须统一把当前链上代币称为“绿洲币 / Oasis Coin”，并以 `OC` / `oc:pk:` 作为当前 symbol/account 真值；`AWT` / `awt:pk:` 仅允许保留在历史语境或兼容说明中。
+  - AC-14: `producer_system_designer` 已将 `main_token_config.initial_supply` 冻结为 `10,000,000,000 OC`；执行清单与后续 reward ledger 若需引用总量占比，必须以该绝对值为单一真值，不得继续使用 `1e8`、`1e9` 或未冻结占位值。
 - Non-Goals:
-  - 本专题不决定总供应量绝对数值（如 `1e8` 或 `1e9`），只冻结比例和控制边界。
   - 不在本专题给出法律意见、证券属性判断、税务结论或上市计划。
   - 不在本专题启动公开空投、二级市场流动性、交易所上币或做市。
   - 不建设产品级 invite-only 准入系统，也不把“可玩技术预览”改写为 `closed beta`。
@@ -105,7 +105,7 @@
   - 若未来需要 fully on-chain、proposal-bound 的 contributor distribution，应在新的治理专题里同时回答“运行时映射”“审计透明度”“社区预期”三项问题后再迁移。
 - Formal Freeze Sheet Decision:
   - `TIGR-5` 使用 slot-based execution sheet 把逻辑账户、控制主体和签名要求冻结为正式执行清单；在真实地址未绑定前，允许 `ready_pending_address_binding`，但不得宣称可直接 mint。
-  - 由于本专题仍不决定总供应绝对值，执行清单固定的是 `allocated_amount` 算法与 slot registry，而不是提前伪造最终绝对金额。
+  - 当前总发行量已冻结为 `10,000,000,000 OC`；执行清单除了保留 `allocated_amount` 算法，也同步固定 7 个 bucket 的 absolute amount，用于后续 QA 审计、reward reserve 占比核算与 mint 前核对。
 - Edge Cases & Error Handling:
   - 若创世 bucket 比例和不为 `10000 bps`，则候选配置直接拒绝。
   - 若任一自然人直接受益份额超过 `1500 bps`，则创世配置直接退回。

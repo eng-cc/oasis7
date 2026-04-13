@@ -41,6 +41,18 @@
 - 生态/治理储备：`ecosystem_governance_reserve = 1500 bps`
 - 创始人个人直持：不单列独立大 bucket；如需个人受益，必须内嵌在 `team_long_term_vesting` 受益人表内并继续受 `500~1000 bps` 目标区间与 `1500 bps` 硬上限约束。
 
+## 3.2A 总发行量冻结
+- `producer_system_designer` 当前已冻结 `main_token_config.initial_supply = 10,000,000,000 OC`，后续 reward round、QA 审计、mint 前 freeze checklist 与对外占比口径统一以此为绝对值真值。
+- 对应 absolute amount：
+  - `team_long_term_vesting = 2,000,000,000 OC`
+  - `early_contributor_reward_reserve = 1,500,000,000 OC`
+  - `node_service_genesis_custody = 2,000,000,000 OC`
+  - `staking_genesis_custody = 1,500,000,000 OC`
+  - `ecosystem_governance_reserve = 1,500,000,000 OC`
+  - `security_reserve_emergency = 1,000,000,000 OC`
+  - `foundation_ops_reserve = 500,000,000 OC`
+- 采用 `10,000,000,000` 的目的不是追随某条公链的固定模板，而是让当前 limited preview 的 reward reserve、长期协议储备与治理盘在数量级上保持可读、可审计、可长期运营的平衡。
+
 ## 3.3 TIGR-4 制作人执行路径决策
 - 当前 limited preview 期间，`early_contributor_reward_reserve` 保持为独立的 reward multisig / producer approval 执行路径，不并入 `ecosystem_pool`。
 - 原因-1：`InitializeMainTokenGenesis` 当前只把分配写入 recipient account `vested_balance`，创世时并不会直接生成 treasury bucket 余额。
