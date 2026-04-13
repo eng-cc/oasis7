@@ -23,6 +23,6 @@
 
 ## 状态
 - 更新日期: 2026-04-13
-- 当前阶段: 已完成
-- 阻塞项: 无
-- 下一步: 用 merged PR round scan 先按窗口生成 `ready/deferred` 候选，再将其抄入首轮真实 limited preview contributor reward ledger，补 producer 审批与 distribution ref。
+- 当前阶段: 首轮真实 round ledger 已批准，待执行发放
+- 阻塞项: 等待 execution owner 回填 `Actual Amount / Distribution Ref / Distribution Date`
+- 下一步: 按 `doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md` 执行本轮发放，完成后回写 distribution closure 并归档本轮 ledger。
