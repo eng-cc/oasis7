@@ -68,6 +68,20 @@ When one reward review round wants to review many merged PRs together, batch the
   --merged-after 2026-04-01 \
   --merged-before 2026-04-12 \
   --format json
+
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --use-gh \
+  --repo <owner>/<repo> \
+  --merged-after 2026-04-01 \
+  --merged-before 2026-04-12 \
+  --format ledger-draft-md
+
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --use-gh \
+  --repo <owner>/<repo> \
+  --merged-after 2026-04-01 \
+  --merged-before 2026-04-12 \
+  --format ledger-csv
 ```
 
 Round scan handling:
@@ -75,6 +89,8 @@ Round scan handling:
 - only import `ready` and `deferred` results into the ledger table.
 - keep `no_reward_review_requested` and `invalid_intake` in the scan report, but do not auto-create ledger rows from them.
 - round scan is only a batching wrapper around the single PR import contract; do not let it drift into a second rule set.
+- `ledger-draft-md` is for a human-readable first ledger draft with round meta placeholders still blank.
+- `ledger-csv` is for spreadsheet-friendly row import; it only exports `ready` and `deferred` rows.
 
 ## 4. Band Summary
 | Band | Row Count | Contributor Count | Status |

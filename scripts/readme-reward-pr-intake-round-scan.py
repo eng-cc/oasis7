@@ -9,8 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from readme_reward_pr_intake_lib import (
+    LEDGER_HEADERS,
     build_result_from_pr_payload,
     fail,
+    render_ledger_csv_header,
+    render_ledger_csv_row,
     render_ledger_row,
     require_cmd,
     run_cmd,
@@ -184,6 +187,97 @@ def render_scan_ledger_rows(report: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def iter_emittable_entries(report: dict[str, Any]) -> list[dict[str, Any]]:
+    return [entry for entry in report["entries"] if entry.get("ledger_row") is not None]
+
+
+def render_scan_ledger_csv(report: dict[str, Any]) -> str:
+    entries = iter_emittable_entries(report)
+    lines = [render_ledger_csv_header()]
+    for entry in entries:
+        row = entry.get("ledger_row")
+        assert row is not None
+        lines.append(render_ledger_csv_row(row))
+    return "\n".join(lines)
+
+
+def render_scan_ledger_draft_md(report: dict[str, Any]) -> str:
+    entries = iter_emittable_entries(report)
+    counts = report["status_counts"]
+    merged_after = report.get("merged_after", "")
+    merged_before = report.get("merged_before", "")
+    window = ""
+    if merged_after or merged_before:
+        window = f"{merged_after or '(open)'} -> {merged_before or '(open)'}"
+
+    ledger_lines = [
+        "| " + " | ".join(LEDGER_HEADERS) + " |",
+        "| " + " | ".join("---" for _ in LEDGER_HEADERS) + " |",
+    ]
+    for entry in entries:
+        ledger_lines.append(render_ledger_row(entry))
+    if len(ledger_lines) == 2:
+        ledger_lines.append("|  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |")
+
+    unresolved = [
+        f"status_counts ready={counts.get('ready', 0)} deferred={counts.get('deferred', 0)} no_reward_review_requested={counts.get('no_reward_review_requested', 0)} invalid_intake={counts.get('invalid_intake', 0)}",
+    ]
+    if report.get("search_query"):
+        unresolved.append(f"search_query={report['search_query']}")
+
+    return "\n".join(
+        [
+            "# Limited Preview Contributor Reward Ledger Draft",
+            "",
+            "## Meta",
+            "- Round ID:",
+            "- Candidate ID:",
+            f"- Window: {window}",
+            "- Claim Envelope: `limited playable technical preview`",
+            "- Owner Role: `liveops_community`",
+            "- Review Role: `producer_system_designer`",
+            "- Execution Role:",
+            "- Ledger Status: `draft`",
+            "",
+            "## 1. Intake Rules",
+            "- This draft only auto-imports PR rows whose intake status is `ready` or `deferred`.",
+            "- `no_reward_review_requested` and `invalid_intake` remain in the scan report and must not be auto-promoted into this ledger.",
+            "- Producer decision, approval ID, actual amount, distribution ref, and distribution date stay blank until later review/execution.",
+            "",
+            "## 2. Ledger",
+            *ledger_lines,
+            "",
+            "## 3. Band Summary",
+            "| Band | Row Count | Contributor Count | Status |",
+            "| --- | --- | --- | --- |",
+            "| `eligible-large` |  |  |  |",
+            "| `eligible-medium` |  |  |  |",
+            "| `eligible-small` |  |  |  |",
+            "| `no-token-recommendation` |  |  |  |",
+            "",
+            "## 4. Approval Summary",
+            "- Producer Review Date:",
+            "- Approved Rows:",
+            "- Rejected Rows:",
+            "- Deferred Rows:",
+            "- Approval Notes:",
+            "",
+            "## 5. Distribution Closure",
+            "| Approval ID | Ledger ID | Contributor | Actual Amount | Distribution Ref | Distribution Date | Execution Owner | Closure Status |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+            "|  |  |  |  |  |  |  | `pending / distributed / failed / retried` |",
+            "",
+            "## 6. Next Actions",
+            "- Unresolved items:",
+            *[f"  - {item}" for item in unresolved],
+            "- Missing accounts:",
+            "- Rows waiting producer review:",
+            "- Rows waiting distribution:",
+            "- Archive note:",
+        ]
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     source_group = parser.add_mutually_exclusive_group(required=True)
@@ -214,7 +308,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--format",
-        choices=("json", "summary", "ledger-md"),
+        choices=("json", "summary", "ledger-md", "ledger-draft-md", "ledger-csv"),
         default="json",
         help="Output format",
     )
@@ -255,8 +349,12 @@ def main() -> None:
         print(json.dumps(report, ensure_ascii=True, indent=2))
     elif args.format == "summary":
         print(render_scan_summary(report))
-    else:
+    elif args.format == "ledger-md":
         print(render_scan_ledger_rows(report))
+    elif args.format == "ledger-draft-md":
+        print(render_scan_ledger_draft_md(report))
+    else:
+        print(render_scan_ledger_csv(report))
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@
 | Ledger Row | `ledger_id`、`contributor`、`reward_account`、`source_link`、`contribution_type`、`total_score`、`recommended_band` | 逐条录入真实贡献 | `captured -> reviewed` | 同 contributor 可多条，但 `ledger_id` 必须唯一 | `liveops_community` 维护 |
 | PR Intake Import | `reward_review_request`、`reward_account`、`evidence_link` | 从 GitHub PR reward intake block 导入或补齐执行字段 | `deleted -> submitted -> imported -> reviewed` | 仅当 source type=`PR` 且作者保留该区块并主动申请 reward review 时使用；raw `public key` 不进入名称层 | `liveops_community` 导入 |
 | PR Import Script | `import_status`、`missing_fields`、`validation_error`、`ledger_row` | 解析 PR body 并输出 ledger-ready 结果 | `parsed -> ready/deferred/no_reward_review_requested/invalid_intake` | `Request reward review` 必须显式为 `yes`；未请求或 intake 无效时不建 row | `liveops_community` 执行 |
-| Merged PR Round Scan | `merged_after`、`merged_before`、`entry.pr_number`、`entry.merged_at`、`entry.import_status`、`status_counts` | 批量扫描一轮 merged PR 的 reward intake，并输出 ledger 候选 | `window_selected -> scanned -> triaged -> imported` | round scan 只能复用单 PR import contract；`ready/deferred` 才能推进到 ledger，`no_reward_review_requested/invalid_intake` 仅保留在报告 | `liveops_community` 执行 |
+| Merged PR Round Scan | `merged_after`、`merged_before`、`entry.pr_number`、`entry.merged_at`、`entry.import_status`、`status_counts`、`ledger_draft_md`、`ledger_csv` | 批量扫描一轮 merged PR 的 reward intake，并输出 ledger 候选 | `window_selected -> scanned -> triaged -> imported` | round scan 只能复用单 PR import contract；`ready/deferred` 才能推进到 ledger，`no_reward_review_requested/invalid_intake` 仅保留在报告；draft 导出不能擅自填 producer/distribution 字段 | `liveops_community` 执行 |
 | Producer Review | `review_status`、`producer_decision`、`approval_id` | 审阅并批准/拒绝/延后 | `reviewed -> approved/rejected/deferred` | 缺证据默认不得批准 | `producer_system_designer` 决策 |
 | Distribution Closure | `actual_amount`、`distribution_ref`、`distribution_date` | 回填真实执行引用 | `approved -> distributed` | 未执行前允许留空；执行后必须补全 | execution owner 回填 |
 | Round Summary | `band_totals`、`approved_rows`、`distributed_rows`、`unresolved_items` | 输出本轮汇总与遗留事项 | `draft -> summarized -> archived` | 汇总值按 ledger rows 聚合 | `liveops_community` 汇总，producer 审核 |
@@ -58,6 +58,7 @@
   - AC-6: 若 row 来源是 GitHub PR，ledger 必须能回溯到 PR intake block 里的 `Reward Account`，或显式记录为何改为 `deferred`。
   - AC-7: 仓库必须提供可执行导入脚本，至少支持 `--body-file` 离线解析，并在脚本输出里显式返回 `ready / deferred / no_reward_review_requested / invalid_intake`。
   - AC-8: 若某轮 ledger 以 merged GitHub PR 为主要来源，仓库必须提供按 merged 时间窗批量扫描的脚本入口，输出窗口级 `status_counts` 与逐条 `pr_number / merged_at / source_link / import_status`，并保持与单 PR import 相同的状态 contract。
+  - AC-9: merged PR round scan 必须支持直接导出 `ledger-draft-md` 与 `ledger-csv`；导出只自动填充 `ready/deferred` 的 PR 来源行和 round meta 占位，不得擅自补 producer decision、approval ID 或 distribution closure。
 - Non-Goals:
   - 本专题不决定每个档位对应的具体 token 数量。
   - 不替代 `readme-limited-preview-contributor-reward-pack-2026-03-22` 的评分规则定义。
@@ -92,6 +93,7 @@
   - NFR-LTRL-3: 每条 `distributed` row 必须具备 `Approval ID` 与 `Distribution Ref`。
   - NFR-LTRL-4: ledger 模板必须可直接复制复用到下一轮，而无需重新设计字段。
   - NFR-LTRL-5: merged PR round scan 输出的状态分类必须与单 PR import 完全一致，不允许单独发明另一套 `ready/deferred` 判定逻辑。
+  - NFR-LTRL-6: `ledger-draft-md` 与 `ledger-csv` 的行集合必须完全一致，且都只包含 `ready/deferred` 行。
 - Security & Privacy: ledger 只记录公开 handle、证据链接、链上奖励账户与必要审批引用；不记录私人聊天原文或不必要个人隐私。raw `public key` 仅保留在底层签名/账户绑定流程中，不作为奖励台账名称字段。
 
 ## 5. Risks & Roadmap
@@ -120,3 +122,4 @@
 | DEC-LTRL-005 | 对于 GitHub PR 来源的贡献，优先从 PR intake block 导入 `Reward Account` | 继续在 ledger 建档后再到评论/私聊里补账户字段 | 让 PR 在提交时就带齐 payout 字段，可以减少二次追问，并让 ledger 更快形成可审阅条目。 |
 | DEC-LTRL-006 | 用仓库脚本输出 PR intake 的导入状态与 ledger-ready row | 继续靠 liveops 在每轮 ledger 时手工判断是否 ready/deferred | ledger 的价值是减少临时表格与口头判断；如果 PR import 还靠人工猜，就没有真正形成可复用入口。 |
 | DEC-LTRL-007 | merged PR 的周期性奖励归集继续复用单 PR intake contract，并以时间窗批量扫描包装 | 为 round scan 再定义另一套字段或状态；或每轮继续逐个点开 merged PR 肉眼判断 | 周期性归集的价值在于省去重复人工判断，而不是发明第二套 contract；只要 PR template 已固定，batch scan 就应严格复用同一套判定。 |
+| DEC-LTRL-008 | merged PR round scan 直接导出 ledger draft markdown 和 csv，但只填充 `ready/deferred` 的初始行与 round meta 占位 | 只给 json/sumary 让 liveops 自己再手抄；或在导出时提前填 producer/distribution 字段 | 本轮要解决的是“首份台账草案怎么更快生成”，不是提前伪造审批或发放结论；导出层应只节省抄录，不替代后续 review/closure。 |

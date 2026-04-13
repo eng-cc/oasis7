@@ -88,6 +88,30 @@ ensure_file_contains "$ledger_md" 'LTRL-PR-202'
 ensure_file_contains "$ledger_md" 'oc:reward:builder01'
 ensure_file_contains "$ledger_md" 'deferred'
 
+ledger_draft_md="$tmpdir/ledger-draft.md"
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --input-json "$input_json" \
+  --merged-after "2026-04-12" \
+  --merged-before "2026-04-13" \
+  --format ledger-draft-md \
+  >"$ledger_draft_md"
+
+ensure_file_contains "$ledger_draft_md" '# Limited Preview Contributor Reward Ledger Draft'
+ensure_file_contains "$ledger_draft_md" 'Window: 2026-04-12 -> 2026-04-13'
+ensure_file_contains "$ledger_draft_md" 'LTRL-PR-201'
+ensure_file_contains "$ledger_draft_md" 'LTRL-PR-202'
+ensure_file_contains "$ledger_draft_md" 'status_counts ready=1 deferred=1 no_reward_review_requested=1 invalid_intake=1'
+
+ledger_csv="$tmpdir/ledger.csv"
+./scripts/readme-reward-pr-intake-round-scan.py \
+  --input-json "$input_json" \
+  --format ledger-csv \
+  >"$ledger_csv"
+
+ensure_file_contains "$ledger_csv" 'Ledger ID,Contributor,Public Handle / GitHub,Reward Account'
+ensure_file_contains "$ledger_csv" 'LTRL-PR-201,@builder01,builder01,oc:reward:builder01'
+ensure_file_contains "$ledger_csv" 'LTRL-PR-202,@builder02,builder02,,PR'
+
 report_like_json="$tmpdir/report-like.json"
 cat >"$report_like_json" <<'EOF'
 {
