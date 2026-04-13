@@ -4,10 +4,11 @@
 - 对应项目管理文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
 
 ## 1. 设计定位
-定义主链 Token 创世分配、控制边界、低流通门禁与早期贡献奖励的统一设计，让 Token 发行从一开始就是“可审计的战略配置”，而不是“事后补解释的营销行为”。
+定义主链 Token 创世分配、创世绝对发行量、控制边界、低流通门禁与早期贡献奖励的统一设计，让 Token 发行从一开始就是“可审计的战略配置”，而不是“事后补解释的营销行为”。
 
 ## 2. 设计结构
 - 创世分配层：冻结 `10000 bps` 分配表、bucket 命名、控制主体与锁仓方式。
+- 绝对总量层：冻结当前 `main_token_config.initial_supply = 10,000,000,000 OC`，把比例表落成可复核的绝对金额。
 - 控制边界层：区分项目战略控制、协议奖励池、单人直接受益和外部流通。
 - 奖励执行层：把 early contributor reward 约束为 evidence-based 审核与受控发放。
 - 审计门禁层：对比例求和、个人上限、低流通和禁语边界做 QA/治理复核。
@@ -41,6 +42,23 @@
 - 生态/治理储备：`ecosystem_governance_reserve = 1500 bps`
 - 创始人个人直持：不单列独立大 bucket；如需个人受益，必须内嵌在 `team_long_term_vesting` 受益人表内并继续受 `500~1000 bps` 目标区间与 `1500 bps` 硬上限约束。
 
+## 3.2A 创世绝对总量冻结（TIGR-9）
+- 当前冻结值：`main_token_config.initial_supply = 10,000,000,000 OC`
+- 对应首年非团队外部释放边界：
+  - 目标：`100,000,000~200,000,000 OC`
+  - 硬上限：`500,000,000 OC`
+- 对应 bucket 绝对分配额：
+| bucket_id | ratio_bps | allocated_amount_at_10b |
+| --- | --- | --- |
+| `team_long_term_vesting` | `2000` | `2,000,000,000 OC` |
+| `early_contributor_reward_reserve` | `1500` | `1,500,000,000 OC` |
+| `node_service_genesis_custody` | `2000` | `2,000,000,000 OC` |
+| `staking_genesis_custody` | `1500` | `1,500,000,000 OC` |
+| `ecosystem_governance_reserve` | `1500` | `1,500,000,000 OC` |
+| `security_reserve_emergency` | `1000` | `1,000,000,000 OC` |
+| `foundation_ops_reserve` | `500` | `500,000,000 OC` |
+- 该口径下 `allocated_amount` 全为整数，runtime rounding remainder 为 `0`；执行清单继续沿用 runtime 真值算法，但当前冻结值不会触发补差额分配。
+
 ## 3.3 TIGR-4 制作人执行路径决策
 - 当前 limited preview 期间，`early_contributor_reward_reserve` 保持为独立的 reward multisig / producer approval 执行路径，不并入 `ecosystem_pool`。
 - 原因-1：`InitializeMainTokenGenesis` 当前只把分配写入 recipient account `vested_balance`，创世时并不会直接生成 treasury bucket 余额。
@@ -54,8 +72,12 @@
   - `Action::InitializeMainTokenGenesis` 输入的是 `MainTokenGenesisAllocationPlan`。
   - runtime 会先按 `floor(initial_supply * ratio_bps / 10000)` 计算 `allocated_amount`，再将 remainder 按 `ratio_bps` 降序、`bucket_id` 升序逐个补 1。
   - 生成的 `MainTokenGenesisAllocationBucketState` 会写入 `main_token_genesis_buckets`，并把 recipient 对应账户的 `vested_balance` 初始化为聚合后的已分配金额。
+- 当前冻结值下的执行含义：
+  - `initial_supply = 10,000,000,000 OC`
+  - 由于 7 个 bucket 的 `ratio_bps` 在该口径下都能整除，当前 `remainder = 0`。
 - 冻结原则：
   - 逻辑参数、slot registry、签名规则和 rounding 规则现在冻结。
+  - 创世绝对发行量 `10,000,000,000 OC` 与 7 个 bucket 的绝对分配额现在冻结。
   - 真实链上 `recipient_account_id` 与 multisig 地址允许后补，但在补齐前 freeze status 只能是 `ready_pending_address_binding`。
   - 最终 mint 前仍必须以 QA checklist 输出 `pass`，不能把 formal sheet 当作最终放行。
 
@@ -68,6 +90,7 @@
 
 ## 5. 设计演进计划
 - 先冻结比例和控制边界。
+- 再冻结当前创世绝对发行量 `10,000,000,000 OC` 与 7 个 bucket 绝对分配额。
 - 再落实具体 bucket/account/vesting 参数表与审计 checklist。
 - 再输出 slot-based 正式执行清单，固定 runtime 落点与 rounding 规则。
 - limited preview 期间先按独立 reward reserve 多签执行。

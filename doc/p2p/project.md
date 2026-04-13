@@ -460,6 +460,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node tests_action_payload -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-P2P-047 (PRD-P2P-013) [test_tier_required]: 冻结当前链上代币的创世 `initial_supply` 为 `10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 同步回写到 token 专题与模块执行台账。
+  - 产物文件:
+    - `doc/p2p/README.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+    - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+    - `.pm/tasks/task_daa6920df91d4df9807c6a04fd3cf3fc.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "10,000,000,000|10000000000|100 亿 OC|2,000,000,000 OC|1,500,000,000 OC|500,000,000 OC" doc/p2p/README.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`
@@ -494,9 +508,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-12
+- 更新日期: 2026-04-13
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
+- 最新完成: `TASK-P2P-047`（已冻结当前链上代币的创世 `initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 收成统一真值；当前仍未进入 mint-ready，真实地址绑定与 QA final pass 继续由 `TIGR-6` 阻断。）
 - 最新完成: `TASK-P2P-046`（已将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 作为现行真值。）
 - 最新完成: `TASK-P2P-045`（已冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，作为后续 runtime/account 真值迁移的前置口径。）
 - 最新完成: `TASK-P2P-044`（已拆分 `crates/oasis7_net/src/libp2p_net.rs` 中的 command/runtime loop 与 peer-manager runtime helpers，恢复 1200 行门禁；同时按当前 stable rustfmt 回写 workspace 格式，避免 required CI 在 file-size gate 通过后卡死在 `cargo fmt --all --check`。）

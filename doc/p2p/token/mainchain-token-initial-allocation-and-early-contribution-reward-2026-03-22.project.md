@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md`
 - 对应需求文档: `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
 
-审计轮次: 5
+审计轮次: 6
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TIGR-0 (PRD-P2P-TOKEN-INIT-001/002/003) [test_tier_required]: 完成 Token 初始分配与早期贡献奖励专题 PRD / design / project 建档，并接入 `doc/p2p` 模块主追踪。
 - [x] TIGR-1 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 由 `runtime_engineer` 输出创世 bucket/account/recipient/vesting 参数表草案，明确当前实现下所有创世 bucket 都先进入 recipient `vested_balance`，并区分 custody account 与 post-genesis treasury bucket 语义。
@@ -14,6 +14,7 @@
 - [ ] TIGR-6 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并用 QA 模板输出最终 `pass` 或 `block`。
 - [x] TIGR-7 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，避免把当时旧 runtime symbol 误写成产品名或误宣称本轮已完成 ticker 改名。
 - [x] TIGR-8 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与专题文档，清理 `AWT` / `awt:pk:` 的现行真值残留。
+- [x] TIGR-9 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 由 `producer_system_designer` 冻结当前 `main_token_config.initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 回写到专题文档。
 
 ## TIGR-1 产物（本地草案，待 review）
 | bucket_id | ratio_bps | recipient | start_epoch | cliff_epochs | linear_unlock_epochs | genesis_liquid | ownership_note |
@@ -72,6 +73,26 @@
   - `OC` 是当前 `main_token.symbol` / ticker 真值，`oc:pk:` 是当前公钥派生账户前缀，签名鉴权前缀也已同步切换到 `oc*auth:v1:`。
   - `AWT` / `awt:pk:` 不再是当前实现真值；若未来需要再次调整 symbol/account 前缀，必须另开专题评估 runtime、launcher、viewer、API 与兼容性影响。
 
+## TIGR-9 创世绝对发行量冻结结论
+- 当前冻结值：`main_token_config.initial_supply = 10,000,000,000 OC`
+- 首 12 个月非团队外部释放边界：
+  - 目标：`100,000,000~200,000,000 OC`
+  - 硬上限：`500,000,000 OC`
+- 7 个 bucket 的绝对分配额：
+| bucket_id | ratio_bps | allocated_amount_at_10b |
+| --- | --- | --- |
+| `team_long_term_vesting` | `2000` | `2,000,000,000 OC` |
+| `early_contributor_reward_reserve` | `1500` | `1,500,000,000 OC` |
+| `node_service_genesis_custody` | `2000` | `2,000,000,000 OC` |
+| `staking_genesis_custody` | `1500` | `1,500,000,000 OC` |
+| `ecosystem_governance_reserve` | `1500` | `1,500,000,000 OC` |
+| `security_reserve_emergency` | `1000` | `1,000,000,000 OC` |
+| `foundation_ops_reserve` | `500` | `500,000,000 OC` |
+- runtime 执行含义：
+  - `allocated_amount` 仍按 runtime 真值公式计算。
+  - 当前 `10,000,000,000 OC` 口径下 7 个 bucket 都能整除，`remainder = 0`，不需要额外补差额。
+  - `genesis_liquid=0`、独立 reward reserve、多签审批与低流通边界不变；本次只冻结绝对总量，不提前宣称 mint-ready。
+
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
 - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26.prd.md`
@@ -91,5 +112,5 @@
 ## 状态
 - 当前阶段：active
 - 下一步：执行 `TIGR-6`，绑定真实 `recipient_account_id` / multisig 地址、补创始人个人受益拆分表，并基于 QA 模板输出最终 `pass/block`。
-- 最近更新：2026-04-12
-- 备注：`TIGR-1~5`、`TIGR-7` 与 `TIGR-8` 已完成并形成当前发行前冻结结论、正式执行清单与当前 runtime/account 真值；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
+- 最近更新：2026-04-13
+- 备注：`TIGR-1~5`、`TIGR-7~9` 已完成并形成当前发行前冻结结论、正式执行清单、`10,000,000,000 OC` 创世绝对发行量与当前 runtime/account 真值；但真实地址绑定、个人拆分表和 QA 最终 `pass` 仍未完成。在新的治理专题明确前，不得把早期贡献奖励写成公开发币活动，也不得把 reward reserve 自动并入 `ecosystem_pool`。
