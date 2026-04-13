@@ -1,16 +1,16 @@
 # schema: kind<TAB>path<TAB>line_count
 # kind in {code,test}; line_count is the frozen oversized baseline for tracked Rust files.
-code	crates/oasis7/src/bin/oasis7_chain_runtime.rs	1349
+code	crates/oasis7/src/bin/oasis7_chain_runtime.rs	1319
 code	crates/oasis7/src/bin/oasis7_game_launcher.rs	1429
 code	crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs	1259
 code	crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs	1389
 code	crates/oasis7_client_launcher/src/launcher_core.rs	1258
 code	crates/oasis7_client_launcher/src/main.rs	1253
-code	crates/oasis7_net/src/libp2p_net.rs	1265
+code	crates/oasis7_net/src/libp2p_net.rs	1264
 code	crates/oasis7_node/src/lib_impl_part1.rs	1298
 code	crates/oasis7_node/src/libp2p_replication_network.rs	1339
 code	crates/oasis7_node/src/replication.rs	1221
-code	crates/oasis7_node/src/types.rs	1362
+code	crates/oasis7_node/src/types.rs	1288
 test	crates/oasis7/src/simulator/llm_agent/tests_split_part1.rs	1204
 test	crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs	1447
 test	crates/oasis7_client_launcher/src/main_tests.rs	1261

@@ -1,0 +1,21 @@
+task_uid: task_f9da1696bc8641f6b612541c195a5987
+title: "Complete AutoNAT and port reachability probes for P2P auto mode"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-p2p-reachability-autonat-probe-closure
+execution_log_path: .pm/tasks/task_f9da1696bc8641f6b612541c195a5987.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "Runtime recommendation consumes explicit AutoNAT and public-port reachability evidence instead of relying only on relay or hole-punch fallback signals"
+  - "Chain status exposes the new probe evidence so launcher or viewer can audit why a node is treated as private_safe or public_entry"
+handoff_to: []
+updated_at: 2026-04-13T00:00:15+08:00
+last_started_at: 2026-04-12T23:27:13+08:00
+last_closed_at: 2026-04-13T00:00:02+08:00
