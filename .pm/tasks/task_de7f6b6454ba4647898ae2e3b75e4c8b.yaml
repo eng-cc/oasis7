@@ -1,0 +1,29 @@
+task_uid: task_de7f6b6454ba4647898ae2e3b75e4c8b
+title: "Repair release web semantic gate and S9 soak regressions"
+owner_role: viewer_engineer
+worktree_hint: oasis7-testing-release-web-soak-gates
+execution_log_path: .pm/tasks/task_de7f6b6454ba4647898ae2e3b75e4c8b.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/release-gate.sh
+  - scripts/viewer-release-qa-loop.sh
+  - scripts/p2p-longrun-soak.sh
+doc_refs:
+  - doc/testing/project.md
+  - doc/game/project.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/testing/prd.md
+  - doc/game/prd.md
+  - doc/world-simulator/prd.md
+acceptance:
+  - "release-gate-web passes without weakening the no-LLM gameplay policy, and software_safe release semantics stay aligned with the documented blocked contract."
+  - "S9 triad_distributed soak no longer fails the release gate under the canonical chaos profile, with root cause covered by targeted regression evidence."
+  - "workflow, docs, and regression commands point to the repaired release contract so a rerun can publish the same candidate tag."
+handoff_to: []
+updated_at: 2026-04-13T15:05:26+08:00
+last_started_at: 2026-04-12T23:59:05+08:00
+last_closed_at: 2026-04-13T15:04:49+08:00

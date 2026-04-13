@@ -439,6 +439,11 @@ impl ConsensusNetworkEndpoint {
         Ok(out)
     }
 
+    pub(crate) fn allows_publish(&self) -> bool {
+        self.network_policy
+            .allows_lane_operation(NetworkLane::ConsensusGossip, NetworkLaneOperation::Publish)
+    }
+
     fn publish_json<T: Serialize>(&self, topic: &str, message: &T) -> Result<(), NodeError> {
         validate_lane_access(
             &self.network_policy,

@@ -55,6 +55,8 @@ mod pos_schedule;
 mod pos_state_store;
 mod pos_validation;
 mod replication;
+mod replication_probe_gate;
+mod replication_state_reconcile;
 mod runtime_util;
 mod types;
 
@@ -100,6 +102,14 @@ use replication::{
     load_blob_from_root, load_commit_message_from_root, FetchBlobRequest, FetchBlobResponse,
     FetchCommitRequest, FetchCommitResponse, ReplicationRuntime, REPLICATION_FETCH_BLOB_PROTOCOL,
     REPLICATION_FETCH_COMMIT_PROTOCOL,
+};
+use replication_probe_gate::{
+    replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
+};
+use replication_state_reconcile::{
+    parse_replication_commit_payload, parse_replication_commit_payload_view,
+    reconcile_engine_with_persisted_replication, NodeEngineTickResult,
+    ReplicationCommitPayloadView,
 };
 use runtime_util::{lock_state, now_unix_ms};
 
@@ -399,6 +409,22 @@ impl NodeRuntime {
         } else {
             None
         };
+        if let Some(replication_runtime) = replication.as_ref() {
+            if let Err(err) = reconcile_engine_with_persisted_replication(
+                &mut engine,
+                replication_runtime,
+                self.config.world_id.as_str(),
+            ) {
+                self.running.store(false, Ordering::SeqCst);
+                return Err(err);
+            }
+            if let Some(store) = pos_state_store.as_ref() {
+                if let Err(err) = store.save_engine_state(&engine) {
+                    self.running.store(false, Ordering::SeqCst);
+                    return Err(err);
+                }
+            }
+        }
         if let (Some(network), Some(replication_config)) = (
             &self.replication_network,
             effective_replication_config.as_ref(),
@@ -1100,6 +1126,7 @@ struct PosNodeEngine {
     local_validator_id: String,
     node_player_id: String,
     gossip_reverse_path_seeding_enabled: bool,
+    allow_local_proposals: bool,
     require_execution_on_commit: bool,
     next_height: u64,
     next_slot: u64,
@@ -1145,48 +1172,8 @@ struct PeerCommittedHead {
     execution_state_root: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct ReplicationCommitPayloadView {
-    height: u64,
-    block_hash: String,
-    committed_at_ms: i64,
-    #[serde(default)]
-    execution_block_hash: Option<String>,
-    #[serde(default)]
-    execution_state_root: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct ReplicationCommitPayload {
-    world_id: String,
-    node_id: String,
-    height: u64,
-    block_hash: String,
-    action_root: String,
-    actions: Vec<NodeConsensusAction>,
-    committed_at_ms: i64,
-    #[serde(default)]
-    execution_block_hash: Option<String>,
-    #[serde(default)]
-    execution_state_root: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct NodeEngineTickResult {
-    consensus_snapshot: NodeConsensusSnapshot,
-    committed_action_batch: Option<NodeCommittedActionBatch>,
-}
-
 include!("lib_impl_part1.rs");
 include!("lib_impl_part2.rs");
-
-fn parse_replication_commit_payload_view(payload: &[u8]) -> Option<ReplicationCommitPayloadView> {
-    serde_json::from_slice::<ReplicationCommitPayloadView>(payload).ok()
-}
-
-fn parse_replication_commit_payload(payload: &[u8]) -> Option<ReplicationCommitPayload> {
-    serde_json::from_slice::<ReplicationCommitPayload>(payload).ok()
-}
 
 #[cfg(test)]
 mod tests;

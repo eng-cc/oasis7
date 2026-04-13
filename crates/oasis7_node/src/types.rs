@@ -12,6 +12,8 @@ use oasis7_proto::distributed_net::{NetworkLane, NetworkLaneOperation};
 use crate::pos_validation::validate_pos_config;
 use crate::{NodeConsensusAction, NodeError, NodeReplicationConfig};
 
+mod node_config_flags;
+
 const DEFAULT_MAX_PENDING_CONSENSUS_ACTIONS: usize = 4096;
 const DEFAULT_MAX_ENGINE_PENDING_CONSENSUS_ACTIONS: usize = 4096;
 const DEFAULT_MAX_CONSENSUS_ACTION_PAYLOAD_BYTES: usize = 256 * 1024;
@@ -583,6 +585,7 @@ pub struct NodeConfig {
     pub role: NodeRole,
     pub network_policy: NodeNetworkPolicy,
     pub pos_config: NodePosConfig,
+    pub allow_local_proposals: bool,
     pub auto_attest_all_validators: bool,
     pub require_execution_on_commit: bool,
     pub require_peer_execution_hashes: bool,
@@ -875,6 +878,7 @@ impl NodeConfig {
             role,
             network_policy: NodeNetworkPolicy::for_runtime_role(role),
             pos_config,
+            allow_local_proposals: true,
             auto_attest_all_validators: false,
             require_execution_on_commit: matches!(role, NodeRole::Sequencer),
             require_peer_execution_hashes: false,
@@ -930,21 +934,6 @@ impl NodeConfig {
         network_policy.validate_for_runtime_role(self.role)?;
         self.network_policy = network_policy;
         Ok(self)
-    }
-
-    pub fn with_auto_attest_all_validators(mut self, enabled: bool) -> Self {
-        self.auto_attest_all_validators = enabled;
-        self
-    }
-
-    pub fn with_require_execution_on_commit(mut self, enabled: bool) -> Self {
-        self.require_execution_on_commit = enabled;
-        self
-    }
-
-    pub fn with_require_peer_execution_hashes(mut self, enabled: bool) -> Self {
-        self.require_peer_execution_hashes = enabled;
-        self
     }
 
     pub fn with_max_pending_consensus_actions(

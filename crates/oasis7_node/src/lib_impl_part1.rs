@@ -98,6 +98,7 @@ impl PosNodeEngine {
             local_validator_id: config.node_id.clone(),
             node_player_id: config.player_id.clone(),
             gossip_reverse_path_seeding_enabled: matches!(config.role, NodeRole::Observer),
+            allow_local_proposals: config.allow_local_proposals,
             require_execution_on_commit: config.require_execution_on_commit,
             next_height: 1,
             next_slot: 0,
@@ -183,10 +184,24 @@ impl PosNodeEngine {
                 replication.as_deref_mut(),
             )?;
         }
+        let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
+            self.maybe_hold_proposal_for_replication_successor_probe(
+                endpoint,
+                node_id,
+                world_id,
+                replication.as_deref_mut(),
+            )?
+        } else {
+            false
+        };
         self.align_next_slot_to_wall_clock(current_slot)?;
 
         let mut decision = if self.pending.is_some() {
             self.advance_pending_attestations(now_ms)?
+        } else if hold_for_replication_probe {
+            self.idle_pending_decision()?
+        } else if !self.allow_local_proposals {
+            self.idle_pending_decision()?
         } else if self.next_slot <= current_slot
             && observed_tick.tick_phase == self.proposal_tick_phase
         {
@@ -631,7 +646,10 @@ impl PosNodeEngine {
                 .inbound_rejected_attestation_epoch_mismatch,
             last_inbound_timing_reject_reason: self.last_inbound_timing_reject_reason.clone(),
             last_status: Some(decision.status),
-            last_block_hash: Some(decision.block_hash.clone()),
+            last_block_hash: self
+                .last_committed_block_hash
+                .clone()
+                .or_else(|| Some(decision.block_hash.clone())),
             last_execution_height: self.last_execution_height,
             last_execution_block_hash: self.last_execution_block_hash.clone(),
             last_execution_state_root: self.last_execution_state_root.clone(),
@@ -1083,6 +1101,9 @@ impl PosNodeEngine {
                         not_found = true;
                         break;
                     }
+                    Err(err) if replication_request_waitable_connection_gap(&err) => {
+                        return Ok(());
+                    }
                     Err(err) => {
                         last_error = Some(format!(
                             "attempt {attempt}/{} failed: {}",
@@ -1129,79 +1150,6 @@ impl PosNodeEngine {
     }
 }
 
-fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
-    let NodeError::Replication { reason } = err else {
-        return false;
-    };
-    reason.contains("NetworkProtocolUnavailable")
-        || reason.contains("libp2p-replication no connected providers for protocol")
-        || reason.contains("libp2p-replication no connected peers for protocol")
-        || (reason.contains("NetworkRequestFailed")
-            && reason.contains("NetworkProtocolUnavailable"))
-}
-
-fn request_fetch_blob_with_route_fallback(
-    endpoint: &ReplicationNetworkEndpoint,
-    world_id: &str,
-    content_hash: &str,
-    request: &FetchBlobRequest,
-    provider_ids: Option<&[String]>,
-) -> Result<FetchBlobResponse, NodeError> {
-    let mut last_not_found: Option<FetchBlobResponse> = None;
-    let mut last_retryable_error: Option<NodeError> = None;
-
-    if let Some(provider_ids) = provider_ids {
-        for provider_id in provider_ids {
-            let provider_route = [provider_id.clone()];
-            match endpoint.request_json_with_providers::<FetchBlobRequest, FetchBlobResponse>(
-                REPLICATION_FETCH_BLOB_PROTOCOL,
-                request,
-                provider_route.as_slice(),
-            ) {
-                Ok(response) => {
-                    if response.found {
-                        return Ok(response);
-                    }
-                    last_not_found = Some(response);
-                }
-                Err(err) if should_fallback_provider_aware_replication_request(&err) => {
-                    last_retryable_error = Some(err);
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    for _ in 0..REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS {
-        match endpoint.request_json::<FetchBlobRequest, FetchBlobResponse>(
-            REPLICATION_FETCH_BLOB_PROTOCOL,
-            request,
-        ) {
-            Ok(response) => {
-                if response.found {
-                    return Ok(response);
-                }
-                last_not_found = Some(response);
-            }
-            Err(err) if should_fallback_provider_aware_replication_request(&err) => {
-                last_retryable_error = Some(err);
-            }
-            Err(err) => return Err(err),
-        }
-    }
-
-    if let Some(response) = last_not_found {
-        return Ok(response);
-    }
-
-    Err(last_retryable_error.unwrap_or_else(|| NodeError::Replication {
-        reason: format!(
-            "blob fetch routes exhausted without response for world_id={} hash={}",
-            world_id, content_hash
-        ),
-    }))
-}
-
 enum StorageChallengeSampleOutcome {
     Matched,
     Unavailable { reason: String },
@@ -1227,17 +1175,17 @@ fn evaluate_storage_challenge_sample(
     };
     let fetch_blob_request = replication.build_fetch_blob_request(content_hash)?;
     let mut provider_lookup_failure = None;
-    let provider_lookup = match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash)
-    {
-        Ok(provider_ids) => provider_ids,
-        Err(err) => {
-            provider_lookup_failure = Some(format!(
-                "storage challenge gate provider lookup failed for hash {}: {:?}",
-                content_hash, err
-            ));
-            None
-        }
-    };
+    let provider_lookup =
+        match endpoint.lookup_provider_ids_for_content_hash(world_id, content_hash) {
+            Ok(provider_ids) => provider_ids,
+            Err(err) => {
+                provider_lookup_failure = Some(format!(
+                    "storage challenge gate provider lookup failed for hash {}: {:?}",
+                    content_hash, err
+                ));
+                None
+            }
+        };
     let response = match request_fetch_blob_with_route_fallback(
         endpoint,
         world_id,
