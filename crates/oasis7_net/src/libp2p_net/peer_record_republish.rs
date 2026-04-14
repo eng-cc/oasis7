@@ -24,6 +24,7 @@ pub(super) struct LocalPeerRecordRepublisher<'a> {
     pub peer_record_template: Option<&'a PeerRecord>,
     pub listening_addrs: &'a Arc<Mutex<Vec<Multiaddr>>>,
     pub reachability: &'a Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    pub event_error_sink: (&'a Arc<Mutex<Vec<String>>>, usize),
     pub allow_loopback_external_addrs_for_testing: bool,
 }
 
@@ -33,6 +34,7 @@ impl LocalPeerRecordRepublisher<'_> {
         peer_record_template: Option<&'a PeerRecord>,
         listening_addrs: &'a Arc<Mutex<Vec<Multiaddr>>>,
         reachability: &'a Arc<Mutex<Libp2pReachabilitySnapshot>>,
+        event_error_sink: (&'a Arc<Mutex<Vec<String>>>, usize),
         allow_loopback_external_addrs_for_testing: bool,
     ) -> LocalPeerRecordRepublisher<'a> {
         LocalPeerRecordRepublisher {
@@ -40,6 +42,7 @@ impl LocalPeerRecordRepublisher<'_> {
             peer_record_template,
             listening_addrs,
             reachability,
+            event_error_sink,
             allow_loopback_external_addrs_for_testing,
         }
     }
@@ -52,7 +55,7 @@ impl LocalPeerRecordRepublisher<'_> {
         peer_record_last_published_at_ms: &mut Option<i64>,
     ) {
         if let Some(template) = self.peer_record_template {
-            let _ = publish_configured_peer_record(
+            match publish_configured_peer_record(
                 swarm,
                 pending_dht,
                 self.keypair,
@@ -61,9 +64,21 @@ impl LocalPeerRecordRepublisher<'_> {
                 self.reachability,
                 self.allow_loopback_external_addrs_for_testing,
                 None,
-            );
-            *peer_record_last_published_at_ms = Some(now_ms());
-            publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
+            ) {
+                Ok(_) => {
+                    *peer_record_last_published_at_ms = Some(now_ms());
+                    publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
+                }
+                Err(err) => {
+                    let (event_errors, max_error_messages) = self.event_error_sink;
+                    push_bounded_clone(
+                        event_errors,
+                        format!("republish local peer record failed: {err:?}"),
+                        max_error_messages,
+                        "lock errors",
+                    );
+                }
+            }
         }
     }
 }

@@ -307,7 +307,6 @@ impl Libp2pNetwork {
             let bootstrap_redial_interval_ms = config_clone.bootstrap_redial_interval_ms;
             let republish_interval_ms = config_clone.republish_interval_ms;
             let discovery_query_interval_ms = config_clone.discovery_query_interval_ms;
-
             for addr in config_clone.listen_addrs {
                 if let Err(err) = swarm.listen_on(addr) {
                     let msg = format!("libp2p listen failed: {err}");
@@ -388,6 +387,7 @@ impl Libp2pNetwork {
                     peer_record_template.as_ref(),
                     &event_listening_addrs,
                     &event_reachability,
+                    (&event_errors, max_error_messages),
                     config_clone.allow_loopback_external_addrs_for_testing,
                 );
                 macro_rules! republish_local_peer_record {
@@ -1210,7 +1210,6 @@ impl Libp2pNetwork {
                 break;
             }
         }
-
         Self {
             peer_id,
             keypair,
