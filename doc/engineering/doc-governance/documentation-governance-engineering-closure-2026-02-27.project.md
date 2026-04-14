@@ -15,7 +15,7 @@
 
 ## 依赖
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.design.md`
-- doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md
+- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`
 - `scripts/ci-tests.sh`
 - `testing-manual.md`
 - `doc/**/*.project.md`（非 archive）
