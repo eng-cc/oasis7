@@ -30,6 +30,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+fn module_manifest_hash(manifest: &ModuleManifest) -> String {
+    let bytes = serde_json::to_vec(manifest).expect("serialize module manifest");
+    sha256_hex(&bytes)
+}
+
 struct InspectSandbox {
     last_request: Option<ModuleCallRequest>,
 }
@@ -121,6 +126,7 @@ fn module_route_encodes_event_input_as_cbor() {
         },
     };
 
+    let expected_manifest_hash = module_manifest_hash(&module_manifest);
     apply_module_manifest(&mut world, module_manifest);
 
     world.submit_action(Action::RegisterAgent {
@@ -141,7 +147,7 @@ fn module_route_encodes_event_input_as_cbor() {
     assert_eq!(decoded.ctx.origin.id, event.id.to_string());
     assert_eq!(decoded.ctx.stage.as_deref(), Some("post_event"));
     assert_eq!(decoded.ctx.world_config_hash, Some(config_hash));
-    assert_eq!(decoded.ctx.manifest_hash, decoded.ctx.world_config_hash);
+    assert_eq!(decoded.ctx.manifest_hash, Some(expected_manifest_hash));
     assert_eq!(decoded.ctx.journal_height, Some(event.id));
     assert_eq!(decoded.ctx.module_version.as_deref(), Some("0.1.0"));
     assert_eq!(decoded.ctx.module_kind.as_deref(), Some("reducer"));
@@ -192,6 +198,7 @@ fn module_route_encodes_action_input_as_cbor() {
         },
     };
 
+    let expected_manifest_hash = module_manifest_hash(&module_manifest);
     apply_module_manifest(&mut world, module_manifest);
 
     let envelope = ActionEnvelope {
@@ -216,7 +223,7 @@ fn module_route_encodes_action_input_as_cbor() {
     assert_eq!(decoded.ctx.origin.id, envelope.id.to_string());
     assert_eq!(decoded.ctx.stage.as_deref(), Some("pre_action"));
     assert_eq!(decoded.ctx.world_config_hash, Some(config_hash));
-    assert_eq!(decoded.ctx.manifest_hash, decoded.ctx.world_config_hash);
+    assert_eq!(decoded.ctx.manifest_hash, Some(expected_manifest_hash));
     assert_eq!(decoded.ctx.journal_height, Some(expected_journal_height));
     assert_eq!(decoded.ctx.module_version.as_deref(), Some("0.1.0"));
     assert_eq!(decoded.ctx.module_kind.as_deref(), Some("reducer"));

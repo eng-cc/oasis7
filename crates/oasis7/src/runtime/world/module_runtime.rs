@@ -10,7 +10,7 @@ use oasis7_wasm_router::{
     prepared_module_subscribes_to_event, PreparedSubscription,
 };
 
-use super::super::util::to_canonical_cbor;
+use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{
     ActionEnvelope, EffectOrigin, ModuleArtifact, ModuleEvent, ModuleEventKind, ModuleKind,
     ModuleLimits, ModuleManifest, ModuleRegistry, ModuleSubscriptionStage, WorldError, WorldEvent,
@@ -268,6 +268,7 @@ impl World {
             }
 
             let trace_id = format!("event-{}-{}", event.id, instance_id);
+            let module_manifest_hash = hash_json(&manifest)?;
             let ctx = ModuleContext {
                 v: "wasm-1".to_string(),
                 module_id: module_id.clone(),
@@ -280,7 +281,7 @@ impl World {
                 limits: manifest.limits.clone(),
                 stage: Some("post_event".to_string()),
                 world_config_hash: Some(world_config_hash.clone()),
-                manifest_hash: Some(world_config_hash.clone()),
+                manifest_hash: Some(module_manifest_hash),
                 journal_height: Some(event.id),
                 module_version: Some(manifest.version.clone()),
                 module_kind: Some(module_kind_label(&manifest.kind).to_string()),
@@ -357,6 +358,7 @@ impl World {
             }
 
             let trace_id = format!("action-{}-{}", envelope.id, instance_id);
+            let module_manifest_hash = hash_json(&manifest)?;
             let ctx = ModuleContext {
                 v: "wasm-1".to_string(),
                 module_id: module_id.clone(),
@@ -369,7 +371,7 @@ impl World {
                 limits: manifest.limits.clone(),
                 stage: Some(subscription_stage_label(stage).to_string()),
                 world_config_hash: Some(world_config_hash.clone()),
-                manifest_hash: Some(world_config_hash.clone()),
+                manifest_hash: Some(module_manifest_hash),
                 journal_height: Some(self.journal.events.len() as u64),
                 module_version: Some(manifest.version.clone()),
                 module_kind: Some(module_kind_label(&manifest.kind).to_string()),
@@ -791,6 +793,16 @@ impl World {
                             policy_module_id
                         ),
                     })?;
+            let policy_manifest_hash =
+                hash_json(&policy_manifest).map_err(|err| ModuleCallFailure {
+                    module_id: module_id.to_string(),
+                    trace_id: trace_id.to_string(),
+                    code: ModuleCallErrorCode::PolicyDenied,
+                    detail: format!(
+                        "pure policy hook {} cannot hash module manifest: {err:?}",
+                        policy_module_id
+                    ),
+                })?;
             let ctx = ModuleContext {
                 v: "wasm-1".to_string(),
                 module_id: policy_module_id.clone(),
@@ -803,7 +815,7 @@ impl World {
                 limits: policy_manifest.limits.clone(),
                 stage: Some("module_policy".to_string()),
                 world_config_hash: Some(world_config_hash.clone()),
-                manifest_hash: Some(world_config_hash),
+                manifest_hash: Some(policy_manifest_hash),
                 journal_height: Some(self.journal.events.len() as u64),
                 module_version: Some(policy_manifest.version.clone()),
                 module_kind: Some(module_kind_label(&policy_manifest.kind).to_string()),
