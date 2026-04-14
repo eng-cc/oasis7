@@ -21,6 +21,6 @@ acceptance:
   - "Public site download cards and checksums references point to the direct installer asset names and no longer advertise archive downloads."
   - "Release workflow verification fails if the expected direct installer assets are missing from the publish stage."
 handoff_to: []
-updated_at: 2026-04-14T14:17:18+08:00
-last_started_at: 2026-04-14T11:11:04+08:00
-last_closed_at: 2026-04-14T14:17:18+08:00
+updated_at: 2026-04-14T15:06:00+08:00
+last_started_at: 2026-04-14T15:01:36+08:00
+last_closed_at: 2026-04-14T15:06:00+08:00
