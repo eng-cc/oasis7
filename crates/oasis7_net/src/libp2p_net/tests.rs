@@ -812,7 +812,6 @@ fn process_discovered_peer_record_dials_candidate_peer() {
     let mut last_dialed_transport_paths = HashMap::new();
     let active_transport_paths = HashMap::new();
     let mut failed_transport_path_labels = HashSet::new();
-    let mut dialed_discovery_addrs = HashSet::new();
 
     super::discovery::process_discovered_peer_record(
         &mut swarm,
@@ -821,7 +820,6 @@ fn process_discovered_peer_record_dials_candidate_peer() {
         &mut last_dialed_transport_paths,
         &active_transport_paths,
         &mut failed_transport_path_labels,
-        &mut dialed_discovery_addrs,
         None,
         &PeerManagerPolicy::default(),
         record.clone(),
@@ -831,7 +829,6 @@ fn process_discovered_peer_record_dials_candidate_peer() {
     assert!(discovered_peer_records.contains_key(&peer_id));
     assert!(known_transport_paths.contains_key(&peer_id));
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
-    assert_eq!(dialed_discovery_addrs.len(), 1);
 }
 
 #[test]
@@ -854,7 +851,6 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
     let mut last_dialed_transport_paths = HashMap::new();
     let active_transport_paths = HashMap::new();
     let mut failed_transport_path_labels = HashSet::new();
-    let mut dialed_discovery_addrs = HashSet::new();
 
     super::discovery::process_discovered_peer_record(
         &mut swarm,
@@ -863,7 +859,6 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
         &mut last_dialed_transport_paths,
         &active_transport_paths,
         &mut failed_transport_path_labels,
-        &mut dialed_discovery_addrs,
         None,
         &PeerManagerPolicy::default(),
         suspect_record,
@@ -872,7 +867,6 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
 
     assert!(discovered_peer_records.contains_key(&peer_id));
     assert!(!last_dialed_transport_paths.contains_key(&peer_id));
-    assert!(dialed_discovery_addrs.is_empty());
 
     super::discovery::process_discovered_peer_record(
         &mut swarm,
@@ -881,7 +875,6 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
         &mut last_dialed_transport_paths,
         &active_transport_paths,
         &mut failed_transport_path_labels,
-        &mut dialed_discovery_addrs,
         None,
         &PeerManagerPolicy::default(),
         upgraded_record,
@@ -889,7 +882,6 @@ fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer()
     .expect("process upgraded peer record");
 
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
-    assert_eq!(dialed_discovery_addrs.len(), 1);
 }
 
 #[test]
