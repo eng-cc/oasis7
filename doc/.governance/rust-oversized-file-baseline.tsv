@@ -4,8 +4,7 @@ code	crates/oasis7/src/bin/oasis7_chain_runtime.rs	1305
 code	crates/oasis7/src/bin/oasis7_game_launcher.rs	1429
 code	crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs	1259
 code	crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs	1389
-code	crates/oasis7_client_launcher/src/launcher_core.rs	1258
-code	crates/oasis7_client_launcher/src/main.rs	1253
+code	crates/oasis7_client_launcher/src/launcher_core.rs	1255
 code	crates/oasis7_net/src/libp2p_net.rs	1261
 code	crates/oasis7_node/src/lib_impl_part1.rs	1246
 code	crates/oasis7_node/src/libp2p_replication_network.rs	1339

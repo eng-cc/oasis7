@@ -866,6 +866,9 @@ pub(super) fn check_provider_loopback_http_provider(
         queue_depth: health.queue_depth,
     };
     let compatibility = evaluate_provider_compatibility(&provider_info, Some(&provider_health));
+    let status = provider_health
+        .status
+        .unwrap_or_else(|| if provider_health.ok { "ok" } else { "not_ok" }.to_string());
     Ok(ProviderSnapshot {
         provider_id: provider_info.provider_id,
         name: provider_info
@@ -879,14 +882,8 @@ pub(super) fn check_provider_loopback_http_provider(
             .unwrap_or_else(|| "unknown".to_string()),
         capabilities: provider_info.capabilities,
         supported_action_sets: provider_info.supported_action_sets,
-        compatibility_status: compatibility.status,
-        status: provider_health.status.unwrap_or_else(|| {
-            if provider_health.ok {
-                "ok".to_string()
-            } else {
-                "not_ok".to_string()
-            }
-        }),
+        compatibility_status: compatibility.status.into(),
+        status,
         queue_depth: provider_health.queue_depth,
         last_error: provider_health.last_error,
         fallback_reason: compatibility.fallback_reason,

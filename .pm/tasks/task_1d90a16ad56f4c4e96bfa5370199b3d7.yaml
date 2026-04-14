@@ -1,0 +1,20 @@
+task_uid: task_1d90a16ad56f4c4e96bfa5370199b3d7
+title: "Fix release build-web-dist launcher wasm compatibility"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-release-web-dist-launcher-wasm-compat
+execution_log_path: .pm/tasks/task_1d90a16ad56f4c4e96bfa5370199b3d7.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+doc_refs:
+  - doc/testing/project.md
+related_prd:
+  - PRD-TESTING-002
+acceptance:
+  - "release build-web-dist passes for oasis7_client_launcher wasm target and release workflow can package web dists"
+handoff_to: []
+updated_at: 2026-04-13T23:44:36+08:00
+last_started_at: 2026-04-13T23:35:27+08:00
+last_closed_at: 2026-04-13T23:44:27+08:00
