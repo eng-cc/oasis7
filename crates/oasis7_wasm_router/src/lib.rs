@@ -1,56 +1,91 @@
 use oasis7_wasm_abi::{ModuleSubscription, ModuleSubscriptionStage};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-type ParsedFilterCache = Mutex<BTreeMap<String, Arc<SubscriptionFilters>>>;
-type RegexCache = Mutex<BTreeMap<String, Arc<regex::Regex>>>;
+const MAX_CACHE_ENTRIES: usize = 1024;
+
+struct BoundedCache<V> {
+    capacity: usize,
+    entries: HashMap<String, Arc<V>>,
+    insertion_order: VecDeque<String>,
+}
+
+impl<V> BoundedCache<V> {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            entries: HashMap::new(),
+            insertion_order: VecDeque::new(),
+        }
+    }
+
+    fn get_cloned(&self, key: &str) -> Option<Arc<V>> {
+        self.entries.get(key).cloned()
+    }
+
+    fn insert(&mut self, key: String, value: Arc<V>) {
+        if self.capacity == 0 {
+            self.entries.clear();
+            self.insertion_order.clear();
+            return;
+        }
+        if self.entries.contains_key(&key) {
+            self.entries.insert(key, value);
+            return;
+        }
+        while self.entries.len() >= self.capacity {
+            if let Some(oldest_key) = self.insertion_order.pop_front() {
+                self.entries.remove(&oldest_key);
+            } else {
+                break;
+            }
+        }
+        self.insertion_order.push_back(key.clone());
+        self.entries.insert(key, value);
+    }
+}
+
+type ParsedFilterCache = Mutex<BoundedCache<SubscriptionFilters>>;
+type RegexCache = Mutex<BoundedCache<regex::Regex>>;
+
+fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
 
 fn parsed_filter_cache() -> &'static ParsedFilterCache {
     static CACHE: OnceLock<ParsedFilterCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
+    CACHE.get_or_init(|| Mutex::new(BoundedCache::new(MAX_CACHE_ENTRIES)))
 }
 
 fn regex_cache() -> &'static RegexCache {
     static CACHE: OnceLock<RegexCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
+    CACHE.get_or_init(|| Mutex::new(BoundedCache::new(MAX_CACHE_ENTRIES)))
 }
 
-fn parsed_subscription_filters(filters_value: &JsonValue) -> Result<Arc<SubscriptionFilters>, ()> {
+fn parsed_subscription_filters(
+    filters_value: &JsonValue,
+) -> Result<Arc<SubscriptionFilters>, serde_json::Error> {
     let key = filters_value.to_string();
-    if let Some(cached) = parsed_filter_cache()
-        .lock()
-        .expect("parsed filter cache poisoned")
-        .get(&key)
-        .cloned()
-    {
+    if let Some(cached) = lock_recover(parsed_filter_cache()).get_cloned(&key) {
         return Ok(cached);
     }
-    let parsed: SubscriptionFilters =
-        serde_json::from_value(filters_value.clone()).map_err(|_| ())?;
+    let parsed: SubscriptionFilters = serde_json::from_value(filters_value.clone())?;
     let parsed = Arc::new(parsed);
-    parsed_filter_cache()
-        .lock()
-        .expect("parsed filter cache poisoned")
-        .insert(key, parsed.clone());
+    lock_recover(parsed_filter_cache()).insert(key, parsed.clone());
     Ok(parsed)
 }
 
 fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
-    if let Some(cached) = regex_cache()
-        .lock()
-        .expect("regex cache poisoned")
-        .get(pattern)
-        .cloned()
-    {
+    if let Some(cached) = lock_recover(regex_cache()).get_cloned(pattern) {
         return Some(cached);
     }
     let compiled = Arc::new(regex::Regex::new(pattern).ok()?);
-    regex_cache()
-        .lock()
-        .expect("regex cache poisoned")
-        .insert(pattern.to_string(), compiled.clone());
+    lock_recover(regex_cache()).insert(pattern.to_string(), compiled.clone());
     Some(compiled)
 }
 
@@ -160,7 +195,7 @@ pub fn validate_subscription_filters(
         return Ok(());
     }
     let parsed = parsed_subscription_filters(filters_value)
-        .map_err(|_| format!("module {module_id} subscription filters invalid"))?;
+        .map_err(|err| format!("module {module_id} subscription filters invalid: {err}"))?;
     for ruleset in parsed.event.iter().chain(parsed.action.iter()) {
         validate_ruleset(ruleset, module_id)?;
     }
@@ -242,7 +277,7 @@ fn subscription_filters_match(
     }
     let parsed = match parsed_subscription_filters(filters_value) {
         Ok(parsed) => parsed,
-        Err(()) => return false,
+        Err(_) => return false,
     };
     let rules = match kind {
         FilterKind::Event => parsed.event.as_ref(),
@@ -647,6 +682,19 @@ mod tests {
         }));
         let schema_err = validate_subscription_filters(&invalid_schema, "m.test").unwrap_err();
         assert!(schema_err.contains("subscription filters invalid"));
+        assert!(schema_err.starts_with("module m.test subscription filters invalid:"));
+    }
+
+    #[test]
+    fn bounded_cache_evicts_oldest_entries() {
+        let mut cache = BoundedCache::new(2);
+        cache.insert("a".to_string(), Arc::new(1u32));
+        cache.insert("b".to_string(), Arc::new(2u32));
+        cache.insert("c".to_string(), Arc::new(3u32));
+
+        assert!(cache.get_cloned("a").is_none());
+        assert_eq!(cache.get_cloned("b").as_deref(), Some(&2u32));
+        assert_eq!(cache.get_cloned("c").as_deref(), Some(&3u32));
     }
 
     #[test]
