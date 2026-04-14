@@ -14,10 +14,11 @@ use super::{
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
     publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
     put_record_query, recompute_peer_manager_healths, should_republish, start_peer_discovery_query,
-    Behaviour, Command, Handler, Keypair, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
-    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
-    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, SignedPeerRecord, TransportPath,
-    WorldError, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    Behaviour, Command, Handler, Keypair, Libp2pReachabilitySnapshot, NetworkMessage,
+    NetworkRequest, PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
+    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
+    PendingPeerRecordRequest, SignedPeerRecord, TransportPath, WorldError,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 pub(super) enum CommandOutcome {
@@ -29,12 +30,14 @@ pub(super) struct CommandContext<'a> {
     pub event_published: &'a Arc<Mutex<Vec<NetworkMessage>>>,
     pub event_errors: &'a Arc<Mutex<Vec<String>>>,
     pub event_listening_addrs: &'a Arc<Mutex<Vec<Multiaddr>>>,
+    pub event_reachability: &'a Arc<Mutex<Libp2pReachabilitySnapshot>>,
     pub keypair: &'a Keypair,
     pub peer_record_template: Option<&'a PeerRecord>,
     pub local_peer_id: PeerId,
     pub max_published_messages: usize,
     pub max_error_messages: usize,
     pub republish_interval_ms: i64,
+    pub allow_loopback_external_addrs_for_testing: bool,
 }
 
 pub(super) struct CommandStateRefs<'a> {
@@ -716,6 +719,8 @@ pub(super) fn handle_command(
                     ctx.keypair,
                     template,
                     ctx.event_listening_addrs,
+                    ctx.event_reachability,
+                    ctx.allow_loopback_external_addrs_for_testing,
                     None,
                 );
                 publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
@@ -797,6 +802,8 @@ pub(super) fn handle_command(
                             ctx.keypair,
                             template,
                             ctx.event_listening_addrs,
+                            ctx.event_reachability,
+                            ctx.allow_loopback_external_addrs_for_testing,
                             None,
                         )
                         .is_ok()

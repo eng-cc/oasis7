@@ -61,7 +61,10 @@ pub use peer_manager::{
     PeerManagerPeerHealth, PeerManagerPolicy,
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
-use peer_record_republish::republish_local_peer_record;
+use peer_record_republish::{
+    log_external_addr_confirmed_and_republish, log_external_addr_expired_and_republish,
+    LocalPeerRecordRepublisher,
+};
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
 pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
@@ -71,8 +74,7 @@ use runtime_loop::{handle_command, CommandContext, CommandOutcome, CommandStateR
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use swarm_reachability_events::{
     handle_autonat_event, handle_expired_listen_addr, handle_external_addr_candidate,
-    handle_external_addr_confirmed, handle_external_addr_expired, handle_listener_closed,
-    handle_new_listen_addr,
+    handle_listener_closed, handle_new_listen_addr,
 };
 use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
@@ -371,13 +373,33 @@ impl Libp2pNetwork {
                     event_published: &event_published,
                     event_errors: &event_errors,
                     event_listening_addrs: &event_listening_addrs,
+                    event_reachability: &event_reachability,
                     keypair: &keypair_clone,
                     peer_record_template: peer_record_template.as_ref(),
                     local_peer_id,
                     max_published_messages,
                     max_error_messages,
                     republish_interval_ms,
+                    allow_loopback_external_addrs_for_testing: config_clone
+                        .allow_loopback_external_addrs_for_testing,
                 };
+                let peer_record_republisher = LocalPeerRecordRepublisher::new(
+                    &keypair_clone,
+                    peer_record_template.as_ref(),
+                    &event_listening_addrs,
+                    &event_reachability,
+                    config_clone.allow_loopback_external_addrs_for_testing,
+                );
+                macro_rules! republish_local_peer_record {
+                    () => {
+                        peer_record_republisher.republish(
+                            &mut swarm,
+                            &mut pending_dht,
+                            &mut provider_keys,
+                            &mut peer_record_last_published_at_ms,
+                        );
+                    };
+                }
                 loop {
                     futures::select! {
                         command = command_rx.next().fuse() => {
@@ -444,6 +466,9 @@ impl Libp2pNetwork {
                                                         peer_record_template.as_ref(),
                                                         &keypair_clone,
                                                         &event_listening_addrs,
+                                                        &event_reachability,
+                                                        config_clone
+                                                            .allow_loopback_external_addrs_for_testing,
                                                         &discovered_peer_records,
                                                     );
                                                     let response_bytes = match reply {
@@ -700,15 +725,7 @@ impl Libp2pNetwork {
                                                 max_error_messages,
                                                 "lock errors",
                                             );
-                                            republish_local_peer_record(
-                                                &mut swarm,
-                                                &mut pending_dht,
-                                                &mut provider_keys,
-                                                &keypair_clone,
-                                                peer_record_template.as_ref(),
-                                                &event_listening_addrs,
-                                                &mut peer_record_last_published_at_ms,
-                                            );
+                                            republish_local_peer_record!();
                                         }
                                         relay::client::Event::OutboundCircuitEstablished { relay_peer_id, .. } => {
                                             push_bounded_clone(
@@ -832,25 +849,29 @@ impl Libp2pNetwork {
                                     );
                                 }
                                 SwarmEvent::ExternalAddrConfirmed { address } => {
-                                    push_bounded_clone(
+                                    log_external_addr_confirmed_and_republish(
                                         &event_errors,
-                                        handle_external_addr_confirmed(
-                                            &event_reachability,
-                                            &address,
-                                        ),
                                         max_error_messages,
-                                        "lock errors",
+                                        &event_reachability,
+                                        &address,
+                                        &peer_record_republisher,
+                                        &mut swarm,
+                                        &mut pending_dht,
+                                        &mut provider_keys,
+                                        &mut peer_record_last_published_at_ms,
                                     );
                                 }
                                 SwarmEvent::ExternalAddrExpired { address } => {
-                                    push_bounded_clone(
+                                    log_external_addr_expired_and_republish(
                                         &event_errors,
-                                        handle_external_addr_expired(
-                                            &event_reachability,
-                                            &address,
-                                        ),
                                         max_error_messages,
-                                        "lock errors",
+                                        &event_reachability,
+                                        &address,
+                                        &peer_record_republisher,
+                                        &mut swarm,
+                                        &mut pending_dht,
+                                        &mut provider_keys,
+                                        &mut peer_record_last_published_at_ms,
                                     );
                                 }
                                 SwarmEvent::NewListenAddr { address, .. } => {
@@ -862,15 +883,7 @@ impl Libp2pNetwork {
                                         config_clone.allow_loopback_external_addrs_for_testing,
                                         max_listening_addrs,
                                     );
-                                    republish_local_peer_record(
-                                        &mut swarm,
-                                        &mut pending_dht,
-                                        &mut provider_keys,
-                                        &keypair_clone,
-                                        peer_record_template.as_ref(),
-                                        &event_listening_addrs,
-                                        &mut peer_record_last_published_at_ms,
-                                    );
+                                    republish_local_peer_record!();
                                 }
                                 SwarmEvent::ExpiredListenAddr { address, .. } => {
                                     handle_expired_listen_addr(
@@ -880,15 +893,7 @@ impl Libp2pNetwork {
                                         &address,
                                         config_clone.allow_loopback_external_addrs_for_testing,
                                     );
-                                    republish_local_peer_record(
-                                        &mut swarm,
-                                        &mut pending_dht,
-                                        &mut provider_keys,
-                                        &keypair_clone,
-                                        peer_record_template.as_ref(),
-                                        &event_listening_addrs,
-                                        &mut peer_record_last_published_at_ms,
-                                    );
+                                    republish_local_peer_record!();
                                 }
                                 SwarmEvent::ListenerClosed { addresses, .. } => {
                                     handle_listener_closed(
@@ -898,15 +903,7 @@ impl Libp2pNetwork {
                                         addresses.as_slice(),
                                         config_clone.allow_loopback_external_addrs_for_testing,
                                     );
-                                    republish_local_peer_record(
-                                        &mut swarm,
-                                        &mut pending_dht,
-                                        &mut provider_keys,
-                                        &keypair_clone,
-                                        peer_record_template.as_ref(),
-                                        &event_listening_addrs,
-                                        &mut peer_record_last_published_at_ms,
-                                    );
+                                    republish_local_peer_record!();
                                 }
                                 SwarmEvent::ConnectionEstablished {
                                     peer_id,

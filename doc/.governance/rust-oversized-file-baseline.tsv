@@ -5,14 +5,13 @@ code	crates/oasis7/src/bin/oasis7_game_launcher.rs	1429
 code	crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs	1259
 code	crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs	1389
 code	crates/oasis7_client_launcher/src/launcher_core.rs	1255
-code	crates/oasis7_net/src/libp2p_net.rs	1242
+code	crates/oasis7_net/src/libp2p_net.rs	1239
 code	crates/oasis7_node/src/lib_impl_part1.rs	1246
 code	crates/oasis7_node/src/replication.rs	1221
 code	crates/oasis7_node/src/types.rs	1277
 test	crates/oasis7/src/simulator/llm_agent/tests_split_part1.rs	1204
 test	crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs	1335
 test	crates/oasis7_client_launcher/src/main_tests.rs	1261
-test	crates/oasis7_net/src/libp2p_net/tests.rs	1280
 test	crates/oasis7_net/src/tests.rs	1241
 test	crates/oasis7_node/src/tests_split_part1.rs	1427
 test	crates/oasis7_node/src/tests_split_part3.rs	1735

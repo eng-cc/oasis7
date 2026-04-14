@@ -1,10 +1,7 @@
-use super::discovery::peer_record_enables_rendezvous;
 use super::peer_manager::{
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
 };
-use super::peer_record::{
-    build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
-};
+use super::peer_record::sign_peer_record;
 use super::runtime_loop::{peer_requires_active_quarantine, refresh_peer_manager_healths};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
@@ -18,6 +15,7 @@ use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
 
 mod discovery_peer_record_tests;
+mod peer_record_tests;
 mod transport_path_refresh_tests;
 
 fn signed_discovery_peer_record(
@@ -159,159 +157,6 @@ fn dht_get_membership_directory_decodes_record() {
         .expect("oneshot")
         .expect("get membership");
     assert_eq!(loaded, Some(snapshot));
-}
-
-#[test]
-fn sign_and_verify_peer_record_round_trip() {
-    let keypair = Keypair::generate_ed25519();
-    let record = PeerRecord {
-        peer_id: PeerId::from(keypair.public()).to_string(),
-        node_id: "node-a".to_string(),
-        world_id: "world-a".to_string(),
-        network_id: "network-a".to_string(),
-        node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
-        deployment_mode: PeerDeploymentMode::ValidatorHidden,
-        reachability_class: crate::dht::PeerReachabilityClass::Private,
-        direct_addrs: Vec::new(),
-        hole_punch_addrs: Vec::new(),
-        relay_addrs: Vec::new(),
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::StaticBootstrap,
-            crate::dht::PeerDiscoverySource::Dht,
-        ],
-        capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
-        source_operator: None,
-        source_asn: None,
-        published_at_ms: 42,
-        ttl_ms: 60_000,
-    };
-
-    let signed = sign_peer_record(&record, &keypair).expect("sign peer record");
-    verify_signed_peer_record(&signed).expect("verify peer record");
-}
-
-#[test]
-fn build_configured_peer_record_splits_direct_and_relay_listener_addrs() {
-    let keypair = Keypair::generate_ed25519();
-    let listening_addrs = Arc::new(Mutex::new(vec![
-        "/ip4/127.0.0.1/udp/4103/quic-v1"
-            .parse()
-            .expect("direct listen addr"),
-        format!(
-            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
-            PeerId::random()
-        )
-        .parse()
-        .expect("relay listen addr"),
-    ]));
-    let signed = build_configured_peer_record(
-        &keypair,
-        &PeerRecord {
-            peer_id: String::new(),
-            node_id: "node-a".to_string(),
-            world_id: "world-a".to_string(),
-            network_id: "network-a".to_string(),
-            node_role: PeerNodeRole::FullStorage.as_str().to_string(),
-            deployment_mode: PeerDeploymentMode::Hybrid,
-            reachability_class: crate::dht::PeerReachabilityClass::Hybrid,
-            direct_addrs: Vec::new(),
-            hole_punch_addrs: Vec::new(),
-            relay_addrs: Vec::new(),
-            discovery_sources: vec![crate::dht::PeerDiscoverySource::Dht],
-            capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
-            source_operator: None,
-            source_asn: None,
-            published_at_ms: 0,
-            ttl_ms: 60_000,
-        },
-        &listening_addrs,
-    )
-    .expect("build peer record");
-    assert_eq!(signed.record.direct_addrs.len(), 1);
-    assert_eq!(signed.record.hole_punch_addrs, Vec::<String>::new());
-    assert_eq!(signed.record.relay_addrs.len(), 1);
-    assert!(signed.record.direct_addrs[0].contains("/quic-v1"));
-    assert!(signed.record.relay_addrs[0].contains("/p2p-circuit"));
-}
-
-#[test]
-fn build_configured_peer_record_keeps_private_validator_without_direct_addrs() {
-    let keypair = Keypair::generate_ed25519();
-    let listening_addrs = Arc::new(Mutex::new(vec![
-        "/ip4/127.0.0.1/tcp/4202"
-            .parse()
-            .expect("direct listen addr"),
-        format!(
-            "/dns4/relay.example/tcp/443/p2p/{}/p2p-circuit",
-            PeerId::random()
-        )
-        .parse()
-        .expect("relay listen addr"),
-    ]));
-    let signed = build_configured_peer_record(
-        &keypair,
-        &PeerRecord {
-            peer_id: String::new(),
-            node_id: "node-private-validator".to_string(),
-            world_id: "world-a".to_string(),
-            network_id: "network-a".to_string(),
-            node_role: PeerNodeRole::ValidatorCore.as_str().to_string(),
-            deployment_mode: PeerDeploymentMode::Private,
-            reachability_class: crate::dht::PeerReachabilityClass::Private,
-            direct_addrs: Vec::new(),
-            hole_punch_addrs: Vec::new(),
-            relay_addrs: Vec::new(),
-            discovery_sources: vec![
-                crate::dht::PeerDiscoverySource::StaticBootstrap,
-                crate::dht::PeerDiscoverySource::Dht,
-            ],
-            capability_lanes: PeerNodeRole::ValidatorCore.default_capability_lanes(),
-            source_operator: None,
-            source_asn: None,
-            published_at_ms: 0,
-            ttl_ms: 60_000,
-        },
-        &listening_addrs,
-    )
-    .expect("build private validator peer record");
-
-    assert!(signed.record.direct_addrs.is_empty());
-    assert_eq!(signed.record.relay_addrs.len(), 1);
-}
-
-#[test]
-fn peer_record_enables_rendezvous_only_when_source_is_declared() {
-    let without_rendezvous = PeerRecord {
-        peer_id: String::new(),
-        node_id: "node-no-rendezvous".to_string(),
-        world_id: "world-a".to_string(),
-        network_id: "network-a".to_string(),
-        node_role: PeerNodeRole::FullStorage.as_str().to_string(),
-        deployment_mode: PeerDeploymentMode::Private,
-        reachability_class: crate::dht::PeerReachabilityClass::Private,
-        direct_addrs: Vec::new(),
-        hole_punch_addrs: Vec::new(),
-        relay_addrs: Vec::new(),
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::StaticBootstrap,
-            crate::dht::PeerDiscoverySource::Dht,
-        ],
-        capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
-        source_operator: None,
-        source_asn: None,
-        published_at_ms: 0,
-        ttl_ms: 60_000,
-    };
-    assert!(!peer_record_enables_rendezvous(&without_rendezvous));
-
-    let with_rendezvous = PeerRecord {
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::StaticBootstrap,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ],
-        ..without_rendezvous
-    };
-    assert!(peer_record_enables_rendezvous(&with_rendezvous));
 }
 
 #[test]

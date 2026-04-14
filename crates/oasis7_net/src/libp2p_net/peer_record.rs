@@ -14,6 +14,9 @@ use oasis7_proto::distributed::dht_peer_record_key;
 use oasis7_proto::distributed_dht::{PeerRecord, SignedPeerRecord};
 
 use super::kad_queries::PendingDhtQuery;
+use super::reachability::{
+    is_loopback_direct_addr, is_public_direct_addr, snapshot_clone, Libp2pReachabilitySnapshot,
+};
 use super::Behaviour;
 
 pub(super) fn publish_configured_peer_record(
@@ -22,9 +25,17 @@ pub(super) fn publish_configured_peer_record(
     keypair: &Keypair,
     template: &PeerRecord,
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    allow_loopback_external_addrs_for_testing: bool,
     response: Option<oneshot::Sender<Result<(), WorldError>>>,
 ) -> Result<SignedPeerRecord, WorldError> {
-    let signed = build_configured_peer_record(keypair, template, listening_addrs)?;
+    let signed = build_configured_peer_record(
+        keypair,
+        template,
+        listening_addrs,
+        reachability,
+        allow_loopback_external_addrs_for_testing,
+    )?;
     let key = dht_peer_record_key(
         signed.record.world_id.as_str(),
         signed.record.peer_id.as_str(),
@@ -39,8 +50,15 @@ pub(super) fn build_configured_peer_record(
     keypair: &Keypair,
     template: &PeerRecord,
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    allow_loopback_external_addrs_for_testing: bool,
 ) -> Result<SignedPeerRecord, WorldError> {
-    let materialized = materialize_peer_record(template, listening_addrs);
+    let materialized = materialize_peer_record(
+        template,
+        listening_addrs,
+        reachability,
+        allow_loopback_external_addrs_for_testing,
+    );
     sign_peer_record(&materialized, keypair)
 }
 
@@ -138,15 +156,18 @@ pub(super) fn verify_signed_peer_record(record: &SignedPeerRecord) -> Result<(),
 fn materialize_peer_record(
     template: &PeerRecord,
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    allow_loopback_external_addrs_for_testing: bool,
 ) -> PeerRecord {
     let mut record = template.clone();
     let listening_addrs = listening_addrs.lock().expect("lock listening addrs");
     if record.direct_addrs.is_empty() && peer_record_allows_direct_addrs(&record) {
-        record.direct_addrs = listening_addrs
-            .iter()
-            .filter(|addr| !is_relayed_addr(addr))
-            .map(ToString::to_string)
-            .collect();
+        let reachability = snapshot_clone(reachability);
+        record.direct_addrs = materialize_direct_addrs(
+            listening_addrs.as_slice(),
+            &reachability,
+            allow_loopback_external_addrs_for_testing,
+        );
     }
     if record.relay_addrs.is_empty() {
         record.relay_addrs = listening_addrs
@@ -157,6 +178,28 @@ fn materialize_peer_record(
     }
     record.published_at_ms = super::now_ms();
     record
+}
+
+fn materialize_direct_addrs(
+    listening_addrs: &[Multiaddr],
+    reachability: &Libp2pReachabilitySnapshot,
+    allow_loopback_external_addrs_for_testing: bool,
+) -> Vec<String> {
+    let mut direct_addrs = if !reachability.confirmed_external_direct_addrs.is_empty() {
+        reachability.confirmed_external_direct_addrs.clone()
+    } else {
+        listening_addrs
+            .iter()
+            .filter(|addr| {
+                is_public_direct_addr(addr)
+                    || (allow_loopback_external_addrs_for_testing && is_loopback_direct_addr(addr))
+            })
+            .map(ToString::to_string)
+            .collect()
+    };
+    direct_addrs.sort();
+    direct_addrs.dedup();
+    direct_addrs
 }
 
 fn peer_record_allows_direct_addrs(record: &PeerRecord) -> bool {

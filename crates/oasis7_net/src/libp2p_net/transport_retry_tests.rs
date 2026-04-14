@@ -117,6 +117,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
     let event_published = Arc::new(Mutex::new(Vec::new()));
     let event_errors = Arc::new(Mutex::new(Vec::new()));
     let event_listening_addrs = Arc::new(Mutex::new(Vec::new()));
+    let event_reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
     let provider_outside_subset = PeerId::random();
 
     let outcome = super::runtime_loop::handle_command(
@@ -150,12 +151,14 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             event_published: &event_published,
             event_errors: &event_errors,
             event_listening_addrs: &event_listening_addrs,
+            event_reachability: &event_reachability,
             keypair: &keypair,
             peer_record_template: None,
             local_peer_id,
             max_published_messages: 8,
             max_error_messages: 8,
             republish_interval_ms: 0,
+            allow_loopback_external_addrs_for_testing: false,
         },
     );
     assert!(matches!(
