@@ -1,0 +1,22 @@
+task_uid: task_3ec0a2b3318344209a2569fa294d05d1
+title: "Design site single primary release CTA"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+execution_log_path: .pm/tasks/task_3ec0a2b3318344209a2569fa294d05d1.execution.md
+status: candidate
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md
+  - site/index.html
+doc_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.project.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Site and release notes expose one primary CTA per platform for ordinary users."
+  - "System requirements, checksums, and support boundaries are visible before download."
+  - "Advanced assets no longer compete with the primary CTA in the default decision surface."
+handoff_to: []
+updated_at: 2026-04-15T05:45:00+08:00

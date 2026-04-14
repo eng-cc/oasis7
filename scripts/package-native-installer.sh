@@ -19,7 +19,7 @@ Options:
   --platform <id>      required: linux-x64 | macos-x64 | windows-x64
   --bundle-dir <path>  required: prepared bundle directory to package
   --out-dir <path>     required: output directory for packaged installer
-  --asset-name <name>  required: final asset filename (.deb | .dmg | .exe)
+  --asset-name <name>  required: final asset filename (.AppImage | .deb | .dmg | .exe)
   --version <value>    required: release version (for example 0.0.40)
   --dry-run            print commands only; do not execute
   -h, --help           show this help
@@ -64,6 +64,14 @@ normalize_deb_version() {
   value="$(normalize_release_version "$1")"
   value="$(printf '%s' "$value" | sed -E 's/_/~/g')"
   printf '%s\n' "$value"
+}
+
+require_bundle_path() {
+  local path="$1"
+  if [[ ! -e "$path" ]]; then
+    echo "error: required bundle path missing: $path" >&2
+    exit 1
+  fi
 }
 
 windows_native_path() {
@@ -152,27 +160,27 @@ run rm -f "$OUT_FILE"
 
 case "$PLATFORM" in
   linux-x64)
-    [[ "$ASSET_NAME" == *.deb ]] || { echo "error: linux-x64 asset must end with .deb" >&2; exit 1; }
-    ensure_command dpkg-deb
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "$TMP_DIR"' EXIT
-    PACKAGE_ROOT="$TMP_DIR/package"
-    INSTALL_ROOT="$PACKAGE_ROOT/opt/oasis7"
-    DEBIAN_DIR="$PACKAGE_ROOT/DEBIAN"
-    BIN_DIR="$PACKAGE_ROOT/usr/bin"
-    DEB_VERSION="$(normalize_deb_version "$VERSION")"
+    if [[ "$ASSET_NAME" == *.deb ]]; then
+      ensure_command dpkg-deb
+      PACKAGE_ROOT="$TMP_DIR/package"
+      INSTALL_ROOT="$PACKAGE_ROOT/opt/oasis7"
+      DEBIAN_DIR="$PACKAGE_ROOT/DEBIAN"
+      BIN_DIR="$PACKAGE_ROOT/usr/bin"
+      DEB_VERSION="$(normalize_deb_version "$VERSION")"
 
-    run mkdir -p "$INSTALL_ROOT" "$DEBIAN_DIR" "$BIN_DIR"
-    run cp -R "$BUNDLE_DIR/." "$INSTALL_ROOT/"
+      run mkdir -p "$INSTALL_ROOT" "$DEBIAN_DIR" "$BIN_DIR"
+      run cp -R "$BUNDLE_DIR/." "$INSTALL_ROOT/"
 
-    if [[ "$DRY_RUN" == "1" ]]; then
-      echo "+ write $DEBIAN_DIR/control"
-      echo "+ write launcher symlinks under $BIN_DIR"
-      echo "+ dpkg-deb --build --root-owner-group '$PACKAGE_ROOT' '$OUT_FILE'"
-      exit 0
-    fi
+      if [[ "$DRY_RUN" == "1" ]]; then
+        echo "+ write $DEBIAN_DIR/control"
+        echo "+ write launcher symlinks under $BIN_DIR"
+        echo "+ dpkg-deb --build --root-owner-group '$PACKAGE_ROOT' '$OUT_FILE'"
+        exit 0
+      fi
 
-    cat > "$DEBIAN_DIR/control" <<EOF
+      cat > "$DEBIAN_DIR/control" <<EOF
 Package: oasis7
 Version: $DEB_VERSION
 Section: games
@@ -184,12 +192,63 @@ Description: oasis7 technical preview bundle
  verification.
 EOF
 
-    ln -s /opt/oasis7/run-client.sh "$BIN_DIR/oasis7-client"
-    ln -s /opt/oasis7/run-game.sh "$BIN_DIR/oasis7-game"
-    ln -s /opt/oasis7/run-web-launcher.sh "$BIN_DIR/oasis7-web-launcher"
-    ln -s /opt/oasis7/run-chain-runtime.sh "$BIN_DIR/oasis7-chain-runtime"
+      ln -s /opt/oasis7/run-client.sh "$BIN_DIR/oasis7-client"
+      ln -s /opt/oasis7/run-game.sh "$BIN_DIR/oasis7-game"
+      ln -s /opt/oasis7/run-web-launcher.sh "$BIN_DIR/oasis7-web-launcher"
+      ln -s /opt/oasis7/run-chain-runtime.sh "$BIN_DIR/oasis7-chain-runtime"
 
-    dpkg-deb --build --root-owner-group "$PACKAGE_ROOT" "$OUT_FILE"
+      dpkg-deb --build --root-owner-group "$PACKAGE_ROOT" "$OUT_FILE"
+    elif [[ "$ASSET_NAME" == *.AppImage ]]; then
+      ensure_command appimagetool
+      require_bundle_path "$BUNDLE_DIR/run-client.sh"
+      ICON_SRC="$ROOT_DIR/site/assets/images/favicon.svg"
+      require_bundle_path "$ICON_SRC"
+      APPDIR="$TMP_DIR/oasis7.AppDir"
+      APP_ROOT="$APPDIR/usr/lib/oasis7"
+
+      run mkdir -p "$APP_ROOT" "$APPDIR/usr/bin"
+      run cp -R "$BUNDLE_DIR/." "$APP_ROOT/"
+
+      if [[ "$DRY_RUN" == "1" ]]; then
+        echo "+ write $APPDIR/AppRun"
+        echo "+ write $APPDIR/oasis7.desktop"
+        echo "+ copy $ICON_SRC -> $APPDIR/oasis7.svg"
+        echo "+ ln -s oasis7.svg '$APPDIR/.DirIcon'"
+        echo "+ ln -s ../lib/oasis7/run-client.sh '$APPDIR/usr/bin/oasis7'"
+        echo "+ env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream '$APPDIR' '$OUT_FILE'"
+        exit 0
+      fi
+
+      cat > "$APPDIR/AppRun" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+APPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$APPDIR/usr/lib/oasis7/run-client.sh" "$@"
+EOF
+      chmod +x "$APPDIR/AppRun"
+
+      cat > "$APPDIR/oasis7.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=oasis7
+Comment=oasis7 technical preview launcher
+Exec=AppRun
+Icon=oasis7
+Terminal=false
+Categories=Game;
+StartupNotify=true
+X-AppImage-Version=$RELEASE_VERSION
+EOF
+
+      cp "$ICON_SRC" "$APPDIR/oasis7.svg"
+      ln -s oasis7.svg "$APPDIR/.DirIcon"
+      ln -s ../lib/oasis7/run-client.sh "$APPDIR/usr/bin/oasis7"
+
+      env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 appimagetool --no-appstream "$APPDIR" "$OUT_FILE"
+    else
+      echo "error: linux-x64 asset must end with .AppImage or .deb" >&2
+      exit 1
+    fi
     ;;
   macos-x64)
     [[ "$ASSET_NAME" == *.dmg ]] || { echo "error: macos-x64 asset must end with .dmg" >&2; exit 1; }
@@ -205,106 +264,37 @@ EOF
   windows-x64)
     [[ "$ASSET_NAME" == *.exe ]] || { echo "error: windows-x64 asset must end with .exe" >&2; exit 1; }
     ensure_command pwsh
+    ensure_command makensis
+    require_bundle_path "$BUNDLE_DIR/run-client.cmd"
+    require_bundle_path "$BUNDLE_DIR/bin/oasis7_client_launcher.exe"
     BUNDLE_DIR_NATIVE="$(windows_native_path "$BUNDLE_DIR")"
     OUT_FILE_NATIVE="$(windows_native_path "$OUT_FILE")"
+    NSIS_SCRIPT_NATIVE="$(windows_native_path "$ROOT_DIR/scripts/windows-release-installer.nsi")"
     if [[ "$DRY_RUN" == "1" ]]; then
-      echo "+ pwsh -NoLogo -NoProfile -Command <7z sfx packaging with run-client.cmd autorun> '$BUNDLE_DIR_NATIVE' -> '$OUT_FILE_NATIVE'"
+      echo "+ makensis /DBUNDLE_DIR='$BUNDLE_DIR_NATIVE' /DOUT_FILE='$OUT_FILE_NATIVE' /DRELEASE_VERSION='$RELEASE_VERSION' '$NSIS_SCRIPT_NATIVE'"
       exit 0
     fi
 
     export OASIS7_WINDOWS_BUNDLE_DIR="$BUNDLE_DIR_NATIVE"
     export OASIS7_WINDOWS_OUT_FILE="$OUT_FILE_NATIVE"
     export OASIS7_WINDOWS_RELEASE_VERSION="$RELEASE_VERSION"
+    export OASIS7_WINDOWS_NSIS_SCRIPT="$NSIS_SCRIPT_NATIVE"
     pwsh -NoLogo -NoProfile -Command '
       $ErrorActionPreference = "Stop"
-
-      function Find-SevenZipSfxModule {
-        param(
-          [string]$SevenZipExecutable
-        )
-
-        $candidateDirs = New-Object System.Collections.Generic.List[string]
-        if ($SevenZipExecutable) {
-          $candidateDirs.Add((Split-Path -Parent $SevenZipExecutable))
-        }
-
-        foreach ($programFilesDir in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
-          if ($programFilesDir) {
-            $candidateDirs.Add((Join-Path $programFilesDir "7-Zip"))
-          }
-        }
-
-        if ($env:ChocolateyInstall) {
-          $candidateDirs.Add((Join-Path $env:ChocolateyInstall "bin"))
-          $candidateDirs.Add((Join-Path $env:ChocolateyInstall "lib\\7zip\\tools"))
-        }
-
-        $seen = @{}
-        foreach ($dir in $candidateDirs) {
-          if (-not $dir -or $seen.ContainsKey($dir)) {
-            continue
-          }
-          $seen[$dir] = $true
-          foreach ($moduleName in @("7z.sfx", "7zCon.sfx")) {
-            $modulePath = Join-Path $dir $moduleName
-            if (Test-Path $modulePath) {
-              return $modulePath
-            }
-          }
-        }
-
-        $searched = ($candidateDirs | Where-Object { $_ } | Select-Object -Unique) -join ", "
-        throw "7z SFX module not found. Searched: $searched"
-      }
-
       $bundleDir = $env:OASIS7_WINDOWS_BUNDLE_DIR
       $outFile = $env:OASIS7_WINDOWS_OUT_FILE
-      $sevenZip = (Get-Command 7z -ErrorAction Stop).Source
-      $sfxModule = Find-SevenZipSfxModule -SevenZipExecutable $sevenZip
-
-      $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("oasis7-sfx-" + [Guid]::NewGuid().ToString("N"))
-      New-Item -ItemType Directory -Path $tempRoot | Out-Null
-      try {
-        $archivePath = Join-Path $tempRoot "payload.7z"
-        $configPath = Join-Path $tempRoot "config.txt"
-        & $sevenZip a -t7z -mx=9 $archivePath (Join-Path $bundleDir "*") | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-          throw "7z archive creation failed with exit code $LASTEXITCODE"
-        }
-
-        $config = @"
-;!@Install@!UTF-8!
-Title="oasis7 $env:OASIS7_WINDOWS_RELEASE_VERSION"
-BeginPrompt="Extract and launch oasis7 Client Launcher?"
-RunProgram="run-client.cmd"
-;!@InstallEnd@!
-"@
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($configPath, $config, $utf8)
-
-        $parentDir = Split-Path -Parent $outFile
-        if (-not (Test-Path $parentDir)) {
-          New-Item -ItemType Directory -Path $parentDir | Out-Null
-        }
-        if (Test-Path $outFile) {
-          Remove-Item $outFile -Force
-        }
-
-        $outputStream = [System.IO.File]::Open($outFile, [System.IO.FileMode]::CreateNew)
-        try {
-          foreach ($part in @($sfxModule, $configPath, $archivePath)) {
-            $bytes = [System.IO.File]::ReadAllBytes($part)
-            $outputStream.Write($bytes, 0, $bytes.Length)
-          }
-        }
-        finally {
-          $outputStream.Dispose()
-        }
+      $nsisScript = $env:OASIS7_WINDOWS_NSIS_SCRIPT
+      $releaseVersion = $env:OASIS7_WINDOWS_RELEASE_VERSION
+      $parentDir = Split-Path -Parent $outFile
+      if (-not (Test-Path $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir | Out-Null
       }
-      finally {
-        if (Test-Path $tempRoot) {
-          Remove-Item $tempRoot -Recurse -Force
-        }
+      if (Test-Path $outFile) {
+        Remove-Item $outFile -Force
+      }
+      & makensis "/DBUNDLE_DIR=$bundleDir" "/DOUT_FILE=$outFile" "/DRELEASE_VERSION=$releaseVersion" $nsisScript | Out-Host
+      if ($LASTEXITCODE -ne 0) {
+        throw "makensis failed with exit code $LASTEXITCODE"
       }
     '
     ;;

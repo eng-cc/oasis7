@@ -1,0 +1,24 @@
+task_uid: task_22a0d58d0d9445b1ad74127c25768d8d
+title: "Implement Windows standard release installer"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+execution_log_path: .pm/tasks/task_22a0d58d0d9445b1ad74127c25768d8d.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.project.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Windows public release asset is produced as a standard installer instead of a self-extracting bundle."
+  - "Installer creates discoverable launch and uninstall entries for ordinary users without requiring manual extraction."
+  - "Release workflow provisions any required Windows packaging dependency and package-native validation/test steps are updated."
+handoff_to: []
+updated_at: 2026-04-15T05:41:31+08:00
+last_started_at: 2026-04-14T23:33:26+08:00
+last_closed_at: 2026-04-15T05:39:51+08:00

@@ -120,8 +120,8 @@
 
 ### T3X Release public assets switch to direct installers（2026-04-14）
 - [x] 更新 `.github/workflows/release-packages.yml`：`package-native` 不再上传 `.tar.gz` / `.zip` 压缩包，而是先准备标准 bundle 目录，再调用 `scripts/package-native-installer.sh` 输出 `oasis7-linux-x64.deb`、`oasis7-macos-x64.dmg`、`oasis7-windows-x64.exe`。
-- [x] 新增 `scripts/package-native-installer.sh`：Linux 产出真正的 `.deb`，macOS 产出带 `/Applications` 拖拽入口的 `.dmg`，Windows 产出默认运行 `run-client.cmd` 的自解压 `.exe`；`publish-release` 与 `oasis7-checksums.txt` 同步切换到新的公开资产名。
-- [x] 新增 `scripts/validate-release-platform-entrypoints.sh`，并让 bundle / packager 在公开发布前强制校验平台原生入口：Linux 继续要求 `run-*.sh` + `/usr/bin/oasis7-*`，macOS 要求 `oasis7 Client Launcher.app`，Windows 要求 `run-*.cmd`。
+- 完成内容：新增 `scripts/package-native-installer.sh`，Linux 产出真正的 `.deb`，macOS 产出带 `/Applications` 拖拽入口的 `.dmg`，Windows 产出默认运行 `run-client.cmd` 的自解压 `.exe`；`publish-release` 与 `oasis7-checksums.txt` 同步切换到新的公开资产名。
+- 完成内容：新增 `scripts/validate-release-platform-entrypoints.sh`，并让 bundle / packager 在公开发布前强制校验平台原生入口：Linux 继续要求 `run-*.sh` + `/usr/bin/oasis7-*`，macOS 要求 `oasis7 Client Launcher.app`，Windows 要求 `run-*.cmd`。
 - [x] 同步 `site/index.html`、`site/en/index.html`、`scripts/site-download-check.sh` 与 site 模块 PRD/project，使公开下载入口、脚本门禁与文档真值一致，不再将压缩包作为公开下载主入口。
 - [x] 本地回归：
   - `./scripts/site-download-check.sh`
@@ -135,6 +135,19 @@
   - `dpkg-deb --contents <tmp>/out/oasis7-linux-x64.deb`
   - `./scripts/build-game-launcher-bundle.sh --dry-run --target-triple x86_64-apple-darwin --web-dist <tmp>/viewer-dist --web-launcher-dist <tmp>/launcher-dist --out-dir <tmp>/macos-bundle`
   - `./scripts/build-game-launcher-bundle.sh --dry-run --target-triple x86_64-pc-windows-msvc --web-dist <tmp>/viewer-dist --web-launcher-dist <tmp>/launcher-dist --out-dir <tmp>/windows-bundle`
+
+### T3Y Linux public asset switch to AppImage（2026-04-15）
+- 完成内容：更新 `.github/workflows/release-packages.yml`，将 Linux `package-native` 主资产改为 `oasis7-linux-x86_64.AppImage`，并在同一 job 内额外保留 `oasis7-linux-x64.deb` 作为次级高级入口；`publish-release` 与 `oasis7-checksums.txt` 同步纳入两类 Linux 资产。
+- 完成内容：更新 `scripts/package-native-installer.sh`，让 Linux 支持从同一 bundle 目录产出 `AppImage` 或 `.deb`；同时保留 `scripts/validate-release-platform-entrypoints.sh` 的 bundle 真值校验，以及 macOS `/Applications` 拖拽入口。
+- 完成内容：把 Windows 打包从自解压 SFX `.exe` 切到 NSIS 标准安装器，并同步引入 `scripts/windows-release-installer.nsi`、`run-client.cmd`/开始菜单/桌面/卸载入口。
+- 完成内容：同步 `site/index.html`、`site/en/index.html`、`scripts/site-download-check.sh` 与相关 PRD/project，官网 Linux 主下载入口切到 `oasis7-linux-x86_64.AppImage`，文案明确“赋予执行权限后即可运行”。
+- 本地回归：
+  - `./scripts/site-download-check.sh`
+  - `bash -n scripts/package-native-installer.sh`
+  - `bash -n scripts/build-game-launcher-bundle.sh`
+  - `bash -n scripts/release-prepare-bundle.sh`
+  - `PATH=<fake-bin>:$PATH ./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/bundle --out-dir <tmp>/out --asset-name oasis7-linux-x86_64.AppImage --version 0.0.0 --dry-run`
+  - `./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/bundle --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0 --dry-run`
 
 ### T3O Release gate web sibling binary 预热回补（2026-03-14）
 - [x] 复盘 `Release Packages` run `23080255868`，确认 `release-gate-web` 已越过 `trunk` 安装，但 `web_strict` 在 `oasis7_game_launcher` 启动阶段因独立 job 缺少 `target/debug/oasis7_viewer_live` 而失败；失败签名为 `failed to locate \`oasis7_viewer_live\` binary; build it first or set OASIS7_VIEWER_LIVE_BIN`。
@@ -196,9 +209,9 @@
 - 站点入口文件：`site/index.html`、`site/en/index.html`
 
 ## 状态
-- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X 已完成；公开下载资产已从压缩包切换为 `.deb` / `.dmg` / `.exe`，且 bundle 入口已补齐平台原生可运行/可安装入口）
-- 最近更新：2026-04-14 已进一步收口 `Release Packages` 的 bundle / installer 入口真值：macOS DMG 现要求 `oasis7 Client Launcher.app`，Windows SFX `.exe` 默认运行 `run-client.cmd`，并通过 `scripts/validate-release-platform-entrypoints.sh` 在发布前阻断缺口。
-- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认三平台原生安装器、校验文件与 `latest/download` 直链全部可用。
+- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X/T3Y 已完成；公开下载主资产已收口为 `AppImage` / `.dmg` / `.exe`，Linux `.deb` 转为次级高级入口）
+- 最近更新：2026-04-15 已进一步把 Linux 公共主资产切到 `oasis7-linux-x86_64.AppImage`，并将 Windows `package-native` 从自解压 SFX `.exe` 切到 NSIS 标准安装器；同时继续保留 `scripts/validate-release-platform-entrypoints.sh` 作为 bundle 真值门禁。
+- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 与 `latest/download` 直链全部可用；随后继续推进 Windows 签名、macOS notarization 与官网单主 CTA/支持边界。
 
 ## 迁移记录（2026-03-03）
 - 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。
