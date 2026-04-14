@@ -18,13 +18,14 @@
    6. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
    7. 涉及本地 Viewer Web / launcher / `agent-browser` / smoke 的任务，默认使用该需求自己的 `worktree` 与隔离 harness
 
-3. 新需求先确定 `owner role`
+3. 新需求先确定 `owner role`，再创建/绑定 `.pm` task
    1. 在 `.agents/roles/*.md` 中确认牵头角色；跨角色任务按“最先落地代码/文档的 owner”牵头
    2. 需要交接时优先使用模板：
       1. 低风险、短任务：`./.agents/roles/templates/handoff-brief.md`
       2. 跨模块、高风险：`./.agents/roles/templates/handoff-detailed.md`
    3. 接收方开始前必须确认目标、输入、输出、完成定义和验证方式
-   4. 仓库已启用 `.pm/` 运行层时，进入实施前先执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审或尚未建 task 时，才允许省略 `--task-uid`
+   4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，先通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
+   5. 进入实施前执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审时，才允许省略 `--task-uid`
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
@@ -75,7 +76,9 @@
    4. PR 合入后，必须立即同步本地 `main` 并回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
    5. 若 PR preflight / create 失败，先在任务 `worktree` 解决分支落后、push 或验证问题，再重试
 
-13. 当前 `project.md` 还有后续任务时，不要中断；完成一个任务后继续下一个
+13. 当前 `project.md` 还有后续任务时，不要中断
+   1. 当前 task 完成后，先完成 `workflow-report --phase close`、snapshot review、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
+   2. 若 `project.md` 仍有后续任务，默认为下一个 task 重新创建独立 `worktree` 与 `.pm` task；只有用户明确授权复用当前 `worktree` 时，才允许不切新环境
 
 ## 工程架构
 - 各个子模块各自闭环基础模块功能
