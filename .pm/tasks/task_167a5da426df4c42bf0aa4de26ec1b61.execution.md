@@ -21,3 +21,8 @@ Example:
 - 完成内容: 根据 `codex-review-snapshot` findings 补上两处遗漏。其一，恢复 `background play` 的独立容错基线：保留 `initial_world_time` 作为“世界自 bootstrap 以来已发生过真实推进”的判断，同时继续把 `confirmed_player_gameplay_progress_time` 仅用于 snapshot stage 机，避免把“玩家已确认进度”和“世界已有历史推进”混成一个信号。其二，收紧 `build_factory_assembler_mk1` 的前台可用性条件，要求完整建造成本必须由同一个 ledger 满足，并把 `structural_frame` 补回门槛检查，和 runtime `BuildFactory` 的整笔成本选择规则保持一致。
 - 完成内容: 新增回归覆盖 `runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progress`、`runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_across_ledgers`，并补跑 `viewer::runtime_live::tests::background_play`，验证“fresh session 不误升阶段”“已有世界进度时 background play 可按预算重试”“split-ledger assembler 成本仍保持禁用”三条边界同时成立。
 - 遗留事项: `codex-review-snapshot` 在本环境仍存在长时间只流检查日志、不稳定收口的问题；本次已依据其明确 findings 补完代码，并以 `snapshot_progress`、`auth_actions`、`background_play` 三组 targeted 测试绿灯作为当前收口依据。
+
+## 2026-04-14 19:24:46 CST / runtime_engineer
+- 完成内容: 处理 PR #73 上关于 `extend_available_actions` ledger clone 的 review comment。`player_gameplay.rs` 已改为直接借用 `state.material_ledgers` 中的 `world/agent` ledger，并使用共享空 `BTreeMap` 作为 fallback，不再在快照构建时 clone 两份完整材料账本；同时把“是否满足完整材料需求”和“读取单项余额”抽成只读 helper，确保只有在确实需要生成 `disabled_reason` 时才做字符串拼接。
+- 完成内容: 复跑 `env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::tests::industrial_progression -- --nocapture`，确认 smelter/assembler build action 的 ledger gating 语义未回归。
+- 遗留事项: 待将这次 review follow-up 提交并推送到 PR #73，然后回复/关闭对应 review thread。
