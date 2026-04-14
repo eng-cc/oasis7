@@ -12,6 +12,7 @@
 - [x] LTPR-4 (PRD-README-LTPR-001/002): 将 reward intake 的必填字段收口为 `Reward Account`，不把 raw `public key` 写进奖励模板名称层。
 - [x] LTPR-5 (PRD-README-LTPR-001/002): 当贡献来源是 GitHub PR 时，新增可选 reward intake block，统一收集 `Reward Account`，不在 PR 模板里索要 raw `public_key` 名称。
 - [x] LTPR-6 (PRD-README-LTPR-001/002): 新增 PR intake import 脚本，支持从 PR body 解析 `Reward Account` 并输出 `ready/deferred/no_reward_review_requested`。
+- [x] LTPR-7 (PRD-README-LTPR-002): 收紧普通 merged PR 的默认真实发放 ceiling 到 `150 OC`，并明确 `1500 OC` 仅适用于极少数 exceptional case，不再作为常规 MR 预期。
 
 ## 依赖
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -21,7 +22,7 @@
 - `doc/devlog/2026-03-22.md`
 
 ## 状态
-- 更新日期: 2026-04-12
+- 更新日期: 2026-04-13
 - 当前阶段: 已完成
 - 阻塞项: 无
-- 下一步: 等待 `producer_system_designer` 在 `TIGR-4` 中决定各建议档位是否映射到真实 token 数额；若开始维护真实 round，可直接用导入脚本批量准备 PR 来源行。
+- 下一步: 后续若出现 `>150 OC` 的普通 merged PR 提案，必须先补 exceptional case note，再进入实际 round 审批；不得再把 `1500 OC` 当成常规 MR 档位。

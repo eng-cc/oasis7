@@ -100,6 +100,12 @@ Round scan handling:
 | `eligible-small` |  |  |  |
 | `no-token-recommendation` |  |  |  |
 
+## 4.1 Producer Amount Guardrails
+- Recommendation bands are review labels, not a public amount table.
+- For ordinary merged PR rows (`Source Type=PR` and `Contribution Type=C-03`), the default producer approval ceiling is `150 OC`.
+- Any merged PR row above `150 OC` must include an exceptional-case note in the row notes or approval summary before it can stay approved.
+- `1500 OC` is reserved for rare exceptional rows and must be recorded as a round-specific decision, not as the default meaning of `eligible-large`.
+
 ## 5. Approval Summary
 - Producer Review Date:
 - Approved Rows:

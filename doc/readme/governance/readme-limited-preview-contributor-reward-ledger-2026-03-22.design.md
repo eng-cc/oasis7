@@ -28,6 +28,7 @@
 - ledger 不替代评分规则，只承接真实 round 的结算记录。
 - raw `public key` 不进入奖励台账名称层。
 - `Reward Account` 只作执行/发放字段。
+- 对普通 merged PR，producer 的默认真实发放 ceiling 为 `150 OC`；超过该值必须留下 exceptional case note，不能把 `1500 OC` 当作常规待发放值。
 - PR intake import 只适用于 `Source Type=PR` 的 row，不替代其它来源的证据补录。
 - 脚本导入结果至少要区分 `ready / deferred / no_reward_review_requested / invalid_intake`，避免普通 PR、待补资料 PR 与错误保留的模板块混在一起。
 - 任何 `distributed` 状态都必须能指回真实执行引用。
