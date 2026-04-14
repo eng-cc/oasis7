@@ -17,28 +17,28 @@
 2. `doc/engineering/design.md`：工程治理的结构设计、规则载体与执行链路。
 3. `doc/engineering/project.md`：工程任务拆解、治理批次与状态。
 4. `doc/engineering/prd.index.md`：活跃专题入口。
-5. 下钻专题：`doc-structure-standard`、`doc-surface-area-governance-2026-04-10`、`prd-review`、`doc-migration` 等。
+5. 下钻专题：`doc-governance/`、`rust-governance/`、`prd-review/`、`doc-migration/` 等。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
 - `prd.md`：定义工程规则 Why / What / Done。
 - `design.md`：定义规则如何组织、如何落地、由哪些脚本与文档承接。
 - `project.md`：定义治理任务、批次、owner 与验证口径。
-- `doc-structure-standard.*`：定义 `doc/` 文档树的组织规范与裁定依据。
-- `doc-surface-area-governance-2026-04-10.*`：定义默认阅读面如何从活跃真值中分离审计、归档与兼容跳转材料。
+- `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
+- `rust-governance/*`：定义 Rust 体量治理、冻结基线与结构切片 burn-down 规则。
 - `prd-review/*`：定义全量审读/治理台账与进度追踪。
 
 ### 3.2 工程治理执行链路
-- 规范定义：`doc/engineering/*.prd.md`、`*.design.md`
+- 规范定义：`doc/engineering/doc-governance/*`、`doc/engineering/rust-governance/*`、`doc/engineering/governance/*`
 - 项目追踪：`doc/engineering/project.md`、专题 `*.project.md`
 - 过程记录：`.pm/tasks/task_<32hex>.execution.md`
 - 静态校验：`scripts/doc-governance-check.sh`
 - ROUND 台账：`doc/core/reviews/consistency-review-round-*.md`
 
 ### 3.3 文档结构治理链路
-- 权威规则：`doc/engineering/doc-structure-standard.prd.md`
-- 规范正文：`doc/engineering/doc-structure-standard.design.md`
-- 执行挂靠：`doc/engineering/doc-structure-standard.project.md`
+- 权威规则：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 执行挂靠：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 项目级执行台账：`doc/core/reviews/consistency-review-round-006.md`
 - 逐文档执行面：`doc/core/reviews/round-006-reviewed-files.md`
 
@@ -46,8 +46,8 @@
 - `AGENTS.md`
 - `.agents/roles/*.md`
 - `.agents/roles/templates/*.md`
-- `doc/engineering/doc-structure-standard.prd.md`
-- `doc/engineering/doc-structure-standard.design.md`
+- `doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/prd-review/*.md`
 - `scripts/doc-governance-check.sh`
 - `testing-manual.md`
@@ -77,3 +77,4 @@
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy `*.project.md` 长期保留，执行入口会继续双轨并存。
+- 若治理专题继续回流到 `engineering` 根目录，根入口会重新退化为专题堆放区。

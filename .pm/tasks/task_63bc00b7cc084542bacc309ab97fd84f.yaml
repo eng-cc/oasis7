@@ -10,10 +10,10 @@ source_refs:
   - doc/engineering/prd.md
 doc_refs:
   - doc/engineering/project.md
-  - doc/engineering/doc-surface-area-governance-2026-04-10.project.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md
 related_prd:
   - doc/engineering/prd.md
-  - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
 acceptance:
   - "文档体量治理专题 prd/design/project、engineering 主 PRD/project 与 execution log 已回写，且文档治理检查通过"
 handoff_to: []

@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - doc/engineering/project.md
 doc_refs:
-  - doc/engineering/doc-surface-area-governance-2026-04-10.project.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md
 related_prd:
   - PRD-ENGINEERING-024
 acceptance:

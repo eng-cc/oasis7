@@ -1,11 +1,11 @@
 # Rust 1200 行根治治理（2026-03-29）
 
-- 对应设计文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md`
-- 对应项目管理文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
+- 对应设计文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
+- 对应项目管理文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
 审计轮次: 6
 
-- 对应标准执行入口: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
+- 对应标准执行入口: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
 ## 1. Executive Summary
 - Problem Statement: 仓库已重新出现大规模 Rust 超限文件，当前实况为 31 个生产文件和 14 个测试文件超过 1200 行，说明“拆一次大文件”没有真正解决文件继续膨胀的问题。现有 round3 治理偏向 `include!`/`split_part` 结构切片，未把职责边界、目录模型和 CI 阻断做成长期机制。
@@ -68,7 +68,7 @@
 
 ## 4. Technical Specifications
 - Architecture Overview:
-  - 治理入口层：`doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.{prd,design,project}.md` 定义规则、批次和追踪。
+  - 治理入口层：`doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.{prd,design,project}.md` 定义规则、批次和追踪。
   - 扫描与门禁层：新增 `scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 `crates/**/src/*.rs` 与测试文件并输出基线差异；`scripts/ci-tests.sh required` 调用该脚本。
   - 基线层：在工程治理目录中维护 `rust-oversized-file-baseline.tsv` 与 `rust-structural-slicing-baseline.tsv` 两份冻结清单，分别记录当前允许存在但必须逐步收缩的超限文件和存量 `split_part/include!` 结构债；新文件不允许进入基线。
   - 迁移层：以目录模块（`mod.rs + 子模块文件`）或按职责拆分的独立模块替代 `include!` 分段；每次迁移必须在 project 中定义目标边界与回归集。
@@ -79,8 +79,8 @@
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/README.md`
-  - `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
-  - `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+  - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
+  - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
   - `doc/.governance/rust-oversized-file-baseline.tsv`
   - `doc/.governance/rust-structural-slicing-baseline.tsv`
   - `scripts/ci-tests.sh`

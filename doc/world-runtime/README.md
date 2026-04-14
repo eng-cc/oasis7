@@ -53,5 +53,5 @@
 上述两个根目录文件仅保留为最小兼容跳转；当前主入口以本目录 `prd.md` / `project.md` 为准。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - runtime 行为、发布门禁或高频专题入口变化时，优先更新 `doc/world-runtime/prd.md` / `doc/world-runtime/project.md`；新增专题后，再按需回写 `doc/world-runtime/prd.index.md` 与本目录“从这里开始”。

@@ -47,5 +47,5 @@
 - 其余专题文档按主题下沉到 `gap/`、`production/`、`governance/`。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 对外口径、运营路径或 README 状态同步规则变化时，优先更新 `doc/readme/prd.md` 与 `doc/readme/project.md`；新增专题后，再同步回写 `doc/readme/prd.index.md`。

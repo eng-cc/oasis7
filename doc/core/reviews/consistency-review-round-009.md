@@ -5,12 +5,12 @@
 ## 目的
 - 为 `TASK-CORE-033` / `TASK-ENGINEERING-058` 提供 ROUND-009 的统一执行台账，将本轮目标定义为“文档消费入口与手册语义收口轮”。
 - 本轮不再回到全仓结构大扫除，而是聚焦“读者如何进入文档树、哪些文档应被视为手册/运行说明、哪些目录已超出模块职责边界”三个高频使用问题。
-- 所有 ROUND-009 结论均以 `doc/engineering/doc-structure-standard.prd.md` 与 `doc/engineering/doc-structure-standard.design.md` 为裁定依据；如发现规范缺口，先补标准，再继续治理。
+- 所有 ROUND-009 结论均以 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 与 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为裁定依据；如发现规范缺口，先补标准，再继续治理。
 
 ## 权威依据
-- 结构规范需求：`doc/engineering/doc-structure-standard.prd.md`
-- 结构规范设计：`doc/engineering/doc-structure-standard.design.md`
-- 结构规范执行：`doc/engineering/doc-structure-standard.project.md`
+- 结构规范需求：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 结构规范设计：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 结构规范执行：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 工程主台账：`doc/engineering/project.md`
 - 项目级 ROUND 台账：`doc/core/project.md`
 - 工程总入口：`doc/README.md`

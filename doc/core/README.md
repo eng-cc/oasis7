@@ -44,5 +44,5 @@
 - 需要完整活跃专题清单时，进入 `doc/core/prd.index.md`；需要 round 审查、采证或模板时，再按子域进入。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 跨模块边界、候选级入口、下一轮优先级或主链路变化时，优先更新 `doc/core/prd.md` 与 `doc/core/project.md`；新增专题后，再同步回写 `doc/core/prd.index.md` 与本目录索引。

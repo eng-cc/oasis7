@@ -32,10 +32,10 @@
 - `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
-- `doc/engineering/documentation-governance-engineering-closure-2026-02-27.prd.md`
-- `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md`
-- `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
-- `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`
+- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
+- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
+- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
 - `doc/engineering/prd-review/checklists/active-core.md`
 - `doc/engineering/prd-review/checklists/active-engineering.md`
 - `doc/engineering/prd-review/checklists/active-game.md`

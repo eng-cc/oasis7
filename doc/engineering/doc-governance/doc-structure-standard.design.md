@@ -1,7 +1,7 @@
 # 文档分工与组织规范正文（2026-03-09）
 
-- 对应需求文档: `doc/engineering/doc-structure-standard.prd.md`
-- 对应项目管理文档（当前仓库文件）: `doc/engineering/doc-structure-standard.project.md`
+- 对应需求文档: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 对应项目管理文档（当前仓库文件）: `doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 规范目标命名: `<topic>.project.md`
 
 ## 1. 规范定位

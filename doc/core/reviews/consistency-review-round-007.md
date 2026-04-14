@@ -5,12 +5,12 @@
 ## 目的
 - 为 `TASK-CORE-010` / `TASK-ENGINEERING-035` 提供 ROUND-007 的统一执行台账，将本轮目标定义为“内容职责边界复核轮”。
 - 本轮聚焦文档内容是否真正符合 `doc-structure-standard` 的职责分层，而不再以命名迁移、入口补齐、历史文件收口为主。
-- 所有 ROUND-007 结论均以 `doc/engineering/doc-structure-standard.prd.md` 与 `doc/engineering/doc-structure-standard.design.md` 为裁定依据；如发现标准缺口，先补标准，再继续复核。
+- 所有 ROUND-007 结论均以 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 与 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为裁定依据；如发现标准缺口，先补标准，再继续复核。
 
 ## 权威依据
-- 结构规范需求：`doc/engineering/doc-structure-standard.prd.md`
-- 结构规范设计：`doc/engineering/doc-structure-standard.design.md`
-- 结构规范执行：`doc/engineering/doc-structure-standard.project.md`
+- 结构规范需求：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 结构规范设计：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 结构规范执行：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 工程主台账：`doc/engineering/project.md`
 - 项目级 ROUND 台账：`doc/core/project.md`
 - 开发工作流：`AGENTS.md`

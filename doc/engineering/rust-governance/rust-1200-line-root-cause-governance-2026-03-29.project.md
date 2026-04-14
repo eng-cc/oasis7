@@ -1,7 +1,7 @@
 # Rust 1200 行根治治理（2026-03-29）项目管理
 
-- 对应设计文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md`
-- 对应需求文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
+- 对应设计文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
+- 对应需求文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 
 审计轮次: 6
 
@@ -20,8 +20,8 @@
 - `doc/engineering/project.md`
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
-- `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
-- `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
+- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
 - `testing-manual.md`
 - `scripts/ci-tests.sh`
 - `scripts/doc-governance-check.sh`

@@ -1,11 +1,11 @@
 # 仓库文档分工与组织规范（2026-03-09）项目管理文档
 
-- 对应设计文档: `doc/engineering/doc-structure-standard.design.md`
-- 对应需求文档: `doc/engineering/doc-structure-standard.prd.md`
+- 对应设计文档: `doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 对应需求文档: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 
 审计轮次: 4
 
-- 对应规范正文: `doc/engineering/doc-structure-standard.design.md`
+- 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
 
 ## 任务拆解
 - [x] T5 (PRD-ENGINEERING-015) [test_tier_required]: 收口 README / legacy redirect 的重复治理话术，明确共享规则回链与最小 redirect 模式。

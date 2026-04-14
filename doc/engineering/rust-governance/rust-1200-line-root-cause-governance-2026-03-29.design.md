@@ -1,7 +1,7 @@
 # Rust 1200 行根治治理设计（2026-03-29）
 
-- 对应需求文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
-- 对应项目管理文档: `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
+- 对应需求文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
+- 对应项目管理文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
 审计轮次: 6
 
@@ -88,9 +88,9 @@
   - 缓解：Batch B/C 必须绑定定向回归和 QA/Viewer 验证。
 
 ## 交付物
-- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
-- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.design.md`
-- `doc/engineering/rust-1200-line-root-cause-governance-2026-03-29.project.md`
+- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
+- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
+- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`

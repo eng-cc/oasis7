@@ -48,5 +48,5 @@
 - 需要完整活跃专题清单时，进入 `doc/testing/prd.index.md`；需要 evidence / template / blocker 留痕时，再按具体子域进入。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 测试门禁、required/full 分层口径或证据模板变化时，优先更新 `doc/testing/prd.md` 与 `doc/testing/project.md`；新增专题时，再同步回写 `doc/testing/prd.index.md`。

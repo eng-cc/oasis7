@@ -1,7 +1,7 @@
 # 工程文档治理闭环设计（2026-02-27）
 
-- 对应需求文档: `doc/engineering/documentation-governance-engineering-closure-2026-02-27.prd.md`
-- 对应项目管理文档: `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md`
+- 对应需求文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`
+- 对应项目管理文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 
 ## 1. 设计定位
 定义工程文档治理如何从规范、台账、模块入口与门禁脚本形成闭环，避免治理结论只停留在审计层。
@@ -13,7 +13,7 @@
 - 校验层：`scripts/doc-governance-check.sh` 提供结构类门禁。
 
 ## 3. 关键接口 / 入口
-- 权威规范：`doc/engineering/doc-structure-standard.prd.md`、`doc/engineering/doc-structure-standard.design.md`
+- 权威规范：`doc/engineering/doc-governance/doc-structure-standard.prd.md`、`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 项目追踪：`doc/core/project.md`、`doc/engineering/project.md`
 - 审读台账：`doc/core/reviews/consistency-review-round-*.md`
 

@@ -1,7 +1,7 @@
 # 文档体量治理与活跃阅读面收敛（2026-04-10）项目管理文档
 
-- 对应设计文档: `doc/engineering/doc-surface-area-governance-2026-04-10.design.md`
-- 对应需求文档: `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md`
+- 对应设计文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
+- 对应需求文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
 
 审计轮次: 1
 
@@ -17,8 +17,8 @@
 - `doc/engineering/project.md`
 - `doc/engineering/README.md`
 - `doc/engineering/prd.index.md`
-- `doc/engineering/doc-structure-standard.prd.md`
-- `doc/engineering/doc-structure-standard.design.md`
+- `doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/.governance/module-root-md-allowlist.txt`
 - `scripts/doc-governance-check.sh`
 

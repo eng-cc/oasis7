@@ -5,12 +5,12 @@
 ## 目的
 - 为 `TASK-CORE-041` / `TASK-ENGINEERING-066` 提供 ROUND-010 的统一执行台账，将本轮目标定义为“ROUND-009 延期模块入口分流跟进轮”。
 - 本轮只处理上一轮明确延期、但仍可能受益于更清晰读者入口的模块 `README.md`，不重新打开已在 ROUND-009 收口的 manual、例外目录与静态镜像问题。
-- 所有 ROUND-010 结论仍以 `doc/engineering/doc-structure-standard.prd.md` 与 `doc/engineering/doc-structure-standard.design.md` 为裁定依据；若发现规则冲突，先补标准，再继续治理。
+- 所有 ROUND-010 结论仍以 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 与 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为裁定依据；若发现规则冲突，先补标准，再继续治理。
 
 ## 权威依据
-- 结构规范需求：`doc/engineering/doc-structure-standard.prd.md`
-- 结构规范设计：`doc/engineering/doc-structure-standard.design.md`
-- 结构规范执行：`doc/engineering/doc-structure-standard.project.md`
+- 结构规范需求：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 结构规范设计：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 结构规范执行：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 上一轮结论：`doc/core/reviews/consistency-review-round-009.md`
 - 上一轮清单：`doc/core/reviews/round-009-reviewed-files.md`
 - 工程总入口：`doc/README.md`

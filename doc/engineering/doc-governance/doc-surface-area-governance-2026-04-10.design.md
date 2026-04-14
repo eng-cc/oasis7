@@ -1,7 +1,7 @@
 # 文档体量治理与活跃阅读面收敛设计（2026-04-10）
 
-- 对应需求文档: `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md`
-- 对应项目管理文档: `doc/engineering/doc-surface-area-governance-2026-04-10.project.md`
+- 对应需求文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
+- 对应项目管理文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
 
 ## 1. 设计定位
 本设计回答的不是“文件应该先搬到哪里”，而是“哪些文件应该出现在默认阅读面”。  

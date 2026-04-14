@@ -5,12 +5,12 @@
 ## 目的
 - 为 `TASK-CORE-010` / `TASK-ENGINEERING-035` 提供 ROUND-008 的统一执行台账，将本轮目标定义为“专题 `Design` 补齐轮”。
 - 本轮聚焦已具备 `PRD + Project` 的专题中，哪些仍缺少 `Design`，并按复杂度进行“必须补 / 建议补 / 可暂缓”分级与回写。
-- 所有 ROUND-008 结论均以 `doc/engineering/doc-structure-standard.prd.md` 与 `doc/engineering/doc-structure-standard.design.md` 为裁定依据。
+- 所有 ROUND-008 结论均以 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 与 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为裁定依据。
 
 ## 权威依据
-- 结构规范需求：`doc/engineering/doc-structure-standard.prd.md`
-- 结构规范设计：`doc/engineering/doc-structure-standard.design.md`
-- 结构规范执行：`doc/engineering/doc-structure-standard.project.md`
+- 结构规范需求：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 结构规范设计：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 结构规范执行：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 工程主台账：`doc/engineering/project.md`
 - 项目级 ROUND 台账：`doc/core/project.md`
 - 开发工作流：`AGENTS.md`
