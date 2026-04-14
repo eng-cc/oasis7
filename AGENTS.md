@@ -29,7 +29,7 @@
 
 4. 先更新 `prd.md`，再拆 `project.md`
    1. 需求、行为、边界变化时必须先更新 `prd.md`
-   2. `project.md` 必须写清 PRD-ID、任务、依赖、状态和测试层级
+   2. `project.md` 必须写清 PRD-ID、任务、依赖、状态和测试层级；新增任务项默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，不再新增 `TASK-XXX-123` 这类顺序编号作为项目页默认写法，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）指向运行态 task；推荐模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`。项目页标识只用于人类规划与检索，`.pm` `task_uid` 仍是唯一真值
    3. handoff 只用于协作，不替代 PRD / project 正式追踪
 
 5. 按任务闭环执行代码、文档、测试

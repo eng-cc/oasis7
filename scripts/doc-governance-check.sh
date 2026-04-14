@@ -29,6 +29,9 @@ Checks:
      paths under doc/ (wildcards/templates and explicit exemption docs excluded).
   9. Role labels in devlogs and handoff templates must use canonical names from
      .agents/roles/*.md.
+  10. Newly added `project.md` task rows must not introduce fresh `TASK-*`
+      sequential identifiers; they must use `topic-slug (PRD-ID) ... Trace:
+      .pm/tasks/task_<32hex>.yaml` on a single line.
 USAGE
 }
 
@@ -51,6 +54,9 @@ readonly DESIGN_SECTION_EXEMPT_PROJECT_DOCS=(
   "doc/game-test.project.md"
   "doc/world-runtime.project.md"
   "doc/world-simulator.project.md"
+)
+readonly GRANDFATHERED_ADDED_PROJECT_TASK_ROWS=(
+  "doc/engineering/project.md::- [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 \`AGENTS.md\`、角色职责卡与 handoff 模板的 \`.pm\` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 \`doc/devlog\` 必写残留要求。"
 )
 readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
   "doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md"
@@ -335,6 +341,55 @@ check_handoff_role_fields() {
   done < <(if command -v rg >/dev/null 2>&1; then rg '^-[[:space:]]*(From Role|To Role): ' "$file" || true; else grep -E '^-[[:space:]]*(From Role|To Role): ' "$file" || true; fi)
 }
 
+is_grandfathered_added_project_task_row() {
+  local project_doc="$1"
+  local added_line="$2"
+  local entry=""
+  for entry in "${GRANDFATHERED_ADDED_PROJECT_TASK_ROWS[@]}"; do
+    if [[ "$entry" == "${project_doc}::${added_line}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+check_added_project_task_row_policy() {
+  local diff_blob="$1"
+  local current_file=""
+  local line=""
+  local added_line=""
+  local task_row_regex='^-[[:space:]]\[[ x]\][[:space:]]'
+  local deprecated_task_regex='^-[[:space:]]\[[ x]\][[:space:]]TASK-'
+  local new_format_regex='^- \[[ x]\] [a-z0-9]+(-[a-z0-9]+)* \(PRD-[A-Z0-9_-]+(/[A-Z0-9_-]+)*\) \[test_tier_(required|full)\]( \+ \[test_tier_(required|full)\])?: .+ Trace: \.pm/tasks/task_[0-9a-f]{32}\.yaml$'
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^diff[[:space:]]--git[[:space:]] ]]; then
+      current_file=""
+      continue
+    fi
+    if [[ "$line" =~ ^\+\+\+[[:space:]]b/(doc/.+project\.md)$ ]]; then
+      current_file="${BASH_REMATCH[1]}"
+      continue
+    fi
+    [[ -n "$current_file" ]] || continue
+    [[ "$line" =~ ^\+[^+] ]] || continue
+    added_line="${line#+}"
+    [[ "$added_line" =~ $task_row_regex ]] || continue
+
+    if [[ "$added_line" =~ $deprecated_task_regex ]]; then
+      if is_grandfathered_added_project_task_row "$current_file" "$added_line"; then
+        continue
+      fi
+      fail "${current_file} adds a new project task row using deprecated sequential TASK-* identifier: ${added_line}"
+      continue
+    fi
+
+    if [[ ! "$added_line" =~ $new_format_regex ]]; then
+      fail "${current_file} adds a project task row that does not match the required topic-slug/PRD-ID/Trace template: ${added_line}"
+    fi
+  done <<< "$diff_blob"
+}
+
 mapfile -t all_doc_files < <(find doc -type f -name '*.md' ! -path 'doc/devlog/*' ! -path '*/archive/*' | sort)
 mapfile -t project_docs < <(find doc -type f -name '*.project.md' ! -path '*/archive/*' | sort)
 mapfile -t devlog_files < <(find doc/devlog -type f -name '*.md' | sort)
@@ -423,6 +478,16 @@ done
 for file in "${handoff_template_files[@]}"; do
   check_handoff_role_fields "$file"
 done
+
+project_task_policy_diff=""
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+  project_task_policy_diff+=$(git diff --unified=0 --no-color origin/main...HEAD -- 'doc/**/*.project.md' 'doc/*/project.md' 'doc/*.project.md' || true)
+fi
+project_task_policy_diff+=$'\n'
+project_task_policy_diff+=$(git diff --unified=0 --no-color --cached -- 'doc/**/*.project.md' 'doc/*/project.md' 'doc/*.project.md' || true)
+project_task_policy_diff+=$'\n'
+project_task_policy_diff+=$(git diff --unified=0 --no-color -- 'doc/**/*.project.md' 'doc/*/project.md' 'doc/*.project.md' || true)
+check_added_project_task_row_policy "$project_task_policy_diff"
 
 if ((failures > 0)); then
   echo "doc-governance-check: failed with ${failures} issue(s)"
