@@ -440,24 +440,23 @@ extract_release_asset() {
       ;;
     *.dmg)
       require_cmd hdiutil
-      local mount_root
-      mount_root="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-run-dmg.XXXXXX")"
-      local attach_output=""
-      cleanup_dmg_mount() {
-        if [[ -n "$attach_output" ]]; then
-          local device
-          device="$(printf '%s\n' "$attach_output" | awk '/^\/dev\// { print $1; exit }')"
-          if [[ -n "$device" ]]; then
-            hdiutil detach "$device" >/dev/null 2>&1 || true
+      (
+        mount_root="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-run-dmg.XXXXXX")"
+        attach_output=""
+        cleanup_dmg_mount() {
+          if [[ -n "$attach_output" ]]; then
+            local device
+            device="$(printf '%s\n' "$attach_output" | awk '/^\/dev\// { print $1; exit }')"
+            if [[ -n "$device" ]]; then
+              hdiutil detach "$device" >/dev/null 2>&1 || true
+            fi
           fi
-        fi
-        rm -rf "$mount_root"
-      }
-      attach_output="$(hdiutil attach "$archive_path" -nobrowse -mountpoint "$mount_root")"
-      trap cleanup_dmg_mount RETURN
-      cp -R "$mount_root/." "$extract_root/"
-      trap - RETURN
-      cleanup_dmg_mount
+          rm -rf "$mount_root"
+        }
+        trap cleanup_dmg_mount EXIT
+        attach_output="$(hdiutil attach "$archive_path" -nobrowse -mountpoint "$mount_root")"
+        cp -R "$mount_root/." "$extract_root/"
+      )
       ;;
     *.exe)
       require_cmd 7z

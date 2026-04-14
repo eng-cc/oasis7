@@ -204,17 +204,50 @@ EOF
     export OASIS7_WINDOWS_OUT_FILE="$OUT_FILE_NATIVE"
     pwsh -NoLogo -NoProfile -Command '
       $ErrorActionPreference = "Stop"
+
+      function Find-SevenZipSfxModule {
+        param(
+          [string]$SevenZipExecutable
+        )
+
+        $candidateDirs = New-Object System.Collections.Generic.List[string]
+        if ($SevenZipExecutable) {
+          $candidateDirs.Add((Split-Path -Parent $SevenZipExecutable))
+        }
+
+        foreach ($programFilesDir in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+          if ($programFilesDir) {
+            $candidateDirs.Add((Join-Path $programFilesDir "7-Zip"))
+          }
+        }
+
+        if ($env:ChocolateyInstall) {
+          $candidateDirs.Add((Join-Path $env:ChocolateyInstall "bin"))
+          $candidateDirs.Add((Join-Path $env:ChocolateyInstall "lib\\7zip\\tools"))
+        }
+
+        $seen = @{}
+        foreach ($dir in $candidateDirs) {
+          if (-not $dir -or $seen.ContainsKey($dir)) {
+            continue
+          }
+          $seen[$dir] = $true
+          foreach ($moduleName in @("7z.sfx", "7zCon.sfx")) {
+            $modulePath = Join-Path $dir $moduleName
+            if (Test-Path $modulePath) {
+              return $modulePath
+            }
+          }
+        }
+
+        $searched = ($candidateDirs | Where-Object { $_ } | Select-Object -Unique) -join ", "
+        throw "7z SFX module not found. Searched: $searched"
+      }
+
       $bundleDir = $env:OASIS7_WINDOWS_BUNDLE_DIR
       $outFile = $env:OASIS7_WINDOWS_OUT_FILE
       $sevenZip = (Get-Command 7z -ErrorAction Stop).Source
-      $sevenZipDir = Split-Path -Parent $sevenZip
-      $sfxModule = @(
-        (Join-Path $sevenZipDir "7z.sfx"),
-        (Join-Path $sevenZipDir "7zCon.sfx")
-      ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-      if (-not $sfxModule) {
-        throw "7z SFX module not found under $sevenZipDir"
-      }
+      $sfxModule = Find-SevenZipSfxModule -SevenZipExecutable $sevenZip
 
       $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("oasis7-sfx-" + [Guid]::NewGuid().ToString("N"))
       New-Item -ItemType Directory -Path $tempRoot | Out-Null
