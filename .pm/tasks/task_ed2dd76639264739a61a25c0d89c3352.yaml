@@ -1,0 +1,23 @@
+task_uid: task_ed2dd76639264739a61a25c0d89c3352
+title: "Fix post_onboarding capability snapshot and stage truth regressions"
+owner_role: runtime_engineer
+worktree_hint: oasis7-game-post-onboarding-capability-truth-regressions
+execution_log_path: .pm/tasks/task_ed2dd76639264739a61a25c0d89c3352.execution.md
+status: committed
+priority: P0
+source_signal: null
+source_refs:
+  - doc/game/project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "player_gameplay must not keep post_onboarding capability/midloop-ready after the underlying factory capability is gone"
+  - "secondary blocked factories must not hijack the primary post_onboarding goal when the main line is still healthy"
+  - "targeted runtime/viewer regression tests cover capability loss and blocked-secondary-line cases"
+handoff_to: []
+updated_at: 2026-04-14T23:05:41+08:00
+last_started_at: 2026-04-14T22:44:22+08:00
+last_closed_at: 2026-04-14T23:05:41+08:00

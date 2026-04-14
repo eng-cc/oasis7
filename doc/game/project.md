@@ -172,13 +172,14 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-12
+- 更新日期: 2026-04-14
 - 当前状态: in_progress
 - 下一任务: 由 `producer_system_designer` 基于 `TASK-GAME-065` 与后续 runtime 切片的正式阻断签名，继续拆出下一轮 runtime/viewer 修复切片，优先解释并修复 `post_onboarding.establish_first_capability / 20%` 长停；若 formal lane 仍再现 `logicalTime/eventSeq` 冻结，则继续按 run id 细分真实 stall 与 provider/decision 瞬时失败的剩余签名。
 - 已登记待排任务: 若后续 formal lane 再次回退到 provider timeout / latency / prompt budget blocker，则继续按 run id 追加失败签名；在当前两个 progression blocker 修复前，不得把 active-LLM retention gate 对外表述为 `continue_playing`。
 - 当前切片进展: `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 runtime-live 快照在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时误回退到 `first_session_loop` 的映射缺口；该结论只说明部分“掉回新手态”是快照口径问题，不等于真实 retention blocker 已消失。
 - 当前切片进展: `task_fb967ddaadde459786e286b484bc4b0c` 已确认 runtime-live 后台 `play` 在 prior progress 之后会把第一次瞬时 LLM access / decision failure 直接升级为永久停机，从而放大成 `logicalTime/eventSeq` 停止前进的冻结签名；当前已改成有限预算重试，并以 `auth_actions` 回归覆盖“短暂失败可重试、预算耗尽仍停机”的边界。
 - 当前切片进展: `task_319c1fc645b04dd185f3afb45dcd00ee` 已确认 `post_onboarding.establish_first_capability / 20%` 的另一条确定性长停来源不在快照或后台 `play` 停机，而在 active-LLM industrial schema 三层一起漂移：`llm_agent` prompt/runtime helper 仍停留在旧的 assembler-only `factory_kind/recipe_id` 集合，`recipe_coverage` 只跟踪 assembler 三条配方，而 shadow kernel `recipe_plan()` 甚至不会接受 `recipe.smelter.*`。当前 `PostOnboarding` canonical 目标链与 `runtime_live` gameplay actions 已改为 smelter-first bootstrap，因此 formal lane 即便 world time 继续前进，也可能长期拿不到、或在 shadow decision path 里直接拒掉，首条能力链所需的 smelter 动作。当前已把 prompt、recipe/factory fallback、tracked recipe coverage、shadow kernel recipe support 与定向回归一起对齐到 `factory.smelter.mk1` + `recipe.smelter.*`，用于消除这条 20% 空转来源并和前两个 runtime slice 明确分层。
+- 当前切片进展: `task_ed2dd76639264739a61a25c0d89c3352` 已修复另一组 `post_onboarding` canonical truth regressions：`player_gameplay` 不再用任意工厂的首个 blocker 劫持主目标，而是优先跟随当前主线能力链；同时 `industry_progress.stage` 现在会在回收最后一座已完成产出的工厂后按现存工厂完成度重新计算，不再因为历史累计 `completed_recipe_jobs` 残留而继续把失效能力误报为 `choose_first_expansion_tradeoff` / `choose_midloop_path`。这次修复只收口“当前能力已失效却仍显示 ready”与“次级 blocked 产线劫持主目标”两类真值误判，不等于 active-LLM formal retention gate 已恢复。
 - 当前切片进展: 上述 runtime hardening 不等于 formal retention gate 已恢复。当前最新 `240s` active-LLM 对照样本未复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`，因此主 blocker 依旧是长停，不得因为 freeze amplifier 已缓解就撤销 `hold`。
 - 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 完成 `3` 条 active-LLM 10 分钟正式样本与 `3` 条 300 秒对照样本回写；当前结论不是 runtime timeout blocker，而是 formal lane 虽已恢复 `software_safe` floor，但仍停在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本会回退到 `first_session_loop.create_first_world_feedback / 0%` 并冻结世界时间，因此 producer verdict 已收口为 `hold`。）
 - 最新完成: `TASK-GAME-064`（`viewer_engineer` 已收口首屏信息层级与玩家口吻反馈，把玩家身份、当前主目标、主阻塞、立即下一步以及奖励/恢复/阻塞语义抬到首层，并补齐对应 Viewer 测试。）
