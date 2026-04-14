@@ -870,6 +870,19 @@
     - `rg -n "PRD-README-043|AC-30|DEC-RM-039|TASK-README-067|小红书博主|微信公众号|绿洲币|300 OC|800 OC|1500 OC|流量买量" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-073 (PRD-README-045) [test_tier_required]: 为小红书第十三篇“谁该拥有游戏的未来”补齐独立素材包，把讨论收口到“真正推动游戏往前走的人应逐步成为利益共同体”，同时明确这不是当前已开放的链上投票权事实，也不是自动发币承诺。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
+    - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
+    - `.pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.yaml`
+    - `.pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-045|AC-32|DEC-RM-043|TASK-README-073|谁该拥有游戏的未来|利益共同体|链上投票权" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md .pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.yaml .pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.execution.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -882,9 +895,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-12
+- 更新日期: 2026-04-13
 - 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务）
+- 下一任务: 无（当前模块主项目无未完成任务；若后续决定补第十三篇封面、轮播版或真实发布执行，再新开独立任务。）
+- 最新完成: `TASK-README-073`（已为小红书第十三篇补齐“谁该拥有游戏的未来”素材包，固定“利益共同体”主线、标题、正文、评论区互动和发布前自检，并显式收口“不是当前已开放的链上投票权事实，也不是自动发币承诺”的边界。）
 - 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
 - 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）
 - 最新完成: `TASK-README-064`（已为小红书第十二篇固定“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）

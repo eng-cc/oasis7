@@ -1,0 +1,25 @@
+task_uid: task_75c0ff260f9c4606897ecae884b3badf
+title: "TASK-README-073 冻结小红书第十三篇未来归属素材包"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-future-ownership
+execution_log_path: .pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "第十三篇小红书素材包明确“谁该拥有游戏的未来”主题的标题、正文、互动问题、关键词和边界说明，并保持既有的人类开发者口吻。"
+  - "素材包把开发者、玩家和高质量创作者写成逐步分享游戏未来的利益共同体，但不越界宣称当前已开放链上投票权、上线可玩或自动发币。"
+  - "readme 模块追踪与小红书渠道入口完成回写，新素材包与当前 `limited playable technical preview` 口径保持一致。"
+handoff_to: []
+updated_at: 2026-04-14T09:22:08+08:00
+last_started_at: 2026-04-13T23:37:45+08:00
+last_closed_at: 2026-04-14T09:22:08+08:00

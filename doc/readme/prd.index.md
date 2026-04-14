@@ -2,7 +2,7 @@
 
 审计轮次: 12
 
-更新时间：2026-04-12
+更新时间：2026-04-13
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,22 +16,23 @@
 - 想直接进入高频渠道运营入口：先读 `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`、`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` 与 `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-12）
-- `doc/readme/`：137 份文件
-- `doc/readme/governance/`：93 份文件
+## 密度快照（2026-04-13）
+- `doc/readme/`：140 份文件
+- `doc/readme/governance/`：96 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 93 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
+| `governance/` | 96 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 12 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
 ## 活跃补充文档
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
+- `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，适合直接判断“谁该拥有游戏的未来 / 利益共同体”主题的标题、正文、互动问题与禁滑坡边界。
 - `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
 - `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md`：根 README 正式状态同步入口，适合判断对外口径和仓库当前承诺边界。
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`：invite-only limited preview 首轮执行记录，保留为按需进入的 execution_log 入口。
@@ -92,6 +93,7 @@
 | --- | --- | --- |
 | `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
+| `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md` | `material` | 小红书“谁该拥有游戏的未来 / 利益共同体”主题帖素材包 |
 | `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md` | `material` | 小红书博主 / 微信公众号绿洲币激励操作包 |
 | `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` | `runbook` | 小红书持续运营 SOP |
 | `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md` | `material` | 小红书 AI 时代岗位穿越周期主题轮播图素材包 |
