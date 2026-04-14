@@ -31,9 +31,9 @@
 
 ## 接口 / 数据
 - Release 产物命名（固定名，保证 `latest/download` 可长期使用）：
-  - `oasis7-windows-x64.zip`
-  - `oasis7-macos-x64.tar.gz`
-  - `oasis7-linux-x64.tar.gz`
+  - `oasis7-windows-x64.exe`
+  - `oasis7-macos-x64.dmg`
+  - `oasis7-linux-x64.deb`
   - `oasis7-checksums.txt`
 - 下载直链：
   - `https://github.com/<owner>/<repo>/releases/latest/download/<asset>`
@@ -47,6 +47,7 @@
   - `release-gate`：聚合三个子门结果，作为 `build-web-dist` 的唯一前置依赖
 - 打包 runner 与目标三元组（release workflow）：
   - `package-native` 在各平台 job 内显式 provision `trunk + wasm32-unknown-unknown`，同时 `scripts/build-game-launcher-bundle.sh` 会在执行 `trunk build` 前自检并补装缺失的 `wasm32-unknown-unknown`，确保 `web-launcher/` 构建不依赖 runner 初始状态
+  - `package-native` 先生成标准 `oasis7-<platform>` bundle 目录，再通过 `scripts/package-native-installer.sh` 输出固定名 `.deb` / `.dmg` / `.exe` 公开安装器，避免公开下载层继续暴露 `.tar.gz` / `.zip`
   - linux：`ubuntu-24.04` + `native`
   - macOS：`macos-14` + `x86_64-apple-darwin`（避免仓库不支持的 `macos-13` 配置）
   - windows：`windows-2022` + `native`

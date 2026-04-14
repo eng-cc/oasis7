@@ -54,6 +54,23 @@
     - `rg -n "仅诊断：--no-llm|Diagnostics only: --no-llm" site/index.html site/en/index.html`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-SITE-022 (PRD-SITE-002/008) [test_tier_required]: 将 GitHub Release 公开下载产物从 `.tar.gz` / `.zip` 压缩包切换为平台原生安装器 `.deb` / `.dmg` / `.exe`，并同步中英首页下载入口、站点下载校验脚本与 release pipeline 真值文档。
+  - 产物文件:
+    - `.github/workflows/release-packages.yml`
+    - `scripts/package-native-installer.sh`
+    - `scripts/site-download-check.sh`
+    - `site/index.html`
+    - `site/en/index.html`
+    - `doc/site/prd.md`
+    - `doc/site/project.md`
+    - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
+    - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-download-check.sh`
+    - `bash -n scripts/package-native-installer.sh`
+    - `bash -n scripts/release-prepare-bundle.sh`
+    - `bash -n scripts/build-game-launcher-bundle.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/site/design.md`
@@ -66,9 +83,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-02
+- 更新日期: 2026-04-14
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-SITE-022`（GitHub Release 公开下载产物已切到 `.deb` / `.dmg` / `.exe` 原生安装器；中英首页与下载校验脚本已同步，不再将 `.tar.gz` / `.zip` 暴露为公开下载主入口。）
 - 最新完成: `TASK-SITE-021`（中英首页在线验证示例已把 `--no-llm` 明确收紧为 observer/debug-only 诊断路径，不再暗示可作为正式在线验证证据。）
 - 最新完成: `TASK-SITE-020`（`site/doc/cn|en/viewer-manual.html` 已追平 current LLM gating 口径，docs hub 已移除陈旧同步日期，Pages workflow 与 `site-manual-sync-check` 已改为监听 canonical `viewer-manual.manual.md`。）
 - 最新完成: `TASK-SITE-019`（已为 `doc/site/README.md` 补齐 site 模块与公开 docs hub、静态手册镜像、仓库权威手册之间的入口映射。）

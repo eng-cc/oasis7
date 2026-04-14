@@ -118,6 +118,17 @@
 - [x] 本地回归 workflow 语法与 soak job 关键片段，确认 `Prewarm soak runtime binary` 已位于 `Run soak release gate` 之前。
 - [ ] 推送修复并打新 tag，继续观察并行 gate 是否能全部进入 aggregate `release_gate`。
 
+### T3X Release public assets switch to direct installers（2026-04-14）
+- [x] 更新 `.github/workflows/release-packages.yml`：`package-native` 不再上传 `.tar.gz` / `.zip` 压缩包，而是先准备标准 bundle 目录，再调用 `scripts/package-native-installer.sh` 输出 `oasis7-linux-x64.deb`、`oasis7-macos-x64.dmg`、`oasis7-windows-x64.exe`。
+- [x] 新增 `scripts/package-native-installer.sh`：Linux 产出真正的 `.deb`，macOS 产出 `.dmg`，Windows 产出自解压 `.exe`；`publish-release` 与 `oasis7-checksums.txt` 同步切换到新的公开资产名。
+- [x] 同步 `site/index.html`、`site/en/index.html`、`scripts/site-download-check.sh` 与 site 模块 PRD/project，使公开下载入口、脚本门禁与文档真值一致，不再将压缩包作为公开下载主入口。
+- [x] 本地回归：
+  - `./scripts/site-download-check.sh`
+  - `bash -n scripts/package-native-installer.sh`
+  - `bash -n scripts/release-prepare-bundle.sh`
+  - `bash -n scripts/build-game-launcher-bundle.sh`
+  - 以临时 bundle 目录实测 `./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp> --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0`
+
 ### T3O Release gate web sibling binary 预热回补（2026-03-14）
 - [x] 复盘 `Release Packages` run `23080255868`，确认 `release-gate-web` 已越过 `trunk` 安装，但 `web_strict` 在 `oasis7_game_launcher` 启动阶段因独立 job 缺少 `target/debug/oasis7_viewer_live` 而失败；失败签名为 `failed to locate \`oasis7_viewer_live\` binary; build it first or set OASIS7_VIEWER_LIVE_BIN`。
 - [x] 调整 `scripts/viewer-release-qa-loop.sh`：在启动 `oasis7_game_launcher` 前显式执行 `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime`，把原先依赖其他步骤隐式生成 sibling binaries 的前置条件收回到脚本内部。
@@ -178,9 +189,9 @@
 - 站点入口文件：`site/index.html`、`site/en/index.html`
 
 ## 状态
-- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W 已完成；`v0.0.23` 的 `Release Packages` run `23086016214` 已稳定放行到成功发布）
-- 最近更新：2026-03-14 `v0.0.23` 的 `Release Packages` run `23086016214` 已完成成功发布：`release_gate_*`、`build-web-dist`、三平台 `package-native` 与 `publish-release` 全绿。
-- 下一步：回到下载入口与真实试玩链路的后续事项；当前 release 打包链路已恢复到可持续成功发布。
+- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X 已完成；公开下载资产已从压缩包切换为 `.deb` / `.dmg` / `.exe`）
+- 最近更新：2026-04-14 已将 `Release Packages` 的公开产物名与 Pages 下载入口统一切到平台原生安装器；后续远端 run 需要以新 tag 复核 `.deb` / `.dmg` / `.exe` 三平台发布是否按预期落盘。
+- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认三平台原生安装器、校验文件与 `latest/download` 直链全部可用。
 
 ## 迁移记录（2026-03-03）
 - 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。
