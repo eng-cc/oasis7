@@ -750,6 +750,7 @@ impl World {
     ) -> Result<ModuleOutput, WorldError> {
         let manifest = self.active_module_manifest(module_id)?.clone();
         let world_config_hash = self.current_manifest_hash()?;
+        let module_manifest_hash = super::super::util::hash_json(&manifest)?;
         let action_bytes = to_canonical_cbor(request)?;
         let ctx = ModuleContext {
             v: "wasm-1".to_string(),
@@ -763,7 +764,7 @@ impl World {
             limits: manifest.limits.clone(),
             stage: Some("economy_action".to_string()),
             world_config_hash: Some(world_config_hash.clone()),
-            manifest_hash: Some(world_config_hash),
+            manifest_hash: Some(module_manifest_hash),
             journal_height: Some(self.journal.events.len() as u64),
             module_version: Some(manifest.version.clone()),
             module_kind: Some(match manifest.kind {

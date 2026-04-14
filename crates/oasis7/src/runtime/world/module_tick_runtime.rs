@@ -4,7 +4,7 @@ use oasis7_wasm_abi::{
 };
 use std::collections::BTreeMap;
 
-use super::super::util::to_canonical_cbor;
+use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{ModuleKind, ModuleManifest, ModuleRegistry, WorldError};
 use super::module_runtime_labels::{
     module_kind_label, module_role_label, subscription_stage_label,
@@ -83,6 +83,7 @@ impl World {
             if !module_has_tick_subscription(&manifest) {
                 continue;
             }
+            let module_manifest_hash = hash_json(&manifest)?;
 
             let (origin_kind, origin_id, trace_id) = match invocation.install_target {
                 ModuleInstallTarget::SelfAgent => (
@@ -132,7 +133,7 @@ impl World {
                         subscription_stage_label(ModuleSubscriptionStage::Tick).to_string(),
                     ),
                     world_config_hash: Some(world_config_hash.clone()),
-                    manifest_hash: Some(world_config_hash.clone()),
+                    manifest_hash: Some(module_manifest_hash),
                     journal_height: Some(self.journal.events.len() as u64),
                     module_version: Some(manifest.version.clone()),
                     module_kind: Some(module_kind_label(&manifest.kind).to_string()),

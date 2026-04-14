@@ -1,0 +1,21 @@
+task_uid: task_73d01224142443af9b02b1c34a9c3c06
+title: "修复 ModuleContext manifest_hash 误填 world_config_hash"
+owner_role: wasm_platform_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-wasm-context-manifest-hash-fix
+execution_log_path: .pm/tasks/task_73d01224142443af9b02b1c34a9c3c06.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.prd.md
+  - crates/oasis7/src/runtime/world/module_runtime.rs
+doc_refs:
+  - doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.prd.md
+related_prd:
+  - PRD-WORLD_RUNTIME-002
+acceptance:
+  - "ModuleContext.manifest_hash 不再复用 world_config_hash；event/action/tick/economy/policy hook 路径补齐回归测试并通过。"
+handoff_to: []
+updated_at: 2026-04-15T05:51:14+08:00
+last_started_at: 2026-04-15T05:33:00+08:00
+last_closed_at: 2026-04-15T05:51:14+08:00

@@ -1014,3 +1014,7 @@ fn activate_module_manifest(world: &mut World, manifest: ModuleManifest) {
         .unwrap();
     world.apply_proposal(proposal_id).unwrap();
 }
+
+fn module_manifest_hash(manifest: &ModuleManifest) -> String {
+    util::hash_json(manifest).expect("hash module manifest")
+}

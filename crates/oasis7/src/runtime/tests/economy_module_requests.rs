@@ -1,8 +1,8 @@
 use super::pos;
 use crate::runtime::{
     util, Action, CapabilityGrant, MaterialLedgerId, ModuleAbiContract, ModuleActivation,
-    ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, PolicySet,
-    ProposalDecision, World,
+    ModuleChangeSet, ModuleKind, ModuleLimits, ModuleManifest, ModuleRegistry, ModuleRole,
+    PolicySet, ProposalDecision, World,
 };
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::{
@@ -107,10 +107,13 @@ fn stack_amount(stacks: &[MaterialStack], kind: &str) -> i64 {
 fn decode_captured_action_request<T: serde::de::DeserializeOwned>(
     request: &ModuleCallRequest,
 ) -> T {
-    let input: ModuleCallInput =
-        serde_cbor::from_slice(&request.input).expect("decode module call input");
+    let input = decode_captured_module_input(request);
     let action = input.action.expect("module call action bytes");
     serde_cbor::from_slice(&action).expect("decode economy request payload")
+}
+
+fn decode_captured_module_input(request: &ModuleCallRequest) -> ModuleCallInput {
+    serde_cbor::from_slice(&request.input).expect("decode module call input")
 }
 
 struct CaptureEconomyRequestSandbox {
@@ -193,7 +196,24 @@ fn build_factory_with_module_request_exposes_available_inputs_by_ledger() {
         .expect("start module build with captured request");
 
     assert_eq!(sandbox.requests.len(), 1);
+    let input = decode_captured_module_input(&sandbox.requests[0]);
     let request: FactoryBuildRequest = decode_captured_action_request(&sandbox.requests[0]);
+    let key = ModuleRegistry::record_key("m4.factory.capture", "0.1.0");
+    let manifest = world
+        .module_registry()
+        .records
+        .get(&key)
+        .expect("active factory module record")
+        .manifest
+        .clone();
+    assert_eq!(
+        input.ctx.world_config_hash,
+        Some(world.current_manifest_hash().unwrap())
+    );
+    assert_eq!(
+        input.ctx.manifest_hash,
+        Some(util::hash_json(&manifest).expect("hash economy module manifest"))
+    );
     assert_eq!(stack_amount(&request.available_inputs, "steel_plate"), 12);
     assert_eq!(stack_amount(&request.available_inputs, "circuit_board"), 3);
 
@@ -276,7 +296,24 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
         .expect("start recipe with captured request");
 
     assert_eq!(sandbox.requests.len(), 1);
+    let input = decode_captured_module_input(&sandbox.requests[0]);
     let request: RecipeExecutionRequest = decode_captured_action_request(&sandbox.requests[0]);
+    let key = ModuleRegistry::record_key("m4.recipe.capture", "0.1.0");
+    let manifest = world
+        .module_registry()
+        .records
+        .get(&key)
+        .expect("active recipe module record")
+        .manifest
+        .clone();
+    assert_eq!(
+        input.ctx.world_config_hash,
+        Some(world.current_manifest_hash().unwrap())
+    );
+    assert_eq!(
+        input.ctx.manifest_hash,
+        Some(util::hash_json(&manifest).expect("hash recipe module manifest"))
+    );
     assert_eq!(request.desired_batches, 2);
     assert_eq!(request.deterministic_seed, 20260214);
     assert_eq!(stack_amount(&request.available_inputs, "iron_ingot"), 6);
