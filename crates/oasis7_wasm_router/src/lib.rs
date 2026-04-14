@@ -47,7 +47,6 @@ impl<V> BoundedCache<V> {
     }
 }
 
-type ParsedFilterCache = Mutex<BoundedCache<SubscriptionFilters>>;
 type RegexCache = Mutex<BoundedCache<regex::Regex>>;
 
 fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -55,11 +54,6 @@ fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     }
-}
-
-fn parsed_filter_cache() -> &'static ParsedFilterCache {
-    static CACHE: OnceLock<ParsedFilterCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(BoundedCache::new(MAX_CACHE_ENTRIES)))
 }
 
 fn regex_cache() -> &'static RegexCache {
@@ -70,14 +64,8 @@ fn regex_cache() -> &'static RegexCache {
 fn parsed_subscription_filters(
     filters_value: &JsonValue,
 ) -> Result<Arc<SubscriptionFilters>, serde_json::Error> {
-    let key = filters_value.to_string();
-    if let Some(cached) = lock_recover(parsed_filter_cache()).get_cloned(&key) {
-        return Ok(cached);
-    }
     let parsed: SubscriptionFilters = serde_json::from_value(filters_value.clone())?;
-    let parsed = Arc::new(parsed);
-    lock_recover(parsed_filter_cache()).insert(key, parsed.clone());
-    Ok(parsed)
+    Ok(Arc::new(parsed))
 }
 
 fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
