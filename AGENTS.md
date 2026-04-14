@@ -65,19 +65,19 @@
    8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
-10. commit 前必须通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review当前改动
+10. commit 前不再要求额外的本地 review 脚本；默认评审边界是在 commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks + review/approval 作为正式 review 流程
 
 11. 每个任务（写文档也算）一个 commit；若用户明确要求“先不要提交”，则只保留本地改动，但仍要完成文档与测试闭环
 
 12. 任务完成后必须标准化通过 GitHub PR 合入 `main`
-   1. 发起 PR 前先确认任务 `worktree` 干净、snapshot review findings 已处理或显式记录、对应测试已完成
+   1. 发起 PR 前先确认任务 `worktree` 干净、对应测试与门禁已完成
    2. 优先通过 `./scripts/prepare-task-pr.sh` 执行标准化 PR preflight / create，而不是直接本地 `landing` 到 `main`
    3. 默认最终合流路径是 GitHub PR + required checks + review/approval；`./scripts/land-task-worktree.sh` 仅用于用户明确要求的本地合流、离线应急或 PR 路径不可用且已显式说明的场景
    4. PR 合入后，必须立即同步本地 `main` 并回收对应 task `worktree` 与 branch；若当前 shell 仍停在 source `worktree`，先切走再删除
    5. 若 PR preflight / create 失败，先在任务 `worktree` 解决分支落后、push 或验证问题，再重试
 
 13. 当前 `project.md` 还有后续任务时，不要中断
-   1. 当前 task 完成后，先完成 `workflow-report --phase close`、`./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`、snapshot review、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
+   1. 当前 task 完成后，先完成 `workflow-report --phase close`、`./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
    2. 若 `project.md` 仍有后续任务，默认为下一个 task 重新创建独立 `worktree` 与 `.pm` task；只有用户明确授权复用当前 `worktree` 时，才允许不切新环境
 
 ## 工程架构

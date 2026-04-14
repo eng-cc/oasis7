@@ -534,11 +534,13 @@ if any(item.get("id") == "review-signals" and "command" in item for item in work
     raise SystemExit("workflow review checklist should not suggest promote-signal for pending signal handling")
 if any(item.get("id") == "triage-signals" and "command" in item for item in workflow_start["checklist"]):
     raise SystemExit("workflow start checklist should not suggest promote-signal for pending signal handling")
-if not any(item.get("id") == "codex-review" for item in workflow_close["checklist"]):
-    raise SystemExit("workflow close checklist should require codex review before commit")
-codex_items = [item for item in workflow_close["checklist"] if item.get("id") == "codex-review"]
-if codex_items[0].get("command") != "./scripts/pm/codex-review-snapshot.sh":
-    raise SystemExit("workflow close codex review checklist should point to codex-review-snapshot.sh")
+if any(item.get("id") == "codex-review" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should no longer require local codex review")
+if not any(item.get("id") == "prepare-pr-review" for item in workflow_close["checklist"]):
+    raise SystemExit("workflow close checklist should point to GitHub PR review as the default review boundary")
+prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
+if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh":
+    raise SystemExit("workflow close PR review checklist should point to prepare-task-pr.sh")
 if not any(item.get("id") == "bootstrap-working-memory" for item in workflow_close["checklist"]):
     raise SystemExit("workflow close checklist should suggest bootstrapping working_memory when the current task has no entries")
 bootstrap_items = [item for item in workflow_close["checklist"] if item.get("id") == "bootstrap-working-memory"]

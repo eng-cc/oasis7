@@ -16,7 +16,7 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: snapshot review -> commit -> prepare-task-pr -> GitHub PR
+- standard path: commit -> prepare-task-pr -> GitHub PR review
 
 Options:
   --base <branch>         Base branch for the PR (default: main)

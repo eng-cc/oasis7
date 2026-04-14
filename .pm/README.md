@@ -55,7 +55,6 @@
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
 - `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
-- `./scripts/pm/codex-review-snapshot.sh`：在临时隔离 Git 快照中重放当前未提交 diff，并在该快照内执行 `codex exec review --uncommitted`，避免 review 过程改动源 worktree 的 `.pm` 或其他文件。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
@@ -64,12 +63,11 @@
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：`./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
-- 提交前 review：`./scripts/pm/codex-review-snapshot.sh`
-- PR 收口 preflight：`./scripts/prepare-task-pr.sh`
+- GitHub PR preflight / 默认评审边界：`./scripts/prepare-task-pr.sh`
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
-- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令，以及 `prepare-task-pr.sh` 前的最后一条 PM 自检命令。
+- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；完成 commit 后立即进入 `prepare-task-pr.sh`，由 GitHub PR 的 required checks + review/approval 承担默认评审边界。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
 
@@ -128,7 +126,7 @@ workflow report 基础用法：
 - `./scripts/pm/workflow-report.sh --phase start --role qa_engineer --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
-- `./scripts/pm/codex-review-snapshot.sh --output-last-message /tmp/codex-review.txt`
+- `./scripts/prepare-task-pr.sh --json`
 - 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-uid` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
 
 阶段汇总基础用法：
