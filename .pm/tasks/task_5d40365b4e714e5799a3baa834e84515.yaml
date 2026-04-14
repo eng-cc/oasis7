@@ -1,0 +1,24 @@
+task_uid: task_5d40365b4e714e5799a3baa834e84515
+title: "Design consumer-grade cross-platform release distribution"
+owner_role: producer_system_designer
+worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+execution_log_path: .pm/tasks/task_5d40365b4e714e5799a3baa834e84515.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/prd.md
+  - doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Define target release UX for Linux/macOS/Windows that is suitable for broad non-technical users, including install/open/update/discoverability boundaries."
+  - "Separate MVP, release-ready, and later-phase packaging requirements across the three platforms with measurable gates."
+  - "Map the design back to world-simulator main PRD/project and release download pipeline docs."
+handoff_to: []
+updated_at: 2026-04-15T05:41:23+08:00
+last_started_at: 2026-04-14T22:56:22+08:00
+last_closed_at: 2026-04-14T23:06:34+08:00
