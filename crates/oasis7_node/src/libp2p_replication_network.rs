@@ -639,9 +639,12 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
     match err {
         WorldError::NetworkRequestFailed { code, message, .. } => {
             matches!(code, DistributedErrorCode::ErrUnsupported)
-                && (message.contains("handler missing") || message.starts_with('/'))
+                && peer_error_message_indicates_missing_handler(message)
+                && !peer_error_message_indicates_retryable_connection_gap(message)
         }
-        WorldError::NetworkProtocolUnavailable { protocol } => protocol.contains("handler missing"),
+        WorldError::NetworkProtocolUnavailable { protocol } => {
+            peer_error_message_indicates_missing_handler(protocol)
+        }
         _ => false,
     }
 }
@@ -668,6 +671,10 @@ fn peer_error_message_indicates_retryable_connection_gap(message: &str) -> bool 
         || message.contains("request failed: ConnectionClosed")
         || message.contains("request failed: DialFailure")
         || message.contains("request failed: Timeout")
+}
+
+fn peer_error_message_indicates_missing_handler(message: &str) -> bool {
+    message.contains("handler missing") || message.starts_with('/')
 }
 
 fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {

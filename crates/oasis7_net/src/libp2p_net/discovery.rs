@@ -357,6 +357,11 @@ pub(super) fn process_discovered_peer_record(
             protocol: "peer record peer_id must be valid".to_string(),
         }
     })?;
+    let allow_single_source_bootstrap_dial = record
+        .record
+        .discovery_sources
+        .iter()
+        .any(|source| matches!(source, PeerDiscoverySource::StaticBootstrap));
     let transport_paths = peer_record_transport_paths(&record)?;
     for path in &transport_paths {
         let (_, kad_addr) = split_peer_id(path.addr.clone());
@@ -388,13 +393,15 @@ pub(super) fn process_discovered_peer_record(
             .get(&peer_id)
             .map(|path| path.label() == preferred_path.label())
             .unwrap_or(false);
-        let should_dial = !matches!(
-            peer_status,
-            PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
-        ) && active_transport_paths
-            .get(&peer_id)
-            .map(|active| preferred_path.preference_rank() < active.preference_rank())
-            .unwrap_or(true);
+        let should_dial = (!matches!(peer_status, PeerManagerHealthStatus::Blocked)
+            && !matches!(peer_status, PeerManagerHealthStatus::Suspect))
+            || (matches!(peer_status, PeerManagerHealthStatus::Suspect)
+                && allow_single_source_bootstrap_dial);
+        let should_dial = should_dial
+            && active_transport_paths
+                .get(&peer_id)
+                .map(|active| preferred_path.preference_rank() < active.preference_rank())
+                .unwrap_or(true);
         if should_dial && !already_dialing_preferred {
             let _ = dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());
         }

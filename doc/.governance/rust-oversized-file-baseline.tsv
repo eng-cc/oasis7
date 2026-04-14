@@ -12,7 +12,7 @@ code	crates/oasis7_node/src/types.rs	1277
 test	crates/oasis7/src/simulator/llm_agent/tests_split_part1.rs	1204
 test	crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs	1447
 test	crates/oasis7_client_launcher/src/main_tests.rs	1261
-test	crates/oasis7_net/src/libp2p_net/tests.rs	1332
+test	crates/oasis7_net/src/libp2p_net/tests.rs	1280
 test	crates/oasis7_net/src/tests.rs	1241
 test	crates/oasis7_node/src/tests_split_part1.rs	1427
 test	crates/oasis7_node/src/tests_split_part3.rs	1735

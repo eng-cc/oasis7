@@ -516,6 +516,39 @@ fn relay_reservation_without_active_relay_path_does_not_claim_relay_only_reachab
 }
 
 #[test]
+fn direct_and_relay_active_paths_do_not_auto_promote_to_public_entry() {
+    let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
+    let (recommendation, detection) = build_live_node_network_policy_recommendation(
+        &options,
+        Some(&Libp2pReachabilitySnapshot {
+            active_transport_kind: Some(LiveTransportKind::RelayReserved),
+            active_direct_path_count: 1,
+            active_hole_punch_path_count: 0,
+            active_relay_path_count: 1,
+            relay_reservation_active: true,
+            hole_punch_state: LiveHolePunchState::Unknown,
+            ..Libp2pReachabilitySnapshot::default()
+        }),
+    )
+    .expect("recommendation");
+
+    assert_eq!(
+        detection.observed_reachability,
+        Some(PeerReachabilityClass::RelayOnly)
+    );
+    assert_eq!(
+        recommendation.recommended_user_mode,
+        NodeUserMode::PrivateSafe
+    );
+    assert_eq!(
+        recommendation.effective_user_mode,
+        NodeUserMode::PrivateSafe
+    );
+    assert!(detection.relay_available);
+    assert!(detection.probe_stable);
+}
+
+#[test]
 fn failed_hole_punch_snapshot_does_not_force_blocked_viability() {
     let options = parse_options(["--node-role", "observer"].into_iter()).expect("parse");
     let (_, detection) = build_live_node_network_policy_recommendation(

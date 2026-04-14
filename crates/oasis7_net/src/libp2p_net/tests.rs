@@ -5,7 +5,7 @@ use super::peer_manager::{
 use super::peer_record::{
     build_configured_peer_record, sign_peer_record, verify_signed_peer_record,
 };
-use super::runtime_loop::peer_requires_active_quarantine;
+use super::runtime_loop::{peer_requires_active_quarantine, refresh_peer_manager_healths};
 use super::transport_paths::{
     active_transport_path_from_endpoint, peer_record_transport_paths,
     select_preferred_transport_path, sync_known_transport_paths, TransportMuxer, TransportPathKind,
@@ -17,6 +17,7 @@ use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
 
+mod discovery_peer_record_tests;
 mod transport_path_refresh_tests;
 
 fn signed_discovery_peer_record(
@@ -824,59 +825,6 @@ fn process_discovered_peer_record_dials_candidate_peer() {
 
     assert!(discovered_peer_records.contains_key(&peer_id));
     assert!(known_transport_paths.contains_key(&peer_id));
-    assert!(last_dialed_transport_paths.contains_key(&peer_id));
-}
-
-#[test]
-fn process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer() {
-    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
-    let peer_key = Keypair::generate_ed25519();
-    let peer_id = PeerId::from(peer_key.public());
-    let suspect_record =
-        signed_discovery_peer_record(&peer_key, vec![crate::dht::PeerDiscoverySource::Dht], 1);
-    let upgraded_record = signed_discovery_peer_record(
-        &peer_key,
-        vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ],
-        2,
-    );
-    let mut discovered_peer_records = HashMap::new();
-    let mut known_transport_paths = HashMap::new();
-    let mut last_dialed_transport_paths = HashMap::new();
-    let active_transport_paths = HashMap::new();
-    let mut failed_transport_path_labels = HashSet::new();
-
-    super::discovery::process_discovered_peer_record(
-        &mut swarm,
-        &mut discovered_peer_records,
-        &mut known_transport_paths,
-        &mut last_dialed_transport_paths,
-        &active_transport_paths,
-        &mut failed_transport_path_labels,
-        None,
-        &PeerManagerPolicy::default(),
-        suspect_record,
-    )
-    .expect("process suspect peer record");
-
-    assert!(discovered_peer_records.contains_key(&peer_id));
-    assert!(!last_dialed_transport_paths.contains_key(&peer_id));
-
-    super::discovery::process_discovered_peer_record(
-        &mut swarm,
-        &mut discovered_peer_records,
-        &mut known_transport_paths,
-        &mut last_dialed_transport_paths,
-        &active_transport_paths,
-        &mut failed_transport_path_labels,
-        None,
-        &PeerManagerPolicy::default(),
-        upgraded_record,
-    )
-    .expect("process upgraded peer record");
-
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
 }
 
