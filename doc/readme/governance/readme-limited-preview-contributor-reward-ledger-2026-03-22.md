@@ -92,6 +92,8 @@ Round scan handling:
 - `ledger-draft-md` is for a human-readable first ledger draft with round meta placeholders still blank.
 - `ledger-csv` is for spreadsheet-friendly row import; it only exports `ready` and `deferred` rows.
 
+Planned grant amounts remain provisional until producer finishes the final actual-value review before distribution.
+
 ## 4. Band Summary
 | Band | Row Count | Contributor Count | Status |
 | --- | --- | --- | --- |
@@ -112,6 +114,7 @@ Round scan handling:
 - Rejected Rows:
 - Deferred Rows:
 - Approval Notes:
+  - If a planned grant is downshifted before distribution, record the actual-value review reason here before execution.
 
 ## 6. Distribution Closure
 | Approval ID | Ledger ID | Contributor | Actual Amount | Distribution Ref | Distribution Date | Execution Owner | Closure Status |

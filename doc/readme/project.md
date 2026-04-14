@@ -348,6 +348,18 @@
     - `.pm/tasks/task_9026e48532624e84a031656172a6a684.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "150 OC|1500 OC|ordinary merged PR|exceptional case|C-03" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md`
+- [x] TASK-README-074 (PRD-README-022) [test_tier_required]: 对原计划授予的 PR round 做 actual-value review，若 planned grant 高于实际增量价值，则先下调档位/金额并同步回写 round ledger、distribution closure 与 ledger 治理模板。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md`
+    - `doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md`
+    - `.pm/tasks/task_fc2393bf4e3b40999fc89761e917afcd.yaml`
+    - `.pm/tasks/task_fc2393bf4e3b40999fc89761e917afcd.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "actual-value review|planned grant|1500 OC|100 OC|50 OC|eligible-medium|eligible-small" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.md doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-README-031 (PRD-README-021) [test_tier_required]: 记录小红书账号第一篇自我介绍帖的标题、正文、封面文案、标签和使用说明，固定“人类开发者 + agent 队友”的首帖叙事。
@@ -902,9 +914,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-13
+- 更新日期: 2026-04-14
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `TASK-README-074`（已对 round ledger 里的 planned grant 做 actual-value review，把高于实际增量价值的计划值先下调到 `100 OC / 50 OC`，并保持结果仍在普通 merged PR `<=150 OC` ceiling 内，再同步回写 round ledger、distribution closure 与 ledger 模板。）
 - 最新完成: `TASK-README-073`（已把普通 merged PR 的 contributor reward 默认真实发放 ceiling 收紧到 `150 OC`，同步回写 reward pack / ledger / round ledger / distribution closure，并明确 `1500 OC` 只保留给极少数 exceptional case。）
 - 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
 - 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）

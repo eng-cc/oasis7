@@ -167,6 +167,7 @@
 - AC-30: 若团队要对小红书博主或微信公众号启用绿洲币激励，必须补齐独立激励包，明确两类对象的可计分/不可计分行为、证据字段、固定档位金额、审批链、发放回填、反作弊与禁语边界，并明确“宣传方是生态参与者与受益者，但激励不按阅读量、播放量或买量口径粗放发放”。
 - AC-31: 若 merged GitHub PR 已成为 reward ledger 的周期性来源，仓库必须提供按 merged 时间窗批量扫描的脚本入口，复用现有 reward intake template contract，并显式输出 `ready / deferred / no_reward_review_requested / invalid_intake` 汇总与逐条来源信息。
 - AC-32: 若团队继续对 merged GitHub PR 做贡献奖励审批，必须把普通 merged PR 的默认真实发放 ceiling 收紧到 `150 OC`；任何 `>150 OC` 的 row 都必须留下 exceptional case note，`1500 OC` 不得作为常规 MR 档位扩散。
+- AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -212,6 +213,7 @@
 - NFR-RM-8: 小红书博主 / 微信公众号绿洲币激励记录中每条非拒绝记录都必须同时具备资产链接、截图或归档证据、事实边界检查结果与反作弊结论；任何仅有阅读量或播放量而无质量和回流证据的记录不得进入审批。
 - NFR-RM-9: merged PR reward round scan 必须输出逐条 `pr_number / merged_at / author / import_status / source_link` 与窗口级 `status_counts`，并保持 `ready/deferred/no_reward_review_requested/invalid_intake` 分类与单 PR 导入脚本一致。
 - NFR-RM-10: 普通 merged PR 的 contributor reward 审批默认 ceiling 为 `150 OC`；任何 `>150 OC` 的待发放或已批准 row 都必须显式携带 exceptional case note，且 `1500 OC` 不得作为常规 MR 奖励预期保留在 active ledger 中。
+- NFR-RM-11: planned grant 若在 actual-value review 后被下调，reward ledger 与 distribution closure 必须同时回写最终金额与下调理由，避免文档计划值和执行值分叉。
 - Security & Privacy: 对外文档不得暴露敏感配置与密钥信息；示例配置需使用脱敏样例。
 
 ## 5. Risks & Roadmap
@@ -248,7 +250,7 @@
 | PRD-README-019 | TASK-README-029 | `test_tier_required` | invite-only limited preview execution pack 明确 callout copy、check slots、signal buckets、summary fields | 受控预览执行性与回流一致性 |
 | PRD-README-020 | TASK-README-030/067/068/069/070/073 | `test_tier_required` | early contributor reward pack 明确 `Reward Account` 字段边界、评分模板、证据字段、奖励建议分级、普通 merged PR `<=150 OC` ceiling、PR intake import 路径、merged PR round scan 与禁语清单 | limited preview 贡献奖励执行性与对外口径安全性 |
 | PRD-README-021 | TASK-README-031 | `test_tier_required` | 小红书首帖素材包明确标题、正文、封面文案、标签与“人类开发者视角”使用说明 | 新渠道冷启动识别度与口径稳定性 |
-| PRD-README-022 | TASK-README-032/067/068/069/070/073 | `test_tier_required` | reward ledger 模板明确 round meta、`Reward Account`、逐条贡献记录、PR import status、merged PR round scan、producer 审批、ordinary merged PR `<=150 OC` ceiling、distribution ref 与归档字段 | limited preview 真实贡献奖励结算闭环 |
+| PRD-README-022 | TASK-README-032/067/068/069/070/073/074 | `test_tier_required` | reward ledger 模板明确 round meta、`Reward Account`、逐条贡献记录、PR import status、merged PR round scan、producer 审批、ordinary merged PR `<=150 OC` ceiling、actual-value review、distribution ref 与归档字段 | limited preview 真实贡献奖励结算闭环 |
 | PRD-README-023 | TASK-README-033 | `test_tier_required` | 小红书第二帖素材包明确 7 位 agent 队友卡文案、收束页与可截图 HTML | 渠道内容连续性与“agent 队伍”概念可理解性 |
 | PRD-README-024 | TASK-README-034 | `test_tier_required` | 小红书 runbook 明确发帖前复核、发帖后 24h 巡检、评论分级、互动引导和 `devlog` 回写要求 | 人类向渠道的持续运营一致性 |
 | PRD-README-025 | TASK-README-035 | `test_tier_required` | 小红书第三帖素材包明确“游戏是什么”的标题、正文、轮播结构、互动问题与技术预览边界 | 渠道内容从“谁在做”过渡到“在做什么游戏”的可理解性 |
@@ -301,6 +303,7 @@
 | DEC-RM-041 | 为 GitHub PR reward intake 提供脚本化导入入口 | 继续让 liveops 手工抄 PR body，或在每轮 ledger 建档时重复肉眼判断 `ready/deferred/no_reward_review_requested` | PR intake 一旦进入重复使用阶段，就应收成可执行脚本；否则 contract 再清晰，也会退化回手工表格流程。 |
 | DEC-RM-042 | merged PR 的周期性奖励归集采用“时间窗扫描 + 复用现有 intake contract”的批量脚本，而不是把单 PR 导入逻辑复制成第二套规则 | 每轮靠 liveops 手工打开 merged PR 重复判断；或为 round scan 单独发明另一套字段/状态 contract | 模板既然已经固定在 PR body，就应把周期性归集也收口到同一 contract 上；否则一旦单 PR 和 batch scan 判定不同，ledger 会再次退回人工表格。 |
 | DEC-RM-043 | 普通 merged PR 的 contributor reward 默认真实发放 ceiling 收紧到 `150 OC`，`1500 OC` 只保留给极少数 exceptional case | 继续让单个 merged PR 在没有 exceptional note 时也能维持 `1500 OC` 待发放 | 当前总量口径改为 `10B` 后，普通 MR 的激励仍应保守；把 ceiling 收紧到 `150 OC` 能更稳地管理预期，避免 contributor reward 被误解成高额 bounty。 |
+| DEC-RM-044 | planned grant 在执行前仍要接受 actual-value review，若原计划金额高于实际增量价值则应先下调 | 文档一旦写出 planned grant，就默认锁定原金额直发 | 奖励治理的目标不是保护最早写下的计划值，而是让最终发放和实际价值匹配，并留下可审计的纠偏痕迹。 |
 | DEC-RM-023 | 小红书持续运营细节独立沉淀为 runbook，而不是继续只留在素材包和角色卡 | 只补几条角色卡示例或继续靠帖子素材包驱动 | 小红书已经进入持续发帖和看反馈阶段，需要和 Moltbook 一样有稳定 SOP，才能复盘互动和误解模式。 |
 | DEC-RM-024 | 第三篇采用“轻量游戏介绍 + 猜类型互动”而非完整设定说明书 | 直接把世界规则、技术架构与完整玩法一次讲清 | 用户到了第三篇需要先建立“这是什么游戏”的可想象轮廓，而不是被文档级信息密度劝退；同时仍要保持技术预览边界。 |
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |
