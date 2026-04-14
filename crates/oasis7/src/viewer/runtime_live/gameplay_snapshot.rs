@@ -6,9 +6,7 @@ use crate::simulator::persist::{
 };
 use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
 
-use super::player_gameplay::extend_available_actions;
-
-const FACTORY_SMELTER_MK1: &str = "factory.smelter.mk1";
+use super::player_gameplay::{extend_available_actions, FACTORY_SMELTER_MK1};
 
 fn blocked_control_hint(error_code: Option<&str>) -> String {
     match error_code {
