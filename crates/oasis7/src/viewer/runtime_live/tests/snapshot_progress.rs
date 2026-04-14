@@ -427,7 +427,7 @@ fn compat_snapshot_keeps_first_session_loop_for_fresh_llm_session() {
 }
 
 #[test]
-fn compat_snapshot_keeps_post_onboarding_blocked_after_prior_progress() {
+fn compat_snapshot_keeps_first_session_loop_after_bootstrap_tick_blocked_feedback() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
@@ -435,6 +435,54 @@ fn compat_snapshot_keeps_post_onboarding_blocked_after_prior_progress() {
     )
     .expect("runtime server");
     server.world.step().expect("advance world once");
+    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
+        action: "play".to_string(),
+        stage: "blocked".to_string(),
+        effect: "gameplay blocked before requested advance completed: logicalTime +0, eventSeq +0"
+            .to_string(),
+        reason: Some("simulated retention blocker".to_string()),
+        hint: Some("repair the blocker before retrying play".to_string()),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    });
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert_eq!(
+        gameplay.stage_id,
+        crate::simulator::PlayerGameplayStageId::FirstSessionLoop
+    );
+    assert_eq!(
+        gameplay.stage_status,
+        crate::simulator::PlayerGameplayStageStatus::Active
+    );
+    assert_eq!(
+        gameplay.goal_id,
+        "first_session_loop.create_first_world_feedback"
+    );
+    assert_eq!(
+        gameplay
+            .recent_feedback
+            .as_ref()
+            .expect("recent feedback")
+            .stage,
+        "blocked"
+    );
+    assert_eq!(gameplay.blocker_kind, None);
+}
+
+#[test]
+fn compat_snapshot_keeps_post_onboarding_blocked_after_confirmed_progress() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.confirmed_player_gameplay_progress_time = Some(server.world.state().time);
     server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
         action: "play".to_string(),
         stage: "blocked".to_string(),
@@ -472,14 +520,14 @@ fn compat_snapshot_keeps_post_onboarding_blocked_after_prior_progress() {
 }
 
 #[test]
-fn compat_snapshot_keeps_post_onboarding_no_progress_after_prior_progress() {
+fn compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
     .expect("runtime server");
-    server.world.step().expect("advance world once");
+    server.confirmed_player_gameplay_progress_time = Some(server.world.state().time);
     server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
         action: "play".to_string(),
         stage: "completed_no_progress".to_string(),

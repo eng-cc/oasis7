@@ -1,0 +1,289 @@
+use super::*;
+use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus};
+
+fn setup_runtime_industrial_gameplay_session(
+    signer_seed: u8,
+) -> (ViewerRuntimeLiveServer, String, String, String) {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(signer_seed);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        u64::from(signer_seed.saturating_sub(1)),
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    (server, agent_id, public_key, private_key)
+}
+
+fn build_first_smelter_via_gameplay_action(
+    server: &mut ViewerRuntimeLiveServer,
+    agent_id: &str,
+    public_key: &str,
+    private_key: &str,
+    nonce: u64,
+) {
+    let build_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id.to_string(),
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        nonce,
+        public_key,
+        private_key,
+    );
+    let build_ack = server
+        .handle_gameplay_action(build_request)
+        .expect("queue smelter build");
+    assert_eq!(build_ack.action_id, "build_factory_smelter_mk1");
+    for _ in 0..2 {
+        server.world.step().expect("settle smelter build");
+    }
+    assert!(server.world.has_factory("factory.smelter.mk1"));
+    let factory = server
+        .world
+        .state()
+        .factories
+        .get("factory.smelter.mk1")
+        .expect("smelter factory state");
+    let site_ledger = crate::runtime::MaterialLedgerId::site(factory.site_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 400)
+        .expect("seed iron ore for repeated recipes");
+    server
+        .world
+        .set_ledger_material_balance(site_ledger, "carbon_fuel", 120)
+        .expect("seed carbon fuel for repeated recipes");
+    server
+        .world
+        .set_material_balance("hardware_part", 200)
+        .expect("seed maintenance parts for repeated recipes");
+    server
+        .world
+        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 2_000);
+}
+
+fn complete_smelter_iron_ingot_jobs(
+    server: &mut ViewerRuntimeLiveServer,
+    agent_id: &str,
+    public_key: &str,
+    private_key: &str,
+    start_nonce: u64,
+    jobs: u64,
+) {
+    for offset in 0..jobs {
+        let recipe_request = signed_gameplay_action_request(
+            crate::viewer::GameplayActionRequest {
+                action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
+                target_agent_id: agent_id.to_string(),
+                player_id: "player-a".to_string(),
+                public_key: None,
+                auth: None,
+            },
+            start_nonce + offset,
+            public_key,
+            private_key,
+        );
+        let recipe_ack = server
+            .handle_gameplay_action(recipe_request)
+            .expect("queue iron ingot recipe");
+        assert_eq!(recipe_ack.action_id, "schedule_recipe_smelter_iron_ingot");
+
+        let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
+        for _ in 0..12 {
+            server.world.step().expect("settle recipe");
+            if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
+                break;
+            }
+        }
+        assert!(
+            server.world.state().industry_progress.completed_recipe_jobs > completed_before,
+            "expected one more completed recipe job"
+        );
+    }
+}
+
+fn setup_industrial_gameplay_with_completed_jobs(
+    signer_seed: u8,
+    jobs: u64,
+) -> ViewerRuntimeLiveServer {
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(signer_seed);
+    let build_nonce = u64::from(signer_seed);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce,
+    );
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce + 1,
+        jobs,
+    );
+    server
+}
+
+fn expect_player_gameplay(
+    server: &mut ViewerRuntimeLiveServer,
+    context: &'static str,
+) -> crate::simulator::PlayerGameplaySnapshot {
+    server.compat_snapshot().player_gameplay.expect(context)
+}
+
+#[test]
+fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(31, 1);
+    let gameplay = expect_player_gameplay(&mut server, "player gameplay after industrial progress");
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.stabilize_first_line_after_output"
+    );
+    assert_eq!(
+        gameplay.goal_title,
+        "Harden your first output into resilient production"
+    );
+    assert_eq!(gameplay.progress_percent, 80);
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
+}
+
+#[test]
+fn runtime_gameplay_actions_allow_assembler_build_from_agent_ledger_fallback() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(35);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        35,
+    );
+    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
+        .expect("seed agent iron ingot");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "copper_wire", 8)
+        .expect("seed agent copper wire");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger, "structural_frame", 8)
+        .expect("seed agent structural frame");
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay after seeding assembler build materials on agent ledger",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    assert_eq!(assembler_action.disabled_reason, None);
+}
+
+#[test]
+fn runtime_gameplay_actions_keep_assembler_build_disabled_when_cost_is_split_across_ledgers() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(36);
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        36,
+    );
+    let agent_ledger = crate::runtime::MaterialLedgerId::agent(agent_id.as_str());
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger.clone(), "iron_ingot", 10)
+        .expect("seed agent iron ingot");
+    server
+        .world
+        .set_ledger_material_balance(agent_ledger, "copper_wire", 8)
+        .expect("seed agent copper wire");
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay with split assembler build materials across ledgers",
+    );
+    let assembler_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == "build_factory_assembler_mk1")
+        .expect("assembler build action");
+    let disabled_reason = assembler_action
+        .disabled_reason
+        .as_deref()
+        .expect("split ledger cost should keep assembler action disabled");
+    assert!(disabled_reason.contains("requires one ledger with"));
+    assert!(disabled_reason.contains("structural_frame>=8"));
+}
+
+#[test]
+fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 3);
+    let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
+    assert_eq!(
+        gameplay.goal_id,
+        "post_onboarding.choose_first_expansion_tradeoff"
+    );
+    assert_eq!(
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
+    );
+    assert_eq!(
+        gameplay.stage_status,
+        PlayerGameplayStageStatus::BranchReady
+    );
+    assert_eq!(gameplay.progress_percent, 92);
+    assert!(gameplay
+        .branch_hint
+        .as_deref()
+        .is_some_and(|hint| hint.contains("throughput expansion")));
+}
+
+#[test]
+fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
+    let gameplay =
+        expect_player_gameplay(&mut server, "player gameplay after governance-ready output");
+    assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
+    assert_eq!(
+        gameplay.goal_kind,
+        PlayerGameplayGoalKind::ChooseMidLoopPath
+    );
+    assert_eq!(gameplay.progress_percent, 100);
+}
