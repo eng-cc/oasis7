@@ -9,16 +9,20 @@ use libp2p::request_response;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
 
+use super::peer_manager::recompute_peer_manager_healths;
+use super::peer_manager_active_set::{
+    candidate_status_with_active_set, candidate_would_degrade_admitted_peers, ActivePeerCandidate,
+    ActivePeerSetStats,
+};
 use super::{
     classify_network_protocol, classify_network_topic, maybe_discover_rendezvous_namespace,
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
     publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
-    put_record_query, recompute_peer_manager_healths, should_republish, start_peer_discovery_query,
-    Behaviour, Command, Handler, Keypair, Libp2pReachabilitySnapshot, NetworkMessage,
-    NetworkRequest, PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
-    PendingPeerRecordRequest, SignedPeerRecord, TransportPath, WorldError,
-    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    put_record_query, should_republish, start_peer_discovery_query, Behaviour, Command, Handler,
+    Keypair, Libp2pReachabilitySnapshot, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, SignedPeerRecord, TransportPath,
+    WorldError, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 pub(super) enum CommandOutcome {
@@ -219,6 +223,8 @@ pub(super) fn refresh_peer_manager_healths(
     }
     let mut admitted_paths =
         active_transport_paths_for_peers(active_transport_paths, &admitted_active_peers);
+    let mut admitted_active_set_stats =
+        ActivePeerSetStats::new(discovered_peer_records, &admitted_paths);
     let mut pending_active_peers: Vec<PeerId> = active_transport_paths
         .keys()
         .copied()
@@ -231,32 +237,32 @@ pub(super) fn refresh_peer_manager_healths(
         {
             continue;
         }
-        let Some(path) = active_transport_paths.get(&peer_id).cloned() else {
+        let Some(path) = active_transport_paths.get(&peer_id) else {
             continue;
         };
-        let mut trial_paths = admitted_paths.clone();
-        trial_paths.insert(peer_id, path.clone());
-        let trial_healths = recompute_peer_manager_healths(
-            discovered_peer_records,
-            &trial_paths,
+        let Some(record) = discovered_peer_records.get(&peer_id) else {
+            continue;
+        };
+        let candidate = ActivePeerCandidate::from_record_and_path(record, path);
+        let candidate_status = candidate_status_with_active_set(
+            &candidate,
+            &admitted_active_set_stats,
             peer_manager_policy,
         );
-        let peer_is_active = matches!(
-            trial_healths.get(&peer_id).map(|health| health.status),
-            Some(PeerManagerHealthStatus::Active)
+        let peer_is_active = matches!(candidate_status, PeerManagerHealthStatus::Active);
+        let degrades_admitted_peer = candidate_would_degrade_admitted_peers(
+            &candidate,
+            &admitted_active_set_stats,
+            peer_manager_policy,
         );
-        let degrades_admitted_peer = admitted_active_peers.iter().any(|admitted_peer_id| {
-            !matches!(
-                trial_healths
-                    .get(admitted_peer_id)
-                    .map(|health| health.status),
-                Some(PeerManagerHealthStatus::Active)
-            )
-        });
         if peer_is_active && !degrades_admitted_peer {
-            admitted_paths.insert(peer_id, path);
+            admitted_paths.insert(peer_id, path.clone());
             admitted_active_peers.insert(peer_id);
-        } else if peer_requires_active_quarantine(peer_id, &trial_healths) {
+            admitted_active_set_stats.add_admitted_peer(record, path);
+        } else if matches!(
+            candidate_status,
+            PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
+        ) {
             quarantined_active_peers.insert(peer_id);
         }
     }

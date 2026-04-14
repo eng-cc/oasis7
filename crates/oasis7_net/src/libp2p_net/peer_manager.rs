@@ -1,10 +1,11 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::net::Ipv4Addr;
 
 use libp2p::multiaddr::Protocol;
 use libp2p::PeerId;
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, SignedPeerRecord};
 
+use super::peer_manager_active_set::ActivePeerSetStats;
 use super::transport_paths::{TransportPath, TransportPathKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,44 +120,12 @@ pub(super) fn recompute_peer_manager_healths(
     active_transport_paths: &HashMap<PeerId, TransportPath>,
     policy: &PeerManagerPolicy,
 ) -> HashMap<PeerId, PeerManagerPeerHealth> {
-    let active_peer_count = active_transport_paths.len();
-    let mut active_discovery_sources = BTreeSet::new();
-    let mut ipv4_subnet_counts: HashMap<String, usize> = HashMap::new();
-    let mut relay_domain_counts: HashMap<String, usize> = HashMap::new();
-    let mut operator_counts: HashMap<String, usize> = HashMap::new();
-    let mut asn_counts: HashMap<String, usize> = HashMap::new();
-    let mut relayed_active_peers = 0usize;
-
-    for (peer_id, active_path) in active_transport_paths {
-        if let Some(record) = discovered_peer_records.get(peer_id) {
-            for source in &record.record.discovery_sources {
-                active_discovery_sources.insert(discovery_source_label(*source));
-            }
-            if let Some(source_operator) =
-                normalized_source_label(record.record.source_operator.as_deref())
-            {
-                *operator_counts.entry(source_operator).or_default() += 1;
-            }
-            if let Some(source_asn) = normalized_source_label(record.record.source_asn.as_deref()) {
-                *asn_counts.entry(source_asn).or_default() += 1;
-            }
-        }
-        if let Some(bucket) = ipv4_subnet_bucket(active_path) {
-            *ipv4_subnet_counts.entry(bucket).or_default() += 1;
-        }
-        if matches!(active_path.kind, TransportPathKind::RelayReserved) {
-            relayed_active_peers += 1;
-            if let Some(domain) = relay_domain(active_path) {
-                *relay_domain_counts.entry(domain).or_default() += 1;
-            }
-        }
-    }
-
-    let insufficient_active_discovery_sources = active_peer_count > 0
-        && active_discovery_sources.len() < policy.min_active_discovery_sources;
+    let active_set_stats = ActivePeerSetStats::new(discovered_peer_records, active_transport_paths);
+    let insufficient_active_discovery_sources = active_set_stats.active_peer_count > 0
+        && active_set_stats.active_discovery_sources.len() < policy.min_active_discovery_sources;
     let relay_budget_exceeded = exceeds_share_limit(
-        relayed_active_peers,
-        active_peer_count,
+        active_set_stats.relayed_active_peers,
+        active_set_stats.active_peer_count,
         policy.max_relayed_active_peer_share_per_mille,
     );
 
@@ -193,40 +162,41 @@ pub(super) fn recompute_peer_manager_healths(
         if let Some(active_path) = active_path {
             if insufficient_active_discovery_sources {
                 issues.push(PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
-                    observed_sources: active_discovery_sources.len(),
+                    observed_sources: active_set_stats.active_discovery_sources.len(),
                     required_sources: policy.min_active_discovery_sources,
                 });
             }
             if let Some(bucket) = ipv4_subnet_bucket(active_path) {
-                let bucket_count = ipv4_subnet_counts
+                let bucket_count = active_set_stats
+                    .ipv4_subnet_counts
                     .get(bucket.as_str())
                     .copied()
                     .unwrap_or(0);
                 if bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.block_ipv4_subnet_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::Ipv4SubnetConcentration {
                         subnet: bucket,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.block_ipv4_subnet_share_per_mille,
                     });
                     hard_block = true;
                 } else if bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.max_ipv4_subnet_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::Ipv4SubnetConcentration {
                         subnet: bucket,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.max_ipv4_subnet_share_per_mille,
                     });
                 }
@@ -234,107 +204,113 @@ pub(super) fn recompute_peer_manager_healths(
             if matches!(active_path.kind, TransportPathKind::RelayReserved) {
                 if relay_budget_exceeded {
                     issues.push(PeerManagerHealthIssue::RelayBudgetExceeded {
-                        relayed_active_peers,
-                        active_peer_count,
+                        relayed_active_peers: active_set_stats.relayed_active_peers,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.max_relayed_active_peer_share_per_mille,
                     });
                 }
                 if let Some(domain) = relay_domain(active_path) {
-                    let bucket_count = relay_domain_counts
+                    let bucket_count = active_set_stats
+                        .relay_domain_counts
                         .get(domain.as_str())
                         .copied()
                         .unwrap_or(0);
                     if bucket_count >= 2
                         && meets_or_exceeds_share_limit(
                             bucket_count,
-                            active_peer_count,
+                            active_set_stats.active_peer_count,
                             policy.block_relay_domain_share_per_mille,
                         )
                     {
                         issues.push(PeerManagerHealthIssue::RelayDomainConcentration {
                             relay_domain: domain,
                             peers_in_bucket: bucket_count,
-                            active_peer_count,
+                            active_peer_count: active_set_stats.active_peer_count,
                             limit_per_mille: policy.block_relay_domain_share_per_mille,
                         });
                         hard_block = true;
                     } else if bucket_count >= 2
                         && exceeds_share_limit(
                             bucket_count,
-                            active_peer_count,
+                            active_set_stats.active_peer_count,
                             policy.max_relay_domain_share_per_mille,
                         )
                     {
                         issues.push(PeerManagerHealthIssue::RelayDomainConcentration {
                             relay_domain: domain,
                             peers_in_bucket: bucket_count,
-                            active_peer_count,
+                            active_peer_count: active_set_stats.active_peer_count,
                             limit_per_mille: policy.max_relay_domain_share_per_mille,
                         });
                     }
                 }
             }
             if let Some(source_operator) = source_operator.clone() {
-                let bucket_count = operator_counts
+                let bucket_count = active_set_stats
+                    .operator_counts
                     .get(source_operator.as_str())
                     .copied()
                     .unwrap_or(0);
                 if bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.block_operator_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::OperatorConcentration {
                         source_operator,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.block_operator_share_per_mille,
                     });
                     hard_block = true;
                 } else if bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.max_operator_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::OperatorConcentration {
                         source_operator,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.max_operator_share_per_mille,
                     });
                 }
             }
             if let Some(source_asn) = source_asn.clone() {
-                let bucket_count = asn_counts.get(source_asn.as_str()).copied().unwrap_or(0);
+                let bucket_count = active_set_stats
+                    .asn_counts
+                    .get(source_asn.as_str())
+                    .copied()
+                    .unwrap_or(0);
                 if bucket_count >= 2
                     && meets_or_exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.block_asn_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::AsnConcentration {
                         source_asn,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.block_asn_share_per_mille,
                     });
                     hard_block = true;
                 } else if bucket_count >= 2
                     && exceeds_share_limit(
                         bucket_count,
-                        active_peer_count,
+                        active_set_stats.active_peer_count,
                         policy.max_asn_share_per_mille,
                     )
                 {
                     issues.push(PeerManagerHealthIssue::AsnConcentration {
                         source_asn,
                         peers_in_bucket: bucket_count,
-                        active_peer_count,
+                        active_peer_count: active_set_stats.active_peer_count,
                         limit_per_mille: policy.max_asn_share_per_mille,
                     });
                 }
@@ -368,28 +344,32 @@ pub(super) fn recompute_peer_manager_healths(
     healths
 }
 
-fn exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool {
+pub(super) fn exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool {
     if total == 0 {
         return false;
     }
     count.saturating_mul(1000) > total.saturating_mul(limit_per_mille as usize)
 }
 
-fn meets_or_exceeds_share_limit(count: usize, total: usize, limit_per_mille: u16) -> bool {
+pub(super) fn meets_or_exceeds_share_limit(
+    count: usize,
+    total: usize,
+    limit_per_mille: u16,
+) -> bool {
     if total == 0 {
         return false;
     }
     count.saturating_mul(1000) >= total.saturating_mul(limit_per_mille as usize)
 }
 
-fn ipv4_subnet_bucket(path: &TransportPath) -> Option<String> {
+pub(super) fn ipv4_subnet_bucket(path: &TransportPath) -> Option<String> {
     path.addr.iter().find_map(|protocol| match protocol {
         Protocol::Ip4(ip) if !ip.is_loopback() => Some(ipv4_bucket(ip)),
         _ => None,
     })
 }
 
-fn relay_domain(path: &TransportPath) -> Option<String> {
+pub(super) fn relay_domain(path: &TransportPath) -> Option<String> {
     path.addr.iter().find_map(|protocol| match protocol {
         Protocol::Dns(domain) | Protocol::Dns4(domain) | Protocol::Dns6(domain) => {
             Some(domain.to_string())
@@ -400,7 +380,7 @@ fn relay_domain(path: &TransportPath) -> Option<String> {
     })
 }
 
-fn normalized_source_label(raw: Option<&str>) -> Option<String> {
+pub(super) fn normalized_source_label(raw: Option<&str>) -> Option<String> {
     raw.map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.to_ascii_lowercase())
@@ -411,7 +391,7 @@ fn ipv4_bucket(ip: Ipv4Addr) -> String {
     format!("{}.{}.{}", octets[0], octets[1], octets[2])
 }
 
-fn discovery_source_label(source: PeerDiscoverySource) -> &'static str {
+pub(super) fn discovery_source_label(source: PeerDiscoverySource) -> &'static str {
     match source {
         PeerDiscoverySource::StaticBootstrap => "static_bootstrap",
         PeerDiscoverySource::Dht => "dht",

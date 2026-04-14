@@ -52,9 +52,9 @@ fn test_peer_record(node_id: &str) -> PeerRecord {
 fn connected_or_active_transport_peers_prefers_connected_snapshot() {
     let peer_a = PeerId::random();
     let peer_b = PeerId::random();
-    let active_only = vec![ReplicationPeerHealthDebug {
+    let active_only = vec![PeerManagerPeerHealth {
         peer_id: PeerId::random().to_string(),
-        status: "active".to_string(),
+        status: PeerManagerHealthStatus::Active,
         issues: Vec::new(),
         discovery_sources: Vec::new(),
         active_path_kind: Some("direct".to_string()),
@@ -75,20 +75,20 @@ fn connected_or_active_transport_peers_falls_back_to_active_health_peers() {
     let active_peer = PeerId::random();
     let candidate_peer = PeerId::random();
     let healths = vec![
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: candidate_peer.to_string(),
-            status: "candidate".to_string(),
+            status: PeerManagerHealthStatus::Candidate,
             issues: Vec::new(),
-            discovery_sources: vec!["dht".to_string()],
+            discovery_sources: vec![PeerDiscoverySource::Dht],
             active_path_kind: None,
             source_operator: None,
             source_asn: None,
         },
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: active_peer.to_string(),
-            status: "active".to_string(),
+            status: PeerManagerHealthStatus::Active,
             issues: Vec::new(),
-            discovery_sources: vec!["dht".to_string()],
+            discovery_sources: vec![PeerDiscoverySource::Dht],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
             source_asn: None,
@@ -105,20 +105,24 @@ fn connected_or_active_transport_peers_excludes_blocked_peer() {
     let blocked_peer = PeerId::random();
     let active_peer = PeerId::random();
     let healths = vec![
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: blocked_peer.to_string(),
-            status: "blocked".to_string(),
-            issues: vec!["relay_budget_exceeded relayed_active_peers=2 active_peer_count=2 limit_per_mille=500".to_string()],
-            discovery_sources: vec!["dht".to_string()],
+            status: PeerManagerHealthStatus::Blocked,
+            issues: vec![PeerManagerHealthIssue::RelayBudgetExceeded {
+                relayed_active_peers: 2,
+                active_peer_count: 2,
+                limit_per_mille: 500,
+            }],
+            discovery_sources: vec![PeerDiscoverySource::Dht],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
             source_asn: None,
         },
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: active_peer.to_string(),
-            status: "active".to_string(),
+            status: PeerManagerHealthStatus::Active,
             issues: Vec::new(),
-            discovery_sources: vec!["dht".to_string()],
+            discovery_sources: vec![PeerDiscoverySource::Dht],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
             source_asn: None,
@@ -134,11 +138,16 @@ fn connected_or_active_transport_peers_excludes_blocked_peer() {
 #[test]
 fn connected_or_active_transport_peers_rejects_fully_blocked_connected_set() {
     let blocked_peer = PeerId::random();
-    let healths = vec![ReplicationPeerHealthDebug {
+    let healths = vec![PeerManagerPeerHealth {
         peer_id: blocked_peer.to_string(),
-        status: "blocked".to_string(),
-        issues: vec!["operator_concentration source_operator=op-a peers_in_bucket=2 active_peer_count=2 limit_per_mille=500".to_string()],
-        discovery_sources: vec!["dht".to_string()],
+        status: PeerManagerHealthStatus::Blocked,
+        issues: vec![PeerManagerHealthIssue::OperatorConcentration {
+            source_operator: "op-a".to_string(),
+            peers_in_bucket: 2,
+            active_peer_count: 2,
+            limit_per_mille: 500,
+        }],
+        discovery_sources: vec![PeerDiscoverySource::Dht],
         active_path_kind: Some("direct".to_string()),
         source_operator: None,
         source_asn: None,
@@ -154,23 +163,26 @@ fn connected_or_active_transport_peers_prefers_known_record_peer_over_missing_re
     let blocked_peer = PeerId::random();
     let active_peer = PeerId::random();
     let healths = vec![
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: blocked_peer.to_string(),
-            status: "blocked".to_string(),
+            status: PeerManagerHealthStatus::Blocked,
             issues: vec![
-                "missing_peer_record".to_string(),
-                "insufficient_active_discovery_sources observed=1 required=2".to_string(),
+                PeerManagerHealthIssue::MissingPeerRecord,
+                PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                    observed_sources: 1,
+                    required_sources: 2,
+                },
             ],
-            discovery_sources: vec!["static_bootstrap".to_string()],
+            discovery_sources: vec![PeerDiscoverySource::StaticBootstrap],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
             source_asn: None,
         },
-        ReplicationPeerHealthDebug {
+        PeerManagerPeerHealth {
             peer_id: active_peer.to_string(),
-            status: "active".to_string(),
+            status: PeerManagerHealthStatus::Active,
             issues: Vec::new(),
-            discovery_sources: vec!["dht".to_string()],
+            discovery_sources: vec![PeerDiscoverySource::Dht],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
             source_asn: None,
@@ -186,11 +198,11 @@ fn connected_or_active_transport_peers_prefers_known_record_peer_over_missing_re
 #[test]
 fn connected_or_active_transport_peers_falls_back_to_missing_record_peer_when_needed() {
     let blocked_peer = PeerId::random();
-    let healths = vec![ReplicationPeerHealthDebug {
+    let healths = vec![PeerManagerPeerHealth {
         peer_id: blocked_peer.to_string(),
-        status: "blocked".to_string(),
-        issues: vec!["missing_peer_record".to_string()],
-        discovery_sources: vec!["static_bootstrap".to_string()],
+        status: PeerManagerHealthStatus::Blocked,
+        issues: vec![PeerManagerHealthIssue::MissingPeerRecord],
+        discovery_sources: vec![PeerDiscoverySource::StaticBootstrap],
         active_path_kind: Some("direct".to_string()),
         source_operator: None,
         source_asn: None,
@@ -205,14 +217,17 @@ fn connected_or_active_transport_peers_falls_back_to_missing_record_peer_when_ne
 fn connected_or_active_transport_peers_falls_back_to_bootstrap_peer_while_record_exchange_is_pending(
 ) {
     let bootstrap_peer = PeerId::random();
-    let healths = vec![ReplicationPeerHealthDebug {
+    let healths = vec![PeerManagerPeerHealth {
         peer_id: bootstrap_peer.to_string(),
-        status: "blocked".to_string(),
+        status: PeerManagerHealthStatus::Blocked,
         issues: vec![
-            "missing_peer_record".to_string(),
-            "insufficient_active_discovery_sources observed=1 required=2".to_string(),
+            PeerManagerHealthIssue::MissingPeerRecord,
+            PeerManagerHealthIssue::InsufficientActiveDiscoverySources {
+                observed_sources: 1,
+                required_sources: 2,
+            },
         ],
-        discovery_sources: vec!["static_bootstrap".to_string()],
+        discovery_sources: vec![PeerDiscoverySource::StaticBootstrap],
         active_path_kind: Some("direct".to_string()),
         source_operator: None,
         source_asn: None,

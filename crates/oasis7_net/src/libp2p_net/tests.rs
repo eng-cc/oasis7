@@ -14,6 +14,8 @@ use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
 
+#[path = "tests/active_set_candidate_tests.rs"]
+mod active_set_candidate_tests;
 mod discovery_peer_record_tests;
 mod peer_record_tests;
 mod transport_path_refresh_tests;
