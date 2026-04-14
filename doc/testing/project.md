@@ -221,6 +221,16 @@
     - `bash -n scripts/s10-five-node-game-soak.sh`
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
     - `./scripts/s10-five-node-game-soak.sh --duration-secs 300 --base-port 7510 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --out-dir .tmp/release_gate_s10_fix_full_v5`
+- [x] TASK-TESTING-065 (PRD-TESTING-002/003) [test_tier_required]: 修复 `build-web-dist` 的 `oasis7_client_launcher` wasm 编译兼容性，避免 release tag 路径在 `crates/oasis7_viewer` 通过后仍因 launcher 引用 native-only `ProviderCompatibilityStatus` 而阻断 web dist 打包。
+  - 产物文件:
+    - `crates/oasis7_client_launcher/src/main.rs`
+    - `crates/oasis7_client_launcher/src/launcher_core.rs`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_1d90a16ad56f4c4e96bfa5370199b3d7.yaml`
+    - `.pm/tasks/task_1d90a16ad56f4c4e96bfa5370199b3d7.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
+    - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
 
 - 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 
@@ -238,6 +248,7 @@
 - 更新日期: 2026-04-13
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `TASK-TESTING-065`（已将 launcher 展示层使用的 `ProviderCompatibilityStatus` 收口为 `oasis7_client_launcher` 本地跨目标类型，并在 native loopback provider 检查结果中显式映射，恢复 `build-web-dist` 的 wasm compile + `trunk build` 闭环。）
 - 最新完成: `TASK-TESTING-064`（已为 `release-gate-soak` 的 S10 五节点样本补齐显式 replication listen/peer 拓扑，并将 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 收口为 `<=2` warning；canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
 - 最新完成: `TASK-TESTING-063`（已为 Web UI 闭环建立 canonical `*.manual.md` 操作手册，并将 `testing-manual`、testing README 与 PRD/project 职责边界同步收口。）
 - 最新完成: `TASK-TESTING-062`（已建立 Token 创世分配 QA 审计清单专题与执行模板，冻结比例/个人上限/流通边界/custody 语义的 QA 门禁。）
