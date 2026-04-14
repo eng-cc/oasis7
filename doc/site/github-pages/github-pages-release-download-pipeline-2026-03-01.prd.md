@@ -47,7 +47,7 @@
   - `release-gate`：聚合三个子门结果，作为 `build-web-dist` 的唯一前置依赖
 - 打包 runner 与目标三元组（release workflow）：
   - `package-native` 在各平台 job 内显式 provision `trunk + wasm32-unknown-unknown`，同时 `scripts/build-game-launcher-bundle.sh` 会在执行 `trunk build` 前自检并补装缺失的 `wasm32-unknown-unknown`，确保 `web-launcher/` 构建不依赖 runner 初始状态
-  - `package-native` 先生成标准 `oasis7-<platform>` bundle 目录，再通过 `scripts/package-native-installer.sh` 输出固定名 `.deb` / `.dmg` / `.exe` 公开安装器，避免公开下载层继续暴露 `.tar.gz` / `.zip`
+  - `package-native` 先生成标准 `oasis7-<platform>` bundle 目录，再通过 `scripts/package-native-installer.sh` 输出固定名 `.deb` / `.dmg` / `.exe` 公开安装器；bundle 目录必须先通过 `scripts/validate-release-platform-entrypoints.sh` 校验，确保公开下载层不只是“换扩展名”，而是真正存在平台原生入口
   - linux：`ubuntu-24.04` + `native`
   - macOS：`macos-14` + `x86_64-apple-darwin`（避免仓库不支持的 `macos-13` 配置）
   - windows：`windows-2022` + `native`
@@ -56,6 +56,9 @@
   - `bin/oasis7_viewer_live`
   - `bin/oasis7_chain_runtime`
   - `bin/oasis7_client_launcher`
+  - linux：`run-*.sh` wrapper + `.deb` 安装后的 `/usr/bin/oasis7-*`
+  - macOS：`oasis7 Client Launcher.app` + `.dmg` 内 `/Applications` 拖拽安装入口
+  - windows：`run-*.cmd` + SFX `.exe` 默认运行 `run-client.cmd`
   - `web/`（viewer 静态资源）
   - `run-game.sh` / `run-client.sh`（Windows 额外提供 `.cmd`）
   - `README.txt`

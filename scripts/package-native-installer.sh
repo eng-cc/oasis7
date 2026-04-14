@@ -141,6 +141,12 @@ if [[ ! -d "$BUNDLE_DIR" && "$DRY_RUN" != "1" ]]; then
   exit 1
 fi
 
+if [[ "$DRY_RUN" != "1" ]]; then
+  "$ROOT_DIR/scripts/validate-release-platform-entrypoints.sh" \
+    --platform "$PLATFORM" \
+    --bundle-dir "$BUNDLE_DIR"
+fi
+
 run mkdir -p "$OUT_DIR"
 run rm -f "$OUT_FILE"
 
@@ -188,7 +194,13 @@ EOF
   macos-x64)
     [[ "$ASSET_NAME" == *.dmg ]] || { echo "error: macos-x64 asset must end with .dmg" >&2; exit 1; }
     ensure_command hdiutil
-    run hdiutil create -volname "oasis7 $RELEASE_VERSION" -srcfolder "$BUNDLE_DIR" -ov -format UDZO "$OUT_FILE"
+    TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "$TMP_DIR"' EXIT
+    DMG_ROOT="$TMP_DIR/dmg-root"
+    run mkdir -p "$DMG_ROOT"
+    run cp -R "$BUNDLE_DIR/." "$DMG_ROOT/"
+    run ln -s /Applications "$DMG_ROOT/Applications"
+    run hdiutil create -volname "oasis7 $RELEASE_VERSION" -srcfolder "$DMG_ROOT" -ov -format UDZO "$OUT_FILE"
     ;;
   windows-x64)
     [[ "$ASSET_NAME" == *.exe ]] || { echo "error: windows-x64 asset must end with .exe" >&2; exit 1; }
@@ -196,12 +208,13 @@ EOF
     BUNDLE_DIR_NATIVE="$(windows_native_path "$BUNDLE_DIR")"
     OUT_FILE_NATIVE="$(windows_native_path "$OUT_FILE")"
     if [[ "$DRY_RUN" == "1" ]]; then
-      echo "+ pwsh -NoLogo -NoProfile -Command <7z sfx packaging> '$BUNDLE_DIR_NATIVE' -> '$OUT_FILE_NATIVE'"
+      echo "+ pwsh -NoLogo -NoProfile -Command <7z sfx packaging with run-client.cmd autorun> '$BUNDLE_DIR_NATIVE' -> '$OUT_FILE_NATIVE'"
       exit 0
     fi
 
     export OASIS7_WINDOWS_BUNDLE_DIR="$BUNDLE_DIR_NATIVE"
     export OASIS7_WINDOWS_OUT_FILE="$OUT_FILE_NATIVE"
+    export OASIS7_WINDOWS_RELEASE_VERSION="$RELEASE_VERSION"
     pwsh -NoLogo -NoProfile -Command '
       $ErrorActionPreference = "Stop"
 
@@ -253,10 +266,21 @@ EOF
       New-Item -ItemType Directory -Path $tempRoot | Out-Null
       try {
         $archivePath = Join-Path $tempRoot "payload.7z"
+        $configPath = Join-Path $tempRoot "config.txt"
         & $sevenZip a -t7z -mx=9 $archivePath (Join-Path $bundleDir "*") | Out-Host
         if ($LASTEXITCODE -ne 0) {
           throw "7z archive creation failed with exit code $LASTEXITCODE"
         }
+
+        $config = @"
+;!@Install@!UTF-8!
+Title="oasis7 $env:OASIS7_WINDOWS_RELEASE_VERSION"
+BeginPrompt="Extract and launch oasis7 Client Launcher?"
+RunProgram="run-client.cmd"
+;!@InstallEnd@!
+"@
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($configPath, $config, $utf8)
 
         $parentDir = Split-Path -Parent $outFile
         if (-not (Test-Path $parentDir)) {
@@ -268,7 +292,7 @@ EOF
 
         $outputStream = [System.IO.File]::Open($outFile, [System.IO.FileMode]::CreateNew)
         try {
-          foreach ($part in @($sfxModule, $archivePath)) {
+          foreach ($part in @($sfxModule, $configPath, $archivePath)) {
             $bytes = [System.IO.File]::ReadAllBytes($part)
             $outputStream.Write($bytes, 0, $bytes.Length)
           }
