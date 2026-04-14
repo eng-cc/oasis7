@@ -5,7 +5,10 @@ use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest,
     ModuleContext, ModuleEmitEvent, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
 };
-use oasis7_wasm_router::{module_subscribes_to_action, module_subscribes_to_event};
+use oasis7_wasm_router::{
+    prepare_subscriptions, prepared_module_subscribes_to_action,
+    prepared_module_subscribes_to_event, PreparedSubscription,
+};
 
 use super::super::util::to_canonical_cbor;
 use super::super::{
@@ -109,6 +112,21 @@ impl World {
             });
         }
         Ok(())
+    }
+
+    fn prepared_subscriptions_for_manifest(
+        &mut self,
+        manifest: &ModuleManifest,
+    ) -> Result<Arc<[PreparedSubscription]>, WorldError> {
+        let key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
+        if let Some(prepared) = self.prepared_subscription_cache.get(&key) {
+            return Ok(prepared.clone());
+        }
+        let prepared = prepare_subscriptions(&manifest.subscriptions, &manifest.module_id)
+            .map_err(|reason| WorldError::ModuleChangeInvalid { reason })?;
+        self.prepared_subscription_cache
+            .insert(key, prepared.clone());
+        Ok(prepared)
     }
 
     pub fn execute_module_call(
@@ -242,8 +260,9 @@ impl World {
             let manifest = invocation.manifest;
             let module_id = invocation.module_id;
             let instance_id = invocation.instance_id;
+            let prepared = self.prepared_subscriptions_for_manifest(&manifest)?;
             let subscribed =
-                module_subscribes_to_event(&manifest.subscriptions, event_kind, &event_value);
+                prepared_module_subscribes_to_event(prepared.as_ref(), event_kind, &event_value);
             if !subscribed {
                 continue;
             }
@@ -326,8 +345,9 @@ impl World {
             let manifest = invocation.manifest;
             let module_id = invocation.module_id;
             let instance_id = invocation.instance_id;
-            let subscribed = module_subscribes_to_action(
-                &manifest.subscriptions,
+            let prepared = self.prepared_subscriptions_for_manifest(&manifest)?;
+            let subscribed = prepared_module_subscribes_to_action(
+                prepared.as_ref(),
                 stage,
                 action_kind,
                 &action_value,
@@ -474,6 +494,7 @@ impl World {
                 registered_by,
             } => {
                 let key = ModuleRegistry::record_key(&module.module_id, &module.version);
+                self.prepared_subscription_cache.remove(&key);
                 self.module_registry.records.insert(
                     key,
                     super::super::ModuleRecord {
@@ -493,6 +514,7 @@ impl World {
                 ..
             } => {
                 let key = ModuleRegistry::record_key(module_id, to_version);
+                self.prepared_subscription_cache.remove(&key);
                 self.module_registry.records.insert(
                     key,
                     super::super::ModuleRecord {

@@ -89,6 +89,151 @@ fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
     Some(compiled)
 }
 
+#[derive(Debug, Clone)]
+pub struct PreparedSubscription {
+    resolved_stage: ModuleSubscriptionStage,
+    event_kinds: Vec<String>,
+    action_kinds: Vec<String>,
+    filters: Option<PreparedSubscriptionFilters>,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedSubscriptionFilters {
+    event: Option<PreparedRuleSet>,
+    action: Option<PreparedRuleSet>,
+}
+
+#[derive(Debug, Clone)]
+enum PreparedRuleSet {
+    List(Vec<PreparedMatchRule>),
+    Group(PreparedRuleGroup),
+}
+
+#[derive(Debug, Clone)]
+struct PreparedRuleGroup {
+    all: Vec<PreparedMatchRule>,
+    any: Vec<PreparedMatchRule>,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedMatchRule {
+    path: String,
+    operator: PreparedMatchOperator,
+}
+
+#[derive(Debug, Clone)]
+enum PreparedMatchOperator {
+    Eq(JsonValue),
+    Ne(JsonValue),
+    Gt(f64),
+    Gte(f64),
+    Lt(f64),
+    Lte(f64),
+    Re(regex::Regex),
+}
+
+pub fn prepare_subscriptions(
+    subscriptions: &[ModuleSubscription],
+    module_id: &str,
+) -> Result<Arc<[PreparedSubscription]>, String> {
+    let prepared = subscriptions
+        .iter()
+        .map(|subscription| prepare_subscription(subscription, module_id))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Arc::from(prepared))
+}
+
+fn prepare_subscription(
+    subscription: &ModuleSubscription,
+    module_id: &str,
+) -> Result<PreparedSubscription, String> {
+    validate_subscription_stage(subscription, module_id)?;
+    let filters = prepare_subscription_filters(&subscription.filters, module_id)?;
+    Ok(PreparedSubscription {
+        resolved_stage: subscription.resolved_stage(),
+        event_kinds: subscription.event_kinds.clone(),
+        action_kinds: subscription.action_kinds.clone(),
+        filters,
+    })
+}
+
+fn prepare_subscription_filters(
+    filters: &Option<JsonValue>,
+    module_id: &str,
+) -> Result<Option<PreparedSubscriptionFilters>, String> {
+    let Some(filters_value) = filters else {
+        return Ok(None);
+    };
+    if filters_value.is_null() {
+        return Ok(None);
+    }
+    let parsed = parsed_subscription_filters(filters_value)
+        .map_err(|err| format!("module {module_id} subscription filters invalid: {err}"))?;
+    let event = parsed
+        .event
+        .as_ref()
+        .map(|ruleset| prepare_ruleset(ruleset, module_id))
+        .transpose()?;
+    let action = parsed
+        .action
+        .as_ref()
+        .map(|ruleset| prepare_ruleset(ruleset, module_id))
+        .transpose()?;
+    Ok(Some(PreparedSubscriptionFilters { event, action }))
+}
+
+fn prepare_ruleset(ruleset: &RuleSet, module_id: &str) -> Result<PreparedRuleSet, String> {
+    match ruleset {
+        RuleSet::List(rules) => Ok(PreparedRuleSet::List(
+            rules
+                .iter()
+                .map(|rule| prepare_rule(rule, module_id))
+                .collect::<Result<_, _>>()?,
+        )),
+        RuleSet::Group(group) => Ok(PreparedRuleSet::Group(PreparedRuleGroup {
+            all: group
+                .all
+                .iter()
+                .map(|rule| prepare_rule(rule, module_id))
+                .collect::<Result<_, _>>()?,
+            any: group
+                .any
+                .iter()
+                .map(|rule| prepare_rule(rule, module_id))
+                .collect::<Result<_, _>>()?,
+        })),
+    }
+}
+
+fn prepare_rule(rule: &MatchRule, module_id: &str) -> Result<PreparedMatchRule, String> {
+    validate_rule(rule, module_id)?;
+    let operator = if let Some(expected) = &rule.eq {
+        PreparedMatchOperator::Eq(expected.clone())
+    } else if let Some(expected) = &rule.ne {
+        PreparedMatchOperator::Ne(expected.clone())
+    } else if let Some(threshold) = rule.gt {
+        PreparedMatchOperator::Gt(threshold)
+    } else if let Some(threshold) = rule.gte {
+        PreparedMatchOperator::Gte(threshold)
+    } else if let Some(threshold) = rule.lt {
+        PreparedMatchOperator::Lt(threshold)
+    } else if let Some(threshold) = rule.lte {
+        PreparedMatchOperator::Lte(threshold)
+    } else if let Some(pattern) = &rule.re {
+        PreparedMatchOperator::Re(regex::Regex::new(pattern).map_err(|err| {
+            format!("module {module_id} subscription filter regex invalid: {err}")
+        })?)
+    } else {
+        return Err(format!(
+            "module {module_id} subscription filter must specify exactly one operator"
+        ));
+    };
+    Ok(PreparedMatchRule {
+        path: rule.path.clone(),
+        operator,
+    })
+}
+
 pub fn module_subscribes_to_event(
     subscriptions: &[ModuleSubscription],
     event_kind: &str,
@@ -101,6 +246,25 @@ pub fn module_subscribes_to_event(
                 .iter()
                 .any(|pattern| subscription_match(pattern, event_kind))
             && subscription_filters_match(&subscription.filters, FilterKind::Event, event_value)
+    })
+}
+
+pub fn prepared_module_subscribes_to_event(
+    subscriptions: &[PreparedSubscription],
+    event_kind: &str,
+    event_value: &JsonValue,
+) -> bool {
+    subscriptions.iter().any(|subscription| {
+        subscription.resolved_stage == ModuleSubscriptionStage::PostEvent
+            && subscription
+                .event_kinds
+                .iter()
+                .any(|pattern| subscription_match(pattern, event_kind))
+            && prepared_subscription_filters_match(
+                subscription.filters.as_ref(),
+                FilterKind::Event,
+                event_value,
+            )
     })
 }
 
@@ -117,6 +281,26 @@ pub fn module_subscribes_to_action(
                 .iter()
                 .any(|pattern| subscription_match(pattern, action_kind))
             && subscription_filters_match(&subscription.filters, FilterKind::Action, action_value)
+    })
+}
+
+pub fn prepared_module_subscribes_to_action(
+    subscriptions: &[PreparedSubscription],
+    stage: ModuleSubscriptionStage,
+    action_kind: &str,
+    action_value: &JsonValue,
+) -> bool {
+    subscriptions.iter().any(|subscription| {
+        subscription.resolved_stage == stage
+            && subscription
+                .action_kinds
+                .iter()
+                .any(|pattern| subscription_match(pattern, action_kind))
+            && prepared_subscription_filters_match(
+                subscription.filters.as_ref(),
+                FilterKind::Action,
+                action_value,
+            )
     })
 }
 
@@ -289,6 +473,24 @@ fn subscription_filters_match(
     ruleset_matches(rules, value)
 }
 
+fn prepared_subscription_filters_match(
+    filters: Option<&PreparedSubscriptionFilters>,
+    kind: FilterKind,
+    value: &JsonValue,
+) -> bool {
+    let Some(filters) = filters else {
+        return true;
+    };
+    let rules = match kind {
+        FilterKind::Event => filters.event.as_ref(),
+        FilterKind::Action => filters.action.as_ref(),
+    };
+    let Some(rules) = rules else {
+        return true;
+    };
+    prepared_ruleset_matches(rules, value)
+}
+
 fn ruleset_matches(ruleset: &RuleSet, value: &JsonValue) -> bool {
     match ruleset {
         RuleSet::List(rules) => rules.iter().all(|rule| match_rule(rule, value)),
@@ -301,6 +503,28 @@ fn ruleset_matches(ruleset: &RuleSet, value: &JsonValue) -> bool {
                 return true;
             }
             group.any.iter().any(|rule| match_rule(rule, value))
+        }
+    }
+}
+
+fn prepared_ruleset_matches(ruleset: &PreparedRuleSet, value: &JsonValue) -> bool {
+    match ruleset {
+        PreparedRuleSet::List(rules) => rules.iter().all(|rule| prepared_match_rule(rule, value)),
+        PreparedRuleSet::Group(group) => {
+            let all_ok = group
+                .all
+                .iter()
+                .all(|rule| prepared_match_rule(rule, value));
+            if !all_ok {
+                return false;
+            }
+            if group.any.is_empty() {
+                return true;
+            }
+            group
+                .any
+                .iter()
+                .any(|rule| prepared_match_rule(rule, value))
         }
     }
 }
@@ -336,6 +560,28 @@ fn match_rule(rule: &MatchRule, value: &JsonValue) -> bool {
         return compare_number(current, |value| value <= threshold);
     }
     false
+}
+
+fn prepared_match_rule(rule: &PreparedMatchRule, value: &JsonValue) -> bool {
+    let Some(current) = value.pointer(&rule.path) else {
+        return false;
+    };
+    match &rule.operator {
+        PreparedMatchOperator::Eq(expected) => current == expected,
+        PreparedMatchOperator::Ne(expected) => current != expected,
+        PreparedMatchOperator::Gt(threshold) => compare_number(current, |value| value > *threshold),
+        PreparedMatchOperator::Gte(threshold) => {
+            compare_number(current, |value| value >= *threshold)
+        }
+        PreparedMatchOperator::Lt(threshold) => compare_number(current, |value| value < *threshold),
+        PreparedMatchOperator::Lte(threshold) => {
+            compare_number(current, |value| value <= *threshold)
+        }
+        PreparedMatchOperator::Re(regex) => current
+            .as_str()
+            .map(|text| regex.is_match(text))
+            .unwrap_or(false),
+    }
 }
 
 fn compare_number<F>(value: &JsonValue, predicate: F) -> bool
@@ -698,6 +944,65 @@ mod tests {
     }
 
     #[test]
+    fn prepared_subscriptions_match_equivalent_event_and_action_routes() {
+        let event_subscriptions = vec![event_subscription(
+            &["world.*"],
+            Some(json!({
+                "event": {
+                    "all": [
+                        { "path": "/status", "eq": "ok" },
+                        { "path": "/hp", "gt": 0.0 }
+                    ]
+                }
+            })),
+        )];
+        let prepared_event =
+            prepare_subscriptions(&event_subscriptions, "m.test").expect("prepare event filters");
+        let event_value = json!({ "status": "ok", "hp": 5.0 });
+        assert_eq!(
+            module_subscribes_to_event(&event_subscriptions, "world.tick", &event_value),
+            prepared_module_subscribes_to_event(
+                prepared_event.as_ref(),
+                "world.tick",
+                &event_value
+            )
+        );
+
+        let action_subscriptions = vec![action_subscription(
+            ModuleSubscriptionStage::PreAction,
+            &["action.move.*"],
+            Some(json!({
+                "action": {
+                    "all": [
+                        { "path": "/cost", "gte": 2.0 }
+                    ],
+                    "any": [
+                        { "path": "/kind", "eq": "move.left" },
+                        { "path": "/kind", "re": "^move\\." }
+                    ]
+                }
+            })),
+        )];
+        let prepared_action =
+            prepare_subscriptions(&action_subscriptions, "m.test").expect("prepare action filters");
+        let action_value = json!({ "cost": 3.0, "kind": "move.left" });
+        assert_eq!(
+            module_subscribes_to_action(
+                &action_subscriptions,
+                ModuleSubscriptionStage::PreAction,
+                "action.move.step",
+                &action_value,
+            ),
+            prepared_module_subscribes_to_action(
+                prepared_action.as_ref(),
+                ModuleSubscriptionStage::PreAction,
+                "action.move.step",
+                &action_value,
+            )
+        );
+    }
+
+    #[test]
     #[ignore = "local perf probe"]
     fn perf_probe_subscription_filter_parse_overhead() {
         use std::time::Instant;
@@ -739,7 +1044,14 @@ mod tests {
         let parsed: SubscriptionFilters =
             serde_json::from_value(no_regex_filter_json).expect("parse filters once");
         let parsed_rules = parsed.event.as_ref().expect("event filters");
+        let prepared =
+            prepare_subscriptions(&subscriptions, "m.perf.no_regex").expect("prepare once");
         assert!(ruleset_matches(parsed_rules, &event_value));
+        assert!(prepared_module_subscribes_to_event(
+            prepared.as_ref(),
+            "world.tick",
+            &event_value
+        ));
 
         let iterations = 200_000u32;
         let started = Instant::now();
@@ -757,6 +1069,16 @@ mod tests {
             assert!(ruleset_matches(parsed_rules, &event_value));
         }
         let parsed_once_elapsed = started.elapsed();
+
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(prepared_module_subscribes_to_event(
+                prepared.as_ref(),
+                "world.tick",
+                &event_value
+            ));
+        }
+        let prepared_once_elapsed = started.elapsed();
 
         let regex_filter_json = json!({
             "event": {
@@ -781,12 +1103,19 @@ mod tests {
         let parsed_regex: SubscriptionFilters =
             serde_json::from_value(regex_filter_json).expect("parse regex filters once");
         let parsed_regex_rules = parsed_regex.event.as_ref().expect("regex event filters");
+        let prepared_regex =
+            prepare_subscriptions(&regex_subscription, "m.perf.regex").expect("prepare regex");
         assert!(module_subscribes_to_event(
             &regex_subscription,
             "world.tick",
             &event_value
         ));
         assert!(ruleset_matches(parsed_regex_rules, &event_value));
+        assert!(prepared_module_subscribes_to_event(
+            prepared_regex.as_ref(),
+            "world.tick",
+            &event_value
+        ));
 
         let started = Instant::now();
         for _ in 0..iterations {
@@ -804,21 +1133,34 @@ mod tests {
         }
         let regex_parsed_once_elapsed = started.elapsed();
 
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(prepared_module_subscribes_to_event(
+                prepared_regex.as_ref(),
+                "world.tick",
+                &event_value
+            ));
+        }
+        let regex_prepared_once_elapsed = started.elapsed();
+
         eprintln!(
-            "perf_probe_subscription_filter_parse_overhead: iterations={iterations} no_regex_parse_each_time_ms={:.3} no_regex_parsed_once_ms={:.3} no_regex_ratio={:.2}x regex_parse_each_time_ms={:.3} regex_parsed_once_ms={:.3} regex_ratio={:.2}x",
+            "perf_probe_subscription_filter_parse_overhead: iterations={iterations} no_regex_parse_each_time_ms={:.3} no_regex_parsed_once_ms={:.3} no_regex_prepared_once_ms={:.3} no_regex_parse_vs_prepared_ratio={:.2}x regex_parse_each_time_ms={:.3} regex_parsed_once_ms={:.3} regex_prepared_once_ms={:.3} regex_parse_vs_prepared_ratio={:.2}x",
             parse_each_time_elapsed.as_secs_f64() * 1_000.0,
             parsed_once_elapsed.as_secs_f64() * 1_000.0,
-            if parsed_once_elapsed.as_nanos() == 0 {
+            prepared_once_elapsed.as_secs_f64() * 1_000.0,
+            if prepared_once_elapsed.as_nanos() == 0 {
                 0.0
             } else {
-                parse_each_time_elapsed.as_secs_f64() / parsed_once_elapsed.as_secs_f64()
+                parse_each_time_elapsed.as_secs_f64() / prepared_once_elapsed.as_secs_f64()
             },
             regex_parse_each_time_elapsed.as_secs_f64() * 1_000.0,
             regex_parsed_once_elapsed.as_secs_f64() * 1_000.0,
-            if regex_parsed_once_elapsed.as_nanos() == 0 {
+            regex_prepared_once_elapsed.as_secs_f64() * 1_000.0,
+            if regex_prepared_once_elapsed.as_nanos() == 0 {
                 0.0
             } else {
-                regex_parse_each_time_elapsed.as_secs_f64() / regex_parsed_once_elapsed.as_secs_f64()
+                regex_parse_each_time_elapsed.as_secs_f64()
+                    / regex_prepared_once_elapsed.as_secs_f64()
             },
         );
     }

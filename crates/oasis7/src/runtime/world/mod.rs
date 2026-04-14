@@ -42,6 +42,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
+use oasis7_wasm_router::PreparedSubscription;
+
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
 use super::events::{ActionEnvelope, MaterialTransitPriority};
@@ -235,6 +237,8 @@ pub struct World {
     module_artifact_bytes: BTreeMap<String, Arc<[u8]>>,
     #[serde(skip)]
     module_cache: ModuleCache,
+    #[serde(skip)]
+    prepared_subscription_cache: BTreeMap<String, Arc<[PreparedSubscription]>>,
     module_limits_max: ModuleLimits,
     snapshot_catalog: SnapshotCatalog,
     state: WorldState,
@@ -340,6 +344,7 @@ impl World {
             module_artifacts: BTreeSet::new(),
             module_artifact_bytes: BTreeMap::new(),
             module_cache: ModuleCache::default(),
+            prepared_subscription_cache: BTreeMap::new(),
             module_limits_max: ModuleLimits::unbounded(),
             snapshot_catalog: SnapshotCatalog::default(),
             state,
