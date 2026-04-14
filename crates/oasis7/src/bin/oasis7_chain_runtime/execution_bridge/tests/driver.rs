@@ -3,17 +3,19 @@ use super::super::checkpoint::{
     load_execution_bridge_record,
 };
 use super::super::driver::{
-    load_execution_bridge_state, load_execution_world, persist_execution_bridge_state,
-    persist_execution_world, simulator_world_dir_from_execution_world_dir,
-    NodeRuntimeExecutionDriver,
+    load_execution_bridge_state, load_execution_world, load_execution_world_with_policy,
+    persist_execution_bridge_state, persist_execution_world,
+    simulator_world_dir_from_execution_world_dir, NodeRuntimeExecutionDriver,
 };
 use super::super::external_effect::load_execution_external_effect_materialization;
 use super::*;
 use oasis7::consensus_action_payload::encode_consensus_action_payload;
 use oasis7::consensus_action_payload::ConsensusActionPayloadEnvelope;
 use oasis7::runtime::{
-    Action as RuntimeAction, DomainEvent, LocalCasStore, ModuleKind, ModuleLimits, ModuleManifest,
-    ModuleRole, ModuleSubscription, ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
+    production_hardened_main_token_config, Action as RuntimeAction, DomainEvent, LocalCasStore,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
+    ModuleSubscriptionStage, ReleaseSecurityPolicy, WorldEventBody,
+    FROZEN_MAIN_TOKEN_INITIAL_SUPPLY,
 };
 use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
 use oasis7_node::{compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionHook};
@@ -42,6 +44,10 @@ fn load_execution_world_defaults_to_hardened_release_policy() {
     assert!(missing_world
         .release_security_policy()
         .is_production_hardened());
+    assert_eq!(
+        missing_world.main_token_config().initial_supply,
+        FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
+    );
 
     let legacy_world_dir = dir.join("legacy");
     let legacy_world = RuntimeWorld::new();
@@ -50,6 +56,47 @@ fn load_execution_world_defaults_to_hardened_release_policy() {
     assert!(loaded_world
         .release_security_policy()
         .is_production_hardened());
+    assert_eq!(
+        loaded_world.main_token_config().initial_supply,
+        FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn load_execution_world_with_dev_local_policy_keeps_generic_supply_for_missing_world() {
+    let dir = temp_dir("execution-world-dev-local-policy");
+    let missing_world =
+        load_execution_world_with_policy(dir.as_path(), ReleaseSecurityPolicy::default())
+            .expect("load missing world with dev_local policy");
+
+    assert_eq!(
+        missing_world.release_security_policy(),
+        &ReleaseSecurityPolicy::default()
+    );
+    assert_eq!(missing_world.main_token_config().initial_supply, 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn load_execution_world_with_dev_local_policy_clears_pristine_frozen_supply_from_existing_world() {
+    let dir = temp_dir("execution-world-dev-local-clears-pristine-frozen");
+    let world_dir = dir.join("world");
+    let mut world = RuntimeWorld::new();
+    world.set_main_token_config(production_hardened_main_token_config());
+    persist_execution_world(world_dir.as_path(), &world).expect("persist release-like world");
+
+    let loaded_world =
+        load_execution_world_with_policy(world_dir.as_path(), ReleaseSecurityPolicy::default())
+            .expect("load existing world with dev_local policy");
+
+    assert_eq!(
+        loaded_world.release_security_policy(),
+        &ReleaseSecurityPolicy::default()
+    );
+    assert_eq!(loaded_world.main_token_config().initial_supply, 0);
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -789,6 +836,62 @@ fn production_release_policy_release_default_applies_hardened_policy() {
         .execution_world
         .release_security_policy()
         .is_production_hardened());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dev_local_storage_profile_keeps_generic_supply_for_missing_execution_world() {
+    let dir = temp_dir("execution-driver-release-policy-dev-local");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::DevLocal);
+    let driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+        &storage_profile,
+    )
+    .expect("driver");
+
+    assert_eq!(
+        driver.execution_world.release_security_policy(),
+        &ReleaseSecurityPolicy::default()
+    );
+    assert_eq!(driver.execution_world.main_token_config().initial_supply, 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn dev_local_storage_profile_clears_pristine_frozen_supply_from_existing_execution_world() {
+    let dir = temp_dir("execution-driver-release-policy-dev-local-existing-world");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut world = RuntimeWorld::new();
+    world.set_main_token_config(production_hardened_main_token_config());
+    persist_execution_world(world_dir.as_path(), &world).expect("persist release-like world");
+
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::DevLocal);
+    let driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+        &storage_profile,
+    )
+    .expect("driver");
+
+    assert_eq!(
+        driver.execution_world.release_security_policy(),
+        &ReleaseSecurityPolicy::default()
+    );
+    assert_eq!(driver.execution_world.main_token_config().initial_supply, 0);
 
     let _ = fs::remove_dir_all(dir);
 }
