@@ -218,7 +218,7 @@ pub(super) fn is_public_direct_addr(addr: &Multiaddr) -> bool {
     })
 }
 
-fn is_loopback_direct_addr(addr: &Multiaddr) -> bool {
+pub(super) fn is_loopback_direct_addr(addr: &Multiaddr) -> bool {
     if is_relay_addr(addr) {
         return false;
     }

@@ -488,6 +488,24 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required dev_local_storage_profile_clears_pristine_frozen_supply_from_existing_execution_world -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-P2P-050 (PRD-P2P-024) [test_tier_required]: 修复 2026-04-14 peer record direct surface 与 reachability republish 真值分叉，确保 `peer record direct_addrs` 不再泄漏 loopback/private/unspecified 监听地址，且 `ExternalAddrConfirmed/Expired` 会驱动本地 peer record 重发到最新外部直连地址集合。
+  - 产物文件:
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/peer_record.rs`
+    - `crates/oasis7_net/src/libp2p_net/peer_record_republish.rs`
+    - `crates/oasis7_net/src/libp2p_net/reachability.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/transport_retry_tests.rs`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_3008ff230aca4cbcbf248d1fd6c09676.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net build_configured_peer_record -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib -- --nocapture`
+    - `./scripts/check-rust-file-size.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`
@@ -544,6 +562,7 @@
 - 更新日期: 2026-04-14
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
+- 最新完成: `TASK-P2P-050`（已收紧 local peer record 地址物化逻辑：默认不再把 loopback/private/unspecified 监听地址写进 `direct_addrs`，而是优先使用已确认的 `confirmed_external_direct_addrs`；同时 `ExternalAddrConfirmed/Expired`、relay reservation 与 listen-surface 变化都会重发 peer record，避免状态真值和 discovery 真值继续分叉。）
 - 最新完成: `TASK-P2P-048`（已修复 p2p provider 子集请求越界 fallback、discovery 单次拨号后不再重试、request-response 丢失远端错误码，以及 replication peer 选择对 blocked peer 缺少优先避让的回归，并补齐 `oasis7_net/oasis7_node` 定向回归。）
 - 最新完成: `TASK-P2P-047`（已冻结当前链上代币的创世 `initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 收成统一真值；当前仍未进入 mint-ready，真实地址绑定与 QA final pass 继续由 `TIGR-6` 阻断。）
 - 最新完成: `TASK-P2P-046`（已将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 作为现行真值。）

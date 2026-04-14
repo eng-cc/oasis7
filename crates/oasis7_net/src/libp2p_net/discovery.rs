@@ -24,6 +24,7 @@ use super::peer_manager::{
 use super::peer_record::{
     build_configured_peer_record, put_record_query, validate_discovered_peer_record,
 };
+use super::reachability::Libp2pReachabilitySnapshot;
 use super::swarm_behaviour::{split_peer_id, Behaviour};
 use super::transport_paths::{
     dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
@@ -415,6 +416,8 @@ pub(super) fn handle_request_response_request(
     peer_record_template: Option<&PeerRecord>,
     keypair: &Keypair,
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
+    reachability: &Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    allow_loopback_external_addrs_for_testing: bool,
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
 ) -> Result<Vec<u8>, WorldError> {
     match request.protocol.as_str() {
@@ -424,7 +427,13 @@ pub(super) fn handle_request_response_request(
                     protocol: super::RR_GET_LOCAL_PEER_RECORD.to_string(),
                 });
             };
-            let record = build_configured_peer_record(keypair, template, listening_addrs)?;
+            let record = build_configured_peer_record(
+                keypair,
+                template,
+                listening_addrs,
+                reachability,
+                allow_loopback_external_addrs_for_testing,
+            )?;
             to_canonical_cbor(&record)
         }
         super::RR_GET_CACHED_PEER_RECORD => {
