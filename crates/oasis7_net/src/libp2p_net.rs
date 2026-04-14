@@ -9,6 +9,7 @@ mod discovery;
 mod error_mapping;
 mod kad_queries;
 mod peer_manager;
+mod peer_manager_active_set;
 mod peer_record;
 mod peer_record_republish;
 mod reachability;
@@ -29,17 +30,7 @@ use libp2p::request_response::{self};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId};
 
-use crate::error::WorldError;
-use oasis7_proto::distributed::WorldHeadAnnounce;
-use oasis7_proto::distributed_dht::{
-    MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
-};
-use oasis7_proto::distributed_net::{
-    classify_network_protocol, classify_network_topic, push_bounded_inbox_message, NetworkMessage,
-    NetworkRequest, NetworkResponse, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
-};
-
-use crate::util::to_canonical_cbor;
+use crate::{error::WorldError, util::to_canonical_cbor};
 use connection_lifecycle::{
     clear_disconnected_peer_state, failover_after_disconnect, record_established_connection,
     refresh_active_path_after_connection_close, refresh_peer_manager_views,
@@ -55,7 +46,14 @@ use discovery::{
 };
 use error_mapping::error_response_from_world_error;
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
-use peer_manager::recompute_peer_manager_healths;
+use oasis7_proto::distributed::WorldHeadAnnounce;
+use oasis7_proto::distributed_dht::{
+    MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
+};
+use oasis7_proto::distributed_net::{
+    classify_network_protocol, classify_network_topic, push_bounded_inbox_message, NetworkMessage,
+    NetworkRequest, NetworkResponse, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+};
 pub use peer_manager::{
     PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
     PeerManagerPeerHealth, PeerManagerPolicy,

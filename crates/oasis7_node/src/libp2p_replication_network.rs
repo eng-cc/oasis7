@@ -5,7 +5,10 @@ use std::time::{Duration, Instant};
 
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
-use oasis7_net::{Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot};
+use oasis7_net::{
+    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, PeerManagerHealthIssue,
+    PeerManagerHealthStatus, PeerManagerPeerHealth,
+};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
 use oasis7_proto::distributed_dht::{
@@ -293,10 +296,8 @@ impl Libp2pReplicationNetwork {
     }
 
     fn connected_peers_sorted(&self) -> Vec<PeerId> {
-        connected_or_active_transport_peers(
-            self.inner.connected_peers(),
-            self.debug_snapshot().peer_healths.as_slice(),
-        )
+        let peer_healths = self.inner.debug_peer_healths();
+        connected_or_active_transport_peers(self.inner.connected_peers(), peer_healths.as_slice())
     }
 
     fn collect_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
@@ -695,7 +696,7 @@ fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
     peers
 }
 
-fn blocked_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -> HashSet<PeerId> {
+fn blocked_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> HashSet<PeerId> {
     healths
         .iter()
         .filter(|health| peer_is_request_blocked(health))
@@ -703,9 +704,7 @@ fn blocked_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -> HashSet
         .collect()
 }
 
-fn soft_deprioritized_peers_from_healths(
-    healths: &[ReplicationPeerHealthDebug],
-) -> HashSet<PeerId> {
+fn soft_deprioritized_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> HashSet<PeerId> {
     healths
         .iter()
         .filter(|health| peer_is_soft_deprioritized_for_requests(health))
@@ -713,8 +712,8 @@ fn soft_deprioritized_peers_from_healths(
         .collect()
 }
 
-fn peer_is_request_blocked(health: &ReplicationPeerHealthDebug) -> bool {
-    health.status == "blocked"
+fn peer_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
+    matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
         && !health
             .issues
@@ -722,8 +721,8 @@ fn peer_is_request_blocked(health: &ReplicationPeerHealthDebug) -> bool {
             .all(|issue| issue_is_soft_bootstrap_constraint(issue))
 }
 
-fn peer_is_soft_deprioritized_for_requests(health: &ReplicationPeerHealthDebug) -> bool {
-    health.status == "blocked"
+fn peer_is_soft_deprioritized_for_requests(health: &PeerManagerPeerHealth) -> bool {
+    matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
         && health
             .issues
@@ -732,19 +731,19 @@ fn peer_is_soft_deprioritized_for_requests(health: &ReplicationPeerHealthDebug) 
         && health
             .issues
             .iter()
-            .any(|issue| issue == "missing_peer_record")
+            .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord))
 }
 
-fn issue_is_soft_bootstrap_constraint(issue: &str) -> bool {
-    issue == "missing_peer_record"
-        || issue.starts_with("insufficient_active_discovery_sources ")
-        || issue.starts_with("single_source_discovery ")
+fn issue_is_soft_bootstrap_constraint(issue: &PeerManagerHealthIssue) -> bool {
+    matches!(
+        issue,
+        PeerManagerHealthIssue::MissingPeerRecord
+            | PeerManagerHealthIssue::InsufficientActiveDiscoverySources { .. }
+            | PeerManagerHealthIssue::SingleSourceDiscovery { .. }
+    )
 }
 
-fn request_candidate_peers(
-    peers: Vec<PeerId>,
-    healths: &[ReplicationPeerHealthDebug],
-) -> Vec<PeerId> {
+fn request_candidate_peers(peers: Vec<PeerId>, healths: &[PeerManagerPeerHealth]) -> Vec<PeerId> {
     let blocked_peers = blocked_peers_from_healths(healths);
     let soft_deprioritized_peers = soft_deprioritized_peers_from_healths(healths);
     let preferred = peers
@@ -763,7 +762,7 @@ fn request_candidate_peers(
         .collect()
 }
 
-fn active_transport_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -> Vec<PeerId> {
+fn active_transport_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> Vec<PeerId> {
     let peers = healths
         .iter()
         .filter(|health| health.active_path_kind.is_some())
@@ -775,7 +774,7 @@ fn active_transport_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -
 
 fn connected_or_active_transport_peers(
     connected_peers: Vec<PeerId>,
-    healths: &[ReplicationPeerHealthDebug],
+    healths: &[PeerManagerPeerHealth],
 ) -> Vec<PeerId> {
     let connected_peers = dedup_sorted_peers(connected_peers);
     let admissible_connected_peers = request_candidate_peers(connected_peers.clone(), healths);
