@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 mod api;
 mod discovery;
+mod error_mapping;
 mod kad_queries;
 mod peer_manager;
 mod peer_record;
@@ -28,7 +29,7 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
-use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse, WorldHeadAnnounce};
+use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
@@ -47,6 +48,7 @@ use discovery::{
     process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
     PendingPeerRecordRequest,
 };
+use error_mapping::error_response_from_world_error;
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
 use peer_manager::recompute_peer_manager_healths;
 pub use peer_manager::{
@@ -295,7 +297,6 @@ impl Libp2pNetwork {
             let mut pending_rendezvous_discovers: HashSet<PeerId> = HashSet::new();
             let mut registered_rendezvous_nodes: HashSet<PeerId> = HashSet::new();
             let mut rendezvous_cookies: HashMap<PeerId, rendezvous::Cookie> = HashMap::new();
-            let mut dialed_discovery_addrs: HashSet<String> = HashSet::new();
             let mut peer_record_last_published_at_ms = None;
             let bootstrap_redial_interval_ms = config_clone.bootstrap_redial_interval_ms;
             let republish_interval_ms = config_clone.republish_interval_ms;
@@ -443,13 +444,10 @@ impl Libp2pNetwork {
                                                     );
                                                     let response_bytes = match reply {
                                                         Ok(bytes) => bytes,
-                                                        Err(err) => {
-                                                            let error = ErrorResponse::from_code(
-                                                                DistributedErrorCode::ErrNotFound,
-                                                                format!("{err:?}"),
-                                                            );
-                                                            to_canonical_cbor(&error).unwrap_or_default()
-                                                        }
+                                                        Err(err) => to_canonical_cbor(
+                                                            &error_response_from_world_error(&err),
+                                                        )
+                                                        .unwrap_or_default(),
                                                     };
                                                     let response = NetworkResponse { payload: response_bytes };
                                                     swarm.behaviour_mut().request_response.send_response(channel, response).ok();
@@ -468,7 +466,6 @@ impl Libp2pNetwork {
                                                             &active_transport_paths,
                                                             &mut failed_transport_path_labels,
                                                             &mut pending_discovery_peer_records,
-                                                            &mut dialed_discovery_addrs,
                                                             peer_record_template.as_ref(),
                                                             local_peer_id,
                                                             &mut pending_connected_peer_records,
@@ -584,7 +581,6 @@ impl Libp2pNetwork {
                                                                 &mut last_dialed_transport_paths,
                                                                 &active_transport_paths,
                                                                 &mut failed_transport_path_labels,
-                                                                &mut dialed_discovery_addrs,
                                                                 peer_record_template.as_ref(),
                                                                 &config_clone.peer_manager_policy,
                                                                 record,
@@ -1259,3 +1255,5 @@ impl Drop for Libp2pNetwork {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transport_retry_tests;

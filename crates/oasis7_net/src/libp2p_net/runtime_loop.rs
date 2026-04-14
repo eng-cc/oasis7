@@ -464,15 +464,23 @@ pub(super) fn handle_command(
             response,
         }) => {
             if peers.is_empty() {
-                if let Some(handler) = handlers.get(&protocol) {
-                    let _ = response.send(handler(&payload));
+                if providers.is_empty() {
+                    if let Some(handler) = handlers.get(&protocol) {
+                        let _ = response.send(handler(&payload));
+                    } else {
+                        let _ =
+                            response.send(Err(WorldError::NetworkProtocolUnavailable { protocol }));
+                    }
                 } else {
-                    let _ = response.send(Err(WorldError::NetworkProtocolUnavailable { protocol }));
+                    let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
+                        protocol: format!("no connected providers for protocol {protocol}"),
+                    }));
                 }
                 return CommandOutcome::Continue;
             }
+            let using_provider_subset = !providers.is_empty();
             let mut candidate_peers: Vec<PeerId> = Vec::new();
-            if !providers.is_empty() {
+            if using_provider_subset {
                 for provider in providers {
                     if let Ok(peer_id) = provider.parse::<PeerId>() {
                         if peers.contains(&peer_id) {
@@ -480,8 +488,13 @@ pub(super) fn handle_command(
                         }
                     }
                 }
-            }
-            if candidate_peers.is_empty() {
+                if candidate_peers.is_empty() {
+                    let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
+                        protocol: format!("no connected providers for protocol {protocol}"),
+                    }));
+                    return CommandOutcome::Continue;
+                }
+            } else {
                 candidate_peers = peers.clone();
             }
             candidate_peers = filter_request_peers_by_lane(
@@ -492,7 +505,11 @@ pub(super) fn handle_command(
             candidate_peers = filter_request_peers_by_health(candidate_peers, peer_healths_by_id);
             if candidate_peers.is_empty() {
                 let _ = response.send(Err(WorldError::NetworkProtocolUnavailable {
-                    protocol: format!("no healthy provider for protocol {protocol}"),
+                    protocol: if using_provider_subset {
+                        format!("no healthy connected providers for protocol {protocol}")
+                    } else {
+                        format!("no healthy provider for protocol {protocol}")
+                    },
                 }));
                 return CommandOutcome::Continue;
             }

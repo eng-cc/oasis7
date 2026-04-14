@@ -347,7 +347,6 @@ pub(super) fn process_discovered_peer_record(
     last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
     failed_transport_path_labels: &mut HashSet<String>,
-    dialed_discovery_addrs: &mut HashSet<String>,
     template: Option<&PeerRecord>,
     peer_manager_policy: &PeerManagerPolicy,
     record: SignedPeerRecord,
@@ -385,6 +384,10 @@ pub(super) fn process_discovered_peer_record(
     if let Some(preferred_path) =
         select_preferred_transport_path(transport_paths.as_slice(), failed_transport_path_labels)
     {
+        let already_dialing_preferred = last_dialed_transport_paths
+            .get(&peer_id)
+            .map(|path| path.label() == preferred_path.label())
+            .unwrap_or(false);
         let should_dial = !matches!(
             peer_status,
             PeerManagerHealthStatus::Suspect | PeerManagerHealthStatus::Blocked
@@ -392,8 +395,7 @@ pub(super) fn process_discovered_peer_record(
             .get(&peer_id)
             .map(|active| preferred_path.preference_rank() < active.preference_rank())
             .unwrap_or(true);
-        let addr_label = preferred_path.label();
-        if should_dial && dialed_discovery_addrs.insert(addr_label) {
+        if should_dial && !already_dialing_preferred {
             let _ = dial_transport_path(swarm, last_dialed_transport_paths, preferred_path.clone());
         }
     }
@@ -476,7 +478,6 @@ pub(super) fn handle_peer_record_response(
     active_transport_paths: &HashMap<PeerId, TransportPath>,
     failed_transport_path_labels: &mut HashSet<String>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
-    dialed_discovery_addrs: &mut HashSet<String>,
     peer_record_template: Option<&PeerRecord>,
     local_peer_id: PeerId,
     pending_connected_peer_records: &mut HashSet<PeerId>,
@@ -543,7 +544,6 @@ pub(super) fn handle_peer_record_response(
                 last_dialed_transport_paths,
                 active_transport_paths,
                 failed_transport_path_labels,
-                dialed_discovery_addrs,
                 peer_record_template,
                 peer_manager_policy,
                 record.clone(),
