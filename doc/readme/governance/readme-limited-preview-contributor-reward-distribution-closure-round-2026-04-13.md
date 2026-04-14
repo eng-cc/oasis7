@@ -10,8 +10,8 @@
 ## Approved Rows
 | Approval ID | Ledger ID | Contributor | Reward Account | Recommended Band | Producer Decision | Actual Amount | Distribution Ref | Distribution Date | Closure Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| APR-LTRL-2026-04-13-01 | LTRL-PR-60 | @eng-cc | oc:pk:6a0701c8feff03ff02f16048c5447223708062e7e1221f79ff2410a22be1063d | eligible-medium | approved eligible-medium under ordinary merged PR ceiling | 150 OC |  |  | `pending` |
-| APR-LTRL-2026-04-13-02 | LTRL-PR-59 | @eng-cc | oc:pk:6a0701c8feff03ff02f16048c5447223708062e7e1221f79ff2410a22be1063d | eligible-medium | approved eligible-medium under ordinary merged PR ceiling | 150 OC |  |  | `pending` |
+| APR-LTRL-2026-04-13-01 | LTRL-PR-60 | @eng-cc | oc:pk:6a0701c8feff03ff02f16048c5447223708062e7e1221f79ff2410a22be1063d | eligible-medium | approved eligible-medium after actual-value review | 100 OC |  |  | `pending` |
+| APR-LTRL-2026-04-13-02 | LTRL-PR-59 | @eng-cc | oc:pk:6a0701c8feff03ff02f16048c5447223708062e7e1221f79ff2410a22be1063d | eligible-small | approved eligible-small after actual-value review | 50 OC |  |  | `pending` |
 
 ## Execution Checklist
 - Final payout amount has been confirmed for each approved row in this round-specific decision.
@@ -24,5 +24,5 @@
 ## Closure Notes
 - `APR-LTRL-2026-04-13-01` corresponds to `LTRL-PR-60`.
 - `APR-LTRL-2026-04-13-02` corresponds to `LTRL-PR-59`.
-- This round-specific amount decision is `150 OC` for each approved ordinary merged PR row and does not redefine the global contributor reward band mapping.
+- This round-specific amount decision is `100 OC` for `LTRL-PR-60` and `50 OC` for `LTRL-PR-59` after actual-value review; both remain within the ordinary merged PR `<=150 OC` ceiling and do not redefine the global contributor reward band mapping.
 - `PR #56` is not approved in this round and must not appear in distribution execution.

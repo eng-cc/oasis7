@@ -14,6 +14,7 @@
 - [x] LTRL-6 (PRD-README-LTRL-001/002): 新增 PR intake import 脚本，输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row 草案，减少手工抄写。
 - [x] LTRL-7 (PRD-README-LTRL-001/002): 新增 merged PR round scan 脚本，按时间窗批量扫描已合入 PR，复用单 PR intake contract 输出窗口级状态汇总与 ledger-ready 候选。
 - [x] LTRL-8 (PRD-README-LTRL-002/003): 收紧普通 merged PR 的默认审批/待发放 ceiling 到 `150 OC`，并要求任何 `>150 OC` 的 row 写明 exceptional case note。
+- [x] LTRL-9 (PRD-README-LTRL-002): 对已进入 planned grant / pending distribution 的 round row 补 actual-value review；若原计划金额高于实际增量价值，则先下调档位或金额并回写审计说明。
 
 ## 依赖
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -23,7 +24,7 @@
 - `doc/devlog/2026-03-22.md`
 
 ## 状态
-- 更新日期: 2026-04-13
-- 当前阶段: 首轮真实 round ledger 已批准，待执行发放
-- 阻塞项: 等待 execution owner 按普通 merged PR `<=150 OC` ceiling 回填最终执行引用。
-- 下一步: 按收紧后的 ordinary merged PR ceiling 更新本轮 distribution closure，再回填 `Distribution Ref / Distribution Date / Execution Owner` 并归档本轮 ledger。
+- 更新日期: 2026-04-14
+- 当前阶段: 首轮真实 round ledger 已完成 actual-value review，待按下调后的 round-specific amount 执行发放
+- 阻塞项: 等待 execution owner 按 `100 OC / 50 OC` 的最新 round decision 回填 `Actual Amount / Distribution Ref / Distribution Date`；最终执行值仍必须保持在普通 merged PR `<=150 OC` ceiling 内。
+- 下一步: 按 `doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md` 执行本轮发放；若执行前还有新证据影响实际增量价值，继续先做 producer review，再落 distribution closure。

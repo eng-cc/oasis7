@@ -1,0 +1,24 @@
+task_uid: task_fc2393bf4e3b40999fc89761e917afcd
+title: "重评计划授予 PR 的实际价值并收紧待发放金额"
+owner_role: producer_system_designer
+worktree_hint: readme-reward-reassess-planned-grants-value
+execution_log_path: .pm/tasks/task_fc2393bf4e3b40999fc89761e917afcd.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-ledger-round-2026-04-13.md
+doc_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+  - doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md
+acceptance:
+  - "对原计划授予的 PR 行按实际增量价值重新评估，而不是沿用高档预期"
+  - "若实际价值偏低，round ledger / distribution closure / 相关治理文档同步下调 planned amount 与档位"
+  - "doc-governance-check、git diff --check、pm close 与 snapshot review 通过"
+handoff_to: []
+updated_at: 2026-04-14T09:49:18+08:00
+last_started_at: 2026-04-14T09:35:03+08:00
+last_closed_at: 2026-04-14T09:49:09+08:00
