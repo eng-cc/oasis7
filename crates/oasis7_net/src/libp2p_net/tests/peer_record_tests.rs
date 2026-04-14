@@ -1,3 +1,4 @@
+use super::super::discovery::peer_record_enables_rendezvous;
 use super::super::peer_record::{build_configured_peer_record, verify_signed_peer_record};
 use super::*;
 use crate::util::to_canonical_cbor;
