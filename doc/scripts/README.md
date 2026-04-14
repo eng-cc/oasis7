@@ -38,16 +38,11 @@
 - `wasm/`：WASM 构建脚本与环境约束。
 - `governance/`：脚本分层、参数契约、稳定性趋势、worktree harness 与 task worktree bootstrap 专题。
 
-## 近期专题
-- `doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`
-- `doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`
-- `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
-- `doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
-- `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
-- `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
-- `doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
-- `doc/scripts/precommit/pre-commit.prd.md`
-- `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
+## 高频专题
+- 脚本治理基线：`doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`、`doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`、`doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
+- task worktree / PR 收口：`doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`、`doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`、`doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
+- 隔离栈：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
+- 其他高频入口：`doc/scripts/precommit/pre-commit.prd.md`、`doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。

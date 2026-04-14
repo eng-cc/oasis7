@@ -25,5 +25,5 @@
 ## 状态
 - 当前阶段: 已完成（T0~T4）
 - 阻塞项: 无
-- 最近更新: 2026-04-10
-- 后续动作: 按本专题冻结的优先级，为 `world-simulator / p2p / testing` 拆首批活跃阅读面收敛任务；这些任务回到 engineering 主项目继续追踪，不在本专题 project 内继续堆叠。
+- 最近更新: 2026-04-14
+- 后续动作: `world-simulator / p2p / testing / readme / core / world-runtime / game / site` 的高密度模块入口减重，以及 `engineering / scripts / playability_test_result / headless-runtime` 的低密度模块复核均已回到 engineering 主项目收口。当前专题不再继续堆叠模块级任务；后续仅在入口再次失去 `what / where / next / risk` 首读分流能力时，才重开新一轮减重，否则转入路径级治理、round 追加或脚本门禁扩展评估。
