@@ -883,6 +883,18 @@
     - `rg -n "PRD-README-045|AC-32|DEC-RM-043|TASK-README-073|谁该拥有游戏的未来|利益共同体|链上投票权" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md .pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.yaml .pm/tasks/task_75c0ff260f9c4606897ecae884b3badf.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-074 (PRD-README-045) [test_tier_required]: 在第十三篇既有素材包基础上补齐一版更适合小红书首屏停留和评论互动的优化文案，保留“利益共同体”主线，同时把正文读感进一步收口到更像人类开发者自然发言。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
+    - `.pm/tasks/task_ed54bf85d41c46b6aeb5500898cfd644.yaml`
+    - `.pm/tasks/task_ed54bf85d41c46b6aeb5500898cfd644.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-045|AC-32|DEC-RM-043|TASK-README-074|优化版推荐|除了官方团队|不是今天已经开放的投票权" doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md .pm/tasks/task_ed54bf85d41c46b6aeb5500898cfd644.yaml .pm/tasks/task_ed54bf85d41c46b6aeb5500898cfd644.execution.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - doc/readme/prd.index.md
@@ -895,9 +907,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-13
+- 更新日期: 2026-04-14
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务；若后续决定补第十三篇封面、轮播版或真实发布执行，再新开独立任务。）
+- 最新完成: `TASK-README-074`（已在第十三篇既有素材包内补齐更适合小红书首屏和评论互动的优化版，收口“关系设错了 / 谁真的在把游戏往前推 / 不是今天已经开放的投票权或自动奖励承诺”的表达链路。）
 - 最新完成: `TASK-README-073`（已为小红书第十三篇补齐“谁该拥有游戏的未来”素材包，固定“利益共同体”主线、标题、正文、评论区互动和发布前自检，并显式收口“不是当前已开放的链上投票权事实，也不是自动发币承诺”的边界。）
 - 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
 - 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）

@@ -1,0 +1,25 @@
+task_uid: task_ed54bf85d41c46b6aeb5500898cfd644
+title: "TASK-README-074 优化小红书第十三篇未来归属素材包"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-future-ownership-optimization
+execution_log_path: .pm/tasks/task_ed54bf85d41c46b6aeb5500898cfd644.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "第十三篇小红书素材包补齐一版更适合小红书首屏阅读和评论互动的优化文案，并保持人类开发者第一人称。"
+  - "优化版继续沿用“谁该拥有游戏的未来 / 利益共同体”主线，不越界写成现行投票权、自动发币或上线可玩宣称。"
+  - "readme 模块追踪、任务 execution log 与最终素材包同步回写完成。"
+handoff_to: []
+updated_at: 2026-04-14T09:40:41+08:00
+last_started_at: 2026-04-14T09:35:17+08:00
+last_closed_at: 2026-04-14T09:40:31+08:00
