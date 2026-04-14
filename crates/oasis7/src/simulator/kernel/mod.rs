@@ -549,7 +549,7 @@ fn build_pre_action_wasm_call_request(
         entrypoint: entrypoint.to_string(),
         input: input_bytes,
         limits: limits.clone(),
-        wasm_bytes: wasm_bytes.to_vec(),
+        wasm_bytes: wasm_bytes.into(),
     })
 }
 

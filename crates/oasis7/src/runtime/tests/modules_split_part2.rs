@@ -190,7 +190,7 @@ fn wasm_executor_skeleton_reports_unavailable() {
         entrypoint: "call".to_string(),
         input: vec![],
         limits: ModuleLimits::default(),
-        wasm_bytes: Vec::new(),
+        wasm_bytes: Vec::new().into(),
     };
 
     let err = sandbox.call(&request).unwrap_err();

@@ -233,6 +233,29 @@
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime`
     - `bash -n scripts/s10-five-node-game-soak.sh`
     - `./scripts/s10-five-node-game-soak.sh --duration-secs 300 --base-port 7510 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --out-dir .tmp/release_gate_s10_fix_full_v5`
+- [x] TASK-WORLD_RUNTIME-060 (PRD-WORLD_RUNTIME-002) [test_tier_required]: 收口 wasm 热路径固定开销，将 executor 超时 watchdog 改为 executor 级复用线程、将模块 artifact/request wasm bytes 切到共享 `Arc<[u8]>`、并为 subscription filters 增加 parsed-filter / regex cache，同时保留本地 release perf probe 作为验证入口。
+  - 产物文件:
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_f7e0830c497849a9a9f5f731cbf60b97.yaml`
+    - `.pm/tasks/task_f7e0830c497849a9a9f5f731cbf60b97.execution.md`
+    - `crates/oasis7_wasm_abi/Cargo.toml`
+    - `crates/oasis7_wasm_abi/src/lib.rs`
+    - `crates/oasis7_wasm_executor/src/lib.rs`
+    - `crates/oasis7_wasm_router/src/lib.rs`
+    - `crates/oasis7_net/src/client.rs`
+    - `crates/oasis7/src/runtime/world/mod.rs`
+    - `crates/oasis7/src/runtime/world/module_runtime.rs`
+    - `crates/oasis7/src/runtime/world/persistence.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --tests`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 kernel_wasm_sandbox_bridge -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 persist_and_restore_world_defaults_to_module_store_roundtrip -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead --release -- --ignored --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -248,9 +271,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-13
+- 更新日期: 2026-04-14
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router 含 regex 场景总耗时从 `3548ms` 降到 `477ms`。）
 - 最新完成: `TASK-WORLD_RUNTIME-059`（已保持 runtime 语义不放宽，并为 S10 五节点脚本补齐显式 replication listen/peer 拓扑；对 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 仅允许 `<=2` warning，canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
 - 最新完成: `TASK-WORLD_RUNTIME-058`（已为 `NodeRuntime` 增加 replication-network consensus 策略位，并将 `oasis7_chain_runtime` 默认注入的 loopback fallback network 切到“只承载 replication/feedback、不承载 consensus 广播”；新增回归证明“有 replication network 句柄但关闭 network-consensus 时，UDP gossip 仍能同步 `known_peer_heads`”，同时保留显式共享 network-consensus 回归通过。）
 - 最新完成: `TASK-WORLD_RUNTIME-057`（已把 `main_token.rs` 拆成语义化 include 子文件，修复 `m4` builtin 模板对 `decode_action::<...>` 的 `Result` 处理，并在 Docker 代理恢复后按本地 canonical builder 复跑并回写 `m1/m4/m5` builtin wasm canonical hash/identity 与 `builtin_wasm_identity.rs` 常量，收口最新 required CI 失败项。）

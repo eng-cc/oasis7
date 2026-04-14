@@ -119,7 +119,7 @@ fn persist_and_restore_world_defaults_to_module_store_roundtrip() {
     let artifact = restored
         .load_module(&wasm_hash)
         .expect("module bytes hydrated from default load");
-    assert_eq!(artifact.bytes, b"persist-default".to_vec());
+    assert_eq!(artifact.bytes, b"persist-default".to_vec().into());
 
     let _ = fs::remove_dir_all(&dir);
 }
