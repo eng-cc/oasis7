@@ -8,6 +8,7 @@ use super::control_plane::{
 use crate::runtime::{Action as RuntimeAction, MaterialLedgerId, RecipeExecutionPlan, WorldState};
 use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback};
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
+use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
 const ACTION_BUILD_SMELTER_MK1: &str = "build_factory_smelter_mk1";
@@ -44,16 +45,15 @@ pub(super) fn extend_available_actions(
         return;
     };
 
+    let empty_materials = BTreeMap::new();
     let world_materials = state
         .material_ledgers
         .get(&MaterialLedgerId::world())
-        .cloned()
-        .unwrap_or_default();
+        .unwrap_or(&empty_materials);
     let agent_materials = state
         .material_ledgers
         .get(&MaterialLedgerId::agent(agent_id.to_string()))
-        .cloned()
-        .unwrap_or_default();
+        .unwrap_or(&empty_materials);
     let smelter_exists = state.factories.contains_key(FACTORY_SMELTER_MK1);
     let assembler_exists = state.factories.contains_key(FACTORY_ASSEMBLER_MK1);
 
@@ -263,27 +263,13 @@ impl ViewerRuntimeLiveServer {
     }
 }
 
-fn missing_materials_reason(
-    materials: &std::collections::BTreeMap<String, i64>,
-    required: &[(&str, i64)],
-) -> Option<String> {
-    let missing = required
-        .iter()
-        .filter_map(|(kind, amount)| {
-            let current = materials.get(*kind).copied().unwrap_or_default();
-            (current < *amount).then(|| format!("{kind}>={amount} (current {current})"))
-        })
-        .collect::<Vec<_>>();
-    (!missing.is_empty()).then(|| format!("requires {}", missing.join(", ")))
-}
-
 fn missing_materials_reason_with_world_fallback(
-    agent_materials: &std::collections::BTreeMap<String, i64>,
-    world_materials: &std::collections::BTreeMap<String, i64>,
+    agent_materials: &BTreeMap<String, i64>,
+    world_materials: &BTreeMap<String, i64>,
     required: &[(&str, i64)],
 ) -> Option<String> {
-    if missing_materials_reason(agent_materials, required).is_none()
-        || missing_materials_reason(world_materials, required).is_none()
+    if has_required_materials(agent_materials, required)
+        || has_required_materials(world_materials, required)
     {
         return None;
     }
@@ -291,12 +277,22 @@ fn missing_materials_reason_with_world_fallback(
     let details = required
         .iter()
         .map(|(kind, amount)| {
-            let agent_current = agent_materials.get(*kind).copied().unwrap_or_default();
-            let world_current = world_materials.get(*kind).copied().unwrap_or_default();
+            let agent_current = material_balance(agent_materials, kind);
+            let world_current = material_balance(world_materials, kind);
             format!("{kind}>={amount} (agent {agent_current}, world {world_current})")
         })
         .collect::<Vec<_>>();
     Some(format!("requires one ledger with {}", details.join(", ")))
+}
+
+fn has_required_materials(materials: &BTreeMap<String, i64>, required: &[(&str, i64)]) -> bool {
+    required
+        .iter()
+        .all(|(kind, amount)| material_balance(materials, kind) >= *amount)
+}
+
+fn material_balance(materials: &BTreeMap<String, i64>, kind: &str) -> i64 {
+    materials.get(kind).copied().unwrap_or_default()
 }
 
 fn runtime_action_from_request(

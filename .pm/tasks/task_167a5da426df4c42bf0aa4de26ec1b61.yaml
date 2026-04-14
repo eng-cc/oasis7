@@ -22,6 +22,6 @@ acceptance:
 handoff_to:
   - viewer_engineer
   - qa_engineer
-updated_at: 2026-04-14T16:55:49+08:00
+updated_at: 2026-04-14T20:00:16+08:00
 last_started_at: 2026-04-14T15:49:57+08:00
-last_closed_at: 2026-04-14T16:55:49+08:00
+last_closed_at: 2026-04-14T20:00:16+08:00
