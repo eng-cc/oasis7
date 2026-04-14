@@ -112,6 +112,83 @@ fn industry_stage_progresses_from_bootstrap_to_scale_out_and_governance() {
     );
 }
 
+#[test]
+fn industry_stage_downgrades_when_last_completed_factory_is_recycled() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0.0, 0.0),
+    });
+    world.step().expect("register builder");
+
+    world
+        .set_material_balance("steel_plate", 20)
+        .expect("seed build steel");
+    world
+        .set_material_balance("circuit_board", 4)
+        .expect("seed build circuits");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.stage", 1, 1),
+    });
+    world.step().expect("start build");
+    world.step().expect("factory ready");
+
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 30)
+        .expect("seed local recipe material");
+    world.set_resource_balance(ResourceKind::Electricity, 100);
+
+    authorize_policy_update(&mut world, "builder-a", "proposal.policy.disable-tax");
+    world.submit_action(Action::UpdateGameplayPolicy {
+        operator_agent_id: "builder-a".to_string(),
+        electricity_tax_bps: 0,
+        data_tax_bps: 0,
+        power_trade_fee_bps: 0,
+        max_open_contracts_per_agent: 16,
+        blocked_agents: Vec::new(),
+        forbidden_location_ids: Vec::new(),
+    });
+    world.step().expect("disable tax policy");
+
+    let recipe_plan = RecipeExecutionPlan::accepted(
+        1,
+        vec![MaterialStack::new("iron_ingot", 2)],
+        vec![MaterialStack::new("gear", 1)],
+        Vec::new(),
+        1,
+        1,
+    );
+    for index in 0..3 {
+        world.submit_action(Action::ScheduleRecipe {
+            requester_agent_id: "builder-a".to_string(),
+            factory_id: "factory.stage".to_string(),
+            recipe_id: format!("recipe.stage.recycle.{index}"),
+            plan: recipe_plan.clone(),
+        });
+        world.step().expect("start recipe");
+        world.step().expect("complete recipe");
+    }
+
+    assert_eq!(
+        world.state().industry_progress.stage,
+        IndustryStage::ScaleOut
+    );
+
+    world.submit_action(Action::RecycleFactory {
+        operator_agent_id: "builder-a".to_string(),
+        factory_id: "factory.stage".to_string(),
+    });
+    world.step().expect("recycle completed factory");
+
+    assert_eq!(
+        world.state().industry_progress.stage,
+        IndustryStage::Bootstrap
+    );
+    assert!(!world.has_factory("factory.stage"));
+}
+
 fn assert_rejected_note_contains(world: &World, action_id: u64, expected: &str) {
     let reason = world
         .journal()

@@ -220,6 +220,7 @@ impl WorldState {
                         reason: format!("factory recycle material add failed: {reason}"),
                     })?;
                 }
+                self.refresh_industry_progress_stage(now);
                 if let Some(cell) = self.agents.get_mut(operator_agent_id) {
                     cell.last_active = now;
                 }
@@ -396,19 +397,21 @@ impl WorldState {
 
     pub(super) fn refresh_industry_progress_stage(&mut self, now: WorldTime) {
         let current = self.industry_progress.stage;
-        let mut next = current;
+        let active_completed_jobs = self
+            .factories
+            .values()
+            .map(|factory| factory.production.completed_jobs)
+            .sum::<u64>();
+        let mut next = IndustryStage::Bootstrap;
 
-        if next == IndustryStage::Bootstrap
-            && self.industry_progress.completed_recipe_jobs >= 3
-            && !self.factories.is_empty()
-        {
+        if !self.factories.is_empty() && active_completed_jobs >= 3 {
             next = IndustryStage::ScaleOut;
         }
 
         let governance_enabled =
             self.gameplay_policy.electricity_tax_bps > 0 || self.gameplay_policy.data_tax_bps > 0;
-        let governance_throughput_ready = self.industry_progress.completed_recipe_jobs >= 6
-            || self.industry_progress.completed_material_transits >= 3;
+        let governance_throughput_ready =
+            active_completed_jobs >= 6 || self.industry_progress.completed_material_transits >= 3;
         if next == IndustryStage::ScaleOut && governance_enabled && governance_throughput_ready {
             next = IndustryStage::Governance;
         }

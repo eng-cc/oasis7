@@ -1,4 +1,4 @@
-use crate::runtime::{FactoryProductionStatus, IndustryStage, WorldState};
+use crate::runtime::{FactoryProductionStatus, FactoryState, IndustryStage, WorldState};
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayGoalKind,
     PlayerGameplayRecentFeedback, PlayerGameplaySnapshot, PlayerGameplayStageId,
@@ -7,6 +7,8 @@ use crate::simulator::persist::{
 use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
 
 use super::player_gameplay::extend_available_actions;
+
+const FACTORY_SMELTER_MK1: &str = "factory.smelter.mk1";
 
 fn blocked_control_hint(error_code: Option<&str>) -> String {
     match error_code {
@@ -121,13 +123,14 @@ pub(super) fn build_player_gameplay_snapshot(
             agent_claim,
         };
     }
-    let latest_blocker = state.factories.iter().find_map(|(factory_id, factory)| {
+    let primary_factory = primary_factory_for_player_gameplay(state);
+    let latest_blocker = primary_factory.and_then(|factory| {
         let kind = factory.production.current_blocker_kind.as_ref()?;
         let detail = factory
             .production
             .current_blocker_detail
             .clone()
-            .unwrap_or_else(|| format!("factory={factory_id}"));
+            .unwrap_or_else(|| format!("factory={}", factory.factory_id));
         Some((kind.clone(), detail))
     });
     let blocked_feedback = recent_feedback.and_then(|feedback| {
@@ -145,20 +148,16 @@ pub(super) fn build_player_gameplay_snapshot(
         .is_some_and(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0);
     let has_confirmed_world_progress = has_first_session_feedback || confirmed_gameplay_progress;
     let has_material_flow = state.industry_progress.completed_material_transits > 0;
-    let has_factory_ready = !state.factories.is_empty();
-    let has_recipe_running = state
-        .factories
-        .values()
-        .any(|factory| factory.production.status == FactoryProductionStatus::Running);
-    let has_first_output = state.industry_progress.completed_recipe_jobs > 0;
-    let has_blocked_history = state
-        .factories
-        .values()
-        .any(|factory| factory.production.last_blocked_at.is_some());
-    let has_recovery_history = state
-        .factories
-        .values()
-        .any(|factory| factory.production.last_resumed_at.is_some());
+    let has_factory_ready = primary_factory.is_some();
+    let has_recipe_running = primary_factory
+        .is_some_and(|factory| factory.production.status == FactoryProductionStatus::Running);
+    let has_first_output = primary_factory.is_some_and(|factory| {
+        factory.production.completed_jobs > 0 || factory.production.last_completed_at.is_some()
+    });
+    let has_blocked_history =
+        primary_factory.is_some_and(|factory| factory.production.last_blocked_at.is_some());
+    let has_recovery_history =
+        primary_factory.is_some_and(|factory| factory.production.last_resumed_at.is_some());
     let industry_stage = state.industry_progress.stage;
 
     if !has_confirmed_world_progress
@@ -189,7 +188,16 @@ pub(super) fn build_player_gameplay_snapshot(
         };
     }
 
-    if let Some((blocker_kind, blocker_detail)) = latest_blocker.or(blocked_feedback) {
+    let fallback_feedback_blocker = if latest_blocker.is_none()
+        && primary_factory
+            .is_none_or(|factory| factory.production.status == FactoryProductionStatus::Blocked)
+    {
+        blocked_feedback
+    } else {
+        None
+    };
+
+    if let Some((blocker_kind, blocker_detail)) = latest_blocker.or(fallback_feedback_blocker) {
         let (progress_detail, progress_percent) = if has_first_output {
             (
                 "Stage progress: the first line already produced output, but the current stoppage still blocks resilient production."
@@ -459,4 +467,23 @@ fn blocker_next_step(kind: &str, detail: &str) -> String {
     }
     "Inspect the blocker details, recover the line, then advance again to confirm progress."
         .to_string()
+}
+
+fn primary_factory_for_player_gameplay(state: &WorldState) -> Option<&FactoryState> {
+    state
+        .factories
+        .values()
+        .max_by_key(|factory| primary_factory_priority(factory))
+}
+
+fn primary_factory_priority(factory: &FactoryState) -> (bool, bool, bool, bool, u64, u64) {
+    let production = &factory.production;
+    (
+        production.completed_jobs > 0 || production.last_completed_at.is_some(),
+        production.status != FactoryProductionStatus::Blocked,
+        production.status == FactoryProductionStatus::Running,
+        factory.factory_id == FACTORY_SMELTER_MK1,
+        production.completed_jobs,
+        production.last_completed_at.unwrap_or(0),
+    )
 }
