@@ -1,0 +1,29 @@
+task_uid: task_fbb0248046ff416dace822c4dc3ff37d
+title: "TASK-README-080 改写第十三篇共同参与游戏主题"
+owner_role: liveops_community
+worktree_hint: oasis7-readme-xiaohongshu-future-ownership
+execution_log_path: .pm/tasks/task_fbb0248046ff416dace822c4dc3ff37d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md
+  - site/social/xiaohongshu-future-ownership-cover.html
+  - site/social/xiaohongshu-future-ownership-carousel.html
+  - doc/readme/prd.md
+  - doc/readme/project.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/prd.index.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "第十三篇推荐版从所有权讨论进一步收口到开发者、玩家和认真把项目讲出去的人共同参与做游戏的主题。"
+  - "改写后仍保留非现行法律股权、链上投票权或自动奖励承诺边界，不写成已开放治理或发币安排。"
+  - "补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，并让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见。"
+  - "readme 模块追踪、索引与 task execution log 完成同步回写。"
+handoff_to: []
+updated_at: 2026-04-14T17:10:33+08:00
+last_started_at: 2026-04-14T17:04:40+08:00
+last_closed_at: 2026-04-14T17:10:33+08:00

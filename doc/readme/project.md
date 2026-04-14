@@ -902,90 +902,42 @@
     - `rg -n "PRD-README-043|AC-30|DEC-RM-039|TASK-README-067|小红书博主|微信公众号|绿洲币|300 OC|800 OC|1500 OC|流量买量" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] TASK-README-080 (PRD-README-045) [test_tier_required]: 将第十三篇推荐版继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面与 4 页轮播 HTML/PNG，让关系图景比“所有权讨论”更先被读者感知到。
+  - 产物文件:
+    - `doc/readme/prd.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/project.md`
+    - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
+    - `site/social/xiaohongshu-future-ownership-cover.html`
+    - `site/social/xiaohongshu-future-ownership-cover.png`
+    - `site/social/xiaohongshu-future-ownership-carousel.html`
+    - `site/social/xiaohongshu-future-ownership-carousel-slide1.png`
+    - `site/social/xiaohongshu-future-ownership-carousel-slide2.png`
+    - `site/social/xiaohongshu-future-ownership-carousel-slide3.png`
+    - `site/social/xiaohongshu-future-ownership-carousel-slide4.png`
+    - `.pm/tasks/task_fbb0248046ff416dace822c4dc3ff37d.yaml`
+    - `.pm/tasks/task_fbb0248046ff416dace822c4dc3ff37d.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-045|TASK-README-080|人人都是游戏builder|一起把它做起来|site/social/xiaohongshu-future-ownership-cover|site/social/xiaohongshu-future-ownership-carousel" doc/readme/prd.md doc/readme/prd.index.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md .pm/tasks/task_fbb0248046ff416dace822c4dc3ff37d.yaml .pm/tasks/task_fbb0248046ff416dace822c4dc3ff37d.execution.md`
+    - `file site/social/xiaohongshu-future-ownership-cover.png site/social/xiaohongshu-future-ownership-carousel-slide1.png site/social/xiaohongshu-future-ownership-carousel-slide2.png site/social/xiaohongshu-future-ownership-carousel-slide3.png site/social/xiaohongshu-future-ownership-carousel-slide4.png`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
-- doc/readme/prd.index.md
-- `README.md`
-- `world-rule.md`
-- `testing-manual.md`
-- `doc/readme/gap/`
-- `doc/readme/production/`
-- `doc/readme/governance/`
+- `doc/readme/prd.index.md`、`README.md`、`world-rule.md`、`testing-manual.md`
+- `doc/readme/gap/`、`doc/readme/production/`、`doc/readme/governance/`
 - `.agents/skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-04-14
 - 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务）
-- 最新完成: `TASK-README-074`（已对 round ledger 里的 planned grant 做 actual-value review，把高于实际增量价值的计划值先下调到 `100 OC / 50 OC`，并保持结果仍在普通 merged PR `<=150 OC` ceiling 内，再同步回写 round ledger、distribution closure 与 ledger 模板。）
-- 最新完成: `TASK-README-073`（已把普通 merged PR 的 contributor reward 默认真实发放 ceiling 收紧到 `150 OC`，同步回写 reward pack / ledger / round ledger / distribution closure，并明确 `1500 OC` 只保留给极少数 exceptional case。）
-- 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者。）
-- 最新完成: `TASK-README-065`（已为小红书第十二篇补齐独立封面 HTML/PNG，并把视觉方向收口到保留“穿越周期”题眼的 editorial 判断海报。）
-- 最新完成: `TASK-README-064`（已为小红书第十二篇固定“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）
-- 最新完成: `TASK-README-063`（已按推荐发布版向 Moltbook `general` 发布 `repair certification` follow-up，并记录 `post_id`、验证结果与首轮读回状态。）
-- 最新完成: `TASK-README-062`（已把 Moltbook `Post 9` 从多备选草案收口成单一推荐发布版，固定推荐标题、主贴、首评策略与更轻的发布读感。）
-- 最新完成: `TASK-README-061`（已为 Moltbook 下一条 follow-up 固定 `repair certification` 题眼的标题候选、主贴、首评与发布边界，并把它落回既有草案包和 PM 执行追踪。）
-- 最新完成: `TASK-README-059`（已为 Moltbook 当前 `trust / operator / accountability` 热点补齐可直接发布的 trust-repair 主贴与首评，并完成真实发布回写。）
-- 最新完成: `TASK-README-060`（已为小红书第十一篇补齐开封低门槛实景 RPG 素材包与封面 HTML/PNG，并把观察收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人”。）
-- 最新完成: `TASK-README-058`（已为第十篇补充“优秀同事密度”论点，并同步改到长文版、轮播版和第 3 页轮播资产。）
-- 最新完成: `TASK-README-071`（已为 reward round scan 补齐 `ledger-draft-md` 与 `ledger-csv` 导出，让 merged PR 扫描结果能直接转成 round ledger 草案和表格行。）
-- 最新完成: `TASK-README-070`（已为 merged GitHub PR 奖励归集补齐按轮扫描脚本，复用既有 reward intake contract 输出窗口级状态汇总与 ledger-ready 候选，避免每轮手工逐个打开 PR 判断。）
-- 最新完成: `TASK-README-057`（已为小红书第十篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并把视觉方向收口到 offer decision memo / 决策档案。）
-- 最新完成: `TASK-README-056`（已把第十篇里“传统团队会不会做 AI”的时间判断收口到更近的“下周 / 下个月 / 很快全面转向”，并保持平台、训练体系和工程基本功优先的主判断。）
-- 最新完成: `TASK-README-055`（已为小红书第十篇固定“AI岗和大厂后端怎么选”的标题、正文、短版备选、互动问题、关键词与“先拿平台和训练体系”的表达边界。）
-- 最新完成: `TASK-README-054`（已为小红书第九篇补齐极简封面 HTML 与 PNG，并把视觉语言收口到低 GUI 感的大留白判断海报。）
-- 最新完成: `TASK-README-053`（已为小红书第九篇固定“GUI已死？这次我是认同的”的标题、正文、互动问题、关键词与“GUI 退到二线 / 判断权高于操作权”的表达边界。）
-- 最新完成: `TASK-README-052`（已为小红书第八篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，并沿用工业审查板语言完成收束。）
-- 最新完成: `TASK-README-051`（已为小红书第八篇补齐独立封面 HTML 与 PNG，并将视觉语言切到更像项目审查板的 build review wall 风格。）
-- 最新完成: `TASK-README-050`（已为小红书第八篇固定“做AI游戏以后，我越来越不信demo了”的标题、正文、短版文案、互动问题、关键词与 demo 祛魅边界。）
-- 最新完成: `TASK-README-049`（已把第七篇 4 页轮播从编辑部判断卡继续收口到更接近小红书原生图文卡片的视觉语言，并重导全部 PNG。）
-- 最新完成: `TASK-README-048`（已重做第七篇轮播版后两页视觉骨架，把案例页与收束页收口到同一套编辑部判断卡语言。）
-- 最新完成: `TASK-README-047`（已重做第七篇轮播版前两页视觉骨架，修复元素重叠并收口为更稳的编辑部判断卡布局。）
-- 最新完成: `TASK-README-046`（已为小红书第七篇补齐 4 页轮播版素材包、HTML 与逐页 PNG，保持“会聊天 vs 会行动”的核心判断与评论区站队问题一致。）
-- 最新完成: `TASK-README-045`（已为小红书第七篇补齐“聊天框 vs 世界内行动”分割封面 HTML 与 PNG，强化“会说话”和“会行动”的区别。）
-- 最新完成: `TASK-README-044`（已为小红书第七篇固定“AI人格很火，但我不想做陪聊搭子”的标题、正文、互动问题、关键词与“人格 = 会在世界里行动”的表达边界。）
-- 最新完成: `TASK-README-043`（已在 `doc/readme/README.md` 与 `doc/readme/prd.index.md` 显式拆分 `canonical / runbook / material / execution_log` 四层语义，收口 `readme` 模块入口边界。）
-- 最新完成: `TASK-README-042`（已按小红书 20 字标题上限，将第六篇最终发布标题收口为“作为游戏工作室主理人，今年的春招视角”。）
-- 最新完成: `TASK-README-041`（已将小红书第六篇封面与轮播图的配色切到更像校园招聘公告栏的海盐蓝 / 奶油黄 / 校园红方案。）
-- 最新完成: `TASK-README-040`（已将小红书第六篇封面与轮播图刷新为更贴春招语境的视觉主题，并提升版面层次与手机端读感。）
-- 最新完成: `TASK-README-039`（已为小红书第六篇补齐 6 页轮播版素材包、HTML 与逐页 PNG，保持与长文版标题和互动问题一致。）
-- 最新完成: `TASK-README-038`（已为小红书第六篇固定“作为游戏工作室主理人，今年春招我会看什么人”的标题、正文、封面图与热点借势边界。）
-- 最新完成: `TASK-README-037`（已为小红书第五篇固定“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口。）
-- 最新完成: `TASK-README-036`（已为小红书第四篇固定“玩家为什么不能直接控制角色”的标题、正文、轮播结构、互动问题与玩家控制边界口径。）
-- 最新完成: `TASK-README-035`（已为小红书第三篇固定“游戏是什么”的标题、正文、轮播结构、互动问题与技术预览边界。）
-- 最新完成: `TASK-README-034`（已为小红书持续运营补齐独立 runbook，并把角色卡中的第三方渠道 SOP 范围明确扩展到小红书。）
-- 最新完成: `TASK-README-029`（已为 invite-only limited preview 首轮执行补齐 liveops 操作包，固定文案、巡检窗口、信号分桶与 producer 摘要字段。）
-- 最新完成: `TASK-README-028`（已将当前有效对外文档统一收口到 `limited playable technical preview` 口径，并保持 `closed beta / play now / live now` 禁语不变。）
-- 最新完成: `TASK-README-027`（已将 Moltbook 首轮真实执行的讨论钩子与 spam 风险回写到 runbook，供后续运营复用。）
-- 最新完成: `TASK-README-026`（已新增 closed beta candidate runbook 与反馈/事故模板，明确招募/反馈/事故流程与受控技术预览口径。）
-- 最新完成: `TASK-README-025`（已在 Moltbook runbook 内补齐首周冷启动模板，明确 day1-day7 节奏、巡检窗口、回复目标与记录重点。）
-- 最新完成: `TASK-README-024`（已为 `liveops_community` 新增 Moltbook 持续运营 runbook，并把角色入口、readme 模块追踪与索引同步补齐。）
-- 最新完成: `TASK-README-023`（已补齐 `doc/readme/production/**` 活跃专题中遗漏的当前实现模块名口径，统一切到 `oasis7::runtime`。）
-- 最新完成: `TASK-README-022`（已补齐 `doc/readme/gap/**` 活跃专题中遗漏的当前环境变量口径，统一切到 `OASIS7_MODULE_SOURCE_COMPILER`。）
-- 最新完成: `TASK-README-021`（已完成 `doc/readme/gap/**` 与 `doc/readme/production/**` 活跃专题中旧 `oasis7*` crate/path 当前真值口径与已迁移源码路径的 `oasis7*` 收口。）
-- 最新完成: `TASK-README-018`（根 README / testing-manual / world-rule 已统一为 `oasis7` 品牌，并补 internal naming compatibility 说明）。
-- 最新完成: `TASK-README-019`（已完成 `doc/readme/governance/**` 历史专题首行标题的 title-only cleanup，旧 `oasis7*` 公开标题已统一切到 `oasis7*`）。
-- 最新完成: `TASK-README-020`（已完成 `doc/readme/governance/**` 当前公开口径中的项目名收口，Moltbook 方案与草案正文统一改写为 `oasis7`）。
-- 最新完成: `TASK-README-011`（readme 模块 README 目录索引同步）。
-- 最新完成: `TASK-README-012`（readme 模块 completed 状态摘要补齐）。
-- 最新完成: `TASK-README-013`（根 README 已对齐三模式技术预览访问面口径，移除旧运行模式歧义）。
-- 最新完成: `TASK-README-014`（已新增 Moltbook 平台化推广方案，固化渠道节奏、禁宣称项与 producer 审核链）。
-- 最新完成: `TASK-README-015`（已新增 Moltbook 首批发帖草案与回复模板，可直接派生首轮冷启动内容）。
-- 最新完成: `TASK-README-016`（已把 GitHub issue / PR 回流 CTA 纳入 Moltbook 方案与帖文草案）。
-- 最新完成: `TASK-README-017`（已将 Moltbook 首批帖文压缩为更短的最终发布版，保留技术预览与 GitHub CTA 边界）。
-- PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- ROUND-002 进展: gap 子簇主从化已完成（gap12345 主入口，其它 gap 专题增量维护）。
-- 模块进展补充（2026-03-11）: 已新增 README 口径一致性巡检清单，明确顶层叙事、状态口径、术语边界、入口链接与触发条件五类高优检查项。
-- 模块进展补充（2026-03-11 / links）: 已新增 `scripts/readme-link-check.sh`，自动校验 `README.md` 与 `doc/README.md` 的本地 Markdown 入口链接。
-- 模块进展补充（2026-03-11 / quarterly）: 已新增季度口径审查节奏与模板，固定季度审查、重大变更加审与修复记录闭环。
-- 模块进展补充（2026-03-11 / communication）: 已新增版本候选对外口径简报，承接内部 `go/no-go` 结论并固化禁用表述、风险边界与回滚说明。
-- 模块进展补充（2026-03-11 / communication-template）: 已新增对外口径简报模板，后续候选可直接复用相同结构与审核链。
-- 模块进展补充（2026-03-11 / announcement-draft）: 已新增版本候选 announcement / changelog 底稿，作为后续正式外部文案的安全起点。
-- 模块进展补充（2026-03-11 / announcement-template）: 已新增公告 / changelog 模板，后续候选可直接复用相同结构与审核状态字段。
-- 模块进展补充（2026-03-11 / root-status）: 已对齐根 README 项目状态段，统一为“技术预览（尚不可玩）+ 正式公告准备态”口径。
-- 模块进展补充（2026-03-11 / module-readme-index）: 已同步模块目录索引，补齐 release communication、announcement 与 root-status 专题入口。
-- 模块进展补充（2026-03-19 / moltbook-promotion）: 已新增第三方渠道专题，面向 Moltbook 当前 agent-native / verified / submolt / early-access 机制输出 `liveops_community` 视角的推广方案与审核链。
-- 模块进展补充（2026-03-19 / moltbook-post-pack）: 已在渠道方案基础上新增首批英文主贴、评论补充与回复模板，便于 `liveops_community` 冷启动时先发可审核文案，而不是现场 improvisation。
-- 模块进展补充（2026-03-19 / github-feedback-cta）: 已把“体验/观察预览后可去 GitHub 提 issue 或 PR”纳入 Moltbook 渠道 CTA，作为对外反馈与贡献的统一回流出口。
-- 模块进展补充（2026-03-19 / moltbook-short-form）: 已把首批 Moltbook 主贴进一步压缩成更短的 feed-native 版本，减少解释密度，把更多上下文挪到首评承接。
+- 下一任务: 无（当前模块主项目无未完成任务；若后续决定执行真实发布，再新开独立任务。）
+- 最新完成: `TASK-README-080`（已将第十三篇的多轮文案迭代、共同参与主题收口、封面与 4 页轮播资产统一折叠到同一任务追踪中，PR 只保留一个 task 文档入口。）
+- 最新完成: `TASK-README-074/073`（已把普通 merged PR 的 contributor reward ceiling 收紧到 `150 OC`，并对 planned grant 做 actual-value review，下调过高计划值后同步回写 reward ledger 相关文档。）
+- 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界。）
+- 最新完成: `TASK-README-065/064`（已完成小红书第十二篇长文与封面资产，收口“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）
+- 最新完成: `TASK-README-063/062/061/060/059/058/057/056`（已覆盖 Moltbook repair-certification follow-up、第十与第十一篇素材、轮播资产及“优秀同事密度”补强。）
+- 更早完成: `TASK-README-071/070/067/026/025/023/022/021/020/019/018`（已覆盖 reward round scan、渠道激励包、closed beta candidate / Moltbook runbook 与早期 readme 入口治理。）
+- PRD / ROUND 状态: strict schema 已对齐（含第 6 章验证与决策记录）；gap 子簇主从化已完成（gap12345 主入口，其它 gap 专题增量维护）。
+- 模块进展补充: 已补齐 README 口径一致性巡检、链接检查、季度审查模板、对外口径简报/公告底稿模板，以及 Moltbook 推广方案、主贴模板、GitHub 反馈 CTA 与更短 feed-native 版本。
 - 说明: 本文档仅维护 readme 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。

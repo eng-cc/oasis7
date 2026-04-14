@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Shared Participation Carousel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f4ecdf;
+        --paper-warm: #fbf5ec;
+        --paper-deep: #e4d6c5;
+        --ink: #171311;
+        --ink-soft: rgba(23, 19, 17, 0.68);
+        --line: rgba(23, 19, 17, 0.12);
+        --brick: #a74331;
+        --brick-soft: rgba(167, 67, 49, 0.12);
+        --teal: #315c59;
+        --teal-soft: rgba(49, 92, 89, 0.12);
+        --gold: #cb8d3d;
+        --panel: #1f1a17;
+        --panel-soft: rgba(31, 26, 23, 0.9);
+        --panel-text: #f6eee2;
+        --shadow: 0 28px 72px rgba(23, 19, 17, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 14% 14%, rgba(167, 67, 49, 0.16), transparent 24%),
+          radial-gradient(circle at 82% 18%, rgba(49, 92, 89, 0.12), transparent 24%),
+          linear-gradient(160deg, #f8f0e5 0%, #efe3d3 56%, #e9ddd0 100%);
+        color: var(--ink);
+        font-family: "Noto Serif SC", serif;
+      }
+
+      .gallery {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 28px 0 80px;
+      }
+
+      .single .gallery {
+        max-width: none;
+        padding: 0;
+      }
+
+      .slide {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        margin: 0 auto 28px;
+        overflow: hidden;
+        border-radius: 30px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 18%),
+          radial-gradient(circle at 12% 12%, rgba(167, 67, 49, 0.12), transparent 24%),
+          radial-gradient(circle at 86% 18%, rgba(49, 92, 89, 0.12), transparent 20%),
+          linear-gradient(180deg, var(--paper-warm) 0%, var(--paper) 58%, var(--paper-deep) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .single .slide {
+        margin: 0 auto;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .grain,
+      .grid,
+      .frame,
+      .wash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.1;
+        background-image:
+          radial-gradient(circle at 22% 22%, rgba(0, 0, 0, 0.58) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 76% 34%, rgba(0, 0, 0, 0.32) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 40% 82%, rgba(0, 0, 0, 0.24) 0.8px, transparent 0.9px);
+        background-size: 28px 28px, 38px 38px, 48px 48px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 74px 74px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.36), transparent 90%);
+      }
+
+      .frame::before,
+      .frame::after {
+        content: "";
+        position: absolute;
+        inset: 34px;
+        border: 1px solid rgba(23, 19, 17, 0.08);
+        border-radius: 24px;
+      }
+
+      .frame::after {
+        inset: 54px;
+        border-style: dashed;
+        border-color: rgba(23, 19, 17, 0.05);
+        border-radius: 18px;
+      }
+
+      .wash::before,
+      .wash::after {
+        content: "";
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(2px);
+      }
+
+      .wash::before {
+        left: -90px;
+        top: 170px;
+        width: 250px;
+        height: 250px;
+        background: rgba(167, 67, 49, 0.08);
+      }
+
+      .wash::after {
+        right: -70px;
+        bottom: 190px;
+        width: 220px;
+        height: 220px;
+        background: rgba(49, 92, 89, 0.08);
+      }
+
+      .header,
+      .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .header {
+        top: 56px;
+      }
+
+      .footer {
+        bottom: 48px;
+      }
+
+      .brand,
+      .meta,
+      .footer-note,
+      .tag,
+      .chip,
+      .step-index,
+      .mini-note,
+      .pill {
+        font-family: "IBM Plex Mono", monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .brand,
+      .meta,
+      .footer-note {
+        font-size: 16px;
+        color: var(--ink-soft);
+      }
+
+      .tag,
+      .chip,
+      .step-index,
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .tag::before,
+      .chip::before,
+      .step-index::before,
+      .pill::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        background: var(--brick);
+        box-shadow: 4px 4px 0 rgba(167, 67, 49, 0.14);
+      }
+
+      .progress {
+        display: flex;
+        gap: 10px;
+      }
+
+      .progress span {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: rgba(23, 19, 17, 0.12);
+      }
+
+      .progress span.active {
+        width: 44px;
+        background: var(--brick);
+      }
+
+      .canvas {
+        position: absolute;
+        inset: 128px 72px 110px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .card,
+      .soft-card,
+      .dark-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .card,
+      .soft-card {
+        background: rgba(255, 251, 245, 0.88);
+        border: 1px solid rgba(23, 19, 17, 0.1);
+      }
+
+      .soft-card {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 251, 245, 0.86));
+      }
+
+      .dark-card {
+        background: linear-gradient(180deg, rgba(31, 26, 23, 0.98), rgba(28, 24, 22, 0.98));
+        color: var(--panel-text);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .card::before,
+      .soft-card::before,
+      .dark-card::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, var(--brick), var(--teal), rgba(203, 141, 61, 0.5));
+      }
+
+      .slide-1 .hero-card {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 636px;
+        min-height: 702px;
+        padding: 42px 42px 38px;
+      }
+
+      .slide-1 h1 {
+        margin-top: 22px;
+        font-size: 92px;
+        line-height: 1.04;
+        letter-spacing: -0.075em;
+      }
+
+      .slide-1 h1 span {
+        display: block;
+      }
+
+      .slide-1 h1 .shift {
+        margin-left: 118px;
+      }
+
+      .hero-divider {
+        width: 188px;
+        height: 6px;
+        margin: 34px 0 26px;
+        background: linear-gradient(90deg, var(--ink), var(--gold));
+      }
+
+      .hero-copy {
+        font-size: 30px;
+        line-height: 1.62;
+        color: rgba(23, 19, 17, 0.8);
+      }
+
+      .hero-note {
+        margin-top: 28px;
+        padding: 22px 24px 24px;
+        border-radius: 22px;
+        background: linear-gradient(135deg, var(--brick-soft), rgba(255, 255, 255, 0.5));
+      }
+
+      .hero-note strong {
+        display: block;
+        font-size: 30px;
+        line-height: 1.35;
+      }
+
+      .hero-note span {
+        display: block;
+        margin-top: 12px;
+        font-size: 22px;
+        line-height: 1.68;
+        color: var(--ink-soft);
+      }
+
+      .slide-1 .signal-card {
+        position: absolute;
+        right: 0;
+        top: 18px;
+        width: 300px;
+        padding: 26px 26px 28px;
+      }
+
+      .signal-card h2 {
+        margin-top: 18px;
+        font-size: 38px;
+        line-height: 1.22;
+      }
+
+      .signal-card p {
+        margin-top: 16px;
+        font-size: 22px;
+        line-height: 1.7;
+        color: rgba(23, 19, 17, 0.76);
+      }
+
+      .role-row {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 162px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+
+      .role-card {
+        min-height: 276px;
+        padding: 28px 26px 28px;
+      }
+
+      .role-card h3 {
+        margin-top: 18px;
+        font-size: 42px;
+        line-height: 1.12;
+      }
+
+      .role-card p {
+        margin-top: 18px;
+        font-size: 24px;
+        line-height: 1.62;
+        color: rgba(23, 19, 17, 0.76);
+      }
+
+      .slide-2 .lead {
+        padding: 32px 34px 34px;
+      }
+
+      .lead h2 {
+        margin-top: 18px;
+        font-size: 52px;
+        line-height: 1.18;
+        letter-spacing: -0.04em;
+      }
+
+      .lead p {
+        margin-top: 16px;
+        font-size: 24px;
+        line-height: 1.66;
+      }
+
+      .participation-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 22px;
+        margin-top: 22px;
+      }
+
+      .voice-card,
+      .roles-panel {
+        min-height: 748px;
+      }
+
+      .voice-card {
+        padding: 34px 34px 32px;
+      }
+
+      .voice-card h3 {
+        margin-top: 20px;
+        font-size: 42px;
+        line-height: 1.26;
+      }
+
+      .voice-card p {
+        margin-top: 18px;
+        font-size: 24px;
+        line-height: 1.72;
+        color: rgba(23, 19, 17, 0.8);
+      }
+
+      .quote-box {
+        margin-top: 24px;
+        padding: 22px 24px 24px;
+        border-radius: 22px;
+        background: linear-gradient(135deg, rgba(49, 92, 89, 0.1), rgba(255, 255, 255, 0.56));
+      }
+
+      .quote-box strong {
+        display: block;
+        font-size: 30px;
+        line-height: 1.42;
+      }
+
+      .quote-box span {
+        display: block;
+        margin-top: 12px;
+        font-size: 21px;
+        line-height: 1.72;
+        color: var(--ink-soft);
+      }
+
+      .roles-panel {
+        padding: 30px 28px 28px;
+      }
+
+      .roles-stack {
+        display: grid;
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .mini-card {
+        padding: 20px 22px 22px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .mini-card strong {
+        display: block;
+        margin-top: 16px;
+        font-size: 34px;
+        line-height: 1.18;
+      }
+
+      .mini-card p {
+        margin-top: 12px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: rgba(246, 238, 226, 0.8);
+      }
+
+      .closing-line {
+        margin-top: 18px;
+        padding: 22px 24px 24px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .closing-line strong {
+        display: block;
+        font-size: 28px;
+        line-height: 1.48;
+      }
+
+      .closing-line p {
+        margin-top: 10px;
+        font-size: 20px;
+        line-height: 1.7;
+        color: rgba(246, 238, 226, 0.72);
+      }
+
+      .slide-3 .critique-grid {
+        display: grid;
+        grid-template-columns: 1.04fr 0.96fr;
+        gap: 22px;
+      }
+
+      .critique-lead,
+      .critique-board {
+        min-height: 872px;
+      }
+
+      .critique-lead {
+        padding: 34px 34px 32px;
+      }
+
+      .critique-lead h2 {
+        margin-top: 18px;
+        font-size: 50px;
+        line-height: 1.22;
+      }
+
+      .critique-lead p {
+        margin-top: 18px;
+        font-size: 24px;
+        line-height: 1.72;
+        color: rgba(246, 238, 226, 0.82);
+      }
+
+      .critique-board {
+        padding: 30px 28px 28px;
+      }
+
+      .bad-list {
+        display: grid;
+        gap: 18px;
+        margin-top: 24px;
+      }
+
+      .bad-item {
+        padding: 22px 22px 24px;
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 251, 245, 0.9));
+        border: 1px solid rgba(23, 19, 17, 0.1);
+      }
+
+      .bad-item strong {
+        display: block;
+        font-size: 28px;
+        line-height: 1.38;
+      }
+
+      .bad-item p {
+        margin-top: 10px;
+        font-size: 20px;
+        line-height: 1.66;
+        color: var(--ink-soft);
+      }
+
+      .nope-card {
+        margin-top: 20px;
+        padding: 22px 24px 24px;
+        border-radius: 22px;
+        background: linear-gradient(135deg, rgba(167, 67, 49, 0.12), rgba(255, 255, 255, 0.52));
+      }
+
+      .nope-card strong {
+        display: block;
+        font-size: 32px;
+        line-height: 1.38;
+      }
+
+      .nope-card p {
+        margin-top: 12px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+
+      .slide-4 .wrap {
+        display: grid;
+        grid-template-columns: 0.96fr 1.04fr;
+        gap: 22px;
+      }
+
+      .boundary-card,
+      .future-card {
+        min-height: 868px;
+      }
+
+      .boundary-card {
+        padding: 32px 30px 30px;
+      }
+
+      .boundary-card h2 {
+        margin-top: 18px;
+        font-size: 48px;
+        line-height: 1.24;
+      }
+
+      .boundary-card p {
+        margin-top: 18px;
+        font-size: 23px;
+        line-height: 1.72;
+        color: rgba(246, 238, 226, 0.82);
+      }
+
+      .boundary-list {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+      }
+
+      .boundary-item {
+        padding: 18px 20px 20px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .boundary-item strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1.5;
+      }
+
+      .boundary-item span {
+        display: block;
+        margin-top: 8px;
+        font-size: 18px;
+        line-height: 1.66;
+        color: rgba(246, 238, 226, 0.7);
+      }
+
+      .future-card {
+        padding: 34px 34px 30px;
+      }
+
+      .future-card h2 {
+        margin-top: 18px;
+        font-size: 52px;
+        line-height: 1.2;
+      }
+
+      .future-card p {
+        margin-top: 18px;
+        font-size: 24px;
+        line-height: 1.72;
+        color: rgba(23, 19, 17, 0.8);
+      }
+
+      .promise-box {
+        margin-top: 24px;
+        padding: 22px 24px 24px;
+        border-radius: 22px;
+        background: linear-gradient(135deg, rgba(49, 92, 89, 0.1), rgba(255, 255, 255, 0.56));
+      }
+
+      .promise-box strong {
+        display: block;
+        font-size: 30px;
+        line-height: 1.42;
+      }
+
+      .promise-box span {
+        display: block;
+        margin-top: 12px;
+        font-size: 21px;
+        line-height: 1.72;
+        color: var(--ink-soft);
+      }
+
+      .prompt {
+        margin-top: 22px;
+        padding: 26px 28px;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(31, 26, 23, 0.98), rgba(28, 24, 22, 0.98));
+        color: var(--panel-text);
+        box-shadow: var(--shadow);
+      }
+
+      .prompt strong {
+        display: block;
+        font-size: 34px;
+        line-height: 1.4;
+      }
+
+      .prompt p {
+        margin-top: 14px;
+        font-size: 21px;
+        line-height: 1.7;
+        color: rgba(246, 238, 226, 0.72);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="gallery">
+      <section class="slide slide-1" data-slide="1">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 01 / hook</span>
+        </header>
+        <div class="canvas">
+          <article class="card hero-card">
+            <div class="tag">shared participation</div>
+            <h1>
+              <span>人人都是</span>
+              <span class="shift">游戏builder</span>
+            </h1>
+            <div class="hero-divider"></div>
+            <p class="hero-copy">
+              我越来越想做的，
+              <br />
+              不是一种只有制作组在里面忙，
+              <br />
+              其他人都在外面看的游戏。
+            </p>
+            <div class="hero-note">
+              <strong>不是围观。</strong>
+              <span>是开发者、玩家、认真把它讲出去的人，一起把它做起来。</span>
+            </div>
+          </article>
+
+          <article class="soft-card signal-card">
+            <div class="chip">first feeling</div>
+            <h2>先让人看到关系。</h2>
+            <p>
+              先别急着谈制度。
+              <br />
+              先把“谁其实已经在参与”这件事说清楚。
+            </p>
+          </article>
+
+          <div class="role-row">
+            <article class="soft-card role-card">
+              <div class="step-index">role 01</div>
+              <h3>开发者</h3>
+              <p>写代码，补细节，把世界真的搭起来。</p>
+            </article>
+            <article class="soft-card role-card">
+              <div class="step-index">role 02</div>
+              <h3>玩家</h3>
+              <p>试玩法，提反馈，把判断带回项目里。</p>
+            </article>
+            <article class="soft-card role-card">
+              <div class="step-index">role 03</div>
+              <h3>传播者</h3>
+              <p>讲清楚它想做什么，把它带给更多人。</p>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span class="active"></span><span></span><span></span><span></span></div>
+          <span class="footer-note">not passing by</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-2" data-slide="2">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 02 / participation</span>
+        </header>
+        <div class="canvas">
+          <article class="card lead">
+            <div class="tag">if you have done this</div>
+            <h2>如果你真的出过力，你就不只是路过。</h2>
+            <p>写代码、提反馈、测 bug、解释它到底想做什么、把它带给更多人，这些都在把一个游戏真的做出来。</p>
+          </article>
+
+          <div class="participation-grid">
+            <article class="soft-card voice-card">
+              <div class="chip">from your side</div>
+              <h3>很多人明明已经参与了，却总被放在“项目外面”。</h3>
+              <p>
+                你可能不是核心制作组，
+                <br />
+                但你认真测过问题、给过判断、
+                <br />
+                帮它被更多人看见过。
+              </p>
+              <p>
+                这些事看上去不一样，
+                <br />
+                本质上都在推动同一个游戏往前走。
+              </p>
+              <div class="quote-box">
+                <strong>这些都不是顺手帮一下。</strong>
+                <span>这些都在改变它最后会变成什么样。</span>
+              </div>
+            </article>
+
+            <article class="dark-card roles-panel">
+              <div class="tag">three tracks</div>
+              <div class="roles-stack">
+                <article class="mini-card">
+                  <div class="pill">build</div>
+                  <strong>开发者在做</strong>
+                  <p>系统、规则、玩法、内容，慢慢搭出来。</p>
+                </article>
+                <article class="mini-card">
+                  <div class="pill">judge</div>
+                  <strong>玩家也在做</strong>
+                  <p>把不好玩、不顺、没感觉的地方真实地指出来。</p>
+                </article>
+                <article class="mini-card">
+                  <div class="pill">explain</div>
+                  <strong>认真讲它的人也在做</strong>
+                  <p>让更多人真正理解它，不是只看一眼就划走。</p>
+                </article>
+              </div>
+              <div class="closing-line">
+                <strong>分工不同，不代表谁在里面，谁就在外面。</strong>
+                <p>我更在意的是，谁真的在让这个游戏变得更完整。</p>
+              </div>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span class="active"></span><span></span><span></span></div>
+          <span class="footer-note">you are part of it</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-3" data-slide="3">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 03 / what feels wrong</span>
+        </header>
+        <div class="canvas">
+          <div class="critique-grid">
+            <article class="dark-card critique-lead">
+              <div class="tag">the awkward part</div>
+              <h2>很多项目最别扭的地方，是只在需要你的时候才看见你。</h2>
+              <p>
+                平时大家都在外面。
+                <br />
+                需要热度了，才想起玩家。
+                <br />
+                需要传播了，才去找创作者和媒体。
+                <br />
+                需要补位了，才突然想起开发者。
+              </p>
+              <p>
+                这种关系一开始就不对。
+                <br />
+                因为它默认只有少数人在“做”，其他人只是等着被调用。
+              </p>
+            </article>
+
+            <article class="soft-card critique-board">
+              <div class="chip">common pattern</div>
+              <div class="bad-list">
+                <article class="bad-item">
+                  <strong>需要流量了，才把玩家叫进来。</strong>
+                  <p>这时候玩家像渠道，不像参与者。</p>
+                </article>
+                <article class="bad-item">
+                  <strong>需要传播了，才去找媒体和创作者。</strong>
+                  <p>好像他们只负责把声量抬起来，不算共同在做内容。</p>
+                </article>
+                <article class="bad-item">
+                  <strong>需要补位了，才重新寻找开发者。</strong>
+                  <p>人被当成执行资源，不像真正一起搭项目的人。</p>
+                </article>
+              </div>
+              <div class="nope-card">
+                <strong>我不想做这种关系。</strong>
+                <p>我更想让真正出了力的人，从一开始就被算作参与者。</p>
+              </div>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span class="active"></span><span></span></div>
+          <span class="footer-note">relationship problem</span>
+        </footer>
+      </section>
+
+      <section class="slide slide-4" data-slide="4">
+        <div class="grain"></div>
+        <div class="grid"></div>
+        <div class="frame"></div>
+        <div class="wash"></div>
+        <header class="header">
+          <span class="brand">oasis7 / xiaohongshu</span>
+          <span class="meta">slide 04 / boundary and prompt</span>
+        </header>
+        <div class="canvas">
+          <div class="wrap">
+            <article class="dark-card boundary-card">
+              <div class="tag">boundary first</div>
+              <h2>这里说的，不是今天已经开放的权利清单。</h2>
+              <p>我现在想讲的，是谁该被认真算进来，不是现在已经发放了什么。</p>
+              <div class="boundary-list">
+                <article class="boundary-item">
+                  <strong>不是法律股权公告</strong>
+                  <span>没有在说今天已经开放法律意义上的股权。</span>
+                </article>
+                <article class="boundary-item">
+                  <strong>不是链上投票权公告</strong>
+                  <span>没有在说现在所有相关人员都拥有治理投票权。</span>
+                </article>
+                <article class="boundary-item">
+                  <strong>不是自动奖励承诺</strong>
+                  <span>更不是“只要参与一下就自动拿到回报”。</span>
+                </article>
+              </div>
+            </article>
+
+            <article class="soft-card future-card">
+              <div class="chip">what i actually want</div>
+              <h2>我只是越来越想做一个，大家真的能一起做起来的游戏。</h2>
+              <p>
+                开发者、玩家、认真讲它的人，
+                <br />
+                不该一直站在外面等被使用。
+              </p>
+              <p>
+                谁一直在投入时间、判断、作品和信誉，
+                <br />
+                谁就该被认真看见。
+              </p>
+              <div class="promise-box">
+                <strong>我更想先把这层关系做对。</strong>
+                <span>先承认你是参与者。后面的制度，才有讨论的价值。</span>
+              </div>
+              <article class="prompt">
+                <strong>如果有这样的游戏，你最想怎么参与？</strong>
+                <p>你会想写、测、提反馈、做内容，还是把它讲给更多人听？</p>
+              </article>
+            </article>
+          </div>
+        </div>
+        <footer class="footer">
+          <div class="progress"><span></span><span></span><span></span><span class="active"></span></div>
+          <span class="footer-note">comment hook</span>
+        </footer>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const slide = params.get("slide");
+      if (slide) {
+        document.body.classList.add("single");
+        document.querySelectorAll(".slide").forEach((node) => {
+          node.style.display = node.dataset.slide === slide ? "block" : "none";
+        });
+      }
+    </script>
+  </body>
+</html>
