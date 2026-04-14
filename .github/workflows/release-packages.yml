@@ -300,15 +300,15 @@ jobs:
         include:
           - os: ubuntu-24.04
             platform: linux-x64
-            asset_name: oasis7-linux-x64.tar.gz
+            asset_name: oasis7-linux-x64.deb
             target_triple: native
           - os: macos-14
             platform: macos-x64
-            asset_name: oasis7-macos-x64.tar.gz
+            asset_name: oasis7-macos-x64.dmg
             target_triple: x86_64-apple-darwin
           - os: windows-2022
             platform: windows-x64
-            asset_name: oasis7-windows-x64.zip
+            asset_name: oasis7-windows-x64.exe
             target_triple: native
     runs-on: ${{ matrix.os }}
     steps:
@@ -346,6 +346,29 @@ jobs:
         with:
           name: release-web-dists
           path: output/release
+      - name: Ensure Windows packaging dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+            exit 0
+          }
+          choco install 7zip -y --no-progress
+      - name: Resolve release version
+        id: release_version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          tag="${tag#v}"
+          if [[ -z "${tag}" ]]; then
+            echo "error: release version is empty" >&2
+            exit 1
+          fi
+          echo "value=${tag}" >> "${GITHUB_OUTPUT}"
       - name: Build launcher bundle
         shell: bash
         run: |
@@ -356,21 +379,16 @@ jobs:
             --web-launcher-dist output/release/web-launcher-dist \
             --out-dir output/release/assets \
             --profile release
-      - name: Archive bundle (tar.gz)
-        if: runner.os != 'Windows'
+      - name: Package native installer
         shell: bash
         run: |
-          tar -C output/release/assets \
-            -czf "output/release/assets/${{ matrix.asset_name }}" \
-            "oasis7-${{ matrix.platform }}"
-      - name: Archive bundle (zip)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Compress-Archive `
-            -Path "output/release/assets/oasis7-${{ matrix.platform }}/*" `
-            -DestinationPath "output/release/assets/${{ matrix.asset_name }}" `
-            -Force
+          chmod +x ./scripts/package-native-installer.sh
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/release/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/release/assets \
+            --asset-name "${{ matrix.asset_name }}" \
+            --version "${{ steps.release_version.outputs.value }}"
       - name: Upload platform asset
         uses: actions/upload-artifact@v4
         with:
@@ -412,16 +430,16 @@ jobs:
           cd output/release/assets
           ls -l
           for file in \
-            oasis7-linux-x64.tar.gz \
-            oasis7-macos-x64.tar.gz \
-            oasis7-windows-x64.zip
+            oasis7-linux-x64.deb \
+            oasis7-macos-x64.dmg \
+            oasis7-windows-x64.exe
           do
             [[ -f "${file}" ]] || { echo "error: missing release asset ${file}" >&2; exit 1; }
           done
           sha256sum \
-            oasis7-linux-x64.tar.gz \
-            oasis7-macos-x64.tar.gz \
-            oasis7-windows-x64.zip \
+            oasis7-linux-x64.deb \
+            oasis7-macos-x64.dmg \
+            oasis7-windows-x64.exe \
             > oasis7-checksums.txt
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -430,7 +448,7 @@ jobs:
           name: oasis7 ${{ steps.tag.outputs.value }}
           generate_release_notes: true
           files: |
-            output/release/assets/oasis7-linux-x64.tar.gz
-            output/release/assets/oasis7-macos-x64.tar.gz
-            output/release/assets/oasis7-windows-x64.zip
+            output/release/assets/oasis7-linux-x64.deb
+            output/release/assets/oasis7-macos-x64.dmg
+            output/release/assets/oasis7-windows-x64.exe
             output/release/assets/oasis7-checksums.txt

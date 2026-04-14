@@ -2,7 +2,6 @@ version: 1
 gate_id: null
 status: draft
 lane_status: []
-blocking_tasks:
-  - task_dfe0d5fdffcf4e0cb5b28a28cda917c8
+blocking_tasks: []
 updated_from:
-  - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+  - .pm/tasks/task_41236b37e7a0493fa4f20424cc465eeb.execution.md

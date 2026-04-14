@@ -350,13 +350,13 @@ detect_release_platform() {
 release_asset_name() {
   case "$1" in
     linux-x64)
-      printf 'oasis7-linux-x64.tar.gz\n'
+      printf 'oasis7-linux-x64.deb\n'
       ;;
     macos-x64)
-      printf 'oasis7-macos-x64.tar.gz\n'
+      printf 'oasis7-macos-x64.dmg\n'
       ;;
     windows-x64)
-      printf 'oasis7-windows-x64.zip\n'
+      printf 'oasis7-windows-x64.exe\n'
       ;;
     *)
       echo "error: unsupported --release-platform: $1" >&2
@@ -428,6 +428,48 @@ find_extracted_bundle_dir() {
   return 1
 }
 
+extract_release_asset() {
+  local asset_name="$1"
+  local archive_path="$2"
+  local extract_root="$3"
+
+  case "$asset_name" in
+    *.deb)
+      require_cmd dpkg-deb
+      dpkg-deb -x "$archive_path" "$extract_root"
+      ;;
+    *.dmg)
+      require_cmd hdiutil
+      local mount_root
+      mount_root="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-run-dmg.XXXXXX")"
+      local attach_output=""
+      cleanup_dmg_mount() {
+        if [[ -n "$attach_output" ]]; then
+          local device
+          device="$(printf '%s\n' "$attach_output" | awk '/^\/dev\// { print $1; exit }')"
+          if [[ -n "$device" ]]; then
+            hdiutil detach "$device" >/dev/null 2>&1 || true
+          fi
+        fi
+        rm -rf "$mount_root"
+      }
+      attach_output="$(hdiutil attach "$archive_path" -nobrowse -mountpoint "$mount_root")"
+      trap cleanup_dmg_mount RETURN
+      cp -R "$mount_root/." "$extract_root/"
+      trap - RETURN
+      cleanup_dmg_mount
+      ;;
+    *.exe)
+      require_cmd 7z
+      7z x -y "-o$extract_root" "$archive_path" >/dev/null
+      ;;
+    *)
+      echo "error: unsupported release archive format: $asset_name" >&2
+      exit 1
+      ;;
+  esac
+}
+
 download_release_bundle() {
   require_cmd curl
 
@@ -465,7 +507,7 @@ download_release_bundle() {
   curl_download_file "$asset_url" "$archive_path" "Downloading release asset…"
   local archive_size_bytes
   archive_size_bytes="$(file_size_bytes "$archive_path")"
-  echo "Downloaded archive: $archive_path (bytes=$archive_size_bytes)" >&2
+  echo "Downloaded release asset: $archive_path (bytes=$archive_size_bytes)" >&2
 
   echo "Fetching release checksums: $checksum_url" >&2
   if curl_download_file "$checksum_url" "$checksum_path" "Fetching release checksums…"; then
@@ -485,25 +527,12 @@ download_release_bundle() {
   fi
 
   [[ -f "$archive_path" ]] || {
-    echo "error: release archive missing before extraction: $archive_path" >&2
+    echo "error: release asset missing before extraction: $archive_path" >&2
     exit 1
   }
 
-  echo "Extracting bundle archive into: $extract_root" >&2
-  case "$asset_name" in
-    *.tar.gz)
-      require_cmd tar
-      tar -xzf "$archive_path" -C "$extract_root"
-      ;;
-    *.zip)
-      require_cmd unzip
-      unzip -q "$archive_path" -d "$extract_root"
-      ;;
-    *)
-      echo "error: unsupported release archive format: $asset_name" >&2
-      exit 1
-      ;;
-  esac
+  echo "Extracting release asset into: $extract_root" >&2
+  extract_release_asset "$asset_name" "$archive_path" "$extract_root"
 
   local detected_bundle
   if ! detected_bundle="$(find_extracted_bundle_dir "$extract_root" "$platform")"; then

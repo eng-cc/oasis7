@@ -33,12 +33,12 @@ done
 [[ -n "$output_path" ]] || { echo "missing -o output path" >&2; exit 2; }
 url="${args[-1]}"
 case "$url" in
-  https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.tar.gz)
+  https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb)
     sleep 2
     cp "$FAKE_ARCHIVE_PAYLOAD" "$output_path"
     ;;
   https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt)
-    printf '%s  oasis7-linux-x64.tar.gz\n' "$FAKE_ARCHIVE_SHA256" > "$output_path"
+    printf '%s  oasis7-linux-x64.deb\n' "$FAKE_ARCHIVE_SHA256" > "$output_path"
     ;;
   *)
     echo "unexpected curl url: $url" >&2
@@ -48,26 +48,25 @@ esac
 CURL
 chmod +x "$fake_bin/curl"
 
-cat > "$fake_bin/tar" <<'TAR'
+cat > "$fake_bin/dpkg-deb" <<'DPKG'
 #!/usr/bin/env bash
 set -euo pipefail
 extract_root=""
 args=("$@")
-for ((i=0; i<${#args[@]}; i+=1)); do
-  if [[ "${args[$i]}" == "-C" ]]; then
-    extract_root="${args[$((i + 1))]}"
-    break
-  fi
-done
-[[ -n "$extract_root" ]] || { echo "missing tar extract root" >&2; exit 2; }
-mkdir -p "$extract_root/oasis7-linux-x64/bin"
-cat > "$extract_root/oasis7-linux-x64/run-game.sh" <<'RUN'
+if [[ "${1:-}" != "-x" ]]; then
+  echo "expected dpkg-deb -x" >&2
+  exit 2
+fi
+extract_root="${3:-}"
+[[ -n "$extract_root" ]] || { echo "missing dpkg-deb extract root" >&2; exit 2; }
+mkdir -p "$extract_root/opt/oasis7/bin"
+cat > "$extract_root/opt/oasis7/run-game.sh" <<'RUN'
 #!/usr/bin/env bash
 exit 0
 RUN
-chmod +x "$extract_root/oasis7-linux-x64/run-game.sh"
-TAR
-chmod +x "$fake_bin/tar"
+chmod +x "$extract_root/opt/oasis7/run-game.sh"
+DPKG
+chmod +x "$fake_bin/dpkg-deb"
 
 sanitized_path="$fake_bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 first_stderr="$tmp_dir/download.stderr"
@@ -92,10 +91,10 @@ fi
 for needle in \
   "Downloading release asset:" \
   "Downloading release asset… (elapsed=1s)" \
-  "Downloaded archive:" \
+  "Downloaded release asset:" \
   "Fetching release checksums:" \
   "Verified SHA256:" \
-  "Extracting bundle archive into:" \
+  "Extracting release asset into:" \
   "Preparing bundle directory:" \
   "Bundle ready:"; do
   if ! grep -Fq "$needle" "$first_stderr"; then
@@ -122,29 +121,26 @@ if [[ "$(tr -d '\n' < "$second_stdout")" != "$expected_bundle" ]]; then
   exit 1
 fi
 
-missing_extract_tar="$tmp_dir/bin/tar-missing"
-cat > "$missing_extract_tar" <<'TAR'
+missing_extract_dpkg="$tmp_dir/bin/dpkg-deb-missing"
+cat > "$missing_extract_dpkg" <<'DPKG'
 #!/usr/bin/env bash
 set -euo pipefail
-extract_root=""
-args=("$@")
-for ((i=0; i<${#args[@]}; i+=1)); do
-  if [[ "${args[$i]}" == "-C" ]]; then
-    extract_root="${args[$((i + 1))]}"
-    break
-  fi
-done
-[[ -n "$extract_root" ]] || { echo "missing tar extract root" >&2; exit 2; }
-mkdir -p "$extract_root/oasis7-linux-x64/bin"
+if [[ "${1:-}" != "-x" ]]; then
+  echo "expected dpkg-deb -x" >&2
+  exit 2
+fi
+extract_root="${3:-}"
+[[ -n "$extract_root" ]] || { echo "missing dpkg-deb extract root" >&2; exit 2; }
+mkdir -p "$extract_root/opt/oasis7/bin"
 printf 'no launcher here
-' > "$extract_root/oasis7-linux-x64/README.txt"
-TAR
-chmod +x "$missing_extract_tar"
+' > "$extract_root/opt/oasis7/README.txt"
+DPKG
+chmod +x "$missing_extract_dpkg"
 
 failure_bin="$tmp_dir/bin-failure"
 mkdir -p "$failure_bin"
 cp "$fake_bin/curl" "$failure_bin/curl"
-cp "$missing_extract_tar" "$failure_bin/tar"
+cp "$missing_extract_dpkg" "$failure_bin/dpkg-deb"
 
 failure_cache_dir="$tmp_dir/cache-failure"
 mkdir -p "$failure_cache_dir"

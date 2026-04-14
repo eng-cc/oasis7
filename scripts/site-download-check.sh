@@ -10,9 +10,9 @@ SITE_ENTRIES=(
 )
 
 RELEASE_ASSET_URLS=(
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.zip"
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.tar.gz"
-  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.tar.gz"
+  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
+  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg"
+  "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb"
   "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt"
 )
 

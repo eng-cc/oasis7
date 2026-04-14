@@ -78,11 +78,11 @@ Operator rules:
 
 ## Bundle-First Entry
 
-For a real试玩，先下载 GitHub Release 的游戏包，再把 Local Provider provider 配到 bundle：
+For a real试玩，先下载 GitHub Release 的平台安装器，再把 Local Provider provider 配到解包后的 bundle：
 
-- latest Linux bundle: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.tar.gz`
-- latest macOS bundle: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.tar.gz`
-- latest Windows bundle: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.zip`
+- latest Linux installer: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x64.deb`
+- latest macOS installer: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg`
+- latest Windows installer: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe`
 - checksums: `https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt`
 
 One-command download via `oasis7`:
