@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 const DEFAULT_MAIN_TOKEN_SYMBOL: &str = "OC";
 const DEFAULT_MAIN_TOKEN_DECIMALS: u8 = 9;
+pub const FROZEN_MAIN_TOKEN_INITIAL_SUPPLY: u64 = 10_000_000_000;
 const DEFAULT_MAIN_TOKEN_BASE_RATE_BPS: u32 = 400;
 const DEFAULT_MAIN_TOKEN_MIN_RATE_BPS: u32 = 200;
 const DEFAULT_MAIN_TOKEN_MAX_RATE_BPS: u32 = 800;
@@ -28,6 +29,18 @@ pub const MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE: &str = "gas_fee_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_SLASH: &str = "slash_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE: &str = "module_fee_treasury";
 pub const RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY: &str = "slot_1_claim_and_upkeep";
+
+pub fn production_hardened_main_token_config() -> MainTokenConfig {
+    MainTokenConfig {
+        symbol: DEFAULT_MAIN_TOKEN_SYMBOL.to_string(),
+        decimals: DEFAULT_MAIN_TOKEN_DECIMALS,
+        initial_supply: FROZEN_MAIN_TOKEN_INITIAL_SUPPLY,
+        max_supply: None,
+        inflation_policy: MainTokenInflationPolicy::default(),
+        issuance_split: MainTokenIssuanceSplitPolicy::default(),
+        burn_policy: MainTokenBurnPolicy::default(),
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MainTokenInflationPolicy {

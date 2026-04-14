@@ -15,6 +15,7 @@
 - [x] TIGR-7 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，并明确 public naming 与 runtime `main_token.symbol` / ticker 的边界，避免把当时旧 runtime symbol 误写成产品名或误宣称本轮已完成 ticker 改名。
 - [x] TIGR-8 (PRD-P2P-TOKEN-INIT-001/003) [test_tier_required]: 将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与专题文档，清理 `AWT` / `awt:pk:` 的现行真值残留。
 - [x] TIGR-9 (PRD-P2P-TOKEN-INIT-001/002) [test_tier_required]: 由 `producer_system_designer` 冻结当前 `main_token_config.initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 回写到专题文档。
+- [x] TIGR-10 (PRD-P2P-TOKEN-INIT-002) [test_tier_required]: 由 `runtime_engineer` 将 `10,000,000,000 OC` frozen supply 接到 chain execution world 的 fresh-init 真值，并确保 execution driver 只在 `ReleaseDefault` 下继承该 production freeze；真实 7 bucket `recipient_account_id` / multisig 绑定仍留在 `TIGR-6` 完成前，不对外暴露可直接落盘的 production helper，也不扩散到 generic `production_hardened` world。
 
 ## TIGR-1 产物（本地草案，待 review）
 | bucket_id | ratio_bps | recipient | start_epoch | cliff_epochs | linear_unlock_epochs | genesis_liquid | ownership_note |
@@ -92,6 +93,19 @@
   - `allocated_amount` 仍按 runtime 真值公式计算。
   - 当前 `10,000,000,000 OC` 口径下 7 个 bucket 都能整除，`remainder = 0`，不需要额外补差额。
   - `genesis_liquid=0`、独立 reward reserve、多签审批与低流通边界不变；本次只冻结绝对总量，不提前宣称 mint-ready。
+
+## TIGR-10 runtime fresh-init 落地结论
+- chain execution world fresh-init 现在会在 `ReleaseDefault` 路径下携带 frozen `main_token_config.initial_supply = 10,000,000,000 OC`，不再沿用 generic default 的 `0`。
+- `NodeRuntimeExecutionDriver::new_with_storage_profile()` 现在会按 `storage_profile.profile` 直接选择 fresh world policy：
+  - `ReleaseDefault` fresh world 继续带 production-hardened policy 与 frozen `10,000,000,000 OC`
+  - `DevLocal` / 其他非 release fresh world 保持 generic `main_token_config.initial_supply = 0`
+- generic `RuntimeWorld::new_production_hardened()` 不再自动携带 10B supply，避免把创世 freeze 扩散到 viewer bootstrap、reward runtime worker、governance import 之类并非 chain execution world 的生产硬化场景。
+- 若同一个 execution world 目录曾在 `ReleaseDefault` 下生成过 pristine frozen config，再以 `DevLocal` 重新打开时，execution driver 会把这类“未初始化主链账本但残留 production freeze”的状态清回 generic `0`，避免 profile switch 后继续误带 10B。
+- 7 bucket freeze sheet 仍保持文档真值，但在 `TIGR-6` 完成真实 `recipient_account_id` / multisig 绑定前，runtime 不再对外暴露可直接初始化创世的 production helper。
+- 边界保持不变：
+  - fresh-init 真值已落 runtime config，但并未跳过 `InitializeMainTokenGenesis`。
+  - `recipient_account_id` / multisig 真实地址仍待 `TIGR-6` 绑定；当前 freeze sheet 里的 logical custody account 命名仍只作为专题文档口径，不作为 production runtime helper 对外发布。
+  - 因此本次是“配置与创世参数真值补齐”，不是“已经 mint-ready”。
 
 ## 依赖
 - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`

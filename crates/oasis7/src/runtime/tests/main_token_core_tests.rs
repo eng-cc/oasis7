@@ -16,6 +16,210 @@ fn main_token_queries_return_defaults_when_uninitialized() {
 }
 
 #[test]
+fn production_hardened_main_token_config_freezes_10b_supply() {
+    let config = production_hardened_main_token_config();
+    assert_eq!(config.symbol, "OC");
+    assert_eq!(config.decimals, 9);
+    assert_eq!(config.initial_supply, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY);
+    assert_eq!(config.max_supply, None);
+}
+
+fn frozen_supply_genesis_sheet_fixture() -> Vec<MainTokenGenesisAllocationPlan> {
+    vec![
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "team_long_term_vesting".to_string(),
+            ratio_bps: 2_000,
+            recipient: "protocol:team-core-vesting".to_string(),
+            cliff_epochs: 365,
+            linear_unlock_epochs: 1_095,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "early_contributor_reward_reserve".to_string(),
+            ratio_bps: 1_500,
+            recipient: "protocol:early-contributor-reward".to_string(),
+            cliff_epochs: 0,
+            linear_unlock_epochs: 3_650,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "node_service_genesis_custody".to_string(),
+            ratio_bps: 2_000,
+            recipient: "protocol:node-service-custody".to_string(),
+            cliff_epochs: 180,
+            linear_unlock_epochs: 1_825,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "staking_genesis_custody".to_string(),
+            ratio_bps: 1_500,
+            recipient: "protocol:staking-custody".to_string(),
+            cliff_epochs: 180,
+            linear_unlock_epochs: 1_825,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "ecosystem_governance_reserve".to_string(),
+            ratio_bps: 1_500,
+            recipient: "protocol:ecosystem-governance".to_string(),
+            cliff_epochs: 90,
+            linear_unlock_epochs: 1_460,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "security_reserve_emergency".to_string(),
+            ratio_bps: 1_000,
+            recipient: "protocol:security-council-reserve".to_string(),
+            cliff_epochs: 0,
+            linear_unlock_epochs: 0,
+            start_epoch: 0,
+        },
+        MainTokenGenesisAllocationPlan {
+            bucket_id: "foundation_ops_reserve".to_string(),
+            ratio_bps: 500,
+            recipient: "protocol:foundation-ops".to_string(),
+            cliff_epochs: 90,
+            linear_unlock_epochs: 730,
+            start_epoch: 0,
+        },
+    ]
+}
+
+#[test]
+fn production_hardened_genesis_plan_matches_frozen_10b_sheet() {
+    let mut world = World::new();
+    world.set_main_token_config(production_hardened_main_token_config());
+
+    let plans = frozen_supply_genesis_sheet_fixture();
+    assert_eq!(plans.len(), 7);
+    assert_eq!(
+        plans
+            .iter()
+            .map(|plan| u64::from(plan.ratio_bps))
+            .sum::<u64>(),
+        10_000
+    );
+
+    world.submit_action(Action::InitializeMainTokenGenesis { allocations: plans });
+    world
+        .step()
+        .expect("initialize production-hardened main token genesis");
+
+    assert_eq!(
+        world.main_token_supply().total_supply,
+        FROZEN_MAIN_TOKEN_INITIAL_SUPPLY
+    );
+    assert_eq!(world.main_token_supply().circulating_supply, 0);
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("team_long_term_vesting")
+            .expect("team bucket")
+            .allocated_amount,
+        2_000_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("early_contributor_reward_reserve")
+            .expect("reward bucket")
+            .allocated_amount,
+        1_500_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("node_service_genesis_custody")
+            .expect("node service bucket")
+            .allocated_amount,
+        2_000_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("staking_genesis_custody")
+            .expect("staking bucket")
+            .allocated_amount,
+        1_500_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("ecosystem_governance_reserve")
+            .expect("ecosystem bucket")
+            .allocated_amount,
+        1_500_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("security_reserve_emergency")
+            .expect("security bucket")
+            .allocated_amount,
+        1_000_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_genesis_bucket("foundation_ops_reserve")
+            .expect("ops bucket")
+            .allocated_amount,
+        500_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_account_balance("protocol:team-core-vesting")
+            .expect("team account")
+            .vested_balance,
+        2_000_000_000
+    );
+    assert_eq!(
+        world
+            .main_token_account_balance("protocol:early-contributor-reward")
+            .expect("reward account")
+            .vested_balance,
+        1_500_000_000
+    );
+}
+
+#[test]
+fn enabling_production_release_policy_leaves_main_token_config_unchanged() {
+    let mut world = World::new();
+    assert_eq!(world.main_token_config().initial_supply, 0);
+
+    world.enable_production_release_policy();
+    assert_eq!(world.main_token_config().initial_supply, 0);
+
+    let mut custom_world = World::new();
+    custom_world.set_main_token_config(MainTokenConfig {
+        symbol: "OC".to_string(),
+        decimals: 9,
+        initial_supply: 777,
+        max_supply: Some(999),
+        inflation_policy: MainTokenInflationPolicy::default(),
+        issuance_split: MainTokenIssuanceSplitPolicy::default(),
+        burn_policy: MainTokenBurnPolicy::default(),
+    });
+    custom_world.enable_production_release_policy();
+    assert_eq!(custom_world.main_token_config().initial_supply, 777);
+    assert_eq!(custom_world.main_token_config().max_supply, Some(999));
+}
+
+#[test]
+fn setting_production_release_policy_leaves_main_token_config_unchanged() {
+    let mut world = World::new();
+    world.set_release_security_policy(ReleaseSecurityPolicy::production_hardened());
+    assert_eq!(world.main_token_config().initial_supply, 0);
+
+    let mut custom_world = World::new();
+    custom_world.set_main_token_config(MainTokenConfig {
+        symbol: "OC".to_string(),
+        decimals: 9,
+        initial_supply: 555,
+        max_supply: Some(888),
+        inflation_policy: MainTokenInflationPolicy::default(),
+        issuance_split: MainTokenIssuanceSplitPolicy::default(),
+        burn_policy: MainTokenBurnPolicy::default(),
+    });
+    custom_world.set_release_security_policy(ReleaseSecurityPolicy::production_hardened());
+    assert_eq!(custom_world.main_token_config().initial_supply, 555);
+    assert_eq!(custom_world.main_token_config().max_supply, Some(888));
+}
+
+#[test]
 fn main_token_snapshot_roundtrip_persists_state() {
     let mut world = World::new();
     world.set_main_token_config(MainTokenConfig {

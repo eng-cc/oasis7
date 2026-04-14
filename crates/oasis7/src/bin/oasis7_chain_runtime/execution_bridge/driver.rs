@@ -6,7 +6,8 @@ use oasis7::consensus_action_payload::{
     decode_consensus_action_payload, ConsensusActionPayloadBody,
 };
 use oasis7::runtime::{
-    blake3_hex, BlobStore, Journal as RuntimeJournal, LocalCasStore, ReleaseSecurityPolicy,
+    blake3_hex, production_hardened_main_token_config, BlobStore, Journal as RuntimeJournal,
+    LocalCasStore, MainTokenConfig, MainTokenSupplyState, ReleaseSecurityPolicy,
     Snapshot as RuntimeSnapshot, World as RuntimeWorld,
 };
 use oasis7::simulator::{
@@ -85,10 +86,10 @@ impl NodeRuntimeExecutionDriver {
         storage_profile: &StorageProfileConfig,
     ) -> Result<Self, String> {
         let state = load_execution_bridge_state(state_path.as_path())?;
-        let mut execution_world = load_execution_world(world_dir.as_path())?;
-        execution_world.set_release_security_policy(release_security_policy_for_storage_profile(
-            storage_profile.profile,
-        ));
+        let release_security_policy =
+            release_security_policy_for_storage_profile(storage_profile.profile);
+        let execution_world =
+            load_execution_world_with_policy(world_dir.as_path(), release_security_policy)?;
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
             WasmExecutor::new(WasmExecutorConfig::default()).map_err(|err| err.to_string())?,
         );
@@ -630,10 +631,55 @@ pub(crate) fn persist_execution_bridge_state(
 }
 
 pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, String> {
+    load_execution_world_with_policy(world_dir, ReleaseSecurityPolicy::production_hardened())
+}
+
+fn execution_world_has_pristine_main_token_state(world: &RuntimeWorld) -> bool {
+    let state = world.state();
+    state.main_token_supply == MainTokenSupplyState::default()
+        && state.main_token_balances.is_empty()
+        && state.main_token_genesis_buckets.is_empty()
+        && state.main_token_epoch_issuance_records.is_empty()
+        && state.main_token_treasury_balances.is_empty()
+        && state.main_token_claim_nonces.is_empty()
+        && state.main_token_transfer_nonces.is_empty()
+        && state.main_token_scheduled_policy_updates.is_empty()
+        && state.main_token_treasury_distribution_records.is_empty()
+        && state.main_token_node_points_bridge_records.is_empty()
+        && state
+            .restricted_starter_claim_liveops_pool_top_up_records
+            .is_empty()
+}
+
+fn normalize_execution_world_main_token_config_for_policy(
+    world: &mut RuntimeWorld,
+    release_security_policy: ReleaseSecurityPolicy,
+) {
+    if release_security_policy.is_production_hardened() {
+        if world.main_token_config() == &MainTokenConfig::default() {
+            world.set_main_token_config(production_hardened_main_token_config());
+        }
+        return;
+    }
+
+    if execution_world_has_pristine_main_token_state(world)
+        && world.main_token_config() == &production_hardened_main_token_config()
+    {
+        world.set_main_token_config(MainTokenConfig::default());
+    }
+}
+
+pub(crate) fn load_execution_world_with_policy(
+    world_dir: &Path,
+    release_security_policy: ReleaseSecurityPolicy,
+) -> Result<RuntimeWorld, String> {
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(RuntimeWorld::new_production_hardened());
+        let mut world =
+            RuntimeWorld::new_with_release_security_policy(release_security_policy.clone());
+        normalize_execution_world_main_token_config_for_policy(&mut world, release_security_policy);
+        return Ok(world);
     }
     RuntimeWorld::load_from_dir(world_dir)
         .map_err(|err| {
@@ -644,7 +690,12 @@ pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
             )
         })
         .map(|world| {
-            world.with_release_security_policy(ReleaseSecurityPolicy::production_hardened())
+            let mut world = world.with_release_security_policy(release_security_policy.clone());
+            normalize_execution_world_main_token_config_for_policy(
+                &mut world,
+                release_security_policy,
+            );
+            world
         })
 }
 

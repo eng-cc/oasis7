@@ -472,6 +472,22 @@
     - `.pm/tasks/task_daa6920df91d4df9807c6a04fd3cf3fc.execution.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "10,000,000,000|10000000000|100 亿 OC|2,000,000,000 OC|1,500,000,000 OC|500,000,000 OC" doc/p2p/README.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.design.md doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
+- [x] TASK-P2P-049 (PRD-P2P-013) [test_tier_required]: 将已冻结的 `10,000,000,000 OC` 创世总量接到 chain execution world 的 fresh-init 真值，并补 execution driver 的 profile 分流，避免 production freeze 泄漏到 generic `production_hardened` world 或重开的 `dev_local` execution world；真实 bucket recipient 继续留在 `TIGR-6` 绑定后再进入 runtime 可用 surface。
+  - 产物文件:
+    - `crates/oasis7/src/runtime/main_token.rs`
+    - `crates/oasis7/src/runtime/mod.rs`
+    - `crates/oasis7/src/runtime/world/mod.rs`
+    - `crates/oasis7/src/runtime/tests/main_token_core_tests.rs`
+    - `doc/p2p/project.md`
+    - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
+    - `.pm/tasks/task_0bac7318e0ba412cbd39469bfc096ffb.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::main_token:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required load_execution_world_defaults_to_hardened_release_policy -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required dev_local_storage_profile_keeps_generic_supply_for_missing_execution_world -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required dev_local_storage_profile_clears_pristine_frozen_supply_from_existing_execution_world -- --nocapture`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`
