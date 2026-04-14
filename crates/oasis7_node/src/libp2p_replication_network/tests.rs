@@ -615,6 +615,15 @@ fn unsupported_protocol_detection_ignores_generic_availability_failures() {
     };
     assert!(peer_error_indicates_unsupported_protocol(&missing_handler));
 
+    let forced_unsupported = WorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrUnsupported,
+        message: "forced unsupported".to_string(),
+        retryable: false,
+    };
+    assert!(!peer_error_indicates_unsupported_protocol(
+        &forced_unsupported
+    ));
+
     let transient_internal = WorldError::NetworkRequestFailed {
         code: DistributedErrorCode::ErrNotAvailable,
         message: "remote temporarily unavailable".to_string(),
@@ -666,6 +675,17 @@ fn libp2p_replication_network_preserves_remote_unsupported_error_code() {
         .expect_err("unsupported remote handler must bubble its code");
     assert!(matches!(
         err,
+        WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrUnsupported,
+            ..
+        }
+    ));
+
+    let second_err = dialer
+        .request("/aw/node/replication/ping", b"node")
+        .expect_err("business unsupported must not quarantine the only peer");
+    assert!(matches!(
+        second_err,
         WorldError::NetworkRequestFailed {
             code: DistributedErrorCode::ErrUnsupported,
             ..
