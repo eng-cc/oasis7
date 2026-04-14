@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::Swarm;
+use libp2p::swarm::{ConnectionId, Swarm};
 use libp2p::{Multiaddr, PeerId};
 
 use crate::error::WorldError;
@@ -239,6 +239,31 @@ pub(super) fn note_established_transport_path(
     last_dialed_transport_paths.remove(&peer_id);
     active_transport_paths.insert(peer_id, active_path.clone());
     active_path
+}
+
+pub(super) fn recompute_active_transport_path_for_peer(
+    active_transport_paths: &mut HashMap<PeerId, TransportPath>,
+    established_transport_paths: &HashMap<ConnectionId, TransportPath>,
+    established_connections_by_peer: &HashMap<PeerId, HashSet<ConnectionId>>,
+    peer_id: PeerId,
+) -> Option<TransportPath> {
+    let replacement = established_connections_by_peer
+        .get(&peer_id)
+        .into_iter()
+        .flat_map(|connection_ids| connection_ids.iter())
+        .filter_map(|connection_id| established_transport_paths.get(connection_id))
+        .min_by_key(|path| path.preference_rank())
+        .cloned();
+    match replacement {
+        Some(path) => {
+            active_transport_paths.insert(peer_id, path.clone());
+            Some(path)
+        }
+        None => {
+            active_transport_paths.remove(&peer_id);
+            None
+        }
+    }
 }
 
 pub(super) fn dial_transport_path(

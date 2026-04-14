@@ -17,6 +17,8 @@ use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;
 
+mod transport_path_refresh_tests;
+
 fn signed_discovery_peer_record(
     keypair: &Keypair,
     discovery_sources: Vec<crate::dht::PeerDiscoverySource>,
@@ -45,12 +47,6 @@ fn signed_discovery_peer_record(
         keypair,
     )
     .expect("sign discovery peer record")
-}
-
-#[test]
-fn libp2p_network_generates_peer_id() {
-    let network = Libp2pNetwork::new(Libp2pNetworkConfig::default());
-    assert!(!network.peer_id().to_string().is_empty());
 }
 
 #[test]

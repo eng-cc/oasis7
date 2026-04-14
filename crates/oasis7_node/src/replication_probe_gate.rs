@@ -51,6 +51,7 @@ fn should_fallback_provider_aware_replication_request(err: &NodeError) -> bool {
         return false;
     };
     reason.contains("NetworkProtocolUnavailable")
+        || reason.contains("libp2p-replication no admissible connected peers for protocol")
         || reason.contains("libp2p-replication no connected providers for protocol")
         || reason.contains("libp2p-replication no connected peers for protocol")
         || (reason.contains("NetworkRequestFailed")
@@ -61,9 +62,26 @@ pub(super) fn replication_request_waitable_connection_gap(err: &NodeError) -> bo
     let NodeError::Replication { reason } = err else {
         return false;
     };
-    reason.contains("no connected peers for protocol")
+    reason.contains("no admissible connected peers for protocol")
+        || reason.contains("no connected peers for protocol")
         || reason.contains("no connected providers for protocol")
         || reason.contains("no healthy provider for protocol")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
+        let err = NodeError::Replication {
+            reason:
+                "NetworkProtocolUnavailable { protocol: \"libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0\" }"
+                    .to_string(),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(replication_request_waitable_connection_gap(&err));
+    }
 }
 
 pub(super) fn request_fetch_blob_with_route_fallback(
