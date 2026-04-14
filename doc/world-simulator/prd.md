@@ -68,6 +68,7 @@
   - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md`（PRD-WORLD_SIMULATOR-018）
   - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`（PRD-WORLD_SIMULATOR-019）
   - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`（PRD-WORLD_SIMULATOR-001/002/003）
+  - `doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md`（PRD-WORLD_SIMULATOR-043）
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。
@@ -212,6 +213,7 @@
   - SC-105: 兼容层源码清理完成后，源码内嵌负向测试中的 helper / fixture 命名也必须收口到 `old_brand_removed` / `removed_old_brand` 等中性语义；旧品牌 env/path/profile 字面量仅允许作为“已移除 alias 的负向输入”存在，不得继续作为 helper 主命名或默认 fixture 身份。
   - SC-106: viewer/client 收口后，runtime/tooling 的源码内嵌负向测试 helper / fixture 命名也必须继续收口到 `removed_old_brand` 等中性语义；旧品牌 env/profile 字面量仅允许作为“已移除 alias 的负向输入”存在，不得继续作为测试 helper 主命名或默认 fixture 身份。
   - SC-107: 活跃角色卡、core 主入口与 world-runtime 主文档必须使用当前 `oasis7*` / `OASIS7_*` 口径描述现行 crate/path/env；旧 `oasis7*` / `OASIS7_*` 仅允许保留在历史任务、归档专题或负向测试输入中，不得继续作为 owner 文档或模块主入口的当前说明。
+  - SC-109: 面向普通用户的 GitHub Release / 官网下载入口必须继续收口为“每个平台一个主包”的产品级发行模型：Windows 为标准安装器，macOS 为签名并 notarized 的 `.app + .dmg`，Linux 为可直接运行的 `AppImage`；checksums、发行版特化包与技术性 bundle 入口只能作为辅助信息，不得继续混入默认下载决策面。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -267,6 +269,7 @@
   - PRD-WORLD_SIMULATOR-039: As a 玩家 / QA / 制作人, I want `software_safe` to be the low-fidelity but formally playable primary Web entry, so that browser gameplay no longer depends on high-fidelity graphics prerequisites while still remaining bounded and auditable.
   - PRD-WORLD_SIMULATOR-040: As a 玩家 / 制作人 / QA, I want Local Provider agents to support both player-parity and headless execution modes, so that we can separate player-feel validation from GUI-dependent automation and keep gameplay regression runnable without graphics dependencies.
   - PRD-WORLD_SIMULATOR-041: As a 制作人 / viewer_engineer / qa_engineer, I want all 3D visualization work paused and the current user-interaction branch held as a staged reference, so that near-term capacity stays on non-3D interaction scope, especially `software_safe`, launcher/runtime interaction, and gameplay closure, while future resumption remains auditable.
+  - PRD-WORLD_SIMULATOR-043: As a 普通用户 / 制作人 / 支持人员, I want one clearly recommended installable or runnable package for my platform, so that I can start oasis7 without reverse-engineering bundle contents, shell scripts, or trust bypass steps.
 - 模式分层说明：按 `PRD-CORE-009`，`PRD-WORLD_SIMULATOR-039` 对应玩家访问模式 `software_safe`，且现在承接低保真但正式可玩的主要 Web 入口；`standard_3d` 继续保留为 visual QA / screenshot / spatial review 模式，而不是默认浏览器主路径。`PRD-WORLD_SIMULATOR-037` 定义 provider-backed Local Provider 路径（`agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`；`agent_direct_connect/provider_loopback_http` 仅作兼容 alias），`PRD-WORLD_SIMULATOR-040` 定义 `player_parity / headless_agent / debug_viewer` execution lane；`PRD-WORLD_SIMULATOR-041` 只定义当前研发优先级与冻结策略，不新增玩家访问模式。`non-3D interaction` / `2D 优先` 在这里是 Viewer 当前 delivery priority 或 interaction scope，不是 `software_safe` 的别名，也不是新的 mode_id。当前 `standard_3d` taxonomy 继续保留，但进入暂停研发态，不再接受新的 3D feature 承诺。
 - Critical User Flows:
   1. Flow-WS-001（Web-first 闭环）:
@@ -483,6 +486,7 @@
   - AC-111: `tools/wasm_build_suite/src/lib.rs`、`crates/oasis7/src/{viewer/runtime_live/tests.rs,runtime/module_source_compiler.rs,runtime/builtin_wasm_materializer.rs,simulator/llm_agent/tests_split_part1.rs,bin/oasis7_provider_local_bridge.rs}` 等源码内嵌负向测试中围绕旧品牌 alias 的 helper / fixture 命名必须改为 `removed_old_brand` 等中性语义，且旧品牌字面量仅保留为“输入已失效 alias”断言；变更后至少 `cargo test --manifest-path tools/wasm_build_suite/Cargo.toml`、`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_live::tests -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 builtin_wasm_materializer -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 llm_agent -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_provider_local_bridge -- --nocapture`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 必须通过。
   - AC-112: `.agents/roles/{wasm_platform_engineer,viewer_engineer}.md`、`doc/core/project.md`、`doc/world-runtime/{prd.md,project.md}` 中作为当前 owner 说明、活跃 artifact/path/command 或模块主入口现行约束使用的 `oasis7*` / `OASIS7_*` 路径与 env 口径必须更新为 `oasis7*` / `OASIS7_*`；历史任务正文可保留原始记录，但主状态与活跃入口不得继续把旧品牌写成当前真值。变更后 `./scripts/doc-governance-check.sh`、`git diff --check`，以及 `rg -n 'oasis7_|OASIS7_' .agents/roles/wasm_platform_engineer.md .agents/roles/viewer_engineer.md doc/core/project.md doc/world-runtime/prd.md doc/world-runtime/project.md` 仅允许命中历史任务正文，不得命中当前 owner/path/env 说明。
   - AC-113: 自 2026-04-01 起，`world-simulator` 不再接受新的 3D scene/camera/render/material/light/post-process 可视化需求进入 active delivery；相关需求必须标记为 paused，当前用户交互分支仅作为暂存参考保留，直到 `producer_system_designer` 明确完成恢复门禁复核后才允许重新进入实施。
+  - AC-114: `doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.{prd,project}.md`、`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.{prd,project}.md` 与主 `world-simulator` PRD/project 必须把普通用户发行目标收口为一致真值：Windows 公共主包为标准 installer，macOS 公共主包为签名并 notarized 的 `.app + .dmg`，Linux 公共主包为 `AppImage`，且官网默认每个平台只展示一个主 CTA；变更后至少 `./scripts/doc-governance-check.sh`、`./scripts/pm/lint.sh`、`git diff --check` 与 `rg -n "AppImage|notariz|codesign|standard installer|主 CTA" doc/world-simulator doc/site/github-pages` 必须通过。
 - Non-Goals:
   - 不在本 PRD 中详细列出每个 UI 像素级规范。
   - 不替代 world-runtime/p2p 的底层协议设计。
@@ -657,6 +661,7 @@
 | PRD-WORLD_SIMULATOR-038 | TASK-WORLD_SIMULATOR-114/115/116/118/123/125/126/128/129/154 | `test_tier_required` / `test_tier_full` | `./scripts/doc-governance-check.sh` + fixture benchmark + 真实 builtin/Local Provider `P0` 对照采证 + QA/producer 评分结论 | Local Provider 与 builtin 体验等价门禁、`experimental` / 默认启用准入与后续扩面策略 |
 | PRD-WORLD_SIMULATOR-040 | TASK-WORLD_SIMULATOR-148/149/150/151/152/153 | `test_tier_required` / `test_tier_full` | `./scripts/doc-governance-check.sh` + 双模式 contract review + `headless_agent`/`player_parity` 真实 smoke + QA/producer 对照采证 | Local Provider 双轨模式、无 GUI 回归主链路、Viewer 旁路调试边界与默认模式策略 |
 | PRD-WORLD_SIMULATOR-041 | TASK-WORLD_SIMULATOR-285/286 | `test_tier_required` | `./scripts/doc-governance-check.sh` + `bash -n scripts/capture-viewer-frame.sh scripts/viewer-release-qa-loop.sh scripts/viewer-texture-inspector.sh scripts/viewer-theme-pack-preview.sh` + `rg -n "hold-only|暂停|暂存|恢复门禁|auto-focus-force-3d|默认保持 2D" doc/world-simulator/prd.md doc/world-simulator/project.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.project.md doc/world-simulator/viewer/viewer-manual*.md doc/scripts/viewer-tools/capture-viewer-frame.prd.md scripts/capture-viewer-frame.sh scripts/viewer-release-qa-loop.sh scripts/viewer-texture-inspector.sh scripts/viewer-theme-pack-preview.sh` + `git diff --check` | Viewer 3D workstream 冻结、用户交互分支暂存治理、operator 脚本默认值与后续恢复门禁的可审计性 |
+| PRD-WORLD_SIMULATOR-043 | `task_5d40365b4e714e5799a3baa834e84515` / `task_22a0d58d0d9445b1ad74127c25768d8d` / `task_85eb196085584f8e9ebb9b3f988cd169` | `test_tier_required` | `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `git diff --check` + `rg -n "AppImage|notariz|codesign|standard installer|主 CTA" doc/world-simulator doc/site/github-pages` + Windows bundle/installer dry-run + Linux AppImage dry-run | 普通用户向安装分发口径、公开下载面的一包一平台主路径、平台信任链与支持边界 |
 
 - Decision Log:
 

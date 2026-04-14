@@ -1,0 +1,22 @@
+task_uid: task_1bf477181357609321ff82e92ca9050e
+title: "Implement Windows release codesign trust chain"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+execution_log_path: .pm/tasks/task_1bf477181357609321ff82e92ca9050e.execution.md
+status: candidate
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.project.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Windows public release asset is code signed and carries a trustworthy publisher chain."
+  - "Release workflow blocks publishing when Windows signing credentials or signing steps fail."
+  - "Windows ordinary-user path no longer depends on ignoring unknown publisher warnings."
+handoff_to: []
+updated_at: 2026-04-15T05:45:00+08:00

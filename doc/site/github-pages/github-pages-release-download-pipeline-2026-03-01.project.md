@@ -129,6 +129,17 @@
   - `bash -n scripts/build-game-launcher-bundle.sh`
   - 以临时 bundle 目录实测 `./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp> --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0`
 
+### T3Y Linux public asset switch to AppImage（2026-04-14）
+- 完成内容：更新 `.github/workflows/release-packages.yml`，将 Linux `package-native` 主资产改为 `oasis7-linux-x86_64.AppImage`，并在同一 job 内额外保留 `oasis7-linux-x64.deb` 作为次级高级入口；`publish-release` 与 `oasis7-checksums.txt` 同步纳入两类 Linux 资产。
+- 完成内容：更新 `scripts/package-native-installer.sh`，让 Linux 支持从同一 bundle 目录产出 `AppImage` 或 `.deb`；`AppImage` 采用最小 AppDir（`AppRun` + desktop entry + icon）并默认直达 `run-client.sh`。
+- 完成内容：同步 `site/index.html`、`site/en/index.html`、`scripts/site-download-check.sh` 与相关 PRD/project，官网 Linux 主下载入口切到 `oasis7-linux-x86_64.AppImage`，文案明确“赋予执行权限后即可运行”。
+- 本地回归：
+  - `./scripts/site-download-check.sh`
+  - `bash -n scripts/package-native-installer.sh`
+  - `bash -n .github/workflows/release-packages.yml` 不适用，改为人工审阅 workflow 关键片段
+  - `PATH=<fake-bin>:$PATH ./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/bundle --out-dir <tmp>/out --asset-name oasis7-linux-x86_64.AppImage --version 0.0.0 --dry-run`
+  - `./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/bundle --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0 --dry-run`
+
 ### T3O Release gate web sibling binary 预热回补（2026-03-14）
 - [x] 复盘 `Release Packages` run `23080255868`，确认 `release-gate-web` 已越过 `trunk` 安装，但 `web_strict` 在 `oasis7_game_launcher` 启动阶段因独立 job 缺少 `target/debug/oasis7_viewer_live` 而失败；失败签名为 `failed to locate \`oasis7_viewer_live\` binary; build it first or set OASIS7_VIEWER_LIVE_BIN`。
 - [x] 调整 `scripts/viewer-release-qa-loop.sh`：在启动 `oasis7_game_launcher` 前显式执行 `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime`，把原先依赖其他步骤隐式生成 sibling binaries 的前置条件收回到脚本内部。
@@ -189,9 +200,9 @@
 - 站点入口文件：`site/index.html`、`site/en/index.html`
 
 ## 状态
-- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X 已完成；公开下载资产已从压缩包切换为 `.deb` / `.dmg` / `.exe`）
-- 最近更新：2026-04-14 已将 `Release Packages` 的公开产物名与 Pages 下载入口统一切到平台原生安装器；后续远端 run 需要以新 tag 复核 `.deb` / `.dmg` / `.exe` 三平台发布是否按预期落盘。
-- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认三平台原生安装器、校验文件与 `latest/download` 直链全部可用。
+- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X/T3Y 已完成；公开下载主资产已收口为 `AppImage` / `.dmg` / `.exe`，Linux `.deb` 转为次级高级入口）
+- 最近更新：2026-04-14 已将 Windows `package-native` 从自解压 SFX `.exe` 切到 NSIS 标准安装器，并将 Linux 公共主资产切到 `oasis7-linux-x86_64.AppImage`；但整体发布仍未达到普通用户级安装分发终态，因为 Windows 签名、macOS notarization 与官网系统要求/失败支持路径仍待继续推进。
+- 下一步：先触发新一轮 GitHub `Release Packages` 远端发布，确认 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 都能正常落盘；随后按 `doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md` 继续推进 Windows 签名、macOS 签名+notarization 与官网单主 CTA/支持边界。
 
 ## 迁移记录（2026-03-03）
 - 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。

@@ -300,7 +300,7 @@ jobs:
         include:
           - os: ubuntu-24.04
             platform: linux-x64
-            asset_name: oasis7-linux-x64.deb
+            asset_name: oasis7-linux-x86_64.AppImage
             target_triple: native
           - os: macos-14
             platform: macos-x64
@@ -341,6 +341,19 @@ jobs:
         with:
           shared-key: release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-v2
           cache-on-failure: true
+      - name: Ensure Linux AppImage tooling
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/appimagetool"
+          curl -fsSL \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -o "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage"
+          chmod +x "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage"
+          ln -sf \
+            "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage" \
+            "${RUNNER_TEMP}/appimagetool/appimagetool"
+          echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
       - name: Download web dist artifacts
         uses: actions/download-artifact@v5
         with:
@@ -350,10 +363,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if (Get-Command 7z -ErrorAction SilentlyContinue) {
+          $missing = @()
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            $missing += "nsis"
+          }
+          if ($missing.Count -eq 0) {
             exit 0
           }
-          choco install 7zip -y --no-progress
+          choco install $missing -y --no-progress
       - name: Resolve release version
         id: release_version
         shell: bash
@@ -389,11 +406,28 @@ jobs:
             --out-dir output/release/assets \
             --asset-name "${{ matrix.asset_name }}" \
             --version "${{ steps.release_version.outputs.value }}"
+      - name: Package secondary Linux .deb
+        if: matrix.platform == 'linux-x64'
+        shell: bash
+        run: |
+          ./scripts/package-native-installer.sh \
+            --platform "${{ matrix.platform }}" \
+            --bundle-dir "output/release/assets/oasis7-${{ matrix.platform }}" \
+            --out-dir output/release/assets \
+            --asset-name "oasis7-linux-x64.deb" \
+            --version "${{ steps.release_version.outputs.value }}"
       - name: Upload platform asset
         uses: actions/upload-artifact@v4
         with:
           name: release-asset-${{ matrix.platform }}
           path: output/release/assets/${{ matrix.asset_name }}
+          if-no-files-found: error
+      - name: Upload secondary Linux .deb
+        if: matrix.platform == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-linux-x64-deb-secondary
+          path: output/release/assets/oasis7-linux-x64.deb
           if-no-files-found: error
 
   publish-release:
@@ -430,6 +464,7 @@ jobs:
           cd output/release/assets
           ls -l
           for file in \
+            oasis7-linux-x86_64.AppImage \
             oasis7-linux-x64.deb \
             oasis7-macos-x64.dmg \
             oasis7-windows-x64.exe
@@ -437,6 +472,7 @@ jobs:
             [[ -f "${file}" ]] || { echo "error: missing release asset ${file}" >&2; exit 1; }
           done
           sha256sum \
+            oasis7-linux-x86_64.AppImage \
             oasis7-linux-x64.deb \
             oasis7-macos-x64.dmg \
             oasis7-windows-x64.exe \
@@ -448,6 +484,7 @@ jobs:
           name: oasis7 ${{ steps.tag.outputs.value }}
           generate_release_notes: true
           files: |
+            output/release/assets/oasis7-linux-x86_64.AppImage
             output/release/assets/oasis7-linux-x64.deb
             output/release/assets/oasis7-macos-x64.dmg
             output/release/assets/oasis7-windows-x64.exe

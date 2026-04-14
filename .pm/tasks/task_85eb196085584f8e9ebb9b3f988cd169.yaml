@@ -1,0 +1,24 @@
+task_uid: task_85eb196085584f8e9ebb9b3f988cd169
+title: "Implement Linux AppImage public release asset"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+execution_log_path: .pm/tasks/task_85eb196085584f8e9ebb9b3f988cd169.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.project.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Linux public release asset is produced as an AppImage while .deb becomes secondary/non-primary."
+  - "Release workflow provisions appimagetool and package-native emits oasis7-linux-x86_64.AppImage as the public Linux asset."
+  - "AppImage packaging is documented and validated locally with dry-run or synthetic bundle checks."
+handoff_to: []
+updated_at: 2026-04-15T05:41:37+08:00
+last_started_at: 2026-04-14T23:34:44+08:00
+last_closed_at: 2026-04-15T05:41:16+08:00

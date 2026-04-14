@@ -118,6 +118,21 @@ resolve_binary_name() {
   fi
 }
 
+bundle_platform_id() {
+  local target_triple="$1"
+  if [[ "$target_triple" == *windows* ]]; then
+    echo "windows-x64"
+  elif [[ "$target_triple" == *apple-darwin* || "$target_triple" == *darwin* ]]; then
+    echo "macos-x64"
+  elif [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+    echo "windows-x64"
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    echo "macos-x64"
+  else
+    echo "linux-x64"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out-dir)
@@ -209,6 +224,7 @@ if [[ "$TARGET_TRIPLE" != "native" ]]; then
   TARGET_OUTPUT_SUBDIR="$TARGET_TRIPLE/$TARGET_SUBDIR"
   CARGO_TARGET_ARGS=(--target "$TARGET_TRIPLE")
 fi
+BUNDLE_PLATFORM_ID="$(bundle_platform_id "$TARGET_TRIPLE")"
 
 BUNDLE_BIN_DIR="$OUT_DIR/bin"
 BUNDLE_WEB_DIR="$OUT_DIR/web"
@@ -357,6 +373,57 @@ OASIS7_CHAIN_RUNTIME_BIN=\"\$ROOT_DIR/bin/$CHAIN_BIN_NAME\" \
 LAUNCH"
 run chmod +x "$OUT_DIR/run-game.sh"
 
+if [[ "$BUNDLE_PLATFORM_ID" == "windows-x64" ]]; then
+  run bash -lc "cat > '$OUT_DIR/run-client.cmd' <<'LAUNCH'
+@echo off
+setlocal
+set \"ROOT_DIR=%~dp0\"
+set \"OASIS7_GAME_LAUNCHER_BIN=%ROOT_DIR%bin\\$LAUNCHER_BIN_NAME\"
+set \"OASIS7_GAME_STATIC_DIR=%ROOT_DIR%web\"
+set \"OASIS7_CHAIN_RUNTIME_BIN=%ROOT_DIR%bin\\$CHAIN_BIN_NAME\"
+\"%ROOT_DIR%bin\\$CLIENT_LAUNCHER_BIN_NAME\" %*
+LAUNCH"
+
+  run bash -lc "cat > '$OUT_DIR/run-web-launcher.cmd' <<'LAUNCH'
+@echo off
+setlocal
+set \"ROOT_DIR=%~dp0\"
+set \"OASIS7_GAME_LAUNCHER_BIN=%ROOT_DIR%bin\\$LAUNCHER_BIN_NAME\"
+set \"OASIS7_GAME_STATIC_DIR=%ROOT_DIR%web\"
+set \"OASIS7_CHAIN_RUNTIME_BIN=%ROOT_DIR%bin\\$CHAIN_BIN_NAME\"
+set \"OASIS7_WEB_LAUNCHER_STATIC_DIR=%ROOT_DIR%web-launcher\"
+if defined OASIS7_CHAIN_STORAGE_PROFILE (
+  \"%ROOT_DIR%bin\\$WEB_LAUNCHER_BIN_NAME\" --chain-storage-profile \"%OASIS7_CHAIN_STORAGE_PROFILE%\" %*
+) else (
+  \"%ROOT_DIR%bin\\$WEB_LAUNCHER_BIN_NAME\" %*
+)
+LAUNCH"
+
+  run bash -lc "cat > '$OUT_DIR/run-chain-runtime.cmd' <<'LAUNCH'
+@echo off
+setlocal
+set \"ROOT_DIR=%~dp0\"
+if defined OASIS7_CHAIN_STORAGE_PROFILE (
+  \"%ROOT_DIR%bin\\$CHAIN_BIN_NAME\" --storage-profile \"%OASIS7_CHAIN_STORAGE_PROFILE%\" %*
+) else (
+  \"%ROOT_DIR%bin\\$CHAIN_BIN_NAME\" %*
+)
+LAUNCH"
+
+  run bash -lc "cat > '$OUT_DIR/run-game.cmd' <<'LAUNCH'
+@echo off
+setlocal
+set \"ROOT_DIR=%~dp0\"
+set \"OASIS7_CHAIN_RUNTIME_BIN=%ROOT_DIR%bin\\$CHAIN_BIN_NAME\"
+set \"OASIS7_GAME_STATIC_DIR=%ROOT_DIR%web\"
+if defined OASIS7_CHAIN_STORAGE_PROFILE (
+  \"%ROOT_DIR%bin\\$LAUNCHER_BIN_NAME\" --chain-storage-profile \"%OASIS7_CHAIN_STORAGE_PROFILE%\" %*
+) else (
+  \"%ROOT_DIR%bin\\$LAUNCHER_BIN_NAME\" %*
+)
+LAUNCH"
+fi
+
 run bash -lc "cat > '$OUT_DIR/README.txt' <<'README'
 oasis7 Launcher Bundle
 
@@ -366,6 +433,7 @@ Quick start:
 3) CLI launcher: ./run-game.sh
 4) Direct chain runtime: ./run-chain-runtime.sh
 5) Open URL printed by launcher (CLI path defaults auto-open browser).
+6) Windows bundle: use run-client.cmd / run-game.cmd when present.
 
 Optional:
 - Desktop launcher can start/stop game stack from GUI and open URL in one click.
@@ -389,6 +457,10 @@ Bundle layout:
 - run-web-launcher.sh
 - run-game.sh
 - run-chain-runtime.sh
+- run-client.cmd (Windows bundle only)
+- run-web-launcher.cmd (Windows bundle only)
+- run-game.cmd (Windows bundle only)
+- run-chain-runtime.cmd (Windows bundle only)
 README"
 
 cat <<INFO
@@ -401,4 +473,5 @@ Bundle ready: $OUT_DIR
 - web:             $BUNDLE_WEB_DIR
 - web launcher:    $BUNDLE_WEB_LAUNCHER_DIR
 - entries:         $OUT_DIR/run-client.sh, $OUT_DIR/run-web-launcher.sh, $OUT_DIR/run-game.sh, $OUT_DIR/run-chain-runtime.sh
+- platform:        $BUNDLE_PLATFORM_ID
 INFO

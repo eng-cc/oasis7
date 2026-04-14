@@ -33,7 +33,8 @@
 - Release 产物命名（固定名，保证 `latest/download` 可长期使用）：
   - `oasis7-windows-x64.exe`
   - `oasis7-macos-x64.dmg`
-  - `oasis7-linux-x64.deb`
+  - `oasis7-linux-x86_64.AppImage`
+  - `oasis7-linux-x64.deb`（次级 / 高级入口）
   - `oasis7-checksums.txt`
 - 下载直链：
   - `https://github.com/<owner>/<repo>/releases/latest/download/<asset>`
@@ -47,7 +48,7 @@
   - `release-gate`：聚合三个子门结果，作为 `build-web-dist` 的唯一前置依赖
 - 打包 runner 与目标三元组（release workflow）：
   - `package-native` 在各平台 job 内显式 provision `trunk + wasm32-unknown-unknown`，同时 `scripts/build-game-launcher-bundle.sh` 会在执行 `trunk build` 前自检并补装缺失的 `wasm32-unknown-unknown`，确保 `web-launcher/` 构建不依赖 runner 初始状态
-  - `package-native` 先生成标准 `oasis7-<platform>` bundle 目录，再通过 `scripts/package-native-installer.sh` 输出固定名 `.deb` / `.dmg` / `.exe` 公开安装器，避免公开下载层继续暴露 `.tar.gz` / `.zip`
+  - `package-native` 先生成标准 `oasis7-<platform>` bundle 目录，再通过 `scripts/package-native-installer.sh` 输出固定名 `AppImage` / `.dmg` / `.exe` 主资产；Linux `.deb` 仅作为次级高级入口保留，避免公开下载层继续暴露 `.tar.gz` / `.zip`
   - linux：`ubuntu-24.04` + `native`
   - macOS：`macos-14` + `x86_64-apple-darwin`（避免仓库不支持的 `macos-13` 配置）
   - windows：`windows-2022` + `native`
@@ -57,7 +58,7 @@
   - `bin/oasis7_chain_runtime`
   - `bin/oasis7_client_launcher`
   - `web/`（viewer 静态资源）
-  - `run-game.sh` / `run-client.sh`（Windows 额外提供 `.cmd`）
+  - `run-game.sh` / `run-client.sh`（Windows 额外提供 `.cmd`，并由 NSIS installer 创建开始菜单/桌面/卸载入口）
   - `README.txt`
 
 ## 里程碑
@@ -75,6 +76,8 @@
   - 缓解：新增下载入口校验脚本并接入 CI。
 - 风险：`latest` 语义受 prerelease 影响，用户可能下载到非稳定版。
   - 缓解：工作流默认发布正式 release，必要时在文档中要求 prerelease 另行命名与渠道区分。
+- 风险：当前 `AppImage` / `.dmg` / `.exe` 虽然已收口为每个平台一个可直接安装/运行的主包，但 Windows 签名、macOS notarization 与官网单主 CTA 支持信息仍未闭环，离普通用户级安装分发体验还有差距。
+  - 缓解：普通用户向目标（Windows 标准安装器、macOS 签名+notarization、Linux AppImage、官网单主 CTA）单独由 `doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md` 跟踪，并在本专题后续阶段接入实现。
 
 ## 原文约束点映射（内容保真）
 - 约束-1（目标与问题定义）：沿用原“目标”章节约束，不改变问题定义与解决方向。
