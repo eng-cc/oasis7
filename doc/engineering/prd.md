@@ -105,9 +105,9 @@
   8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/task execution log`
   9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
   10. Flow-ENG-010: `评估外部 memory/reflective-agent 方案 -> 冻结 adopted/rejected/deferred 边界 -> 将可借鉴对象映射到 .pm/doc 现有结构 -> 再拆实现任务`
-  11. Flow-ENG-011: `owner 创建 `.pm` task -> 系统本地生成 merge-stable task_uid -> task file / execution log / working_memory / stage blocker 全部按 task_uid 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突`
+  11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
-  13. Flow-ENG-013: `新需求 -> 新建独立 worktree -> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> workflow-report close -> snapshot review -> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task`
+  13. Flow-ENG-013: 新需求 -> 新建独立 worktree -> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> workflow-report close -> `move-task --to-status done|deferred` -> snapshot review -> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
