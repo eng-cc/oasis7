@@ -1,13 +1,13 @@
 # 仓库文档分工与组织规范（2026-03-09）
 
-- 对应设计文档: `doc/engineering/doc-structure-standard.design.md`
-- 对应项目管理文档: `doc/engineering/doc-structure-standard.project.md`
+- 对应设计文档: `doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 对应项目管理文档: `doc/engineering/doc-governance/doc-structure-standard.project.md`
 
 审计轮次: 4
 
-- 对应标准执行入口: `doc/engineering/doc-structure-standard.project.md`
+- 对应标准执行入口: `doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 规范目标命名: `<topic>.project.md`
-- 对应规范正文: `doc/engineering/doc-structure-standard.design.md`
+- 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
 
 ## 目标
 - 为仓库后续新增文档建立统一、可判定、可扩展的组织规范，解决“详细设计写在哪里、同类文档如何命名、专题目录如何收口”的问题。
@@ -25,9 +25,9 @@
 - 规范主入口：`doc/README.md`、`doc/<module>/README.md`、`doc/<module>/prd.md`。
 - 追踪主键：`PRD-ENGINEERING-015`。
 - 标准载体：
-  - 需求与边界：`doc/engineering/doc-structure-standard.prd.md`
-  - 规范正文：`doc/engineering/doc-structure-standard.design.md`
-  - 执行状态（当前仓库文件）：`doc/engineering/doc-structure-standard.project.md`
+  - 需求与边界：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+  - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
+  - 执行状态（当前仓库文件）：`doc/engineering/doc-governance/doc-structure-standard.project.md`
   - 规范目标命名：`<topic>.project.md`
 
 ## 里程碑
@@ -120,7 +120,7 @@
   - `doc/<module>/README.md`
   - `doc/<module>/prd.md`
   - `doc/<module>/project.md`
-  - `doc/engineering/doc-structure-standard.design.md`
+  - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - Edge Cases & Error Handling:
   - 极小主题：若只有短期任务且无结构设计内容，可仅建 `*.prd.md` 与 `*.project.md`，但一旦涉及组件/接口/状态机即补 `*.design.md`。
   - 超大专题：允许在专题目录下继续拆 `design/` 或 `parts/` 分册，但保留一个总入口 `*.design.md`。

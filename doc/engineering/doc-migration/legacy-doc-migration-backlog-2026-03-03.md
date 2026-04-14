@@ -266,7 +266,7 @@
 - `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.project.md`
 
 ## Owner-D 清单（57）
-- `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md`
+- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 - `doc/game-test.project.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md`
 - `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md`

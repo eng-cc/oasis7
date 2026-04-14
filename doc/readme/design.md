@@ -24,7 +24,7 @@
 ## 4. 集成点
 - `doc/README.md`
 - `doc/site/prd.md`
-- `doc/engineering/doc-structure-standard.prd.md`
+- `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 
 ## 5. 专题导航
 - 口径差距进入 `gap/`

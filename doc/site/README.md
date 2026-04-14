@@ -45,5 +45,5 @@
 - 需要完整活跃专题清单时，进入 `doc/site/prd.index.md`；需要公开 docs hub、下载页或手册镜像时，再按 `site/**` 的公开页面定向进入。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 站点信息架构、公开状态口径或镜像入口变化时，优先更新 `doc/site/prd.md` / `doc/site/project.md`；新增默认首读入口或专题后，再同步回写 `doc/site/prd.index.md` 与本页“从这里开始”。

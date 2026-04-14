@@ -64,5 +64,5 @@
 - 需要完整活跃专题清单时，进入 `doc/p2p/prd.index.md`；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 模块行为、默认参数或跨模块分布式口径变化时，优先更新 `doc/p2p/prd.md` / `doc/p2p/project.md`；高频入口变化时，再同步回写本目录“从这里开始”与 `doc/p2p/prd.index.md`。

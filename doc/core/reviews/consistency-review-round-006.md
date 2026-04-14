@@ -5,11 +5,11 @@
 ## 目的
 - 为 `TASK-CORE-010` / `TASK-ENGINEERING-035` 提供 ROUND-006 的统一执行台账，将本轮目标从“纯审计”升级为“按 `doc-structure-standard` 逐文档治理与改造”。
 - 本轮不仅登记问题，还要求对不符合规范的文档逐个执行改名、拆分、补齐、互链回写与入口回写，直到文档树结构符合规范。
-- 所有 ROUND-006 结论均以 `doc/engineering/doc-structure-standard.prd.md` 为裁定依据；如发现规范空白，再先回写规范，再继续治理。
+- 所有 ROUND-006 结论均以 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 为裁定依据；如发现规范空白，再先回写规范，再继续治理。
 
 ## 权威依据
-- 结构规范需求：`doc/engineering/doc-structure-standard.prd.md`
-- 结构规范执行：`doc/engineering/doc-structure-standard.project.md`
+- 结构规范需求：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 结构规范执行：`doc/engineering/doc-governance/doc-structure-standard.project.md`
 - 工程主台账：`doc/engineering/project.md`
 - 项目级 ROUND 台账：`doc/core/project.md`
 - 开发工作流：`AGENTS.md`

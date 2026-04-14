@@ -106,9 +106,9 @@
 | 2026-03-09 22:15:00 +0800 | `producer_system_designer` | `doc/world-simulator/project.md` | `backfill` | pass | B6-001 | B6-001 新增模块 project 标准入口 |
 | 2026-03-09 22:15:00 +0800 | `producer_system_designer` | `doc/world-simulator/prd.index.md` | `backfill` | pass | B6-001 | B6-001 已登记模块 design / project 入口 |
 
-| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-structure-standard.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/doc-structure-standard.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/README.md` | `backfill` | pass | B6-002 | 已接入标准专题 project 入口 |

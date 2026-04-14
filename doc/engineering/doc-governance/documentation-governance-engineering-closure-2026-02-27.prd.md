@@ -1,11 +1,11 @@
 # 文档治理工程化全量优化（2026-02-27）
 
-- 对应设计文档: `doc/engineering/documentation-governance-engineering-closure-2026-02-27.design.md`
-- 对应项目管理文档: `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md`
+- 对应设计文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.design.md`
+- 对应项目管理文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 
 审计轮次: 4
 
-- 对应标准执行入口: `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md`
+- 对应标准执行入口: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 
 ## 目标
 - 将当前“依赖人工约定”的文档治理升级为“可自动检查、可持续执行、可在 CI 门禁生效”的工程化机制。

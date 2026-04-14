@@ -23,8 +23,8 @@
 
 ## 首批已补齐专题
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03`
-- `doc/engineering/documentation-governance-engineering-closure-2026-02-27`
-- `doc/engineering/oversized-rust-file-splitting-2026-02-23`
+- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27`
+- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23`
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03`
 
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26`

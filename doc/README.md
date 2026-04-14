@@ -65,4 +65,4 @@
 ## 共享规则
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 `project.md`，最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。
-- 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

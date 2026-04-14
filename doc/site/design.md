@@ -24,7 +24,7 @@
 ## 4. 集成点
 - `doc/readme/prd.md`
 - `site/doc/`
-- `doc/engineering/doc-structure-standard.prd.md`
+- `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 
 ## 5. 专题导航
 - 页面与体验优化进入 `github-pages/`

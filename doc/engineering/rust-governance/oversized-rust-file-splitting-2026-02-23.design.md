@@ -1,7 +1,7 @@
 # 超长 Rust 文件拆分设计（2026-02-23）
 
-- 对应需求文档: `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md`
-- 对应项目管理文档: `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md`
+- 对应需求文档: `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
+- 对应项目管理文档: `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
 
 ## 1. 设计定位
 定义 Rust 超长文件拆分的判定规则、拆分边界、模块化策略与回归要求，避免只按行数机械切割。

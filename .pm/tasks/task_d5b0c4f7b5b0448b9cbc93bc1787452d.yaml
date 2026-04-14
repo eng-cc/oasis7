@@ -1,0 +1,27 @@
+task_uid: task_d5b0c4f7b5b0448b9cbc93bc1787452d
+title: "下沉 engineering 根目录治理专题并清理 root allowlist 残留"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-low-density-doc-entry-followup
+execution_log_path: .pm/tasks/task_d5b0c4f7b5b0448b9cbc93bc1787452d.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-governance/doc-structure-standard.prd.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/prd.index.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/doc-governance/doc-structure-standard.prd.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
+acceptance:
+  - "engineering 根目录治理专题按对象下沉到子目录，根目录只保留模块入口文件"
+  - "全仓引用与 module-root-md-allowlist 完成同步回写且通过文档治理检查"
+  - "新的路径级治理结论回写 engineering 主 project 与 task execution log"
+handoff_to: []
+updated_at: 2026-04-14T21:44:47+08:00
+last_started_at: 2026-04-14T21:33:46+08:00
+last_closed_at: 2026-04-14T21:39:30+08:00

@@ -49,5 +49,5 @@
 - 需要完整活跃专题清单时，进入 `doc/game/prd.index.md`；需要 runbook、evidence、handoff 或 checklist 时，再按 `gameplay/` 中的补充文件精确进入。
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 玩法行为、发布门禁或体验验收变化时，优先更新 `doc/game/prd.md` 与 `doc/game/project.md`；新增 gameplay 专题或默认首读入口变化时，再同步回写 `doc/game/prd.index.md` 与本页“从这里开始”。

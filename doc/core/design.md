@@ -44,12 +44,12 @@
 - `doc/core/prd.md`
 - `doc/core/project.md`
 - `doc/core/prd.index.md`
-- `doc/engineering/doc-structure-standard.prd.md`
+- `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 各模块入口：`doc/<module>/README.md`、`doc/<module>/prd.md`、`doc/<module>/design.md`、`doc/<module>/project.md`
 
 ## 5. ROUND-006 入口职责
 - ROUND-006 下，`core` 负责维护全量治理台账与批次推进骨架。
-- 文档结构治理的裁定依据来自 `doc/engineering/doc-structure-standard.prd.md`。
+- 文档结构治理的裁定依据来自 `doc/engineering/doc-governance/doc-structure-standard.prd.md`。
 - 任何模块入口补齐、专题三件套治理和索引回写，都必须在 core 台账中可追踪。
 
 ## 设计目标

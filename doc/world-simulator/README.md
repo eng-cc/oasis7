@@ -50,5 +50,5 @@
 - `doc/world-simulator.project.md`
 
 ## 共享约定
-- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 模块行为、Web 闭环或启动器体验口径变化时，优先更新 `doc/world-simulator/prd.md` / `doc/world-simulator/project.md`；手册步骤改动时，先更新仓库内 `viewer-manual.manual.md`，再评估是否同步静态镜像。

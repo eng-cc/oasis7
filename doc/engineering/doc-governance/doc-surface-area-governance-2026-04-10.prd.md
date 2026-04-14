@@ -1,7 +1,7 @@
 # 文档体量治理与活跃阅读面收敛（2026-04-10）
 
-- 对应设计文档: `doc/engineering/doc-surface-area-governance-2026-04-10.design.md`
-- 对应项目管理文档: `doc/engineering/doc-surface-area-governance-2026-04-10.project.md`
+- 对应设计文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
+- 对应项目管理文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
 
 审计轮次: 1
 
@@ -20,7 +20,7 @@
 - 追踪主键: `PRD-ENGINEERING-024`
 - 模块主入口: `doc/engineering/prd.md`
 - 模块执行入口: `doc/engineering/project.md`
-- 规范基线: `doc/engineering/doc-structure-standard.prd.md`
+- 规范基线: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 关键导航入口: `doc/README.md`、`doc/<module>/README.md`、`doc/<module>/prd.index.md`
 - 体量快照（2026-04-10）:
   - `doc/` 文件总数: 1720
@@ -108,7 +108,7 @@
   - `doc/<module>/prd.md`
   - `doc/<module>/project.md`
   - `doc/<module>/prd.index.md`
-  - `doc/engineering/doc-structure-standard.prd.md`
+  - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
   - `doc/core/reviews/*`
   - `doc/devlog/*`
 - Edge Cases & Error Handling:

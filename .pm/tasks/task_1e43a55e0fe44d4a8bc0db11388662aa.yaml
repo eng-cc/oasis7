@@ -8,13 +8,13 @@ priority: P1
 source_signal: null
 source_refs:
   - doc/engineering/project.md
-  - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
 doc_refs:
   - doc/engineering/project.md
-  - doc/engineering/doc-surface-area-governance-2026-04-10.project.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md
 related_prd:
   - doc/engineering/prd.md
-  - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
 acceptance:
   - "engineering/README 与剩余低密度模块入口按默认阅读面原则减重，且不新增路径迁移"
   - "engineering 主 project 明确写清剩余模块评估结论与下一步边界"

@@ -25,7 +25,7 @@
 | 2026-03-10 00:20:00 +0800 | `qa_engineer` | `doc/*/prd.md` | `review` | pass | none | 模块入口 PRD 已完成首批边界复核，未发现执行/设计越权段落 |
 | 2026-03-10 00:20:00 +0800 | `qa_engineer` | `doc/*/project.md` | `review` | pass | none | 模块入口 Project 已完成首批边界复核，未发现需求/设计越权段落 |
 
-| 2026-03-10 00:32:00 +0800 | `producer_system_designer` | `doc/engineering/doc-structure-standard.design.md` | `review` | pass | none | 专题 design 结构/契约边界清晰，未发现 PRD/Project 越权段落 |
+| 2026-03-10 00:32:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/doc-structure-standard.design.md` | `review` | pass | none | 专题 design 结构/契约边界清晰，未发现 PRD/Project 越权段落 |
 | 2026-03-10 00:32:00 +0800 | `producer_system_designer` | `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.design.md` | `review` | pass | none | 专题 design 结构/契约边界清晰，未发现 PRD/Project 越权段落 |
 | 2026-03-10 00:32:00 +0800 | `qa_engineer` | `doc/**/*.prd.md + doc/**/*.project.md` | `scan` | pass | none | 启发式扫描未发现专题 PRD 混入任务拆解/依赖/状态，亦未发现专题 Project 混入 Executive Summary/Technical Specifications 高信号标题 |
 

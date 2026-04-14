@@ -68,13 +68,13 @@
 | `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/engineering/doc-structure-standard.design.md` | `design` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Design 结构/契约边界复核通过 |
-| `doc/engineering/doc-structure-standard.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/engineering/doc-structure-standard.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/engineering/documentation-governance-engineering-closure-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/engineering/documentation-governance-engineering-closure-2026-02-27.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/engineering/oversized-rust-file-splitting-2026-02-23.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/engineering/oversized-rust-file-splitting-2026-02-23.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `doc/engineering/doc-governance/doc-structure-standard.design.md` | `design` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Design 结构/契约边界复核通过 |
+| `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `doc/engineering/doc-governance/doc-structure-standard.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/engineering/prd-review/checklists/active-core.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/prd-review/checklists/active-engineering.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/engineering/prd-review/checklists/active-game.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |

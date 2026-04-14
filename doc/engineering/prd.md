@@ -187,9 +187,9 @@
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
-  - `doc/engineering/doc-surface-area-governance-2026-04-10.prd.md`
-  - `doc/engineering/doc-surface-area-governance-2026-04-10.design.md`
-  - `doc/engineering/doc-surface-area-governance-2026-04-10.project.md`
+  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
+  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
+  - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
   - `testing-manual.md`
