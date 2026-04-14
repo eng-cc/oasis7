@@ -2,13 +2,12 @@
 
 审计轮次: 6
 
-更新时间：2026-04-10
+更新时间：2026-04-14
 
 ## 入口
 - 模块 PRD：`doc/scripts/prd.md`
 - 模块设计总览：`doc/scripts/design.md`
 - 模块标准执行入口：`doc/scripts/project.md`
-- 模块兼容项目管理：`doc/scripts/project.md`
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |

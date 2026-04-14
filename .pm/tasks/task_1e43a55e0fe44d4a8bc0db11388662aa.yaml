@@ -1,0 +1,25 @@
+task_uid: task_1e43a55e0fe44d4a8bc0db11388662aa
+title: "收口剩余低密度模块文档减重边界并压掉重复入口"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-low-density-doc-entry-followup
+execution_log_path: .pm/tasks/task_1e43a55e0fe44d4a8bc0db11388662aa.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-surface-area-governance-2026-04-10.project.md
+related_prd:
+  - doc/engineering/prd.md
+  - doc/engineering/doc-surface-area-governance-2026-04-10.prd.md
+acceptance:
+  - "engineering/README 与剩余低密度模块入口按默认阅读面原则减重，且不新增路径迁移"
+  - "engineering 主 project 明确写清剩余模块评估结论与下一步边界"
+  - "文档治理检查、PM lint 与 diff cleanliness 通过"
+handoff_to: []
+updated_at: 2026-04-14T21:09:31+08:00
+last_started_at: 2026-04-14T20:55:53+08:00
+last_closed_at: 2026-04-14T20:59:17+08:00

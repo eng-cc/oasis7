@@ -141,7 +141,7 @@
 
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-ENGINEERING-024 | TASK-ENGINEERING-106 | `test_tier_required` | 专题三件套互链、engineering 主 PRD/project/README/`prd.index.md` 回写、`module-root-md-allowlist` 更新、`scripts/doc-governance-check.sh` 通过、人工核对默认阅读面分层表述 | 仓库文档消费层治理、项目经理视角导航与后续模块减重任务拆解 |
+| PRD-ENGINEERING-024 | TASK-ENGINEERING-106/107/108/109/110/111/112/114/115 | `test_tier_required` | 专题三件套互链、engineering 主 PRD/project/README/`prd.index.md` 回写、模块 README / `prd.index.md` 入口减重、低密度模块复核结论回写、`scripts/doc-governance-check.sh` 通过、人工核对默认阅读面分层表述 | 仓库文档消费层治理、项目经理视角导航与后续模块减重任务拆解 |
 
 - Decision Log:
   - DEC-DSA-001: 选择“消费层四分法”而不是立即迁移目录树，因为当前最直接的问题是默认阅读面过宽，而不是文件暂时放在哪里。

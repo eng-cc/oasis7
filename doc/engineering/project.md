@@ -119,6 +119,7 @@
 - [x] TASK-ENGINEERING-111 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `world-runtime` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 runtime/wasm/module 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-112 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `game` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 gameplay 活跃专题与补充材料长名单的默认暴露。
 - [x] TASK-ENGINEERING-114 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `site` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 github-pages/manual 活跃专题长名单的默认暴露。
+- [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-024) [test_tier_required]: 评估 `engineering / scripts / playability_test_result / headless-runtime` 四个剩余低密度模块的默认阅读面；仅对仍有长名单或重复入口噪音的入口页继续减重，并明确“不进入路径级治理”的当前边界。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 
@@ -165,13 +166,14 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-11
+- 更新日期: 2026-04-14
 - 当前状态: active
-- 下一任务: 基于 `TASK-ENGINEERING-107/108/109/110/111/112/114` 已完成的 `world-simulator / p2p / testing / readme / core / world-runtime / game / site` 入口减重结果，评估是否继续对 `engineering / scripts / playability_test_result / headless-runtime` 做同类默认阅读面收紧；若剩余模块入口已能稳定回答 `what / where / next / risk`，再决定是否进入路径级治理、round 追加或脚本门禁扩展。
+- 下一任务: `TASK-ENGINEERING-115` 已完成对 `engineering / scripts / playability_test_result / headless-runtime` 的低密度模块复核：当前无需继续开新一轮模块级入口减重任务。后续只有在这些模块再次出现“默认入口无法在 15 分钟内回答 `what / where / next / risk`”或专题长名单重新膨胀时，才重新进入入口减重；否则下一步转为观察是否需要路径级治理、round 追加或脚本门禁扩展。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
+- 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
