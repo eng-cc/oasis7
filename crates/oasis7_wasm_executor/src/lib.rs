@@ -229,6 +229,15 @@ impl Clone for WasmExecutor {
     }
 }
 
+#[cfg(not(feature = "wasmtime"))]
+impl Clone for WasmExecutor {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+        }
+    }
+}
+
 impl fmt::Debug for WasmExecutor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("WasmExecutor")
