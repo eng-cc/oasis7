@@ -1,0 +1,25 @@
+task_uid: task_4dac4415a1ce4870ad1b9a07a65fe28b
+title: "Close platform-native release installer entrypoints"
+owner_role: viewer_engineer
+worktree_hint: oasis7-world-simulator-launcher-release-platform-packages
+execution_log_path: .pm/tasks/task_4dac4415a1ce4870ad1b9a07a65fe28b.execution.md
+status: committed
+priority: P1
+source_signal: null
+source_refs:
+  - .github/workflows/release-packages.yml
+  - scripts/build-game-launcher-bundle.sh
+  - scripts/package-native-installer.sh
+doc_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+related_prd:
+  - doc/world-simulator/prd.md
+acceptance:
+  - "Each release asset maps to a platform-native runnable/installable entrypoint instead of only shipping shell-based bundle wrappers."
+  - "macOS release packaging exposes an app-style entrypoint inside the DMG and Windows release packaging exposes a native launcher entrypoint without requiring users to discover shell scripts."
+  - "Release workflow and bundle validation fail when platform-native entrypoints are missing from packaged assets."
+handoff_to: []
+updated_at: 2026-04-14T22:42:03+08:00
+last_started_at: 2026-04-14T22:07:11+08:00
+last_closed_at: 2026-04-14T22:42:03+08:00
