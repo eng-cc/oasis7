@@ -12,7 +12,10 @@ use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 #[cfg(feature = "wasmtime")]
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    mpsc, Arc, Mutex,
+};
 
 fn count_exceeds_limit(count: usize, limit: u32) -> bool {
     match u32::try_from(count) {
@@ -78,7 +81,6 @@ impl Default for WasmExecutorConfig {
 }
 
 /// Placeholder WASM executor implementation.
-#[derive(Clone)]
 pub struct WasmExecutor {
     config: WasmExecutorConfig,
     #[cfg(feature = "wasmtime")]
@@ -87,6 +89,8 @@ pub struct WasmExecutor {
     compiled_cache: Arc<Mutex<CompiledModuleCache>>,
     #[cfg(feature = "wasmtime")]
     compiled_disk_cache: Option<Arc<DiskCompiledModuleCache>>,
+    #[cfg(feature = "wasmtime")]
+    watchdog: Arc<EpochWatchdogController>,
 }
 
 #[cfg(feature = "wasmtime")]
@@ -95,37 +99,132 @@ struct WasmStoreState {
 }
 
 #[cfg(feature = "wasmtime")]
-struct EpochWatchdog {
-    stop_tx: Option<mpsc::Sender<()>>,
-    join_handle: Option<std::thread::JoinHandle<()>>,
+enum WatchdogCommand {
+    Arm {
+        ticket: u64,
+        timeout: std::time::Duration,
+    },
+    Disarm {
+        ticket: u64,
+    },
+    Shutdown,
 }
 
 #[cfg(feature = "wasmtime")]
-impl EpochWatchdog {
-    fn start(engine: &wasmtime::Engine, timeout_ms: u64) -> Self {
-        let (stop_tx, stop_rx) = mpsc::channel::<()>();
-        let engine = engine.clone();
-        let timeout = std::time::Duration::from_millis(timeout_ms.max(1));
+struct EpochWatchdogController {
+    next_ticket: AtomicU64,
+    command_tx: mpsc::Sender<WatchdogCommand>,
+    join_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+#[cfg(feature = "wasmtime")]
+impl EpochWatchdogController {
+    fn new(engine: wasmtime::Engine) -> Self {
+        let (command_tx, command_rx) = mpsc::channel::<WatchdogCommand>();
         let join_handle = std::thread::spawn(move || {
-            if stop_rx.recv_timeout(timeout).is_err() {
-                engine.increment_epoch();
+            let mut armed: Option<(u64, std::time::Instant)> = None;
+            loop {
+                match armed {
+                    Some((ticket, deadline)) => {
+                        let timeout = deadline.saturating_duration_since(std::time::Instant::now());
+                        match command_rx.recv_timeout(timeout) {
+                            Ok(command) => match command {
+                                WatchdogCommand::Arm { ticket, timeout } => {
+                                    armed = Some((ticket, std::time::Instant::now() + timeout));
+                                }
+                                WatchdogCommand::Disarm {
+                                    ticket: disarm_ticket,
+                                } => {
+                                    if disarm_ticket == ticket {
+                                        armed = None;
+                                    }
+                                }
+                                WatchdogCommand::Shutdown => break,
+                            },
+                            Err(mpsc::RecvTimeoutError::Timeout) => {
+                                engine.increment_epoch();
+                                armed = None;
+                            }
+                            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                        }
+                    }
+                    None => match command_rx.recv() {
+                        Ok(WatchdogCommand::Arm { ticket, timeout }) => {
+                            armed = Some((ticket, std::time::Instant::now() + timeout));
+                        }
+                        Ok(WatchdogCommand::Disarm { .. }) => {}
+                        Ok(WatchdogCommand::Shutdown) | Err(_) => break,
+                    },
+                }
             }
         });
         Self {
-            stop_tx: Some(stop_tx),
-            join_handle: Some(join_handle),
+            next_ticket: AtomicU64::new(1),
+            command_tx,
+            join_handle: Mutex::new(Some(join_handle)),
+        }
+    }
+
+    fn arm(self: &Arc<Self>, timeout_ms: u64) -> EpochWatchdogGuard {
+        let ticket = self.next_ticket.fetch_add(1, Ordering::Relaxed);
+        let _ = self.command_tx.send(WatchdogCommand::Arm {
+            ticket,
+            timeout: std::time::Duration::from_millis(timeout_ms.max(1)),
+        });
+        EpochWatchdogGuard {
+            controller: Arc::clone(self),
+            ticket,
         }
     }
 }
 
 #[cfg(feature = "wasmtime")]
-impl Drop for EpochWatchdog {
+impl Drop for EpochWatchdogController {
     fn drop(&mut self) {
-        if let Some(stop_tx) = self.stop_tx.take() {
-            let _ = stop_tx.send(());
-        }
-        if let Some(join_handle) = self.join_handle.take() {
+        let _ = self.command_tx.send(WatchdogCommand::Shutdown);
+        if let Some(join_handle) = self
+            .join_handle
+            .lock()
+            .expect("watchdog mutex poisoned")
+            .take()
+        {
             let _ = join_handle.join();
+        }
+    }
+}
+
+#[cfg(feature = "wasmtime")]
+struct EpochWatchdogGuard {
+    controller: Arc<EpochWatchdogController>,
+    ticket: u64,
+}
+
+#[cfg(feature = "wasmtime")]
+impl Drop for EpochWatchdogGuard {
+    fn drop(&mut self) {
+        let _ = self.command_tx().send(WatchdogCommand::Disarm {
+            ticket: self.ticket,
+        });
+    }
+}
+
+#[cfg(feature = "wasmtime")]
+impl EpochWatchdogGuard {
+    fn command_tx(&self) -> &mpsc::Sender<WatchdogCommand> {
+        &self.controller.command_tx
+    }
+}
+
+#[cfg(feature = "wasmtime")]
+impl Clone for WasmExecutor {
+    fn clone(&self) -> Self {
+        let engine = self.engine.clone();
+        Self {
+            config: self.config.clone(),
+            compiled_cache: Arc::clone(&self.compiled_cache),
+            compiled_disk_cache: self.compiled_disk_cache.clone(),
+            watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
+            engine,
         }
     }
 }
@@ -188,6 +287,7 @@ impl WasmExecutor {
                 .map_err(|err| WasmExecutorInitError::DiskCacheInit(err.to_string()))?;
             Ok(Self {
                 config,
+                watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
                 engine,
                 compiled_cache,
                 compiled_disk_cache: compiled_disk_cache.map(Arc::new),
@@ -244,7 +344,7 @@ impl WasmExecutor {
                     entrypoint: "call".to_string(),
                     input: Vec::new(),
                     limits: ModuleLimits::default(),
-                    wasm_bytes: Vec::new(),
+                    wasm_bytes: Arc::<[u8]>::from([]),
                 },
                 ModuleCallErrorCode::Trap,
                 format!("compile failed: {err}"),
@@ -425,7 +525,8 @@ impl ModuleSandbox for WasmExecutor {
                 return Err(self.failure(request, ModuleCallErrorCode::Trap, "missing wasm bytes"));
             }
 
-            let module = self.compile_module_cached(&request.wasm_hash, &request.wasm_bytes)?;
+            let module =
+                self.compile_module_cached(&request.wasm_hash, request.wasm_bytes.as_ref())?;
             let start = std::time::Instant::now();
             let mut store = wasmtime::Store::new(
                 &self.engine,
@@ -436,7 +537,7 @@ impl ModuleSandbox for WasmExecutor {
             store.limiter(|state| &mut state.limits);
             store.epoch_deadline_trap();
             store.set_epoch_deadline(1);
-            let _watchdog = EpochWatchdog::start(&self.engine, self.config.max_call_ms);
+            let _watchdog = self.watchdog.arm(self.config.max_call_ms);
             store
                 .set_fuel(self.requested_fuel(request))
                 .map_err(|err| self.failure(request, ModuleCallErrorCode::Trap, err.to_string()))?;
@@ -780,396 +881,4 @@ impl CompiledModuleCache {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oasis7_wasm_abi::ModuleLimits;
-    #[cfg(feature = "wasmtime")]
-    use std::fs;
-    #[cfg(feature = "wasmtime")]
-    use std::path::PathBuf;
-    #[cfg(feature = "wasmtime")]
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn make_request(limits: ModuleLimits) -> ModuleCallRequest {
-        ModuleCallRequest {
-            module_id: "m.test".to_string(),
-            wasm_hash: "hash".to_string(),
-            trace_id: "trace-1".to_string(),
-            entrypoint: "call".to_string(),
-            input: vec![],
-            limits,
-            wasm_bytes: Vec::new(),
-        }
-    }
-
-    fn test_executor(config: WasmExecutorConfig) -> WasmExecutor {
-        WasmExecutor::new(config).expect("initialize wasm executor")
-    }
-
-    #[test]
-    fn fixed_sandbox_succeed_returns_cloned_output() {
-        let output = ModuleOutput {
-            new_state: Some(vec![1, 2, 3]),
-            effects: Vec::new(),
-            emits: Vec::new(),
-            tick_lifecycle: None,
-            output_bytes: 3,
-        };
-        let mut sandbox = FixedSandbox::succeed(output.clone());
-        let request = make_request(ModuleLimits::default());
-
-        let first = sandbox.call(&request).unwrap();
-        assert_eq!(first, output);
-
-        let second = sandbox.call(&request).unwrap();
-        assert_eq!(second, output);
-    }
-
-    #[test]
-    fn fixed_sandbox_fail_returns_cloned_failure() {
-        let failure = ModuleCallFailure {
-            module_id: "m.test".to_string(),
-            trace_id: "trace-err".to_string(),
-            code: ModuleCallErrorCode::Trap,
-            detail: "boom".to_string(),
-        };
-        let mut sandbox = FixedSandbox::fail(failure.clone());
-        let request = make_request(ModuleLimits::default());
-
-        let first = sandbox.call(&request).unwrap_err();
-        assert_eq!(first, failure);
-
-        let second = sandbox.call(&request).unwrap_err();
-        assert_eq!(second, failure);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_returns_disk_cache_init_error() {
-        let cache_root = std::env::temp_dir().join("oasis7-wasm-init-error-file");
-        fs::write(&cache_root, b"not-a-directory").expect("create temp cache file");
-
-        let err = WasmExecutor::new(WasmExecutorConfig {
-            compiled_cache_dir: Some(cache_root.clone()),
-            ..WasmExecutorConfig::default()
-        })
-        .expect_err("file path should fail cache dir initialization");
-
-        assert!(matches!(err, WasmExecutorInitError::DiskCacheInit(_)));
-
-        let _ = fs::remove_file(cache_root);
-    }
-
-    #[test]
-    fn wasm_executor_rejects_output_limit_overflow() {
-        let executor = test_executor(WasmExecutorConfig::default());
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: 4,
-            max_effects: 0,
-            max_emits: 0,
-        });
-        let output = ModuleOutput {
-            new_state: None,
-            effects: Vec::new(),
-            emits: Vec::new(),
-            tick_lifecycle: None,
-            output_bytes: 8,
-        };
-
-        let err = executor
-            .validate_output_limits(&request, &output)
-            .unwrap_err();
-        assert_eq!(err.code, ModuleCallErrorCode::OutputTooLarge);
-    }
-
-    #[test]
-    fn count_exceeds_limit_treats_usize_overflow_as_exceeded() {
-        assert!(count_exceeds_limit(usize::MAX, 1));
-        assert!(!count_exceeds_limit(1, 1));
-    }
-
-    #[test]
-    fn wasm_executor_rejects_fuel_limit_as_timeout() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_fuel: 10,
-            ..WasmExecutorConfig::default()
-        });
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: 11,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        let err = executor.validate_request_limits(&request).unwrap_err();
-        assert_eq!(err.code, ModuleCallErrorCode::Timeout);
-    }
-
-    #[test]
-    fn wasm_executor_uses_executor_max_fuel_when_request_limit_is_zero() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_fuel: 123,
-            ..WasmExecutorConfig::default()
-        });
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: 0,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        assert_eq!(executor.requested_fuel(&request), 123);
-    }
-
-    #[test]
-    fn wasm_executor_rejects_memory_limit_overflow_as_trap() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_mem_bytes: 64,
-            ..WasmExecutorConfig::default()
-        });
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: 65,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        let err = executor.validate_request_limits(&request).unwrap_err();
-        assert_eq!(err.code, ModuleCallErrorCode::Trap);
-    }
-
-    #[test]
-    fn wasm_executor_rejects_requested_output_limit_over_executor_max() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_output_bytes: 16,
-            ..WasmExecutorConfig::default()
-        });
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: 17,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        let err = executor.validate_request_limits(&request).unwrap_err();
-        assert_eq!(err.code, ModuleCallErrorCode::OutputTooLarge);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_maps_interrupt_trap_to_interrupted() {
-        let executor = test_executor(WasmExecutorConfig::default());
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        let err = executor.map_wasmtime_error(&request, wasmtime::Trap::Interrupt.into());
-        assert_eq!(err.code, ModuleCallErrorCode::Interrupted);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_maps_out_of_fuel_trap_to_out_of_fuel() {
-        let executor = test_executor(WasmExecutorConfig::default());
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: executor.config().max_mem_bytes,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-
-        let err = executor.map_wasmtime_error(&request, wasmtime::Trap::OutOfFuel.into());
-        assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_store_limits_enforce_requested_memory_cap() {
-        let executor = test_executor(WasmExecutorConfig::default());
-        let request = make_request(ModuleLimits {
-            max_mem_bytes: 64,
-            max_gas: executor.config().max_fuel,
-            max_call_rate: 0,
-            max_output_bytes: executor.config().max_output_bytes,
-            max_effects: 0,
-            max_emits: 0,
-        });
-        let mut limits = executor.build_store_limits(&request);
-
-        let allow = <wasmtime::StoreLimits as wasmtime::ResourceLimiter>::memory_growing(
-            &mut limits,
-            32,
-            64,
-            Some(128),
-        )
-        .expect("memory growth decision");
-        assert!(allow);
-
-        let deny = <wasmtime::StoreLimits as wasmtime::ResourceLimiter>::memory_growing(
-            &mut limits,
-            64,
-            65,
-            Some(128),
-        );
-        assert!(deny.is_err());
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_epoch_watchdog_preempts_infinite_loop() {
-        let mut executor = test_executor(WasmExecutorConfig {
-            max_call_ms: 20,
-            max_fuel: u64::MAX,
-            ..WasmExecutorConfig::default()
-        });
-        let wasm = wat::parse_str(
-            r#"(module
-                 (memory (export "memory") 1)
-                 (func (export "alloc") (param i32) (result i32)
-                   i32.const 0)
-                 (func (export "call") (param i32 i32) (result i64)
-                   (loop $l
-                     br $l)
-                   i64.const 0))"#,
-        )
-        .expect("compile test wat");
-        let request = ModuleCallRequest {
-            module_id: "m.loop".to_string(),
-            wasm_hash: "hash-loop".to_string(),
-            trace_id: "trace-loop".to_string(),
-            entrypoint: "call".to_string(),
-            input: Vec::new(),
-            limits: ModuleLimits {
-                max_mem_bytes: 64 * 1024,
-                max_gas: 0,
-                max_call_rate: 0,
-                max_output_bytes: 1024,
-                max_effects: 0,
-                max_emits: 0,
-            },
-            wasm_bytes: wasm,
-        };
-
-        let started = std::time::Instant::now();
-        let err = executor
-            .call(&request)
-            .expect_err("infinite loop should be interrupted by watchdog");
-        assert_eq!(err.code, ModuleCallErrorCode::Interrupted);
-        assert!(
-            started.elapsed().as_millis() < 3_000,
-            "watchdog timeout should preempt quickly"
-        );
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_compiled_cache_evicts_old_entries() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_cache_entries: 1,
-            ..WasmExecutorConfig::default()
-        });
-        let wasm_a = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-        let wasm_b = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-
-        executor.compile_module_cached("hash-a", &wasm_a).unwrap();
-        assert_eq!(executor.compiled_cache_len(), 1);
-
-        executor.compile_module_cached("hash-b", &wasm_b).unwrap();
-        assert_eq!(executor.compiled_cache_len(), 1);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_compiled_cache_zero_capacity_stays_empty() {
-        let executor = test_executor(WasmExecutorConfig {
-            max_cache_entries: 0,
-            ..WasmExecutorConfig::default()
-        });
-        let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-
-        executor.compile_module_cached("hash-a", &wasm).unwrap();
-        assert_eq!(executor.compiled_cache_len(), 0);
-
-        executor.compile_module_cached("hash-b", &wasm).unwrap();
-        assert_eq!(executor.compiled_cache_len(), 0);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    fn unique_temp_cache_dir(suffix: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock drift")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("oasis7-wasm-cache-{suffix}-{nonce}"));
-        fs::create_dir_all(&dir).expect("create temp cache dir");
-        dir
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_disk_cache_hits_when_memory_cache_disabled() {
-        let cache_dir = unique_temp_cache_dir("hit");
-        let executor = test_executor(WasmExecutorConfig {
-            max_cache_entries: 0,
-            compiled_cache_dir: Some(cache_dir.clone()),
-            ..WasmExecutorConfig::default()
-        });
-        let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-        let invalid_wasm = [0x01, 0x02, 0x03];
-
-        executor
-            .compile_module_cached("hash-disk-hit", &wasm)
-            .unwrap();
-        executor
-            .compile_module_cached("hash-disk-hit", &invalid_wasm)
-            .expect("load compiled module from disk cache");
-
-        let _ = fs::remove_dir_all(cache_dir);
-    }
-
-    #[cfg(feature = "wasmtime")]
-    #[test]
-    fn wasm_executor_disk_cache_recovers_from_corruption() {
-        let cache_dir = unique_temp_cache_dir("corrupt");
-        let executor = test_executor(WasmExecutorConfig {
-            max_cache_entries: 0,
-            compiled_cache_dir: Some(cache_dir.clone()),
-            ..WasmExecutorConfig::default()
-        });
-        let wasm = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-        let wasm_hash = "hash-disk-corrupt";
-
-        executor.compile_module_cached(wasm_hash, &wasm).unwrap();
-        let cache_file = executor
-            .compiled_disk_cache_path_for_test(wasm_hash)
-            .expect("cache path");
-        fs::write(&cache_file, b"corrupt-bytes").expect("write corrupt cache");
-
-        executor
-            .compile_module_cached(wasm_hash, &wasm)
-            .expect("recompile after corrupt cache");
-
-        let repaired = fs::read(&cache_file).expect("read repaired cache");
-        assert_ne!(repaired, b"corrupt-bytes");
-
-        let _ = fs::remove_dir_all(cache_dir);
-    }
-}
+mod tests;

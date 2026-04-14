@@ -360,7 +360,7 @@ fn deploy_module_artifact_action_registers_artifact_bytes() {
 
     let loaded = world.load_module(&wasm_hash).expect("load deployed module");
     assert_eq!(loaded.wasm_hash, wasm_hash);
-    assert_eq!(loaded.bytes, wasm_bytes);
+    assert_eq!(loaded.bytes, wasm_bytes.into());
 }
 
 #[test]
@@ -383,8 +383,7 @@ fn compile_module_artifact_from_source_registers_compiled_artifact() {
     let _env_lock = SOURCE_COMPILER_ENV_LOCK.lock().expect("lock compile env");
     let _env_guard = EnvVarGuard::capture(SOURCE_COMPILER_ENV);
     let removed_old_brand_compiler = removed_old_brand_module_source_env("COMPILER");
-    let _removed_old_brand_env_guard =
-        EnvVarGuard::capture(removed_old_brand_compiler.as_str());
+    let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_compiler.as_str());
     let temp_root = temp_dir("compile-module-artifact");
     fs::create_dir_all(&temp_root).expect("create temp dir");
     let compiler_script = temp_root.join("compiler.sh");
@@ -423,7 +422,7 @@ fn compile_module_artifact_from_source_registers_compiled_artifact() {
             .load_module(&wasm_hash)
             .expect("load compiled module")
             .bytes,
-        wasm_bytes
+        wasm_bytes.into()
     );
 
     let _ = fs::remove_dir_all(temp_root);
@@ -434,8 +433,7 @@ fn compile_module_artifact_from_source_rejects_removed_old_brand_compiler_env() 
     let _env_lock = SOURCE_COMPILER_ENV_LOCK.lock().expect("lock compile env");
     let _env_guard = EnvVarGuard::capture(SOURCE_COMPILER_ENV);
     let removed_old_brand_compiler = removed_old_brand_module_source_env("COMPILER");
-    let _removed_old_brand_env_guard =
-        EnvVarGuard::capture(removed_old_brand_compiler.as_str());
+    let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_compiler.as_str());
 
     let temp_root = temp_dir("compile-module-artifact-prefers-oasis7-env");
     fs::create_dir_all(&temp_root).expect("create temp dir");
@@ -447,7 +445,10 @@ fn compile_module_artifact_from_source_rejects_removed_old_brand_compiler_env() 
         "compiled-from-removed-old-brand-env",
     );
     std::env::set_var(SOURCE_COMPILER_ENV, primary_script.as_os_str());
-    std::env::set_var(removed_old_brand_compiler.as_str(), removed_old_brand_script.as_os_str());
+    std::env::set_var(
+        removed_old_brand_compiler.as_str(),
+        removed_old_brand_script.as_os_str(),
+    );
 
     let mut world = World::new();
     register_agent(&mut world, "publisher-1");
@@ -479,8 +480,7 @@ fn compile_module_artifact_from_source_rejects_in_production_release_policy() {
     let _env_lock = SOURCE_COMPILER_ENV_LOCK.lock().expect("lock compile env");
     let _env_guard = EnvVarGuard::capture(SOURCE_COMPILER_ENV);
     let removed_old_brand_compiler = removed_old_brand_module_source_env("COMPILER");
-    let _removed_old_brand_env_guard =
-        EnvVarGuard::capture(removed_old_brand_compiler.as_str());
+    let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_compiler.as_str());
 
     let temp_root = temp_dir("compile-module-artifact-production-disabled");
     fs::create_dir_all(&temp_root).expect("create temp dir");
@@ -537,8 +537,7 @@ fn compile_module_artifact_from_source_rejects_when_file_count_exceeds_limit() {
     let _env_lock = SOURCE_COMPILER_ENV_LOCK.lock().expect("lock compile env");
     let _env_guard = EnvVarGuard::capture(SOURCE_MAX_FILES_ENV);
     let removed_old_brand_max_files = removed_old_brand_module_source_env("MAX_FILES");
-    let _removed_old_brand_env_guard =
-        EnvVarGuard::capture(removed_old_brand_max_files.as_str());
+    let _removed_old_brand_env_guard = EnvVarGuard::capture(removed_old_brand_max_files.as_str());
     std::env::set_var(SOURCE_MAX_FILES_ENV, "1");
     std::env::remove_var(removed_old_brand_max_files.as_str());
 

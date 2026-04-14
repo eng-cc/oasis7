@@ -40,6 +40,7 @@ pub use bootstrap_power::M1ScenarioBootstrapConfig;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::Arc;
 
 use super::consensus::{TickConsensusRecord, TickConsensusRejectionAuditEvent};
 use super::effect::{CapabilityGrant, EffectIntent};
@@ -231,7 +232,7 @@ pub struct World {
     module_registry: ModuleRegistry,
     module_artifacts: BTreeSet<String>,
     #[serde(skip)]
-    module_artifact_bytes: BTreeMap<String, Vec<u8>>,
+    module_artifact_bytes: BTreeMap<String, Arc<[u8]>>,
     #[serde(skip)]
     module_cache: ModuleCache,
     module_limits_max: ModuleLimits,

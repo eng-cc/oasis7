@@ -104,7 +104,7 @@ fn kernel_wasm_sandbox_bridge_allow_path_captures_encoded_request() {
     assert_eq!(request.module_id, "rule.module");
     assert_eq!(request.wasm_hash, "hash-allow");
     assert_eq!(request.entrypoint, "call");
-    assert_eq!(request.wasm_bytes, vec![0x00, 0x61, 0x73, 0x6d]);
+    assert_eq!(request.wasm_bytes, vec![0x00, 0x61, 0x73, 0x6d].into());
 
     let call_input: ModuleCallInput = serde_cbor::from_slice(&request.input).expect("decode input");
     assert_eq!(call_input.ctx.module_id, "rule.module");
@@ -294,5 +294,5 @@ fn kernel_wasm_artifact_registry_activation_uses_registered_bytes() {
     assert_eq!(request.module_id, "rule.module");
     assert_eq!(request.wasm_hash, "hash-registered");
     assert_eq!(request.entrypoint, "call");
-    assert_eq!(request.wasm_bytes, wasm_bytes);
+    assert_eq!(request.wasm_bytes, wasm_bytes.into());
 }

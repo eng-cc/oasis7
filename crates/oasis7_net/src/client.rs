@@ -234,7 +234,7 @@ impl DistributedClient {
         let bytes = self.fetch_blob_from_dht(world_id, &artifact_ref.content_hash, dht)?;
         Ok(ModuleArtifact {
             wasm_hash: wasm_hash.to_string(),
-            bytes,
+            bytes: bytes.into(),
         })
     }
 

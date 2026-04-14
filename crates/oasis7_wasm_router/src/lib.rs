@@ -1,6 +1,58 @@
 use oasis7_wasm_abi::{ModuleSubscription, ModuleSubscriptionStage};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, OnceLock};
+
+type ParsedFilterCache = Mutex<BTreeMap<String, Arc<SubscriptionFilters>>>;
+type RegexCache = Mutex<BTreeMap<String, Arc<regex::Regex>>>;
+
+fn parsed_filter_cache() -> &'static ParsedFilterCache {
+    static CACHE: OnceLock<ParsedFilterCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn regex_cache() -> &'static RegexCache {
+    static CACHE: OnceLock<RegexCache> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn parsed_subscription_filters(filters_value: &JsonValue) -> Result<Arc<SubscriptionFilters>, ()> {
+    let key = filters_value.to_string();
+    if let Some(cached) = parsed_filter_cache()
+        .lock()
+        .expect("parsed filter cache poisoned")
+        .get(&key)
+        .cloned()
+    {
+        return Ok(cached);
+    }
+    let parsed: SubscriptionFilters =
+        serde_json::from_value(filters_value.clone()).map_err(|_| ())?;
+    let parsed = Arc::new(parsed);
+    parsed_filter_cache()
+        .lock()
+        .expect("parsed filter cache poisoned")
+        .insert(key, parsed.clone());
+    Ok(parsed)
+}
+
+fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
+    if let Some(cached) = regex_cache()
+        .lock()
+        .expect("regex cache poisoned")
+        .get(pattern)
+        .cloned()
+    {
+        return Some(cached);
+    }
+    let compiled = Arc::new(regex::Regex::new(pattern).ok()?);
+    regex_cache()
+        .lock()
+        .expect("regex cache poisoned")
+        .insert(pattern.to_string(), compiled.clone());
+    Some(compiled)
+}
 
 pub fn module_subscribes_to_event(
     subscriptions: &[ModuleSubscription],
@@ -107,8 +159,8 @@ pub fn validate_subscription_filters(
     if filters_value.is_null() {
         return Ok(());
     }
-    let parsed: SubscriptionFilters = serde_json::from_value(filters_value.clone())
-        .map_err(|err| format!("module {module_id} subscription filters invalid: {err}"))?;
+    let parsed = parsed_subscription_filters(filters_value)
+        .map_err(|_| format!("module {module_id} subscription filters invalid"))?;
     for ruleset in parsed.event.iter().chain(parsed.action.iter()) {
         validate_ruleset(ruleset, module_id)?;
     }
@@ -126,7 +178,7 @@ fn subscription_match(pattern: &str, value: &str) -> bool {
     pattern == value
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SubscriptionFilters {
     #[serde(default)]
@@ -135,14 +187,14 @@ struct SubscriptionFilters {
     action: Option<RuleSet>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum RuleSet {
     List(Vec<MatchRule>),
     Group(RuleGroup),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RuleGroup {
     #[serde(default)]
@@ -151,7 +203,7 @@ struct RuleGroup {
     any: Vec<MatchRule>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MatchRule {
     path: String,
@@ -188,9 +240,9 @@ fn subscription_filters_match(
     if filters_value.is_null() {
         return true;
     }
-    let parsed: SubscriptionFilters = match serde_json::from_value(filters_value.clone()) {
+    let parsed = match parsed_subscription_filters(filters_value) {
         Ok(parsed) => parsed,
-        Err(_) => return false,
+        Err(()) => return false,
     };
     let rules = match kind {
         FilterKind::Event => parsed.event.as_ref(),
@@ -232,7 +284,7 @@ fn match_rule(rule: &MatchRule, value: &JsonValue) -> bool {
         let Some(text) = current.as_str() else {
             return false;
         };
-        return regex::Regex::new(pattern)
+        return cached_regex(pattern)
             .map(|re| re.is_match(text))
             .unwrap_or(false);
     }
@@ -595,5 +647,131 @@ mod tests {
         }));
         let schema_err = validate_subscription_filters(&invalid_schema, "m.test").unwrap_err();
         assert!(schema_err.contains("subscription filters invalid"));
+    }
+
+    #[test]
+    #[ignore = "local perf probe"]
+    fn perf_probe_subscription_filter_parse_overhead() {
+        use std::time::Instant;
+
+        let no_regex_filter_json = json!({
+            "event": {
+                "all": [
+                    { "path": "/actor/kind", "eq": "player" },
+                    { "path": "/stats/hp", "gt": 0.0 },
+                    { "path": "/region/id", "eq": "region-alpha" }
+                ],
+                "any": [
+                    { "path": "/event_kind", "eq": "world.tick" },
+                    { "path": "/event_kind", "eq": "world.effect" },
+                    { "path": "/event_kind", "eq": "world.spawn" }
+                ]
+            }
+        });
+        let no_regex_subscription = ModuleSubscription {
+            event_kinds: vec!["world.*".to_string()],
+            action_kinds: Vec::new(),
+            stage: Some(ModuleSubscriptionStage::PostEvent),
+            filters: Some(no_regex_filter_json.clone()),
+        };
+        let subscriptions = vec![no_regex_subscription];
+        let event_value = json!({
+            "actor": { "kind": "player", "id": "p-1" },
+            "stats": { "hp": 7.0, "energy": 3.0 },
+            "region": { "id": "region-alpha" },
+            "event_kind": "world.tick"
+        });
+
+        assert!(module_subscribes_to_event(
+            &subscriptions,
+            "world.tick",
+            &event_value
+        ));
+
+        let parsed: SubscriptionFilters =
+            serde_json::from_value(no_regex_filter_json).expect("parse filters once");
+        let parsed_rules = parsed.event.as_ref().expect("event filters");
+        assert!(ruleset_matches(parsed_rules, &event_value));
+
+        let iterations = 200_000u32;
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(module_subscribes_to_event(
+                &subscriptions,
+                "world.tick",
+                &event_value
+            ));
+        }
+        let parse_each_time_elapsed = started.elapsed();
+
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(ruleset_matches(parsed_rules, &event_value));
+        }
+        let parsed_once_elapsed = started.elapsed();
+
+        let regex_filter_json = json!({
+            "event": {
+                "all": [
+                    { "path": "/actor/kind", "eq": "player" },
+                    { "path": "/stats/hp", "gt": 0.0 },
+                    { "path": "/region/id", "re": "^region-" }
+                ],
+                "any": [
+                    { "path": "/event_kind", "eq": "world.tick" },
+                    { "path": "/event_kind", "eq": "world.effect" },
+                    { "path": "/event_kind", "eq": "world.spawn" }
+                ]
+            }
+        });
+        let regex_subscription = vec![ModuleSubscription {
+            event_kinds: vec!["world.*".to_string()],
+            action_kinds: Vec::new(),
+            stage: Some(ModuleSubscriptionStage::PostEvent),
+            filters: Some(regex_filter_json.clone()),
+        }];
+        let parsed_regex: SubscriptionFilters =
+            serde_json::from_value(regex_filter_json).expect("parse regex filters once");
+        let parsed_regex_rules = parsed_regex.event.as_ref().expect("regex event filters");
+        assert!(module_subscribes_to_event(
+            &regex_subscription,
+            "world.tick",
+            &event_value
+        ));
+        assert!(ruleset_matches(parsed_regex_rules, &event_value));
+
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(module_subscribes_to_event(
+                &regex_subscription,
+                "world.tick",
+                &event_value
+            ));
+        }
+        let regex_parse_each_time_elapsed = started.elapsed();
+
+        let started = Instant::now();
+        for _ in 0..iterations {
+            assert!(ruleset_matches(parsed_regex_rules, &event_value));
+        }
+        let regex_parsed_once_elapsed = started.elapsed();
+
+        eprintln!(
+            "perf_probe_subscription_filter_parse_overhead: iterations={iterations} no_regex_parse_each_time_ms={:.3} no_regex_parsed_once_ms={:.3} no_regex_ratio={:.2}x regex_parse_each_time_ms={:.3} regex_parsed_once_ms={:.3} regex_ratio={:.2}x",
+            parse_each_time_elapsed.as_secs_f64() * 1_000.0,
+            parsed_once_elapsed.as_secs_f64() * 1_000.0,
+            if parsed_once_elapsed.as_nanos() == 0 {
+                0.0
+            } else {
+                parse_each_time_elapsed.as_secs_f64() / parsed_once_elapsed.as_secs_f64()
+            },
+            regex_parse_each_time_elapsed.as_secs_f64() * 1_000.0,
+            regex_parsed_once_elapsed.as_secs_f64() * 1_000.0,
+            if regex_parsed_once_elapsed.as_nanos() == 0 {
+                0.0
+            } else {
+                regex_parse_each_time_elapsed.as_secs_f64() / regex_parsed_once_elapsed.as_secs_f64()
+            },
+        );
     }
 }

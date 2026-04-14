@@ -507,7 +507,7 @@ fn module_cache_loads_and_evicts() {
 
     let artifact_a = world.load_module(&hash_a).unwrap();
     assert_eq!(artifact_a.wasm_hash, hash_a);
-    assert_eq!(artifact_a.bytes, wasm_a.to_vec());
+    assert_eq!(artifact_a.bytes, wasm_a.to_vec().into());
     assert_eq!(world.module_cache_len(), 1);
 
     let artifact_b = world.load_module(&hash_b).unwrap();

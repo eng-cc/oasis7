@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
 
 mod economy;
 
@@ -35,7 +36,7 @@ pub struct ModuleLimits {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleArtifact {
     pub wasm_hash: String,
-    pub bytes: Vec<u8>,
+    pub bytes: Arc<[u8]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -475,7 +476,7 @@ pub struct ModuleCallRequest {
     pub input: Vec<u8>,
     pub limits: ModuleLimits,
     #[serde(default)]
-    pub wasm_bytes: Vec<u8>,
+    pub wasm_bytes: Arc<[u8]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -565,11 +566,12 @@ pub trait ModuleSandbox {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn artifact(hash: &str, byte: u8) -> ModuleArtifact {
         ModuleArtifact {
             wasm_hash: hash.to_string(),
-            bytes: vec![byte],
+            bytes: Arc::<[u8]>::from(vec![byte]),
         }
     }
 
@@ -666,5 +668,45 @@ mod tests {
             b"modsig:ed25519:v1|hash-1|src-1|build-1|node-1".to_vec()
         );
         assert!(!identity.has_unsigned_prefix());
+    }
+
+    #[test]
+    #[ignore = "local perf probe"]
+    fn perf_probe_module_cache_clone_cost_scales_with_wasm_size() {
+        let sizes = [4 * 1024usize, 256 * 1024usize, 4 * 1024 * 1024usize];
+
+        for size in sizes {
+            let mut cache = ModuleCache::new(1);
+            let key = format!("hash-{size}");
+            cache.insert(ModuleArtifact {
+                wasm_hash: key.clone(),
+                bytes: vec![7_u8; size].into(),
+            });
+            let iterations = match size {
+                0..=16_384 => 200_000u32,
+                16_385..=1_048_576 => 20_000u32,
+                _ => 2_000u32,
+            };
+
+            let started = Instant::now();
+            let mut bytes_observed = 0usize;
+            for _ in 0..iterations {
+                let artifact = cache.get(&key).expect("cache hit");
+                bytes_observed = bytes_observed.saturating_add(artifact.bytes.len());
+            }
+            let elapsed = started.elapsed();
+            let avg_us = elapsed.as_secs_f64() * 1_000_000.0 / f64::from(iterations);
+            let throughput_mib_s = if elapsed.as_secs_f64() == 0.0 {
+                0.0
+            } else {
+                (bytes_observed as f64 / (1024.0 * 1024.0)) / elapsed.as_secs_f64()
+            };
+            eprintln!(
+                "perf_probe_module_cache_clone_cost_scales_with_wasm_size: size_bytes={size} iterations={iterations} total_ms={:.3} avg_us_per_get={:.3} throughput_mib_s={:.2}",
+                elapsed.as_secs_f64() * 1_000.0,
+                avg_us,
+                throughput_mib_s
+            );
+        }
     }
 }

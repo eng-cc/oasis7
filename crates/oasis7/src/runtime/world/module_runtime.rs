@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallOrigin, ModuleCallRequest,
@@ -52,7 +53,8 @@ impl World {
             });
         }
         self.module_artifacts.insert(wasm_hash);
-        self.module_artifact_bytes.insert(computed, bytes.to_vec());
+        self.module_artifact_bytes
+            .insert(computed, Arc::<[u8]>::from(bytes));
         Ok(())
     }
 
@@ -720,7 +722,7 @@ impl World {
             entrypoint: manifest.kind.entrypoint().to_string(),
             input,
             limits: manifest.limits.clone(),
-            wasm_bytes: artifact.bytes,
+            wasm_bytes: artifact.bytes.clone(),
         };
         sandbox.call(&request)
     }
