@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 
 use super::*;
 
@@ -21,6 +22,30 @@ fn listening_addr_with_peer_id(network: &Libp2pReplicationNetwork) -> Multiaddr 
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("listener visible addr")
         .with(libp2p::multiaddr::Protocol::P2p(network.peer_id().into()))
+}
+
+fn test_peer_record(node_id: &str) -> PeerRecord {
+    PeerRecord {
+        peer_id: String::new(),
+        node_id: node_id.to_string(),
+        world_id: "world-a".to_string(),
+        network_id: "world-a".to_string(),
+        node_role: PeerNodeRole::FullStorage.as_str().to_string(),
+        deployment_mode: PeerDeploymentMode::Private,
+        reachability_class: PeerReachabilityClass::Private,
+        direct_addrs: Vec::new(),
+        hole_punch_addrs: Vec::new(),
+        relay_addrs: Vec::new(),
+        discovery_sources: vec![
+            PeerDiscoverySource::StaticBootstrap,
+            PeerDiscoverySource::Dht,
+        ],
+        capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
+        source_operator: None,
+        source_asn: None,
+        published_at_ms: 0,
+        ttl_ms: 60_000,
+    }
 }
 
 #[test]
@@ -83,7 +108,7 @@ fn connected_or_active_transport_peers_excludes_blocked_peer() {
         ReplicationPeerHealthDebug {
             peer_id: blocked_peer.to_string(),
             status: "blocked".to_string(),
-            issues: vec!["missing_peer_record".to_string()],
+            issues: vec!["relay_budget_exceeded relayed_active_peers=2 active_peer_count=2 limit_per_mille=500".to_string()],
             discovery_sources: vec!["dht".to_string()],
             active_path_kind: Some("direct".to_string()),
             source_operator: None,
@@ -107,13 +132,107 @@ fn connected_or_active_transport_peers_excludes_blocked_peer() {
 }
 
 #[test]
+fn connected_or_active_transport_peers_rejects_fully_blocked_connected_set() {
+    let blocked_peer = PeerId::random();
+    let healths = vec![ReplicationPeerHealthDebug {
+        peer_id: blocked_peer.to_string(),
+        status: "blocked".to_string(),
+        issues: vec!["operator_concentration source_operator=op-a peers_in_bucket=2 active_peer_count=2 limit_per_mille=500".to_string()],
+        discovery_sources: vec!["dht".to_string()],
+        active_path_kind: Some("direct".to_string()),
+        source_operator: None,
+        source_asn: None,
+    }];
+
+    let resolved = connected_or_active_transport_peers(vec![blocked_peer], healths.as_slice());
+
+    assert!(resolved.is_empty());
+}
+
+#[test]
+fn connected_or_active_transport_peers_prefers_known_record_peer_over_missing_record_peer() {
+    let blocked_peer = PeerId::random();
+    let active_peer = PeerId::random();
+    let healths = vec![
+        ReplicationPeerHealthDebug {
+            peer_id: blocked_peer.to_string(),
+            status: "blocked".to_string(),
+            issues: vec![
+                "missing_peer_record".to_string(),
+                "insufficient_active_discovery_sources observed=1 required=2".to_string(),
+            ],
+            discovery_sources: vec!["static_bootstrap".to_string()],
+            active_path_kind: Some("direct".to_string()),
+            source_operator: None,
+            source_asn: None,
+        },
+        ReplicationPeerHealthDebug {
+            peer_id: active_peer.to_string(),
+            status: "active".to_string(),
+            issues: Vec::new(),
+            discovery_sources: vec!["dht".to_string()],
+            active_path_kind: Some("direct".to_string()),
+            source_operator: None,
+            source_asn: None,
+        },
+    ];
+
+    let resolved =
+        connected_or_active_transport_peers(vec![blocked_peer, active_peer], healths.as_slice());
+
+    assert_eq!(resolved, vec![active_peer]);
+}
+
+#[test]
+fn connected_or_active_transport_peers_falls_back_to_missing_record_peer_when_needed() {
+    let blocked_peer = PeerId::random();
+    let healths = vec![ReplicationPeerHealthDebug {
+        peer_id: blocked_peer.to_string(),
+        status: "blocked".to_string(),
+        issues: vec!["missing_peer_record".to_string()],
+        discovery_sources: vec!["static_bootstrap".to_string()],
+        active_path_kind: Some("direct".to_string()),
+        source_operator: None,
+        source_asn: None,
+    }];
+
+    let resolved = connected_or_active_transport_peers(vec![blocked_peer], healths.as_slice());
+
+    assert_eq!(resolved, vec![blocked_peer]);
+}
+
+#[test]
+fn connected_or_active_transport_peers_falls_back_to_bootstrap_peer_while_record_exchange_is_pending(
+) {
+    let bootstrap_peer = PeerId::random();
+    let healths = vec![ReplicationPeerHealthDebug {
+        peer_id: bootstrap_peer.to_string(),
+        status: "blocked".to_string(),
+        issues: vec![
+            "missing_peer_record".to_string(),
+            "insufficient_active_discovery_sources observed=1 required=2".to_string(),
+        ],
+        discovery_sources: vec!["static_bootstrap".to_string()],
+        active_path_kind: Some("direct".to_string()),
+        source_operator: None,
+        source_asn: None,
+    }];
+
+    let resolved = connected_or_active_transport_peers(vec![bootstrap_peer], healths.as_slice());
+
+    assert_eq!(resolved, vec![bootstrap_peer]);
+}
+
+#[test]
 fn libp2p_replication_network_request_with_providers_honors_provider_subset() {
     let listener_fail = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener fail addr")],
+        peer_record: Some(test_peer_record("listener-fail")),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let listener_ok = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener ok addr")],
+        peer_record: Some(test_peer_record("listener-ok")),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let listen_deadline = Instant::now() + Duration::from_secs(10);

@@ -423,6 +423,13 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             if self.allow_local_handler_fallback_when_no_peers {
                 return self.call_local_handler(protocol, payload);
             }
+            if !self.inner.connected_peers().is_empty() {
+                return Err(WorldError::NetworkProtocolUnavailable {
+                    protocol: format!(
+                        "libp2p-replication no admissible connected peers for protocol {protocol}"
+                    ),
+                });
+            }
             return Err(WorldError::NetworkProtocolUnavailable {
                 protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
             });
@@ -632,7 +639,7 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
     match err {
         WorldError::NetworkRequestFailed { code, message, .. } => {
             matches!(code, DistributedErrorCode::ErrUnsupported)
-                || message.contains("NetworkProtocolUnavailable")
+                && (message.contains("handler missing") || message.starts_with('/'))
         }
         WorldError::NetworkProtocolUnavailable { protocol } => protocol.contains("handler missing"),
         _ => false,
@@ -642,11 +649,25 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
 fn peer_error_indicates_retryable_connection_gap(err: &WorldError) -> bool {
     match err {
         WorldError::NetworkProtocolUnavailable { protocol } => {
-            protocol.contains("is not connected for protocol")
-                || protocol.contains("no connected peers for protocol")
+            peer_error_message_indicates_retryable_connection_gap(protocol)
+        }
+        WorldError::NetworkRequestFailed { message, .. } => {
+            peer_error_message_indicates_retryable_connection_gap(message)
         }
         _ => false,
     }
+}
+
+fn peer_error_message_indicates_retryable_connection_gap(message: &str) -> bool {
+    message.contains("is not connected for protocol")
+        || message.contains("no connected peers for protocol")
+        || message.contains("no admissible connected peers for protocol")
+        || message.contains("no connected providers for protocol")
+        || message.contains("no healthy provider for protocol")
+        || message.contains("no healthy connected providers for protocol")
+        || message.contains("request failed: ConnectionClosed")
+        || message.contains("request failed: DialFailure")
+        || message.contains("request failed: Timeout")
 }
 
 fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {
@@ -670,8 +691,68 @@ fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
 fn blocked_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -> HashSet<PeerId> {
     healths
         .iter()
-        .filter(|health| health.status == "blocked")
+        .filter(|health| peer_is_request_blocked(health))
         .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
+        .collect()
+}
+
+fn soft_deprioritized_peers_from_healths(
+    healths: &[ReplicationPeerHealthDebug],
+) -> HashSet<PeerId> {
+    healths
+        .iter()
+        .filter(|health| peer_is_soft_deprioritized_for_requests(health))
+        .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
+        .collect()
+}
+
+fn peer_is_request_blocked(health: &ReplicationPeerHealthDebug) -> bool {
+    health.status == "blocked"
+        && !health.issues.is_empty()
+        && !health
+            .issues
+            .iter()
+            .all(|issue| issue_is_soft_bootstrap_constraint(issue))
+}
+
+fn peer_is_soft_deprioritized_for_requests(health: &ReplicationPeerHealthDebug) -> bool {
+    health.status == "blocked"
+        && !health.issues.is_empty()
+        && health
+            .issues
+            .iter()
+            .all(|issue| issue_is_soft_bootstrap_constraint(issue))
+        && health
+            .issues
+            .iter()
+            .any(|issue| issue == "missing_peer_record")
+}
+
+fn issue_is_soft_bootstrap_constraint(issue: &str) -> bool {
+    issue == "missing_peer_record"
+        || issue.starts_with("insufficient_active_discovery_sources ")
+        || issue.starts_with("single_source_discovery ")
+}
+
+fn request_candidate_peers(
+    peers: Vec<PeerId>,
+    healths: &[ReplicationPeerHealthDebug],
+) -> Vec<PeerId> {
+    let blocked_peers = blocked_peers_from_healths(healths);
+    let soft_deprioritized_peers = soft_deprioritized_peers_from_healths(healths);
+    let preferred = peers
+        .iter()
+        .copied()
+        .filter(|peer_id| {
+            !blocked_peers.contains(peer_id) && !soft_deprioritized_peers.contains(peer_id)
+        })
+        .collect::<Vec<_>>();
+    if !preferred.is_empty() {
+        return preferred;
+    }
+    peers
+        .into_iter()
+        .filter(|peer_id| !blocked_peers.contains(peer_id))
         .collect()
 }
 
@@ -682,35 +763,20 @@ fn active_transport_peers_from_healths(healths: &[ReplicationPeerHealthDebug]) -
         .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
         .collect();
     let peers = dedup_sorted_peers(peers);
-    let blocked_peers = blocked_peers_from_healths(healths);
-    let admissible = peers
-        .iter()
-        .copied()
-        .filter(|peer_id| !blocked_peers.contains(peer_id))
-        .collect::<Vec<_>>();
-    if !admissible.is_empty() {
-        admissible
-    } else {
-        peers
-    }
+    request_candidate_peers(peers, healths)
 }
 
 fn connected_or_active_transport_peers(
     connected_peers: Vec<PeerId>,
     healths: &[ReplicationPeerHealthDebug],
 ) -> Vec<PeerId> {
-    let blocked_peers = blocked_peers_from_healths(healths);
     let connected_peers = dedup_sorted_peers(connected_peers);
-    let admissible_connected_peers = connected_peers
-        .iter()
-        .copied()
-        .filter(|peer_id| !blocked_peers.contains(peer_id))
-        .collect::<Vec<_>>();
+    let admissible_connected_peers = request_candidate_peers(connected_peers.clone(), healths);
     if !admissible_connected_peers.is_empty() {
         return admissible_connected_peers;
     }
     if !connected_peers.is_empty() {
-        return connected_peers;
+        return Vec::new();
     }
     active_transport_peers_from_healths(healths)
 }
@@ -719,571 +785,4 @@ fn connected_or_active_transport_peers(
 mod peer_selection_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oasis7_proto::distributed::DistributedErrorCode;
-    use std::net::TcpListener;
-    use std::time::{Duration, Instant};
-
-    fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
-        while Instant::now() < deadline {
-            if condition() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        panic!("timed out waiting for condition: {what}");
-    }
-
-    fn listening_addr_with_peer_id(network: &Libp2pReplicationNetwork) -> Multiaddr {
-        network
-            .listening_addrs()
-            .into_iter()
-            .find(|addr| addr.to_string().contains("127.0.0.1"))
-            .expect("listener visible addr")
-            .with(libp2p::multiaddr::Protocol::P2p(network.peer_id().into()))
-    }
-
-    #[test]
-    fn libp2p_replication_network_generates_peer_id() {
-        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
-        assert!(!network.peer_id().to_string().is_empty());
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_rejects_without_connected_peers_by_default() {
-        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
-        let result = network.request("/aw/node/replication/ping", b"hello");
-        match result {
-            Err(WorldError::NetworkProtocolUnavailable { protocol }) => {
-                assert!(protocol.contains("no connected peers"));
-            }
-            other => panic!("expected NetworkProtocolUnavailable, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_falls_back_to_local_handler_when_enabled() {
-        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            allow_local_handler_fallback_when_no_peers: true,
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        network
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-ok");
-                    Ok(out)
-                }),
-            )
-            .expect("register local handler");
-
-        let response = network
-            .request("/aw/node/replication/ping", b"hello")
-            .expect("local request");
-        assert_eq!(response, b"hello-ok".to_vec());
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_response_between_peers() {
-        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener bind", listen_deadline, || {
-            !listener.listening_addrs().is_empty()
-        });
-
-        let dial_addr = listening_addr_with_peer_id(&listener);
-        listener
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-pong");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![dial_addr],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connection", connect_deadline, || {
-            !dialer.connected_peers().is_empty()
-        });
-
-        let request_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("request response", request_deadline, || {
-            match dialer.request("/aw/node/replication/ping", b"node") {
-                Ok(payload) => payload == b"node-pong".to_vec(),
-                Err(WorldError::NetworkProtocolUnavailable { .. }) => false,
-                Err(WorldError::NetworkRequestFailed { .. }) => false,
-                Err(err) => panic!(
-                    "unexpected request error: {err:?}; dialer_errors={:?}; listener_errors={:?}",
-                    dialer.debug_errors(),
-                    listener.debug_errors(),
-                ),
-            }
-        });
-    }
-
-    #[test]
-    fn libp2p_replication_network_redials_bootstrap_peer_until_listener_is_ready() {
-        let reserved_listener =
-            TcpListener::bind("127.0.0.1:0").expect("reserve bootstrap listener port");
-        let bootstrap_port = reserved_listener
-            .local_addr()
-            .expect("reserved bootstrap addr")
-            .port();
-        drop(reserved_listener);
-
-        let bootstrap_addr = format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-            .parse()
-            .expect("bootstrap addr");
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![bootstrap_addr],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-
-        std::thread::sleep(Duration::from_millis(200));
-
-        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec![format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-                .parse()
-                .expect("listener addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        listener
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-late");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener handler");
-
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until(
-            "dialer reconnects to late listener",
-            connect_deadline,
-            || !dialer.connected_peers().is_empty(),
-        );
-
-        let listener_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until(
-            "late listener sees connected peer",
-            listener_deadline,
-            || !listener.connected_peers().is_empty(),
-        );
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_waits_for_delayed_bootstrap_connection() {
-        let reserved_listener =
-            TcpListener::bind("127.0.0.1:0").expect("reserve bootstrap listener port");
-        let bootstrap_port = reserved_listener
-            .local_addr()
-            .expect("reserved bootstrap addr")
-            .port();
-        drop(reserved_listener);
-
-        let bootstrap_addr = format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-            .parse()
-            .expect("bootstrap addr");
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![bootstrap_addr],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-
-        let listener_thread = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(250));
-            let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-                listen_addrs: vec![format!("/ip4/127.0.0.1/tcp/{bootstrap_port}")
-                    .parse()
-                    .expect("listener addr")],
-                ..Libp2pReplicationNetworkConfig::default()
-            });
-            listener
-                .register_handler(
-                    "/aw/node/replication/ping",
-                    Box::new(|payload| {
-                        let mut out = payload.to_vec();
-                        out.extend_from_slice(b"-delayed");
-                        Ok(out)
-                    }),
-                )
-                .expect("register delayed listener handler");
-            std::thread::sleep(Duration::from_secs(3));
-        });
-
-        let response = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("request should wait for delayed connection");
-        assert_eq!(response, b"node-delayed".to_vec());
-
-        listener_thread
-            .join()
-            .expect("join delayed listener thread");
-    }
-
-    #[test]
-    fn filtered_request_peers_excludes_known_unsupported_peers_without_fallback() {
-        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
-        let observer_peer = PeerId::random();
-        let sequencer_peer = PeerId::random();
-        network.mark_peer_unsupported_for_protocol(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            observer_peer,
-        );
-
-        let filtered = network.filtered_request_peers(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            vec![observer_peer, sequencer_peer],
-        );
-        assert_eq!(filtered, vec![sequencer_peer]);
-
-        let filtered_only_unsupported = network.filtered_request_peers(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            vec![observer_peer],
-        );
-        assert!(filtered_only_unsupported.is_empty());
-    }
-
-    #[test]
-    fn filtered_request_peers_retries_unsupported_peer_after_retry_window() {
-        let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            unsupported_protocol_retry_after: Duration::from_millis(5),
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let sequencer_peer = PeerId::random();
-        network.mark_peer_unsupported_for_protocol(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            sequencer_peer,
-        );
-
-        let filtered_initial = network.filtered_request_peers(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            vec![sequencer_peer],
-        );
-        assert!(filtered_initial.is_empty());
-
-        std::thread::sleep(Duration::from_millis(15));
-
-        let filtered_after_retry_window = network.filtered_request_peers(
-            "/aw/node/replication/fetch-commit/1.0.0",
-            vec![sequencer_peer],
-        );
-        assert_eq!(filtered_after_retry_window, vec![sequencer_peer]);
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_round_robins_across_connected_peers() {
-        let listener_a = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener a addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listener_b = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener b addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener a bind", listen_deadline, || {
-            !listener_a.listening_addrs().is_empty()
-        });
-        wait_until("listener b bind", listen_deadline, || {
-            !listener_b.listening_addrs().is_empty()
-        });
-
-        listener_a
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-a");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener a handler");
-        listener_b
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-b");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener b handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![
-                listening_addr_with_peer_id(&listener_a),
-                listening_addr_with_peer_id(&listener_b),
-            ],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connects to two peers", connect_deadline, || {
-            dialer.connected_peers().len() >= 2
-        });
-
-        let first = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("first request");
-        let second = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("second request");
-
-        assert_ne!(
-            first, second,
-            "expected round-robin request targets to differ"
-        );
-        let mut responses = vec![first, second];
-        responses.sort();
-        assert_eq!(responses, vec![b"node-a".to_vec(), b"node-b".to_vec()]);
-    }
-
-    #[test]
-    fn libp2p_replication_network_request_retries_next_peer_when_remote_handler_fails() {
-        let listener_fail = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener fail addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listener_ok = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener ok addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener fail bind", listen_deadline, || {
-            !listener_fail.listening_addrs().is_empty()
-        });
-        wait_until("listener ok bind", listen_deadline, || {
-            !listener_ok.listening_addrs().is_empty()
-        });
-
-        listener_fail
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|_payload| {
-                    Err(WorldError::NetworkRequestFailed {
-                        code: DistributedErrorCode::ErrUnsupported,
-                        message: "forced failure".to_string(),
-                        retryable: false,
-                    })
-                }),
-            )
-            .expect("register listener fail handler");
-        listener_ok
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-ok");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener ok handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![
-                listening_addr_with_peer_id(&listener_fail),
-                listening_addr_with_peer_id(&listener_ok),
-            ],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connects to two peers", connect_deadline, || {
-            dialer.connected_peers().len() >= 2
-        });
-
-        let first = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("first request should succeed via retry");
-        let second = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("second request should succeed via retry");
-
-        assert_eq!(first, b"node-ok".to_vec());
-        assert_eq!(second, b"node-ok".to_vec());
-    }
-
-    #[test]
-    fn libp2p_replication_network_retries_previously_unsupported_single_peer_after_retry_window() {
-        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener bind", listen_deadline, || {
-            !listener.listening_addrs().is_empty()
-        });
-
-        listener
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(move |payload| {
-                    let mut out = payload.to_vec();
-                    out.extend_from_slice(b"-recovered");
-                    Ok(out)
-                }),
-            )
-            .expect("register listener handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-            unsupported_protocol_retry_after: Duration::from_millis(25),
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connection", connect_deadline, || {
-            !dialer.connected_peers().is_empty()
-        });
-
-        let listener_peer_id = listener.peer_id();
-        dialer.mark_peer_unsupported_for_protocol("/aw/node/replication/ping", listener_peer_id);
-
-        let immediate_retry = dialer.request("/aw/node/replication/ping", b"node");
-        assert!(matches!(
-            immediate_retry,
-            Err(WorldError::NetworkProtocolUnavailable { protocol })
-                if protocol.contains("no connected peers")
-        ));
-
-        std::thread::sleep(Duration::from_millis(60));
-
-        let recovered = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect("request after retry window");
-        assert_eq!(recovered, b"node-recovered".to_vec());
-    }
-
-    #[test]
-    fn libp2p_replication_network_does_not_quarantine_not_found_response_as_unsupported() {
-        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener bind", listen_deadline, || {
-            !listener.listening_addrs().is_empty()
-        });
-
-        listener
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|_payload| {
-                    Err(WorldError::NetworkRequestFailed {
-                        code: DistributedErrorCode::ErrNotFound,
-                        message: "missing content".to_string(),
-                        retryable: false,
-                    })
-                }),
-            )
-            .expect("register listener handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-            unsupported_protocol_retry_after: Duration::from_millis(250),
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connection", connect_deadline, || {
-            !dialer.connected_peers().is_empty()
-        });
-
-        let first = dialer.request("/aw/node/replication/ping", b"node");
-        assert!(matches!(
-            first,
-            Err(WorldError::NetworkRequestFailed {
-                code: DistributedErrorCode::ErrNotFound,
-                ..
-            })
-        ));
-
-        let second = dialer.request("/aw/node/replication/ping", b"node");
-        assert!(matches!(
-            second,
-            Err(WorldError::NetworkRequestFailed {
-                code: DistributedErrorCode::ErrNotFound,
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn retryable_connection_gap_detection_matches_request_to_peer_disconnects() {
-        let err = WorldError::NetworkProtocolUnavailable {
-            protocol: "libp2p-replication outbound request failed: NetworkProtocolUnavailable { protocol: \"peer 12D3KooW... is not connected for protocol /aw/node/replication/fetch-commit/1.0.0\" }".to_string(),
-        };
-        assert!(peer_error_indicates_retryable_connection_gap(&err));
-
-        let not_retryable = WorldError::NetworkProtocolUnavailable {
-            protocol: "libp2p-replication handler missing: /aw/node/replication/fetch-commit/1.0.0"
-                .to_string(),
-        };
-        assert!(!peer_error_indicates_retryable_connection_gap(
-            &not_retryable
-        ));
-    }
-
-    #[test]
-    fn libp2p_replication_network_preserves_remote_unsupported_error_code() {
-        let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let listen_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("listener bind", listen_deadline, || {
-            !listener.listening_addrs().is_empty()
-        });
-
-        listener
-            .register_handler(
-                "/aw/node/replication/ping",
-                Box::new(|_payload| {
-                    Err(WorldError::NetworkRequestFailed {
-                        code: DistributedErrorCode::ErrUnsupported,
-                        message: "forced unsupported".to_string(),
-                        retryable: false,
-                    })
-                }),
-            )
-            .expect("register listener handler");
-
-        let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-            listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-            bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-            unsupported_protocol_retry_after: Duration::from_millis(250),
-            ..Libp2pReplicationNetworkConfig::default()
-        });
-        let connect_deadline = Instant::now() + Duration::from_secs(10);
-        wait_until("dialer connection", connect_deadline, || {
-            !dialer.connected_peers().is_empty()
-        });
-
-        let err = dialer
-            .request("/aw/node/replication/ping", b"node")
-            .expect_err("unsupported remote handler must bubble its code");
-        assert!(matches!(
-            err,
-            WorldError::NetworkRequestFailed {
-                code: DistributedErrorCode::ErrUnsupported,
-                ..
-            }
-        ));
-    }
-}
+mod tests;

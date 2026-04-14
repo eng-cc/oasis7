@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 mod api;
+mod connection_lifecycle;
 mod discovery;
 mod error_mapping;
 mod kad_queries;
@@ -39,6 +40,10 @@ use oasis7_proto::distributed_net::{
 };
 
 use crate::util::to_canonical_cbor;
+use connection_lifecycle::{
+    clear_disconnected_peer_state, failover_after_disconnect, record_established_connection,
+    refresh_active_path_after_connection_close, refresh_peer_manager_views,
+};
 use discovery::{
     clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
     handle_request_response_request, maybe_discover_rendezvous_namespace,
@@ -57,28 +62,19 @@ pub use peer_manager::{
 };
 use peer_record::{publish_configured_peer_record, put_record_query};
 use peer_record_republish::republish_local_peer_record;
-use reachability::{
-    note_hole_punch_result, note_relay_reservation_accepted, refresh_active_transport_snapshot,
-    snapshot_clone,
-};
+use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
 pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     LiveTransportKind,
 };
-use runtime_loop::{
-    enforce_peer_manager_quarantine, handle_command, refresh_peer_manager_healths, CommandContext,
-    CommandOutcome, CommandStateRefs,
-};
+use runtime_loop::{handle_command, CommandContext, CommandOutcome, CommandStateRefs};
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use swarm_reachability_events::{
     handle_autonat_event, handle_expired_listen_addr, handle_external_addr_candidate,
     handle_external_addr_confirmed, handle_external_addr_expired, handle_listener_closed,
     handle_new_listen_addr,
 };
-use transport_paths::{
-    failover_transport_path, note_established_transport_path, retry_transport_path_after_error,
-    TransportPath,
-};
+use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
     try_send_command,
@@ -284,6 +280,14 @@ impl Libp2pNetwork {
             let mut known_transport_paths: HashMap<PeerId, Vec<TransportPath>> = HashMap::new();
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
+            let mut established_transport_paths_by_connection: HashMap<
+                libp2p::swarm::ConnectionId,
+                TransportPath,
+            > = HashMap::new();
+            let mut established_connections_by_peer: HashMap<
+                PeerId,
+                HashSet<libp2p::swarm::ConnectionId>,
+            > = HashMap::new();
             let mut peer_healths_by_id: HashMap<PeerId, PeerManagerPeerHealth> = HashMap::new();
             let mut quarantined_active_peers: HashSet<PeerId> = HashSet::new();
             let mut admitted_active_peers: HashSet<PeerId> = HashSet::new();
@@ -479,22 +483,18 @@ impl Libp2pNetwork {
                                                             peer_healths_by_id,
                                                             quarantined_active_peers,
                                                             admitted_active_peers,
-                                                        ) = refresh_peer_manager_healths(
+                                                        ) = refresh_peer_manager_views(
+                                                            &mut swarm,
                                                             &discovered_peer_records,
                                                             &active_transport_paths,
                                                             &admitted_active_peers,
                                                             &config_clone.peer_manager_policy,
                                                             &event_peer_healths,
                                                             &event_peer_block_artifacts,
-                                                            &event_errors,
-                                                            max_error_messages,
-                                                        );
-                                                        enforce_peer_manager_quarantine(
-                                                            &mut swarm,
-                                                            &quarantined_active_peers,
                                                             &mut pending_quarantine_disconnects,
                                                             &event_errors,
                                                             max_error_messages,
+                                                            &event_reachability,
                                                         );
                                                     } else if let Some(sender) = pending.remove(&request_id) {
                                                         let _ = sender.send(Ok(response.payload));
@@ -604,22 +604,18 @@ impl Libp2pNetwork {
                                                                     peer_healths_by_id,
                                                                     quarantined_active_peers,
                                                                     admitted_active_peers,
-                                                                ) = refresh_peer_manager_healths(
+                                                                ) = refresh_peer_manager_views(
+                                                                    &mut swarm,
                                                                     &discovered_peer_records,
                                                                     &active_transport_paths,
                                                                     &admitted_active_peers,
                                                                     &config_clone.peer_manager_policy,
                                                                     &event_peer_healths,
                                                                     &event_peer_block_artifacts,
-                                                                    &event_errors,
-                                                                    max_error_messages,
-                                                                );
-                                                                enforce_peer_manager_quarantine(
-                                                                    &mut swarm,
-                                                                    &quarantined_active_peers,
                                                                     &mut pending_quarantine_disconnects,
                                                                     &event_errors,
                                                                     max_error_messages,
+                                                                    &event_reachability,
                                                                 );
                                                             }
                                                         }
@@ -912,7 +908,12 @@ impl Libp2pNetwork {
                                         &mut peer_record_last_published_at_ms,
                                     );
                                 }
-                                SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                                SwarmEvent::ConnectionEstablished {
+                                    peer_id,
+                                    connection_id,
+                                    endpoint,
+                                    ..
+                                } => {
                                     if !peers.contains(&peer_id) {
                                         peers.push(peer_id);
                                     }
@@ -926,53 +927,36 @@ impl Libp2pNetwork {
                                         max_error_messages,
                                         "lock errors",
                                     );
-                                    match endpoint {
-                                        libp2p::core::connection::ConnectedPoint::Dialer { address, .. } => {
-                                            let active_path = note_established_transport_path(
-                                                &known_transport_paths,
-                                                &mut active_transport_paths,
-                                                &mut last_dialed_transport_paths,
-                                                &mut failed_transport_path_labels,
-                                                peer_id,
-                                                &address,
-                                            );
-                                            push_bounded_clone(
-                                                &event_errors,
-                                                format!(
-                                                    "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
-                                                    active_path.kind_label(),
-                                                    active_path.flavor_label(),
-                                                    active_path.addr,
-                                                ),
-                                                max_error_messages,
-                                                "lock errors",
-                                            );
-                                            swarm
-                                                .behaviour_mut()
-                                                .kademlia
-                                                .add_address(&peer_id, address.clone());
-                                        }
-                                        libp2p::core::connection::ConnectedPoint::Listener { send_back_addr, .. } => {
-                                            let active_path = note_established_transport_path(
-                                                &known_transport_paths,
-                                                &mut active_transport_paths,
-                                                &mut last_dialed_transport_paths,
-                                                &mut failed_transport_path_labels,
-                                                peer_id,
-                                                &send_back_addr,
-                                            );
-                                            push_bounded_clone(
-                                                &event_errors,
-                                                format!(
-                                                    "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
-                                                    active_path.kind_label(),
-                                                    active_path.flavor_label(),
-                                                    active_path.addr,
-                                                ),
-                                                max_error_messages,
-                                                "lock errors",
-                                            );
-                                        }
+                                    let (refreshed_active_path, dialed_addr) =
+                                        record_established_connection(
+                                            &known_transport_paths,
+                                            &mut active_transport_paths,
+                                            &mut last_dialed_transport_paths,
+                                            &mut failed_transport_path_labels,
+                                            &mut established_transport_paths_by_connection,
+                                            &mut established_connections_by_peer,
+                                            peer_id,
+                                            connection_id,
+                                            &endpoint,
+                                        );
+                                    if let Some(address) = dialed_addr {
+                                        swarm
+                                            .behaviour_mut()
+                                            .kademlia
+                                            .add_address(&peer_id, address);
+                                    }
+                                    if let Some(active_path) = refreshed_active_path {
+                                        push_bounded_clone(
+                                            &event_errors,
+                                            format!(
+                                                "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
+                                                active_path.kind_label(),
+                                                active_path.flavor_label(),
+                                                active_path.addr,
+                                            ),
+                                            max_error_messages,
+                                            "lock errors",
+                                        );
                                     }
                                     maybe_queue_discovery_peer_record(
                                         &mut swarm,
@@ -1044,110 +1028,109 @@ impl Libp2pNetwork {
                                         peer_healths_by_id,
                                         quarantined_active_peers,
                                         admitted_active_peers,
-                                    ) = refresh_peer_manager_healths(
+                                    ) = refresh_peer_manager_views(
+                                        &mut swarm,
                                         &discovered_peer_records,
                                         &active_transport_paths,
                                         &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
                                         &event_peer_block_artifacts,
-                                        &event_errors,
-                                        max_error_messages,
-                                    );
-                                    enforce_peer_manager_quarantine(
-                                        &mut swarm,
-                                        &quarantined_active_peers,
                                         &mut pending_quarantine_disconnects,
                                         &event_errors,
                                         max_error_messages,
-                                    );
-                                    refresh_active_transport_snapshot(
                                         &event_reachability,
-                                        &active_transport_paths,
                                     );
                                 }
-                                SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                                    peers.retain(|peer| peer != &peer_id);
-                                    admitted_active_peers.remove(&peer_id);
-                                    let quarantined = quarantined_active_peers.remove(&peer_id)
-                                        || pending_quarantine_disconnects.contains(&peer_id);
-                                    pending_quarantine_disconnects.remove(&peer_id);
-                                    if quarantined {
-                                        active_transport_paths.remove(&peer_id);
-                                        last_dialed_transport_paths.remove(&peer_id);
+                                SwarmEvent::ConnectionClosed {
+                                    peer_id,
+                                    connection_id,
+                                    num_established,
+                                    ..
+                                } => {
+                                    if num_established > 0 {
+                                        let refreshed_active_path =
+                                            refresh_active_path_after_connection_close(
+                                                &mut active_transport_paths,
+                                                &mut established_transport_paths_by_connection,
+                                                &mut established_connections_by_peer,
+                                                peer_id,
+                                                connection_id,
+                                            );
                                         push_bounded_clone(
                                             &event_errors,
                                             format!(
-                                                "libp2p peer manager quarantine suppresses failover peer={peer_id}"
+                                                "libp2p connection closed peer={peer_id} num_established={num_established} active_path={}",
+                                                refreshed_active_path
+                                                    .as_ref()
+                                                    .map(|path| path.addr.to_string())
+                                                    .unwrap_or_else(|| "none".to_string())
                                             ),
                                             max_error_messages,
                                             "lock errors",
                                         );
                                     } else {
-                                        match failover_transport_path(
-                                            &mut swarm,
-                                            &known_transport_paths,
+                                        established_transport_paths_by_connection
+                                            .remove(&connection_id);
+                                        established_connections_by_peer.remove(&peer_id);
+                                        let quarantined = clear_disconnected_peer_state(
+                                            &mut peers,
+                                            &mut admitted_active_peers,
+                                            &mut quarantined_active_peers,
+                                            &mut pending_quarantine_disconnects,
                                             &mut active_transport_paths,
                                             &mut last_dialed_transport_paths,
-                                            &mut failed_transport_path_labels,
+                                            &mut pending_rendezvous_registers,
+                                            &mut pending_rendezvous_discovers,
+                                            &mut registered_rendezvous_nodes,
+                                            &mut rendezvous_cookies,
+                                            &event_connected_peers,
                                             peer_id,
-                                        ) {
-                                            Ok(Some((active_path, next_path))) => {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p transport failover peer={peer_id} from={} to={}",
-                                                        active_path.addr,
-                                                        next_path.addr,
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
-                                            }
-                                            Err(err) => {
-                                                push_bounded_clone(
-                                                    &event_errors,
-                                                    format!(
-                                                        "libp2p transport failover dial failed peer={peer_id}: {err:?}"
-                                                    ),
-                                                    max_error_messages,
-                                                    "lock errors",
-                                                );
-                                            }
-                                            Ok(None) => {}
+                                        );
+                                        if quarantined {
+                                            push_bounded_clone(
+                                                &event_errors,
+                                                format!(
+                                                    "libp2p peer manager quarantine suppresses failover peer={peer_id}"
+                                                ),
+                                                max_error_messages,
+                                                "lock errors",
+                                            );
+                                        } else {
+                                            failover_after_disconnect(
+                                                &mut swarm,
+                                                &known_transport_paths,
+                                                &mut active_transport_paths,
+                                                &mut last_dialed_transport_paths,
+                                                &mut failed_transport_path_labels,
+                                                &event_errors,
+                                                max_error_messages,
+                                                peer_id,
+                                            );
                                         }
+                                        push_bounded_clone(
+                                            &event_errors,
+                                            format!("libp2p connection closed peer={peer_id}"),
+                                            max_error_messages,
+                                            "lock errors",
+                                        );
                                     }
-                                    pending_rendezvous_registers.remove(&peer_id);
-                                    pending_rendezvous_discovers.remove(&peer_id);
-                                    registered_rendezvous_nodes.remove(&peer_id);
-                                    rendezvous_cookies.remove(&peer_id);
-                                    event_connected_peers
-                                        .lock()
-                                        .expect("lock connected peers")
-                                        .remove(&peer_id);
-                                    push_bounded_clone(
-                                        &event_errors,
-                                        format!("libp2p connection closed peer={peer_id}"),
-                                        max_error_messages,
-                                        "lock errors",
-                                    );
                                     (
                                         peer_healths_by_id,
                                         quarantined_active_peers,
                                         admitted_active_peers,
-                                    ) = refresh_peer_manager_healths(
+                                    ) = refresh_peer_manager_views(
+                                        &mut swarm,
                                         &discovered_peer_records,
                                         &active_transport_paths,
                                         &admitted_active_peers,
                                         &config_clone.peer_manager_policy,
                                         &event_peer_healths,
                                         &event_peer_block_artifacts,
+                                        &mut pending_quarantine_disconnects,
                                         &event_errors,
                                         max_error_messages,
-                                    );
-                                    refresh_active_transport_snapshot(
                                         &event_reachability,
-                                        &active_transport_paths,
                                     );
                                 }
                                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
