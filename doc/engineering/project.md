@@ -122,6 +122,7 @@
 - [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-024) [test_tier_required]: 评估 `engineering / scripts / playability_test_result / headless-runtime` 四个剩余低密度模块的默认阅读面；仅对仍有长名单或重复入口噪音的入口页继续减重，并明确“不进入路径级治理”的当前边界。
 - [x] TASK-ENGINEERING-116 (PRD-ENGINEERING-015/024) [test_tier_required]: 将 `engineering` 根目录治理专题按对象下沉到 `doc-governance/` 与 `rust-governance/`，清理 `module-root-md-allowlist` 中已过时的 root topic 白名单，并全仓回写引用与索引，恢复“根目录只保留模块入口文件”的结构边界。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
+- [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 `AGENTS.md`、角色职责卡与 handoff 模板的 `.pm` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 `doc/devlog` 必写残留要求。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 
 ## 依赖

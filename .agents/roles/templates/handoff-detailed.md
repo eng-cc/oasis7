@@ -7,7 +7,7 @@
 - To Role: `producer_system_designer | runtime_engineer | wasm_platform_engineer | agent_engineer | viewer_engineer | qa_engineer | liveops_community`
 - Related Module:
 - Related PRD-ID:
-- Related Task ID:
+- Related Task UID:
 - Priority: `P0` / `P1` / `P2`
 - Expected ETA:
 
@@ -43,13 +43,13 @@
 - 代码改动：
 - 文档回写：
 - 测试记录：
-- devlog 记录：
+- task execution log：
 
 ## Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对上游 / 下游角色
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `doc/devlog/YYYY-MM-DD.md` 已记录
+- [ ] 对应 `.pm/tasks/<TASK-UID>.execution.md` 已记录
 - [ ] required/full 测试证据已补齐
 
 ## Risks / Decisions
