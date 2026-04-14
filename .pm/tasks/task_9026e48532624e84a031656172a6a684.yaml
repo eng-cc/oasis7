@@ -1,0 +1,24 @@
+task_uid: task_9026e48532624e84a031656172a6a684
+title: "收紧普通 MR 的贡献奖励上限到 150 OC"
+owner_role: producer_system_designer
+worktree_hint: readme-reward-mr-cap-150
+execution_log_path: .pm/tasks/task_9026e48532624e84a031656172a6a684.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md
+doc_refs:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md
+  - doc/readme/prd.md
+acceptance:
+  - "普通 MR 默认奖励建议不超过 150 OC，并明确 1500 OC 仅适用于极少数 exceptional case，不再作为常规 MR 档位"
+  - "reward pack、ledger、相关 PRD/project 与模块入口同步改为更保守的建议档位和审批边界，避免形成固定 bounty 预期"
+  - "doc-governance-check、git diff --check、pm close 与 snapshot review 通过"
+handoff_to: []
+updated_at: 2026-04-14T09:17:48+08:00
+last_started_at: 2026-04-13T23:39:20+08:00
+last_closed_at: 2026-04-14T09:17:48+08:00

@@ -13,6 +13,7 @@
 - [x] LTRL-5 (PRD-README-LTRL-001/002): 对于 GitHub PR 来源的贡献，优先从可选 PR reward intake block 导入 `Reward Account`，缺字段则保持 `deferred`。
 - [x] LTRL-6 (PRD-README-LTRL-001/002): 新增 PR intake import 脚本，输出 `ready/deferred/no_reward_review_requested` 与 ledger-ready row 草案，减少手工抄写。
 - [x] LTRL-7 (PRD-README-LTRL-001/002): 新增 merged PR round scan 脚本，按时间窗批量扫描已合入 PR，复用单 PR intake contract 输出窗口级状态汇总与 ledger-ready 候选。
+- [x] LTRL-8 (PRD-README-LTRL-002/003): 收紧普通 merged PR 的默认审批/待发放 ceiling 到 `150 OC`，并要求任何 `>150 OC` 的 row 写明 exceptional case note。
 
 ## 依赖
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -24,5 +25,5 @@
 ## 状态
 - 更新日期: 2026-04-13
 - 当前阶段: 首轮真实 round ledger 已批准，待执行发放
-- 阻塞项: 等待 execution owner 回填 `Actual Amount / Distribution Ref / Distribution Date`
-- 下一步: 按 `doc/readme/governance/readme-limited-preview-contributor-reward-distribution-closure-round-2026-04-13.md` 执行本轮发放，完成后回写 distribution closure 并归档本轮 ledger。
+- 阻塞项: 等待 execution owner 按普通 merged PR `<=150 OC` ceiling 回填最终执行引用。
+- 下一步: 按收紧后的 ordinary merged PR ceiling 更新本轮 distribution closure，再回填 `Distribution Ref / Distribution Date / Execution Owner` 并归档本轮 ledger。

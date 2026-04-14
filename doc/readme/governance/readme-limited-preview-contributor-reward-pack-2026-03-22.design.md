@@ -28,6 +28,7 @@
 - GitHub PR intake block 只在作者主动申请 reward review 时填写，不强制所有 PR 都填奖励字段。
 - 脚本导入只接受显式 `Request reward review: yes`；其它占位或残留块不自动视作已申请。
 - 不公开固定 token 数额或固定 token/point 汇率。
+- 普通 merged PR 的真实发放默认不高于 `150 OC`；若 producer 要批到更高金额，必须作为 exceptional case 单独写理由，`1500 OC` 只保留给极少数 exceptional row。
 - 不把奖励资格绑定到 product-level invite-only。
 - 默认不奖励登录、试玩或在线时长。
 

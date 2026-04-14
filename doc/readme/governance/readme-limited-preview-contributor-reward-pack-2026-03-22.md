@@ -109,6 +109,12 @@ Recommended handling:
 
 These are recommendation bands only.
 
+## 4.1 Producer Amount Guardrails
+- Recommendation bands are not a public bounty table.
+- For ordinary merged PR rows (`Source Type=PR` and `Contribution Type=C-03`), the default producer approval ceiling is `150 OC`.
+- Any merged PR row approved above `150 OC` must carry an exceptional-case note explaining why the ordinary ceiling is not enough.
+- `1500 OC` is reserved for rare exceptional rows and must be recorded as a round-specific decision, not a global contributor reward band mapping.
+
 Do not say:
 - fixed token amount
 - fixed token/point ratio
