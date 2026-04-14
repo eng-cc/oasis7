@@ -1,0 +1,27 @@
+task_uid: task_167a5da426df4c42bf0aa4de26ec1b61
+title: "Fix industrial gameplay progression regressions after post-onboarding"
+owner_role: runtime_engineer
+worktree_hint: oasis7-gameplay-industrial-progression-regressions
+execution_log_path: .pm/tasks/task_167a5da426df4c42bf0aa4de26ec1b61.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+doc_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+acceptance:
+  - "LLM recipe coverage only treats tracked recipes as completed after real completion signals, not just schedule acceptance."
+  - "Runtime live gameplay actions expose assembler follow-up actions when required materials exist on the same effective industrial ledger path used by runtime scheduling/build rules."
+  - "Player gameplay snapshot does not promote sessions into post_onboarding recovery solely because world time advanced once; first-session guidance remains until industrial progress is actually established."
+handoff_to:
+  - viewer_engineer
+  - qa_engineer
+updated_at: 2026-04-14T16:55:49+08:00
+last_started_at: 2026-04-14T15:49:57+08:00
+last_closed_at: 2026-04-14T16:55:49+08:00

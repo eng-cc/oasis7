@@ -77,7 +77,7 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
 
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
-    initial_world_time: u64,
+    confirmed_gameplay_progress: bool,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
     gameplay_enabled: bool,
     gameplay_disabled_reason: Option<&str>,
@@ -143,8 +143,7 @@ pub(super) fn build_player_gameplay_snapshot(
 
     let has_first_session_feedback = recent_feedback
         .is_some_and(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0);
-    let has_confirmed_world_progress =
-        has_first_session_feedback || state.time > initial_world_time;
+    let has_confirmed_world_progress = has_first_session_feedback || confirmed_gameplay_progress;
     let has_material_flow = state.industry_progress.completed_material_transits > 0;
     let has_factory_ready = !state.factories.is_empty();
     let has_recipe_running = state

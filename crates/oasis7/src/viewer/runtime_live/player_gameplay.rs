@@ -49,16 +49,13 @@ pub(super) fn extend_available_actions(
         .get(&MaterialLedgerId::world())
         .cloned()
         .unwrap_or_default();
+    let agent_materials = state
+        .material_ledgers
+        .get(&MaterialLedgerId::agent(agent_id.to_string()))
+        .cloned()
+        .unwrap_or_default();
     let smelter_exists = state.factories.contains_key(FACTORY_SMELTER_MK1);
     let assembler_exists = state.factories.contains_key(FACTORY_ASSEMBLER_MK1);
-    let iron_ingot = world_materials
-        .get("iron_ingot")
-        .copied()
-        .unwrap_or_default();
-    let copper_wire = world_materials
-        .get("copper_wire")
-        .copied()
-        .unwrap_or_default();
 
     if !smelter_exists {
         actions.push(PlayerGameplayAction {
@@ -66,7 +63,8 @@ pub(super) fn extend_available_actions(
             label: "Queue Smelter MK1 construction".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: missing_materials_reason(
+            disabled_reason: missing_materials_reason_with_world_fallback(
+                &agent_materials,
                 &world_materials,
                 &[
                     ("structural_frame", 12),
@@ -108,13 +106,15 @@ pub(super) fn extend_available_actions(
             label: "Queue Assembler MK1 construction".to_string(),
             protocol_action: GAMEPLAY_ACTION_PROTOCOL.to_string(),
             target_agent_id: Some(agent_id.to_string()),
-            disabled_reason: if iron_ingot >= 10 && copper_wire >= 8 {
-                None
-            } else {
-                Some(format!(
-                    "requires iron_ingot>=10 and copper_wire>=8 (current iron_ingot={iron_ingot}, copper_wire={copper_wire})"
-                ))
-            },
+            disabled_reason: missing_materials_reason_with_world_fallback(
+                &agent_materials,
+                &world_materials,
+                &[
+                    ("structural_frame", 8),
+                    ("iron_ingot", 10),
+                    ("copper_wire", 8),
+                ],
+            ),
         });
         return;
     }
@@ -219,7 +219,7 @@ impl ViewerRuntimeLiveServer {
 
         let runtime_action = runtime_action_from_request(&request)?;
         let runtime_action_id = self.world.submit_action(runtime_action);
-        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: format!("gameplay_action:{}", request.action_id),
             stage: "accepted".to_string(),
             effect: format!(
@@ -275,6 +275,28 @@ fn missing_materials_reason(
         })
         .collect::<Vec<_>>();
     (!missing.is_empty()).then(|| format!("requires {}", missing.join(", ")))
+}
+
+fn missing_materials_reason_with_world_fallback(
+    agent_materials: &std::collections::BTreeMap<String, i64>,
+    world_materials: &std::collections::BTreeMap<String, i64>,
+    required: &[(&str, i64)],
+) -> Option<String> {
+    if missing_materials_reason(agent_materials, required).is_none()
+        || missing_materials_reason(world_materials, required).is_none()
+    {
+        return None;
+    }
+
+    let details = required
+        .iter()
+        .map(|(kind, amount)| {
+            let agent_current = agent_materials.get(*kind).copied().unwrap_or_default();
+            let world_current = world_materials.get(*kind).copied().unwrap_or_default();
+            format!("{kind}>={amount} (agent {agent_current}, world {world_current})")
+        })
+        .collect::<Vec<_>>();
+    Some(format!("requires one ledger with {}", details.join(", ")))
 }
 
 fn runtime_action_from_request(

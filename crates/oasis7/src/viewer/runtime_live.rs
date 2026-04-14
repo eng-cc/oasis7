@@ -156,6 +156,7 @@ pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
     initial_world_time: u64,
+    confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
@@ -188,6 +189,7 @@ impl ViewerRuntimeLiveServer {
             config,
             world,
             initial_world_time,
+            confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
@@ -219,6 +221,17 @@ impl ViewerRuntimeLiveServer {
             });
         }
         Ok(())
+    }
+
+    fn set_latest_player_gameplay_feedback(&mut self, feedback: PlayerGameplayRecentFeedback) {
+        if feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0 {
+            self.confirm_player_gameplay_progress();
+        }
+        self.latest_player_gameplay_feedback = Some(feedback);
+    }
+
+    fn confirm_player_gameplay_progress(&mut self) {
+        self.confirmed_player_gameplay_progress_time = Some(self.world.state().time);
     }
 
     pub fn run_once(&mut self) -> Result<(), ViewerRuntimeLiveServerError> {
@@ -620,6 +633,11 @@ impl ViewerRuntimeLiveServer {
                 );
             }
             session.transient_play_failures = 0;
+            if self.world.state().time > baseline_logical_time
+                || latest_runtime_event_seq(&self.world) > baseline_event_seq
+            {
+                self.confirm_player_gameplay_progress();
+            }
 
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
             let mut mapped_events = Vec::new();
@@ -738,7 +756,7 @@ impl ViewerRuntimeLiveServer {
                 error_code: None,
                 error_message: None,
             };
-            self.latest_player_gameplay_feedback = Some(player_gameplay_feedback_from_control_ack(
+            self.set_latest_player_gameplay_feedback(player_gameplay_feedback_from_control_ack(
                 &control_mode_for_action(action, step_count),
                 &ack,
             ));
@@ -767,7 +785,7 @@ impl ViewerRuntimeLiveServer {
         if session.transient_play_failures >= BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET {
             return Ok(false);
         }
-        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: action.to_string(),
             stage: "blocked".to_string(),
             effect: effect.to_string(),
@@ -869,7 +887,7 @@ impl ViewerRuntimeLiveServer {
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: Some(build_player_gameplay_snapshot(
                 self.world.state(),
-                self.initial_world_time,
+                self.confirmed_player_gameplay_progress_time.is_some(),
                 self.latest_player_gameplay_feedback.as_ref(),
                 gameplay_gate.is_none(),
                 gameplay_gate.as_deref(),
@@ -903,7 +921,7 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar
             .ensure_gameplay_ready(&self.world, &self.snapshot_config)
             .map_err(|message| {
-                self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+                self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
                     action: action.to_string(),
                     stage: "blocked".to_string(),
                     effect: "gameplay action rejected before runtime submission".to_string(),
@@ -965,7 +983,7 @@ impl ViewerRuntimeLiveServer {
         let (error_code, error_message) = self.gameplay_control_error(reason.clone());
         session.playing = false;
         session.next_play_step_at = None;
-        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: action.to_string(),
             stage: "blocked".to_string(),
             effect: effect.to_string(),
@@ -1008,7 +1026,7 @@ impl ViewerRuntimeLiveServer {
         eprintln!("viewer runtime live: control {action} failed: {error_message} ({error:?})");
         session.playing = false;
         session.next_play_step_at = None;
-        self.latest_player_gameplay_feedback = Some(PlayerGameplayRecentFeedback {
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: action.to_string(),
             stage: "blocked".to_string(),
             effect: effect.to_string(),

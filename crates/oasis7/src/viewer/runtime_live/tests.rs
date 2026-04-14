@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 mod auth_actions;
 mod authoritative;
 mod background_play;
+mod industrial_progression;
 mod prompt_control;
 mod snapshot_progress;
 

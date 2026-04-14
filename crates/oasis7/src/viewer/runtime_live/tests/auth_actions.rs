@@ -1,163 +1,7 @@
 use super::*;
-use crate::simulator::{PlayerGameplayGoalKind, PlayerGameplayStageStatus};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
-
-fn setup_runtime_industrial_gameplay_session(
-    signer_seed: u8,
-) -> (ViewerRuntimeLiveServer, String, String, String) {
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm),
-    )
-    .expect("runtime server");
-    let agent_id = server
-        .world
-        .state()
-        .agents
-        .keys()
-        .next()
-        .cloned()
-        .expect("seed agent");
-    let (public_key, private_key) = test_signer(signer_seed);
-    let register_ack = register_runtime_session(
-        &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        u64::from(signer_seed.saturating_sub(1)),
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-    (server, agent_id, public_key, private_key)
-}
-
-fn build_first_smelter_via_gameplay_action(
-    server: &mut ViewerRuntimeLiveServer,
-    agent_id: &str,
-    public_key: &str,
-    private_key: &str,
-    nonce: u64,
-) {
-    let build_request = signed_gameplay_action_request(
-        crate::viewer::GameplayActionRequest {
-            action_id: "build_factory_smelter_mk1".to_string(),
-            target_agent_id: agent_id.to_string(),
-            player_id: "player-a".to_string(),
-            public_key: None,
-            auth: None,
-        },
-        nonce,
-        public_key,
-        private_key,
-    );
-    let build_ack = server
-        .handle_gameplay_action(build_request)
-        .expect("queue smelter build");
-    assert_eq!(build_ack.action_id, "build_factory_smelter_mk1");
-    for _ in 0..2 {
-        server.world.step().expect("settle smelter build");
-    }
-    assert!(server.world.has_factory("factory.smelter.mk1"));
-    let factory = server
-        .world
-        .state()
-        .factories
-        .get("factory.smelter.mk1")
-        .expect("smelter factory state");
-    let site_ledger = crate::runtime::MaterialLedgerId::site(factory.site_id.as_str());
-    server
-        .world
-        .set_ledger_material_balance(site_ledger.clone(), "iron_ore", 400)
-        .expect("seed iron ore for repeated recipes");
-    server
-        .world
-        .set_ledger_material_balance(site_ledger, "carbon_fuel", 120)
-        .expect("seed carbon fuel for repeated recipes");
-    server
-        .world
-        .set_material_balance("hardware_part", 200)
-        .expect("seed maintenance parts for repeated recipes");
-    server
-        .world
-        .set_resource_balance(crate::simulator::ResourceKind::Electricity, 2_000);
-}
-
-fn complete_smelter_iron_ingot_jobs(
-    server: &mut ViewerRuntimeLiveServer,
-    agent_id: &str,
-    public_key: &str,
-    private_key: &str,
-    start_nonce: u64,
-    jobs: u64,
-) {
-    for offset in 0..jobs {
-        let recipe_request = signed_gameplay_action_request(
-            crate::viewer::GameplayActionRequest {
-                action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
-                target_agent_id: agent_id.to_string(),
-                player_id: "player-a".to_string(),
-                public_key: None,
-                auth: None,
-            },
-            start_nonce + offset,
-            public_key,
-            private_key,
-        );
-        let recipe_ack = server
-            .handle_gameplay_action(recipe_request)
-            .expect("queue iron ingot recipe");
-        assert_eq!(recipe_ack.action_id, "schedule_recipe_smelter_iron_ingot");
-
-        let completed_before = server.world.state().industry_progress.completed_recipe_jobs;
-        for _ in 0..12 {
-            server.world.step().expect("settle recipe");
-            if server.world.state().industry_progress.completed_recipe_jobs > completed_before {
-                break;
-            }
-        }
-        assert!(
-            server.world.state().industry_progress.completed_recipe_jobs > completed_before,
-            "expected one more completed recipe job"
-        );
-    }
-}
-
-fn setup_industrial_gameplay_with_completed_jobs(
-    signer_seed: u8,
-    jobs: u64,
-) -> ViewerRuntimeLiveServer {
-    let (mut server, agent_id, public_key, private_key) =
-        setup_runtime_industrial_gameplay_session(signer_seed);
-    let build_nonce = u64::from(signer_seed);
-    build_first_smelter_via_gameplay_action(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        build_nonce,
-    );
-    complete_smelter_iron_ingot_jobs(
-        &mut server,
-        agent_id.as_str(),
-        public_key.as_str(),
-        private_key.as_str(),
-        build_nonce + 1,
-        jobs,
-    );
-    server
-}
-
-fn expect_player_gameplay(
-    server: &mut ViewerRuntimeLiveServer,
-    context: &'static str,
-) -> crate::simulator::PlayerGameplaySnapshot {
-    server.compat_snapshot().player_gameplay.expect(context)
-}
 
 #[test]
 fn runtime_agent_chat_script_mode_requires_llm_mode() {
@@ -373,6 +217,105 @@ fn runtime_background_play_stops_when_llm_access_is_unavailable() {
         .reason
         .as_deref()
         .is_some_and(|reason| { reason.contains("configured and reachable LLM provider") }));
+}
+
+#[test]
+fn runtime_background_play_tolerates_transient_llm_failure_after_confirmed_progress() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let request_count = Arc::new(Mutex::new(0_usize));
+    let base_url = spawn_runtime_live_mock_http_server(2, {
+        let request_count = Arc::clone(&request_count);
+        move |request| {
+            let mut count = request_count.lock().expect("request count lock");
+            *count += 1;
+            match (request.method.as_str(), request.path.as_str(), *count) {
+                ("POST", "/v1/world-simulator/decision", 1) => {
+                    let decoded: crate::simulator::DecisionRequest =
+                        serde_json::from_slice(request.body.as_slice())
+                            .expect("decode decision request");
+                    let response = crate::simulator::DecisionResponse {
+                        decision: crate::simulator::ProviderDecision::Act {
+                            action_ref: "speak_to_nearby".to_string(),
+                            action: crate::simulator::Action::SpeakToNearby {
+                                agent_id: decoded.observation.agent_id,
+                                message: "runtime-live play ok".to_string(),
+                                target_agent_id: None,
+                            },
+                        },
+                        provider_error: None,
+                        diagnostics: crate::simulator::ProviderDiagnostics::default(),
+                        trace_payload: crate::simulator::ProviderTraceEnvelope::default(),
+                        memory_write_intents: Vec::new(),
+                    };
+                    MockHttpResponse {
+                        status_code: 200,
+                        body: serde_json::to_string(&response).expect("encode decision response"),
+                    }
+                }
+                ("POST", "/v1/world-simulator/decision", _) => MockHttpResponse {
+                    status_code: 503,
+                    body: serde_json::json!({
+                        "ok": false,
+                        "error": "provider temporarily unavailable"
+                    })
+                    .to_string(),
+                },
+                _ => MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                },
+            }
+        }
+    });
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let (mut writer, _client) = test_writer_pair();
+    let mut session = RuntimeLiveSession::new();
+    session.playing = true;
+
+    server
+        .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+        .expect("first background play tick advances");
+    let advanced_time = server.world.state().time;
+    assert!(
+        server.confirmed_player_gameplay_progress_time.is_some(),
+        "successful background play should confirm gameplay progress"
+    );
+
+    server
+        .advance_runtime(&mut session, &mut writer, "play", 1, None, false)
+        .expect("transient provider failure should be tolerated");
+
+    assert!(
+        session.playing,
+        "background play should remain active during transient failure budget"
+    );
+    assert_eq!(session.transient_play_failures, 1);
+    assert_eq!(
+        server.world.state().time,
+        advanced_time,
+        "transient failure should not advance world time"
+    );
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("blocked feedback recorded");
+    assert_eq!(feedback.action, "play");
+    assert_eq!(feedback.stage, "blocked");
+    assert!(feedback
+        .reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains("provider temporarily unavailable")));
+    clear_runtime_provider_env();
 }
 
 #[test]
@@ -802,61 +745,6 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
             .get(agent_ids[0].as_str()),
         None
     );
-}
-
-#[test]
-fn runtime_gameplay_action_promotes_first_output_into_resilient_production_goal() {
-    let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(31, 1);
-    let gameplay = expect_player_gameplay(&mut server, "player gameplay after industrial progress");
-    assert_eq!(
-        gameplay.goal_id,
-        "post_onboarding.stabilize_first_line_after_output"
-    );
-    assert_eq!(
-        gameplay.goal_title,
-        "Harden your first output into resilient production"
-    );
-    assert_eq!(gameplay.progress_percent, 80);
-    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Active);
-}
-
-#[test]
-fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
-    let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(41, 3);
-    let gameplay = expect_player_gameplay(&mut server, "player gameplay after scale-out");
-    assert_eq!(
-        gameplay.goal_id,
-        "post_onboarding.choose_first_expansion_tradeoff"
-    );
-    assert_eq!(
-        gameplay.goal_kind,
-        PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff
-    );
-    assert_eq!(
-        gameplay.stage_status,
-        PlayerGameplayStageStatus::BranchReady
-    );
-    assert_eq!(gameplay.progress_percent, 92);
-    assert!(gameplay
-        .branch_hint
-        .as_deref()
-        .is_some_and(|hint| hint.contains("throughput expansion")));
-}
-
-#[test]
-fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
-    let _guard = lock_test_llm_env();
-    let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
-    let gameplay =
-        expect_player_gameplay(&mut server, "player gameplay after governance-ready output");
-    assert_eq!(gameplay.goal_id, "post_onboarding.choose_midloop_path");
-    assert_eq!(
-        gameplay.goal_kind,
-        PlayerGameplayGoalKind::ChooseMidLoopPath
-    );
-    assert_eq!(gameplay.progress_percent, 100);
 }
 
 #[test]
