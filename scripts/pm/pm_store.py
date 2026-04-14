@@ -2525,9 +2525,9 @@ def build_workflow_checklist(
                 reason=f"triaged_reflections={pending_reflections}",
             )
         add(
-            "codex-review",
-            "commit 前必须通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted` review 当前 diff；若命令因运行环境或工具失败无法执行，需显式记录为阻断。review 只用于暴露风险/回归/缺测，不替代 owner role，findings 处理后再提交。",
-            command="./scripts/pm/codex-review-snapshot.sh",
+            "prepare-pr-review",
+            "默认评审边界在 GitHub PR：完成 commit 后通过 `./scripts/prepare-task-pr.sh` 执行 PR preflight / create，并以 required checks + review/approval 作为正式 review 流程；本地不再要求额外的 pre-commit review 脚本。",
+            command="./scripts/prepare-task-pr.sh",
         )
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(

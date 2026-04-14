@@ -19,3 +19,22 @@ records:
     superseded_by: MEM-SHARED-0001
     superseded_at: 2026-03-30T22:25:40+08:00
     supersede_reason: claim_envelope_refined
+  - id: MEM-SHARED-0002
+    role: shared
+    topic: cross_role.workflow.codex_review_requires_isolated_snapshot
+    summary: "In Codex, the default pre-commit review flow must run `codex exec review --uncommitted` inside a temporary isolated snapshot via `./scripts/pm/codex-review-snapshot.sh`, so the live task worktree and `.pm` state stay untouched."
+    source_refs:
+      - .pm/tasks/task_5228ebc444f252a89ecdc8bba46db869.execution.md
+      - .pm/tasks/task_b006f2efdbd247ab883906d150cacbaf.execution.md
+    tags:
+      - workflow
+      - review
+      - snapshot
+    effective_at: 2026-04-08T21:56:42+08:00
+    last_reviewed_at: 2026-04-14T23:00:33+08:00
+    status: superseded
+    confidence: confirmed
+    promotion_reason: engineering_constraint
+    superseded_by: MEM-SHARED-0004
+    superseded_at: 2026-04-14T23:00:33+08:00
+    supersede_reason: "GitHub PR review replaced local snapshot review as the default workflow boundary"

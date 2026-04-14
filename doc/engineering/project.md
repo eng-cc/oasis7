@@ -125,6 +125,7 @@
 - [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-024) [test_tier_required]: 评估 `engineering / scripts / playability_test_result / headless-runtime` 四个剩余低密度模块的默认阅读面；仅对仍有长名单或重复入口噪音的入口页继续减重，并明确“不进入路径级治理”的当前边界。
 - [x] TASK-ENGINEERING-116 (PRD-ENGINEERING-015/024) [test_tier_required]: 将 `engineering` 根目录治理专题按对象下沉到 `doc-governance/` 与 `rust-governance/`，清理 `module-root-md-allowlist` 中已过时的 root topic 白名单，并全仓回写引用与索引，恢复“根目录只保留模块入口文件”的结构边界。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
+- [x] drop-local-review-script (PRD-ENGINEERING-021) [test_tier_required]: 将默认评审边界完全切到 GitHub PR review，移除 `codex-review-snapshot.sh` 与相关 `workflow-report` / smoke / README / engineering 正式口径残留。 Trace: .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.yaml
 - [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 `AGENTS.md`、角色职责卡与 handoff 模板的 `.pm` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 `doc/devlog` 必写残留要求。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 
@@ -181,6 +182,7 @@
 - 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
+- 当前流程补充: 已完成 `drop-local-review-script`，默认评审边界已完全切到 GitHub PR review；`workflow-report` close、required-tier smoke、`.pm/README` 与 `AGENTS.md` 不再要求本地 snapshot review 脚本。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。

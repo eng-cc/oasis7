@@ -17,22 +17,6 @@ records:
     status: active
     confidence: confirmed
     promotion_reason: stage_decision
-  - id: MEM-SHARED-0002
-    role: shared
-    topic: cross_role.workflow.codex_review_requires_isolated_snapshot
-    summary: "In Codex, the default pre-commit review flow must run `codex exec review --uncommitted` inside a temporary isolated snapshot via `./scripts/pm/codex-review-snapshot.sh`, so the live task worktree and `.pm` state stay untouched."
-    source_refs:
-      - .pm/tasks/task_5228ebc444f252a89ecdc8bba46db869.execution.md
-      - .pm/tasks/task_b006f2efdbd247ab883906d150cacbaf.execution.md
-    tags:
-      - workflow
-      - review
-      - snapshot
-    effective_at: 2026-04-08T21:56:42+08:00
-    last_reviewed_at: 2026-04-08T21:56:42+08:00
-    status: active
-    confidence: confirmed
-    promotion_reason: engineering_constraint
   - id: MEM-SHARED-0003
     role: shared
     topic: cross_role.workflow.task_scoped_working_memory_close_checklist
@@ -46,6 +30,22 @@ records:
       - close_phase
     effective_at: 2026-04-06T23:33:31+08:00
     last_reviewed_at: 2026-04-06T23:33:31+08:00
+    status: active
+    confidence: confirmed
+    promotion_reason: engineering_constraint
+  - id: MEM-SHARED-0004
+    role: shared
+    topic: cross_role.workflow.github_pr_review_default_boundary
+    summary: "The default workflow review boundary is GitHub PR review via ./scripts/prepare-task-pr.sh; local codex-review-snapshot is no longer required in workflow close or pre-commit flow."
+    source_refs:
+      - .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.execution.md
+      - AGENTS.md
+    tags:
+      - workflow
+      - review
+      - github_pr
+    effective_at: 2026-04-14T23:00:17+08:00
+    last_reviewed_at: 2026-04-14T23:00:17+08:00
     status: active
     confidence: confirmed
     promotion_reason: engineering_constraint
