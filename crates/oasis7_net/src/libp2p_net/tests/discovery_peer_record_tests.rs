@@ -176,6 +176,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
             ask_peer: first_proxy,
             peer_id: target_peer_id,
+            tried_proxies: vec![first_proxy],
         },
         not_found_payload.as_slice(),
         &mut pending_peer_record_requests,
@@ -207,7 +208,67 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         retried,
         super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
             ask_peer,
-            peer_id
-        } if *ask_peer == fallback_proxy && *peer_id == target_peer_id
+            peer_id,
+            tried_proxies
+        } if *ask_peer == fallback_proxy
+            && *peer_id == target_peer_id
+            && *tried_proxies == vec![first_proxy, fallback_proxy]
     ));
+}
+
+#[test]
+fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let target_peer_id = PeerId::random();
+    let first_proxy = PeerId::random();
+    let fallback_proxy = PeerId::random();
+    let local_peer_id = PeerId::random();
+    let not_found_payload = to_canonical_cbor(&oasis7_proto::distributed::ErrorResponse {
+        code: oasis7_proto::distributed::DistributedErrorCode::ErrNotFound,
+        message: "missing cached peer record".to_string(),
+        retryable: true,
+    })
+    .expect("encode error response");
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_dht = HashMap::new();
+    let mut discovered_peer_records = HashMap::new();
+    let mut known_transport_paths = HashMap::new();
+    let mut last_dialed_transport_paths = HashMap::new();
+    let active_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+    let mut pending_discovery_peer_records = HashSet::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+
+    super::super::discovery::handle_peer_record_response(
+        &mut swarm,
+        super::super::discovery::PendingPeerRecordRequest::CachedPeerRecord {
+            ask_peer: fallback_proxy,
+            peer_id: target_peer_id,
+            tried_proxies: vec![first_proxy, fallback_proxy],
+        },
+        not_found_payload.as_slice(),
+        &mut pending_peer_record_requests,
+        &mut pending_dht,
+        &mut discovered_peer_records,
+        &mut known_transport_paths,
+        &mut last_dialed_transport_paths,
+        &active_transport_paths,
+        &[first_proxy, fallback_proxy],
+        &mut failed_transport_path_labels,
+        &mut pending_discovery_peer_records,
+        None,
+        local_peer_id,
+        &mut pending_connected_peer_records,
+        &mut pending_cached_peer_records,
+        &mut pending_cached_discovery_peers,
+        16,
+        &event_errors,
+        &PeerManagerPolicy::default(),
+    );
+
+    assert!(pending_peer_record_requests.is_empty());
+    assert!(!pending_cached_peer_records.contains(&target_peer_id));
 }

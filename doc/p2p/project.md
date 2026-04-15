@@ -506,7 +506,7 @@
     - `./scripts/check-rust-file-size.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] cached-peer-record-fallback-retry-fix (PRD-P2P-024) [test_tier_required]: 修复 2026-04-15 cached peer record fallback 误路由与 cache-miss 错误语义，确保 fallback 不再把 `RR_GET_CACHED_PEER_RECORD` 发给目标 peer 自己，cache miss 返回 `ErrNotFound`，且收到 miss 后可继续换用其他已连接 proxy peer 重试。 Trace: .pm/tasks/task_fa2fb263ce3b4c58bff341bf4e815408.yaml
+- [x] cached-peer-record-fallback-retry-fix (PRD-P2P-024) [test_tier_required]: 修复 2026-04-15 cached peer record fallback 误路由与 cache-miss 错误语义，确保 fallback 不再把 `RR_GET_CACHED_PEER_RECORD` 发给目标 peer 自己，cache miss 返回 `ErrNotFound`，收到 miss 后仅在未尝试过的已连接 proxy peer 间继续重试，并在候选耗尽后停止，避免 A/B proxy 间振荡。 Trace: .pm/tasks/task_fa2fb263ce3b4c58bff341bf4e815408.yaml
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`
     - `crates/oasis7_net/src/libp2p_net/discovery.rs`
