@@ -247,6 +247,7 @@ impl World {
         }
         while let Some(envelope) = self.pending_actions.pop_front() {
             let mut action_envelope = envelope.clone();
+            let mut post_action_result_event: Option<WorldEvent> = None;
             match self.resolve_module_backed_economy_action(&envelope, sandbox)? {
                 EconomyActionResolution::Resolved(action) => {
                     action_envelope.action = action;
@@ -260,11 +261,11 @@ impl World {
                             reason,
                         });
                     self.append_event(rejection_body.clone(), Some(CausedBy::Action(envelope.id)))?;
-                    let result_event = self.journal.events.last().cloned();
+                    post_action_result_event = self.journal.events.last().cloned();
                     self.route_action_to_modules_with_stage_and_event(
                         &envelope,
                         ModuleSubscriptionStage::PostAction,
-                        result_event.as_ref(),
+                        post_action_result_event.as_ref(),
                         sandbox,
                     )?;
                     if let Some(event) = self.journal.events.last() {
@@ -311,6 +312,7 @@ impl World {
                     }),
                     Some(CausedBy::Action(envelope.id)),
                 )?;
+                post_action_result_event = self.journal.events.last().cloned();
             } else {
                 let deficits = decision.cost.deficits(&self.state.resources);
                 if !deficits.is_empty() {
@@ -322,6 +324,7 @@ impl World {
                         }),
                         Some(CausedBy::Action(envelope.id)),
                     )?;
+                    post_action_result_event = self.journal.events.last().cloned();
                 } else {
                     match self.apply_resource_delta(&decision.cost) {
                         Ok(()) => {
@@ -335,6 +338,7 @@ impl World {
                                     event_body.clone(),
                                     Some(CausedBy::Action(envelope.id)),
                                 )?;
+                                post_action_result_event = self.journal.events.last().cloned();
                                 if let Some(event) = self.journal.events.last() {
                                     let event = event.clone();
                                     self.route_event_to_modules(&event, sandbox)?;
@@ -361,16 +365,16 @@ impl World {
                                 }),
                                 Some(CausedBy::Action(envelope.id)),
                             )?;
+                            post_action_result_event = self.journal.events.last().cloned();
                         }
                     }
                 }
             }
 
-            let result_event = self.journal.events.last().cloned();
             self.route_action_to_modules_with_stage_and_event(
                 &action_envelope,
                 ModuleSubscriptionStage::PostAction,
-                result_event.as_ref(),
+                post_action_result_event.as_ref(),
                 sandbox,
             )?;
             if let Some(event) = self.journal.events.last() {
