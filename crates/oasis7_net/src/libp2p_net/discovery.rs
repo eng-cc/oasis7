@@ -33,9 +33,17 @@ use super::transport_paths::{
 use super::{push_bounded_clone, Handler};
 
 pub(super) enum PendingPeerRecordRequest {
-    ConnectedPeerRecord { peer_id: PeerId },
-    CachedPeerRecord { ask_peer: PeerId, peer_id: PeerId },
-    CachedDiscoveryPeers { peer_id: PeerId },
+    ConnectedPeerRecord {
+        peer_id: PeerId,
+    },
+    CachedPeerRecord {
+        ask_peer: PeerId,
+        peer_id: PeerId,
+        tried_proxies: Vec<PeerId>,
+    },
+    CachedDiscoveryPeers {
+        peer_id: PeerId,
+    },
 }
 
 pub(super) fn start_peer_discovery_query(
@@ -204,12 +212,16 @@ fn request_cached_peer_record_via(
     ask_peer: PeerId,
     peer_id: PeerId,
     local_peer_id: PeerId,
+    mut tried_proxies: Vec<PeerId>,
 ) -> bool {
     if peer_id == local_peer_id
         || ask_peer == local_peer_id
         || pending_cached_peer_records.contains(&peer_id)
     {
         return false;
+    }
+    if !tried_proxies.contains(&ask_peer) {
+        tried_proxies.push(ask_peer);
     }
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &ask_peer,
@@ -221,7 +233,11 @@ fn request_cached_peer_record_via(
     pending_cached_peer_records.insert(peer_id);
     pending_peer_record_requests.insert(
         request_id,
-        PendingPeerRecordRequest::CachedPeerRecord { ask_peer, peer_id },
+        PendingPeerRecordRequest::CachedPeerRecord {
+            ask_peer,
+            peer_id,
+            tried_proxies,
+        },
     );
     true
 }
@@ -230,14 +246,10 @@ fn select_cached_peer_record_proxy(
     connected_peers: &[PeerId],
     peer_id: PeerId,
     local_peer_id: PeerId,
-    excluded_peer: Option<PeerId>,
+    excluded_peers: &[PeerId],
 ) -> Option<PeerId> {
     connected_peers.iter().copied().find(|candidate| {
-        *candidate != peer_id
-            && *candidate != local_peer_id
-            && excluded_peer
-                .map(|excluded| *candidate != excluded)
-                .unwrap_or(true)
+        *candidate != peer_id && *candidate != local_peer_id && !excluded_peers.contains(candidate)
     })
 }
 
@@ -256,7 +268,7 @@ pub(super) fn maybe_request_cached_peer_record(
         return false;
     }
     let Some(ask_peer) =
-        select_cached_peer_record_proxy(connected_peers, peer_id, local_peer_id, None)
+        select_cached_peer_record_proxy(connected_peers, peer_id, local_peer_id, &[])
     else {
         return false;
     };
@@ -267,6 +279,7 @@ pub(super) fn maybe_request_cached_peer_record(
         ask_peer,
         peer_id,
         local_peer_id,
+        Vec::new(),
     )
 }
 
@@ -550,6 +563,7 @@ pub(super) fn handle_peer_record_response(
                         *peer_id,
                         discovered_peer_id,
                         local_peer_id,
+                        Vec::new(),
                     );
                 }
             }
@@ -592,12 +606,17 @@ pub(super) fn handle_peer_record_response(
             }
         }
         Ok(None) => {
-            if let PendingPeerRecordRequest::CachedPeerRecord { ask_peer, peer_id } = kind {
+            if let PendingPeerRecordRequest::CachedPeerRecord {
+                ask_peer: _,
+                peer_id,
+                tried_proxies,
+            } = kind
+            {
                 if let Some(next_ask_peer) = select_cached_peer_record_proxy(
                     connected_peers,
                     peer_id,
                     local_peer_id,
-                    Some(ask_peer),
+                    tried_proxies.as_slice(),
                 ) {
                     let _ = request_cached_peer_record_via(
                         swarm,
@@ -606,6 +625,7 @@ pub(super) fn handle_peer_record_response(
                         next_ask_peer,
                         peer_id,
                         local_peer_id,
+                        tried_proxies,
                     );
                 }
             }
