@@ -20,6 +20,6 @@ acceptance:
   - "macOS release packaging exposes an app-style entrypoint inside the DMG and Windows release packaging exposes a native launcher entrypoint without requiring users to discover shell scripts."
   - "Release workflow and bundle validation fail when platform-native entrypoints are missing from packaged assets."
 handoff_to: []
-updated_at: 2026-04-14T22:42:03+08:00
-last_started_at: 2026-04-14T22:07:11+08:00
-last_closed_at: 2026-04-14T22:42:03+08:00
+updated_at: 2026-04-15T15:39:17+08:00
+last_started_at: 2026-04-15T15:33:02+08:00
+last_closed_at: 2026-04-15T15:39:17+08:00

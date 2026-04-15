@@ -29,10 +29,38 @@ resolve_abs_path() {
 
 require_path() {
   local path="$1"
-  if [[ ! -e "$path" ]]; then
-    echo "error: required release bundle entrypoint missing: $path" >&2
-    exit 1
-  fi
+  local expected_type="${2:-exists}"
+
+  case "$expected_type" in
+    exists)
+      [[ -e "$path" ]] || {
+        echo "error: required release bundle path missing: $path" >&2
+        exit 1
+      }
+      ;;
+    dir)
+      [[ -d "$path" ]] || {
+        echo "error: required release bundle directory missing or invalid: $path" >&2
+        exit 1
+      }
+      ;;
+    file)
+      [[ -f "$path" ]] || {
+        echo "error: required release bundle file missing or invalid: $path" >&2
+        exit 1
+      }
+      ;;
+    executable)
+      [[ -x "$path" ]] || {
+        echo "error: required release bundle executable missing or not executable: $path" >&2
+        exit 1
+      }
+      ;;
+    *)
+      echo "error: invalid require_path expected type: $expected_type" >&2
+      exit 1
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -69,43 +97,43 @@ esac
 BUNDLE_DIR="$(resolve_abs_path "$BUNDLE_DIR")"
 [[ -d "$BUNDLE_DIR" ]] || { echo "error: bundle dir does not exist: $BUNDLE_DIR" >&2; exit 1; }
 
-require_path "$BUNDLE_DIR/bin"
-require_path "$BUNDLE_DIR/web/index.html"
-require_path "$BUNDLE_DIR/web-launcher/index.html"
-require_path "$BUNDLE_DIR/README.txt"
-require_path "$BUNDLE_DIR/.oasis7-bundle-manifest.json"
-require_path "$BUNDLE_DIR/run-client.sh"
-require_path "$BUNDLE_DIR/run-web-launcher.sh"
-require_path "$BUNDLE_DIR/run-game.sh"
-require_path "$BUNDLE_DIR/run-chain-runtime.sh"
+require_path "$BUNDLE_DIR/bin" dir
+require_path "$BUNDLE_DIR/web/index.html" file
+require_path "$BUNDLE_DIR/web-launcher/index.html" file
+require_path "$BUNDLE_DIR/README.txt" file
+require_path "$BUNDLE_DIR/.oasis7-bundle-manifest.json" file
+require_path "$BUNDLE_DIR/run-client.sh" executable
+require_path "$BUNDLE_DIR/run-web-launcher.sh" executable
+require_path "$BUNDLE_DIR/run-game.sh" executable
+require_path "$BUNDLE_DIR/run-chain-runtime.sh" executable
 
 case "$PLATFORM" in
   linux-x64)
-    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live"
-    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime"
+    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
     ;;
   macos-x64)
-    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher"
-    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live"
-    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime"
-    require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist"
-    require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/MacOS/oasis7-client-launcher"
+    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
+    require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist" file
+    require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/MacOS/oasis7-client-launcher" executable
     ;;
   windows-x64)
-    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher.exe"
-    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher.exe"
-    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher.exe"
-    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live.exe"
-    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime.exe"
-    require_path "$BUNDLE_DIR/run-client.cmd"
-    require_path "$BUNDLE_DIR/run-web-launcher.cmd"
-    require_path "$BUNDLE_DIR/run-game.cmd"
-    require_path "$BUNDLE_DIR/run-chain-runtime.cmd"
+    require_path "$BUNDLE_DIR/bin/oasis7_client_launcher.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_game_launcher.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_web_launcher.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_viewer_live.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime.exe" file
+    require_path "$BUNDLE_DIR/run-client.cmd" file
+    require_path "$BUNDLE_DIR/run-web-launcher.cmd" file
+    require_path "$BUNDLE_DIR/run-game.cmd" file
+    require_path "$BUNDLE_DIR/run-chain-runtime.cmd" file
     ;;
 esac
 
