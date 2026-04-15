@@ -23,9 +23,9 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             "recipe.smelter.iron_ingot"
             | "recipe.smelter.copper_wire"
             | "recipe.smelter.polymer_resin"
-            | "recipe.assembler.gear" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
+            | "recipe.assembler.gear"
+            | "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
             "recipe.smelter.alloy_plate"
-            | "recipe.assembler.control_chip"
             | "recipe.assembler.motor_mk1"
             | "recipe.assembler.sensor_pack" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 2),
             "recipe.assembler.module_rack" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 3),
@@ -43,11 +43,13 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             "recipe.smelter.iron_ingot"
             | "recipe.smelter.copper_wire"
             | "recipe.smelter.polymer_resin" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
-            "recipe.assembler.motor_mk1" => Some(7),
+            "recipe.assembler.motor_mk1" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 2),
             "recipe.smelter.alloy_plate" => Some(9),
             "recipe.assembler.sensor_pack" => Some(8),
             "recipe.assembler.module_rack" => Some(10),
-            "recipe.assembler.logistics_drone" => Some(12),
+            "recipe.assembler.logistics_drone" => {
+                Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 4)
+            }
             "recipe.assembler.factory_core" => Some(14),
             _ => None,
         }
@@ -1058,6 +1060,24 @@ mod tests {
                 "recipe.assembler.gear"
             ),
             Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_hardware_cost_per_batch(
+                "recipe.assembler.control_chip"
+            ),
+            Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_electricity_cost_per_batch(
+                "recipe.assembler.motor_mk1"
+            ),
+            Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 2)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_electricity_cost_per_batch(
+                "recipe.assembler.logistics_drone"
+            ),
+            Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 4)
         );
         assert_eq!(
             LlmAgentBehavior::<DummyClient>::default_recipe_electricity_cost_per_batch(

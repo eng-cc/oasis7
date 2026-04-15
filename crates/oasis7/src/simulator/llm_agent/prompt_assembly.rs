@@ -315,7 +315,7 @@ impl PromptAssembler {
 - module 市场动作（list/buy/delist/destroy/place_bid/cancel_bid）中的 agent 字段仅允许 self 或 agent:<id>
 - module 市场动作的 price_amount 必须是正整数；cancel_module_artifact_bid.bid_order_id 必须是正整数
 - 若准备 install 但缺少 wasm_hash，先调用 `module.lifecycle.status` 读取最近 artifact 列表再执行
-- 默认 recipe_hardware_cost_per_batch：iron_ingot=2，copper_wire=2，polymer_resin=2，alloy_plate=4，gear=2，control_chip=4，motor_mk1=4，logistics_drone=8，sensor_pack=4，module_rack=6，factory_core=8
+- 默认 recipe_hardware_cost_per_batch：iron_ingot=2，copper_wire=2，polymer_resin=2，alloy_plate=4，gear=2，control_chip=2，motor_mk1=4，logistics_drone=8，sensor_pack=4，module_rack=6，factory_core=8
 - 当 owner=self 时，schedule_recipe.batches 必须 <= floor(self_resources.data / recipe_hardware_cost_per_batch)；若上界为 0，先 refine_compound 再 schedule_recipe
 - 当 observation.recipe_coverage.missing 非空且你准备重复 observation.recipe_coverage.completed 中的 recipe 时，必须先切换到 missing 列表中的配方（优先 missing[0]）
 - 默认经济参数下（refine_hardware_yield_ppm={}），refine_compound 需 compound_mass_g >= {} 才会产出 >=1 hardware；低于阈值会因产出为 0 被拒绝
@@ -1039,6 +1039,7 @@ mod tests {
             .user_prompt
             .contains("默认 recipe_hardware_cost_per_batch"));
         assert!(output.user_prompt.contains("iron_ingot=2"));
+        assert!(output.user_prompt.contains("control_chip=2"));
         assert!(output.user_prompt.contains("factory_core=8"));
         assert!(output
             .user_prompt
