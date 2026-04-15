@@ -834,16 +834,12 @@ fn build_region_zoom_slice(
     }
 
     let node_ids: BTreeSet<_> = nodes.iter().map(|node| node.id.as_str()).collect();
-    let mut edges: Vec<_> = edges
+    let edges: Vec<_> = edges
         .iter()
         .filter(|edge| node_ids.contains(edge.from.as_str()) || node_ids.contains(edge.to.as_str()))
         .take(WORLD_EDGE_LIMIT)
         .cloned()
         .collect();
-
-    if edges.len() > WORLD_EDGE_LIMIT {
-        edges.truncate(WORLD_EDGE_LIMIT);
-    }
 
     nodes.sort_by(|left, right| {
         right
