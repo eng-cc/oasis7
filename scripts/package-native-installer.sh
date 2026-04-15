@@ -160,8 +160,12 @@ run rm -f "$OUT_FILE"
 
 case "$PLATFORM" in
   linux-x64)
-    TMP_DIR="$(mktemp -d)"
-    trap 'rm -rf "$TMP_DIR"' EXIT
+    if [[ "$DRY_RUN" == "1" ]]; then
+      TMP_DIR="$OUT_DIR/.dry-run-linux-x64"
+    else
+      TMP_DIR="$(mktemp -d)"
+      trap 'rm -rf "$TMP_DIR"' EXIT
+    fi
     if [[ "$ASSET_NAME" == *.deb ]]; then
       ensure_command dpkg-deb
       PACKAGE_ROOT="$TMP_DIR/package"
@@ -253,8 +257,12 @@ EOF
   macos-x64)
     [[ "$ASSET_NAME" == *.dmg ]] || { echo "error: macos-x64 asset must end with .dmg" >&2; exit 1; }
     ensure_command hdiutil
-    TMP_DIR="$(mktemp -d)"
-    trap 'rm -rf "$TMP_DIR"' EXIT
+    if [[ "$DRY_RUN" == "1" ]]; then
+      TMP_DIR="$OUT_DIR/.dry-run-macos-x64"
+    else
+      TMP_DIR="$(mktemp -d)"
+      trap 'rm -rf "$TMP_DIR"' EXIT
+    fi
     DMG_ROOT="$TMP_DIR/dmg-root"
     run mkdir -p "$DMG_ROOT"
     run cp -R "$BUNDLE_DIR/." "$DMG_ROOT/"

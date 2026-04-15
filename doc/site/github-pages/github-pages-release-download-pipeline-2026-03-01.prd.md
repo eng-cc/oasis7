@@ -59,7 +59,7 @@
   - `bin/oasis7_client_launcher`
   - linux：`run-*.sh` wrapper + `oasis7-linux-x86_64.AppImage` 直接运行入口（另保留 `.deb` 安装后的 `/usr/bin/oasis7-*` 次级入口）
   - macOS：`oasis7 Client Launcher.app` + `.dmg` 内 `/Applications` 拖拽安装入口
-  - windows：`run-*.cmd` + SFX `.exe` 默认运行 `run-client.cmd`
+  - windows：`run-*.cmd` + NSIS `.exe` 安装器，执行安装并创建开始菜单/桌面快捷方式，可在安装完成页选择立即启动客户端
   - `web/`（viewer 静态资源）
   - `run-game.sh` / `run-client.sh`（Windows 额外提供 `.cmd`）
   - `README.txt`

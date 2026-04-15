@@ -345,13 +345,21 @@ jobs:
         if: matrix.platform == 'linux-x64'
         shell: bash
         run: |
+          set -euo pipefail
+          APPIMAGETOOL_VERSION="1.9.1"
+          APPIMAGETOOL_FILENAME="appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/${APPIMAGETOOL_FILENAME}"
+          APPIMAGETOOL_SHA256="ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+
           mkdir -p "${RUNNER_TEMP}/appimagetool"
-          curl -fsSL \
-            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
-            -o "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage"
-          chmod +x "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage"
+          curl -fsSL "${APPIMAGETOOL_URL}" \
+            -o "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
+          printf '%s  %s\n' \
+            "${APPIMAGETOOL_SHA256}" \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" | sha256sum -c -
+          chmod +x "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}"
           ln -sf \
-            "${RUNNER_TEMP}/appimagetool/appimagetool-x86_64.AppImage" \
+            "${RUNNER_TEMP}/appimagetool/${APPIMAGETOOL_FILENAME}" \
             "${RUNNER_TEMP}/appimagetool/appimagetool"
           echo "${RUNNER_TEMP}/appimagetool" >> "${GITHUB_PATH}"
       - name: Download web dist artifacts

@@ -120,13 +120,17 @@ resolve_binary_name() {
 
 bundle_platform_id() {
   local target_triple="$1"
-  if [[ "$target_triple" == *windows* ]]; then
+  if [[ "$target_triple" == "native" ]]; then
+    if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+      echo "windows-x64"
+    elif [[ "$(uname -s)" == "Darwin" ]]; then
+      echo "macos-x64"
+    else
+      echo "linux-x64"
+    fi
+  elif [[ "$target_triple" == *windows* ]]; then
     echo "windows-x64"
   elif [[ "$target_triple" == *apple-darwin* || "$target_triple" == *darwin* ]]; then
-    echo "macos-x64"
-  elif [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-    echo "windows-x64"
-  elif [[ "$(uname -s)" == "Darwin" ]]; then
     echo "macos-x64"
   else
     echo "linux-x64"
