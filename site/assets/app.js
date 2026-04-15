@@ -761,13 +761,71 @@
       return;
     }
 
+    const pageLang = String(document.documentElement.lang || "").toLowerCase();
+    const isZh = pageLang.startsWith("zh");
+    const platformLabels = {
+      windows: "Windows x64",
+      macos: "macOS x64",
+      linux: "Linux x64",
+    };
+    const buildRecommendationText = (platformId, mode) => {
+      const platformLabel = platformLabels[platformId] || platformId;
+      if (isZh) {
+        if (mode === "auto") {
+          return {
+            badge: "当前设备推荐",
+            footnote: `已按当前设备优先选中 ${platformLabel}；如果你要给其他机器下载，可切换上方平台按钮。`,
+          };
+        }
+        if (mode === "manual") {
+          return {
+            badge: "手动切换平台",
+            footnote: `当前显示的是你手动切换后的 ${platformLabel} 主包；如果要恢复自动判断，请刷新页面后按当前设备重新选择。`,
+          };
+        }
+        return {
+          badge: "按平台选择主包",
+          footnote: `当前无法可靠识别设备平台，默认展示 ${platformLabel} 主包；如果你要给其他机器下载，可切换上方平台按钮。`,
+        };
+      }
+
+      if (mode === "auto") {
+        return {
+          badge: "Recommended for this device",
+          footnote: `The page auto-selected ${platformLabel} for the current device. Switch platforms above if you are downloading for a different machine.`,
+        };
+      }
+      if (mode === "manual") {
+        return {
+          badge: "Manually selected platform",
+          footnote: `You manually switched to the ${platformLabel} primary package. Refresh the page if you want the surface to follow device detection again.`,
+        };
+      }
+      return {
+        badge: "Choose a platform",
+        footnote: `The page could not confidently detect the current device platform, so it is showing the ${platformLabel} primary package by default. Switch platforms above if needed.`,
+      };
+    };
+
     const detectPreferredPlatform = () => {
+      const uaData = window.navigator && window.navigator.userAgentData ? window.navigator.userAgentData : null;
+      const userAgent = window.navigator ? String(window.navigator.userAgent || "").toLowerCase() : "";
+      const platform = window.navigator ? String(window.navigator.platform || "").toLowerCase() : "";
+      const uaPlatform = uaData ? String(uaData.platform || "").toLowerCase() : "";
+      const candidateText = [uaPlatform, platform, userAgent]
+        .filter(Boolean)
+        .join(" ");
+      const isMobile =
+        (uaData && uaData.mobile === true) ||
+        /android|iphone|ipad|ipod|mobile/.test(candidateText);
+      if (isMobile) {
+        return "";
+      }
+
       const candidates = [
-        window.navigator && window.navigator.userAgentData
-          ? window.navigator.userAgentData.platform
-          : "",
-        window.navigator ? window.navigator.platform : "",
-        window.navigator ? window.navigator.userAgent : "",
+        uaPlatform,
+        platform,
+        userAgent,
       ]
         .filter(Boolean)
         .join(" ")
@@ -806,7 +864,6 @@
 
         sourceMap.set(platformId, {
           url: String(node.getAttribute("data-download-source-url") || "").trim(),
-          badge: readText("[data-download-source-badge]"),
           title: readText("[data-download-source-title]"),
           copy: readText("[data-download-source-copy]"),
           linkLabel: readText("[data-download-source-link-label]"),
@@ -814,7 +871,6 @@
           install: readText("[data-download-source-install]"),
           trust: readText("[data-download-source-trust]"),
           support: readText("[data-download-source-support]"),
-          footnote: readText("[data-download-source-footnote]"),
         });
       });
 
@@ -828,7 +884,7 @@
       const supportNode = surface.querySelector("[data-download-primary-support]");
       const footnoteNode = surface.querySelector("[data-download-primary-footnote]");
 
-      const applyPlatform = (platformId) => {
+      const applyPlatform = (platformId, selectionMode) => {
         const next = sourceMap.get(platformId);
         if (!next) {
           return;
@@ -841,8 +897,9 @@
           button.setAttribute("aria-pressed", isActive ? "true" : "false");
         });
 
-        if (badgeNode && next.badge) {
-          badgeNode.textContent = next.badge;
+        const recommendationText = buildRecommendationText(platformId, selectionMode);
+        if (badgeNode) {
+          badgeNode.textContent = recommendationText.badge;
         }
         if (titleNode && next.title) {
           titleNode.textContent = next.title;
@@ -868,14 +925,14 @@
         if (supportNode && next.support) {
           supportNode.textContent = next.support;
         }
-        if (footnoteNode && next.footnote) {
-          footnoteNode.textContent = next.footnote;
+        if (footnoteNode) {
+          footnoteNode.textContent = recommendationText.footnote;
         }
       };
 
       buttons.forEach((button) => {
         button.addEventListener("click", () => {
-          applyPlatform(String(button.getAttribute("data-download-platform-button") || ""));
+          applyPlatform(String(button.getAttribute("data-download-platform-button") || ""), "manual");
         });
       });
 
@@ -884,7 +941,9 @@
         buttons.length > 0
           ? String(buttons[0].getAttribute("data-download-platform-button") || "")
           : "";
-      applyPlatform(sourceMap.has(detected) ? detected : fallback);
+      const initialPlatform = sourceMap.has(detected) ? detected : fallback;
+      const initialMode = detected && sourceMap.has(detected) ? "auto" : "neutral";
+      applyPlatform(initialPlatform, initialMode);
     });
   };
 
