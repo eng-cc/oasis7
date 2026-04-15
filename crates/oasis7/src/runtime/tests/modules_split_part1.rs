@@ -9,7 +9,6 @@ use oasis7_wasm_executor::FixedSandbox;
 #[cfg(not(feature = "wasmtime"))]
 use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde_json::json;
-use std::collections::VecDeque;
 
 #[test]
 fn apply_module_changes_registers_and_activates() {
@@ -1017,4 +1016,162 @@ fn activate_module_manifest(world: &mut World, manifest: ModuleManifest) {
 
 fn module_manifest_hash(manifest: &ModuleManifest) -> String {
     util::hash_json(manifest).expect("hash module manifest")
+}
+
+#[test]
+fn step_with_modules_routes_post_action_rejection_event() {
+    let mut world = World::new();
+    world.set_policy(PolicySet::allow_all());
+
+    let deny_rule_wasm_bytes = b"module-post-action-deny-rule";
+    let deny_rule_wasm_hash = util::sha256_hex(deny_rule_wasm_bytes);
+    world
+        .register_module_artifact(deny_rule_wasm_hash.clone(), deny_rule_wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        ModuleManifest {
+            module_id: "m.rule.deny".to_string(),
+            name: "DenyRule".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Rule,
+            wasm_hash: deny_rule_wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["reduce".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: vec!["action.move_agent".to_string()],
+                stage: Some(ModuleSubscriptionStage::PreAction),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(super::signed_test_artifact_identity(
+                deny_rule_wasm_hash.as_str(),
+            )),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 1,
+            },
+        },
+    );
+
+    let observer_wasm_bytes = b"module-post-action-rejection-observer";
+    let observer_wasm_hash = util::sha256_hex(observer_wasm_bytes);
+    world
+        .register_module_artifact(observer_wasm_hash.clone(), observer_wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        ModuleManifest {
+            module_id: "m.post-action.reject-observer".to_string(),
+            name: "RejectObserver".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::Domain,
+            wasm_hash: observer_wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: vec!["action.move_agent".to_string()],
+                stage: Some(ModuleSubscriptionStage::PostAction),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(super::signed_test_artifact_identity(
+                observer_wasm_hash.as_str(),
+            )),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0.0, 0.0),
+    });
+    world.step().unwrap();
+
+    let action_id = world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(1.0, 0.0),
+    });
+    let deny_output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "rule.decision".to_string(),
+            payload: serde_json::to_value(RuleDecision {
+                action_id,
+                verdict: RuleVerdict::Deny,
+                override_action: None,
+                cost: ResourceDelta::default(),
+                notes: vec!["deny".to_string()],
+            })
+            .unwrap(),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 128,
+    };
+    let observer_output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    };
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![deny_output, observer_output]);
+    world.step_with_modules(&mut sandbox).unwrap();
+
+    assert_eq!(sandbox.requests.len(), 2);
+    let observer_input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[1].input).expect("decode observer input");
+    let observed_action: ActionEnvelope = serde_cbor::from_slice(
+        observer_input
+            .action
+            .as_deref()
+            .expect("post_action action bytes"),
+    )
+    .expect("decode rejected action");
+    match observed_action.action {
+        Action::MoveAgent { agent_id, to } => {
+            assert_eq!(agent_id, "agent-1");
+            assert_eq!(to, pos(1.0, 0.0));
+        }
+        other => panic!("unexpected observed action: {other:?}"),
+    }
+
+    let observed_event: WorldEvent = serde_cbor::from_slice(
+        observer_input
+            .event
+            .as_deref()
+            .expect("post_action rejection event bytes"),
+    )
+    .expect("decode rejection event");
+    match observed_event.body {
+        WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id: rejected_id,
+            ..
+        }) => {
+            assert_eq!(rejected_id, action_id);
+        }
+        other => panic!("unexpected rejection event: {other:?}"),
+    }
+    assert_eq!(
+        world.state().agents.get("agent-1").unwrap().state.pos,
+        pos(0.0, 0.0)
+    );
 }

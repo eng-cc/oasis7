@@ -418,46 +418,166 @@ fn step_with_modules_routes_actions() {
     assert!(action_emit_index < domain_event_index);
 }
 
-#[derive(Default)]
-struct TickLifecycleSandbox {
-    calls: Vec<ModuleCallRequest>,
-    outputs: VecDeque<ModuleOutput>,
-}
+#[test]
+fn step_with_modules_routes_post_action_with_effective_action_and_result_event() {
+    let mut world = World::new();
+    world.set_policy(PolicySet::allow_all());
 
-impl TickLifecycleSandbox {
-    fn with_outputs(outputs: Vec<ModuleOutput>) -> Self {
-        Self {
-            calls: Vec::new(),
-            outputs: outputs.into(),
+    let rule_wasm_bytes = b"module-post-action-override-rule";
+    let rule_wasm_hash = util::sha256_hex(rule_wasm_bytes);
+    world
+        .register_module_artifact(rule_wasm_hash.clone(), rule_wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        ModuleManifest {
+            module_id: "m.rule.override".to_string(),
+            name: "OverrideRule".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Rule,
+            wasm_hash: rule_wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["reduce".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: vec!["action.move_agent".to_string()],
+                stage: Some(ModuleSubscriptionStage::PreAction),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(super::signed_test_artifact_identity(
+                rule_wasm_hash.as_str(),
+            )),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 1,
+            },
+        },
+    );
+
+    let observer_wasm_bytes = b"module-post-action-observer";
+    let observer_wasm_hash = util::sha256_hex(observer_wasm_bytes);
+    world
+        .register_module_artifact(observer_wasm_hash.clone(), observer_wasm_bytes)
+        .unwrap();
+    activate_module_manifest(
+        &mut world,
+        ModuleManifest {
+            module_id: "m.post-action.observer".to_string(),
+            name: "PostActionObserver".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::Domain,
+            wasm_hash: observer_wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: vec!["action.move_agent".to_string()],
+                stage: Some(ModuleSubscriptionStage::PostAction),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(super::signed_test_artifact_identity(
+                observer_wasm_hash.as_str(),
+            )),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0.0, 0.0),
+    });
+    world.step().unwrap();
+
+    let action_id = world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(1.0, 0.0),
+    });
+    let override_action = Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(9.0, 0.0),
+    };
+    let rule_output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: vec![ModuleEmit {
+            kind: "rule.decision".to_string(),
+            payload: serde_json::to_value(RuleDecision {
+                action_id,
+                verdict: RuleVerdict::Modify,
+                override_action: Some(override_action.clone()),
+                cost: ResourceDelta::default(),
+                notes: vec!["override".to_string()],
+            })
+            .unwrap(),
+        }],
+        tick_lifecycle: None,
+        output_bytes: 128,
+    };
+    let observer_output = ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    };
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![rule_output, observer_output]);
+    world.step_with_modules(&mut sandbox).unwrap();
+
+    assert_eq!(sandbox.requests.len(), 2);
+    let observer_input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[1].input).expect("decode observer input");
+    assert_eq!(observer_input.ctx.stage.as_deref(), Some("post_action"));
+    let observed_action: ActionEnvelope = serde_cbor::from_slice(
+        observer_input
+            .action
+            .as_deref()
+            .expect("post_action action bytes"),
+    )
+    .expect("decode effective action");
+    assert_eq!(observed_action.id, action_id);
+    match observed_action.action {
+        Action::MoveAgent { agent_id, to } => {
+            assert_eq!(agent_id, "agent-1");
+            assert_eq!(to, pos(9.0, 0.0));
         }
+        other => panic!("unexpected observed action: {other:?}"),
     }
-}
 
-struct CaptureContextSandbox {
-    requests: Vec<ModuleCallRequest>,
-    outputs: VecDeque<ModuleOutput>,
-}
-
-impl CaptureContextSandbox {
-    fn with_outputs(outputs: Vec<ModuleOutput>) -> Self {
-        Self {
-            requests: Vec::new(),
-            outputs: outputs.into(),
+    let observed_event: WorldEvent = serde_cbor::from_slice(
+        observer_input
+            .event
+            .as_deref()
+            .expect("post_action result event bytes"),
+    )
+    .expect("decode post_action event");
+    match observed_event.body {
+        WorldEventBody::Domain(DomainEvent::AgentMoved { agent_id, to, .. }) => {
+            assert_eq!(agent_id, "agent-1");
+            assert_eq!(to, pos(9.0, 0.0));
         }
+        other => panic!("unexpected post_action result event: {other:?}"),
     }
-}
-
-impl ModuleSandbox for CaptureContextSandbox {
-    fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
-        self.requests.push(request.clone());
-        Ok(self.outputs.pop_front().unwrap_or(ModuleOutput {
-            new_state: None,
-            effects: Vec::new(),
-            emits: Vec::new(),
-            tick_lifecycle: None,
-            output_bytes: 0,
-        }))
-    }
+    assert_eq!(
+        world.state().agents.get("agent-1").unwrap().state.pos,
+        pos(9.0, 0.0)
+    );
 }
 
 impl ModuleSandbox for TickLifecycleSandbox {

@@ -260,9 +260,11 @@ impl World {
                             reason,
                         });
                     self.append_event(rejection_body.clone(), Some(CausedBy::Action(envelope.id)))?;
-                    self.route_action_to_modules_with_stage(
+                    let result_event = self.journal.events.last().cloned();
+                    self.route_action_to_modules_with_stage_and_event(
                         &envelope,
                         ModuleSubscriptionStage::PostAction,
+                        result_event.as_ref(),
                         sandbox,
                     )?;
                     if let Some(event) = self.journal.events.last() {
@@ -364,9 +366,11 @@ impl World {
                 }
             }
 
-            self.route_action_to_modules_with_stage(
-                &envelope,
+            let result_event = self.journal.events.last().cloned();
+            self.route_action_to_modules_with_stage_and_event(
+                &action_envelope,
                 ModuleSubscriptionStage::PostAction,
+                result_event.as_ref(),
                 sandbox,
             )?;
             if let Some(event) = self.journal.events.last() {
