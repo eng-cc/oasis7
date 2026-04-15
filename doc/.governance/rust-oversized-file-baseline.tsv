@@ -1,6 +1,6 @@
 # schema: kind<TAB>path<TAB>line_count
 # kind in {code,test}; line_count is the frozen oversized baseline for tracked Rust files.
-code	crates/oasis7/src/bin/oasis7_chain_runtime.rs	1304
+code	crates/oasis7/src/bin/oasis7_chain_runtime.rs	1303
 code	crates/oasis7/src/bin/oasis7_game_launcher.rs	1429
 code	crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs	1259
 code	crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs	1389
