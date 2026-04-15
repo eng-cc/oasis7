@@ -16,10 +16,9 @@ use oasis7::runtime::{
 };
 use oasis7_node::{
     derive_libp2p_identity_keypair, Libp2pReachabilitySnapshot, Libp2pReplicationNetwork,
-    Libp2pReplicationNetworkConfig, NodeConfig, NodeFeedbackP2pConfig, NodeNetworkPolicy,
-    NodePosConfig, NodeReachabilityAutoDetection, NodeReplicationConfig,
-    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, NodeSnapshot, NodeUserModeRecommendation,
-    PosConsensusStatus, PosValidator,
+    Libp2pReplicationNetworkConfig, NodeConfig, NodeNetworkPolicy, NodePosConfig,
+    NodeReachabilityAutoDetection, NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole,
+    NodeRuntime, NodeSnapshot, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -86,9 +85,9 @@ use reward_runtime_worker::{
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
 use status_payload::{build_chain_p2p_status, ChainP2pStatus};
-use traffic_profile::apply_traffic_profile_to_replication_network_config;
-pub(super) use traffic_profile::{
-    apply_traffic_profile_to_node_config, feedback_p2p_config_for_role,
+use traffic_profile::{
+    apply_traffic_profile_to_node_config, apply_traffic_profile_to_replication_network_config,
+    feedback_p2p_config_for_role,
 };
 #[cfg(test)]
 mod execution_bridge {

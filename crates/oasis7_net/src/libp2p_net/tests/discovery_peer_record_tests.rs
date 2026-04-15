@@ -93,7 +93,8 @@ fn process_discovered_peer_record_keeps_dht_only_suspect_peer_non_dialable() {
 
 #[test]
 fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let local_peer_id = PeerId::random();
     let target_peer_id = PeerId::random();
     let mut pending_peer_record_requests = HashMap::new();
@@ -149,7 +150,8 @@ fn cached_peer_record_request_handler_reports_not_found_on_cache_miss() {
 
 #[test]
 fn cached_peer_record_not_found_retries_via_another_connected_peer() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let target_peer_id = PeerId::random();
     let first_proxy = PeerId::random();
     let fallback_proxy = PeerId::random();
@@ -220,7 +222,8 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
 
 #[test]
 fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let target_peer_id = PeerId::random();
     let first_proxy = PeerId::random();
     let fallback_proxy = PeerId::random();
