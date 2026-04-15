@@ -261,43 +261,141 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
       </section>
 
       <section id="download" class="section" data-reveal>
-        <h2>Download Preview Builds (Not a Playable Release)</h2>
-        <p class="section-intro">Recommended order: verify the current technical preview path on your machine first; only then move into the full build/docs path if you need deeper inspection.Current packages are for development and technical validation, not for end-user playable release.</p>
+        <h2>Preview Build Downloads (Single Primary CTA per Platform)</h2>
+        <p class="section-intro">The public download surface now defaults to one primary package for the platform you are most likely using. These packages still target technical-preview validation, not a player-ready public release.</p>
         <p class="release-meta">
           Current version: <strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="Published">publish time pending</span>
           <a data-release-notes-link href="https://github.com/eng-cc/oasis7/releases/latest">Release notes</a>
         </p>
-        <p class="doc-entry-note">Public note: formal announcement is still being prepared; current release-notes links describe preview build artifacts and verification info, not a player/community launch notice.</p>
-        <div class="download-grid">
-          <a
-            class="download-card"
-            href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
-          >
-            <h3>Windows x64</h3>
-            <p>Download the preview installer `oasis7-windows-x64.exe` for technical verification.</p>
-          </a>
-          <a
-            class="download-card"
-            href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg"
-          >
-            <h3>macOS x64</h3>
-            <p>Download the preview disk image `oasis7-macos-x64.dmg` for technical verification.</p>
-          </a>
-          <a
-            class="download-card"
-            href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x86_64.AppImage"
-          >
-            <h3>Linux x64</h3>
-            <p>Download the runnable preview `oasis7-linux-x86_64.AppImage` and launch it after granting execute permission.</p>
-          </a>
+        <p class="doc-entry-note">Public note: the formal announcement is still pending. Current release notes describe preview build artifacts and verification info, not a player/community launch notice.</p>
+        <div class="download-surface" data-download-surface>
+          <div class="download-surface-main">
+            <p class="eyebrow" data-download-primary-badge>Recommended for this device</p>
+            <div class="download-platform-switch" role="tablist" aria-label="Switch download platform">
+              <button
+                class="download-platform-chip"
+                type="button"
+                data-download-platform-button="windows"
+                aria-pressed="false"
+              >
+                Windows x64
+              </button>
+              <button
+                class="download-platform-chip"
+                type="button"
+                data-download-platform-button="macos"
+                aria-pressed="false"
+              >
+                macOS x64
+              </button>
+              <button
+                class="download-platform-chip"
+                type="button"
+                data-download-platform-button="linux"
+                aria-pressed="false"
+              >
+                Linux x64
+              </button>
+            </div>
+            <h3 data-download-primary-title>Windows x64 Primary Installer</h3>
+            <p class="download-primary-copy" data-download-primary-copy>Download `oasis7-windows-x64.exe`. The public default surface now points to one installer instead of asking ordinary users to unpack a bundle and discover scripts.</p>
+            <div class="download-actions">
+              <a
+                class="button primary"
+                data-download-primary-link
+                href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
+              >
+                Download Windows Primary Package
+              </a>
+              <a
+                class="button secondary"
+                href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt"
+              >
+                View checksums
+              </a>
+            </div>
+            <p class="download-primary-footnote" data-download-primary-footnote>If platform detection is not what you want, switch manually above. The default surface no longer presents multiple technical asset shapes as peer choices.</p>
+          </div>
+          <aside class="download-support-card">
+            <h3>Check Before Download</h3>
+            <dl class="download-support-list">
+              <div>
+                <dt>System / architecture</dt>
+                <dd data-download-primary-requirements>64-bit Windows desktop environment. The public asset surface currently targets x64 only; no ARM or portable zip is offered as the default path.</dd>
+              </div>
+              <div>
+                <dt>Install path</dt>
+                <dd data-download-primary-install>Double-click the installer to enter setup. After install, `oasis7 Client Launcher` is discoverable from the Start menu, with optional desktop shortcut creation.</dd>
+              </div>
+              <div>
+                <dt>Trust-chain status</dt>
+                <dd data-download-primary-trust>These are still preview packages: Windows is not code-signed yet, macOS is not notarized yet, and checksums remain auxiliary verification rather than a platform trust substitute.</dd>
+              </div>
+              <div>
+                <dt>Support boundary</dt>
+                <dd data-download-primary-support>This page serves technical-preview validation, not a player-ready launch promise. If your device policy blocks unknown publishers, check the release notes before downloading.</dd>
+              </div>
+            </dl>
+          </aside>
+          <div class="download-platform-sources" hidden>
+            <article
+              data-download-platform-source="windows"
+              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
+            >
+              <h4 data-download-source-title>Windows x64 Primary Installer</h4>
+              <p data-download-source-badge>Recommended for this device</p>
+              <p data-download-source-copy>Download `oasis7-windows-x64.exe`. The public default surface now points to one installer instead of asking ordinary users to unpack a bundle and discover scripts.</p>
+              <p data-download-source-link-label>Download Windows Primary Package</p>
+              <p data-download-source-requirements>64-bit Windows desktop environment. The current public asset surface targets x64 only; no ARM or portable zip is offered as the default path.</p>
+              <p data-download-source-install>Double-click the installer to enter setup. After install, `oasis7 Client Launcher` is discoverable from the Start menu, with optional desktop shortcut creation.</p>
+              <p data-download-source-trust>Windows remains an unsigned preview installer today, so SmartScreen warnings may still appear until the code-signing task lands.</p>
+              <p data-download-source-support>This remains a technical-preview path, not a claim of warning-free ordinary-user install. Enterprise or locked-down devices should check release notes and support boundaries first.</p>
+              <p data-download-source-footnote>The page auto-selected Windows x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+            </article>
+            <article
+              data-download-platform-source="macos"
+              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg"
+            >
+              <h4 data-download-source-title>macOS x64 Primary Disk Image</h4>
+              <p data-download-source-badge>Recommended for this device</p>
+              <p data-download-source-copy>Download `oasis7-macos-x64.dmg`, mount it, and drag `oasis7 Client Launcher.app` into `/Applications`. The default surface no longer exposes internal bundle scripts as the primary decision path.</p>
+              <p data-download-source-link-label>Download macOS Primary Package</p>
+              <p data-download-source-requirements>Intel x64 macOS desktop environment. A separate Apple Silicon package is not shipped yet, so Apple Silicon validation still depends on compatibility assumptions.</p>
+              <p data-download-source-install>Open the `.dmg`, drag the app into `/Applications`, then launch `oasis7 Client Launcher.app` from there.</p>
+              <p data-download-source-trust>macOS preview packaging has not completed codesign + notarization yet. Gatekeeper prompts may still appear until the notarization task is closed.</p>
+              <p data-download-source-support>This is a technical-preview installation path, not a promise of first-launch zero-warning ordinary-user polish. The public trust-chain contract remains incomplete today.</p>
+              <p data-download-source-footnote>The page auto-selected macOS x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+            </article>
+            <article
+              data-download-platform-source="linux"
+              data-download-source-url="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-linux-x86_64.AppImage"
+            >
+              <h4 data-download-source-title>Linux x64 Primary Runnable Package</h4>
+              <p data-download-source-badge>Recommended for this device</p>
+              <p data-download-source-copy>Download `oasis7-linux-x86_64.AppImage`, grant execute permission, and launch directly. The `.deb` asset is now secondary distro-specific material rather than a competing default choice.</p>
+              <p data-download-source-link-label>Download Linux Primary Package</p>
+              <p data-download-source-requirements>x86_64 Linux desktop environment. The default path assumes AppImage-capable distros; no ARM/Linux alt-arch package is presented as a primary public option.</p>
+              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it via terminal or desktop. Root privileges and package-manager knowledge are not required for the default path.</p>
+              <p data-download-source-trust>Linux preview distribution currently relies on the public `SHA256` manifest for auxiliary verification. The `.deb` asset remains in release attachments as an advanced path only.</p>
+              <p data-download-source-support>If your desktop environment blocks AppImage or lacks integration, check release notes for minimum run guidance first. Distro-specific behavior is not the default support lane.</p>
+              <p data-download-source-footnote>The page auto-selected Linux x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+            </article>
+          </div>
         </div>
-        <p class="download-note">
-          Checksum manifest:
-          <a href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt">
-            oasis7-checksums.txt
-          </a>
-        </p>
+        <div class="download-advanced">
+          <p class="download-advanced-title">Additional Context</p>
+          <ul class="download-advanced-list">
+            <li>
+              Checksum manifest:
+              <a href="https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-checksums.txt">
+                oasis7-checksums.txt
+              </a>
+            </li>
+            <li>Linux `.deb` remains a distro-specific secondary asset in release attachments and notes, not a peer default CTA.</li>
+            <li>The current upgrade expectation is still “re-download the latest primary package and replace/overwrite the install”; a fuller config/world migration policy remains a follow-up topic.</li>
+          </ul>
+        </div>
       </section>
 
       <section id="proof" class="section" data-reveal>

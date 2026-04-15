@@ -1,9 +1,9 @@
 task_uid: task_3ec0a2b3318344209a2569fa294d05d1
-title: "Design site single primary release CTA"
+title: "Implement site single primary release CTA"
 owner_role: viewer_engineer
-worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
+worktree_hint: oasis7-world-simulator-ordinary-user-release-cta-boundary
 execution_log_path: .pm/tasks/task_3ec0a2b3318344209a2569fa294d05d1.execution.md
-status: candidate
+status: done
 priority: P1
 source_signal: null
 source_refs:
@@ -19,4 +19,6 @@ acceptance:
   - "System requirements, checksums, and support boundaries are visible before download."
   - "Advanced assets no longer compete with the primary CTA in the default decision surface."
 handoff_to: []
-updated_at: 2026-04-15T05:45:00+08:00
+updated_at: 2026-04-15T19:25:16+08:00
+last_started_at: 2026-04-15T19:13:39+08:00
+last_closed_at: 2026-04-15T19:24:43+08:00

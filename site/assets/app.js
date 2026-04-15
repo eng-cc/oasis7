@@ -755,8 +755,142 @@
       });
   };
 
+  const bindReleaseDownloadSurface = () => {
+    const surfaces = Array.from(document.querySelectorAll("[data-download-surface]"));
+    if (!surfaces.length) {
+      return;
+    }
+
+    const detectPreferredPlatform = () => {
+      const candidates = [
+        window.navigator && window.navigator.userAgentData
+          ? window.navigator.userAgentData.platform
+          : "",
+        window.navigator ? window.navigator.platform : "",
+        window.navigator ? window.navigator.userAgent : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      if (candidates.includes("win")) {
+        return "windows";
+      }
+      if (candidates.includes("mac") || candidates.includes("darwin")) {
+        return "macos";
+      }
+      if (candidates.includes("linux") || candidates.includes("x11")) {
+        return "linux";
+      }
+      return "";
+    };
+
+    surfaces.forEach((surface) => {
+      const buttons = Array.from(surface.querySelectorAll("[data-download-platform-button]"));
+      const sourceNodes = Array.from(surface.querySelectorAll("[data-download-platform-source]"));
+      if (!buttons.length || !sourceNodes.length) {
+        return;
+      }
+
+      const sourceMap = new Map();
+      sourceNodes.forEach((node) => {
+        const platformId = String(node.getAttribute("data-download-platform-source") || "").trim();
+        if (!platformId) {
+          return;
+        }
+
+        const readText = (selector) => {
+          const target = node.querySelector(selector);
+          return target ? target.textContent.trim() : "";
+        };
+
+        sourceMap.set(platformId, {
+          url: String(node.getAttribute("data-download-source-url") || "").trim(),
+          badge: readText("[data-download-source-badge]"),
+          title: readText("[data-download-source-title]"),
+          copy: readText("[data-download-source-copy]"),
+          linkLabel: readText("[data-download-source-link-label]"),
+          requirements: readText("[data-download-source-requirements]"),
+          install: readText("[data-download-source-install]"),
+          trust: readText("[data-download-source-trust]"),
+          support: readText("[data-download-source-support]"),
+          footnote: readText("[data-download-source-footnote]"),
+        });
+      });
+
+      const badgeNode = surface.querySelector("[data-download-primary-badge]");
+      const titleNode = surface.querySelector("[data-download-primary-title]");
+      const copyNode = surface.querySelector("[data-download-primary-copy]");
+      const linkNode = surface.querySelector("[data-download-primary-link]");
+      const requirementsNode = surface.querySelector("[data-download-primary-requirements]");
+      const installNode = surface.querySelector("[data-download-primary-install]");
+      const trustNode = surface.querySelector("[data-download-primary-trust]");
+      const supportNode = surface.querySelector("[data-download-primary-support]");
+      const footnoteNode = surface.querySelector("[data-download-primary-footnote]");
+
+      const applyPlatform = (platformId) => {
+        const next = sourceMap.get(platformId);
+        if (!next) {
+          return;
+        }
+
+        surface.setAttribute("data-download-active-platform", platformId);
+        buttons.forEach((button) => {
+          const isActive = String(button.getAttribute("data-download-platform-button") || "") === platformId;
+          button.classList.toggle("is-active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+
+        if (badgeNode && next.badge) {
+          badgeNode.textContent = next.badge;
+        }
+        if (titleNode && next.title) {
+          titleNode.textContent = next.title;
+        }
+        if (copyNode && next.copy) {
+          copyNode.textContent = next.copy;
+        }
+        if (linkNode && next.url) {
+          linkNode.setAttribute("href", next.url);
+        }
+        if (linkNode && next.linkLabel) {
+          linkNode.textContent = next.linkLabel;
+        }
+        if (requirementsNode && next.requirements) {
+          requirementsNode.textContent = next.requirements;
+        }
+        if (installNode && next.install) {
+          installNode.textContent = next.install;
+        }
+        if (trustNode && next.trust) {
+          trustNode.textContent = next.trust;
+        }
+        if (supportNode && next.support) {
+          supportNode.textContent = next.support;
+        }
+        if (footnoteNode && next.footnote) {
+          footnoteNode.textContent = next.footnote;
+        }
+      };
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          applyPlatform(String(button.getAttribute("data-download-platform-button") || ""));
+        });
+      });
+
+      const detected = detectPreferredPlatform();
+      const fallback =
+        buttons.length > 0
+          ? String(buttons[0].getAttribute("data-download-platform-button") || "")
+          : "";
+      applyPlatform(sourceMap.has(detected) ? detected : fallback);
+    });
+  };
+
   maybeRedirectByLanguageOnFirstVisit();
   bindLanguageChoicePersistence();
+  bindReleaseDownloadSurface();
 
   const menu = document.querySelector("[data-menu]");
   const toggle = document.querySelector("[data-menu-toggle]");
