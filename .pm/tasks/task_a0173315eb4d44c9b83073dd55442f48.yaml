@@ -16,6 +16,6 @@ acceptance:
   - "canonical gameplay actions expose runtime scale_out and governance recipes; active-LLM recipe surface no longer omits runtime-supported industrial recipes; targeted cargo tests pass"
 handoff_to:
   - agent_engineer
-updated_at: 2026-04-15T19:55:42+08:00
+updated_at: 2026-04-15T20:11:10+08:00
 last_started_at: 2026-04-15T17:25:32+08:00
-last_closed_at: 2026-04-15T19:55:42+08:00
+last_closed_at: 2026-04-15T20:11:10+08:00
