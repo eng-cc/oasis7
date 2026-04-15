@@ -21,3 +21,10 @@ Example:
 - 完成内容: 已执行 `./scripts/pm/codex-review-snapshot.sh`；在该环境下 review 复现已知 silent-hang 行为，采用 `timeout 180 ./scripts/pm/codex-review-snapshot.sh --output-last-message .tmp/review/p2p-hotpath-last.txt` 抓取隔离快照审查证据。
 - 完成内容: review 日志位于 `.tmp/review/p2p-hotpath.log`，退出码为 `124`，未落出 final banner 或 last-message 文件；日志中未见具体 findings，仅见对 `peer_manager_active_set.rs`、`runtime_loop.rs`、`peer_record.rs` 等相关改动的审查读取轨迹。
 - 遗留事项: 无；进入 commit/PR 收口。
+
+## 2026-04-15 15:18:26 CST / runtime_engineer
+- 完成内容: 处理 PR `#83` 的两条 reviewer comments：其一将 `candidate_status_with_active_set()` 中 candidate discovery source 计数改为按唯一 source label 判定，避免重复 source 误过 `min_peer_discovery_sources` / `min_active_discovery_sources`；其二移除 `runtime_loop.rs` active peer admission 热路里的重复 `contains_key()` 查找。
+- 完成内容: 新增重复 discovery source 的定向回归测试；在回归验证时发现 rebased 后 `crates/oasis7_net/src/tests.rs` 存在 `Arc<[u8]>` 与 `Vec<u8>` 直接比较导致的编译失败，已同步改为 `.into()` 以恢复 `oasis7_net` 库测可编译状态。
+- 完成内容: 已执行 `env -u RUSTC_WRAPPER cargo test -p oasis7_net active_set_candidate_tests -- --nocapture` 与 `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib -- --nocapture`，均通过。
+- 完成内容: 已重新执行 `timeout 180 ./scripts/pm/codex-review-snapshot.sh --output-last-message .tmp/review/p2p-hotpath-followup-last.txt`；该环境再次复现 silent-hang，日志位于 `.tmp/review/p2p-hotpath-followup.log`，退出码 `124`，但隔离快照中本次定向 `oasis7_net` 测试通过，未见新的 findings 文本。
+- 遗留事项: 无；进入 reviewer follow-up commit / push / resolve thread。
