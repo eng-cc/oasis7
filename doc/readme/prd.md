@@ -1,6 +1,6 @@
 # readme PRD
 
-审计轮次: 12
+审计轮次: 13
 
 ## 目标
 - 建立 readme 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -37,6 +37,7 @@
 - SC-5: Closed beta candidate 的 liveops runbook与模板能直接维持 `limited playable technical preview` 口径，并服务 `prg-game-009` 的 evidence gate。
 - SC-6: limited preview 贡献奖励流程必须具备可直接复用的 round ledger 模板，能够承接评分、审批、发放记录与归档。
 - SC-7: 小红书博主 / 微信公众号激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，固定映射 `300 / 800 / 1500 OC` 档位，而不是按播放量粗放买量。
+- SC-8: 根 README、世界规则入口与站点首页的公开定位在 1 个任务内完成“系统/引擎 -> 游戏”同步，不再出现对外首屏主语分叉。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -94,6 +95,7 @@
 - PRD-README-043: As a `liveops_community`, I want a reusable Xiaohongshu blogger and WeChat official account Oasis Coin incentive pack, so that these two priority channel types can be reviewed as participants and beneficiaries through auditable contribution records rather than flat buyout or raw-view payouts.
 - PRD-README-044: As a `liveops_community`, I want a merged-PR reward round scan script, so that one reward review window can batch-import candidate PR rows from the existing template contract instead of reopening each PR manually.
 - PRD-README-045: As a `liveops_community`, I want a reusable Xiaohongshu ownership-and-beneficiary post pack framed around a利益共同体, so that we can use “谁该拥有游戏的所有权、谁该成为受益者” to explain why developers, players, and high-quality creators should be treated as long-term participants in the game's value distribution without drifting into already-live voting-right claims, governance-token overclaim, or generic community-slogan copy.
+- PRD-README-046: As a 仓库访客 / 外部评审者, I want README、世界规则入口与站点首页统一把 `oasis7` 定位为“文明模拟游戏”, so that public entry docs no longer split between system, engine, and game framing.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -118,6 +120,7 @@
   21. Flow-RM-021: `将第十篇长文版压成 4 页轮播版 -> 拆成封面冲突/优先级判断/成熟团队价值/评论区站队页 -> 导出逐页 PNG -> 保持“平台优先、不反 AI、趋势会快速扩散”的边界一致`
   22. Flow-RM-022: `收集小红书笔记或微信公众号文章 -> 按渠道与内容深度分类 -> 校验事实边界与反作弊信号 -> 计算绿洲币奖励建议档位 -> producer 审核 -> 回填 actual amount / distribution ref 并归档`
   23. Flow-RM-023: `进入一轮 contributor reward review -> 按 merged 时间窗扫描已合入 PR -> 复用 reward intake contract 产出 ready/deferred/no_reward_review_requested/invalid_intake 候选 -> 再把 ready/deferred 行抄入 round ledger`
+  24. Flow-RM-024: `发现 README / site / world-rule 的公开定位分叉 -> 先冻结“文明模拟游戏”主口径 -> 同步回写中英首页与规则入口 -> 校验技术预览边界未漂移`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -170,6 +173,7 @@
 - AC-32: 若团队继续对 merged GitHub PR 做贡献奖励审批，必须把普通 merged PR 的默认真实发放 ceiling 收紧到 `150 OC`；任何 `>150 OC` 的 row 都必须留下 exceptional case note，`1500 OC` 不得作为常规 MR 档位扩散。
 - AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
+- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `技术预览（尚不可玩）` 边界不变。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -186,6 +190,8 @@
 - Integration Points:
   - `README.md`
   - `world-rule.md`
+  - `site/index.html`
+  - `site/en/index.html`
   - `testing-manual.md`
 - `doc/README.md`
   - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
@@ -276,6 +282,7 @@
 | PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
 | PRD-README-044 | TASK-README-070 | `test_tier_required` | merged PR reward round scan 脚本支持按时间窗批量扫描、离线 smoke 输入、状态汇总与 ledger-ready row 输出，并与单 PR intake contract 保持一致 | reward review 周期性归集与首轮台账准备效率 |
 | PRD-README-045 | TASK-README-080 | `test_tier_required` | 将第十三篇推荐版从所有权讨论继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，同时保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
+| PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留技术预览与尚不可玩边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -308,6 +315,7 @@
 | DEC-RM-043 | 普通 merged PR 的 contributor reward 默认真实发放 ceiling 收紧到 `150 OC`，`1500 OC` 只保留给极少数 exceptional case | 继续让单个 merged PR 在没有 exceptional note 时也能维持 `1500 OC` 待发放 | 当前总量口径改为 `10B` 后，普通 MR 的激励仍应保守；把 ceiling 收紧到 `150 OC` 能更稳地管理预期，避免 contributor reward 被误解成高额 bounty。 |
 | DEC-RM-044 | planned grant 在执行前仍要接受 actual-value review，若原计划金额高于实际增量价值则应先下调 | 文档一旦写出 planned grant，就默认锁定原金额直发 | 奖励治理的目标不是保护最早写下的计划值，而是让最终发放和实际价值匹配，并留下可审计的纠偏痕迹。 |
 | DEC-RM-045 | 第十三篇采用“谁该拥有游戏的所有权 / 谁该成为受益者”切口，把开发者、玩家和高质量创作者写成应逐步进入价值分配讨论的人，而不是直接宣称“所有相关人员已经拥有链上投票权” | 直接把帖子写成当前治理权公告；或只写“大家都是一家人”的泛共同体口号 | 这个主题真正有张力的地方是“谁不该被排除在所有权和受益之外”，不是“现在已经发放了什么权利”。把它收口到长期参与、真实贡献和共同体关系，既能延续账号的制度判断主线，也能避开当前 preview 阶段尚未完成的治理实现和过度承诺风险。 |
+| DEC-RM-046 | 对外首读入口统一把 `oasis7` 表述为“文明模拟游戏”，内部实现文档仍可在对应上下文使用系统/引擎/runtime 术语 | 全仓机械替换所有“系统/引擎”措辞 | 公开定位需要单一主语，但实现层术语仍服务不同技术边界；只收口入口层可以消除对外分叉，又不误伤内部设计语义。 |
 | DEC-RM-023 | 小红书持续运营细节独立沉淀为 runbook，而不是继续只留在素材包和角色卡 | 只补几条角色卡示例或继续靠帖子素材包驱动 | 小红书已经进入持续发帖和看反馈阶段，需要和 Moltbook 一样有稳定 SOP，才能复盘互动和误解模式。 |
 | DEC-RM-024 | 第三篇采用“轻量游戏介绍 + 猜类型互动”而非完整设定说明书 | 直接把世界规则、技术架构与完整玩法一次讲清 | 用户到了第三篇需要先建立“这是什么游戏”的可想象轮廓，而不是被文档级信息密度劝退；同时仍要保持技术预览边界。 |
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |
