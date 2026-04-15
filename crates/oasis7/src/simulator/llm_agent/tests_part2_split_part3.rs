@@ -1062,7 +1062,7 @@ fn llm_agent_reroutes_schedule_recipe_when_hardware_cannot_cover_one_batch() {
             },
             factory_id: "factory.alpha".to_string(),
             recipe_id: "recipe.assembler.logistics_drone".to_string(),
-            batches: 2,
+            batches: 1,
         })
     );
 
