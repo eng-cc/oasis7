@@ -17,10 +17,11 @@ mod reachability;
 mod runtime_loop;
 mod swarm_behaviour;
 mod swarm_reachability_events;
+mod traffic_metrics;
 mod transport_paths;
 mod utils;
 
-use futures::channel::{mpsc, oneshot};
+use futures::channel::mpsc;
 use futures::{FutureExt, StreamExt};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
@@ -70,11 +71,21 @@ pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     LiveTransportKind,
 };
-use runtime_loop::{handle_command, CommandContext, CommandOutcome, CommandStateRefs};
+use runtime_loop::{
+    handle_command, Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
+};
 use swarm_behaviour::{build_swarm, dial_addr_with_optional_peer_id, Behaviour, BehaviourEvent};
 use swarm_reachability_events::{
     handle_autonat_event, handle_expired_listen_addr, handle_external_addr_candidate,
     handle_listener_closed, handle_new_listen_addr,
+};
+use traffic_metrics::{
+    init_shared_traffic_metrics, record_gossip_inbound, record_request_inbound,
+    record_response_inbound, record_response_outbound, snapshot_traffic_metrics,
+    SharedLibp2pTrafficMetrics,
+};
+pub use traffic_metrics::{
+    Libp2pTrafficMetricsSnapshot, TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot,
 };
 use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
@@ -105,70 +116,10 @@ pub struct Libp2pNetwork {
     peer_healths: Arc<Mutex<HashMap<String, PeerManagerPeerHealth>>>,
     peer_block_artifacts: Arc<Mutex<HashMap<String, PeerManagerBlockArtifact>>>,
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    traffic_metrics: SharedLibp2pTrafficMetrics,
 }
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
-
-enum Command {
-    Publish {
-        topic: String,
-        payload: Vec<u8>,
-    },
-    Subscribe(String),
-    Dial(Multiaddr),
-    Request {
-        protocol: String,
-        payload: Vec<u8>,
-        providers: Vec<String>,
-        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
-    },
-    RequestToPeer {
-        protocol: String,
-        payload: Vec<u8>,
-        peer: PeerId,
-        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
-    },
-    RegisterHandler {
-        protocol: String,
-        handler: Handler,
-        response: oneshot::Sender<Result<(), WorldError>>,
-    },
-    PublishProvider(String, oneshot::Sender<Result<(), WorldError>>),
-    GetProviders(
-        String,
-        oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>,
-    ),
-    PutWorldHead {
-        key: String,
-        payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
-    },
-    GetWorldHead(
-        String,
-        oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>,
-    ),
-    PutMembershipDirectory {
-        key: String,
-        payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
-    },
-    GetMembershipDirectory {
-        key: String,
-        response: oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>,
-    },
-    PutPeerRecord {
-        key: String,
-        payload: Vec<u8>,
-        response: oneshot::Sender<Result<(), WorldError>>,
-    },
-    GetPeerRecord {
-        key: String,
-        response: oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>,
-    },
-    RefreshPeerDiscovery,
-    RepublishProviders,
-    Shutdown,
-}
 
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
@@ -187,6 +138,7 @@ impl Libp2pNetwork {
             HashMap::<String, PeerManagerBlockArtifact>::new(),
         ));
         let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+        let traffic_metrics = init_shared_traffic_metrics();
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
         let max_published_messages = config.max_published_messages.max(1);
@@ -201,6 +153,7 @@ impl Libp2pNetwork {
         let event_peer_healths = Arc::clone(&peer_healths);
         let event_peer_block_artifacts = Arc::clone(&peer_block_artifacts);
         let event_reachability = Arc::clone(&reachability);
+        let event_traffic_metrics = Arc::clone(&traffic_metrics);
         let config_clone = config.clone();
         let keypair_clone = keypair.clone();
         let local_peer_id = peer_id;
@@ -226,10 +179,8 @@ impl Libp2pNetwork {
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
             let mut handlers: HashMap<String, Handler> = HashMap::new();
-            let mut pending: HashMap<
-                request_response::OutboundRequestId,
-                oneshot::Sender<Result<Vec<u8>, WorldError>>,
-            > = HashMap::new();
+            let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
+                HashMap::new();
             let mut pending_peer_record_requests: HashMap<
                 request_response::OutboundRequestId,
                 PendingPeerRecordRequest,
@@ -332,6 +283,7 @@ impl Libp2pNetwork {
                     event_errors: &event_errors,
                     event_listening_addrs: &event_listening_addrs,
                     event_reachability: &event_reachability,
+                    event_traffic_metrics: &event_traffic_metrics,
                     keypair: &keypair_clone,
                     peer_record_template: peer_record_template.as_ref(),
                     local_peer_id,
@@ -407,6 +359,11 @@ impl Libp2pNetwork {
                                                 .map(|lane| lane.default_subscription_inbox_messages())
                                         })
                                         .unwrap_or(DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES);
+                                    record_gossip_inbound(
+                                        &event_traffic_metrics,
+                                        topic.as_str(),
+                                        message.data.len(),
+                                    );
                                     push_bounded_inbox_message(
                                         &event_inbox,
                                         topic.as_str(),
@@ -419,6 +376,11 @@ impl Libp2pNetwork {
                                         request_response::Event::Message { message, peer: _ } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
+                                                    record_request_inbound(
+                                                        &event_traffic_metrics,
+                                                        request.protocol.as_str(),
+                                                        request.payload.len(),
+                                                    );
                                                     let reply = handle_request_response_request(
                                                         &request,
                                                         &handlers,
@@ -437,11 +399,21 @@ impl Libp2pNetwork {
                                                         )
                                                         .unwrap_or_default(),
                                                     };
+                                                    record_response_outbound(
+                                                        &event_traffic_metrics,
+                                                        request.protocol.as_str(),
+                                                        response_bytes.len(),
+                                                    );
                                                     let response = NetworkResponse { payload: response_bytes };
                                                     swarm.behaviour_mut().request_response.send_response(channel, response).ok();
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
+                                                        record_response_inbound(
+                                                            &event_traffic_metrics,
+                                                            kind.protocol_label(),
+                                                            response.payload.len(),
+                                                        );
                                                         handle_peer_record_response(
                                                             &mut swarm,
                                                             kind,
@@ -453,6 +425,7 @@ impl Libp2pNetwork {
                                                             &mut last_dialed_transport_paths,
                                                             &active_transport_paths,
                                                             peers.as_slice(),
+                                                            &event_traffic_metrics,
                                                             &mut failed_transport_path_labels,
                                                             &mut pending_discovery_peer_records,
                                                             peer_record_template.as_ref(),
@@ -479,10 +452,15 @@ impl Libp2pNetwork {
                                                             &mut pending_quarantine_disconnects,
                                                             &event_errors,
                                                             max_error_messages,
-                                                            &event_reachability,
+                                                                &event_reachability,
                                                         );
-                                                    } else if let Some(sender) = pending.remove(&request_id) {
-                                                        let _ = sender.send(Ok(response.payload));
+                                                    } else if let Some(pending_response) = pending.remove(&request_id) {
+                                                        record_response_inbound(
+                                                            &event_traffic_metrics,
+                                                            pending_response.protocol.as_str(),
+                                                            response.payload.len(),
+                                                        );
+                                                        let _ = pending_response.response.send(Ok(response.payload));
                                                     }
                                                 }
                                             }
@@ -502,7 +480,7 @@ impl Libp2pNetwork {
                                                     "lock errors",
                                                 );
                                             } else if let Some(sender) = pending.remove(&request_id) {
-                                                let _ = sender.send(Err(WorldError::NetworkProtocolUnavailable { protocol: format!("request failed: {error:?}") }));
+                                                let _ = sender.response.send(Err(WorldError::NetworkProtocolUnavailable { protocol: format!("request failed: {error:?}") }));
                                             }
                                         }
                                         request_response::Event::InboundFailure { peer, error, .. } => {
@@ -541,6 +519,7 @@ impl Libp2pNetwork {
                                                             &mut swarm,
                                                             &mut pending_peer_record_requests,
                                                             &mut pending_cached_peer_records,
+                                                            &event_traffic_metrics,
                                                             peers.as_slice(),
                                                             peer_id,
                                                             local_peer_id,
@@ -580,6 +559,7 @@ impl Libp2pNetwork {
                                                                     &mut swarm,
                                                                     &mut pending_peer_record_requests,
                                                                     &mut pending_cached_peer_records,
+                                                                    &event_traffic_metrics,
                                                                     peers.as_slice(),
                                                                     peer_id,
                                                                     local_peer_id,
@@ -609,6 +589,7 @@ impl Libp2pNetwork {
                                                                 &mut swarm,
                                                                 &mut pending_peer_record_requests,
                                                                 &mut pending_cached_peer_records,
+                                                                &event_traffic_metrics,
                                                                 peers.as_slice(),
                                                                 peer_id,
                                                                 local_peer_id,
@@ -625,6 +606,7 @@ impl Libp2pNetwork {
                                                                 &mut swarm,
                                                                 &mut pending_peer_record_requests,
                                                                 &mut pending_cached_peer_records,
+                                                                &event_traffic_metrics,
                                                                 peers.as_slice(),
                                                                 peer_id,
                                                                 local_peer_id,
@@ -657,6 +639,7 @@ impl Libp2pNetwork {
                                                     &mut swarm,
                                                     &mut pending_peer_record_requests,
                                                     &mut pending_connected_peer_records,
+                                                    &event_traffic_metrics,
                                                     peer,
                                                     local_peer_id,
                                                 );
@@ -765,6 +748,7 @@ impl Libp2pNetwork {
                                                 &mut pending_peer_record_requests,
                                                 &mut pending_discovery_peer_records,
                                                 &mut pending_cached_peer_records,
+                                                &event_traffic_metrics,
                                                 peers.as_slice(),
                                                 local_peer_id,
                                                 peer_record_template.as_ref(),
@@ -930,6 +914,7 @@ impl Libp2pNetwork {
                                         &mut swarm,
                                         &mut pending_peer_record_requests,
                                         &mut pending_connected_peer_records,
+                                        &event_traffic_metrics,
                                         peer_id,
                                         local_peer_id,
                                     );
@@ -937,6 +922,7 @@ impl Libp2pNetwork {
                                         &mut swarm,
                                         &mut pending_peer_record_requests,
                                         &mut pending_cached_discovery_peers,
+                                        &event_traffic_metrics,
                                         peer_id,
                                         local_peer_id,
                                     );
@@ -1181,6 +1167,7 @@ impl Libp2pNetwork {
             peer_healths,
             peer_block_artifacts,
             reachability,
+            traffic_metrics,
         }
     }
 }

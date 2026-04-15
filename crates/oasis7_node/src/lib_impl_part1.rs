@@ -139,7 +139,7 @@ impl PosNodeEngine {
         node_id: &str,
         world_id: &str,
         now_ms: i64,
-        gossip: Option<&mut GossipEndpoint>,
+        gossip: Option<&GossipEndpoint>,
         mut replication: Option<&mut ReplicationRuntime>,
         replication_network: Option<&mut ReplicationNetworkEndpoint>,
         consensus_network: Option<&mut ConsensusNetworkEndpoint>,
@@ -154,7 +154,6 @@ impl PosNodeEngine {
 
         let observed_tick = self.observe_wall_clock_tick(now_ms)?;
         let current_slot = observed_tick.slot;
-
         if let Some(endpoint) = gossip.as_ref() {
             self.seed_reverse_gossip_path(endpoint, node_id, world_id, now_ms)?;
         }

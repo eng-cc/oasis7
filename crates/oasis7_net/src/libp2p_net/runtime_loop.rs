@@ -14,15 +14,17 @@ use super::peer_manager_active_set::{
     candidate_status_with_active_set, candidate_would_degrade_admitted_peers, ActivePeerCandidate,
     ActivePeerSetStats,
 };
+use super::traffic_metrics::{record_gossip_outbound, record_request_outbound};
 use super::{
     classify_network_protocol, classify_network_topic, maybe_discover_rendezvous_namespace,
     maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
     publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
-    put_record_query, should_republish, start_peer_discovery_query, Behaviour, Command, Handler,
-    Keypair, Libp2pReachabilitySnapshot, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
-    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
-    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, SignedPeerRecord, TransportPath,
-    WorldError, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
+    put_record_query, should_republish, start_peer_discovery_query, Behaviour, Handler, Keypair,
+    Libp2pReachabilitySnapshot, MembershipDirectorySnapshot, NetworkMessage, NetworkRequest,
+    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
+    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
+    PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord, TransportPath, WorldError,
+    WorldHeadAnnounce, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES,
 };
 
 pub(super) enum CommandOutcome {
@@ -30,11 +32,17 @@ pub(super) enum CommandOutcome {
     Break,
 }
 
+pub(super) struct PendingResponse {
+    pub protocol: String,
+    pub response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+}
+
 pub(super) struct CommandContext<'a> {
     pub event_published: &'a Arc<Mutex<Vec<NetworkMessage>>>,
     pub event_errors: &'a Arc<Mutex<Vec<String>>>,
     pub event_listening_addrs: &'a Arc<Mutex<Vec<Multiaddr>>>,
     pub event_reachability: &'a Arc<Mutex<Libp2pReachabilitySnapshot>>,
+    pub event_traffic_metrics: &'a super::SharedLibp2pTrafficMetrics,
     pub keypair: &'a Keypair,
     pub peer_record_template: Option<&'a PeerRecord>,
     pub local_peer_id: PeerId,
@@ -44,15 +52,73 @@ pub(super) struct CommandContext<'a> {
     pub allow_loopback_external_addrs_for_testing: bool,
 }
 
+pub(super) enum Command {
+    Publish {
+        topic: String,
+        payload: Vec<u8>,
+    },
+    Subscribe(String),
+    Dial(Multiaddr),
+    Request {
+        protocol: String,
+        payload: Vec<u8>,
+        providers: Vec<String>,
+        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+    },
+    RequestToPeer {
+        protocol: String,
+        payload: Vec<u8>,
+        peer: PeerId,
+        response: oneshot::Sender<Result<Vec<u8>, WorldError>>,
+    },
+    RegisterHandler {
+        protocol: String,
+        handler: Handler,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
+    PublishProvider(String, oneshot::Sender<Result<(), WorldError>>),
+    GetProviders(
+        String,
+        oneshot::Sender<Result<Vec<ProviderRecord>, WorldError>>,
+    ),
+    PutWorldHead {
+        key: String,
+        payload: Vec<u8>,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
+    GetWorldHead(
+        String,
+        oneshot::Sender<Result<Option<WorldHeadAnnounce>, WorldError>>,
+    ),
+    PutMembershipDirectory {
+        key: String,
+        payload: Vec<u8>,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
+    GetMembershipDirectory {
+        key: String,
+        response: oneshot::Sender<Result<Option<MembershipDirectorySnapshot>, WorldError>>,
+    },
+    PutPeerRecord {
+        key: String,
+        payload: Vec<u8>,
+        response: oneshot::Sender<Result<(), WorldError>>,
+    },
+    GetPeerRecord {
+        key: String,
+        response: oneshot::Sender<Result<Option<SignedPeerRecord>, WorldError>>,
+    },
+    RefreshPeerDiscovery,
+    RepublishProviders,
+    Shutdown,
+}
+
 pub(super) struct CommandStateRefs<'a> {
     pub subscriptions: &'a mut HashSet<String>,
     pub topic_map: &'a mut HashMap<TopicHash, String>,
     pub topic_inbox_limits: &'a mut HashMap<String, usize>,
     pub handlers: &'a mut HashMap<String, Handler>,
-    pub pending: &'a mut HashMap<
-        request_response::OutboundRequestId,
-        oneshot::Sender<Result<Vec<u8>, WorldError>>,
-    >,
+    pub pending: &'a mut HashMap<request_response::OutboundRequestId, PendingResponse>,
     pub pending_peer_record_requests:
         &'a mut HashMap<request_response::OutboundRequestId, PendingPeerRecordRequest>,
     pub pending_dht: &'a mut HashMap<kad::QueryId, PendingDhtQuery>,
@@ -418,6 +484,7 @@ pub(super) fn handle_command(
 
     match command {
         Some(Command::Publish { topic, payload }) => {
+            let payload_len = payload.len();
             let message = NetworkMessage {
                 topic: topic.clone(),
                 payload: payload.clone(),
@@ -428,11 +495,12 @@ pub(super) fn handle_command(
                 ctx.max_published_messages,
                 "lock published",
             );
-            let topic_handle = IdentTopic::new(topic);
+            let topic_handle = IdentTopic::new(&topic);
             let _ = swarm
                 .behaviour_mut()
                 .gossipsub
                 .publish(topic_handle, payload);
+            record_gossip_outbound(ctx.event_traffic_metrics, topic.as_str(), payload_len);
             CommandOutcome::Continue
         }
         Some(Command::Subscribe(topic)) => {
@@ -521,12 +589,21 @@ pub(super) fn handle_command(
                 return CommandOutcome::Continue;
             }
             let peer = candidate_peers[0];
+            let payload_len = payload.len();
+            let pending_protocol = protocol.clone();
+            record_request_outbound(ctx.event_traffic_metrics, protocol.as_str(), payload_len);
             let request = NetworkRequest { protocol, payload };
             let request_id = swarm
                 .behaviour_mut()
                 .request_response
                 .send_request(&peer, request);
-            pending.insert(request_id, response);
+            pending.insert(
+                request_id,
+                PendingResponse {
+                    protocol: pending_protocol,
+                    response,
+                },
+            );
             CommandOutcome::Continue
         }
         Some(Command::RequestToPeer {
@@ -541,11 +618,20 @@ pub(super) fn handle_command(
                 }));
                 return CommandOutcome::Continue;
             }
+            let payload_len = payload.len();
+            let pending_protocol = protocol.clone();
+            record_request_outbound(ctx.event_traffic_metrics, protocol.as_str(), payload_len);
             let request_id = swarm
                 .behaviour_mut()
                 .request_response
                 .send_request(&peer, NetworkRequest { protocol, payload });
-            pending.insert(request_id, response);
+            pending.insert(
+                request_id,
+                PendingResponse {
+                    protocol: pending_protocol,
+                    response,
+                },
+            );
             CommandOutcome::Continue
         }
         Some(Command::RegisterHandler {
@@ -735,6 +821,7 @@ pub(super) fn handle_command(
                         swarm,
                         pending_peer_record_requests,
                         pending_cached_discovery_peers,
+                        ctx.event_traffic_metrics,
                         peer_id,
                         ctx.local_peer_id,
                     );

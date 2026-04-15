@@ -26,6 +26,7 @@ use super::peer_record::{
 };
 use super::reachability::Libp2pReachabilitySnapshot;
 use super::swarm_behaviour::{split_peer_id, Behaviour};
+use super::traffic_metrics::{record_request_outbound, SharedLibp2pTrafficMetrics};
 use super::transport_paths::{
     dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
     sync_known_transport_paths, TransportPath,
@@ -44,6 +45,16 @@ pub(super) enum PendingPeerRecordRequest {
     CachedDiscoveryPeers {
         peer_id: PeerId,
     },
+}
+
+impl PendingPeerRecordRequest {
+    pub(super) fn protocol_label(&self) -> &'static str {
+        match self {
+            Self::ConnectedPeerRecord { .. } => super::RR_GET_LOCAL_PEER_RECORD,
+            Self::CachedPeerRecord { .. } => super::RR_GET_CACHED_PEER_RECORD,
+            Self::CachedDiscoveryPeers { .. } => super::RR_GET_CACHED_DISCOVERY_PEERS,
+        }
+    }
 }
 
 pub(super) fn start_peer_discovery_query(
@@ -182,12 +193,14 @@ pub(super) fn maybe_request_connected_peer_record(
         PendingPeerRecordRequest,
     >,
     pending_connected_peer_records: &mut HashSet<PeerId>,
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     peer_id: PeerId,
     local_peer_id: PeerId,
 ) {
     if peer_id == local_peer_id || pending_connected_peer_records.contains(&peer_id) {
         return;
     }
+    record_request_outbound(traffic_metrics, super::RR_GET_LOCAL_PEER_RECORD, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &peer_id,
         NetworkRequest {
@@ -209,6 +222,7 @@ fn request_cached_peer_record_via(
         PendingPeerRecordRequest,
     >,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     ask_peer: PeerId,
     peer_id: PeerId,
     local_peer_id: PeerId,
@@ -223,6 +237,11 @@ fn request_cached_peer_record_via(
     if !tried_proxies.contains(&ask_peer) {
         tried_proxies.push(ask_peer);
     }
+    record_request_outbound(
+        traffic_metrics,
+        super::RR_GET_CACHED_PEER_RECORD,
+        peer_id.to_string().len(),
+    );
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &ask_peer,
         NetworkRequest {
@@ -260,6 +279,7 @@ pub(super) fn maybe_request_cached_peer_record(
         PendingPeerRecordRequest,
     >,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     connected_peers: &[PeerId],
     peer_id: PeerId,
     local_peer_id: PeerId,
@@ -276,6 +296,7 @@ pub(super) fn maybe_request_cached_peer_record(
         swarm,
         pending_peer_record_requests,
         pending_cached_peer_records,
+        traffic_metrics,
         ask_peer,
         peer_id,
         local_peer_id,
@@ -290,12 +311,14 @@ pub(super) fn maybe_request_cached_discovery_peers(
         PendingPeerRecordRequest,
     >,
     pending_cached_discovery_peers: &mut HashSet<PeerId>,
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     peer_id: PeerId,
     local_peer_id: PeerId,
 ) {
     if peer_id == local_peer_id || pending_cached_discovery_peers.contains(&peer_id) {
         return;
     }
+    record_request_outbound(traffic_metrics, super::RR_GET_CACHED_DISCOVERY_PEERS, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &peer_id,
         NetworkRequest {
@@ -321,6 +344,7 @@ pub(super) fn handle_rendezvous_discovered(
     >,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     connected_peers: &[PeerId],
     local_peer_id: PeerId,
     template: Option<&PeerRecord>,
@@ -359,6 +383,7 @@ pub(super) fn handle_rendezvous_discovered(
             swarm,
             pending_peer_record_requests,
             pending_cached_peer_records,
+            traffic_metrics,
             connected_peers,
             peer_id,
             local_peer_id,
@@ -520,6 +545,7 @@ pub(super) fn handle_peer_record_response(
     last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
     connected_peers: &[PeerId],
+    traffic_metrics: &SharedLibp2pTrafficMetrics,
     failed_transport_path_labels: &mut HashSet<String>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     peer_record_template: Option<&PeerRecord>,
@@ -560,6 +586,7 @@ pub(super) fn handle_peer_record_response(
                         swarm,
                         pending_peer_record_requests,
                         pending_cached_peer_records,
+                        traffic_metrics,
                         *peer_id,
                         discovered_peer_id,
                         local_peer_id,
@@ -622,6 +649,7 @@ pub(super) fn handle_peer_record_response(
                         swarm,
                         pending_peer_record_requests,
                         pending_cached_peer_records,
+                        traffic_metrics,
                         next_ask_peer,
                         peer_id,
                         local_peer_id,

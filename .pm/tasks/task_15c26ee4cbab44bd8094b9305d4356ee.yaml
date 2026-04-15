@@ -1,0 +1,20 @@
+task_uid: task_15c26ee4cbab44bd8094b9305d4356ee
+title: "world-runtime network traffic metrics"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-network-traffic-metrics
+execution_log_path: .pm/tasks/task_15c26ee4cbab44bd8094b9305d4356ee.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/prd.md
+related_prd:
+  - PRD-WORLD_RUNTIME-026
+acceptance:
+  - "Expose udp_gossip and libp2p_replication traffic counters in /v1/chain/status and cover with runtime tests."
+handoff_to: []
+updated_at: 2026-04-15T22:06:45+08:00
+last_started_at: 2026-04-15T21:25:08+08:00
+last_closed_at: 2026-04-15T22:06:45+08:00

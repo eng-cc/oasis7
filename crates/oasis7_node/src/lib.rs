@@ -68,6 +68,10 @@ use gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipEndpoint, GossipMessage,
     GossipProposalMessage,
 };
+pub use gossip_udp::{
+    GossipTrafficDirectionMetricsSnapshot, GossipTrafficLaneMetricsSnapshot,
+    GossipTrafficMetricsSnapshot,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use libp2p_replication_network::{
     derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
@@ -78,8 +82,8 @@ pub use libp2p_replication_network_wasm::{
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
 pub use oasis7_net::{
-    Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
-    LiveTransportKind,
+    Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot, LiveAutoNatStatus,
+    LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,
 };
 pub use replication::NodeReplicationConfig;
 pub use types::{
@@ -293,6 +297,7 @@ pub struct NodeRuntime {
     config: NodeConfig,
     replication_network: Option<NodeReplicationNetworkHandle>,
     replication_network_consensus_enabled: bool,
+    gossip_endpoint: Option<Arc<GossipEndpoint>>,
     feedback_store: Option<Arc<FeedbackStore>>,
     pending_feedback_announces: Arc<Mutex<Vec<FeedbackAnnounce>>>,
     execution_hook: Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeExecutionHook>>>>,
@@ -387,9 +392,9 @@ impl NodeRuntime {
                 }
             }
         }
-        let mut gossip = if let Some(config) = &self.config.gossip {
+        let gossip = if let Some(config) = &self.config.gossip {
             match GossipEndpoint::bind(config) {
-                Ok(endpoint) => Some(endpoint),
+                Ok(endpoint) => Some(Arc::new(endpoint)),
                 Err(err) => {
                     self.running.store(false, Ordering::SeqCst);
                     return Err(err);
@@ -398,6 +403,7 @@ impl NodeRuntime {
         } else {
             None
         };
+        self.gossip_endpoint = gossip.clone();
         let mut replication = if let Some(config) = effective_replication_config.as_ref() {
             match ReplicationRuntime::new(config, &self.config.node_id) {
                 Ok(runtime) => Some(runtime),
@@ -594,7 +600,7 @@ impl NodeRuntime {
                                         &node_id,
                                         &world_id,
                                         now_ms,
-                                        gossip.as_mut(),
+                                        gossip.as_deref(),
                                         replication.as_mut(),
                                         replication_network.as_mut(),
                                         consensus_network.as_mut(),
@@ -610,7 +616,7 @@ impl NodeRuntime {
                                     &node_id,
                                     &world_id,
                                     now_ms,
-                                    gossip.as_mut(),
+                                    gossip.as_deref(),
                                     replication.as_mut(),
                                     replication_network.as_mut(),
                                     consensus_network.as_mut(),
@@ -734,6 +740,12 @@ impl NodeRuntime {
             consensus: state.consensus.clone(),
             last_error: state.last_error.clone(),
         }
+    }
+
+    pub fn gossip_traffic_snapshot(&self) -> Option<GossipTrafficMetricsSnapshot> {
+        self.gossip_endpoint
+            .as_ref()
+            .map(|endpoint| endpoint.traffic_metrics_snapshot())
     }
 }
 
