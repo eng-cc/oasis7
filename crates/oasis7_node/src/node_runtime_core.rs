@@ -203,6 +203,7 @@ impl NodeRuntime {
             config,
             replication_network: None,
             replication_network_consensus_enabled: true,
+            gossip_endpoint: None,
             feedback_store,
             pending_feedback_announces: Arc::new(Mutex::new(Vec::new())),
             execution_hook: None,

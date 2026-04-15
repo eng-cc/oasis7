@@ -936,6 +936,10 @@ fn build_chain_status_payload_includes_storage_metrics() {
         ReleaseSecurityPolicy::default(),
         reward_runtime,
         storage.clone(),
+        super::ChainTrafficStatus {
+            udp_gossip: None,
+            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
     );
 
     assert_eq!(payload.storage.storage_profile, "dev_local");
@@ -980,6 +984,11 @@ fn build_chain_status_payload_includes_storage_metrics() {
         payload.release_security_policy,
         ReleaseSecurityPolicy::default()
     );
+    assert_eq!(
+        payload.traffic.libp2p_replication.scope,
+        "application_payload_only"
+    );
+    assert!(payload.traffic.udp_gossip.is_none());
 }
 
 #[test]
@@ -1053,6 +1062,10 @@ fn production_release_policy_status_payload_reports_effective_policy() {
         release_security_policy.clone(),
         reward_runtime,
         storage,
+        super::ChainTrafficStatus {
+            udp_gossip: None,
+            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
     );
 
     assert_eq!(
@@ -1137,6 +1150,10 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
         ReleaseSecurityPolicy::default(),
         reward_runtime,
         storage,
+        super::ChainTrafficStatus {
+            udp_gossip: None,
+            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
     );
 
     assert_eq!(payload.p2p.requested_user_mode, "private_safe");

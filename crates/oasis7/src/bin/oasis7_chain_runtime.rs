@@ -15,14 +15,13 @@ use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
 };
 use oasis7_node::{
-    derive_libp2p_identity_keypair, Libp2pReachabilitySnapshot, Libp2pReplicationNetwork,
-    Libp2pReplicationNetworkConfig, NodeConfig, NodeNetworkPolicy, NodePosConfig,
-    NodeReachabilityAutoDetection, NodeReplicationConfig, NodeReplicationNetworkHandle, NodeRole,
-    NodeRuntime, NodeSnapshot, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
+    derive_libp2p_identity_keypair, Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig,
+    NodeConfig, NodeNetworkPolicy, NodePosConfig, NodeReplicationConfig,
+    NodeReplicationNetworkHandle, NodeRole, NodeRuntime, PosConsensusStatus, PosValidator,
 };
 use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
-use runtime_status_util::{consensus_status_to_string, now_unix_ms};
+use runtime_status_util::now_unix_ms;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[path = "oasis7_chain_runtime/balances_api.rs"]
@@ -59,6 +58,8 @@ mod status_payload;
 mod storage_metrics;
 #[path = "oasis7_chain_runtime/traffic_profile.rs"]
 mod traffic_profile;
+#[path = "oasis7_chain_runtime/traffic_status.rs"]
+mod traffic_status;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
 mod transfer_submit_api;
 #[cfg(test)]
@@ -84,11 +85,12 @@ use reward_runtime_worker::{
     init_shared_metrics, poll_worker_error, snapshot_metrics, start_reward_runtime_worker,
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
-use status_payload::{build_chain_p2p_status, ChainP2pStatus};
+use status_payload::build_chain_status_payload;
 use traffic_profile::{
     apply_traffic_profile_to_node_config, apply_traffic_profile_to_replication_network_config,
     feedback_p2p_config_for_role,
 };
+use traffic_status::{build_chain_traffic_status, ChainTrafficStatus};
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -176,51 +178,6 @@ struct ChainStatusServer {
     stop_tx: Sender<()>,
     error_rx: Receiver<String>,
     join_handle: Option<thread::JoinHandle<()>>,
-}
-
-#[derive(Debug, Serialize)]
-struct ChainStatusResponse {
-    ok: bool,
-    observed_at_unix_ms: i64,
-    node_id: String,
-    world_id: String,
-    role: String,
-    running: bool,
-    worker_poll_count: u64,
-    // Legacy alias kept for existing tooling; same value as worker_poll_count.
-    tick_count: u64,
-    last_tick_unix_ms: Option<i64>,
-    consensus: ChainConsensusStatus,
-    last_error: Option<String>,
-    execution_world_dir: String,
-    p2p: ChainP2pStatus,
-    release_security_policy: ReleaseSecurityPolicy,
-    reward_runtime: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
-    storage: storage_metrics::StorageMetricsSnapshot,
-    replication: ChainReplicationDebugStatus,
-}
-
-#[derive(Debug, Serialize)]
-struct ChainConsensusStatus {
-    slot: u64,
-    epoch: u64,
-    ticks_per_slot: u64,
-    tick_phase: u64,
-    proposal_tick_phase: u64,
-    last_observed_slot: u64,
-    missed_slot_count: u64,
-    last_observed_tick: u64,
-    missed_tick_count: u64,
-    adaptive_tick_scheduler_enabled: bool,
-    latest_height: u64,
-    committed_height: u64,
-    network_committed_height: u64,
-    last_status: Option<String>,
-    last_block_hash: Option<String>,
-    last_execution_height: u64,
-    last_execution_block_hash: Option<String>,
-    last_execution_state_root: Option<String>,
-    known_peer_heads: usize,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -830,10 +787,10 @@ fn handle_chain_status_connection(
                 .map_err(|err| format!("failed to write /healthz response: {err}"))?;
         }
         "/v1/chain/status" => {
-            let snapshot = runtime
+            let (snapshot, udp_gossip_traffic) = runtime
                 .lock()
-                .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())?
-                .snapshot();
+                .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())
+                .map(|locked| (locked.snapshot(), locked.gossip_traffic_snapshot()))?;
             let live_snapshot = replication_network.reachability_snapshot();
             let (p2p_recommendation, p2p_detection) =
                 build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
@@ -850,6 +807,7 @@ fn handle_chain_status_connection(
                 release_security_policy.clone(),
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
+                build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
             );
             payload.replication =
                 build_chain_replication_debug_status(replication_network.as_ref());
@@ -872,70 +830,6 @@ fn handle_chain_status_connection(
     }
 
     Ok(())
-}
-
-fn build_chain_status_payload(
-    snapshot: NodeSnapshot,
-    execution_world_dir: &Path,
-    live_p2p_recommendation: &NodeUserModeRecommendation,
-    applied_effective_user_mode: Option<String>,
-    effective_p2p_policy: NodeNetworkPolicy,
-    live_snapshot: &Libp2pReachabilitySnapshot,
-    p2p_detection: NodeReachabilityAutoDetection,
-    release_security_policy: ReleaseSecurityPolicy,
-    reward_runtime_metrics: reward_runtime_worker::RewardRuntimeMetricsSnapshot,
-    storage_metrics: storage_metrics::StorageMetricsSnapshot,
-) -> ChainStatusResponse {
-    let last_status = snapshot
-        .consensus
-        .last_status
-        .map(consensus_status_to_string);
-
-    ChainStatusResponse {
-        ok: true,
-        observed_at_unix_ms: now_unix_ms(),
-        node_id: snapshot.node_id,
-        world_id: snapshot.world_id,
-        role: snapshot.role.as_str().to_string(),
-        running: snapshot.running,
-        worker_poll_count: snapshot.tick_count,
-        tick_count: snapshot.tick_count,
-        last_tick_unix_ms: snapshot.last_tick_unix_ms,
-        consensus: ChainConsensusStatus {
-            slot: snapshot.consensus.slot,
-            epoch: snapshot.consensus.epoch,
-            ticks_per_slot: snapshot.consensus.ticks_per_slot,
-            tick_phase: snapshot.consensus.tick_phase,
-            proposal_tick_phase: snapshot.consensus.proposal_tick_phase,
-            last_observed_slot: snapshot.consensus.last_observed_slot,
-            missed_slot_count: snapshot.consensus.missed_slot_count,
-            last_observed_tick: snapshot.consensus.last_observed_tick,
-            missed_tick_count: snapshot.consensus.missed_tick_count,
-            adaptive_tick_scheduler_enabled: snapshot.consensus.adaptive_tick_scheduler_enabled,
-            latest_height: snapshot.consensus.latest_height,
-            committed_height: snapshot.consensus.committed_height,
-            network_committed_height: snapshot.consensus.network_committed_height,
-            last_status,
-            last_block_hash: snapshot.consensus.last_block_hash,
-            last_execution_height: snapshot.consensus.last_execution_height,
-            last_execution_block_hash: snapshot.consensus.last_execution_block_hash,
-            last_execution_state_root: snapshot.consensus.last_execution_state_root,
-            known_peer_heads: snapshot.consensus.known_peer_heads,
-        },
-        last_error: snapshot.last_error,
-        execution_world_dir: execution_world_dir.display().to_string(),
-        p2p: build_chain_p2p_status(
-            live_p2p_recommendation,
-            applied_effective_user_mode,
-            effective_p2p_policy,
-            live_snapshot,
-            p2p_detection,
-        ),
-        release_security_policy,
-        reward_runtime: reward_runtime_metrics,
-        storage: storage_metrics,
-        replication: ChainReplicationDebugStatus::default(),
-    }
 }
 
 fn build_chain_replication_debug_status(

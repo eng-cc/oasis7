@@ -119,6 +119,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
     let event_errors = Arc::new(Mutex::new(Vec::new()));
     let event_listening_addrs = Arc::new(Mutex::new(Vec::new()));
     let event_reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+    let event_traffic_metrics = super::traffic_metrics::init_shared_traffic_metrics();
     let provider_outside_subset = PeerId::random();
 
     let outcome = super::runtime_loop::handle_command(
@@ -148,11 +149,12 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             rendezvous_cookies: &rendezvous_cookies,
             peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
         },
-        &super::runtime_loop::CommandContext {
+        &super::CommandContext {
             event_published: &event_published,
             event_errors: &event_errors,
             event_listening_addrs: &event_listening_addrs,
             event_reachability: &event_reachability,
+            event_traffic_metrics: &event_traffic_metrics,
             keypair: &keypair,
             peer_record_template: None,
             local_peer_id,
@@ -162,10 +164,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             allow_loopback_external_addrs_for_testing: false,
         },
     );
-    assert!(matches!(
-        outcome,
-        super::runtime_loop::CommandOutcome::Continue
-    ));
+    assert!(matches!(outcome, super::CommandOutcome::Continue));
 
     let err = futures::executor::block_on(receiver)
         .expect("request response")

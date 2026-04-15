@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{
-    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, PeerManagerHealthIssue,
-    PeerManagerHealthStatus, PeerManagerPeerHealth,
+    Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth,
 };
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
@@ -219,6 +219,10 @@ impl Libp2pReplicationNetwork {
 
     pub fn reachability_snapshot(&self) -> Libp2pReachabilitySnapshot {
         self.inner.reachability_snapshot()
+    }
+
+    pub fn traffic_metrics_snapshot(&self) -> Libp2pTrafficMetricsSnapshot {
+        self.inner.traffic_metrics_snapshot()
     }
 
     fn local_handler(&self, protocol: &str) -> Option<Handler> {

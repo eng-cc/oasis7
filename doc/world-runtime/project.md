@@ -257,6 +257,37 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
 - [x] post-action-wasm-contract-drift-fix (PRD-WORLD_RUNTIME-001/002) [test_tier_required]: 修复 `post_action` WASM 路由的 contract drift，让订阅者收到实际执行后的 action 与结果事件，并补齐 override / rejection 回归。 Trace: .pm/tasks/task_e053e8a306e44c53921430c2499751be.yaml
+- [x] chain-status-traffic-metrics (PRD-WORLD_RUNTIME-026) [test_tier_required]: 为 `oasis7_chain_runtime` 的 `/v1/chain/status` 增加节点流量观测快照，分别暴露 `udp_gossip` 与 `libp2p_replication` counters，并在 payload 中标明统计范围；同时补齐 gossip/libp2p/status 定向回归与 oversized baseline 同步。 Trace: .pm/tasks/task_15c26ee4cbab44bd8094b9305d4356ee.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/.governance/rust-oversized-file-baseline.tsv`
+    - `.pm/tasks/task_15c26ee4cbab44bd8094b9305d4356ee.yaml`
+    - `.pm/tasks/task_15c26ee4cbab44bd8094b9305d4356ee.execution.md`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/traffic_status.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_tests.rs`
+    - `crates/oasis7_net/src/lib.rs`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/api.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/libp2p_net/traffic_metrics.rs`
+    - `crates/oasis7_net/src/tests.rs`
+    - `crates/oasis7_net/src/tests_libp2p_traffic.rs`
+    - `crates/oasis7_node/src/gossip_udp.rs`
+    - `crates/oasis7_node/src/lib.rs`
+    - `crates/oasis7_node/src/lib_impl_part1.rs`
+    - `crates/oasis7_node/src/libp2p_replication_network.rs`
+    - `crates/oasis7_node/src/node_runtime_core.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_net -p oasis7_node -p oasis7 --tests`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net libp2p_traffic_metrics_track_requests_and_gossip_payloads -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node gossip_endpoint_tracks_inbound_and_outbound_payload_bytes -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime storage_and_p2p_status_payload_reports_storage_metrics_and_live_p2p_recommendation -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime production_release_policy_status_payload_reports_effective_policy -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime status_payload_reports_effective_policy_when_raw_override_differs_from_recommendation -- --nocapture`
+    - `./scripts/check-rust-file-size.sh`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -272,9 +303,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-14
+- 更新日期: 2026-04-15
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `chain-status-traffic-metrics`（已为 `/v1/chain/status` 增加 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组节点流量快照；UDP gossip 现按消息种类累计 datagram/payload bytes，libp2p replication 现按 gossip/request/response 与 topic/protocol 统计逻辑 payload，并在 payload 中显式标记排除 transport headers、Kademlia control-plane 与 gossipsub mesh fanout 的范围说明。）
 - 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；随后把 runtime 事件/动作路由切到 prepared subscription cache，移除了 `filters_value.to_string()` 热路径固定成本。release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router `parse_each_time -> prepared_once` 在 no-regex / regex 场景都约为 `5.1x~5.5x`。）
 - 最新完成: `TASK-WORLD_RUNTIME-059`（已保持 runtime 语义不放宽，并为 S10 五节点脚本补齐显式 replication listen/peer 拓扑；对 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 仅允许 `<=2` warning，canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
 - 最新完成: `TASK-WORLD_RUNTIME-058`（已为 `NodeRuntime` 增加 replication-network consensus 策略位，并将 `oasis7_chain_runtime` 默认注入的 loopback fallback network 切到“只承载 replication/feedback、不承载 consensus 广播”；新增回归证明“有 replication network 句柄但关闭 network-consensus 时，UDP gossip 仍能同步 `known_peer_heads`”，同时保留显式共享 network-consensus 回归通过。）

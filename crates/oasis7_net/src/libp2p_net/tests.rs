@@ -10,6 +10,7 @@ use super::transport_paths::{
 };
 use super::utils::push_bounded_vec;
 use super::*;
+use futures::channel::oneshot;
 use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::NetworkLane;

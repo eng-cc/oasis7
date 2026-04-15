@@ -99,11 +99,13 @@ fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
     let target_peer_id = PeerId::random();
     let mut pending_peer_record_requests = HashMap::new();
     let mut pending_cached_peer_records = HashSet::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
     let requested = super::super::discovery::maybe_request_cached_peer_record(
         &mut swarm,
         &mut pending_peer_record_requests,
         &mut pending_cached_peer_records,
+        &traffic_metrics,
         &[target_peer_id],
         target_peer_id,
         local_peer_id,
@@ -174,6 +176,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
     let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
     let mut pending_cached_discovery_peers = HashSet::new();
     let event_errors = Arc::new(Mutex::new(Vec::new()));
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
     super::super::discovery::handle_peer_record_response(
         &mut swarm,
@@ -190,6 +193,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         &mut last_dialed_transport_paths,
         &active_transport_paths,
         &[first_proxy, fallback_proxy],
+        &traffic_metrics,
         &mut failed_transport_path_labels,
         &mut pending_discovery_peer_records,
         None,
@@ -246,6 +250,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
     let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
     let mut pending_cached_discovery_peers = HashSet::new();
     let event_errors = Arc::new(Mutex::new(Vec::new()));
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
     super::super::discovery::handle_peer_record_response(
         &mut swarm,
@@ -262,6 +267,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
         &mut last_dialed_transport_paths,
         &active_transport_paths,
         &[first_proxy, fallback_proxy],
+        &traffic_metrics,
         &mut failed_transport_path_labels,
         &mut pending_discovery_peer_records,
         None,

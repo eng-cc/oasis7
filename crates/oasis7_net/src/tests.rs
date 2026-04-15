@@ -1,22 +1,21 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
-
-#[cfg(feature = "libp2p")]
 #[cfg(feature = "libp2p")]
 #[path = "tests_libp2p_helpers.rs"]
 mod libp2p_test_helpers;
-use oasis7_proto::distributed as proto_distributed;
-use oasis7_proto::distributed_dht::DistributedDht as _;
-use oasis7_proto::distributed_dht::SignedPeerRecord;
-use oasis7_proto::distributed_net as proto_net;
-use oasis7_proto::distributed_net::DistributedNetwork as _;
-use oasis7_proto::distributed_storage as proto_storage;
-use oasis7_wasm_abi::ModuleAbiContract;
-
+#[cfg(feature = "libp2p")]
+#[path = "tests_libp2p_traffic.rs"]
+mod libp2p_traffic_tests;
 use super::*;
 use crate::util::to_canonical_cbor;
 #[cfg(feature = "libp2p")]
 use libp2p_test_helpers::{loopback_test_bootstrap, loopback_test_peer};
+use oasis7_proto::distributed as proto_distributed;
+use oasis7_proto::distributed_dht::{DistributedDht as _, SignedPeerRecord};
+use oasis7_proto::distributed_net as proto_net;
+use oasis7_proto::distributed_net::DistributedNetwork as _;
+use oasis7_proto::distributed_storage as proto_storage;
+use oasis7_wasm_abi::ModuleAbiContract;
 
 #[test]
 fn net_exports_are_available() {
