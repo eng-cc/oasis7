@@ -21,6 +21,6 @@ acceptance:
   - "post_action ModuleCallInput carries the resulting domain event when action application succeeds or rejects"
   - "runtime regression tests cover override plus post_action event payload"
 handoff_to: []
-updated_at: 2026-04-15T19:36:52+08:00
+updated_at: 2026-04-15T20:43:35+08:00
 last_started_at: 2026-04-15T19:15:03+08:00
-last_closed_at: 2026-04-15T19:36:52+08:00
+last_closed_at: 2026-04-15T20:43:34+08:00
