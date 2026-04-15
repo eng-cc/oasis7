@@ -113,6 +113,7 @@
   - NFR-P2P-PRA-7: gossip、sync、blob/state、control 四条 lane 必须支持独立的 rate limit、peer subset 和 quarantine 规则。
   - NFR-P2P-PRA-8: 默认安装/启动路径中，用户在不打开高级设置的情况下不应被迫选择底层正式角色；系统必须在 `60s` 内完成一次自动探测并给出默认用户模式。
   - NFR-P2P-PRA-9: 任何会把节点提升为 `公网入口` 的自动决策，都必须带可审计的检测依据与风险提示；无依据时默认保持保守模式。
+  - NFR-P2P-PRA-10: 对于 `1` 本机 + `2` ECS 这类固定 triad/bootstrap 拓扑，runtime 必须提供显式低流量运行档位，至少能同步收紧 bootstrap redial、discovery query、peer record republish、dynamic gossip peer budget、feedback announce budget，并允许关闭 AutoNAT 这类在固定私网拓扑中只会制造控制面抖动的探测。
 - Security & Privacy:
   - 所有 peer record 必须做链域隔离签名，防止跨链、跨环境重放。
   - transport 默认要求加密和双向身份确认；未认证链路不得进入 consensus/control lane。

@@ -56,17 +56,26 @@ pub struct Libp2pReplicationNetworkConfig {
     pub peer_record: Option<PeerRecord>,
     pub listen_addrs: Vec<Multiaddr>,
     pub bootstrap_peers: Vec<Multiaddr>,
+    pub bootstrap_redial_interval_ms: i64,
+    pub republish_interval_ms: i64,
+    pub discovery_query_interval_ms: i64,
+    pub enable_autonat: bool,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub unsupported_protocol_retry_after: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
     fn default() -> Self {
+        let inner_defaults = Libp2pNetworkConfig::default();
         Self {
             keypair: None,
             peer_record: None,
             listen_addrs: Vec::new(),
             bootstrap_peers: Vec::new(),
+            bootstrap_redial_interval_ms: inner_defaults.bootstrap_redial_interval_ms,
+            republish_interval_ms: inner_defaults.republish_interval_ms,
+            discovery_query_interval_ms: inner_defaults.discovery_query_interval_ms,
+            enable_autonat: inner_defaults.enable_autonat,
             allow_local_handler_fallback_when_no_peers: false,
             unsupported_protocol_retry_after: Duration::from_millis(
                 UNSUPPORTED_PROTOCOL_RETRY_AFTER_MS,
@@ -92,6 +101,10 @@ impl Libp2pReplicationNetwork {
             peer_record: config.peer_record,
             listen_addrs: config.listen_addrs,
             bootstrap_peers: config.bootstrap_peers,
+            bootstrap_redial_interval_ms: config.bootstrap_redial_interval_ms,
+            republish_interval_ms: config.republish_interval_ms,
+            discovery_query_interval_ms: config.discovery_query_interval_ms,
+            enable_autonat: config.enable_autonat,
             ..Libp2pNetworkConfig::default()
         });
 

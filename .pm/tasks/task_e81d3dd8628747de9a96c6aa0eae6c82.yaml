@@ -1,0 +1,20 @@
+task_uid: task_e81d3dd8628747de9a96c6aa0eae6c82
+title: "收紧 triad 固定拓扑低流量运行档位"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-triad-low-traffic-profile
+execution_log_path: .pm/tasks/task_e81d3dd8628747de9a96c6aa0eae6c82.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+doc_refs:
+  - doc/p2p/prd.md
+related_prd:
+  - PRD-P2P-024
+acceptance:
+  - "triad 固定三节点场景具备低流量配置入口；收紧 discovery/redial/gossip/feedback 预算；本机 observer 可走低流量档位且定向测试通过"
+handoff_to: []
+updated_at: 2026-04-15T20:24:15+08:00
+last_started_at: 2026-04-15T20:03:29+08:00
+last_closed_at: 2026-04-15T20:24:15+08:00

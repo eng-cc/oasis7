@@ -58,6 +58,8 @@ mod runtime_status_util;
 mod status_payload;
 #[path = "oasis7_chain_runtime/storage_metrics.rs"]
 mod storage_metrics;
+#[path = "oasis7_chain_runtime/traffic_profile.rs"]
+mod traffic_profile;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
 mod transfer_submit_api;
 #[cfg(test)]
@@ -84,6 +86,10 @@ use reward_runtime_worker::{
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
 use status_payload::{build_chain_p2p_status, ChainP2pStatus};
+use traffic_profile::apply_traffic_profile_to_replication_network_config;
+pub(super) use traffic_profile::{
+    apply_traffic_profile_to_node_config, feedback_p2p_config_for_role,
+};
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -346,11 +352,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
     )?);
-    if let Some(feedback_p2p_config) = feedback_p2p_config_for_role(options.node_role) {
-        config = config
-            .with_feedback_p2p(feedback_p2p_config)
-            .map_err(|err| format!("failed to enable node feedback p2p: {err:?}"))?;
-    }
+    config = apply_traffic_profile_to_node_config(config, &options)?;
     config = governance_registry::apply_world_governance_registry_overrides(
         config,
         paths.execution_world_dir.as_path(),
@@ -533,10 +535,6 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
 
         thread::sleep(Duration::from_millis(300));
     }
-}
-
-fn feedback_p2p_config_for_role(node_role: NodeRole) -> Option<NodeFeedbackP2pConfig> {
-    (!matches!(node_role, NodeRole::Observer)).then_some(NodeFeedbackP2pConfig::default())
 }
 
 fn resolve_runtime_paths(options: &CliOptions) -> RuntimePaths {
@@ -1148,6 +1146,7 @@ fn build_default_replication_network_config(
                 .map_err(|err| format!("invalid --replication-network-peer {raw}: {err}"))
         })
         .collect::<Result<_, _>>()?;
+    apply_traffic_profile_to_replication_network_config(&mut config, options.traffic_profile);
     Ok(config)
 }
 

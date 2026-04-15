@@ -517,6 +517,25 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib`
     - `./scripts/check-rust-file-size.sh`
+- [x] fixed-triad-low-traffic-profile (PRD-P2P-024) [test_tier_required]: 为固定 triad / 本机 + 阿里云三节点场景新增显式低流量运行档位，收紧 libp2p redial/discovery/republish/gossip/feedback 预算，并允许关闭固定拓扑下会制造探测噪音的 AutoNAT，同时保持 `release_default` 的 release security policy 不被 `dev_local` 语义污染。 Trace: .pm/tasks/task_e81d3dd8628747de9a96c6aa0eae6c82.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/cli.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_tests.rs`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/swarm_behaviour.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests/discovery_peer_record_tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/transport_retry_tests.rs`
+    - `crates/oasis7_node/src/libp2p_replication_network.rs`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+    - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md`
+    - `doc/p2p/project.md`
+    - `doc/.governance/rust-oversized-file-baseline.tsv`
+    - `.pm/tasks/task_e81d3dd8628747de9a96c6aa0eae6c82.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [ ] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，并把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定。 Trace: .pm/tasks/task_f5beda0b81da4b538d168d675aed2e08.yaml
