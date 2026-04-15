@@ -16,6 +16,8 @@ REQUIRED_ENTRY_MARKERS=(
   "data-download-surface"
   "data-download-primary-link"
   "data-download-primary-requirements"
+  "data-download-primary-install"
+  "data-download-primary-trust"
   "data-download-primary-support"
   "data-download-platform-button=\"windows\""
   "data-download-platform-button=\"macos\""
