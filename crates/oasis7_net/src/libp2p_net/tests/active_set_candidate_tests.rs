@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use super::super::peer_manager::{PeerManagerHealthStatus, PeerManagerPolicy};
 use super::super::peer_manager_active_set::{
     candidate_status_with_active_set, candidate_would_degrade_admitted_peers, ActivePeerCandidate,
@@ -109,4 +111,58 @@ fn active_set_candidate_status_admits_distinct_peer_without_degrading_existing_a
         &stats,
         &PeerManagerPolicy::default(),
     ));
+}
+
+#[test]
+fn active_set_candidate_status_counts_unique_candidate_discovery_sources() {
+    let candidate = ActivePeerCandidate {
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::Dht,
+            crate::dht::PeerDiscoverySource::Dht,
+        ],
+        ipv4_subnet_bucket: None,
+        relay_domain: None,
+        source_operator: None,
+        source_asn: None,
+        relay_reserved: false,
+    };
+
+    assert_eq!(
+        candidate_status_with_active_set(
+            &candidate,
+            &ActivePeerSetStats::default(),
+            &PeerManagerPolicy::default(),
+        ),
+        PeerManagerHealthStatus::Suspect
+    );
+}
+
+#[test]
+fn active_set_candidate_status_projects_unique_active_discovery_source_union() {
+    let candidate = ActivePeerCandidate {
+        discovery_sources: vec![
+            crate::dht::PeerDiscoverySource::Dht,
+            crate::dht::PeerDiscoverySource::Dht,
+        ],
+        ipv4_subnet_bucket: None,
+        relay_domain: None,
+        source_operator: None,
+        source_asn: None,
+        relay_reserved: false,
+    };
+    let active_set_stats = ActivePeerSetStats {
+        active_peer_count: 1,
+        active_discovery_sources: BTreeSet::from(["rendezvous"]),
+        ..ActivePeerSetStats::default()
+    };
+    let policy = PeerManagerPolicy {
+        min_active_discovery_sources: 3,
+        min_peer_discovery_sources: 1,
+        ..PeerManagerPolicy::default()
+    };
+
+    assert_eq!(
+        candidate_status_with_active_set(&candidate, &active_set_stats, &policy),
+        PeerManagerHealthStatus::Suspect
+    );
 }

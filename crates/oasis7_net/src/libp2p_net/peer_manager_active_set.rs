@@ -104,22 +104,28 @@ impl ActivePeerCandidate {
     }
 }
 
+fn candidate_discovery_source_labels(candidate: &ActivePeerCandidate) -> BTreeSet<&'static str> {
+    candidate
+        .discovery_sources
+        .iter()
+        .map(|source| discovery_source_label(*source))
+        .collect()
+}
+
 pub(super) fn candidate_status_with_active_set(
     candidate: &ActivePeerCandidate,
     active_set_stats: &ActivePeerSetStats,
     policy: &PeerManagerPolicy,
 ) -> PeerManagerHealthStatus {
     let projected_active_peer_count = active_set_stats.active_peer_count.saturating_add(1);
-    let mut has_issue = candidate.discovery_sources.len() < policy.min_peer_discovery_sources;
+    let candidate_discovery_source_labels = candidate_discovery_source_labels(candidate);
+    let mut has_issue = candidate_discovery_source_labels.len() < policy.min_peer_discovery_sources;
     let mut hard_block = false;
 
-    let projected_active_discovery_sources = candidate
-        .discovery_sources
-        .iter()
-        .map(|source| discovery_source_label(*source))
-        .filter(|source| !active_set_stats.active_discovery_sources.contains(source))
-        .count()
-        .saturating_add(active_set_stats.active_discovery_sources.len());
+    let projected_active_discovery_sources = active_set_stats
+        .active_discovery_sources
+        .union(&candidate_discovery_source_labels)
+        .count();
     if projected_active_peer_count > 0
         && projected_active_discovery_sources < policy.min_active_discovery_sources
     {

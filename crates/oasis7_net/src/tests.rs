@@ -1234,8 +1234,7 @@ fn client_fetch_module_artifact_from_dht_uses_provider_list() {
         .fetch_module_artifact_from_dht("w1", "wasm-hash", &dht)
         .expect("fetch artifact");
     assert_eq!(artifact.wasm_hash, "wasm-hash");
-    assert_eq!(artifact.bytes, b"data".to_vec());
-
+    assert_eq!(artifact.bytes, b"data".to_vec().into());
     let seen = spy.providers();
     assert_eq!(seen, vec!["peer-7".to_string()]);
 }

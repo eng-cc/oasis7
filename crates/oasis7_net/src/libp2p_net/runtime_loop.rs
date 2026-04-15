@@ -232,9 +232,7 @@ pub(super) fn refresh_peer_manager_healths(
         .collect();
     pending_active_peers.sort_unstable_by_key(|peer_id| peer_id.to_string());
     for peer_id in pending_active_peers {
-        if quarantined_active_peers.contains(&peer_id)
-            || !discovered_peer_records.contains_key(&peer_id)
-        {
+        if quarantined_active_peers.contains(&peer_id) {
             continue;
         }
         let Some(path) = active_transport_paths.get(&peer_id) else {
