@@ -30,7 +30,6 @@
 - `testing-manual.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
-- `testing-manual.md`
 
 ## 状态
 - 更新日期：2026-04-15
