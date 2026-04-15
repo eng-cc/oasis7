@@ -11,7 +11,7 @@
 - Success Criteria:
   - SC-1: `m1/m4/m5` hash manifest 仅包含单 canonical token：`linux-x86_64=<sha256>`。
   - SC-2: `sync-m*-builtin-wasm-artifacts.sh` 默认按 Docker canonical 平台校验，并拒绝 legacy / mixed 输入。
-  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 成为唯一现行 builtin wasm 独立 gate，单次运行可产出 summary + release evidence。
+  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 成为唯一现行 builtin wasm 独立 gate，并在 PR/push 上先按 changed paths 规划命中的 `m1/m4/m5` module set；未命中时保持 required context 稳定但 job 内 no-op 成功。
   - SC-4: required checks 默认包含以下 3 个汇总校验上下文：
     - `Wasm Determinism Gate / verify-wasm-determinism (m1)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m4)`
@@ -25,7 +25,7 @@
   - 发布工程维护者：需要 manifest / identity / release evidence 的写入来源可审计且不可被 CI 或开发机误覆盖。
   - 模块开发者：需要在本地快速执行 `--check` 获取 canonical 结果。
 - User Scenarios & Frequency:
-  - PR 门禁：涉及 wasm 构建链路改动时，每次 PR 触发 canonical summary / release evidence gate。
+  - PR 门禁：涉及 wasm 构建链路改动时，每次 PR 触发 canonical summary / release evidence gate；纯文档或无关改动只保留 stable required contexts，不实际收集 summaries。
   - 发布更新：仅在发布流程由受控节点执行 manifest / identity 写入。
   - 本地调试：开发者高频执行 `sync-m*/--check` 进行只读校验。
 - User Stories:
@@ -33,7 +33,7 @@
   - PRD-TESTING-CI-WASMHARD-002: As a 发布工程维护者, I want identity and release evidence bound to stable tracked inputs plus build receipts, so that trust no longer depends on host-native builds.
   - PRD-TESTING-CI-WASMHARD-003: As a 仓库管理员, I want required checks and evidence automation aligned to `wasm-determinism-gate`, so that policy drift is prevented.
 - Critical User Flows:
-  1. Flow-WASMHARD-001: `PR 触发 -> wasm-determinism-gate 收集 m1/m4/m5 canonical summary -> 汇总 release evidence -> required check 放行/阻断`
+  1. Flow-WASMHARD-001: `PR 触发 -> planner 基于 changed paths 推导命中的 module set -> wasm-determinism-gate 仅对命中的 m1/m4/m5 收集 canonical summary -> 汇总 release evidence -> required check 放行/阻断`
   2. Flow-WASMHARD-002: `发布触发 -> 受控节点执行 sync 写入 -> single canonical manifest + identity 更新 -> 合规提交`
   3. Flow-WASMHARD-003: `本地执行 sync -> 默认仅 --check -> 若请求写入且未显式授权则拒绝并提示策略`
 - Functional Specification Matrix:
@@ -42,13 +42,13 @@
 | canonical hash manifest | `module_id`, `linux-x86_64=<sha256>` | `sync --check` 校验 canonical token 合法性与平台完备性 | `raw -> validated -> pass/fail` | 发布清单仅允许单 canonical token | 所有人可读，写入受策略约束 |
 | sync strict 模式 | `legacy_tokens`, `keyed_tokens`, `current_platform` | 检测 legacy / mixed 时直接失败 | `checking -> rejected/accepted` | 仅 canonical token 允许进入后续流程 | 本地默认只读，写入需显式授权 |
 | identity / receipt 输入收敛 | 源码白名单、模块 lockfile、build receipt、hash manifest token | 计算 `source_hash`、`identity_hash` 与 release evidence | `collecting -> hashing -> emitted` | 输入路径排序稳定，忽略未跟踪文件 | 由构建脚本统一执行 |
-| canonical summary / evidence 对账 | `runner`, `canonical_platform`, `module_hashes`, `receipt_evidence`, `module_set` | runner 导出摘要，汇总脚本执行差异比较并生成 evidence | `generated -> uploaded -> reconciled` | 按 `module_id` 全量对齐 canonical 输出 | CI workflow 自动执行 |
+| canonical summary / evidence 对账 | `runner`, `canonical_platform`, `module_hashes`, `receipt_evidence`, `module_set`, `scope` | planner 先产出 scope，runner 仅对命中的 module set 导出摘要；汇总脚本执行差异比较并生成 evidence | `planned -> generated -> uploaded -> reconciled` | 按 `module_id` 全量对齐 canonical 输出；无关改动允许 no-op success | CI workflow 自动执行 |
 | required check 保护 | check context 列表、strict 标记 | 自动注入/并集更新 `required_status_checks` | `planned -> applied -> verified` | 保留既有上下文并去重 | 需仓库写权限 |
 - Acceptance Criteria:
   - AC-1: `m1/m4/m5_builtin_modules.sha256` 全量迁移到单 canonical token，且不含 legacy / 双平台 token。
   - AC-2: sync 脚本在 check / sync 两种模式均拒绝 legacy 或 mixed 输入。
   - AC-3: 本地执行不带显式写入授权时，sync 脚本拒绝写入并提供修复提示。
-  - AC-4: `.github/workflows/wasm-determinism-gate.yml` 与摘要 / 证据脚本可稳定运行。
+  - AC-4: `.github/workflows/wasm-determinism-gate.yml` 与摘要 / 证据脚本可稳定运行，并能基于 changed paths 把无关 PR 收口为 stable required-context no-op。
   - AC-5: required checks 自动化默认上下文覆盖 `Wasm Determinism Gate` 的 m1/m4/m5 三个 verify job。
   - AC-6: identity `source_hash` 移除 workspace 根 `Cargo.lock` 依赖，并仅使用可追踪稳定输入。
 - Non-Goals:
@@ -63,6 +63,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 通过“single canonical token + sync 严格策略 + identity 输入白名单 + canonical summary/release evidence + required check 治理”形成闭环，消除 builtin wasm 发布链路的宿主漂移来源。
 - Integration Points:
+  - `scripts/plan-wasm-determinism-scope.sh`
   - `scripts/sync-m1-builtin-wasm-artifacts.sh`
   - `scripts/sync-m4-builtin-wasm-artifacts.sh`
   - `scripts/sync-m5-builtin-wasm-artifacts.sh`
@@ -75,6 +76,7 @@
   - `crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256`
   - `crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256`
 - Edge Cases & Error Handling:
+  - git diff base 不可解析：planner 必须回退为 `m1,m4,m5` 全量运行，不能静默漏跑。
   - GitHub-hosted macOS 无 Docker daemon：默认 gate 只跑 Linux canonical runner；full-tier 通过外部 summary 导入补证。
   - 当前平台不在 canonical 列表：`--check` 直接失败并提示 `OASIS7_WASM_CANONICAL_PLATFORMS`。
   - manifest 含重复平台 token：严格失败并报告 `module_id + platform`。
@@ -85,6 +87,7 @@
   - NFR-WASMHARD-2: canonical summary / evidence 对账失败信息须包含 `runner/module_id/hash`，单次运行内可定位。
   - NFR-WASMHARD-3: 新增治理链路不改变 `scripts/ci-tests.sh required/full` 的职责边界。
   - NFR-WASMHARD-4: 本地默认路径无写权限时不会修改任何 tracked manifest 文件。
+  - NFR-WASMHARD-5: docs-only / 无关 PR 不得实际执行 builtin wasm summary collect，但 required check context 名称保持不变。
 - Security & Privacy: 仅处理模块源码路径、hash token、receipt evidence 与 CI metadata；不处理敏感业务数据。
 
 ## 5. Risks & Roadmap
@@ -103,7 +106,7 @@
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-CI-WASMHARD-001 | T1/T2/T3 | `test_tier_required` | `sync-m4/m5 --check` + canonical token schema 校验 | builtin wasm manifest 稳定性 |
 | PRD-TESTING-CI-WASMHARD-002 | T1/T6/T7 | `test_tier_required` | identity / receipt evidence 对账 + source 输入白名单验证 | identity hash 可复现性 |
-| PRD-TESTING-CI-WASMHARD-003 | T1/T4/T5/T8 | `test_tier_required` + `test_tier_full` | `wasm-determinism-gate` + required check 注入脚本验证 | 发布门禁与策略治理 |
+| PRD-TESTING-CI-WASMHARD-003 | T1/T4/T5/T8/T9 | `test_tier_required` + `test_tier_full` | `wasm-determinism-gate` planner + no-op/collect 分流验证 + required check 注入脚本验证 | 发布门禁与策略治理 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
