@@ -1,6 +1,6 @@
 # readme PRD Project
 
-审计轮次: 12
+审计轮次: 13
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-README-001 (PRD-README-001) [test_tier_required]: 完成 readme PRD 改写，建立对外口径主控入口。
@@ -902,6 +902,20 @@
     - `rg -n "PRD-README-043|AC-30|DEC-RM-039|TASK-README-067|小红书博主|微信公众号|绿洲币|300 OC|800 OC|1500 OC|流量买量" doc/readme/prd.md doc/readme/project.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.yaml .pm/tasks/task_655d27d6d71142fd9df37f52e5ae0936.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] game-positioning-alignment (PRD-README-046) [test_tier_required]: 对齐根 README.md、world-rule.md 与站点首页中英首页的公开定位，把“文明模拟系统/引擎”收口为“文明模拟游戏”，同时保持技术预览与尚不可玩边界。 Trace: .pm/tasks/task_774fd50ebd6d4c53bc94592dbe8554cc.yaml
+  - 产物文件:
+    - `README.md`
+    - `world-rule.md`
+    - `site/index.html`
+    - `site/en/index.html`
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `.pm/tasks/task_774fd50ebd6d4c53bc94592dbe8554cc.yaml`
+    - `.pm/tasks/task_774fd50ebd6d4c53bc94592dbe8554cc.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "文明模拟游戏|civilization simulation game|文明模拟系统|战争引擎" README.md world-rule.md site/index.html site/en/index.html doc/readme/prd.md doc/readme/project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-README-080 (PRD-README-045) [test_tier_required]: 将第十三篇推荐版继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面与 4 页轮播 HTML/PNG，让关系图景比“所有权讨论”更先被读者感知到。
   - 产物文件:
     - `doc/readme/prd.md`
@@ -929,9 +943,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-14
+- 更新日期: 2026-04-15
 - 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务；若后续决定执行真实发布，再新开独立任务。）
+- 下一任务: 无（当前模块主项目无未完成任务；若后续继续扩展公开定位或进入真实发布，再新开独立任务。）
+- 最新完成: `game-positioning-alignment`（已将根 README、世界规则入口与站点首页中英首页的公开主定位统一收口为“文明模拟游戏”，并保持技术预览 / 尚不可玩边界不变。）
 - 最新完成: `TASK-README-080`（已将第十三篇的多轮文案迭代、共同参与主题收口、封面与 4 页轮播资产统一折叠到同一任务追踪中，PR 只保留一个 task 文档入口。）
 - 最新完成: `TASK-README-074/073`（已把普通 merged PR 的 contributor reward ceiling 收紧到 `150 OC`，并对 planned grant 做 actual-value review，下调过高计划值后同步回写 reward ledger 相关文档。）
 - 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界。）

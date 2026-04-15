@@ -1,0 +1,22 @@
+task_uid: task_774fd50ebd6d4c53bc94592dbe8554cc
+title: "对齐 README 与公开文档的‘文明模拟游戏’定位口径"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-readme-game-positioning-alignment
+execution_log_path: .pm/tasks/task_774fd50ebd6d4c53bc94592dbe8554cc.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - README.md
+doc_refs:
+  - doc/readme/project.md
+related_prd:
+  - doc/readme/prd.md
+acceptance:
+  - "README 主描述从‘文明模拟系统’切到‘文明模拟游戏’，并对齐 world-rule/site/readme 模块文档中的公开定位口径。"
+  - "新增 PRD/project 跟踪并回写 execution log。"
+  - "./scripts/doc-governance-check.sh 与 git diff --check 通过。"
+handoff_to: []
+updated_at: 2026-04-15T21:45:57+08:00
+last_started_at: 2026-04-15T21:36:17+08:00
+last_closed_at: 2026-04-15T21:45:47+08:00
