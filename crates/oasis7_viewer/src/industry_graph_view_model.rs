@@ -182,6 +182,10 @@ pub(crate) struct IndustryGraphViewModel {
     pub node_hotspots: Vec<IndustryNodeHotspot>,
     pub root_cause_chains: Vec<IndustryRootCauseChain>,
     pub rollup: IndustryGraphRollup,
+    world_slice: IndustryGraphSlice,
+    region_slice: IndustryGraphSlice,
+    world_routes: Vec<IndustryRouteStats>,
+    region_routes: Vec<IndustryRouteStats>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -691,6 +695,11 @@ impl IndustryGraphViewModel {
                 .then_with(|| left.node_id.cmp(&right.node_id))
         });
 
+        let world_slice = build_world_zoom_slice(&nodes, &edges);
+        let region_slice = build_region_zoom_slice(&nodes, &edges, &region_hotspots, &world_slice);
+        let world_routes = filter_routes_for_slice(&routes, &world_slice);
+        let region_routes = filter_routes_for_slice(&routes, &region_slice);
+
         Self {
             nodes,
             edges,
@@ -699,6 +708,10 @@ impl IndustryGraphViewModel {
             node_hotspots,
             root_cause_chains,
             rollup,
+            world_slice,
+            region_slice,
+            world_routes,
+            region_routes,
         }
     }
 
@@ -729,127 +742,134 @@ impl IndustryGraphViewModel {
         &self,
         zoom: IndustrySemanticZoomLevel,
     ) -> Vec<IndustryRouteStats> {
-        let slice = self.graph_for_zoom(zoom);
-        let node_ids: BTreeSet<_> = slice.nodes.into_iter().map(|node| node.id).collect();
-
-        let mut filtered: Vec<_> = self
-            .routes
-            .iter()
-            .filter(|route| {
-                node_ids.is_empty()
-                    || node_ids.contains(route.from.as_str())
-                    || node_ids.contains(route.to.as_str())
-            })
-            .cloned()
-            .collect();
-
-        filtered.sort_by(|left, right| {
-            route_weight(right)
-                .cmp(&route_weight(left))
-                .then_with(|| right.transfer_events.cmp(&left.transfer_events))
-                .then_with(|| left.from.cmp(&right.from))
-                .then_with(|| left.to.cmp(&right.to))
-        });
-        filtered
+        self.routes_for_zoom_ref(zoom).to_vec()
     }
 
-    pub(crate) fn graph_for_zoom(&self, zoom: IndustrySemanticZoomLevel) -> IndustryGraphSlice {
+    pub(crate) fn routes_for_zoom_ref(
+        &self,
+        zoom: IndustrySemanticZoomLevel,
+    ) -> &[IndustryRouteStats] {
         match zoom {
-            IndustrySemanticZoomLevel::Node => IndustryGraphSlice {
-                nodes: self.nodes.clone(),
-                edges: self.edges.clone(),
-            },
-            IndustrySemanticZoomLevel::World => {
-                let mut edges = self.edges.clone();
-                edges.sort_by(|left, right| {
-                    right
-                        .throughput
-                        .cmp(&left.throughput)
-                        .then_with(|| right.transfer_events.cmp(&left.transfer_events))
-                        .then_with(|| left.from.cmp(&right.from))
-                        .then_with(|| left.to.cmp(&right.to))
-                });
-                edges.truncate(WORLD_EDGE_LIMIT);
+            IndustrySemanticZoomLevel::Node => self.routes.as_slice(),
+            IndustrySemanticZoomLevel::World => self.world_routes.as_slice(),
+            IndustrySemanticZoomLevel::Region => self.region_routes.as_slice(),
+        }
+    }
 
-                let mut node_ids = BTreeSet::<String>::new();
-                for edge in &edges {
-                    node_ids.insert(edge.from.clone());
-                    node_ids.insert(edge.to.clone());
-                }
-
-                let mut nodes: Vec<_> = self
-                    .nodes
-                    .iter()
-                    .filter(|node| node_ids.contains(node.id.as_str()))
-                    .cloned()
-                    .collect();
-                nodes.sort_by(|left, right| {
-                    right
-                        .throughput
-                        .cmp(&left.throughput)
-                        .then_with(|| left.id.cmp(&right.id))
-                });
-                if nodes.len() > WORLD_NODE_LIMIT {
-                    nodes.truncate(WORLD_NODE_LIMIT);
-                }
-
-                IndustryGraphSlice { nodes, edges }
-            }
+    pub(crate) fn graph_slice_for_zoom(
+        &self,
+        zoom: IndustrySemanticZoomLevel,
+    ) -> (&[IndustryGraphNode], &[IndustryGraphEdge]) {
+        match zoom {
+            IndustrySemanticZoomLevel::Node => (&self.nodes, &self.edges),
+            IndustrySemanticZoomLevel::World => (&self.world_slice.nodes, &self.world_slice.edges),
             IndustrySemanticZoomLevel::Region => {
-                let allowed_chunks: BTreeSet<_> = self
-                    .region_hotspots
-                    .iter()
-                    .take(REGION_HOTSPOT_LIMIT)
-                    .map(|entry| entry.coord)
-                    .collect();
-
-                let mut nodes: Vec<_> = self
-                    .nodes
-                    .iter()
-                    .filter(|node| {
-                        node.chunk
-                            .is_some_and(|coord| allowed_chunks.contains(&coord))
-                    })
-                    .cloned()
-                    .collect();
-
-                if nodes.is_empty() {
-                    return self.graph_for_zoom(IndustrySemanticZoomLevel::World);
-                }
-
-                let node_ids: BTreeSet<_> = nodes.iter().map(|node| node.id.as_str()).collect();
-                let mut edges: Vec<_> = self
-                    .edges
-                    .iter()
-                    .filter(|edge| {
-                        node_ids.contains(edge.from.as_str()) || node_ids.contains(edge.to.as_str())
-                    })
-                    .cloned()
-                    .collect();
-
-                edges.sort_by(|left, right| {
-                    right
-                        .throughput
-                        .cmp(&left.throughput)
-                        .then_with(|| right.transfer_events.cmp(&left.transfer_events))
-                        .then_with(|| left.from.cmp(&right.from))
-                        .then_with(|| left.to.cmp(&right.to))
-                });
-                if edges.len() > WORLD_EDGE_LIMIT {
-                    edges.truncate(WORLD_EDGE_LIMIT);
-                }
-
-                nodes.sort_by(|left, right| {
-                    right
-                        .throughput
-                        .cmp(&left.throughput)
-                        .then_with(|| right.status.alert_events.cmp(&left.status.alert_events))
-                        .then_with(|| left.id.cmp(&right.id))
-                });
-                IndustryGraphSlice { nodes, edges }
+                (&self.region_slice.nodes, &self.region_slice.edges)
             }
         }
     }
+
+    pub(crate) fn graph_for_zoom(&self, zoom: IndustrySemanticZoomLevel) -> IndustryGraphSlice {
+        let (nodes, edges) = self.graph_slice_for_zoom(zoom);
+        IndustryGraphSlice {
+            nodes: nodes.to_vec(),
+            edges: edges.to_vec(),
+        }
+    }
+}
+
+fn build_world_zoom_slice(
+    nodes: &[IndustryGraphNode],
+    edges: &[IndustryGraphEdge],
+) -> IndustryGraphSlice {
+    let edges = edges[..edges.len().min(WORLD_EDGE_LIMIT)].to_vec();
+
+    let mut node_ids = BTreeSet::<String>::new();
+    for edge in &edges {
+        node_ids.insert(edge.from.clone());
+        node_ids.insert(edge.to.clone());
+    }
+
+    let mut nodes: Vec<_> = nodes
+        .iter()
+        .filter(|node| node_ids.contains(node.id.as_str()))
+        .cloned()
+        .collect();
+    nodes.sort_by(|left, right| {
+        right
+            .throughput
+            .cmp(&left.throughput)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    if nodes.len() > WORLD_NODE_LIMIT {
+        nodes.truncate(WORLD_NODE_LIMIT);
+    }
+
+    IndustryGraphSlice { nodes, edges }
+}
+
+fn build_region_zoom_slice(
+    nodes: &[IndustryGraphNode],
+    edges: &[IndustryGraphEdge],
+    region_hotspots: &[IndustryRegionHotspot],
+    world_slice: &IndustryGraphSlice,
+) -> IndustryGraphSlice {
+    let allowed_chunks: BTreeSet<_> = region_hotspots
+        .iter()
+        .take(REGION_HOTSPOT_LIMIT)
+        .map(|entry| entry.coord)
+        .collect();
+
+    let mut nodes: Vec<_> = nodes
+        .iter()
+        .filter(|node| {
+            node.chunk
+                .is_some_and(|coord| allowed_chunks.contains(&coord))
+        })
+        .cloned()
+        .collect();
+
+    if nodes.is_empty() {
+        return world_slice.clone();
+    }
+
+    let node_ids: BTreeSet<_> = nodes.iter().map(|node| node.id.as_str()).collect();
+    let mut edges: Vec<_> = edges
+        .iter()
+        .filter(|edge| node_ids.contains(edge.from.as_str()) || node_ids.contains(edge.to.as_str()))
+        .take(WORLD_EDGE_LIMIT)
+        .cloned()
+        .collect();
+
+    if edges.len() > WORLD_EDGE_LIMIT {
+        edges.truncate(WORLD_EDGE_LIMIT);
+    }
+
+    nodes.sort_by(|left, right| {
+        right
+            .throughput
+            .cmp(&left.throughput)
+            .then_with(|| right.status.alert_events.cmp(&left.status.alert_events))
+            .then_with(|| left.id.cmp(&right.id))
+    });
+
+    IndustryGraphSlice { nodes, edges }
+}
+
+fn filter_routes_for_slice(
+    routes: &[IndustryRouteStats],
+    slice: &IndustryGraphSlice,
+) -> Vec<IndustryRouteStats> {
+    let node_ids: BTreeSet<_> = slice.nodes.iter().map(|node| node.id.as_str()).collect();
+    routes
+        .iter()
+        .filter(|route| {
+            node_ids.is_empty()
+                || node_ids.contains(route.from.as_str())
+                || node_ids.contains(route.to.as_str())
+        })
+        .cloned()
+        .collect()
 }
 
 #[path = "industry_graph_view_model_support.rs"]
@@ -858,243 +878,5 @@ mod industry_graph_view_model_support;
 use industry_graph_view_model_support::*;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use oasis7::simulator::{
-        Agent, ChunkRuntimeConfig, Location, ModuleVisualAnchor, ModuleVisualEntity, WorldConfig,
-        WorldModel, CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
-    };
-
-    fn sample_snapshot() -> WorldSnapshot {
-        let mut model = WorldModel::default();
-        model.locations.insert(
-            "loc-a".to_string(),
-            Location::new("loc-a", "Alpha", GeoPos::new(0.0, 0.0, 0.0)),
-        );
-        model.locations.insert(
-            "loc-b".to_string(),
-            Location::new("loc-b", "Beta", GeoPos::new(2_100_000.0, 0.0, 0.0)),
-        );
-        model.agents.insert(
-            "agent-1".to_string(),
-            Agent::new("agent-1", "loc-a", GeoPos::new(0.0, 0.0, 0.0)),
-        );
-
-        model.module_visual_entities.insert(
-            "factory-1".to_string(),
-            ModuleVisualEntity {
-                entity_id: "factory-1".to_string(),
-                module_id: "m4.factory.smelter.iron_ingot".to_string(),
-                kind: "factory".to_string(),
-                label: Some("Smelter".to_string()),
-                anchor: ModuleVisualAnchor::Location {
-                    location_id: "loc-a".to_string(),
-                },
-            },
-        );
-        model.module_visual_entities.insert(
-            "recipe-1".to_string(),
-            ModuleVisualEntity {
-                entity_id: "recipe-1".to_string(),
-                module_id: "m4.recipe.module_rack".to_string(),
-                kind: "recipe".to_string(),
-                label: Some("Rack Recipe".to_string()),
-                anchor: ModuleVisualAnchor::Location {
-                    location_id: "loc-a".to_string(),
-                },
-            },
-        );
-        model.module_visual_entities.insert(
-            "product-1".to_string(),
-            ModuleVisualEntity {
-                entity_id: "product-1".to_string(),
-                module_id: "m4.product.module_rack".to_string(),
-                kind: "product".to_string(),
-                label: Some("Module Rack".to_string()),
-                anchor: ModuleVisualAnchor::Location {
-                    location_id: "loc-b".to_string(),
-                },
-            },
-        );
-
-        WorldSnapshot {
-            version: SNAPSHOT_VERSION,
-            chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
-            time: 77,
-            config: WorldConfig::default(),
-            model,
-            chunk_runtime: ChunkRuntimeConfig::default(),
-            next_event_id: 12,
-            next_action_id: 4,
-            pending_actions: Vec::new(),
-            journal_len: 10,
-            runtime_snapshot: None,
-            player_gameplay: None,
-        }
-    }
-
-    #[test]
-    fn build_graph_aggregates_nodes_edges_and_root_chains() {
-        let snapshot = sample_snapshot();
-        let events = vec![
-            WorldEvent {
-                id: 1,
-                time: 70,
-                kind: WorldEventKind::ResourceTransferred {
-                    from: ResourceOwner::Location {
-                        location_id: "loc-a".to_string(),
-                    },
-                    to: ResourceOwner::Location {
-                        location_id: "loc-b".to_string(),
-                    },
-                    kind: ResourceKind::Data,
-                    amount: 5,
-                },
-                runtime_event: None,
-            },
-            WorldEvent {
-                id: 2,
-                time: 71,
-                kind: WorldEventKind::Power(PowerEvent::PowerTransferred {
-                    from: ResourceOwner::Location {
-                        location_id: "loc-a".to_string(),
-                    },
-                    to: ResourceOwner::Agent {
-                        agent_id: "agent-1".to_string(),
-                    },
-                    amount: 9,
-                    loss: 2,
-                    quoted_price_per_pu: 3,
-                    price_per_pu: 3,
-                    settlement_amount: 27,
-                }),
-                runtime_event: None,
-            },
-            WorldEvent {
-                id: 3,
-                time: 72,
-                kind: WorldEventKind::CompoundRefined {
-                    owner: ResourceOwner::Location {
-                        location_id: "loc-a".to_string(),
-                    },
-                    compound_mass_g: 20,
-                    electricity_cost: 4,
-                    hardware_output: 6,
-                },
-                runtime_event: None,
-            },
-            WorldEvent {
-                id: 4,
-                time: 73,
-                kind: WorldEventKind::ActionRejected {
-                    reason: RejectReason::InsufficientResource {
-                        owner: ResourceOwner::Location {
-                            location_id: "loc-a".to_string(),
-                        },
-                        kind: ResourceKind::Data,
-                        requested: 7,
-                        available: 2,
-                    },
-                },
-                runtime_event: None,
-            },
-        ];
-
-        let graph = IndustryGraphViewModel::build(Some(&snapshot), &events);
-        assert!(graph.has_industrial_signals());
-        assert!(graph.has_economy_signals());
-        assert!(graph.has_ops_signals());
-
-        assert!(graph
-            .nodes
-            .iter()
-            .any(|node| node.kind == IndustryNodeKind::Factory));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.flow_kind == IndustryFlowKind::Data));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.flow_kind == IndustryFlowKind::Electricity));
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.flow_kind == IndustryFlowKind::Material));
-
-        assert_eq!(graph.rollup.recent_refine_events, 1);
-        assert_eq!(graph.rollup.recent_hardware_output, 6);
-        assert_eq!(graph.rollup.insufficient_rejects, 1);
-        assert_eq!(graph.rollup.power_trade_settlement, 27);
-
-        assert!(!graph.root_cause_chains.is_empty());
-        assert!(graph.root_cause_chains[0]
-            .shortage_label
-            .contains("shortage::Data:5"));
-    }
-
-    #[test]
-    fn graph_for_zoom_filters_world_and_region() {
-        let snapshot = sample_snapshot();
-        let events = vec![
-            WorldEvent {
-                id: 1,
-                time: 70,
-                kind: WorldEventKind::ResourceTransferred {
-                    from: ResourceOwner::Location {
-                        location_id: "loc-a".to_string(),
-                    },
-                    to: ResourceOwner::Location {
-                        location_id: "loc-b".to_string(),
-                    },
-                    kind: ResourceKind::Data,
-                    amount: 5,
-                },
-                runtime_event: None,
-            },
-            WorldEvent {
-                id: 2,
-                time: 71,
-                kind: WorldEventKind::ActionRejected {
-                    reason: RejectReason::LocationNotFound {
-                        location_id: "loc-b".to_string(),
-                    },
-                },
-                runtime_event: None,
-            },
-        ];
-
-        let graph = IndustryGraphViewModel::build(Some(&snapshot), &events);
-        let world = graph.graph_for_zoom(IndustrySemanticZoomLevel::World);
-        let region = graph.graph_for_zoom(IndustrySemanticZoomLevel::Region);
-        let node = graph.graph_for_zoom(IndustrySemanticZoomLevel::Node);
-
-        assert!(!world.nodes.is_empty());
-        assert!(!world.edges.is_empty());
-        assert!(!region.nodes.is_empty());
-        assert!(node.nodes.len() >= world.nodes.len());
-        assert!(node.edges.len() >= world.edges.len());
-    }
-
-    #[test]
-    fn infer_tier_and_stage_follow_p3_keywords() {
-        assert_eq!(
-            infer_tier_from_text(&["m4.product.factory_core"]),
-            IndustryTier::R5
-        );
-        assert_eq!(
-            infer_stage_from_text(&["module governance"], IndustryTier::Unknown),
-            IndustryStage::Governance
-        );
-        assert_eq!(
-            infer_stage_from_text(&["module sensor_pack"], IndustryTier::R3),
-            IndustryStage::Scale
-        );
-    }
-
-    #[test]
-    fn semantic_zoom_state_defaults_to_node() {
-        let state = IndustrySemanticZoomState::default();
-        assert_eq!(state.level, IndustrySemanticZoomLevel::Node);
-    }
-}
+#[path = "industry_graph_view_model_tests.rs"]
+mod tests;

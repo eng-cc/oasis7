@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::i18n::{locale_or_default, UiI18n, UiLocale};
 use crate::industry_graph_view_model::{
-    IndustryFlowKind, IndustryGraphNode, IndustryGraphSlice, IndustryGraphViewModel,
+    IndustryFlowKind, IndustryGraphEdge, IndustryGraphNode, IndustryGraphViewModel,
     IndustryNodeKind, IndustrySemanticZoomLevel, IndustrySemanticZoomState, IndustryStage,
     IndustryTier,
 };
@@ -366,8 +366,9 @@ pub(super) fn update_world_overlays_3d(
 
     if overlay_config.show_flow_overlay {
         let graph = IndustryGraphViewModel::build(Some(snapshot), &state.events);
-        let slice = graph.graph_for_zoom(zoom_state.level);
-        let mut flow_segments = collect_flow_segments_from_graph(&slice, origin, cm_to_unit);
+        let (slice_nodes, slice_edges) = graph.graph_slice_for_zoom(zoom_state.level);
+        let mut flow_segments =
+            collect_flow_segments_from_graph(slice_nodes, slice_edges, origin, cm_to_unit);
         flow_segments = batch_flow_segments(
             flow_segments,
             viewer_3d_config
@@ -416,7 +417,7 @@ pub(super) fn update_world_overlays_3d(
             }
         }
 
-        let mut symbol_nodes = slice.nodes;
+        let mut symbol_nodes = slice_nodes.to_vec();
         symbol_nodes.sort_by(|left, right| {
             right
                 .throughput
@@ -483,7 +484,8 @@ fn build_overlay_status_text(
     };
 
     let graph = IndustryGraphViewModel::build(Some(snapshot), events);
-    let flow_count = graph.graph_for_zoom(zoom).edges.len();
+    let (_, edges) = graph.graph_slice_for_zoom(zoom);
+    let flow_count = edges.len();
     let (unexplored, generated, exhausted) = chunk_state_counts(snapshot);
     let heat_peak = top_heat_location(snapshot)
         .map(|(id, value)| format!("{id}:{value}"))
@@ -561,19 +563,19 @@ fn collect_location_heat_points(
 }
 
 fn collect_flow_segments_from_graph(
-    graph: &IndustryGraphSlice,
+    nodes: &[IndustryGraphNode],
+    edges: &[IndustryGraphEdge],
     origin: GeoPos,
     cm_to_unit: f32,
 ) -> Vec<FlowSegment> {
     let mut node_positions = HashMap::<String, Vec3>::new();
-    for node in &graph.nodes {
+    for node in nodes {
         if let Some(position) = node.position {
             node_positions.insert(node.id.clone(), geo_to_vec3(position, origin, cm_to_unit));
         }
     }
 
-    graph
-        .edges
+    edges
         .iter()
         .filter_map(|edge| {
             let from = node_positions.get(edge.from.as_str())?;
@@ -961,8 +963,8 @@ mod tests {
         ];
 
         let graph = IndustryGraphViewModel::build(Some(&snapshot), &events);
-        let slice = graph.graph_for_zoom(IndustrySemanticZoomLevel::Node);
-        let segments = collect_flow_segments_from_graph(&slice, origin, 0.00001);
+        let (nodes, edges) = graph.graph_slice_for_zoom(IndustrySemanticZoomLevel::Node);
+        let segments = collect_flow_segments_from_graph(nodes, edges, origin, 0.00001);
         assert_eq!(segments.len(), 2);
         assert!(segments
             .iter()
