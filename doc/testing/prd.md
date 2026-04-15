@@ -157,7 +157,7 @@
 | PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056 | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证 | 发布链路可信性与可复现性 |
 | PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056 | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比 | 长期质量治理与发布风险控制 |
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
-| PRD-TESTING-005 | TASK-TESTING-037/038/039/040/066 | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
+| PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
