@@ -7,6 +7,7 @@
 
 ## 设计目标
 - 把“偶尔好玩”收成“10 分钟内稳定想继续玩”的产品地板。
+- 把正式 verdict 拆成两层：先用 `10-minute trust gate` 证明“值得继续”，再用 `first capability gate` 证明“首个持续能力已成立”。
 - 用最少的新范围改动，优先解决可信度、目标承接和奖励节奏。
 - 让跨角色任务按明确先后顺序推进，避免 viewer/runtime/QA 各自优化却无法叠成玩家体验。
 
@@ -27,7 +28,8 @@
   - 负责 `play/step/select` 的地板语义。
   - 负责工业状态、阻塞、恢复、分支建议的 canonical 可解释性。
 - `qa_engineer`
-  - 负责 active-LLM 10 分钟样本与 `software_safe` floor 的统一 verdict。
+  - 负责 active-LLM 10 分钟 trust 样本与 `software_safe` floor 的统一 verdict。
+  - 负责把 capability follow-up verdict 与 trust verdict 分开归档。
 - `agent_engineer`
   - 只在反馈语义需要把“Agent 回执”改成“玩家指挥结果”时介入，不扩展 AI 新玩法范围。
 
@@ -36,7 +38,7 @@
 2. `TASK-GAME-062`: 修首连、控制 floor、software_safe 最弱入口。
 3. `TASK-GAME-064`: 在地板趋稳后收首屏噪音与主目标表达。
 4. `TASK-GAME-063`: 把 `PostOnboarding` 后的工业中循环包加厚。
-5. `TASK-GAME-065`: 用 active-LLM 10 分钟 gate 做继续/暂停裁决。
+5. `TASK-GAME-065`: 用 active-LLM 10 分钟 trust gate 做继续/暂停裁决，并把 capability gate 作为后续独立复验。
 
 ## 验证口径
 - required:

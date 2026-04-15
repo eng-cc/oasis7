@@ -1,0 +1,25 @@
+task_uid: task_e979c6c996c74c52b31aea4336f614ff
+title: "Split gameplay trust gate from capability gate"
+owner_role: producer_system_designer
+worktree_hint: oasis7-game-gameplay-gate-split
+execution_log_path: .pm/tasks/task_e979c6c996c74c52b31aea4336f614ff.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+doc_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+  - doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md
+acceptance:
+  - "PRD-GAME-012 explicitly separates a 10-minute trust gate from a later capability gate."
+  - "Top-level gameplay docs and game project status use the same gate vocabulary and no longer conflate trust with first sustained capability."
+  - "Project tracking and execution log record the new producer decision boundary and verification expectations."
+handoff_to: []
+updated_at: 2026-04-15T22:02:44+08:00
+last_started_at: 2026-04-15T21:53:58+08:00
+last_closed_at: 2026-04-15T22:02:44+08:00

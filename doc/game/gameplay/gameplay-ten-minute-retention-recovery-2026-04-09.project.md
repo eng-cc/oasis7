@@ -19,18 +19,18 @@
 | --- | --- | --- |
 | `TASK-GAME-061` | `producer_system_designer` | Freeze gameplay 10-minute retention recovery scope and owner lanes |
 | `TASK-GAME-062` | `viewer_engineer` | Stabilize first-session control floor across headed Web/UI and software_safe |
-| `TASK-GAME-063` | `runtime_engineer` | Ship the first 10-minute industrial midloop package after PostOnboarding |
+| `TASK-GAME-063` | `runtime_engineer` | Ship the first capability package after PostOnboarding |
 | `TASK-GAME-064` | `viewer_engineer` | Reduce first-screen noise and surface player-facing consequences/rewards |
-| `TASK-GAME-065` | `qa_engineer` | Establish active-LLM 10-minute retention gate and producer continue/hold verdict |
+| `TASK-GAME-065` | `qa_engineer` | Establish active-LLM 10-minute trust gate and keep capability verdict separate |
 
 ## Handoff Matrix
 
 | 根任务 | 发起角色 | 接收角色 | 输入 | 期望输出 |
 | --- | --- | --- | --- | --- |
 | `TASK-GAME-062` | `producer_system_designer` | `viewer_engineer` | 最近 playability 卡片、`software_safe` 阻断事实、首连/控制 floor 指标 | 正式入口稳定性收口与回归证据 |
-| `TASK-GAME-063` | `producer_system_designer` | `runtime_engineer` | 工业引导卡组、`PostOnboarding` 阶段口径、M4 工业链目标 | 10 分钟中循环 canonical 状态、事件与恢复逻辑 |
+| `TASK-GAME-063` | `producer_system_designer` | `runtime_engineer` | 工业引导卡组、`PostOnboarding` 阶段口径、M4 工业链目标 | 首个持续能力 canonical 状态、事件与恢复逻辑 |
 | `TASK-GAME-064` | `producer_system_designer` | `viewer_engineer` | 首屏主目标优先级、噪音样本、当前奖励反馈缺口 | 主界面信息层级与反馈可见化收口 |
-| `TASK-GAME-065` | `producer_system_designer` | `qa_engineer` | active-LLM 正式 lane 定义、debug lane 边界、阶段当前真值 | `continue_playing` / `hold` gate 与 producer 裁决输入 |
+| `TASK-GAME-065` | `producer_system_designer` | `qa_engineer` | active-LLM 正式 lane 定义、debug lane 边界、阶段当前真值 | `10-minute trust gate` 的 `continue_playing / hold` 裁决，以及与 capability verdict 分开的归档 |
 
 ## 验收命令（草案）
 
@@ -43,20 +43,20 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::mapping -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer -- --nocapture`
   - headed Web/UI + `software_safe` 各 1 轮 `agent-browser` 主路径复跑并留证
-- `TASK-GAME-063` / 工业中循环包
+- `TASK-GAME-063` / 首个持续能力门
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::economy:: -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer ui_text_industrial -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer feedback_tone_for_event_maps_warning_positive_and_info -- --nocapture`
   - `./scripts/run-game-test.sh`
-  - 按 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 复跑卡片 A/B/C
+  - 按 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 复跑卡片 A/B/C，并补 `30` 分钟或 `1~3` 次会话 capability follow-up 样本
 - `TASK-GAME-064` / 首屏降噪与后果可见化
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer push_feedback_toast_uses_runtime_industry_friendly_detail -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer sync_agent_chatter_bubbles_formats_runtime_industry_feedback -- --nocapture`
   - headed Web/UI 首屏截图对比与 Mission HUD/summary/toast/chatter 人工复核
-- `TASK-GAME-065` / 10 分钟 retention gate
-  - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟样本
+- `TASK-GAME-065` / 10 分钟 trust gate
+  - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
   - `software_safe` floor：至少 1 轮正式入口复核
-  - 回写 `doc/playability_test_result/card_*.md` 与 QA 汇总结论
+  - 回写 `doc/playability_test_result/card_*.md` 与 QA trust verdict，并单列 capability verdict 现状
 
 ## Done Definition
 
@@ -69,7 +69,7 @@
   - [x] `software_safe` 不再把明确 `blocked` / `timeout_no_progress` 压扁成伪 timeout，前台会回填正确控制反馈
   - [x] viewer-side regression、execution log 与相关证据已回写；fresh active-LLM formal re-certification 已交由 `TASK-GAME-065` 复核并形成当前 `hold` 裁决
 - `TASK-GAME-063`
-  - [x] 10 分钟工业中循环包可在同一会话完成
+  - [x] 首个持续能力链已有独立 canonical 包，不再被要求在单个 10 分钟 trust 样本内闭环
   - [x] 建厂/首产出/停机恢复/扩产取舍均有 canonical 状态与前台反馈锚点
 - `TASK-GAME-064`
   - [x] 首屏主目标不再被无关历史噪音/operator 语义抢焦点
@@ -77,7 +77,8 @@
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
   - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
-  - [x] 已完成 `3` 条 active-LLM 10 分钟正式样本与最终 `hold` 裁决回写
+  - [x] 已完成 `3` 条 active-LLM 10 分钟正式样本与最终 `10-minute trust gate = hold` 裁决回写
+  - [x] 已把“首个持续能力尚未闭环”从 trust verdict 中拆出，改为单独的 capability follow-up 结论
 
 ## 依赖
 
@@ -95,7 +96,9 @@
 - 更新日期: 2026-04-14
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: 由 `producer_system_designer` 按 `TASK-GAME-065` 的正式阻断签名拆出下一轮 runtime/viewer 修复切片，再重新申请 formal retention 复验。
+- 下一任务: 由 `producer_system_designer` 先按 `TASK-GAME-065` 的 `10-minute trust gate` 阻断签名继续拆 runtime/viewer 修复切片，再在 trust gate 稳定后单独重开 capability follow-up 复验。
+
+口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not yet proven`。
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
@@ -106,6 +109,6 @@
   - viewer follow-up `task_a0173315eb4d44c9b83073dd55442f48` 已补齐上一条修复里仍残留的 advanced industrial recipe surface drift：`player_gameplay` 现在会显式暴露 runtime 已支持的 `scale_out` / `governance` 配方动作，active-LLM recipe truth 也扩到 runtime 已开放的 smelter / assembler 高阶配方，shadow kernel 决策面不再漏掉 `recipe.smelter.alloy_plate`、`recipe.assembler.gear`、`recipe.assembler.sensor_pack`、`recipe.assembler.module_rack`、`recipe.assembler.factory_core`。这条 follow-up 的目标是避免 canonical gameplay、LLM 提示与 shadow decision path 继续各说各话，把 runtime 明明可执行的工业能力链留在“支持但永远不会被选中”的灰区。
   - runtime follow-up `task_ed2dd76639264739a61a25c0d89c3352` 已收口当前 retention slice 的另一组 canonical truth regressions：`player_gameplay` 现在会优先跟随当前主线能力链，而不是被字典序更靠前的次级 blocked 工厂劫持；`industry_progress.stage` 也会在回收最后一座已完成产出的工厂后按现存工厂完成度重新回退，不再让历史累计完成数把失效能力误报成 `choose_first_expansion_tradeoff` 或 `choose_midloop_path`。该切片只修复真值误判，不替代新的 active-LLM formal retention 样本。
   - runtime follow-up `task_167a5da426df4c42bf0aa4de26ec1b61` 已收口另一组确定性 progression regressions：`runtime_live` 现在只会在真实玩家控制已确认产生前向增量后，才把后续 `blocked` / `completed_no_progress` 归入 `post_onboarding.recover_capability`，不再把 fresh session 的 bootstrap tick 或背景时间推进误判成正式阶段推进；同时 gameplay industrial action 的建厂门槛已改成与 runtime `BuildFactory` 真值一致，按 `agent ledger -> world fallback` 判断 smelter/assembler build 是否可执行，避免前台 action 卡片仅因忽略 agent ledger 而把可执行扩产链误报为材料不足。
-  - `TASK-GAME-065` 的最新正式结论是：active-LLM `software_safe` formal floor 已恢复，不再以 `Responses API` 10 秒超时作为当前阻断项；但 `3` 条 10 分钟正式样本均未支持 `continue_playing`，其中 `1` 条长期停在 `post_onboarding.establish_first_capability / 20%`，另 `2` 条出现 `post_onboarding -> first_session_loop` 回退并冻结世界时间，因此当前 producer verdict 为 `hold`。
-  - 最新 `240s` active-LLM 对照复跑没有再复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`；这说明“冻结放大器”与“长期不推进”是两条相关但独立的 blocker，后者仍是当前 formal retention gate 的主阻断。
-  - 即便去掉上述快照误回退、缓解瞬时失败放大器并对齐 industrial schema，本专题仍未重新拿到 fresh active-LLM formal 复验证据，也没有证明所有历史 `logicalTime/eventSeq` 冻结都已消失；在新的正式样本确认 `20%` 长停消失前，formal retention gate 仍不得回收 `hold`。
+  - `TASK-GAME-065` 的最新正式结论是：active-LLM `software_safe` formal floor 已恢复，不再以 `Responses API` 10 秒超时作为当前阻断项；但当前 `10-minute trust gate` 仍为 `hold`，因为 `3` 条正式样本里只有 `1` 条保持连续 progression，另 `2` 条出现 `post_onboarding -> first_session_loop` 回退并冻结世界时间。
+  - 同一批 trust 样本也尚未证明 `first capability gate`，但 capability 未闭环已不再作为单独拉低 trust verdict 的唯一理由；它改由后续 `30` 分钟或 `1~3` 次会话样本单列追踪。
+  - 最新 `240s` active-LLM 对照复跑没有再复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`；这说明“冻结放大器”与“长期不推进”是两条相关但独立的 blocker，前者继续阻断 trust gate，后者继续阻断 capability gate。

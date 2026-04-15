@@ -62,6 +62,8 @@
 - [x] `viewer_engineer` / `agent_engineer`：已收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
 - [x] `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；当前 producer verdict 为 `hold`，因为 `3` 条 active-LLM 10 分钟正式样本均未形成“首个可持续能力”闭环，且其中 `2` 条样本出现阶段回退并冻结世界时间。
 
+口径更新（2026-04-15）: T8 当前已将 producer verdict 拆成两层。`10-minute trust gate` 只判断“是否已经值得继续玩”，`first capability gate` 再判断“首个持续能力是否已闭环”。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not yet proven`。
+
 ## 依赖
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
