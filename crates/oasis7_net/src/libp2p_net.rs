@@ -491,6 +491,7 @@ impl Libp2pNetwork {
                                                             &mut known_transport_paths,
                                                             &mut last_dialed_transport_paths,
                                                             &active_transport_paths,
+                                                            peers.as_slice(),
                                                             &mut failed_transport_path_labels,
                                                             &mut pending_discovery_peer_records,
                                                             peer_record_template.as_ref(),
@@ -1200,7 +1201,6 @@ impl Libp2pNetwork {
                 }
             });
         });
-
         let mut bootstrap_tx = command_tx.clone();
         for addr in bootstrap_peers {
             // Best-effort: if the background task exits, dial requests can be dropped.
@@ -1223,7 +1223,6 @@ impl Libp2pNetwork {
         }
     }
 }
-
 impl Drop for Libp2pNetwork {
     fn drop(&mut self) {
         let _ = self.enqueue_command(Command::Shutdown);
