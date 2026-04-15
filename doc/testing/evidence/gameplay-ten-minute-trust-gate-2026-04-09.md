@@ -1,4 +1,4 @@
-# Gameplay 10-minute trust gate verdict (2026-04-09)
+# Gameplay trust gate verdict (2026-04-09 baseline, revalidated 2026-04-15)
 
 审计轮次: 2
 
@@ -8,7 +8,7 @@
 - 责任角色: `qa_engineer`
 - 裁决角色: `producer_system_designer`
 - 当前结论: `hold`
-- 目标: 在当前 10 分钟留存修复切片下，区分 active-LLM formal lane 与 debug/probe lane，重新核对 `software_safe` floor，并输出 producer 可直接采纳的 `10-minute trust gate` 结论，同时把 `first capability gate` 作为独立 follow-up 结论记录。
+- 目标: 在当前 10 分钟留存修复切片下，把 active-LLM formal lane 的 `trust gate` 与后续 `first capability gate` 分开裁决；只有在 `software_safe` floor 通过后，才允许继续累计更长正式样本。
 
 ## Lane boundary
 - active-LLM formal lane:
@@ -38,6 +38,45 @@
     - `feedbackStage=completed_advanced`
   - gate implication:
     - formal lane 首个 `step` 已恢复 first-step progress，说明当前真实 provider + repo-root config 组合下，`software_safe` 最小控制 floor 已从 runtime timeout blocker 恢复。
+
+## Trust-gate revalidation (2026-04-15)
+- revalidation task:
+  - `.pm/tasks/task_1dbcc087ae374721aa0928de3cd240e2.yaml`
+- config source:
+  - 当前 worktree 复用了源仓 `config.toml` 的 real-provider 配置副本；该文件仅用于本轮 local real-provider 复跑，不纳入提交。
+- shared active-LLM stack:
+  - startup run id: `20260415-223459`
+  - game url: `http://127.0.0.1:4673/?ws=ws://127.0.0.1:5511&test_api=1`
+  - stack logs: `output/playwright/playability/startup-20260415-223459/`
+  - ready proof:
+    - chain runtime `ok=true`
+    - viewer/game stack emitted ready URL and stayed alive for follow-up probes
+- floor probe A:
+  - run id: `20260415-224143`
+  - artifact root: `output/playwright/viewer-software-safe-step/20260415-224143/`
+  - direct facts:
+    - `initial_state.connectionStatus=connected`
+    - `initial_state.renderMode=software_safe`
+    - `initial_state.goalId=first_session_loop.create_first_world_feedback`
+    - `step_request.accepted=true`
+    - `step_request.stage=queued`
+    - `step_request.deltaLogicalTime=0`
+    - `step_request.deltaEventSeq=0`
+    - 脚本在默认 `15000ms` 窗口内未拿到 terminal feedback，也未生成 `after_step_state.json` / `final_state.json`
+- floor probe B:
+  - run id: `20260415-224312`
+  - artifact root: `output/playwright/viewer-software-safe-step/20260415-224312/`
+  - direct facts:
+    - 与 probe A 相同的 shared URL / same-stack 条件下再次复现
+    - `step_request.accepted=true`
+    - `step_request.stage=queued`
+    - `initial_state.logicalTime=1`
+    - `initial_state.eventSeq=0`
+    - 即使把 step wait window 放宽到 `30000ms`，依然没有 terminal feedback，也没有任何世界时间推进证据
+- revalidation verdict:
+  - 当前 rerun 不是 `Responses API` 10 秒 timeout 旧签名，也不是浏览器/stack 冷启动失败。
+  - 当前 blocker 已回退到更早的 trust floor：active-LLM formal lane 的首个 `step` 可以被接受，但会长期停留在 `queued`，且不给出 `lastControlFeedback` 终态，也不推进 `logicalTime/eventSeq`。
+  - 按当前 gate 规则，本轮不继续跑 `./scripts/collect-active-llm-retention-sample.sh`，因此 `first capability gate` 结论保持 `not_run`。
 
 ## Formal 10-minute evidence
 
@@ -75,24 +114,30 @@
   - qualified 10-minute trust samples: `3 / 3`
   - supplemental 300s samples: `3`
   - excluded samples: `2`
-- `software_safe` floor verdict: `pass`
-- `10-minute trust gate` verdict: `hold`
-- `first capability gate` verdict: `not yet proven`
-- QA gate input: `trust_hold + capability_unproven`
+- `software_safe` floor verdict:
+  - historical baseline (2026-04-09 / 2026-04-10): `pass`
+  - current rerun (2026-04-15): `hold`
+- active-LLM trust gate verdict: `hold`
+- first capability gate verdict: `not_run`
+- QA gate input: `hold`
 - exact blocker signature:
-  - 样本 A 证明当前阻断不再是 provider timeout 或首步 floor 崩溃；但它仍只证明 trust path 有前进，不足以单独证明 `first capability gate`
-  - 样本 B/C 进一步证明存在更强 trust blocker：同一正式 lane 会在进入 `post_onboarding / 20%` 后回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime/eventSeq` 冻结不再增长
+  - 2026-04-15 current blocker：在 shared active-LLM stack 上，`step_request.accepted=true` 但持续卡在 `stage=queued`，`deltaLogicalTime=0`、`deltaEventSeq=0`，且在 `15000ms` 与 `30000ms` 两档窗口内都拿不到 terminal feedback
+  - 样本 A 证明当前阻断不再是 provider timeout 或首步 floor 崩溃，而是 formal lane 在 `post_onboarding.establish_first_capability` 长时间卡在 `20%`
+  - 样本 B/C 进一步证明存在更强阻断：同一正式 lane 会在进入 `post_onboarding / 20%` 后回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime/eventSeq` 冻结不再增长
 
 ## Producer verdict
 - producer decision: `hold`
 - rationale:
-  - `PRD-GAME-012` 的当前 formal lane 不再受 `Responses API` 10 秒 timeout 控制 floor 阻断，但这不等于 `10-minute trust gate` 可放行。
-  - 三条正式 10 分钟样本里，只有一条保持连续 progression；另外两条样本已经出现阶段语义回退 + 逻辑时间冻结，因此 trust gate 仍不能给 `continue_playing`。
-  - “首个可持续能力尚未闭环”继续成立，但该事实改为独立 capability gate 结论，不再单独充当 trust gate 的唯一失败理由。
+  - 历史 10 分钟样本仍然证明 formal lane 的 progression/retention 尚未闭环。
+  - 但 2026-04-15 这轮复验甚至没有走到累计 10 分钟正式样本的前提，因为 trust floor 已重新卡在 `step accepted -> queued forever`。
+  - 在 trust gate 未恢复前，继续讨论 capability gate 或 `continue_playing` 都会污染正式结论。
 
 ## Required follow-up before re-open
-- `producer_system_designer` 需要把当前 gate 从“已恢复到 watch”更新为“floor pass，但 `10-minute trust gate = hold`”，并把 `first capability gate` 单列为未证明状态，停止对外延伸 `continue_playing` 口径。
-- `runtime_engineer` / `viewer_engineer` 需要先解释并修复这两个签名中的至少一个，再重新申请正式复验：
-  - `post_onboarding -> first_session_loop` 的阶段语义回退伴随 `logicalTime/eventSeq` 冻结（trust gate blocker）
-  - `post_onboarding.establish_first_capability` 长时间停在 `20%`（capability gate blocker）
+- `producer_system_designer` 需要把当前对外口径更新为“active-LLM trust gate 仍 hold；capability gate 未进入”，停止任何 `continue_playing` 或“已恢复到 capability 检查”的延伸表述。
+- `runtime_engineer` / `viewer_engineer` 需要先解释并修复当前最前置 blocker，再重新申请正式 trust 复验：
+  - shared active-LLM stack 下，`step_request.accepted=true` 但长期停留 `queued`，不给 terminal `lastControlFeedback`
+  - 同一时间窗口内 `logicalTime/eventSeq` 不前进，说明 first-step world delta 没有完成闭环
+- 只有在 trust floor 再次恢复后，才允许重新检查历史 progression blocker：
+  - `post_onboarding.establish_first_capability` 长时间停在 `20%`
+  - `post_onboarding -> first_session_loop` 的阶段语义回退伴随 `logicalTime/eventSeq` 冻结
 - 继续保留 debug/probe lane 的 `--no-llm` 工业与 UI 语义回归，但这些样本不得再作为 formal retention 结论。
