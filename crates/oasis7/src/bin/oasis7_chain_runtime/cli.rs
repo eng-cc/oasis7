@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
+use std::fmt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use oasis7::runtime::RewardAssetConfig;
 use oasis7_node::{
@@ -30,12 +32,46 @@ pub(super) const DEFAULT_REWARD_RUNTIME_STORAGE_METRICS_FILE: &str =
     "reward-runtime-storage-metrics.json";
 pub(super) const DEFAULT_REWARD_RUNTIME_RESERVE_UNITS: i64 = 100_000;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TrafficProfile {
+    Default,
+    TriadLowTraffic,
+}
+
+impl TrafficProfile {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::TriadLowTraffic => "triad_low_traffic",
+        }
+    }
+}
+
+impl fmt::Display for TrafficProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for TrafficProfile {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "default" => Ok(Self::Default),
+            "triad_low_traffic" => Ok(Self::TriadLowTraffic),
+            _ => Err("traffic profile must be one of: default, triad_low_traffic".to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct CliOptions {
     pub node_id: String,
     pub world_id: String,
     pub status_bind: String,
     pub storage_profile: StorageProfile,
+    pub traffic_profile: TrafficProfile,
     pub node_role: NodeRole,
     pub p2p_user_mode: NodeUserMode,
     pub p2p_accept_public_entry: bool,
@@ -90,6 +126,7 @@ impl Default for CliOptions {
             world_id: DEFAULT_WORLD_ID.to_string(),
             status_bind: DEFAULT_STATUS_BIND.to_string(),
             storage_profile: StorageProfile::DevLocal,
+            traffic_profile: TrafficProfile::Default,
             node_role: NodeRole::Sequencer,
             p2p_user_mode: NodeUserMode::AutoJoin,
             p2p_accept_public_entry: false,
@@ -153,6 +190,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--storage-profile" => {
                 options.storage_profile = parse_required_value(&mut iter, "--storage-profile")?
                     .parse::<StorageProfile>()?;
+            }
+            "--traffic-profile" => {
+                options.traffic_profile = parse_required_value(&mut iter, "--traffic-profile")?
+                    .parse::<TrafficProfile>()?;
             }
             "--node-role" => {
                 let raw = parse_required_value(&mut iter, "--node-role")?;
@@ -535,6 +576,7 @@ Options:\n\
   --node-id <id>                    node identifier (default: {DEFAULT_NODE_ID})\n\
   --world-id <id>                   world identifier (default: {DEFAULT_WORLD_ID})\n\
   --storage-profile <name>          dev_local|release_default|soak_forensics (default: dev_local)\n\
+  --traffic-profile <name>          default|triad_low_traffic (default: default)\n\
   --status-bind <host:port>         status HTTP bind (default: {DEFAULT_STATUS_BIND})\n\
   --node-role <role>                sequencer|storage|observer (default: sequencer)\n\
   --p2p-user-mode <mode>            auto_join|private_safe|public_entry (default: auto_join)\n\

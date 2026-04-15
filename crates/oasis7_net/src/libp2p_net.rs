@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 mod api;
+mod config;
 mod connection_lifecycle;
 mod discovery;
 mod error_mapping;
@@ -31,6 +32,7 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::{error::WorldError, util::to_canonical_cbor};
+pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
     clear_disconnected_peer_state, failover_after_disconnect, record_established_connection,
     refresh_active_path_after_connection_close, refresh_peer_manager_views,
@@ -86,54 +88,9 @@ use runtime_loop::{
     filter_request_peers_by_health, filter_request_peers_by_lane,
 };
 
-const DEFAULT_COMMAND_BUFFER_CAPACITY: usize = 2048;
-const DEFAULT_MAX_PUBLISHED_MESSAGES: usize = 4096;
-const DEFAULT_MAX_ERROR_MESSAGES: usize = 4096;
-const DEFAULT_MAX_LISTENING_ADDRS: usize = 128;
-const DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS: i64 = 1_000;
-const DEFAULT_DISCOVERY_QUERY_INTERVAL_MS: i64 = 15_000;
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
-
-#[derive(Debug, Clone)]
-pub struct Libp2pNetworkConfig {
-    pub keypair: Option<Keypair>,
-    pub peer_record: Option<PeerRecord>,
-    pub enable_rendezvous: bool,
-    pub allow_loopback_external_addrs_for_testing: bool,
-    pub listen_addrs: Vec<Multiaddr>,
-    pub bootstrap_peers: Vec<Multiaddr>,
-    pub bootstrap_redial_interval_ms: i64,
-    pub republish_interval_ms: i64,
-    pub discovery_query_interval_ms: i64,
-    pub command_buffer_capacity: usize,
-    pub max_published_messages: usize,
-    pub max_error_messages: usize,
-    pub max_listening_addrs: usize,
-    pub peer_manager_policy: PeerManagerPolicy,
-}
-
-impl Default for Libp2pNetworkConfig {
-    fn default() -> Self {
-        Self {
-            keypair: None,
-            peer_record: None,
-            enable_rendezvous: false,
-            allow_loopback_external_addrs_for_testing: false,
-            listen_addrs: Vec::new(),
-            bootstrap_peers: Vec::new(),
-            bootstrap_redial_interval_ms: DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS,
-            republish_interval_ms: 5 * 60 * 1000,
-            discovery_query_interval_ms: DEFAULT_DISCOVERY_QUERY_INTERVAL_MS,
-            command_buffer_capacity: DEFAULT_COMMAND_BUFFER_CAPACITY,
-            max_published_messages: DEFAULT_MAX_PUBLISHED_MESSAGES,
-            max_error_messages: DEFAULT_MAX_ERROR_MESSAGES,
-            max_listening_addrs: DEFAULT_MAX_LISTENING_ADDRS,
-            peer_manager_policy: PeerManagerPolicy::default(),
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct Libp2pNetwork {
@@ -260,7 +217,11 @@ impl Libp2pNetwork {
                 .unwrap_or(false);
 
         std::thread::spawn(move || {
-            let mut swarm = build_swarm(&keypair_clone, enable_rendezvous);
+            let mut swarm = build_swarm(
+                &keypair_clone,
+                enable_rendezvous,
+                config_clone.enable_autonat,
+            );
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();

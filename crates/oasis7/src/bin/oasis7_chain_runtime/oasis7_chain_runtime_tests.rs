@@ -1,6 +1,8 @@
 use super::cli::parse_validator_signer_public_key_spec;
+use super::cli::TrafficProfile;
 use super::{
-    build_chain_balances_payload_from_world, build_chain_status_payload, build_default_peer_record,
+    apply_traffic_profile_to_node_config, build_chain_balances_payload_from_world,
+    build_chain_status_payload, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
     build_node_replication_config, build_replication_remote_writer_allowlist,
     build_validator_signer_public_keys, derive_node_consensus_signer_keypair,
@@ -29,6 +31,7 @@ fn parse_options_defaults() {
     assert_eq!(options.node_id, DEFAULT_NODE_ID);
     assert_eq!(options.status_bind, DEFAULT_STATUS_BIND);
     assert_eq!(options.storage_profile, StorageProfile::DevLocal);
+    assert_eq!(options.traffic_profile, TrafficProfile::Default);
     assert_eq!(options.p2p_user_mode, NodeUserMode::AutoJoin);
     assert!(!options.p2p_accept_public_entry);
     assert_eq!(options.p2p_detected_reachability, None);
@@ -67,6 +70,8 @@ fn parse_options_reads_custom_values() {
             "live-foo",
             "--storage-profile",
             "soak_forensics",
+            "--traffic-profile",
+            "triad_low_traffic",
             "--status-bind",
             "127.0.0.1:6221",
             "--node-role",
@@ -106,6 +111,7 @@ fn parse_options_reads_custom_values() {
     assert_eq!(options.node_id, "node-a");
     assert_eq!(options.world_id, "live-foo");
     assert_eq!(options.storage_profile, StorageProfile::SoakForensics);
+    assert_eq!(options.traffic_profile, TrafficProfile::TriadLowTraffic);
     assert_eq!(options.status_bind, "127.0.0.1:6221");
     assert_eq!(options.node_role.as_str(), "storage");
     assert_eq!(options.p2p_deployment_mode, PeerDeploymentMode::Private);
@@ -263,6 +269,13 @@ fn parse_options_rejects_unknown_storage_profile() {
 }
 
 #[test]
+fn parse_options_rejects_unknown_traffic_profile() {
+    let err = parse_options(["--traffic-profile", "burst_mode"].into_iter())
+        .expect_err("invalid traffic profile should fail");
+    assert!(err.contains("triad_low_traffic"));
+}
+
+#[test]
 fn parse_validator_spec_rejects_zero_stake() {
     let err = parse_validator_spec("node-a:0").expect_err("should reject");
     assert!(err.contains("positive integer"));
@@ -318,7 +331,11 @@ fn default_replication_network_config_uses_loopback_ephemeral_listen() {
         DEFAULT_REPLICATION_NETWORK_LISTEN
     );
     assert!(config.bootstrap_peers.is_empty());
+    assert!(config.enable_autonat);
     assert!(!config.allow_local_handler_fallback_when_no_peers);
+    assert_eq!(config.bootstrap_redial_interval_ms, 1_000);
+    assert_eq!(config.discovery_query_interval_ms, 15_000);
+    assert_eq!(config.republish_interval_ms, 5 * 60 * 1000);
     assert!(config.keypair.is_some());
     let peer_record = config.peer_record.expect("peer record");
     assert_eq!(peer_record.node_id, DEFAULT_NODE_ID);
@@ -378,6 +395,60 @@ fn default_replication_network_config_uses_explicit_topology_addrs() {
             "/ip4/127.0.0.1/tcp/19743".to_string(),
         ]
     );
+}
+
+#[test]
+fn triad_low_traffic_replication_network_config_slows_control_plane_churn() {
+    let signing_key = SigningKey::from_bytes(&[12_u8; 32]);
+    let keypair = node_keypair_config::NodeKeypairConfig {
+        private_key_hex: hex::encode(signing_key.to_bytes()),
+        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+    };
+    let options = parse_options(
+        [
+            "--traffic-profile",
+            "triad_low_traffic",
+            "--replication-network-peer",
+            "/ip4/39.104.204.172/tcp/5611",
+            "--replication-network-peer",
+            "/ip4/39.104.205.67/tcp/5612",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+    let config = build_default_replication_network_config(&options, &keypair)
+        .expect("low-traffic replication network config should build");
+
+    assert_eq!(config.bootstrap_redial_interval_ms, 10_000);
+    assert_eq!(config.discovery_query_interval_ms, 180_000);
+    assert_eq!(config.republish_interval_ms, 30 * 60 * 1000);
+    assert!(!config.enable_autonat);
+}
+
+#[test]
+fn triad_low_traffic_node_profile_reduces_gossip_and_feedback_budgets() {
+    let options = parse_options(
+        [
+            "--node-role",
+            "storage",
+            "--traffic-profile",
+            "triad_low_traffic",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+    let base = NodeConfig::new("node-a", "world-a", NodeRole::Storage)
+        .expect("base node config should build");
+    let config = apply_traffic_profile_to_node_config(base, &options)
+        .expect("profile application should succeed");
+
+    assert_eq!(config.max_dynamic_gossip_peers, 8);
+    assert_eq!(config.dynamic_gossip_peer_ttl_ms, 60 * 60 * 1000);
+    let feedback = config
+        .feedback_p2p
+        .expect("storage role should keep feedback p2p");
+    assert_eq!(feedback.max_incoming_announces_per_tick, 8);
+    assert_eq!(feedback.max_outgoing_announces_per_tick, 8);
 }
 
 #[test]
@@ -1077,7 +1148,13 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
 
 #[test]
 fn feedback_p2p_is_disabled_for_observer_role() {
-    assert!(super::feedback_p2p_config_for_role(NodeRole::Observer).is_none());
-    assert!(super::feedback_p2p_config_for_role(NodeRole::Sequencer).is_some());
-    assert!(super::feedback_p2p_config_for_role(NodeRole::Storage).is_some());
+    assert!(
+        super::feedback_p2p_config_for_role(NodeRole::Observer, TrafficProfile::Default).is_none()
+    );
+    assert!(
+        super::feedback_p2p_config_for_role(NodeRole::Sequencer, TrafficProfile::Default).is_some()
+    );
+    assert!(
+        super::feedback_p2p_config_for_role(NodeRole::Storage, TrafficProfile::Default).is_some()
+    );
 }

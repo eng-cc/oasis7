@@ -2,7 +2,8 @@ use super::*;
 
 #[test]
 fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligible() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let peer_key = Keypair::generate_ed25519();
     let peer_id = PeerId::from(peer_key.public());
     let suspect_record = super::signed_discovery_peer_record(
@@ -58,7 +59,8 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
 
 #[test]
 fn process_discovered_peer_record_keeps_dht_only_suspect_peer_non_dialable() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let peer_key = Keypair::generate_ed25519();
     let peer_id = PeerId::from(peer_key.public());
     let suspect_record = super::signed_discovery_peer_record(

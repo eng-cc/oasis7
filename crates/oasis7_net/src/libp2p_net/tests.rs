@@ -80,7 +80,7 @@ fn dht_get_providers_collects_results() {
 #[test]
 fn build_swarm_supports_more_than_default_max_provider_records() {
     let keypair = Keypair::generate_ed25519();
-    let mut swarm = super::swarm_behaviour::build_swarm(&keypair, false);
+    let mut swarm = super::swarm_behaviour::build_swarm(&keypair, false, true);
 
     for idx in 0..1100 {
         let key = RecordKey::new(&format!("provider-key-{idx}"));
@@ -640,7 +640,7 @@ fn refresh_peer_manager_healths_keeps_blocked_unverified_peer_out_of_admitted_se
 
 #[test]
 fn process_discovered_peer_record_dials_candidate_peer() {
-    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false);
+    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
     let peer_key = Keypair::generate_ed25519();
     let record = signed_discovery_peer_record(
         &peer_key,

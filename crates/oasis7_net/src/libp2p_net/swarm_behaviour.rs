@@ -32,7 +32,7 @@ pub(super) struct Behaviour {
     pub(super) gossipsub: gossipsub::Behaviour,
     pub(super) request_response: request_response::cbor::Behaviour<NetworkRequest, NetworkResponse>,
     pub(super) kademlia: kad::Behaviour<MemoryStore>,
-    pub(super) autonat: autonat::Behaviour,
+    pub(super) autonat: Toggle<autonat::Behaviour>,
     pub(super) relay_client: relay::client::Behaviour,
     pub(super) dcutr: dcutr::Behaviour,
     pub(super) rendezvous_client: Toggle<rendezvous_client::Behaviour>,
@@ -99,7 +99,11 @@ impl From<rendezvous_server::Event> for BehaviourEvent {
     }
 }
 
-pub(super) fn build_swarm(keypair: &Keypair, enable_rendezvous: bool) -> Swarm<Behaviour> {
+pub(super) fn build_swarm(
+    keypair: &Keypair,
+    enable_rendezvous: bool,
+    enable_autonat: bool,
+) -> Swarm<Behaviour> {
     let swarm_config = libp2p::swarm::Config::with_async_std_executor()
         .with_idle_connection_timeout(std::time::Duration::from_secs(30));
 
@@ -127,7 +131,9 @@ pub(super) fn build_swarm(keypair: &Keypair, enable_rendezvous: bool) -> Swarm<B
         gossipsub,
         request_response,
         kademlia,
-        autonat: autonat::Behaviour::new(peer_id, Default::default()),
+        autonat: Toggle::from(
+            enable_autonat.then(|| autonat::Behaviour::new(peer_id, Default::default())),
+        ),
         relay_client,
         dcutr: dcutr::Behaviour::new(peer_id),
         rendezvous_client: Toggle::from(
