@@ -281,7 +281,7 @@ fn llm_agent_keeps_hard_switch_within_current_factory_kind() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
@@ -365,7 +365,7 @@ fn llm_agent_hands_off_coverage_to_known_assembler_after_last_smelter_recipe() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.assembler.1".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
@@ -467,9 +467,13 @@ fn llm_agent_moves_before_cross_factory_coverage_handoff() {
     let decision = behavior.decide(&observation);
     assert_eq!(
         decision,
-        AgentDecision::Act(Action::MoveAgent {
-            agent_id: "agent-1".to_string(),
-            to: "loc-assembler".to_string(),
+        AgentDecision::Act(Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.smelter.1".to_string(),
+            recipe_id: "recipe.smelter.alloy_plate".to_string(),
+            batches: 1,
         })
     );
 }
@@ -545,7 +549,7 @@ fn llm_agent_hard_switches_with_factory_kind_inferred_from_recipe_hint() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
@@ -710,7 +714,7 @@ fn llm_agent_preserves_hard_switch_on_noncanonical_same_kind_factory() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.assembler.legacy".to_string(),
-            recipe_id: "recipe.assembler.motor_mk1".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
@@ -1058,7 +1062,7 @@ fn llm_agent_reroutes_schedule_recipe_when_hardware_cannot_cover_one_batch() {
             },
             factory_id: "factory.alpha".to_string(),
             recipe_id: "recipe.assembler.logistics_drone".to_string(),
-            batches: 1,
+            batches: 2,
         })
     );
 

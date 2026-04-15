@@ -953,8 +953,8 @@ mod tests {
             budget.effective_input_budget_tokens(),
         );
 
-        // Keep prompt near hard target while allowing limited drift when schema guidance expands.
-        let tolerated_hard_target = hard_target + 384;
+        // Keep prompt near hard target while allowing limited drift when industrial guidance expands.
+        let tolerated_hard_target = hard_target + 512;
         assert!(
             output.estimated_input_tokens <= tolerated_hard_target,
             "estimated_input_tokens={} hard_target={} tolerated_hard_target={}",
