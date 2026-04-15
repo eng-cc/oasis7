@@ -91,10 +91,10 @@ pub(super) fn economy_dashboard_summary_with_zoom(
     lines.push(format!("- Margin Proxy(Recent): {margin_proxy}"));
 
     if zoom != IndustrySemanticZoomLevel::World {
-        let slice = graph.graph_for_zoom(zoom);
+        let (nodes, _) = graph.graph_slice_for_zoom(zoom);
         lines.push("".to_string());
         lines.push("Inventory Focus:".to_string());
-        for node in slice.nodes.into_iter().take(4) {
+        for node in nodes.iter().take(4) {
             lines.push(format!(
                 "- {}: stock(E/D)={}/{} throughput={} flags(b/c/a)={}/{}/{}",
                 node.id,

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::industry_graph_view_model::{IndustryGraphViewModel, IndustrySemanticZoomLevel};
 use oasis7::geometry::GeoPos;
 use oasis7::simulator::{
@@ -251,12 +253,15 @@ pub(super) fn agent_activity_summary(
 
     let mut agent_ids: Vec<_> = snapshot.model.agents.keys().cloned().collect();
     agent_ids.sort();
+    let latest_activities = collect_latest_agent_activities(events, agent_ids.len());
 
     for agent_id in agent_ids {
         if let Some(agent) = snapshot.model.agents.get(&agent_id) {
             let electricity = agent.resources.get(ResourceKind::Electricity);
-            let activity =
-                latest_agent_activity(&agent_id, events).unwrap_or_else(|| "idle".to_string());
+            let activity = latest_activities
+                .get(&agent_id)
+                .cloned()
+                .unwrap_or_else(|| "idle".to_string());
             lines.push(format!(
                 "{agent_id} @ {} | E={} | {}",
                 agent.location_id, electricity, activity
@@ -740,13 +745,150 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     normalized.chars().take(max_len).collect::<String>() + "..."
 }
 
-fn latest_agent_activity(agent_id: &str, events: &[WorldEvent]) -> Option<String> {
+fn collect_latest_agent_activities(
+    events: &[WorldEvent],
+    agent_count: usize,
+) -> BTreeMap<String, String> {
+    let mut latest = BTreeMap::new();
     for event in events.iter().rev() {
-        if let Some(activity) = event_activity_for_agent(event, agent_id) {
-            return Some(format!("t{} {}", event.time, activity));
+        collect_latest_agent_activities_from_event(event, &mut latest);
+        if latest.len() >= agent_count {
+            break;
         }
     }
-    None
+    latest
+}
+
+fn collect_latest_agent_activities_from_event(
+    event: &WorldEvent,
+    latest: &mut BTreeMap<String, String>,
+) {
+    match &event.kind {
+        WorldEventKind::AgentRegistered {
+            agent_id,
+            location_id,
+            ..
+        } => insert_latest_agent_activity(latest, agent_id, || {
+            format!("t{} register at {location_id}", event.time)
+        }),
+        WorldEventKind::AgentMoved {
+            agent_id,
+            to,
+            electricity_cost,
+            ..
+        } => insert_latest_agent_activity(latest, agent_id, || {
+            format!("t{} move -> {to} (cost {electricity_cost})", event.time)
+        }),
+        WorldEventKind::RadiationHarvested {
+            agent_id,
+            amount,
+            location_id,
+            ..
+        } => insert_latest_agent_activity(latest, agent_id, || {
+            format!("t{} harvest +{amount} at {location_id}", event.time)
+        }),
+        WorldEventKind::ResourceTransferred {
+            from,
+            to,
+            kind,
+            amount,
+        } => {
+            if let ResourceOwner::Agent { agent_id } = from {
+                let is_self =
+                    matches!(to, ResourceOwner::Agent { agent_id: to_id } if to_id == agent_id);
+                insert_latest_agent_activity(latest, agent_id, || {
+                    if is_self {
+                        format!("t{} transfer {:?} {} (self)", event.time, kind, amount)
+                    } else {
+                        format!("t{} transfer out {:?} {}", event.time, kind, amount)
+                    }
+                });
+            }
+            if let ResourceOwner::Agent { agent_id } = to {
+                let is_self = matches!(from, ResourceOwner::Agent { agent_id: from_id } if from_id == agent_id);
+                insert_latest_agent_activity(latest, agent_id, || {
+                    if is_self {
+                        format!("t{} transfer {:?} {} (self)", event.time, kind, amount)
+                    } else {
+                        format!("t{} transfer in {:?} {}", event.time, kind, amount)
+                    }
+                });
+            }
+        }
+        WorldEventKind::CompoundRefined {
+            owner,
+            compound_mass_g,
+            hardware_output,
+            ..
+        } => {
+            if let ResourceOwner::Agent { agent_id } = owner {
+                insert_latest_agent_activity(latest, agent_id, || {
+                    format!(
+                        "t{} refine {}g -> hw {}",
+                        event.time, compound_mass_g, hardware_output
+                    )
+                });
+            }
+        }
+        WorldEventKind::Power(power_event) => match power_event {
+            PowerEvent::PowerConsumed {
+                agent_id, amount, ..
+            } => insert_latest_agent_activity(latest, agent_id, || {
+                format!("t{} power -{amount}", event.time)
+            }),
+            PowerEvent::PowerStateChanged { agent_id, to, .. } => {
+                insert_latest_agent_activity(latest, agent_id, || {
+                    format!("t{} power state -> {:?}", event.time, to)
+                })
+            }
+            PowerEvent::PowerCharged {
+                agent_id, amount, ..
+            } => insert_latest_agent_activity(latest, agent_id, || {
+                format!("t{} power +{amount}", event.time)
+            }),
+            PowerEvent::PowerTransferred {
+                from,
+                to,
+                amount,
+                loss,
+                ..
+            } => {
+                if let ResourceOwner::Agent { agent_id } = from {
+                    let is_self =
+                        matches!(to, ResourceOwner::Agent { agent_id: to_id } if to_id == agent_id);
+                    insert_latest_agent_activity(latest, agent_id, || {
+                        if is_self {
+                            format!("t{} trade power {} (loss {})", event.time, amount, loss)
+                        } else {
+                            format!("t{} sell power {} (loss {})", event.time, amount, loss)
+                        }
+                    });
+                }
+                if let ResourceOwner::Agent { agent_id } = to {
+                    let is_self = matches!(from, ResourceOwner::Agent { agent_id: from_id } if from_id == agent_id);
+                    insert_latest_agent_activity(latest, agent_id, || {
+                        if is_self {
+                            format!("t{} trade power {} (loss {})", event.time, amount, loss)
+                        } else {
+                            format!("t{} buy power {} (loss {})", event.time, amount, loss)
+                        }
+                    });
+                }
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+}
+
+fn insert_latest_agent_activity<F>(latest: &mut BTreeMap<String, String>, agent_id: &str, build: F)
+where
+    F: FnOnce() -> String,
+{
+    if latest.contains_key(agent_id) {
+        return;
+    }
+    latest.insert(agent_id.to_string(), build());
 }
 
 fn event_activity_for_agent(event: &WorldEvent, agent_id: &str) -> Option<String> {

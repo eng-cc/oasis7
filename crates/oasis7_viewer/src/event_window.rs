@@ -97,6 +97,7 @@ fn compact_event_window(events: &mut Vec<WorldEvent>, policy: EventWindowPolicy)
 mod tests {
     use super::*;
     use oasis7::simulator::{RejectReason, WorldEventKind};
+    use std::{hint::black_box, time::Instant};
 
     #[test]
     fn event_window_policy_normalizes_values() {
@@ -170,5 +171,40 @@ mod tests {
 
         let ids: Vec<u64> = events.iter().map(|event| event.id).collect();
         assert_eq!(ids, vec![3, 4, 5, 6]);
+    }
+
+    #[test]
+    #[ignore = "perf harness"]
+    fn perf_push_event_with_window_after_capacity() {
+        let policy = EventWindowPolicy::new(512, 320, 4);
+        let total_events = 40_000_u64;
+        let mut events = Vec::new();
+        let started_at = Instant::now();
+
+        for id in 1..=total_events {
+            push_event_with_window(
+                &mut events,
+                WorldEvent {
+                    id,
+                    time: id,
+                    kind: WorldEventKind::ActionRejected {
+                        reason: RejectReason::InvalidAmount { amount: id as i64 },
+                    },
+                    runtime_event: None,
+                },
+                policy,
+            );
+        }
+
+        let elapsed = started_at.elapsed();
+        println!(
+            "perf event_window total_ms={:.2} avg_us_per_push={:.3} final_len={} checksum={}",
+            elapsed.as_secs_f64() * 1000.0,
+            elapsed.as_secs_f64() * 1_000_000.0 / total_events as f64,
+            events.len(),
+            black_box(events.iter().map(|event| event.id as usize).sum::<usize>()),
+        );
+
+        assert!(events.len() <= policy.max_events);
     }
 }

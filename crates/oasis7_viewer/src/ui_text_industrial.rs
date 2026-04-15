@@ -102,7 +102,7 @@ pub(super) fn industrial_ops_summary_with_zoom(
 
     lines.push("".to_string());
     lines.push("Logistics Routes:".to_string());
-    let routes = graph.routes_for_zoom(zoom);
+    let routes = graph.routes_for_zoom_ref(zoom);
     lines.push(format!("- Active Routes: {}", routes.len()));
     lines.push(format!(
         "- Transfer Events: {}",
@@ -113,7 +113,7 @@ pub(super) fn industrial_ops_summary_with_zoom(
         graph.rollup.total_power_moved, graph.rollup.total_power_loss
     ));
 
-    for route in routes.into_iter().take(INDUSTRIAL_TOP_ROUTE_LIMIT) {
+    for route in routes.iter().take(INDUSTRIAL_TOP_ROUTE_LIMIT) {
         lines.push(format!(
             "- Route {} -> {} moves={} material={} electricity={} data={} power={} loss={}",
             route.from,
@@ -152,19 +152,17 @@ pub(super) fn industrial_ops_summary_with_zoom(
         }
         IndustrySemanticZoomLevel::Region => {
             lines.push("Region Lens: Cluster Nodes".to_string());
-            let slice = graph.graph_for_zoom(zoom);
-            let factories = slice
-                .nodes
+            let (nodes, edges) = graph.graph_slice_for_zoom(zoom);
+            let factories = nodes
                 .iter()
                 .filter(|node| node.kind == IndustryNodeKind::Factory)
                 .count();
-            let recipes = slice
-                .nodes
+            let recipes = nodes
                 .iter()
                 .filter(|node| node.kind == IndustryNodeKind::Recipe)
                 .count();
-            lines.push(format!("- Cluster Nodes: {}", slice.nodes.len()));
-            lines.push(format!("- Cluster Edges: {}", slice.edges.len()));
+            lines.push(format!("- Cluster Nodes: {}", nodes.len()));
+            lines.push(format!("- Cluster Edges: {}", edges.len()));
             lines.push(format!("- Factory/Recipe: {factories}/{recipes}"));
         }
         IndustrySemanticZoomLevel::Node => {
