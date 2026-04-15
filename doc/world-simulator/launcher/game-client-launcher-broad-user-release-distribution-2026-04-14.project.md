@@ -12,7 +12,7 @@
 - [ ] macos-notarized-release-dmg (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 将 macOS 公共主包升级为签名并 notarized 的 `.app + .dmg`，补齐图标、应用元数据、Gatekeeper 通过路径与 CI 阻断。 Trace: .pm/tasks/task_f7299eb703f78c1ae0d2086fc4b88c29.yaml
 - [x] linux-appimage-primary-release-asset (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 将 Linux 公共主包切到 `AppImage`，同时把 `.deb` 降级为高级/次级入口，并补齐支持发行版说明。 Trace: .pm/tasks/task_85eb196085584f8e9ebb9b3f988cd169.yaml
 - [x] site-single-primary-release-cta (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 改造 `site/index.html`、`site/en/index.html`、`site/assets/{app.js,styles.css}` 与 `scripts/site-download-check.sh`，使官网按平台只展示一个主 CTA，并前置显示系统要求、checksums 与失败支持路径。 Trace: .pm/tasks/task_3ec0a2b3318344209a2569fa294d05d1.yaml
-- [ ] release-upgrade-path-overwrite-policy (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 设计并验证“重新下载覆盖安装/替换”的升级口径，明确配置/world 目录迁移边界；应用内更新若要推进，需另开专题。 Trace: .pm/tasks/task_30d0e01f74a3ced99f104893beb9d53f.yaml
+- [x] release-upgrade-path-overwrite-policy (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 基于当前代码真值收口“重新下载覆盖安装/替换”的升级口径，明确 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` 仍按实际启动工作目录解析；Windows 卸载器会删除 `$INSTDIR`，因此“卸载重装”不得被写成保留本地状态的等价升级路径。同步更新官网下载文案、bundle README 与 release pipeline 文档，并把应用内更新继续保留为后续独立专题。 Trace: .pm/tasks/task_30d0e01f74a3ced99f104893beb9d53f.yaml
 
 ## 依赖
 - `doc/world-simulator/prd.md`
@@ -25,5 +25,5 @@
 ## 状态
 - 最近更新：2026-04-15
 - 当前阶段: in_progress
-- 当前任务: T0/T1/T3/T4 已完成；T1A/T2/T5 待继续实施
-- 备注: 当前官网下载面已经切到“按平台单主 CTA + 支持边界 + checksums 前置”的默认决策面；Windows 代码签名、macOS notarization 与更完整的升级覆盖口径仍未闭环，因此整体普通用户发行目标尚未完成。
+- 当前任务: T0/T1/T3/T4/T5 已完成；T1A/T2 待继续实施
+- 备注: 当前官网下载面已经切到“按平台单主 CTA + 支持边界 + checksums 前置”的默认决策面；升级口径也已明确为“手动覆盖安装/替换 + 用户自备份相对路径状态”。Windows 代码签名与 macOS notarization 仍未闭环，因此整体普通用户发行目标尚未完成。

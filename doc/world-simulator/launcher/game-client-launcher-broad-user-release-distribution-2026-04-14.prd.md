@@ -45,7 +45,7 @@
 | macOS 安装器 | `oasis7-macos-x64.dmg` + `oasis7 Client Launcher.app` | 打开 dmg 后拖拽到 `/Applications`，随后直接启动 `.app` | `mounted -> copied -> launchable` | `.app` 名称、图标与版本号需一致 | 必须完成 codesign + notarization |
 | Linux 主包 | `oasis7-linux-x86_64.AppImage` | 下载后直接运行，不再要求用户理解 `.deb` 与 shell wrapper 差异 | `downloaded -> runnable` | 官网主入口只推荐一个 Linux 主包；发行版特化包放次级入口 | 不要求 root / 包管理器 |
 | 支持与校验信息 | `release_notes_url`、`checksums_url`、`support_boundary` | 下载页在 CTA 附近显示系统要求、版本、校验、失败排障入口 | `visible before download` | 主 CTA 优先，高级校验信息折叠展示 | 所有访问者可见 |
-| 更新路径 | `update_strategy`、`data_migration_policy` | v1.1 采用“重新下载主包覆盖安装/替换”，v2 再考虑应用内更新 | `manual_update -> optional_auto_update` | 同版本覆盖安装不得丢失用户配置与本地世界目录指向 | 已安装用户可见 |
+| 更新路径 | `update_strategy`、`data_migration_policy`、`state_paths` | 当前版本统一采用“重新下载最新主包并手动覆盖安装/替换”；应用内更新与自动迁移暂不承诺 | `manual_replace_only -> optional_auto_update` | 当前相对路径状态以实际启动工作目录为准，升级前必须明确备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` | 已安装用户可见 |
 - Acceptance Criteria:
   - AC-1: 官网与 GitHub Release 公共下载面必须对每个平台只暴露一个普通用户主包，并保证命名稳定可预期。
   - AC-2: Windows 公共主包必须升级为标准安装器形态，安装后提供可发现的应用入口和卸载入口。
@@ -55,6 +55,8 @@
   - AC-6: 普通用户 happy path 不允许出现“手工解压 -> 找 shell 脚本 -> 读 README 再决定启动哪个入口”的前置要求。
   - AC-7: 当前不支持的平台、架构或系统版本必须在下载前即给出结构化说明，而不是仅在安装后失败。
   - AC-8: 版本升级的默认口径必须统一为“重新下载并覆盖安装/替换”，直到应用内更新被正式建模和交付。
+  - AC-9: Windows、macOS、Linux 的公开下载说明都必须明确区分“覆盖安装/替换当前主包”与“卸载后重装/删除旧包”不是同义操作；至少 Windows 卸载路径不得被表述为会保留安装目录数据。
+  - AC-10: 当前版本不得宣称存在自动 config/world 迁移；所有面向用户的升级说明都必须点名当前相对路径状态真值：`config.toml`、`.oasis7_launcher_ux_state.json`、`output/chain-runtime/<node_id>/reward-runtime-execution-world/` 需要由用户自行备份/迁移。
 - Non-Goals:
   - 不在本专题中要求接入 App Store / Microsoft Store / Snap Store 等商店分发。
   - 不在 v1.1 同时交付应用内自动更新、增量 patch 或后台常驻 updater。
@@ -85,13 +87,16 @@
   - Linux 桌面环境缺少 AppImage 集成：允许用户直接运行，但下载页必须提供最小执行权限说明。
   - 用户无管理员权限：Windows 方案优先采用 per-user installer，避免“必须管理员权限”成为默认阻断。
   - 平台不兼容：下载页必须先提示支持边界；Release notes 也要给出当前支持矩阵。
-  - 旧版本升级：覆盖安装不得 silently 改写用户现有 world/config 目录；若有迁移，必须给出明确迁移文案。
+  - 旧版本升级：当前仅支持“手动覆盖安装/替换当前主包”；若用户需要保留本地配置或链执行 world，必须先备份当前工作目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 和 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。
+  - Windows 卸载：NSIS 卸载器当前会递归删除 `$INSTDIR`，因此“先卸载再重装”不得被当作保留本地状态的默认升级建议。
+  - 相对路径状态：`oasis7_client_launcher` 与 `oasis7_game_launcher` 当前未建立独立 app-data 目录协议；子进程也未显式切换 `current_dir`，所以配置/本地 world 的落盘位置仍与实际启动工作目录耦合。
 - Non-Functional Requirements:
   - NFR-1: 官网和 `latest/download` 的主包 URL 必须长期稳定，保证外部分享和社区口径可复用。
   - NFR-2: Windows / macOS 的公共主包必须具备可验证的签名信任链；Linux 主包必须具备可验证的 SHA256。
   - NFR-3: 公共下载面默认不展示 shell wrapper、bundle 内部结构或技术预览脚本名。
   - NFR-4: 三平台主包的应用名、图标、版本号和支持说明必须保持产品口径一致。
   - NFR-5: Release workflow 必须在“普通用户主包缺失、信任链缺失、公开资产名漂移”时阻断发布。
+  - NFR-6: 在独立 app-data / migration contract 建模完成前，所有公开升级说明都必须保持“手动覆盖/替换 + 用户自备份”这一低承诺真值，不得提前写成自动迁移体验。
 - Security & Privacy:
   - Windows 代码签名证书、macOS 签名与 notarization 凭据必须存放在 GitHub Actions secrets / 环境中，不允许写入仓库。
   - 公共主包不得内嵌开发态调试凭据、本地路径或发布流程私有说明。
@@ -108,12 +113,13 @@
   - 风险-2: macOS notarization 往往增加外部依赖与等待时间，若未并行设计好可能拖慢 release。
   - 风险-3: Linux 若直接切 AppImage，需要补齐桌面集成、执行权限提示与运行时依赖验证。
   - 风险-4: 公开只保留一个主包会压缩“高级用户自由选择”的空间，因此必须保留次级高级入口但不混入默认路径。
+  - 风险-5: 当前配置与本地 world 仍是相对路径存储；若在未先定义 app-data/migration contract 前推进自动更新，极易造成状态丢失或跨平台口径不一致。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_SIMULATOR-043 | `task_5d40365b4e714e5799a3baa834e84515` / `task_22a0d58d0d9445b1ad74127c25768d8d` / `task_85eb196085584f8e9ebb9b3f988cd169` | `test_tier_required` | `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `git diff --check` + `rg -n "AppImage|notariz|codesign|NSIS|single primary asset|普通用户主包" doc/world-simulator doc/site/github-pages` | 下载页口径、Release 资产策略、平台安装体验目标、支持边界与后续实现任务拆解 |
+| PRD-WORLD_SIMULATOR-043 | `task_5d40365b4e714e5799a3baa834e84515` / `task_22a0d58d0d9445b1ad74127c25768d8d` / `task_85eb196085584f8e9ebb9b3f988cd169` / `task_30d0e01f74a3ced99f104893beb9d53f` | `test_tier_required` | `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `bash -n scripts/build-game-launcher-bundle.sh` + `git diff --check` + `rg -n "覆盖安装|replace/overwrite|config.toml|reward-runtime-execution-world|notariz|codesign|AppImage" doc/world-simulator doc/site/github-pages site scripts/build-game-launcher-bundle.sh` | 下载页口径、Release 资产策略、平台安装体验目标、升级/覆盖边界与后续自动更新拆解 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -121,3 +127,4 @@
 | DEC-RELEASE-CONSUMER-002 | macOS 采用签名并 notarized 的 `.app + .dmg` | 继续发布 unsigned `.dmg` 或改用 `.pkg` 作为默认首选 | `.app + .dmg` 更接近普通桌面应用习惯，且不需要把安装过程复杂化。 |
 | DEC-RELEASE-CONSUMER-003 | Linux 公共主包采用 `AppImage` | 继续把 `.deb` 作为普通用户唯一公开资产 | `.deb` 只覆盖 Debian/Ubuntu 系，`AppImage` 更符合“一个包直接运行”的跨发行版目标。 |
 | DEC-RELEASE-CONSUMER-004 | 官网每个平台只保留一个主 CTA，其余高级资产降级 | 继续把多个技术形态并列给普通用户选择 | 普通用户最怕“下载前要做技术判断”，默认路径必须唯一。 |
+| DEC-RELEASE-CONSUMER-005 | 在独立 app-data/migration contract 落地前，升级口径固定为“手动覆盖安装/替换 + 用户自备份相对路径状态” | 先宣传自动迁移或把“卸载重装”写成等价升级路径 | 当前 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/.../reward-runtime-execution-world/` 仍按实际启动工作目录解析，Windows 卸载器还会删除安装目录，仓库内不存在可审计的自动迁移实现。 |

@@ -65,8 +65,9 @@
   - `README.txt`
 - 官网下载面（当前真值）：
   - `site/index.html` / `site/en/index.html` 默认通过平台识别先展示一个主 CTA，并允许手动切换 Windows/macOS/Linux 三个平台主包
-  - checksums、系统/架构、安装路径、当前信任链缺口与支持边界必须在下载前可见
+  - checksums、系统/架构、安装路径、当前信任链缺口、升级覆盖边界与支持边界必须在下载前可见
   - Linux `.deb` 继续保留在 Release 附件中，但不再作为默认公开 CTA 竞争面
+  - 当前升级口径固定为“重新下载最新主包并手动覆盖安装/替换”；`config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/` 仍是相对路径状态，应用内更新与自动迁移不在本专题范围内
 
 ## 里程碑
 - M0：建档（设计 + 项目管理）。
@@ -85,6 +86,8 @@
   - 缓解：工作流默认发布正式 release，必要时在文档中要求 prerelease 另行命名与渠道区分。
 - 风险：当前官网单主 CTA 与支持边界虽已前置收口，但 Windows 签名、macOS notarization 以及更完整的普通用户信任链仍未闭环，离“无安全提示的普通用户安装分发”还有差距。
   - 缓解：普通用户向目标（Windows 标准安装器 + 签名、macOS 签名+notarization、Linux AppImage、升级覆盖口径）继续由 `doc/world-simulator/launcher/game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md` 跟踪并分 task 实施。
+- 风险：如果公开下载面过早把“覆盖安装/替换”写成自动迁移体验，用户会误以为卸载重装或跨目录替换会保留本地状态。
+  - 缓解：站点和 bundle README 统一声明当前仅支持手动覆盖/替换，并要求用户在升级前自行备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。
 
 ## 原文约束点映射（内容保真）
 - 约束-1（目标与问题定义）：沿用原“目标”章节约束，不改变问题定义与解决方向。
