@@ -1,4 +1,47 @@
 #[test]
+fn llm_agent_user_prompt_includes_recipe_coverage_summary() {
+    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
+    behavior.on_action_result(&ActionResult {
+        action: Action::ScheduleRecipe {
+            owner: ResourceOwner::Agent {
+                agent_id: "agent-1".to_string(),
+            },
+            factory_id: "factory.alpha".to_string(),
+            recipe_id: "recipe.assembler.control_chip".to_string(),
+            batches: 1,
+        },
+        action_id: 521,
+        success: true,
+        event: WorldEvent {
+            id: 621,
+            time: 121,
+            kind: WorldEventKind::RecipeScheduled {
+                owner: ResourceOwner::Agent {
+                    agent_id: "agent-1".to_string(),
+                },
+                factory_id: "factory.alpha".to_string(),
+                recipe_id: "recipe.assembler.control_chip".to_string(),
+                batches: 1,
+                electricity_cost: 6,
+                hardware_cost: 2,
+                data_output: 1,
+                finished_product_id: "product.component.control_chip".to_string(),
+                finished_product_units: 1,
+            },
+            runtime_event: None,
+        },
+    });
+
+    let prompt = behavior.user_prompt(&make_observation(), &[], 0, 4);
+    assert!(prompt.contains("\"recipe_coverage\""));
+    assert!(prompt.contains("\"recipe.smelter.iron_ingot\"") || prompt.contains("...(truncated)"));
+    assert!(
+        prompt.contains("\"recipe.assembler.control_chip\"") || prompt.contains("...(truncated)")
+    );
+    assert!(prompt.contains("\"recipe.assembler.motor_mk1\"") || prompt.contains("...(truncated)"));
+}
+
+#[test]
 fn llm_agent_prioritizes_mine_alternative_with_lower_failure_streak() {
     let client = MockClient {
         output: Some(

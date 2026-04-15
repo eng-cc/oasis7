@@ -5,10 +5,15 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         match recipe_id.trim() {
             "recipe.smelter.iron_ingot"
             | "recipe.smelter.copper_wire"
-            | "recipe.smelter.polymer_resin" => Some("factory.smelter.mk1"),
-            "recipe.assembler.control_chip"
+            | "recipe.smelter.polymer_resin"
+            | "recipe.smelter.alloy_plate" => Some("factory.smelter.mk1"),
+            "recipe.assembler.gear"
+            | "recipe.assembler.control_chip"
             | "recipe.assembler.motor_mk1"
-            | "recipe.assembler.logistics_drone" => Some("factory.assembler.mk1"),
+            | "recipe.assembler.logistics_drone"
+            | "recipe.assembler.sensor_pack"
+            | "recipe.assembler.module_rack"
+            | "recipe.assembler.factory_core" => Some("factory.assembler.mk1"),
             _ => None,
         }
     }
@@ -17,24 +22,33 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         match recipe_id.trim() {
             "recipe.smelter.iron_ingot"
             | "recipe.smelter.copper_wire"
-            | "recipe.smelter.polymer_resin" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
-            "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
-            "recipe.assembler.motor_mk1" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 2),
-            "recipe.assembler.logistics_drone" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 4),
+            | "recipe.smelter.polymer_resin"
+            | "recipe.assembler.gear" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH),
+            "recipe.smelter.alloy_plate"
+            | "recipe.assembler.control_chip"
+            | "recipe.assembler.motor_mk1"
+            | "recipe.assembler.sensor_pack" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 2),
+            "recipe.assembler.module_rack" => Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 3),
+            "recipe.assembler.logistics_drone" | "recipe.assembler.factory_core" => {
+                Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH * 4)
+            }
             _ => None,
         }
     }
 
     pub(super) fn default_recipe_electricity_cost_per_batch(recipe_id: &str) -> Option<i64> {
         match recipe_id.trim() {
+            "recipe.assembler.gear" => Some(4),
+            "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
             "recipe.smelter.iron_ingot"
             | "recipe.smelter.copper_wire"
             | "recipe.smelter.polymer_resin" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
-            "recipe.assembler.control_chip" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH),
-            "recipe.assembler.motor_mk1" => Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 2),
-            "recipe.assembler.logistics_drone" => {
-                Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH * 4)
-            }
+            "recipe.assembler.motor_mk1" => Some(7),
+            "recipe.smelter.alloy_plate" => Some(9),
+            "recipe.assembler.sensor_pack" => Some(8),
+            "recipe.assembler.module_rack" => Some(10),
+            "recipe.assembler.logistics_drone" => Some(12),
+            "recipe.assembler.factory_core" => Some(14),
             _ => None,
         }
     }
@@ -736,7 +750,7 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                             "mine_compound 获取可精炼原料。",
                             "refine_compound 产出 hardware/data。",
                             "post_onboarding 优先 build_factory(factory.smelter.mk1) 作为第一条可持续产线。",
-                            "先 schedule_recipe 覆盖 iron_ingot/copper_wire/polymer_resin，再在原料稳定后补 factory.assembler.mk1 与 control_chip/motor/logistics_drone。"
+                            "先 schedule_recipe 覆盖 iron_ingot/copper_wire/polymer_resin/alloy_plate；assembler 侧先补 gear/control_chip/motor/logistics_drone，再在更高阶段推进 sensor_pack/module_rack/factory_core。"
                         ],
                         "success_signals": [
                             "action_kind_build_factory >= 1",
@@ -1011,6 +1025,18 @@ mod tests {
             ),
             Some("factory.smelter.mk1")
         );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::required_factory_kind_for_recipe(
+                "recipe.smelter.alloy_plate"
+            ),
+            Some("factory.smelter.mk1")
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::required_factory_kind_for_recipe(
+                "recipe.assembler.factory_core"
+            ),
+            Some("factory.assembler.mk1")
+        );
     }
 
     #[test]
@@ -1026,6 +1052,18 @@ mod tests {
                 "recipe.smelter.iron_ingot"
             ),
             Some(DEFAULT_RECIPE_ELECTRICITY_COST_PER_BATCH)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_hardware_cost_per_batch(
+                "recipe.assembler.gear"
+            ),
+            Some(DEFAULT_RECIPE_HARDWARE_COST_PER_BATCH)
+        );
+        assert_eq!(
+            LlmAgentBehavior::<DummyClient>::default_recipe_electricity_cost_per_batch(
+                "recipe.assembler.factory_core"
+            ),
+            Some(14)
         );
     }
 }

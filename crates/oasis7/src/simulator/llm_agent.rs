@@ -190,13 +190,18 @@ const DEFAULT_MINE_ELECTRICITY_COST_PER_KG: i64 = 1;
 const DEFAULT_MINE_DEPLETED_LOCATION_COOLDOWN_TICKS: u64 = 6;
 const DEFAULT_MINE_FAILURE_STREAK_WINDOW_TICKS: u64 = 24;
 const DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK: i64 = 1_000_000;
-const TRACKED_RECIPE_IDS: [&str; 6] = [
+const TRACKED_RECIPE_IDS: [&str; 11] = [
     "recipe.smelter.iron_ingot",
     "recipe.smelter.copper_wire",
     "recipe.smelter.polymer_resin",
+    "recipe.smelter.alloy_plate",
+    "recipe.assembler.gear",
     "recipe.assembler.control_chip",
     "recipe.assembler.motor_mk1",
     "recipe.assembler.logistics_drone",
+    "recipe.assembler.sensor_pack",
+    "recipe.assembler.module_rack",
+    "recipe.assembler.factory_core",
 ];
 
 const DEFAULT_SHORT_TERM_MEMORY_CAPACITY: usize = 128;
