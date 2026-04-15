@@ -256,6 +256,7 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
+- [x] post-action-wasm-contract-drift-fix (PRD-WORLD_RUNTIME-001/002) [test_tier_required]: 修复 `post_action` WASM 路由的 contract drift，让订阅者收到实际执行后的 action 与结果事件，并补齐 override / rejection 回归。 Trace: .pm/tasks/task_e053e8a306e44c53921430c2499751be.yaml
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`

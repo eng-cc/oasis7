@@ -335,10 +335,25 @@ impl World {
         stage: ModuleSubscriptionStage,
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<usize, WorldError> {
+        self.route_action_to_modules_with_stage_and_event(envelope, stage, None, sandbox)
+    }
+
+    pub(super) fn route_action_to_modules_with_stage_and_event(
+        &mut self,
+        envelope: &ActionEnvelope,
+        stage: ModuleSubscriptionStage,
+        result_event: Option<&WorldEvent>,
+        sandbox: &mut dyn ModuleSandbox,
+    ) -> Result<usize, WorldError> {
         let action_kind = action_kind_label(&envelope.action);
         let action_value = serde_json::to_value(envelope)?;
         let invocations = self.collect_active_module_invocations()?;
         let action_bytes = to_canonical_cbor(envelope)?;
+        let event_bytes = if stage == ModuleSubscriptionStage::PostAction {
+            result_event.map(to_canonical_cbor).transpose()?
+        } else {
+            None
+        };
         let world_config_hash = self.current_manifest_hash()?;
         let mut invoked = 0;
 
@@ -389,7 +404,7 @@ impl World {
             };
             let input = ModuleCallInput {
                 ctx,
-                event: None,
+                event: event_bytes.clone(),
                 action: Some(action_bytes.clone()),
                 state,
             };
