@@ -506,6 +506,19 @@
     - `./scripts/check-rust-file-size.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] cached-peer-record-fallback-retry-fix (PRD-P2P-024) [test_tier_required]: 修复 2026-04-15 cached peer record fallback 误路由与 cache-miss 错误语义，确保 fallback 不再把 `RR_GET_CACHED_PEER_RECORD` 发给目标 peer 自己，cache miss 返回 `ErrNotFound`，且收到 miss 后可继续换用其他已连接 proxy peer 重试。 Trace: .pm/tasks/task_fa2fb263ce3b4c58bff341bf4e815408.yaml
+  - 产物文件:
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests/discovery_peer_record_tests.rs`
+    - `doc/.governance/rust-oversized-file-baseline.tsv`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_fa2fb263ce3b4c58bff341bf4e815408.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib`
+    - `./scripts/check-rust-file-size.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [ ] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，并把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定。 Trace: .pm/tasks/task_f5beda0b81da4b538d168d675aed2e08.yaml
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:

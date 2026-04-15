@@ -1,0 +1,23 @@
+task_uid: task_fa2fb263ce3b4c58bff341bf4e815408
+title: "修复 p2p cached peer record fallback 误路由与 miss 错误语义"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-cached-peer-record-fallback-fix
+execution_log_path: .pm/tasks/task_fa2fb263ce3b4c58bff341bf4e815408.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/project.md
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.project.md
+related_prd:
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+acceptance:
+  - "cached peer record fallback 不再向目标 peer 自己发请求。"
+  - "cached peer record miss 返回可区分的 not_found 语义，并允许上层继续重试其他候选 peer。"
+  - "libp2p_net 定向回归测试覆盖 self-fallback 与 cache-miss 路径并通过。"
+handoff_to: []
+updated_at: 2026-04-15T17:35:57+08:00
+last_started_at: 2026-04-15T17:26:20+08:00
+last_closed_at: 2026-04-15T17:35:39+08:00

@@ -34,7 +34,7 @@ use super::{push_bounded_clone, Handler};
 
 pub(super) enum PendingPeerRecordRequest {
     ConnectedPeerRecord { peer_id: PeerId },
-    CachedPeerRecord { peer_id: PeerId },
+    CachedPeerRecord { ask_peer: PeerId, peer_id: PeerId },
     CachedDiscoveryPeers { peer_id: PeerId },
 }
 
@@ -221,9 +221,24 @@ fn request_cached_peer_record_via(
     pending_cached_peer_records.insert(peer_id);
     pending_peer_record_requests.insert(
         request_id,
-        PendingPeerRecordRequest::CachedPeerRecord { peer_id },
+        PendingPeerRecordRequest::CachedPeerRecord { ask_peer, peer_id },
     );
     true
+}
+
+fn select_cached_peer_record_proxy(
+    connected_peers: &[PeerId],
+    peer_id: PeerId,
+    local_peer_id: PeerId,
+    excluded_peer: Option<PeerId>,
+) -> Option<PeerId> {
+    connected_peers.iter().copied().find(|candidate| {
+        *candidate != peer_id
+            && *candidate != local_peer_id
+            && excluded_peer
+                .map(|excluded| *candidate != excluded)
+                .unwrap_or(true)
+    })
 }
 
 pub(super) fn maybe_request_cached_peer_record(
@@ -240,11 +255,8 @@ pub(super) fn maybe_request_cached_peer_record(
     if peer_id == local_peer_id || pending_cached_peer_records.contains(&peer_id) {
         return false;
     }
-    let Some(ask_peer) = connected_peers
-        .iter()
-        .copied()
-        .find(|candidate| *candidate != peer_id && *candidate != local_peer_id)
-        .or_else(|| connected_peers.first().copied())
+    let Some(ask_peer) =
+        select_cached_peer_record_proxy(connected_peers, peer_id, local_peer_id, None)
     else {
         return false;
     };
@@ -446,8 +458,10 @@ pub(super) fn handle_request_response_request(
                     protocol: "cached peer record peer_id must be valid".to_string(),
                 })?;
             let record = discovered_peer_records.get(&peer_id).ok_or_else(|| {
-                WorldError::NetworkProtocolUnavailable {
-                    protocol: super::RR_GET_CACHED_PEER_RECORD.to_string(),
+                WorldError::NetworkRequestFailed {
+                    code: DistributedErrorCode::ErrNotFound,
+                    message: format!("cached peer record not found for peer={peer_id}"),
+                    retryable: true,
                 }
             })?;
             to_canonical_cbor(record)
@@ -492,6 +506,7 @@ pub(super) fn handle_peer_record_response(
     known_transport_paths: &mut HashMap<PeerId, Vec<TransportPath>>,
     last_dialed_transport_paths: &mut HashMap<PeerId, TransportPath>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
+    connected_peers: &[PeerId],
     failed_transport_path_labels: &mut HashSet<String>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     peer_record_template: Option<&PeerRecord>,
@@ -511,8 +526,8 @@ pub(super) fn handle_peer_record_response(
     );
     let requested_peer_id = match &kind {
         PendingPeerRecordRequest::ConnectedPeerRecord { peer_id }
-        | PendingPeerRecordRequest::CachedPeerRecord { peer_id }
         | PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => *peer_id,
+        PendingPeerRecordRequest::CachedPeerRecord { peer_id, .. } => *peer_id,
     };
     if let PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } = &kind {
         match decode_cached_discovery_peers_response(payload) {
@@ -576,7 +591,25 @@ pub(super) fn handle_peer_record_response(
                 let _ = republish_cached_peer_record(swarm, pending_dht, &record);
             }
         }
-        Ok(None) => {}
+        Ok(None) => {
+            if let PendingPeerRecordRequest::CachedPeerRecord { ask_peer, peer_id } = kind {
+                if let Some(next_ask_peer) = select_cached_peer_record_proxy(
+                    connected_peers,
+                    peer_id,
+                    local_peer_id,
+                    Some(ask_peer),
+                ) {
+                    let _ = request_cached_peer_record_via(
+                        swarm,
+                        pending_peer_record_requests,
+                        pending_cached_peer_records,
+                        next_ask_peer,
+                        peer_id,
+                        local_peer_id,
+                    );
+                }
+            }
+        }
         Err(err) => {
             push_bounded_clone(
                 event_errors,
@@ -600,7 +633,7 @@ pub(super) fn clear_pending_peer_record_request(
         PendingPeerRecordRequest::ConnectedPeerRecord { peer_id } => {
             pending_connected_peer_records.remove(peer_id);
         }
-        PendingPeerRecordRequest::CachedPeerRecord { peer_id } => {
+        PendingPeerRecordRequest::CachedPeerRecord { peer_id, .. } => {
             pending_cached_peer_records.remove(peer_id);
         }
         PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => {
