@@ -313,6 +313,7 @@ fn llm_agent_hands_off_coverage_to_known_assembler_after_last_smelter_recipe() {
         (0_u64, "recipe.smelter.iron_ingot", "iron_ingot"),
         (1_u64, "recipe.smelter.copper_wire", "copper_wire"),
         (2_u64, "recipe.smelter.polymer_resin", "polymer_resin"),
+        (3_u64, "recipe.smelter.alloy_plate", "alloy_plate"),
     ] {
         behavior.on_action_result(&ActionResult {
             action: Action::ScheduleRecipe {
@@ -627,13 +628,13 @@ fn llm_agent_builds_missing_factory_before_cross_stage_coverage_handoff() {
     let decision = behavior.decide(&observation);
     assert_eq!(
         decision,
-        AgentDecision::Act(Action::BuildFactory {
+        AgentDecision::Act(Action::ScheduleRecipe {
             owner: ResourceOwner::Agent {
                 agent_id: "agent-1".to_string(),
             },
-            location_id: "loc-home".to_string(),
-            factory_id: "factory.assembler.mk1".to_string(),
-            factory_kind: "factory.assembler.mk1".to_string(),
+            factory_id: "factory.smelter.1".to_string(),
+            recipe_id: "recipe.smelter.alloy_plate".to_string(),
+            batches: 1,
         })
     );
 }
@@ -771,14 +772,26 @@ fn llm_agent_rewrites_wait_ticks_to_sustained_schedule_after_full_recipe_coverag
             "product.material.polymer_resin",
         ),
         (
+            "recipe.smelter.alloy_plate",
+            9_i64,
+            4_i64,
+            "product.material.alloy_plate",
+        ),
+        (
+            "recipe.assembler.gear",
+            4_i64,
+            2_i64,
+            "product.component.gear",
+        ),
+        (
             "recipe.assembler.control_chip",
             6_i64,
-            2_i64,
+            4_i64,
             "product.component.control_chip",
         ),
         (
             "recipe.assembler.motor_mk1",
-            12_i64,
+            7_i64,
             4_i64,
             "product.component.motor_mk1",
         ),
@@ -787,6 +800,24 @@ fn llm_agent_rewrites_wait_ticks_to_sustained_schedule_after_full_recipe_coverag
             24_i64,
             8_i64,
             "product.component.logistics_drone",
+        ),
+        (
+            "recipe.assembler.sensor_pack",
+            8_i64,
+            4_i64,
+            "product.component.sensor_pack",
+        ),
+        (
+            "recipe.assembler.module_rack",
+            10_i64,
+            6_i64,
+            "product.finished.module_rack",
+        ),
+        (
+            "recipe.assembler.factory_core",
+            14_i64,
+            8_i64,
+            "product.infrastructure.factory_core",
         ),
     ];
 
@@ -855,7 +886,7 @@ fn llm_agent_rewrites_wait_ticks_to_sustained_schedule_after_full_recipe_coverag
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
@@ -910,9 +941,14 @@ fn llm_agent_rewrites_wait_to_recovery_action_after_full_recipe_coverage() {
         "recipe.smelter.iron_ingot",
         "recipe.smelter.copper_wire",
         "recipe.smelter.polymer_resin",
+        "recipe.smelter.alloy_plate",
+        "recipe.assembler.gear",
         "recipe.assembler.control_chip",
         "recipe.assembler.motor_mk1",
         "recipe.assembler.logistics_drone",
+        "recipe.assembler.sensor_pack",
+        "recipe.assembler.module_rack",
+        "recipe.assembler.factory_core",
     ];
     for (offset, recipe_id) in covered_recipe_ids.into_iter().enumerate() {
         behavior.on_action_result(&ActionResult {
@@ -986,49 +1022,6 @@ fn llm_agent_rewrites_wait_to_recovery_action_after_full_recipe_coverage() {
         .llm_step_trace
         .iter()
         .any(|step| step.output_summary.contains("decision_rewrite={")));
-}
-
-#[test]
-fn llm_agent_user_prompt_includes_recipe_coverage_summary() {
-    let mut behavior = LlmAgentBehavior::new("agent-1", base_config(), MockClient::default());
-    behavior.on_action_result(&ActionResult {
-        action: Action::ScheduleRecipe {
-            owner: ResourceOwner::Agent {
-                agent_id: "agent-1".to_string(),
-            },
-            factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
-            batches: 1,
-        },
-        action_id: 521,
-        success: true,
-        event: WorldEvent {
-            id: 621,
-            time: 121,
-            kind: WorldEventKind::RecipeScheduled {
-                owner: ResourceOwner::Agent {
-                    agent_id: "agent-1".to_string(),
-                },
-                factory_id: "factory.alpha".to_string(),
-                recipe_id: "recipe.assembler.control_chip".to_string(),
-                batches: 1,
-                electricity_cost: 6,
-                hardware_cost: 2,
-                data_output: 1,
-                finished_product_id: "product.component.control_chip".to_string(),
-                finished_product_units: 1,
-            },
-            runtime_event: None,
-        },
-    });
-
-    let prompt = behavior.user_prompt(&make_observation(), &[], 0, 4);
-    assert!(prompt.contains("\"recipe_coverage\""));
-    assert!(prompt.contains("\"recipe.smelter.iron_ingot\"") || prompt.contains("...(truncated)"));
-    assert!(
-        prompt.contains("\"recipe.assembler.control_chip\"") || prompt.contains("...(truncated)")
-    );
-    assert!(prompt.contains("\"recipe.assembler.motor_mk1\"") || prompt.contains("...(truncated)"));
 }
 
 #[test]

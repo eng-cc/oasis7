@@ -86,6 +86,25 @@ impl WorldKernel {
                 finished_product_id: "polymer_resin",
                 finished_product_units_per_batch: 1,
             }),
+            "recipe.smelter.alloy_plate" | "recipe.alloy_plate" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_SMELTER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch.saturating_add(3),
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch.saturating_mul(2),
+                data_output_per_batch: economy.recipe_data_output_per_batch.saturating_mul(2),
+                finished_product_id: "alloy_plate",
+                finished_product_units_per_batch: 2,
+            }),
+            "recipe.assembler.gear" | "recipe.gear" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
+                electricity_per_batch: economy
+                    .recipe_electricity_cost_per_batch
+                    .saturating_sub(2)
+                    .max(1),
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch,
+                data_output_per_batch: economy.recipe_data_output_per_batch,
+                finished_product_id: "gear",
+                finished_product_units_per_batch: 1,
+            }),
             "recipe.assembler.control_chip" | "recipe.control_chip" => Some(RecipePlan {
                 required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
                 electricity_per_batch: economy.recipe_electricity_cost_per_batch,
@@ -108,6 +127,30 @@ impl WorldKernel {
                 hardware_per_batch: economy.recipe_hardware_cost_per_batch.saturating_mul(4),
                 data_output_per_batch: economy.recipe_data_output_per_batch.saturating_mul(4),
                 finished_product_id: "logistics_drone",
+                finished_product_units_per_batch: 1,
+            }),
+            "recipe.assembler.sensor_pack" | "recipe.sensor_pack" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch.saturating_add(2),
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch.saturating_mul(2),
+                data_output_per_batch: economy.recipe_data_output_per_batch.saturating_mul(2),
+                finished_product_id: "sensor_pack",
+                finished_product_units_per_batch: 1,
+            }),
+            "recipe.assembler.module_rack" | "recipe.module_rack" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch.saturating_add(4),
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch.saturating_mul(3),
+                data_output_per_batch: economy.recipe_data_output_per_batch.saturating_mul(3),
+                finished_product_id: "module_rack",
+                finished_product_units_per_batch: 1,
+            }),
+            "recipe.assembler.factory_core" | "recipe.factory_core" => Some(RecipePlan {
+                required_factory_kind: FACTORY_KIND_ASSEMBLER_MK1,
+                electricity_per_batch: economy.recipe_electricity_cost_per_batch.saturating_add(8),
+                hardware_per_batch: economy.recipe_hardware_cost_per_batch.saturating_mul(4),
+                data_output_per_batch: economy.recipe_data_output_per_batch.saturating_mul(4),
+                finished_product_id: "factory_core",
                 finished_product_units_per_batch: 1,
             }),
             _ => None,

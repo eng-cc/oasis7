@@ -370,6 +370,17 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
         .branch_hint
         .as_deref()
         .is_some_and(|hint| hint.contains("throughput expansion")));
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(
+            |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
+                && action.disabled_reason.is_none()
+        ));
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(|action| action.action_id == "build_factory_assembler_mk1"));
 }
 
 #[test]
@@ -384,6 +395,69 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         PlayerGameplayGoalKind::ChooseMidLoopPath
     );
     assert_eq!(gameplay.progress_percent, 100);
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(
+            |action| action.action_id == "schedule_recipe_smelter_alloy_plate"
+                && action.disabled_reason.is_none()
+        ));
+}
+
+#[test]
+fn runtime_gameplay_actions_expose_scale_out_and_governance_recipes_once_assembler_exists() {
+    let _guard = lock_test_llm_env();
+    let (mut server, agent_id, public_key, private_key) =
+        setup_runtime_industrial_gameplay_session(52);
+    let build_nonce = 52_u64;
+    build_first_smelter_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce,
+    );
+    complete_smelter_iron_ingot_jobs(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce + 1,
+        6,
+    );
+    build_first_assembler_via_gameplay_action(
+        &mut server,
+        agent_id.as_str(),
+        public_key.as_str(),
+        private_key.as_str(),
+        build_nonce + 10,
+    );
+
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "player gameplay after assembler build in governance stage",
+    );
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(
+            |action| action.action_id == "schedule_recipe_assembler_sensor_pack"
+                && action.disabled_reason.is_none()
+        ));
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(
+            |action| action.action_id == "schedule_recipe_assembler_module_rack"
+                && action.disabled_reason.is_none()
+        ));
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .any(
+            |action| action.action_id == "schedule_recipe_assembler_factory_core"
+                && action.disabled_reason.is_none()
+        ));
 }
 
 #[test]

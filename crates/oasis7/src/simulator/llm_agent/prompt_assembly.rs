@@ -281,7 +281,7 @@ impl PromptAssembler {
 - 推荐 refine 模板: {{"decision":"refine_compound","owner":"self","compound_mass_g":<i64 >=1>}}
 - 推荐 build_factory 模板: {{"decision":"build_factory","owner":"self","location_id":"<location_id>","factory_id":"factory.smelter.mk1","factory_kind":"factory.smelter.mk1"}}
 - 推荐 schedule_recipe 模板: {{"decision":"schedule_recipe","owner":"self","factory_id":"factory.smelter.mk1","recipe_id":"recipe.smelter.iron_ingot","batches":1}}
-- post_onboarding 工业主线优先级: 先 smelter（iron_ingot/copper_wire/polymer_resin），再 assembler（control_chip/motor/logistics_drone）；不要在还没形成第一条 smelter 产线前直接跳到 assembler-only 规划
+- post_onboarding 工业主线优先级: 先 smelter（iron_ingot/copper_wire/polymer_resin/alloy_plate），再 assembler（gear/control_chip/motor/logistics_drone）；当 runtime stage 进入更高阶段后再推进 sensor_pack/module_rack/factory_core，不要在还没形成第一条 smelter 产线前直接跳到 assembler-only 规划
 - 推荐 compile 模板: {{"decision":"compile_module_artifact_from_source","publisher":"self","module_id":"m.llm.example","manifest_path":"Cargo.toml","source_files":{{"Cargo.toml":"<text>","src/lib.rs":"<text>"}}}}
 - 推荐 install 模板: {{"decision":"install_module_from_artifact","installer":"self","module_id":"m.llm.example","module_version":"0.1.0","wasm_hash":"<sha256_hex>","activate":true}}
 - 推荐 list_module_artifact_for_sale 模板: {{"decision":"list_module_artifact_for_sale","seller":"self","wasm_hash":"<sha256_hex>","price_kind":"data","price_amount":1}}
@@ -306,7 +306,7 @@ impl PromptAssembler {
 - gameplay/economic 决策字段必须遵守 schema 中的枚举与数值约束（尤其 proposal options、vote weight、meta points、contract settlement_kind/amount）
 - move_agent.to 不能是当前所在位置（若 observation 中该 location 的 distance_cm=0，则不要选择该 location）
 - factory_kind 当前支持：factory.smelter.mk1、factory.assembler.mk1、factory.power.radiation.mk1（留空将被拒绝）
-- recipe_id 当前支持：recipe.smelter.iron_ingot / recipe.smelter.copper_wire / recipe.smelter.polymer_resin / recipe.assembler.control_chip / recipe.assembler.motor_mk1 / recipe.assembler.logistics_drone
+- recipe_id 当前支持：recipe.smelter.iron_ingot / recipe.smelter.copper_wire / recipe.smelter.polymer_resin / recipe.smelter.alloy_plate / recipe.assembler.gear / recipe.assembler.control_chip / recipe.assembler.motor_mk1 / recipe.assembler.logistics_drone / recipe.assembler.sensor_pack / recipe.assembler.module_rack / recipe.assembler.factory_core
 - schedule_recipe.batches 必须是正整数
 - compile_module_artifact_from_source: module_id/manifest_path/source_files 必填；source_files value 必须是 utf8 文本
 - deploy_module_artifact: wasm_hash 必须为 sha256 hex；wasm_bytes_hex 必须是非空 hex 字节串
@@ -315,7 +315,7 @@ impl PromptAssembler {
 - module 市场动作（list/buy/delist/destroy/place_bid/cancel_bid）中的 agent 字段仅允许 self 或 agent:<id>
 - module 市场动作的 price_amount 必须是正整数；cancel_module_artifact_bid.bid_order_id 必须是正整数
 - 若准备 install 但缺少 wasm_hash，先调用 `module.lifecycle.status` 读取最近 artifact 列表再执行
-- 默认 recipe_hardware_cost_per_batch：iron_ingot=2，copper_wire=2，polymer_resin=2，control_chip=2，motor_mk1=4，logistics_drone=8
+- 默认 recipe_hardware_cost_per_batch：iron_ingot=2，copper_wire=2，polymer_resin=2，alloy_plate=4，gear=2，control_chip=4，motor_mk1=4，logistics_drone=8，sensor_pack=4，module_rack=6，factory_core=8
 - 当 owner=self 时，schedule_recipe.batches 必须 <= floor(self_resources.data / recipe_hardware_cost_per_batch)；若上界为 0，先 refine_compound 再 schedule_recipe
 - 当 observation.recipe_coverage.missing 非空且你准备重复 observation.recipe_coverage.completed 中的 recipe 时，必须先切换到 missing 列表中的配方（优先 missing[0]）
 - 默认经济参数下（refine_hardware_yield_ppm={}），refine_compound 需 compound_mass_g >= {} 才会产出 >=1 hardware；低于阈值会因产出为 0 被拒绝
@@ -1030,10 +1030,16 @@ mod tests {
         assert!(output.user_prompt.contains("recipe_id 当前支持"));
         assert!(output.user_prompt.contains("recipe.smelter.copper_wire"));
         assert!(output.user_prompt.contains("recipe.smelter.polymer_resin"));
+        assert!(output.user_prompt.contains("recipe.smelter.alloy_plate"));
+        assert!(output.user_prompt.contains("recipe.assembler.gear"));
+        assert!(output.user_prompt.contains("recipe.assembler.sensor_pack"));
+        assert!(output.user_prompt.contains("recipe.assembler.module_rack"));
+        assert!(output.user_prompt.contains("recipe.assembler.factory_core"));
         assert!(output
             .user_prompt
             .contains("默认 recipe_hardware_cost_per_batch"));
         assert!(output.user_prompt.contains("iron_ingot=2"));
+        assert!(output.user_prompt.contains("factory_core=8"));
         assert!(output
             .user_prompt
             .contains("schedule_recipe.batches 必须 <= floor(self_resources.data"));

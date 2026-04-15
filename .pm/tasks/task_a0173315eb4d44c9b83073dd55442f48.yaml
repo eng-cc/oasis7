@@ -1,0 +1,21 @@
+task_uid: task_a0173315eb4d44c9b83073dd55442f48
+title: "Align scale-out gameplay and LLM recipe surfaces with runtime truth"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-gameplay-scaleout-recipe-surface
+execution_log_path: .pm/tasks/task_a0173315eb4d44c9b83073dd55442f48.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "canonical gameplay actions expose runtime scale_out and governance recipes; active-LLM recipe surface no longer omits runtime-supported industrial recipes; targeted cargo tests pass"
+handoff_to:
+  - agent_engineer
+updated_at: 2026-04-15T17:47:30+08:00
+last_started_at: 2026-04-15T17:25:32+08:00
+last_closed_at: 2026-04-15T17:47:30+08:00
