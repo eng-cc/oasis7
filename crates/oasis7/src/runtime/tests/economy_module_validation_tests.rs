@@ -1,4 +1,67 @@
 use super::*;
+use crate::runtime::tests::signed_test_artifact_identity;
+use crate::runtime::{Manifest, ModuleSubscription, ModuleSubscriptionStage, WorldEvent};
+use oasis7_wasm_abi::{
+    ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleOutput, ModuleSandbox,
+};
+use std::collections::VecDeque;
+
+struct CaptureContextSandbox {
+    requests: Vec<ModuleCallRequest>,
+    outputs: VecDeque<ModuleOutput>,
+}
+
+impl CaptureContextSandbox {
+    fn with_outputs(outputs: Vec<ModuleOutput>) -> Self {
+        Self {
+            requests: Vec::new(),
+            outputs: outputs.into(),
+        }
+    }
+}
+
+impl ModuleSandbox for CaptureContextSandbox {
+    fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
+        self.requests.push(request.clone());
+        Ok(self.outputs.pop_front().unwrap_or(ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        }))
+    }
+}
+
+fn activate_module_manifest_for_test(world: &mut World, manifest: ModuleManifest) {
+    let changes = ModuleChangeSet {
+        register: vec![manifest.clone()],
+        activate: vec![ModuleActivation {
+            module_id: manifest.module_id.clone(),
+            version: manifest.version.clone(),
+        }],
+        ..ModuleChangeSet::default()
+    };
+
+    let mut content = serde_json::Map::new();
+    content.insert(
+        "module_changes".to_string(),
+        serde_json::to_value(&changes).unwrap(),
+    );
+    let manifest_update = Manifest {
+        version: 2,
+        content: serde_json::Value::Object(content),
+    };
+
+    let proposal_id = world
+        .propose_manifest_update(manifest_update, "alice")
+        .unwrap();
+    world.shadow_proposal(proposal_id).unwrap();
+    world
+        .approve_proposal(proposal_id, "bob", ProposalDecision::Approve)
+        .unwrap();
+    world.apply_proposal(proposal_id).unwrap();
+}
 
 #[test]
 fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
@@ -462,4 +525,136 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
     );
     assert_eq!(completed_factory.production.active_jobs, 0);
     assert_eq!(completed_factory.production.completed_jobs, 1);
+}
+
+#[test]
+fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0.0, 0.0),
+    });
+    world.step().expect("register agent");
+
+    world
+        .set_material_balance("steel_plate", 20)
+        .expect("seed build steel");
+    world
+        .set_material_balance("circuit_board", 4)
+        .expect("seed build circuits");
+    world.submit_action(Action::BuildFactory {
+        builder_agent_id: "builder-a".to_string(),
+        site_id: "site-1".to_string(),
+        spec: factory_spec("factory.blocked_resume.post_action", 1, 1),
+    });
+    world.step().expect("start build");
+    world.step().expect("finish build");
+
+    let plan = RecipeExecutionPlan::accepted(
+        1,
+        vec![MaterialStack::new("iron_ingot", 2)],
+        vec![MaterialStack::new("motor_mk1", 1)],
+        Vec::new(),
+        1,
+        1,
+    );
+    world.set_resource_balance(ResourceKind::Electricity, 5);
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.blocked_resume.post_action".to_string(),
+        recipe_id: "recipe.blocked_resume".to_string(),
+        plan: plan.clone(),
+    });
+    world.step().expect("block factory production");
+
+    world
+        .set_ledger_material_balance(MaterialLedgerId::site("site-1"), "iron_ingot", 2)
+        .expect("seed recovery iron");
+
+    let observer_wasm_bytes = b"module-post-action-followup-observer";
+    let observer_wasm_hash = util::sha256_hex(observer_wasm_bytes);
+    world
+        .register_module_artifact(observer_wasm_hash.clone(), observer_wasm_bytes)
+        .unwrap();
+    activate_module_manifest_for_test(
+        &mut world,
+        ModuleManifest {
+            module_id: "m.post-action.followup-observer".to_string(),
+            name: "PostActionFollowupObserver".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Pure,
+            role: ModuleRole::Domain,
+            wasm_hash: observer_wasm_hash.clone(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["call".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: vec!["action.economy.schedule_recipe".to_string()],
+                stage: Some(ModuleSubscriptionStage::PostAction),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: Some(signed_test_artifact_identity(observer_wasm_hash.as_str())),
+            limits: ModuleLimits {
+                max_mem_bytes: 1024,
+                max_gas: 10_000,
+                max_call_rate: 1,
+                max_output_bytes: 1024,
+                max_effects: 0,
+                max_emits: 0,
+            },
+        },
+    );
+
+    world.submit_action(Action::ScheduleRecipe {
+        requester_agent_id: "builder-a".to_string(),
+        factory_id: "factory.blocked_resume.post_action".to_string(),
+        recipe_id: "recipe.blocked_resume".to_string(),
+        plan,
+    });
+    let mut sandbox = CaptureContextSandbox::with_outputs(vec![ModuleOutput {
+        new_state: None,
+        effects: Vec::new(),
+        emits: Vec::new(),
+        tick_lifecycle: None,
+        output_bytes: 0,
+    }]);
+    world
+        .step_with_modules(&mut sandbox)
+        .expect("resume schedule with post_action observer");
+
+    assert_eq!(sandbox.requests.len(), 1);
+    let observer_input: ModuleCallInput =
+        serde_cbor::from_slice(&sandbox.requests[0].input).expect("decode observer input");
+    let observed_event: WorldEvent = serde_cbor::from_slice(
+        observer_input
+            .event
+            .as_deref()
+            .expect("post_action result event bytes"),
+    )
+    .expect("decode post_action event");
+    match observed_event.body {
+        WorldEventBody::Domain(DomainEvent::RecipeStarted {
+            factory_id,
+            recipe_id,
+            ..
+        }) => {
+            assert_eq!(factory_id, "factory.blocked_resume.post_action");
+            assert_eq!(recipe_id, "recipe.blocked_resume");
+        }
+        other => panic!("expected RecipeStarted, got {other:?}"),
+    }
+
+    match &world.journal().events.last().expect("followup event").body {
+        WorldEventBody::Domain(DomainEvent::FactoryProductionResumed {
+            factory_id,
+            recipe_id,
+            ..
+        }) => {
+            assert_eq!(factory_id, "factory.blocked_resume.post_action");
+            assert_eq!(recipe_id, "recipe.blocked_resume");
+        }
+        other => panic!("expected FactoryProductionResumed, got {other:?}"),
+    }
 }
