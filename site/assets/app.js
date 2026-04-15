@@ -831,11 +831,11 @@
         .join(" ")
         .toLowerCase();
 
-      if (candidates.includes("win")) {
-        return "windows";
-      }
       if (candidates.includes("mac") || candidates.includes("darwin")) {
         return "macos";
+      }
+      if (/\bwindows\b|\bwin32\b|\bwin64\b|\bwinnt\b/.test(candidates)) {
+        return "windows";
       }
       if (candidates.includes("linux") || candidates.includes("x11")) {
         return "linux";
