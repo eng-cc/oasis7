@@ -3,7 +3,7 @@ title: "Define overwrite reinstall upgrade policy"
 owner_role: producer_system_designer
 worktree_hint: oasis7-world-simulator-broader-user-release-distribution-design
 execution_log_path: .pm/tasks/task_30d0e01f74a3ced99f104893beb9d53f.execution.md
-status: candidate
+status: done
 priority: P1
 source_signal: null
 source_refs:
@@ -19,4 +19,6 @@ acceptance:
   - "Config and local world migration boundaries are explicit before any in-app updater work begins."
   - "User-facing guidance distinguishes manual replace/install now from later auto-update work."
 handoff_to: []
-updated_at: 2026-04-15T05:45:00+08:00
+updated_at: 2026-04-15T19:53:49+08:00
+last_started_at: 2026-04-15T19:44:46+08:00
+last_closed_at: 2026-04-15T19:53:42+08:00

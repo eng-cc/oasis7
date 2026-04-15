@@ -361,9 +361,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               <p data-download-source-copy>下载 `oasis7-macos-x64.dmg`，挂载后将 `oasis7 Client Launcher.app` 拖入 `/Applications` 即可；默认不再把 bundle 内部脚本暴露给普通用户。</p>
               <p data-download-source-link-label>下载 macOS 主包</p>
               <p data-download-source-requirements>Intel x64 macOS 桌面环境；当前未提供独立 Apple Silicon 包，若在 Apple Silicon 设备上验证，需要接受兼容层前提。</p>
-              <p data-download-source-install>打开 `.dmg` 后拖入 `/Applications`，随后从应用目录启动 `oasis7 Client Launcher.app`。</p>
+              <p data-download-source-install>打开 `.dmg` 后拖入 `/Applications`；升级时优先用新 `.app` 替换现有安装，不要把“先删除旧包”表述为会自动保留本地状态的等价路径。</p>
               <p data-download-source-trust>当前 DMG 仍处于技术预览阶段，尚未完成 codesign + notarization；Gatekeeper 相关警告在 notarization 收口前仍可能出现。</p>
-              <p data-download-source-support>当前仅承诺技术预览验证链路，不承诺“首次打开零系统警告”；正式普通用户体验以后续 notarization 任务为准。</p>
+              <p data-download-source-support>当前仅承诺技术预览验证链路，不承诺“首次打开零系统警告”；若你有本地 `config.toml` 或链执行 world，请在替换前先自行备份，正式普通用户体验以后续 notarization 任务为准。</p>
               <p data-download-source-footnote>已按当前设备优先选中 macOS x64；如果你要给其他机器下载，可切换上方平台按钮。</p>
             </article>
             <article
@@ -375,7 +375,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               <p data-download-source-copy>下载 `oasis7-linux-x86_64.AppImage`，赋予执行权限后即可直接运行；`.deb` 已降级为发行版特化次级入口，不再和主包并列展示。</p>
               <p data-download-source-link-label>下载 Linux 主包</p>
               <p data-download-source-requirements>x86_64 Linux 桌面环境；默认主包面向可运行 AppImage 的发行版，当前不提供 ARM/Linux 其他架构主包。</p>
-              <p data-download-source-install>下载后执行 `chmod +x oasis7-linux-x86_64.AppImage`，再双击或命令行运行；默认不要求 root 或包管理器。</p>
+              <p data-download-source-install>下载后执行 `chmod +x oasis7-linux-x86_64.AppImage`，再双击或命令行运行；升级时直接替换现有 AppImage 文件，不要默认假设跨目录移动会自动迁移本地状态。</p>
               <p data-download-source-trust>Linux 主包当前依赖公开 `SHA256` 校验文件辅助验证，不提供额外平台签名外壳；`.deb` 仅保留在 Release 附件中作为高级入口。</p>
               <p data-download-source-support>若桌面环境缺少 AppImage 集成或被安全策略拦截，请先看发布说明中的最小执行说明；发行版特化问题不进入默认支持路径。</p>
               <p data-download-source-footnote>已按当前设备优先选中 Linux x64；如果你要给其他机器下载，可切换上方平台按钮。</p>
@@ -392,7 +392,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               </a>
             </li>
             <li>Linux `.deb` 作为发行版特化次级入口，仅保留在 Release 附件与说明中，不再进入默认下载决策面。</li>
-            <li>当前升级建议仍是“重新下载最新主包并覆盖安装/替换”；更细的配置/world 目录迁移口径仍在后续专题中收口。</li>
+            <li>当前升级口径已固定为“重新下载最新主包并手动覆盖安装/替换”，还没有应用内自动更新。</li>
+            <li>升级前请自行备份当前启动目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/`；这些状态当前仍按实际启动工作目录解析。</li>
+            <li>Windows 尤其要避免把“先卸载再重装”当作等价升级路径：当前卸载器会删除安装目录。</li>
           </ul>
         </div>
       </section>

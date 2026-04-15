@@ -485,6 +485,15 @@ Optional:
   OASIS7_CHAIN_STORAGE_PROFILE=release_default ./run-game.sh
   OASIS7_CHAIN_STORAGE_PROFILE=soak_forensics ./run-web-launcher.sh --listen-bind 0.0.0.0:5410
 
+Upgrade policy (current truth):
+- Re-download the latest primary package and manually replace/overwrite the current install.
+- There is no in-app updater or automatic config/world migration in this bundle yet.
+- Back up these paths from the directory you actually launch from before replacing the bundle:
+  - config.toml
+  - .oasis7_launcher_ux_state.json
+  - output/chain-runtime/<node_id>/reward-runtime-execution-world/
+- On Windows, do not assume uninstall + reinstall preserves local state. The current uninstaller removes the install directory.
+
 Bundle layout:
 - bin/oasis7_client_launcher
 - bin/oasis7_game_launcher

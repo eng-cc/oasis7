@@ -362,9 +362,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               <p data-download-source-copy>Download `oasis7-macos-x64.dmg`, mount it, and drag `oasis7 Client Launcher.app` into `/Applications`. The default surface no longer exposes internal bundle scripts as the primary decision path.</p>
               <p data-download-source-link-label>Download macOS Primary Package</p>
               <p data-download-source-requirements>Intel x64 macOS desktop environment. A separate Apple Silicon package is not shipped yet, so Apple Silicon validation still depends on compatibility assumptions.</p>
-              <p data-download-source-install>Open the `.dmg`, drag the app into `/Applications`, then launch `oasis7 Client Launcher.app` from there.</p>
+              <p data-download-source-install>Open the `.dmg` and drag the app into `/Applications`. For upgrades, replace the existing app in place; do not describe “delete first, then reinstall” as an equivalent state-preserving path.</p>
               <p data-download-source-trust>macOS preview packaging has not completed codesign + notarization yet. Gatekeeper prompts may still appear until the notarization task is closed.</p>
-              <p data-download-source-support>This is a technical-preview installation path, not a promise of first-launch zero-warning ordinary-user polish. The public trust-chain contract remains incomplete today.</p>
+              <p data-download-source-support>This is a technical-preview installation path, not a promise of first-launch zero-warning ordinary-user polish. If you keep local `config.toml` or chain execution-world state, back it up yourself before replacing the package.</p>
               <p data-download-source-footnote>The page auto-selected macOS x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
             </article>
             <article
@@ -376,7 +376,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               <p data-download-source-copy>Download `oasis7-linux-x86_64.AppImage`, grant execute permission, and launch directly. The `.deb` asset is now secondary distro-specific material rather than a competing default choice.</p>
               <p data-download-source-link-label>Download Linux Primary Package</p>
               <p data-download-source-requirements>x86_64 Linux desktop environment. The default path assumes AppImage-capable distros; no ARM/Linux alt-arch package is presented as a primary public option.</p>
-              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it via terminal or desktop. Root privileges and package-manager knowledge are not required for the default path.</p>
+              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it via terminal or desktop. For upgrades, replace the existing AppImage file directly rather than assuming cross-directory moves will migrate local state for you.</p>
               <p data-download-source-trust>Linux preview distribution currently relies on the public `SHA256` manifest for auxiliary verification. The `.deb` asset remains in release attachments as an advanced path only.</p>
               <p data-download-source-support>If your desktop environment blocks AppImage or lacks integration, check release notes for minimum run guidance first. Distro-specific behavior is not the default support lane.</p>
               <p data-download-source-footnote>The page auto-selected Linux x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
@@ -393,7 +393,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               </a>
             </li>
             <li>Linux `.deb` remains a distro-specific secondary asset in release attachments and notes, not a peer default CTA.</li>
-            <li>The current upgrade expectation is still “re-download the latest primary package and replace/overwrite the install”; a fuller config/world migration policy remains a follow-up topic.</li>
+            <li>The current upgrade contract is fixed as “re-download the latest primary package and manually replace/overwrite the current install.” There is no in-app auto-update yet.</li>
+            <li>Before upgrading, back up `config.toml`, `.oasis7_launcher_ux_state.json`, and `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/` from the directory you actually launch from. Those state paths are still resolved relative to the active working directory today.</li>
+            <li>On Windows in particular, do not treat “uninstall then reinstall” as a state-preserving equivalent. The current uninstaller removes the install directory.</li>
           </ul>
         </div>
       </section>
