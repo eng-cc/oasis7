@@ -11,7 +11,7 @@
 - [ ] windows-release-codesign-trust-chain (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 为 Windows 公共主包补齐代码签名、Publisher trust chain 与证书型 CI 阻断；在仓库未配置签名凭据前，不宣称 Windows 已达到普通用户“无安全警告”目标。 Trace: .pm/tasks/task_1bf477181357609321ff82e92ca9050e.yaml
 - [ ] macos-notarized-release-dmg (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 将 macOS 公共主包升级为签名并 notarized 的 `.app + .dmg`，补齐图标、应用元数据、Gatekeeper 通过路径与 CI 阻断。 Trace: .pm/tasks/task_f7299eb703f78c1ae0d2086fc4b88c29.yaml
 - [x] linux-appimage-primary-release-asset (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 将 Linux 公共主包切到 `AppImage`，同时把 `.deb` 降级为高级/次级入口，并补齐支持发行版说明。 Trace: .pm/tasks/task_85eb196085584f8e9ebb9b3f988cd169.yaml
-- [ ] site-single-primary-release-cta (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 改造 `site/index.html`、`site/en/index.html` 与 Release 说明，使官网按平台只展示一个主 CTA，并前置显示系统要求、checksums 与失败支持路径。 Trace: .pm/tasks/task_3ec0a2b3318344209a2569fa294d05d1.yaml
+- [x] site-single-primary-release-cta (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 改造 `site/index.html`、`site/en/index.html`、`site/assets/{app.js,styles.css}` 与 `scripts/site-download-check.sh`，使官网按平台只展示一个主 CTA，并前置显示系统要求、checksums 与失败支持路径。 Trace: .pm/tasks/task_3ec0a2b3318344209a2569fa294d05d1.yaml
 - [ ] release-upgrade-path-overwrite-policy (PRD-WORLD_SIMULATOR-043) [test_tier_required]: 设计并验证“重新下载覆盖安装/替换”的升级口径，明确配置/world 目录迁移边界；应用内更新若要推进，需另开专题。 Trace: .pm/tasks/task_30d0e01f74a3ced99f104893beb9d53f.yaml
 
 ## 依赖
@@ -23,7 +23,7 @@
 - `site/{index.html,en/index.html}`
 
 ## 状态
-- 最近更新：2026-04-14
+- 最近更新：2026-04-15
 - 当前阶段: in_progress
-- 当前任务: T0/T1/T3 已完成；T1A/T2/T4/T5 待继续实施
-- 备注: 当前 Windows 公共主包已经从自解压 bundle 改为标准安装器，Linux 公共主包也已切到 `AppImage` 且 `.deb` 退为次级高级入口；但 Windows 代码签名、macOS notarization 与官网单主 CTA/支持边界仍未闭环，因此整体普通用户发行目标尚未完成。
+- 当前任务: T0/T1/T3/T4 已完成；T1A/T2/T5 待继续实施
+- 备注: 当前官网下载面已经切到“按平台单主 CTA + 支持边界 + checksums 前置”的默认决策面；Windows 代码签名、macOS notarization 与更完整的升级覆盖口径仍未闭环，因此整体普通用户发行目标尚未完成。

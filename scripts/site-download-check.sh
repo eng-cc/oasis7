@@ -9,6 +9,19 @@ SITE_ENTRIES=(
   "${REPO_ROOT}/site/en/index.html"
 )
 
+REQUIRED_ENTRY_MARKERS=(
+  "data-release-tag"
+  "data-release-date"
+  "data-release-notes-link"
+  "data-download-surface"
+  "data-download-primary-link"
+  "data-download-primary-requirements"
+  "data-download-primary-support"
+  "data-download-platform-button=\"windows\""
+  "data-download-platform-button=\"macos\""
+  "data-download-platform-button=\"linux\""
+)
+
 RELEASE_ASSET_URLS=(
   "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-windows-x64.exe"
   "https://github.com/eng-cc/oasis7/releases/latest/download/oasis7-macos-x64.dmg"
@@ -36,18 +49,12 @@ for entry in "${SITE_ENTRIES[@]}"; do
     fi
   done
 
-  if ! contains_fixed_pattern "data-release-tag" "${entry}"; then
-    echo "error: missing data-release-tag in ${entry}" >&2
-    exit 1
-  fi
-  if ! contains_fixed_pattern "data-release-date" "${entry}"; then
-    echo "error: missing data-release-date in ${entry}" >&2
-    exit 1
-  fi
-  if ! contains_fixed_pattern "data-release-notes-link" "${entry}"; then
-    echo "error: missing data-release-notes-link in ${entry}" >&2
-    exit 1
-  fi
+  for marker in "${REQUIRED_ENTRY_MARKERS[@]}"; do
+    if ! contains_fixed_pattern "${marker}" "${entry}"; then
+      echo "error: missing required download marker in ${entry}: ${marker}" >&2
+      exit 1
+    fi
+  done
 done
 
 if ! contains_fixed_pattern "https://api.github.com/repos/eng-cc/oasis7/releases/latest" "${REPO_ROOT}/site/assets/app.js"; then

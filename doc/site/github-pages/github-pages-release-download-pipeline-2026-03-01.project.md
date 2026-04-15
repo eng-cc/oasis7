@@ -210,8 +210,8 @@
 
 ## 状态
 - 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X/T3Y 已完成；公开下载主资产已收口为 `AppImage` / `.dmg` / `.exe`，Linux `.deb` 转为次级高级入口）
-- 最近更新：2026-04-15 已进一步把 Linux 公共主资产切到 `oasis7-linux-x86_64.AppImage`，并将 Windows `package-native` 从自解压 SFX `.exe` 切到 NSIS 标准安装器；同时继续保留 `scripts/validate-release-platform-entrypoints.sh` 作为 bundle 真值门禁。
-- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 与 `latest/download` 直链全部可用；随后继续推进 Windows 签名、macOS notarization 与官网单主 CTA/支持边界。
+- 最近更新：2026-04-15 已进一步把 Linux 公共主资产切到 `oasis7-linux-x86_64.AppImage`，并将 Windows `package-native` 从自解压 SFX `.exe` 切到 NSIS 标准安装器；随后官网首页也已切到“按平台单主 CTA + checksums/支持边界前置”的默认下载面，同时继续保留 `scripts/validate-release-platform-entrypoints.sh` 作为 bundle 真值门禁。
+- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 与最新站点下载面全部可用；随后继续推进 Windows 签名、macOS notarization 与升级覆盖口径。
 
 ## 迁移记录（2026-03-03）
 - 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。
