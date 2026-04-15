@@ -1,4 +1,4 @@
-# Gameplay 10-minute retention gate verdict (2026-04-09)
+# Gameplay 10-minute trust gate verdict (2026-04-09)
 
 审计轮次: 2
 
@@ -8,7 +8,7 @@
 - 责任角色: `qa_engineer`
 - 裁决角色: `producer_system_designer`
 - 当前结论: `hold`
-- 目标: 在当前 10 分钟留存修复切片下，区分 active-LLM formal lane 与 debug/probe lane，重新核对 `software_safe` floor，并输出 producer 可直接采纳的 `continue_playing / hold` 结论。
+- 目标: 在当前 10 分钟留存修复切片下，区分 active-LLM formal lane 与 debug/probe lane，重新核对 `software_safe` floor，并输出 producer 可直接采纳的 `10-minute trust gate` 结论，同时把 `first capability gate` 作为独立 follow-up 结论记录。
 
 ## Lane boundary
 - active-LLM formal lane:
@@ -41,20 +41,20 @@
 
 ## Formal 10-minute evidence
 
-### Qualified 10-minute samples
+### Qualified 10-minute trust samples
 
 | 样本 | run id | 工件目录 | 结果卡 | 关键事实 | QA 结论 |
 | --- | --- | --- | --- | --- | --- |
-| A | `20260410-125829` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-125829/` | `doc/playability_test_result/card_2026_04_10_12_58_29.md` | `playDurationMs=600000`，`reachedPostOnboarding=true`，`maxLogicalTime=43`，`finalGoalId=post_onboarding.establish_first_capability`，`finalProgressPercent=20` | formal lane 稳定连通，但 10 分钟内没有把 `post_onboarding.establish_first_capability` 从 `20%` 推进到可持续能力闭环；`continue_playing` 不成立。 |
-| B | `20260410-132858` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-132858/` | `doc/playability_test_result/card_2026_04_10_13_28_58.md` | 先到 `post_onboarding / 20%`，随后在样本中后段 UI 语义回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=22`、`eventSeq=7` 在余下样本保持不变 | formal lane 不只是“20% 不涨”，还出现阶段语义回退并伴随时间冻结，属于更强的 retention blocker。 |
-| C | `20260410-134323` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-134323/` | `doc/playability_test_result/card_2026_04_10_13_43_23.md` | 先到 `post_onboarding / 20%`，随后在样本前中段即回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=13`、`eventSeq=6` 在余下样本保持不变 | B 的回退冻结签名在另一独立 10 分钟样本中再次复现，说明当前 `hold` 不是单次偶发噪音。 |
+| A | `20260410-125829` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-125829/` | `doc/playability_test_result/card_2026_04_10_12_58_29.md` | `playDurationMs=600000`，`reachedPostOnboarding=true`，`maxLogicalTime=43`，`finalGoalId=post_onboarding.establish_first_capability`，`finalProgressPercent=20` | formal lane 稳定连通，说明 trust path 至少不是“第一步就停机”；但该样本只足以说明 trust 有希望，不足以单独证明 `first capability gate`。 |
+| B | `20260410-132858` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-132858/` | `doc/playability_test_result/card_2026_04_10_13_28_58.md` | 先到 `post_onboarding / 20%`，随后在样本中后段 UI 语义回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=22`、`eventSeq=7` 在余下样本保持不变 | formal lane 不只是 capability 没闭环，还出现 trust 级别的阶段回退并伴随时间冻结，属于更强的 blocker。 |
+| C | `20260410-134323` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-134323/` | `doc/playability_test_result/card_2026_04_10_13_43_23.md` | 先到 `post_onboarding / 20%`，随后在样本前中段即回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=13`、`eventSeq=6` 在余下样本保持不变 | B 的回退冻结签名在另一独立 10 分钟样本中再次复现，说明当前 `10-minute trust gate = hold` 不是单次偶发噪音。 |
 
 ### Supplemental shorter samples
 - `20260410-111006`
   - `playDurationMs=300000`
   - 已到 `post_onboarding.establish_first_capability`
   - `finalProgressPercent=20`
-  - 说明 5 分钟窗口内也只看到“到达 20%”而不是“完成首个可持续能力”
+  - 说明 5 分钟窗口内也只看到“到达 20%”而不是“完成首个可持续能力”；该事实归入 capability gate，而不是单独决定 trust gate
 - `20260410-111714`
   - `playDurationMs=300000`
   - 已到 `post_onboarding.establish_first_capability`
@@ -72,26 +72,27 @@
 
 ## Gate summary
 - formal lane sample count:
-  - qualified 10-minute samples: `3 / 3`
+  - qualified 10-minute trust samples: `3 / 3`
   - supplemental 300s samples: `3`
   - excluded samples: `2`
 - `software_safe` floor verdict: `pass`
-- headed Web/UI retention verdict: `hold`
-- QA gate input: `hold`
+- `10-minute trust gate` verdict: `hold`
+- `first capability gate` verdict: `not yet proven`
+- QA gate input: `trust_hold + capability_unproven`
 - exact blocker signature:
-  - 样本 A 证明当前阻断不再是 provider timeout 或首步 floor 崩溃，而是 formal lane 在 `post_onboarding.establish_first_capability` 长时间卡在 `20%`
-  - 样本 B/C 进一步证明存在更强阻断：同一正式 lane 会在进入 `post_onboarding / 20%` 后回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime/eventSeq` 冻结不再增长
+  - 样本 A 证明当前阻断不再是 provider timeout 或首步 floor 崩溃；但它仍只证明 trust path 有前进，不足以单独证明 `first capability gate`
+  - 样本 B/C 进一步证明存在更强 trust blocker：同一正式 lane 会在进入 `post_onboarding / 20%` 后回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime/eventSeq` 冻结不再增长
 
 ## Producer verdict
 - producer decision: `hold`
 - rationale:
-  - `PRD-GAME-012` 的当前 formal lane 不再受 `Responses API` 10 秒 timeout 控制 floor 阻断，但这不等于 retention gate 可放行。
-  - 三条正式 10 分钟样本里，没有任何一条证明玩家能在 10 分钟窗口内建立“首个可持续能力”。
-  - 其中两条样本已经出现阶段语义回退 + 逻辑时间冻结，说明当前 blocker 不是单纯 pacing 偏慢，而是正式 progression/retention 仍未闭环。
+  - `PRD-GAME-012` 的当前 formal lane 不再受 `Responses API` 10 秒 timeout 控制 floor 阻断，但这不等于 `10-minute trust gate` 可放行。
+  - 三条正式 10 分钟样本里，只有一条保持连续 progression；另外两条样本已经出现阶段语义回退 + 逻辑时间冻结，因此 trust gate 仍不能给 `continue_playing`。
+  - “首个可持续能力尚未闭环”继续成立，但该事实改为独立 capability gate 结论，不再单独充当 trust gate 的唯一失败理由。
 
 ## Required follow-up before re-open
-- `producer_system_designer` 需要把当前 gate 从“已恢复到 watch”更新为“floor pass，但 active-LLM retention hold”，停止对外延伸 `continue_playing` 口径。
+- `producer_system_designer` 需要把当前 gate 从“已恢复到 watch”更新为“floor pass，但 `10-minute trust gate = hold`”，并把 `first capability gate` 单列为未证明状态，停止对外延伸 `continue_playing` 口径。
 - `runtime_engineer` / `viewer_engineer` 需要先解释并修复这两个签名中的至少一个，再重新申请正式复验：
-  - `post_onboarding.establish_first_capability` 长时间停在 `20%`
-  - `post_onboarding -> first_session_loop` 的阶段语义回退伴随 `logicalTime/eventSeq` 冻结
+  - `post_onboarding -> first_session_loop` 的阶段语义回退伴随 `logicalTime/eventSeq` 冻结（trust gate blocker）
+  - `post_onboarding.establish_first_capability` 长时间停在 `20%`（capability gate blocker）
 - 继续保留 debug/probe lane 的 `--no-llm` 工业与 UI 语义回归，但这些样本不得再作为 formal retention 结论。
