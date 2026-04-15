@@ -836,7 +836,7 @@ fn llm_agent_reroutes_duplicate_build_factory_to_schedule_on_known_factory() {
                 agent_id: "agent-1".to_string(),
             },
             factory_id: "factory.alpha".to_string(),
-            recipe_id: "recipe.assembler.control_chip".to_string(),
+            recipe_id: "recipe.assembler.gear".to_string(),
             batches: 1,
         })
     );
