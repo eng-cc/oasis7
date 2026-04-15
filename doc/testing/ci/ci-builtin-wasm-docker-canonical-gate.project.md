@@ -14,6 +14,7 @@
 - [x] T6 (PRD-TESTING-CI-WASMHARD-002): identity / receipt 输入收敛为源码白名单与稳定 tracked 文件集合。
 - [x] T7 (PRD-TESTING-CI-WASMHARD-002): identity 输入移除 workspace 根 `Cargo.lock`，改为模块级 lockfile 策略。
 - [x] T8 (PRD-TESTING-CI-WASMHARD-003): 落地“本地仅 `--check`、写入需显式授权”策略并同步测试手册。
+- [x] wasm-determinism-gate-ondemand-scope (PRD-TESTING-CI-WASMHARD-003) [test_tier_required]: 为 `wasm-determinism-gate` 补 changed-path scope planner，保持 `verify-wasm-determinism (m1|m4|m5)` required contexts 稳定，同时把 docs-only / 无关 PR 收口为 job 内 no-op success。 Trace: .pm/tasks/task_3db20911d0a141cda3f990ea75bc5ea7.yaml
 
 ## 依赖
 - `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md`
@@ -29,9 +30,10 @@
 - `testing-manual.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
+- `testing-manual.md`
 
 ## 状态
-- 更新日期：2026-03-17
-- 当前阶段：已完成（现行口径已收敛；外部跨宿主 full-tier 证据按需补充）
+- 更新日期：2026-04-15
+- 当前阶段：已完成（现行口径已收敛；PR/push 改为 planner 先判 scope，无关改动 job 内 no-op；外部跨宿主 full-tier 证据按需补充）
 - 阻塞项：无
 - 下一步：无（等待新一轮治理需求）
