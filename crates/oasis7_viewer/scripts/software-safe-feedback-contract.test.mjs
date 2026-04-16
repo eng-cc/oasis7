@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 
 globalThis.window = {
-  location: { search: "" },
+  location: { search: "", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011", pathname: "/software_safe.html" },
+  history: { replaceState() {} },
+  localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
   addEventListener() {},
 };
 globalThis.document = {
+  documentElement: { lang: "en" },
   createElement() {
     return {
       getContext() {
@@ -30,6 +33,21 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(display.label, "LLM unavailable");
   assert.match(display.summary, /no usable LLM configuration/i);
   assert.match(display.detail, /config\.toml|OASIS7_LLM_/);
+}
+
+{
+  const display = core.describeSemanticFeedback({
+    kind: "chat",
+    stage: "error",
+    effect: "llm_init_failed",
+    reason: "llm init failed",
+    response: {
+      code: "llm_init_failed",
+      message: "llm init failed",
+    },
+  }, "zh");
+  assert.equal(display.label, "LLM 不可用");
+  assert.match(display.summary, /没有可用的 LLM 配置/);
 }
 
 {
@@ -105,6 +123,17 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.availableActions[0].actionId, "advance_step");
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
+}
+
+{
+  const gameplaySummary = core.buildGameplaySummary("zh");
+  assert.match(gameplaySummary.assetGovernanceHandoff, /资产 \/ 治理动作/);
+}
+
+{
+  assert.equal(core.setSoftwareSafeLocale("zh"), "zh");
+  assert.equal(core.state.uiLocale, "zh");
+  assert.equal(globalThis.document.documentElement.lang, "zh-CN");
 }
 
 {

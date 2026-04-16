@@ -2,7 +2,7 @@ use super::web_test_api::{
     consume_web_test_api_commands, publish_web_test_api_state, setup_web_test_api,
 };
 use super::*;
-use crate::i18n::UiI18n;
+use crate::i18n::{UiI18n, UiLocale};
 use crate::right_panel_module_visibility::RightPanelModuleVisibilityState;
 #[cfg(target_arch = "wasm32")]
 use bevy::asset::{AssetMetaCheck, AssetPlugin};
@@ -75,7 +75,7 @@ pub(super) fn run_ui(addr: String, offline: bool) {
         .insert_resource(CopyableTextPanelState::default())
         .insert_resource(OrbitDragState::default())
         .insert_resource(TwoDZoomTier::default())
-        .insert_resource(UiI18n::default())
+        .insert_resource(resolve_initial_ui_i18n())
         .insert_resource(auto_degrade_config)
         .insert_resource(AutoDegradeState::default())
         .insert_resource(perf_probe_config)
@@ -209,6 +209,62 @@ pub(super) fn run_ui(addr: String, offline: bool) {
                 .after(run_viewer_automation),
         )
         .run();
+}
+
+fn resolve_initial_ui_i18n() -> UiI18n {
+    UiI18n {
+        locale: resolve_initial_ui_locale().unwrap_or(UiI18n::default().locale),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn resolve_initial_ui_locale() -> Option<UiLocale> {
+    let window = web_sys::window()?;
+    let search = window.location().search().ok()?;
+    parse_ui_locale_from_search(search.as_str())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn resolve_initial_ui_locale() -> Option<UiLocale> {
+    None
+}
+
+fn parse_ui_locale_from_search(search: &str) -> Option<UiLocale> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let params = web_sys::UrlSearchParams::new_with_str(search).ok()?;
+        return parse_ui_locale_param(
+            params
+                .get("locale")
+                .or_else(|| params.get("language"))
+                .as_deref(),
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if search.trim().is_empty() {
+            return None;
+        }
+        let trimmed = search.trim_start_matches('?');
+        for pair in trimmed.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            let key = parts.next().unwrap_or_default();
+            let value = parts.next().unwrap_or_default();
+            if key == "locale" || key == "language" {
+                return parse_ui_locale_param(Some(value));
+            }
+        }
+        None
+    }
+}
+
+fn parse_ui_locale_param(raw: Option<&str>) -> Option<UiLocale> {
+    match raw.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
+        "zh" | "zh-cn" | "zh_cn" | "cn" | "chinese" => Some(UiLocale::ZhCn),
+        "en" | "en-us" | "en_us" | "english" => Some(UiLocale::EnUs),
+        _ => None,
+    }
 }
 
 fn primary_window_config() -> Window {
@@ -385,6 +441,28 @@ pub(super) fn decide_offline(headless: bool, offline_env: bool, force_online: bo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_ui_locale_from_search_accepts_locale_and_language_keys() {
+        assert_eq!(
+            parse_ui_locale_from_search("?locale=zh"),
+            Some(UiLocale::ZhCn)
+        );
+        assert_eq!(
+            parse_ui_locale_from_search("?language=en-US"),
+            Some(UiLocale::EnUs)
+        );
+        assert_eq!(
+            parse_ui_locale_from_search("?ws=ws://127.0.0.1:5011&locale=chinese"),
+            Some(UiLocale::ZhCn)
+        );
+    }
+
+    #[test]
+    fn parse_ui_locale_from_search_ignores_unknown_values() {
+        assert_eq!(parse_ui_locale_from_search("?locale=fr"), None);
+        assert_eq!(parse_ui_locale_from_search("?ws=ws://127.0.0.1:5011"), None);
+    }
 
     #[test]
     fn primary_window_config_sets_title_and_resolution() {

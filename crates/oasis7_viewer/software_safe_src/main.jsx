@@ -3,6 +3,43 @@ import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
 
+function uiLocale() {
+  return core.state.uiLocale;
+}
+
+function tr(locale, zh, en) {
+  return core.isLocaleZh(locale) ? zh : en;
+}
+
+function localeCode(locale) {
+  return core.isLocaleZh(locale) ? "zh" : "en";
+}
+
+function buildViewerEntryUrls(locale) {
+  const standardUrl = new URL(window.location.href);
+  standardUrl.pathname = standardUrl.pathname.replace(/software_safe\.html$/, "");
+  if (!standardUrl.pathname) {
+    standardUrl.pathname = "/";
+  }
+  standardUrl.searchParams.set("render_mode", "standard");
+  standardUrl.searchParams.set("locale", localeCode(locale));
+  standardUrl.searchParams.delete("language");
+  standardUrl.searchParams.delete("software_safe_reason");
+
+  const softwareSafeUrl = new URL(window.location.href);
+  softwareSafeUrl.searchParams.set("locale", localeCode(locale));
+  softwareSafeUrl.searchParams.delete("language");
+
+  return {
+    softwareSafeUrl: softwareSafeUrl.toString(),
+    standardUrl: standardUrl.toString(),
+  };
+}
+
+function openViewerUrl(url) {
+  window.open(url, "_blank", "noopener");
+}
+
 function Badge(props) {
   return <span class={props.class ?? "badge"}>{props.children}</span>;
 }
@@ -16,9 +53,10 @@ function JsonBlock(props) {
 }
 
 function DiagnosticDetails(props) {
+  const locale = () => props.locale ?? uiLocale();
   return (
     <details class="diagnostic">
-      <summary>{props.label ?? "Raw diagnostics"}</summary>
+      <summary>{props.label ?? tr(locale(), "原始诊断", "Raw diagnostics")}</summary>
       <div class="stack" style="margin-top:10px;">
         <Show when={props.note}>
           <div class="feedback-detail">{props.note}</div>
@@ -105,25 +143,26 @@ function renderResourceSummary(resources) {
 
 function TargetsPanel() {
   const lists = () => core.modelLists();
+  const locale = () => uiLocale();
 
   return (
     <div class="stack">
       <div class="field">
-        <label for="entity-search">Filter targets</label>
+        <label for="entity-search">{tr(locale(), "筛选目标", "Filter targets")}</label>
         <input
           id="entity-search"
           type="search"
-          placeholder="Search agents or locations"
+          placeholder={tr(locale(), "搜索 Agent 或地点", "Search agents or locations")}
           value={core.getSelectedSearch()}
           onInput={(event) => core.setSelectedSearch(event.currentTarget.value)}
         />
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">Agents</div>
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "Agents", "Agents")}</div>
         <div class="list">
           <Show
             when={lists().agents.length > 0}
-            fallback={<EmptyState>No agents in current snapshot.</EmptyState>}
+            fallback={<EmptyState>{tr(locale(), "当前快照里没有 Agent。", "No agents in current snapshot.")}</EmptyState>}
           >
             <For each={lists().agents}>
               {(agent) => (
@@ -136,7 +175,7 @@ function TargetsPanel() {
                 >
                   <div class="list-item__title">{agent.id}</div>
                   <div class="list-item__meta">
-                    {`location=${agent.location_id} · resources=${renderResourceSummary(agent.resources)}`}
+                    {`${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`}
                   </div>
                 </button>
               )}
@@ -145,11 +184,11 @@ function TargetsPanel() {
         </div>
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">Locations</div>
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "地点", "Locations")}</div>
         <div class="list">
           <Show
             when={lists().locations.length > 0}
-            fallback={<EmptyState>No locations in current snapshot.</EmptyState>}
+            fallback={<EmptyState>{tr(locale(), "当前快照里没有地点。", "No locations in current snapshot.")}</EmptyState>}
           >
             <For each={lists().locations}>
               {(location) => (
@@ -164,7 +203,7 @@ function TargetsPanel() {
                 >
                   <div class="list-item__title">{location.name || location.id}</div>
                   <div class="list-item__meta">
-                    {`id=${location.id} · resources=${renderResourceSummary(location.resources)}`}
+                    {`id=${location.id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`}
                   </div>
                 </button>
               )}
@@ -177,17 +216,19 @@ function TargetsPanel() {
 }
 
 function WorldSummaryPanel() {
+  const locale = () => uiLocale();
   const state = core.state;
-  const gameplaySummary = () => core.buildGameplaySummary();
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
   const controlFeedback = () => core.snapshotControlFeedback(state.lastControlFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
-  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback());
-  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback());
+  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
+  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const authSurface = () => core.buildAuthSurfaceModel();
   const hostedActionMatrixView = () => core.buildHostedActionMatrixView();
-  const hostedRecoveryHint = () => core.buildHostedRecoveryHint();
+  const hostedRecoveryHint = () => core.buildHostedRecoveryHint(locale());
   const selectedDebug = () => core.selectedAgentExecutionDebugContext();
+  const viewerEntryUrls = () => buildViewerEntryUrls(locale());
   const tierBadgeClass = (status) =>
     status === "active" || status === "active_legacy_preview"
       ? "badge badge--good"
@@ -204,16 +245,62 @@ function WorldSummaryPanel() {
     <div class="stack">
       <div class="badge-row">
         <Badge class="badge badge--accent">software_safe</Badge>
-        <Badge class="badge badge--accent">formal_web_entry</Badge>
-        <Badge class={core.connectionBadgeClass()}>{state.connectionStatus}</Badge>
+        <Badge class="badge badge--accent">{tr(locale(), "正式 Web 主入口", "Formal Web Entry")}</Badge>
+        <Badge class={core.connectionBadgeClass()}>
+          {tr(locale(), "连接状态", "connection")}={state.connectionStatus}
+        </Badge>
         <Badge>{`debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`}</Badge>
         <Badge>{`rendererClass=${state.rendererClass}`}</Badge>
         <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
       </div>
-      <PanelSection title="Formal Gameplay Summary">
+      <PanelSection title={tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry")}>
+        <div class="toolbar">
+          <button
+            data-locale="zh"
+            disabled={locale() === "zh"}
+            onClick={() => core.setSoftwareSafeLocale("zh")}
+          >
+            中文
+          </button>
+          <button
+            data-locale="en"
+            disabled={locale() === "en"}
+            onClick={() => core.setSoftwareSafeLocale("en")}
+          >
+            English
+          </button>
+        </div>
+        <EmptyState>
+          {tr(
+            locale(),
+            "当前 software_safe 页面支持中英文切换；如果你要进入显式 bilingual Viewer，可以直接打开下面这条标准 Viewer 入口。",
+            "This software_safe page supports Chinese and English. If you want the explicit bilingual Viewer surface, open the standard Viewer entry below.",
+          )}
+        </EmptyState>
+        <div class="toolbar">
+          <button
+            data-entry="software-safe-current-locale"
+            onClick={() => openViewerUrl(viewerEntryUrls().softwareSafeUrl)}
+          >
+            {tr(locale(), "当前语言重新打开 software_safe", "Re-open software_safe in current language")}
+          </button>
+          <button
+            data-entry="standard-viewer-current-locale"
+            onClick={() => openViewerUrl(viewerEntryUrls().standardUrl)}
+          >
+            {tr(locale(), "打开标准 Viewer", "Open standard Viewer")}
+          </button>
+        </div>
+        <div class="badge-row">
+          <Badge>{`locale=${localeCode(locale())}`}</Badge>
+          <Badge>{`software_safe=${viewerEntryUrls().softwareSafeUrl}`}</Badge>
+        </div>
+        <div class="feedback-detail">{viewerEntryUrls().standardUrl}</div>
+      </PanelSection>
+      <PanelSection title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}>
         <Show
           when={gameplaySummary()}
-          fallback={<EmptyState>Waiting for the first canonical gameplay snapshot…</EmptyState>}
+          fallback={<EmptyState>{tr(locale(), "等待首条 canonical gameplay 快照…", "Waiting for the first canonical gameplay snapshot…")}</EmptyState>}
         >
           {(gameplay) => (
             <>
@@ -233,18 +320,18 @@ function WorldSummaryPanel() {
                 </Badge>
               </div>
               <EventCard
-                title={gameplay().goalTitle || "Current Goal"}
+                title={gameplay().goalTitle || tr(locale(), "当前目标", "Current Goal")}
                 badge={gameplay().progressPercent == null ? "n/a" : `${gameplay().progressPercent}%`}
                 badgeClass="badge badge--accent"
-                meta={gameplay().objective || "No objective text yet."}
+                meta={gameplay().objective || tr(locale(), "当前还没有目标说明。", "No objective text yet.")}
               >
                 <Show when={gameplay().progressDetail}>
                   <div class="feedback-detail">{gameplay().progressDetail}</div>
                 </Show>
               </EventCard>
-              <EventCard title="Next Step" badge={gameplay().stageStatus || "-"}>
+              <EventCard title={tr(locale(), "下一步", "Next Step")} badge={gameplay().stageStatus || "-"}>
                 <div class="feedback-summary">
-                  {gameplay().nextStepHint || "Wait for the next runtime guidance update."}
+                  {gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
                 </div>
                 <Show when={gameplay().branchHint}>
                   <div class="feedback-detail">{gameplay().branchHint}</div>
@@ -252,12 +339,12 @@ function WorldSummaryPanel() {
               </EventCard>
               <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
                 <EventCard
-                  title="Blocked / Handoff"
+                  title={tr(locale(), "阻塞 / 交接", "Blocked / Handoff")}
                   badge={gameplay().blockerKind || "blocked"}
                   badgeClass="badge badge--warn"
                 >
                   <div class="feedback-summary">
-                    {gameplay().blockerDetail || "Gameplay is blocked and needs explicit recovery."}
+                    {gameplay().blockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
                   </div>
                   <div class="feedback-detail">{gameplay().assetGovernanceHandoff}</div>
                 </EventCard>
@@ -265,7 +352,7 @@ function WorldSummaryPanel() {
               <Show when={gameplay().recentFeedback}>
                 {(feedback) => (
                   <EventCard
-                    title="Recent Gameplay Feedback"
+                    title={tr(locale(), "最近玩法反馈", "Recent Gameplay Feedback")}
                     badge={feedback().stage || "-"}
                     badgeClass={
                       feedback().stage === "blocked" ? "badge badge--warn" : "badge badge--good"
@@ -285,11 +372,11 @@ function WorldSummaryPanel() {
                 )}
               </Show>
               <div>
-                <div class="panel__title" style="margin-bottom:10px;">Available Gameplay Actions</div>
+                <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
                 <div class="event-list">
                   <Show
                     when={gameplay().availableActions.length > 0}
-                    fallback={<EmptyState>No canonical gameplay actions published yet.</EmptyState>}
+                    fallback={<EmptyState>{tr(locale(), "当前还没有发布 canonical gameplay 动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
                   >
                     <For each={gameplay().availableActions}>
                       {(action) => (
@@ -301,7 +388,7 @@ function WorldSummaryPanel() {
                         >
                           <div class="feedback-detail">
                             {action.disabledReason
-                              || "Playable from the formal Web entry without opening the visual QA viewer."}
+                              || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.")}
                           </div>
                         </EventCard>
                       )}
@@ -309,10 +396,14 @@ function WorldSummaryPanel() {
                   </Show>
                 </div>
               </div>
-              <EventCard title="Missing Action Handoff" badge="explicit" badgeClass="badge badge--warn">
+              <EventCard title={tr(locale(), "缺失动作交接", "Missing Action Handoff")} badge="explicit" badgeClass="badge badge--warn">
                 <div class="feedback-summary">{gameplay().assetGovernanceHandoff}</div>
                 <div class="feedback-detail">
-                  Use the Asset / Governance Lane below for policy visibility. This page intentionally keeps transfer forms out of the primary Web entry.
+                  {tr(
+                    locale(),
+                    "资产 / 治理相关能力请走下面的单独 lane。本页刻意不把转账表单塞进 primary Web entry。",
+                    "Use the Asset / Governance Lane below for policy visibility. This page intentionally keeps transfer forms out of the primary Web entry.",
+                  )}
                 </div>
               </EventCard>
             </>
@@ -320,17 +411,17 @@ function WorldSummaryPanel() {
         </Show>
       </PanelSection>
       <div class="summary-grid">
-        <MetricCard label="Logical Time" value={state.logicalTime} />
-        <MetricCard label="Event Seq" value={state.eventSeq} />
-        <MetricCard label="World" value={state.worldId || "-"} />
-        <MetricCard label="Viewer Server" value={state.server || "-"} />
+        <MetricCard label={tr(locale(), "逻辑时间", "Logical Time")} value={state.logicalTime} />
+        <MetricCard label={tr(locale(), "事件序号", "Event Seq")} value={state.eventSeq} />
+        <MetricCard label={tr(locale(), "世界", "World")} value={state.worldId || "-"} />
+        <MetricCard label={tr(locale(), "Viewer 服务", "Viewer Server")} value={state.server || "-"} />
       </div>
       <div class="badge-row">
         <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
         <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
         <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
       </div>
-      <PanelSection title="Execution Lanes">
+      <PanelSection title={tr(locale(), "执行 Lane", "Execution Lanes")}>
         <div class="badge-row">
           <Badge class="badge badge--accent">debug_viewer</Badge>
           <Badge>{`status=${state.debugViewerStatus}`}</Badge>
@@ -338,8 +429,11 @@ function WorldSummaryPanel() {
           <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
         </div>
         <EmptyState style="margin-top:-2px;">
-          debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer
-          does not stop the agent lane.
+          {tr(
+            locale(),
+            "debug_viewer 是只读订阅 lane，只负责消费 runtime 快照和事件；关闭这个 viewer 不会停止 agent lane。",
+            "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.",
+          )}
         </EmptyState>
         <Show
           when={selectedDebug()}
@@ -352,8 +446,8 @@ function WorldSummaryPanel() {
         >
           {(debug) => (
             <>
-              <div class="badge-row">
-                <Badge class="badge badge--accent">selected agent lane</Badge>
+            <div class="badge-row">
+              <Badge class="badge badge--accent">selected agent lane</Badge>
                 <Badge>{`provider=${debug().provider_mode || "-"}`}</Badge>
                 <Badge>{`mode=${debug().execution_mode || "-"}`}</Badge>
                 <Badge>{`env=${debug().environment_class || "-"}`}</Badge>
@@ -365,9 +459,11 @@ function WorldSummaryPanel() {
                 <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
               </div>
               <EmptyState style="margin-top:-2px;">
-                Lane badges show the expected phase-1 execution contract. Provider check badges below
-                show the actual runtime_live probe against <code>/v1/provider/info</code> and{" "}
-                <code>/v1/provider/health</code>.
+                {tr(
+                  locale(),
+                  "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
+                  "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.",
+                )}
               </EmptyState>
               <div class="badge-row">
                 <Badge class="badge badge--accent">provider check</Badge>
@@ -463,7 +559,7 @@ function WorldSummaryPanel() {
             style="background:rgba(255,255,255,0.02); border-color:rgba(255,184,77,0.35);"
           >
             <div class="panel__header">
-              <div class="panel__title">Hosted Recovery</div>
+              <div class="panel__title">{tr(locale(), "托管恢复", "Hosted Recovery")}</div>
             </div>
             <div class="panel__body stack">
               <div class="badge-row">
@@ -548,10 +644,13 @@ function WorldSummaryPanel() {
         <EmptyState>{authSurface().reconnect}</EmptyState>
       </PanelSection>
       <Show when={hostedActionMatrixView().length > 0}>
-        <PanelSection title="Hosted Action Matrix">
+        <PanelSection title={tr(locale(), "托管动作矩阵", "Hosted Action Matrix")}>
           <EmptyState>
-            This is the hosted public-join truth surface exported by the launcher. QA should read these
-            action ids directly instead of inferring from button state alone.
+            {tr(
+              locale(),
+              "这里是 launcher 导出的 hosted public-join 真值面。QA 应该直接读取这些 action id，而不是只靠按钮状态推断。",
+              "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.",
+            )}
           </EmptyState>
           <div class="event-list">
             <For each={hostedActionMatrixView()}>
@@ -574,14 +673,14 @@ function WorldSummaryPanel() {
       </Show>
       <PlaybackControls controlFeedback={controlFeedback()} />
       <div class="summary-grid">
-        <MetricCard label="Prompt Feedback" value={promptFeedback()?.stage || "idle"}>
+        <MetricCard label={tr(locale(), "Prompt 反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
           <Show when={promptFeedbackDisplay()}>
             <Badge class={promptFeedbackDisplay().badgeClass}>
               {promptFeedbackDisplay().label}
             </Badge>
           </Show>
         </MetricCard>
-        <MetricCard label="Chat Feedback" value={chatFeedback()?.stage || "idle"}>
+        <MetricCard label={tr(locale(), "聊天反馈", "Chat Feedback")} value={chatFeedback()?.stage || "idle"}>
           <Show when={chatFeedbackDisplay()}>
             <Badge class={chatFeedbackDisplay().badgeClass}>
               {chatFeedbackDisplay().label}
@@ -590,9 +689,9 @@ function WorldSummaryPanel() {
         </MetricCard>
       </div>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">Recent Events</div>
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近事件", "Recent Events")}</div>
         <div class="event-list">
-          <Show when={state.recentEvents.length > 0} fallback={<EmptyState>Waiting for live events…</EmptyState>}>
+          <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待 live 事件…", "Waiting for live events…")}</EmptyState>}>
             <For each={state.recentEvents}>
               {(event) => (
                 <EventCard
@@ -613,17 +712,18 @@ function WorldSummaryPanel() {
 
 function PlaybackControls(props) {
   const [stepCount, setStepCount] = createSignal(3);
+  const locale = () => uiLocale();
 
   return (
-    <PanelSection title="Playback Controls">
+    <PanelSection title={tr(locale(), "回放控制", "Playback Controls")}>
       <div class="toolbar">
-        <button data-action="play" onClick={() => core.sendControl("play", null)}>Play</button>
-        <button data-action="pause" onClick={() => core.sendControl("pause", null)}>Pause</button>
-        <button data-action="step" onClick={() => core.sendControl("step", null)}>Step x1</button>
+        <button data-action="play" onClick={() => core.sendControl("play", null)}>{tr(locale(), "播放", "Play")}</button>
+        <button data-action="pause" onClick={() => core.sendControl("pause", null)}>{tr(locale(), "暂停", "Pause")}</button>
+        <button data-action="step" onClick={() => core.sendControl("step", null)}>{tr(locale(), "单步 x1", "Step x1")}</button>
       </div>
       <div class="control-grid">
         <div class="field">
-          <label for="step-count">Step count</label>
+          <label for="step-count">{tr(locale(), "步数", "Step count")}</label>
           <input
             id="step-count"
             type="number"
@@ -638,13 +738,13 @@ function PlaybackControls(props) {
             data-action="step-count"
             onClick={() => core.sendControl("step", { count: Math.max(1, Math.floor(stepCount() || 1)) })}
           >
-            Step custom count
+            {tr(locale(), "按自定义步数推进", "Step custom count")}
           </button>
         </div>
       </div>
       <Show
         when={props.controlFeedback}
-        fallback={<EmptyState>No control feedback yet.</EmptyState>}
+        fallback={<EmptyState>{tr(locale(), "还没有控制反馈。", "No control feedback yet.")}</EmptyState>}
       >
         {(feedback) => (
           <>
@@ -655,9 +755,9 @@ function PlaybackControls(props) {
               <Badge>{`Δevent=${feedback().deltaEventSeq}`}</Badge>
             </div>
             <div class="feedback-summary">
-              {feedback().effect || feedback().reason || "Control feedback updated."}
+              {feedback().effect || feedback().reason || tr(locale(), "控制反馈已更新。", "Control feedback updated.")}
             </div>
-            <DiagnosticDetails value={feedback()} />
+            <DiagnosticDetails value={feedback()} locale={locale()} />
           </>
         )}
       </Show>
@@ -666,6 +766,7 @@ function PlaybackControls(props) {
 }
 
 function InteractionPanel() {
+  const locale = () => uiLocale();
   const agentId = () => core.selectedAgentId();
   const authSurface = () => core.buildAuthSurfaceModel();
   const promptCapability = () => authSurface().capabilities.prompt_control;
@@ -676,9 +777,9 @@ function InteractionPanel() {
   const debugContext = () => core.selectedAgentExecutionDebugContext();
   const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
-  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback());
-  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback());
-  const promptVersionState = () => core.describePromptVersionState(promptFeedback());
+  const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
+  const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () =>
     core.state.chatHistory
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
@@ -686,15 +787,19 @@ function InteractionPanel() {
   const interactionEnabled = () => promptCapability().enabled;
   const assetLaneStatusText = () =>
     mainTokenTransferCapability().enabled
-      ? "preview_only"
+      ? tr(locale(), "仅预览", "preview_only")
       : mainTokenTransferCapability().code || "blocked";
   const assetLaneDetail = () =>
     mainTokenTransferCapability().enabled
-      ? "Contract marks main_token_transfer as strong_auth-capable on this lane, but software_safe still exposes no transfer form here."
+      ? tr(
+          locale(),
+          "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 software_safe 这里仍然不会直接暴露转账表单。",
+          "Contract marks main_token_transfer as strong_auth-capable on this lane, but software_safe still exposes no transfer form here.",
+        )
       : mainTokenTransferCapability().reason;
 
   if (!agentId()) {
-    return <EmptyState>Select an agent to unlock prompt/chat controls.</EmptyState>;
+    return <EmptyState>{tr(locale(), "先选中一个 Agent，才能解锁 prompt/chat 控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
   }
 
   return (
@@ -710,9 +815,15 @@ function InteractionPanel() {
       </div>
       <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
         <EmptyState>
-          {`Selected agent currently runs through the provider-backed loopback bridge in ${
-            debugContext()?.execution_mode || "headless_agent"
-          }; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`}
+          {tr(
+            locale(),
+            `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${
+              debugContext()?.execution_mode || "headless_agent"
+            }；software_safe 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`,
+            `Selected agent currently runs through the provider-backed loopback bridge in ${
+              debugContext()?.execution_mode || "headless_agent"
+            }; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`,
+          )}
         </EmptyState>
       </Show>
       <Show when={debugContext()?.provider_mode !== "provider_loopback_http"}>
@@ -752,7 +863,7 @@ function InteractionPanel() {
           }
         >
           <div class="field">
-            <label for="strong-auth-approval-code">Backend Approval Code</label>
+            <label for="strong-auth-approval-code">{tr(locale(), "后端审批码", "Backend Approval Code")}</label>
             <input
               id="strong-auth-approval-code"
               type="password"
@@ -765,7 +876,7 @@ function InteractionPanel() {
           </div>
         </Show>
         <div class="field">
-          <label for="prompt-system">System Prompt Override</label>
+          <label for="prompt-system">{tr(locale(), "System Prompt 覆盖", "System Prompt Override")}</label>
           <textarea
             id="prompt-system"
             rows="4"
@@ -778,7 +889,7 @@ function InteractionPanel() {
           />
         </div>
         <div class="field">
-          <label for="prompt-short">Short-Term Goal Override</label>
+          <label for="prompt-short">{tr(locale(), "短期目标覆盖", "Short-Term Goal Override")}</label>
           <textarea
             id="prompt-short"
             rows="3"
@@ -791,7 +902,7 @@ function InteractionPanel() {
           />
         </div>
         <div class="field">
-          <label for="prompt-long">Long-Term Goal Override</label>
+          <label for="prompt-long">{tr(locale(), "长期目标覆盖", "Long-Term Goal Override")}</label>
           <textarea
             id="prompt-long"
             rows="3"
@@ -809,19 +920,19 @@ function InteractionPanel() {
             disabled={!promptCapability().enabled}
             onClick={() => core.sendPromptControl("preview", null)}
           >
-            Preview Prompt
+            {tr(locale(), "预览 Prompt", "Preview Prompt")}
           </button>
           <button
             data-prompt-action="apply"
             disabled={!promptCapability().enabled}
             onClick={() => core.sendPromptControl("apply", null)}
           >
-            Apply Prompt
+            {tr(locale(), "应用 Prompt", "Apply Prompt")}
           </button>
         </div>
         <div class="toolbar">
           <div class="field" style="margin:0; min-width:180px; flex:1;">
-            <label for="prompt-rollback-version">Next Rollback Target Version</label>
+            <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
             <input
               id="prompt-rollback-version"
               type="number"
@@ -845,10 +956,10 @@ function InteractionPanel() {
               });
             }}
           >
-            Rollback Prompt
+            {tr(locale(), "回滚 Prompt", "Rollback Prompt")}
           </button>
         </div>
-        <Show when={promptFeedback()} fallback={<EmptyState>No prompt feedback yet.</EmptyState>}>
+        <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有 Prompt 反馈。", "No prompt feedback yet.")}</EmptyState>}>
           {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
         </Show>
         <Show when={core.state.strongAuth.lastGrantActionId}>
@@ -862,7 +973,7 @@ function InteractionPanel() {
           <EmptyState style="color:var(--bad);">{core.state.strongAuth.lastGrantError}</EmptyState>
         </Show>
       </PanelSection>
-      <PanelSection title="Asset / Governance Lane">
+      <PanelSection title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}>
         <div class="badge-row">
           <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
             {`main_token_transfer=${assetLaneStatusText()}`}
@@ -873,19 +984,19 @@ function InteractionPanel() {
         <EmptyState>{assetLaneDetail()}</EmptyState>
         <EmptyState>
           {mainTokenTransferPolicy()?.reason
-            || "No hosted action policy is available for main_token_transfer on this lane."}
+            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
         </EmptyState>
         <div class="toolbar">
-          <button disabled>Main Token Transfer (Not Exposed Here Yet)</button>
+          <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
         </div>
       </PanelSection>
-      <PanelSection title="Agent Chat">
+      <PanelSection title={tr(locale(), "Agent 聊天", "Agent Chat")}>
         <div class="field">
-          <label for="agent-chat-message">Message</label>
+          <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
           <textarea
             id="agent-chat-message"
             rows="4"
-            placeholder="Send a message to the selected agent"
+            placeholder={tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent")}
             disabled={!chatCapability().enabled}
             value={core.state.chatDraft.message}
             onInput={(event) => {
@@ -900,23 +1011,23 @@ function InteractionPanel() {
             disabled={!chatCapability().enabled}
             onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
           >
-            Send Chat
+            {tr(locale(), "发送聊天", "Send Chat")}
           </button>
         </div>
-        <Show when={chatFeedback()} fallback={<EmptyState>No chat feedback yet.</EmptyState>}>
+        <Show when={chatFeedback()} fallback={<EmptyState>{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</EmptyState>}>
           {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
         </Show>
         <div>
-          <div class="panel__title" style="margin-bottom:10px;">Message Flow</div>
+          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
           <div class="event-list">
-            <Show when={chatHistory().length > 0} fallback={<EmptyState>No chat history for this agent yet.</EmptyState>}>
+            <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
               <For each={chatHistory()}>
                 {(entry) => (
                   <EventCard
                     title={
                       entry.source === "player"
-                        ? `player → ${entry.targetAgentId || entry.agentId || "agent"}`
-                        : `${entry.agentId || "agent"} spoke`
+                        ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
+                        : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`
                     }
                     badge={`tick=${Number(entry.tick || 0)}`}
                     meta={`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}
@@ -934,10 +1045,11 @@ function InteractionPanel() {
 }
 
 function DetailsPanel() {
+  const locale = () => uiLocale();
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
-      : "nothing selected";
+      : tr(locale(), "未选择", "nothing selected");
   const snapshotSummary = () => ({
     config: core.state.snapshot?.config || null,
     counts: {
@@ -953,20 +1065,20 @@ function DetailsPanel() {
   return (
     <div class="stack">
       <div class="badge-row">
-        <Badge class="badge badge--accent">Selected</Badge>
+        <Badge class="badge badge--accent">{tr(locale(), "已选中", "Selected")}</Badge>
         <Badge>{selectedLabel()}</Badge>
       </div>
       <InteractionPanel />
-      <Show when={core.state.selectedObject} fallback={<EmptyState>Select an agent or location from the left list.</EmptyState>}>
+      <Show when={core.state.selectedObject} fallback={<EmptyState>{tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.")}</EmptyState>}>
         <JsonBlock value={core.clone(core.state.selectedObject)} />
       </Show>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">Snapshot Summary</div>
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "快照摘要", "Snapshot Summary")}</div>
         <JsonBlock value={snapshotSummary()} />
       </div>
       <Show when={core.state.lastError}>
         <div>
-          <div class="panel__title" style="margin-bottom:10px; color: var(--bad);">Last Error</div>
+          <div class="panel__title" style="margin-bottom:10px; color: var(--bad);">{tr(locale(), "最近错误", "Last Error")}</div>
           <pre class="json">{core.state.lastError}</pre>
         </div>
       </Show>
@@ -975,11 +1087,12 @@ function DetailsPanel() {
 }
 
 function AppShell() {
+  const locale = () => uiLocale();
   return (
     <>
       <section class="panel">
         <div class="panel__header">
-          <div class="panel__title">Targets</div>
+          <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
         </div>
         <div class="panel__body">
           <TargetsPanel />
@@ -987,7 +1100,7 @@ function AppShell() {
       </section>
       <section class="panel">
         <div class="panel__header">
-          <div class="panel__title">World Summary</div>
+          <div class="panel__title">{tr(locale(), "世界摘要", "World Summary")}</div>
         </div>
         <div class="panel__body">
           <WorldSummaryPanel />
@@ -995,7 +1108,7 @@ function AppShell() {
       </section>
       <section class="panel">
         <div class="panel__header">
-          <div class="panel__title">Details</div>
+          <div class="panel__title">{tr(locale(), "明细", "Details")}</div>
         </div>
         <div class="panel__body">
           <DetailsPanel />
