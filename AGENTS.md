@@ -15,7 +15,7 @@
    3. 进入实施前必须先确认当前 `worktree` 是否已绑定其他未完成任务，或是否存在与当前需求无关的未提交改动；任一成立，都必须先新开 `worktree`
    4. 只有用户明确说出“复用当前 `worktree`”“就在这里改”“不要切新 `worktree`”这类指令时，才允许不新开；“先写一版”“先不要提交”“顺手改一下”都不算复用授权
    5. 不能因为“文件很小”“只是文案修改”“已经开始改了几行”就继续复用当前 `worktree`；如果开工后才发现切错了，必须立即说明并切到新 `worktree`
-   6. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
+   6. 推荐优先通过 `./scripts/new-task-worktree.sh <module> <task>` 创建标准 worktree；若已经明确 owner role / task title / source refs，优先直接追加 `--pm-owner-role ... --pm-title ... --pm-source-ref ...` 在目标 worktree 内原子完成 `.pm` task 创建、`move-task --to-status committed` 与 `workflow-report --phase start`，避免把 task 文件误写到 source worktree；需要立刻检查模块文档或预热隔离栈时，可追加 `--init-docs` / `--with-harness`
    7. 涉及本地 Viewer Web / launcher / `agent-browser` / smoke 的任务，默认使用该需求自己的 `worktree` 与隔离 harness
 
 3. 新需求先确定 `owner role`，再创建/绑定 `.pm` task
@@ -24,7 +24,7 @@
       1. 低风险、短任务：`./.agents/roles/templates/handoff-brief.md`
       2. 跨模块、高风险：`./.agents/roles/templates/handoff-detailed.md`
    3. 接收方开始前必须确认目标、输入、输出、完成定义和验证方式
-   4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，先通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task . --owner-role <owner_role> ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
+   4. 仓库已启用 `.pm/` 运行层时，若当前需求尚未绑定 task，优先在目标 task worktree 内通过 `./scripts/new-task-worktree.sh ... --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性完成 `.pm` bootstrap；若手动执行，则也必须先 `cd` 到目标 worktree，再通过 `./scripts/pm/new-task.sh` 或 `python3 ./scripts/pm/pm_store.py new-task . --owner-role <owner_role> ...` 创建 `.pm` task，并按需要执行 `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status committed`，把任务放入 owner backlog
    5. 进入实施前执行 `./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`，把 `last_started_at` 写入当前任务，再读取该角色 backlog / memory / pending signals / stage 摘要后开始编辑；纯阶段评审时，才允许省略 `--task-uid`
 
 4. 先更新 `prd.md`，再拆 `project.md`

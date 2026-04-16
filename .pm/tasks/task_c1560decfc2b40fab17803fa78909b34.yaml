@@ -1,0 +1,20 @@
+task_uid: task_c1560decfc2b40fab17803fa78909b34
+title: "atomic task worktree and pm bootstrap"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-task-worktree-pm-bootstrap
+execution_log_path: .pm/tasks/task_c1560decfc2b40fab17803fa78909b34.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/prd.md
+related_prd:
+  - "PRD-ENGINEERING-021,PRD-ENGINEERING-029"
+acceptance:
+  - "Provide a one-shot task worktree bootstrap path that creates the git worktree, creates the .pm task inside the target worktree, moves it to committed, and records workflow-report start without mutating the source worktree."
+handoff_to: []
+updated_at: 2026-04-16T22:45:30+08:00
+last_started_at: 2026-04-16T22:34:35+08:00
+last_closed_at: 2026-04-16T22:45:22+08:00
