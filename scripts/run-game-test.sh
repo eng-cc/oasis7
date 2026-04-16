@@ -437,7 +437,10 @@ if [[ -n "$BUNDLE_DIR" ]]; then
   LAUNCH_MODE="bundle"
   LAUNCH_CMD="$BUNDLE_DIR/run-game.sh"
   if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
-    if ! "$ROOT_DIR/scripts/check-active-llm-provider.sh" >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
+    if ! (
+      cd "$BUNDLE_DIR"
+      "$ROOT_DIR/scripts/check-active-llm-provider.sh"
+    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
       echo "error: active LLM provider preflight failed before launcher startup" >&2
       echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
       tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
