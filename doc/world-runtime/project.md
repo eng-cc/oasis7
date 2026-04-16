@@ -300,6 +300,22 @@
     - `./scripts/p2p-real-env-traffic-monitor.sh --samples 2 --interval-secs 2 --window-minutes 10`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] node-traffic-monitor-feature-toggle (PRD-WORLD_RUNTIME-028) [test_tier_required]: 为真实 triad 节点补 repo-owned `start-node.sh` 源码与节点本地 traffic monitor，通过 `node.env` 开关启停本地 `/v1/chain/status` 周期采样，并让 monitor 与 runtime 共生命周期收口；单节点与 triad monitor 的汇总逻辑必须复用共享 helper，持久化 history 需做 bounded retention。 Trace: .pm/tasks/task_7863b156fce3484481310b33a263cc7c.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_7863b156fce3484481310b33a263cc7c.yaml`
+    - `.pm/tasks/task_7863b156fce3484481310b33a263cc7c.execution.md`
+    - `scripts/oasis7-node-traffic-monitor.sh`
+    - `scripts/traffic-monitor-summary.py`
+    - `scripts/p2p-triad-node-start.sh`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/oasis7-node-traffic-monitor.sh`
+    - `bash -n scripts/p2p-triad-node-start.sh`
+    - `./scripts/oasis7-node-traffic-monitor.sh --status-url http://127.0.0.1:5633/v1/chain/status --node-label triad-observer-local --out-dir .tmp/oasis7_node_traffic_monitor_test`
+    - `OASIS7_NODE_START_DRY_RUN=1 APP_ROOT=<tmp_app_root> ./scripts/p2p-triad-node-start.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -318,6 +334,7 @@
 - 更新日期: 2026-04-16
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `node-traffic-monitor-feature-toggle`（已补 repo-owned `scripts/p2p-triad-node-start.sh` 与 `scripts/oasis7-node-traffic-monitor.sh`，可通过 `node.env` 中的 `TRAFFIC_MONITOR_ENABLE` 等开关，让单节点在启动后自动对本地 `/v1/chain/status` 做周期采样，并把 monitor 生命周期绑定到 runtime/service 收口；节点与 triad monitor 现共用 `scripts/traffic-monitor-summary.py`，history 会按 retention 窗口自动裁剪。）
 - 最新完成: `triad-traffic-window-monitor`（已新增 `scripts/p2p-real-env-traffic-monitor.sh`，可将本机 observer + ECS sequencer/storage 的 `/v1/chain/status.traffic` 累计计数采样到持久化 history，并输出最近 N 分钟的 reset-aware delta 汇总，覆盖 UDP gossip / libp2p replication totals、top kind/topic/protocol、height 进度与 recent error counters；history 会按 retention 窗口自动裁剪并以 NDJSON 流式解析。）
 - 最新完成: `chain-status-traffic-metrics`（已为 `/v1/chain/status` 增加 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组节点流量快照；UDP gossip 现按消息种类累计 datagram/payload bytes，libp2p replication 现按 gossip/request/response 与 topic/protocol 统计逻辑 payload，并在 payload 中显式标记排除 transport headers、Kademlia control-plane 与 gossipsub mesh fanout 的范围说明。）
 - 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；随后把 runtime 事件/动作路由切到 prepared subscription cache，移除了 `filters_value.to_string()` 热路径固定成本。release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router `parse_each_time -> prepared_once` 在 no-regex / regex 场景都约为 `5.1x~5.5x`。）
