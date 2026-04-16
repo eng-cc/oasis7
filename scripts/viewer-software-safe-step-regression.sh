@@ -15,14 +15,15 @@ The script forces `render_mode=software_safe`, then verifies:
 - runtime connection reaches `connected`
 - target agent selection is reflected in state + DOM
 - realtime surfaces remain readable after selection
-- internal test API `step` still updates `lastControlFeedback` without relying on page buttons
+- world state advances naturally through live snapshot/metrics updates, or the page explicitly surfaces a gameplay blocker without exposing playback controls
 
 Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
   --out-dir <path>          Artifact root (default: output/playwright/viewer-software-safe-step)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
   --agent-id <id>           Target agent id (default: agent-0)
-  --step-timeout-ms <ms>    Wait timeout for internal step completion/progress (default: 15000)
+  --progress-timeout-ms <ms> Wait timeout for natural live progress (default: 15000)
+  --step-timeout-ms <ms>    Deprecated alias for --progress-timeout-ms
   --headed                  Open browser in headed mode
   --headless                Open browser in headless mode (default)
   -h, --help                Show this help
@@ -36,8 +37,7 @@ Artifacts:
   <out-dir>/<run-id>/browser_env.json
   <out-dir>/<run-id>/initial_state.json
   <out-dir>/<run-id>/after_select_state.json
-  <out-dir>/<run-id>/step_request.json
-  <out-dir>/<run-id>/after_step_state.json
+  <out-dir>/<run-id>/after_progress_state.json
   <out-dir>/<run-id>/final_state.json
   <out-dir>/<run-id>/software-safe-step-summary.json
   <out-dir>/<run-id>/software-safe-step-summary.md
@@ -129,7 +129,9 @@ state_render_mode() { json_get "$1" renderMode; }
 state_last_error() { json_get "$1" lastError; }
 state_logical_time() { json_get "$1" logicalTime; }
 state_event_seq() { json_get "$1" eventSeq; }
-state_last_feedback_json() { json_get "$1" lastControlFeedback; }
+state_blocker_kind() { json_get "$1" gameplaySummary.blockerKind; }
+state_blocker_detail() { json_get "$1" gameplaySummary.blockerDetail; }
+state_stage_status() { json_get "$1" gameplaySummary.stageStatus; }
 
 wait_for_api() {
   local timeout_ms=${1:-20000}
@@ -231,13 +233,14 @@ payload = {
     "agentId": sys.argv[4],
     "gameUrl": sys.argv[5],
     "renderMode": sys.argv[6],
-    "stepAccepted": sys.argv[7] == "true",
-    "selectedAgentVisible": sys.argv[8] == "true",
-    "playbackControlsVisible": sys.argv[9] == "true",
-    "logicalTimeAdvanced": sys.argv[10] == "true",
-    "eventSeqAdvanced": sys.argv[11] == "true",
-    "feedbackStage": None if sys.argv[12] == "null" else sys.argv[12],
-    "feedbackReason": None if sys.argv[13] == "null" else sys.argv[13],
+    "selectedAgentVisible": sys.argv[7] == "true",
+    "playbackControlsVisible": sys.argv[8] == "true",
+    "logicalTimeAdvanced": sys.argv[9] == "true",
+    "eventSeqAdvanced": sys.argv[10] == "true",
+    "autoProgressObserved": sys.argv[11] == "true",
+    "stageStatus": None if sys.argv[12] == "null" else sys.argv[12],
+    "blockerKind": None if sys.argv[13] == "null" else sys.argv[13],
+    "blockerDetail": None if sys.argv[14] == "null" else sys.argv[14],
 }
 print(json.dumps(payload, ensure_ascii=False, indent=2))
 PY
@@ -247,7 +250,7 @@ GAME_URL=""
 OUT_ROOT="output/playwright/viewer-software-safe-step"
 STARTUP_TIMEOUT_SECS=240
 AGENT_ID="agent-0"
-STEP_TIMEOUT_MS=15000
+PROGRESS_TIMEOUT_MS=15000
 HEADED=0
 STACK_ARGS=()
 BOOTSTRAP_USES_BUNDLE=0
@@ -271,8 +274,12 @@ while [[ $# -gt 0 ]]; do
       AGENT_ID="${2:-}"
       shift 2
       ;;
+    --progress-timeout-ms)
+      PROGRESS_TIMEOUT_MS="${2:-}"
+      shift 2
+      ;;
     --step-timeout-ms)
-      STEP_TIMEOUT_MS="${2:-}"
+      PROGRESS_TIMEOUT_MS="${2:-}"
       shift 2
       ;;
     --headed)
@@ -301,7 +308,7 @@ done
 
 [[ -n "$OUT_ROOT" ]] || { echo "error: --out-dir cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be positive" >&2; exit 2; }
-[[ "$STEP_TIMEOUT_MS" =~ ^[0-9]+$ ]] && [[ "$STEP_TIMEOUT_MS" -gt 0 ]] || { echo "error: --step-timeout-ms must be positive" >&2; exit 2; }
+[[ "$PROGRESS_TIMEOUT_MS" =~ ^[0-9]+$ ]] && [[ "$PROGRESS_TIMEOUT_MS" -gt 0 ]] || { echo "error: --progress-timeout-ms must be positive" >&2; exit 2; }
 
 require_cmd python3
 require_cmd rg
@@ -317,8 +324,7 @@ run_game_test_log="$out_dir/run-game-test.log"
 browser_env_json="$out_dir/browser_env.json"
 initial_state_json="$out_dir/initial_state.json"
 after_select_state_json="$out_dir/after_select_state.json"
-step_request_json="$out_dir/step_request.json"
-after_step_state_json="$out_dir/after_step_state.json"
+after_progress_state_json="$out_dir/after_progress_state.json"
 final_state_json="$out_dir/final_state.json"
 summary_json_path="$out_dir/software-safe-step-summary.json"
 summary_md_path="$out_dir/software-safe-step-summary.md"
@@ -443,37 +449,20 @@ wait_for_js_true "(() => {
   exit 1
 }
 
-log_note step
-step_request=$(ab_eval "$session" "(() => { try { return window.__AW_TEST__?.sendControl?.('step', null) ?? null; } catch (err) { return { accepted: false, reason: String(err), effect: 'exception on sendControl' }; } })()")
-write_json_file "$step_request" "$step_request_json"
-step_accepted=$(json_get "$step_request" accepted)
-if [[ "$step_accepted" == "true" ]]; then
-  wait_for_js_true "(() => {
-    const snapshot = window.__AW_TEST__?.getState?.();
-    const feedback = snapshot?.lastControlFeedback;
-    const stage = String(feedback?.stage || '');
-    if (feedback?.action !== 'step') {
-      return false;
-    }
-    return stage === 'completed_advanced'
-      || stage === 'completed_timeout'
-      || stage === 'completed_no_progress'
-      || stage === 'blocked'
-      || Number(snapshot?.logicalTime || 0) > ${before_logical_time}
-      || Number(snapshot?.eventSeq || 0) > ${before_event_seq};
-  })()" "$STEP_TIMEOUT_MS" || {
-    echo "error: step control did not reach terminal feedback or advance within timeout" >&2
-    exit 1
-  }
-fi
+log_note wait_live_progress
+wait_for_js_true "(() => {
+  const snapshot = window.__AW_TEST__?.getState?.();
+  return Number(snapshot?.logicalTime || 0) > ${before_logical_time}
+    || Number(snapshot?.eventSeq || 0) > ${before_event_seq};
+})()" "$PROGRESS_TIMEOUT_MS" || true
 
-after_step_state=$(ab_state)
-write_json_file "$after_step_state" "$after_step_state_json"
+after_progress_state=$(ab_state)
+write_json_file "$after_progress_state" "$after_progress_state_json"
 
 selected_agent_visible=true
 playback_controls_visible=false
-after_logical_time=$(state_logical_time "$after_step_state")
-after_event_seq=$(state_event_seq "$after_step_state")
+after_logical_time=$(state_logical_time "$after_progress_state")
+after_event_seq=$(state_event_seq "$after_progress_state")
 after_logical_time=${after_logical_time:-0}
 after_event_seq=${after_event_seq:-0}
 
@@ -485,34 +474,31 @@ fi
 if (( ${after_event_seq%%.*} > ${before_event_seq%%.*} )); then
   event_seq_advanced=true
 fi
+auto_progress_observed=false
+if [[ "$logical_time_advanced" == "true" || "$event_seq_advanced" == "true" ]]; then
+  auto_progress_observed=true
+fi
 
 final_state=$(ab_state)
 write_json_file "$final_state" "$final_state_json"
 ab_screenshot "$session" "$screenshot_path" >>"$ab_log" 2>&1 || true
 
-feedback_json=$(state_last_feedback_json "$after_step_state")
-feedback_stage=$(json_get "$feedback_json" stage)
-feedback_reason=$(json_get "$feedback_json" reason)
-feedback_action=$(json_get "$feedback_json" action)
-if [[ "$step_accepted" != "true" ]]; then
-  feedback_stage=${feedback_stage:-rejected}
-  if [[ -z "${feedback_reason:-}" || "$feedback_reason" == "null" ]]; then
-    feedback_reason=$(json_get "$step_request" reason)
-  fi
-fi
-if [[ "$step_accepted" == "true" && "$feedback_action" != "step" ]]; then
-  echo "error: lastControlFeedback action drifted to ${feedback_action:-<empty>}" >&2
-  exit 1
-fi
-if [[ "$(state_connection "$after_step_state")" != "connected" ]]; then
-  echo "error: viewer disconnected after step (lastError=$(state_last_error "$after_step_state"))" >&2
+stage_status=$(state_stage_status "$after_progress_state")
+blocker_kind=$(state_blocker_kind "$after_progress_state")
+blocker_detail=$(state_blocker_detail "$after_progress_state")
+if [[ "$(state_connection "$after_progress_state")" != "connected" ]]; then
+  echo "error: viewer disconnected after realtime wait (lastError=$(state_last_error "$after_progress_state"))" >&2
   exit 1
 fi
 fail_category=null
-if [[ "$step_accepted" == "true" && "$logical_time_advanced" != true && "$event_seq_advanced" != true && "$feedback_stage" != "completed_advanced" ]]; then
-  fail_category="no_progress_after_step"
-elif [[ "$step_accepted" == "true" && "$feedback_stage" != "completed_advanced" && "$feedback_stage" != "completed_timeout" && "$feedback_stage" != "completed_no_progress" && "$feedback_stage" != "blocked" ]]; then
-  fail_category="missing_terminal_feedback"
+if [[ "$auto_progress_observed" != "true" ]]; then
+  if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
+    :
+  elif [[ "${stage_status:-}" == "blocked" ]]; then
+    :
+  else
+    fail_category="no_auto_progress_or_explicit_blocker"
+  fi
 fi
 
 summary_raw=$(summary_json \
@@ -522,13 +508,14 @@ summary_raw=$(summary_json \
   "$AGENT_ID" \
   "$GAME_URL" \
   "$render_mode" \
-  "$step_accepted" \
   "$selected_agent_visible" \
   "$playback_controls_visible" \
   "$logical_time_advanced" \
   "$event_seq_advanced" \
-  "${feedback_stage:-null}" \
-  "${feedback_reason:-null}")
+  "$auto_progress_observed" \
+  "${stage_status:-null}" \
+  "${blocker_kind:-null}" \
+  "${blocker_detail:-null}")
 printf '%s\n' "$summary_raw" >"$summary_json_path"
 python3 - "$summary_json_path" "$summary_md_path" <<'PY'
 import json
@@ -545,20 +532,21 @@ lines = [
     f"- runId: `{data['runId']}`",
     f"- agentId: `{data['agentId']}`",
     f"- renderMode: `{data['renderMode']}`",
-    f"- stepAccepted: `{data['stepAccepted']}`",
     f"- selectedAgentVisible: `{data['selectedAgentVisible']}`",
     f"- playbackControlsVisible: `{data['playbackControlsVisible']}`",
     f"- logicalTimeAdvanced: `{data['logicalTimeAdvanced']}`",
     f"- eventSeqAdvanced: `{data['eventSeqAdvanced']}`",
-    f"- feedbackStage: `{data['feedbackStage']}`",
-    f"- feedbackReason: `{data['feedbackReason']}`",
+    f"- autoProgressObserved: `{data['autoProgressObserved']}`",
+    f"- stageStatus: `{data['stageStatus']}`",
+    f"- blockerKind: `{data['blockerKind']}`",
+    f"- blockerDetail: `{data['blockerDetail']}`",
     f"- gameUrl: `{data['gameUrl']}`",
 ]
 out.write_text("\n".join(lines) + "\n", encoding='utf-8')
 PY
 
 if [[ "$fail_category" != "null" ]]; then
-  echo "error: software_safe step did not produce playable advancement (failCategory=${fail_category}, feedbackStage=${feedback_stage:-null}, logicalTimeAdvanced=${logical_time_advanced}, eventSeqAdvanced=${event_seq_advanced})" >&2
+  echo "error: software_safe realtime-only regression saw neither natural progress nor explicit blocker (failCategory=${fail_category}, stageStatus=${stage_status:-null}, blockerKind=${blocker_kind:-null}, logicalTimeAdvanced=${logical_time_advanced}, eventSeqAdvanced=${event_seq_advanced})" >&2
   exit 1
 fi
 

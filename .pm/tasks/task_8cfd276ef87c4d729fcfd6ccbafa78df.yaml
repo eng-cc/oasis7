@@ -1,0 +1,21 @@
+task_uid: task_8cfd276ef87c4d729fcfd6ccbafa78df
+title: "software_safe realtime auto-progress QA"
+owner_role: qa_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_8cfd276ef87c4d729fcfd6ccbafa78df.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-039
+acceptance:
+  - "software_safe QA regression no longer manually calls step and instead verifies live logicalTime/eventSeq progression while keeping realtime-only UI contract"
+  - "testing/manual and project trace reflect auto-progress-only QA contract"
+handoff_to: []
+updated_at: 2026-04-16T20:27:18+08:00
+last_started_at: 2026-04-16T20:15:50+08:00
+last_closed_at: 2026-04-16T20:27:18+08:00
