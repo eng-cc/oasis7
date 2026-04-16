@@ -1,0 +1,27 @@
+task_uid: task_ea7079990f1049e3a21e69e4eb5d6249
+title: "Refresh rust oversized baseline after compile cleanup"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workspace-compile-followup
+execution_log_path: .pm/tasks/task_ea7079990f1049e3a21e69e4eb5d6249.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/.governance/rust-oversized-file-baseline.tsv
+  - crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs
+  - crates/oasis7_client_launcher/src/launcher_core.rs
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-001
+acceptance:
+  - "Rust oversized baseline matches the current compile-cleanup branch after required shrink fixes."
+  - "Touched oversized files do not regress the touch-and-shrink gate."
+  - "Validation records the rust-size gate command used before PR preparation."
+handoff_to: []
+updated_at: 2026-04-16T23:51:43+08:00
+last_started_at: 2026-04-16T23:50:14+08:00
+last_closed_at: 2026-04-16T23:51:43+08:00

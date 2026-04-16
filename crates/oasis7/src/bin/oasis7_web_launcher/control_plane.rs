@@ -1,6 +1,5 @@
 use super::runtime_paths::viewer_dev_dist_candidates;
 use super::*;
-
 use oasis7_proto::storage_profile::StorageProfile;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -23,7 +22,6 @@ mod support;
 #[cfg(test)]
 #[path = "control_plane/tests.rs"]
 mod tests;
-
 #[cfg(test)]
 use self::support::resolve_viewer_static_env_override;
 use self::support::{
@@ -943,7 +941,6 @@ pub(super) fn validate_game_config_with_launcher_bin(
             "viewer static directory does not exist or is not a directory: {viewer_static_dir}"
         ));
     }
-
     issues
 }
 
@@ -952,7 +949,6 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if !config.chain_enabled {
         return issues;
     }
-
     if parse_host_port(config.chain_status_bind.as_str(), "chain status bind").is_err() {
         issues.push("chain status bind must be in <host:port> format".to_string());
     }
