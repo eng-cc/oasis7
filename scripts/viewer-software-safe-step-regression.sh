@@ -238,9 +238,10 @@ payload = {
     "logicalTimeAdvanced": sys.argv[9] == "true",
     "eventSeqAdvanced": sys.argv[10] == "true",
     "autoProgressObserved": sys.argv[11] == "true",
-    "stageStatus": None if sys.argv[12] == "null" else sys.argv[12],
-    "blockerKind": None if sys.argv[13] == "null" else sys.argv[13],
-    "blockerDetail": None if sys.argv[14] == "null" else sys.argv[14],
+    "blockerDomVisible": None if sys.argv[12] == "null" else sys.argv[12] == "true",
+    "stageStatus": None if sys.argv[13] == "null" else sys.argv[13],
+    "blockerKind": None if sys.argv[14] == "null" else sys.argv[14],
+    "blockerDetail": None if sys.argv[15] == "null" else sys.argv[15],
 }
 print(json.dumps(payload, ensure_ascii=False, indent=2))
 PY
@@ -486,16 +487,64 @@ ab_screenshot "$session" "$screenshot_path" >>"$ab_log" 2>&1 || true
 stage_status=$(state_stage_status "$after_progress_state")
 blocker_kind=$(state_blocker_kind "$after_progress_state")
 blocker_detail=$(state_blocker_detail "$after_progress_state")
+blocker_dom_visible=null
 if [[ "$(state_connection "$after_progress_state")" != "connected" ]]; then
   echo "error: viewer disconnected after realtime wait (lastError=$(state_last_error "$after_progress_state"))" >&2
   exit 1
 fi
 fail_category=null
 if [[ "$auto_progress_observed" != "true" ]]; then
+  explicit_blocker_state=false
   if [[ -n "${blocker_kind:-}" && "$blocker_kind" != "null" ]]; then
-    :
+    explicit_blocker_state=true
   elif [[ "${stage_status:-}" == "blocked" ]]; then
-    :
+    explicit_blocker_state=true
+  fi
+
+  if [[ "$explicit_blocker_state" == "true" ]]; then
+    blocker_dom_check_js=$(python3 - "${stage_status:-null}" "${blocker_kind:-null}" "${blocker_detail:-null}" <<'PY'
+import json
+import sys
+
+stage_status = sys.argv[1]
+blocker_kind = sys.argv[2]
+blocker_detail = sys.argv[3]
+
+print(r"""
+(() => {
+  const normalize = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  const text = normalize(document.body && document.body.innerText ? document.body.innerText : '');
+  const stageStatus = %s;
+  const blockerKind = %s;
+  const blockerDetail = %s;
+  const surfaceKeywords = [
+    'formal gameplay summary',
+    'recent feedback',
+    'blocker',
+    'blocked',
+    'handoff',
+    '正式玩法摘要',
+    '最近反馈',
+    '阻塞',
+    '交接',
+    '接管',
+  ];
+  const hasSurface = surfaceKeywords.some((token) => text.includes(normalize(token)));
+  const kindOk = !blockerKind || blockerKind === 'null' || text.includes(normalize(blockerKind));
+  const detailOk = !blockerDetail || blockerDetail === 'null' || text.includes(normalize(blockerDetail));
+  const statusOk = stageStatus !== 'blocked' || text.includes('blocked') || text.includes('阻塞');
+  return hasSurface && kindOk && detailOk && statusOk;
+})()
+""" % (json.dumps(stage_status), json.dumps(blocker_kind), json.dumps(blocker_detail)))
+PY
+)
+    blocker_dom_visible=$(normalize_eval_token "$(ab_eval "$session" "$blocker_dom_check_js" 2>>"$ab_log" || printf 'false')")
+    if [[ "$blocker_dom_visible" != "true" ]]; then
+      fail_category="blocker_ui_not_visible"
+    fi
   else
     fail_category="no_auto_progress_or_explicit_blocker"
   fi
@@ -513,6 +562,7 @@ summary_raw=$(summary_json \
   "$logical_time_advanced" \
   "$event_seq_advanced" \
   "$auto_progress_observed" \
+  "${blocker_dom_visible:-null}" \
   "${stage_status:-null}" \
   "${blocker_kind:-null}" \
   "${blocker_detail:-null}")
@@ -537,6 +587,7 @@ lines = [
     f"- logicalTimeAdvanced: `{data['logicalTimeAdvanced']}`",
     f"- eventSeqAdvanced: `{data['eventSeqAdvanced']}`",
     f"- autoProgressObserved: `{data['autoProgressObserved']}`",
+    f"- blockerDomVisible: `{data['blockerDomVisible']}`",
     f"- stageStatus: `{data['stageStatus']}`",
     f"- blockerKind: `{data['blockerKind']}`",
     f"- blockerDetail: `{data['blockerDetail']}`",
