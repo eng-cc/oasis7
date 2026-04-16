@@ -99,12 +99,14 @@ fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
     let target_peer_id = PeerId::random();
     let mut pending_peer_record_requests = HashMap::new();
     let mut pending_cached_peer_records = HashSet::new();
+    let mut cached_peer_record_cooldowns = HashMap::new();
     let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
     let requested = super::super::discovery::maybe_request_cached_peer_record(
         &mut swarm,
         &mut pending_peer_record_requests,
         &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
         &traffic_metrics,
         &[target_peer_id],
         target_peer_id,
@@ -114,6 +116,169 @@ fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
     assert!(!requested);
     assert!(pending_peer_record_requests.is_empty());
     assert!(pending_cached_peer_records.is_empty());
+}
+
+#[test]
+fn maybe_request_connected_peer_record_respects_short_cooldown() {
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let local_peer_id = PeerId::random();
+    let target_peer_id = PeerId::random();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut connected_peer_record_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    let requested = super::super::discovery::maybe_request_connected_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested);
+    assert_eq!(pending_peer_record_requests.len(), 1);
+
+    pending_peer_record_requests.clear();
+    pending_connected_peer_records.clear();
+
+    let requested_during_cooldown = super::super::discovery::maybe_request_connected_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(!requested_during_cooldown);
+    assert!(pending_peer_record_requests.is_empty());
+
+    connected_peer_record_cooldowns.insert(target_peer_id, 0);
+
+    let requested_after_expiry = super::super::discovery::maybe_request_connected_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested_after_expiry);
+    assert_eq!(pending_peer_record_requests.len(), 1);
+}
+
+#[test]
+fn maybe_request_cached_peer_record_respects_short_cooldown() {
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let local_peer_id = PeerId::random();
+    let target_peer_id = PeerId::random();
+    let proxy_peer_id = PeerId::random();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_cached_peer_records = HashSet::new();
+    let mut cached_peer_record_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    let requested = super::super::discovery::maybe_request_cached_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &traffic_metrics,
+        &[proxy_peer_id],
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested);
+    assert_eq!(pending_peer_record_requests.len(), 1);
+
+    pending_peer_record_requests.clear();
+    pending_cached_peer_records.clear();
+
+    let requested_during_cooldown = super::super::discovery::maybe_request_cached_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &traffic_metrics,
+        &[proxy_peer_id],
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(!requested_during_cooldown);
+    assert!(pending_peer_record_requests.is_empty());
+
+    cached_peer_record_cooldowns.insert(target_peer_id, 0);
+
+    let requested_after_expiry = super::super::discovery::maybe_request_cached_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &traffic_metrics,
+        &[proxy_peer_id],
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested_after_expiry);
+    assert_eq!(pending_peer_record_requests.len(), 1);
+}
+
+#[test]
+fn maybe_request_cached_discovery_peers_respects_short_cooldown() {
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let local_peer_id = PeerId::random();
+    let target_peer_id = PeerId::random();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    let requested = super::super::discovery::maybe_request_cached_discovery_peers(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested);
+    assert_eq!(pending_peer_record_requests.len(), 1);
+
+    pending_peer_record_requests.clear();
+    pending_cached_discovery_peers.clear();
+
+    let requested_during_cooldown = super::super::discovery::maybe_request_cached_discovery_peers(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(!requested_during_cooldown);
+    assert!(pending_peer_record_requests.is_empty());
+
+    cached_discovery_peer_cooldowns.insert(target_peer_id, 0);
+
+    let requested_after_expiry = super::super::discovery::maybe_request_cached_discovery_peers(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(requested_after_expiry);
+    assert_eq!(pending_peer_record_requests.len(), 1);
 }
 
 #[test]
@@ -175,6 +340,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
     let mut pending_connected_peer_records = HashSet::new();
     let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
     let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_peer_record_cooldowns = HashMap::new();
     let event_errors = Arc::new(Mutex::new(Vec::new()));
     let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
@@ -196,6 +362,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         &traffic_metrics,
         &mut failed_transport_path_labels,
         &mut pending_discovery_peer_records,
+        &mut cached_peer_record_cooldowns,
         None,
         local_peer_id,
         &mut pending_connected_peer_records,
@@ -249,6 +416,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
     let mut pending_connected_peer_records = HashSet::new();
     let mut pending_cached_peer_records = HashSet::from([target_peer_id]);
     let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_peer_record_cooldowns = HashMap::new();
     let event_errors = Arc::new(Mutex::new(Vec::new()));
     let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
 
@@ -270,6 +438,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
         &traffic_metrics,
         &mut failed_transport_path_labels,
         &mut pending_discovery_peer_records,
+        &mut cached_peer_record_cooldowns,
         None,
         local_peer_id,
         &mut pending_connected_peer_records,

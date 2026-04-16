@@ -328,6 +328,24 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] peer-record-request-backoff (PRD-WORLD_RUNTIME-030) [test_tier_required]: 为 `libp2p_net` 的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 增加 peer-scoped 短时协议冷却，压制 DHT/routing/rendezvous/connection-established 高频重复取件，同时保留 cached-peer-record 单次请求链中的多 proxy fallback。 Trace: .pm/tasks/task_a28db8372d864bde9a9c5ea508bd7824.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_a28db8372d864bde9a9c5ea508bd7824.yaml`
+    - `.pm/tasks/task_a28db8372d864bde9a9c5ea508bd7824.execution.md`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/connection_lifecycle.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests/discovery_peer_record_tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/transport_retry_tests.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net discovery_peer_record_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net maybe_request_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_net --tests`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -348,6 +366,7 @@
 - 下一任务: `TASK-WORLD_RUNTIME-043`
 - 最新完成: `fetch-commit-retry-backoff`（已将 `libp2p_replication_network` 对 `fetch-commit` 的短时 peer cooldown 从“仅缺失 handler / 不支持协议签名的 `ErrUnsupported`”扩展到 `ErrNotFound`、`Timeout` 与连接缺口类失败；定向回归证明立即重试会被抑制，窗口过后仍可恢复请求，且 `ping` 等其他协议与泛化业务态 `ErrUnsupported` 不被误隔离。）
 - 最新完成: `node-traffic-monitor-feature-toggle`（已补 repo-owned `scripts/p2p-triad-node-start.sh` 与 `scripts/oasis7-node-traffic-monitor.sh`，可通过 `node.env` 中的 `TRAFFIC_MONITOR_ENABLE` 等开关，让单节点在启动后自动对本地 `/v1/chain/status` 做周期采样，并把 monitor 生命周期绑定到 runtime/service 收口；节点与 triad monitor 现共用 `scripts/traffic-monitor-summary.py`，history 会按 retention 窗口自动裁剪。）
+- 最新完成: `peer-record-request-backoff`（已为 `libp2p_net` 的 `get_local_peer_record`、`get_cached_peer_record`、`get_cached_discovery_peers` 增加 peer-scoped 10 秒短时协议冷却，压制 DHT/routing/rendezvous/connection-established 连续触发造成的重复取件；定向回归证明窗口内重试被抑制、窗口过后可恢复请求，且 cached-peer-record 的多 proxy fallback 仍保留。）
 - 最新完成: `triad-traffic-window-monitor`（已新增 `scripts/p2p-real-env-traffic-monitor.sh`，可将本机 observer + ECS sequencer/storage 的 `/v1/chain/status.traffic` 累计计数采样到持久化 history，并输出最近 N 分钟的 reset-aware delta 汇总，覆盖 UDP gossip / libp2p replication totals、top kind/topic/protocol、height 进度与 recent error counters。）
 - 最新完成: `chain-status-traffic-metrics`（已为 `/v1/chain/status` 增加 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组节点流量快照；UDP gossip 现按消息种类累计 datagram/payload bytes，libp2p replication 现按 gossip/request/response 与 topic/protocol 统计逻辑 payload，并在 payload 中显式标记排除 transport headers、Kademlia control-plane 与 gossipsub mesh fanout 的范围说明。）
 - 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；随后把 runtime 事件/动作路由切到 prepared subscription cache，移除了 `filters_value.to_string()` 热路径固定成本。release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router `parse_each_time -> prepared_once` 在 no-regex / regex 场景都约为 `5.1x~5.5x`。）
