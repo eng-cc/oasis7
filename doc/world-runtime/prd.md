@@ -79,6 +79,7 @@
   - PRD-WORLD_RUNTIME-025: As a `runtime_engineer`, I want oversized runtime hotpath files split below the 1200-line governance ceiling, so that determinism, replay, and rule changes stop depending on multi-kiloline match blocks.
   - PRD-WORLD_RUNTIME-026: As a `runtime_engineer` / `qa_engineer` / 节点运营者, I want `/v1/chain/status` to expose network traffic counters for `udp_gossip` and `libp2p_replication`, so that real traffic spikes can be attributed to a concrete lane instead of only host-level bandwidth totals.
   - PRD-WORLD_RUNTIME-027: As a `runtime_engineer` / 节点运营者, I want a persistent triad traffic sampler to convert cumulative `/v1/chain/status.traffic` counters into recent-window deltas, so that questions like "last 10 minutes per node" can be answered without waiting for a process restart.
+  - PRD-WORLD_RUNTIME-028: As a 节点运营者, I want traffic monitoring to be an env-gated node startup capability, so that local recent-window history can be enabled per node without hand-running an external triad script.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -121,6 +122,9 @@
   - AC-22: triad traffic monitor 必须支持最近 N 分钟窗口汇总，至少输出每节点的 UDP gossip / libp2p replication totals delta、top `by_kind` / `by_topic` / `by_protocol` 贡献项，以及 committed/network heights 与 recent error counters 的窗口变化。
   - AC-23: triad traffic monitor 的窗口基线选择必须识别 `observed_since_unix_ms` 变化并在进程重启或 counter reset 时自动缩短覆盖窗口，而不是跨 reset 计算负值或伪增量。
   - AC-24: triad traffic monitor 的持久化 history 不得无限增长；脚本必须只保留“最近窗口 + buffer”范围内的样本，并以 NDJSON 流式读取/裁剪 history，而不是整文件 `read_text` 后一次性解码。
+  - AC-25: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
+  - AC-26: 节点本地 traffic monitor 必须能通过 `node.env` 功能开关启停，默认对单节点本地 `/v1/chain/status` 进行周期采样，输出持久化 history 与最近 N 分钟 summary；节点与 triad monitor 的窗口汇总必须复用共享 helper，且本地 history 也要做 bounded retention。
+  - AC-27: 节点启动壳在开启 traffic monitor 时必须与 runtime 共享生命周期，runtime 退出或 service 停止时不能留下长期孤儿 monitor 进程；若开关开启但 monitor 脚本缺失，启动必须显式失败而不是静默跳过。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -200,6 +204,7 @@
 | PRD-WORLD_RUNTIME-025 | TASK-WORLD_RUNTIME-056 | `test_tier_required` + `test_tier_full` | 热路径文件长度治理、拆分后 determinism / replay / persistence 回归 | 规则演进可维护性、运行时热路径复杂度 |
 | PRD-WORLD_RUNTIME-026 | TASK-WORLD_RUNTIME-061 | `test_tier_required` | `/v1/chain/status` 流量快照、UDP gossip / libp2p replication counters、范围说明与定向回归 | 节点带宽归因、运行态网络可观测性 |
 | PRD-WORLD_RUNTIME-027 | task_370ce55ed73a490797055403164e8f41 | `test_tier_required` | triad traffic history 持久化、最近 N 分钟窗口汇总、`observed_since_unix_ms` reset-aware baseline 选择、live triad 短窗口采样验证 | 节点最近窗口流量归因、triad 运营监控可回答性 |
+| PRD-WORLD_RUNTIME-028 | task_7863b156fce3484481310b33a263cc7c | `test_tier_required` | repo-owned node start wrapper、env-gated local traffic monitor、dry-run CLI 装配验证、单节点 live status 采样验证 | 节点级监控开关、真实环境启动入口可维护性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
