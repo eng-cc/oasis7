@@ -29,6 +29,7 @@
 - [x] T21 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `producer_system_designer` 按新的主入口 contract 重跑 formal Web vs visual QA 证据，确认 `/` 与 `render_mode=auto` -> `software_safe` PASS、显式 `render_mode=standard` visual QA PASS，并记录 `software_safe` formal gameplay 当前因缺少 `OASIS7_LLM_MODEL` 环境配置而处于 `blocked`；产物见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 与 `output/playwright/viewer-{primary-web-entry,software-safe-step}/...`。
 - [x] T22 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 在 software-safe 的 Local Provider observer/debug surface 上，把 execution lane 期望 metadata 与 provider 实际 readiness check 分开展示，新增 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error` 语义，并以 repo-owned contract/test/documentation 固定该区别。
 - [x] software-safe-bilingual-viewer-entry (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 为 `software_safe` 补齐 `zh/en` 语言切换、为标准 Viewer 补 URL locale 初始化，并把本地试玩链路与 software-safe 页面里的显式 bilingual Viewer 入口一起收口。 Trace: .pm/tasks/task_cc8b4bf31e2648b0a8ffa22ed023d962.yaml
+- [x] software-safe-realtime-auto-progress (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` 将 `software_safe` 最小浏览器回归改为纯实时契约：不再手动调用 `step`，改为等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 gameplay blocker 卡住，则要求页面显式暴露 blocker，并继续禁止回放控件回归。 Trace: .pm/tasks/task_8cfd276ef87c4d729fcfd6ccbafa78df.yaml
 - [x] software-safe-realtime-only (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `software_safe` 页面收口为纯实时模式，移除页面内回放/步进/tick jump 控件，并过滤 canonical gameplay summary 里的 `live_control.play|step` 动作，只保留正式实时观察与语义交互入口。 Trace: .pm/tasks/task_3b03fd02dbca4de7aae0503749fd7832.yaml
 
 ## 依赖
@@ -45,12 +46,13 @@
 - 当前阶段：T0~T13 已完成，标准模式 bootstrap loading overlay 已改为一次性覆盖层并在 wasm Viewer 启动后自动 cleanup，不再持续压缩左侧视口。
 - 当前阶段：T0~T14 已完成，`software_safe` 已迁到 SolidJS 组件化渲染层，同时保留既有 product contract，并把 source-tree freshness gate 扩到框架构建输入。
 - 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
-- 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小 step browser regression，能重复验证连接、选中目标、`step` 推进与 DOM/`lastControlFeedback` 反馈。
+- 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小浏览器回归；最新 QA follow-up 已把该脚本收口为 realtime-only 契约，默认验证连接、选中目标、自然实时推进，或在 gameplay blocked 时验证 blocker 可见性。
 - 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
 - 当前阶段：T18~T22 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地，且新 contract 的 QA 证据与 Local Provider readiness truth 表达都已补齐：primary Web entry PASS、`standard` visual QA PASS、software-safe 已区分 lane metadata 与 actual provider check，且 `software_safe` formal gameplay 已在 LLM-enabled 环境中补跑 PASS。
 - 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3/T4.6`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 execution lane 元数据、actual provider check 真值，以及 OpenClaw runtime live 下的 observer-only 提示。
 - 最近更新：2026-04-08（完成 `T22` 后继续补跑 LLM-enabled formal gameplay：针对 `https://api.letai.run/v1` 修复 `Responses API` stream/list-input/output-item 聚合兼容层，随后以 `output/playwright/viewer-software-safe-step/20260408-133532/` 取得 formal Web gameplay PASS；详见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 的 2026-04-08 addendum。）
 - 最近更新：2026-04-16（新增 `T23`：software-safe 中英切换 + 标准 Viewer locale URL 初始化 + 本地试玩显式 bilingual Viewer 入口。）
+- 最近更新：2026-04-16（新增 QA realtime auto-progress follow-up：`viewer-software-safe-step-regression.sh` 不再手动 `step`，改为等待自然实时推进或显式 blocker。）
 - 最近更新：2026-04-16（新增 realtime-only 收口：software-safe 页面已移除回放/步进/tick jump 控件，canonical gameplay summary 不再暴露 `live_control.play|step`。）
 - 阻塞项：本专题主入口 contract 与 formal gameplay PASS 证据均已完成；当前剩余事项已转为 README / current-entry / release claim 口径同步，以及 `PRD-WORLD_SIMULATOR-037/038` parity/latency experimental follow-up，不能再把本专题记成“缺 provider 配置导致 blocked”。
 
