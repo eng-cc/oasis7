@@ -16,6 +16,8 @@ Options:
   --samples <n>                    number of samples to collect this run (default: 3)
   --interval-secs <n>              sleep between samples (default: 20)
   --window-minutes <n>             recent summary window in minutes (default: 10)
+  --history-retention-minutes <n>  keep only recent history for summary+buffer
+                                   (default: max(window+30, 120))
   --top-n <n>                      top protocol/topic/kind entries per node (default: 5)
   --ssh-timeout-secs <n>           SSH connect timeout in seconds (default: 8)
   --out-dir <path>                 output root (default: .tmp/p2p_real_env_traffic_monitor)
@@ -49,6 +51,8 @@ Notes:
   - Counter deltas are derived only from samples whose `observed_since_unix_ms`
     matches the latest sample for that node, so process restarts/reset windows
     shrink coverage instead of producing negative deltas.
+  - History is pruned to a bounded retention window before summarization, so
+    repeated cron/systemd runs do not grow `history.ndjson` without bound.
   - Use repeated invocations (cron/systemd timer) or a longer single run to
     accumulate enough history for a full 10-minute answer.
 USAGE
@@ -155,6 +159,7 @@ append_sample_record() {
 samples=3
 interval_secs=20
 window_minutes=10
+history_retention_minutes=""
 top_n=5
 ssh_timeout_secs=8
 out_root=".tmp/p2p_real_env_traffic_monitor"
@@ -181,6 +186,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --window-minutes)
       window_minutes=${2:-}
+      shift 2
+      ;;
+    --history-retention-minutes)
+      history_retention_minutes=${2:-}
       shift 2
       ;;
     --top-n)
@@ -240,6 +249,14 @@ if (( summary_only == 0 )); then
   ensure_positive_int --interval-secs "$interval_secs"
 fi
 ensure_positive_int --window-minutes "$window_minutes"
+if [[ -n "$history_retention_minutes" ]]; then
+  ensure_positive_int --history-retention-minutes "$history_retention_minutes"
+else
+  history_retention_minutes=$(( window_minutes + 30 ))
+  if (( history_retention_minutes < 120 )); then
+    history_retention_minutes=120
+  fi
+fi
 ensure_positive_int --top-n "$top_n"
 ensure_positive_int --ssh-timeout-secs "$ssh_timeout_secs"
 
@@ -278,6 +295,7 @@ jq -n \
   --argjson samples "$samples" \
   --argjson interval_secs "$interval_secs" \
   --argjson window_minutes "$window_minutes" \
+  --argjson history_retention_minutes "$history_retention_minutes" \
   --argjson top_n "$top_n" \
   --argjson ssh_timeout_secs "$ssh_timeout_secs" \
   --argjson summary_only "$summary_only" \
@@ -290,6 +308,7 @@ jq -n \
     samples: $samples,
     interval_secs: $interval_secs,
     window_minutes: $window_minutes,
+    history_retention_minutes: $history_retention_minutes,
     top_n: $top_n,
     ssh_timeout_secs: $ssh_timeout_secs,
     summary_only: ($summary_only == 1),
@@ -339,28 +358,60 @@ if [[ ! -s "$history_path" ]]; then
   exit 1
 fi
 
-python3 - "$history_path" "$latest_summary_json" "$latest_summary_md" "$window_minutes" "$top_n" "$run_id" "$run_dir" <<'PY'
+python3 - "$history_path" "$latest_summary_json" "$latest_summary_md" "$window_minutes" "$history_retention_minutes" "$top_n" "$run_id" "$run_dir" <<'PY'
 import json
 import sys
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
 
-def load_records(path: Path):
-    records = []
-    decoder = json.JSONDecoder()
-    text = path.read_text(encoding="utf-8")
-    index = 0
-    text_len = len(text)
-    while index < text_len:
-        while index < text_len and text[index].isspace():
-            index += 1
-        if index >= text_len:
-            break
-        record, next_index = decoder.raw_decode(text, index)
-        records.append(record)
-        index = next_index
-    return records
+def history_cutoff_ms(latest_ts_ms: int, retention_minutes: int):
+    return latest_ts_ms - retention_minutes * 60 * 1000
+
+
+def record_ts_ms(record):
+    value = record.get("captured_at_unix_ms")
+    if value is None:
+        return None
+    return int(value)
+
+
+def prune_and_load_records(path: Path, retention_minutes: int):
+    records = deque()
+    latest_ts_ms = None
+    total_records = 0
+
+    with path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            total_records += 1
+            ts_ms = record_ts_ms(record)
+            if ts_ms is None:
+                records.append(record)
+                continue
+            if latest_ts_ms is None or ts_ms > latest_ts_ms:
+                latest_ts_ms = ts_ms
+            records.append(record)
+            cutoff_ms = history_cutoff_ms(latest_ts_ms, retention_minutes)
+            while records:
+                oldest_ts_ms = record_ts_ms(records[0])
+                if oldest_ts_ms is None or oldest_ts_ms >= cutoff_ms:
+                    break
+                records.popleft()
+
+    pruned_records = list(records)
+    if len(pruned_records) != total_records:
+        tmp_path = path.with_name(path.name + ".tmp")
+        with tmp_path.open("w", encoding="utf-8") as fh:
+            for record in pruned_records:
+                fh.write(json.dumps(record, ensure_ascii=False))
+                fh.write("\n")
+        tmp_path.replace(path)
+    return pruned_records, total_records
 
 
 def clamp_delta(current, baseline):
@@ -683,12 +734,15 @@ history_path = Path(sys.argv[1])
 summary_json_path = Path(sys.argv[2])
 summary_md_path = Path(sys.argv[3])
 window_minutes = int(sys.argv[4])
-top_n = int(sys.argv[5])
-run_id = sys.argv[6]
-run_dir = sys.argv[7]
+history_retention_minutes = int(sys.argv[5])
+top_n = int(sys.argv[6])
+run_id = sys.argv[7]
+run_dir = sys.argv[8]
 generated_at = datetime.now(tz=timezone.utc).isoformat()
 
-records = load_records(history_path)
+records, total_history_records = prune_and_load_records(
+    history_path, history_retention_minutes
+)
 labels = ["observer_local", "sequencer_ecs", "storage_ecs"]
 records_by_label = {label: [] for label in labels}
 for record in records:
@@ -702,7 +756,10 @@ summary = {
     "run_id": run_id,
     "run_dir": run_dir,
     "history_path": str(history_path),
+    "history_retention_minutes": history_retention_minutes,
+    "history_record_count_before_prune": total_history_records,
     "history_record_count": len(records),
+    "history_pruned_count": max(0, total_history_records - len(records)),
     "window_minutes_requested": window_minutes,
     "top_n": top_n,
     "nodes": {},
@@ -722,7 +779,9 @@ md_lines = [
     "",
     f"- Generated at: `{generated_at}`",
     f"- History file: `{history_path}`",
-    f"- History record count: `{len(records)}`",
+    f"- History retention: `{history_retention_minutes}` minutes",
+    f"- History record count after prune: `{len(records)}`",
+    f"- History records pruned this run: `{max(0, total_history_records - len(records))}`",
     f"- Requested window: `{window_minutes}` minutes",
     f"- Top contributors per map: `{top_n}`",
     "",

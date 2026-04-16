@@ -15,6 +15,6 @@ related_prd:
 acceptance:
   - "Provide a reusable traffic sampler that records status traffic deltas over time and can summarize a recent window for local+ECS triad nodes."
 handoff_to: []
-updated_at: 2026-04-16T11:37:31+08:00
-last_started_at: 2026-04-16T11:23:26+08:00
-last_closed_at: 2026-04-16T11:37:20+08:00
+updated_at: 2026-04-16T21:41:58+08:00
+last_started_at: 2026-04-16T21:38:29+08:00
+last_closed_at: 2026-04-16T21:41:58+08:00
