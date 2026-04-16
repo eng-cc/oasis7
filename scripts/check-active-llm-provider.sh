@@ -20,5 +20,8 @@ resolve_target_dir() {
 TARGET_DIR="$(resolve_target_dir)"
 PROBE_BIN="$TARGET_DIR/oasis7_llm_provider_probe"
 
-env -u RUSTC_WRAPPER cargo build -q -p oasis7 --bin oasis7_llm_provider_probe >&2
+(
+  cd "$ROOT_DIR"
+  env -u RUSTC_WRAPPER cargo build -q -p oasis7 --bin oasis7_llm_provider_probe >&2
+)
 exec "$PROBE_BIN" "$@"
