@@ -1,0 +1,26 @@
+task_uid: task_67ace00b259d423a8569f52a2f58c1fd
+title: "Add changed-path scope planner for Rust required gate"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-rust-required-gate-scope
+execution_log_path: .pm/tasks/task_67ace00b259d423a8569f52a2f58c1fd.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - "doc/testing/ci/ci-tiered-execution.prd.md#L1"
+doc_refs:
+  - doc/testing/ci/ci-tiered-execution.project.md
+  - doc/testing/project.md
+related_prd:
+  - PRD-TESTING-002
+  - PRD-TESTING-CI-TIERED-002
+  - PRD-TESTING-CI-TIERED-003
+acceptance:
+  - "Rust required gate plans changed paths before heavy tests and keeps required-gate check context stable."
+  - "Docs-only and unrelated metadata changes run governance/fmt-only path without viewer/runtime heavy tests."
+  - "Local explicit ./scripts/ci-tests.sh required semantics stay unchanged unless CI scope env is set."
+  - "Testing docs and manual record the planner contract and verification evidence."
+handoff_to: []
+updated_at: 2026-04-16T23:27:14+08:00
+last_started_at: 2026-04-16T23:17:22+08:00
+last_closed_at: 2026-04-16T23:26:46+08:00

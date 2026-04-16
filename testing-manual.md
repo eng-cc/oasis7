@@ -97,8 +97,10 @@
   - `./scripts/llm-baseline-fixture-smoke.sh`
   - `cargo test -p oasis7 --features wasmtime --lib --bins`
 - 入口 B：`.github/workflows/rust.yml`（required-gate）
+  - planner 先执行：`./scripts/plan-rust-required-scope.sh --event-name <push|pull_request> --base-ref <base> --head-ref <head>`
   - `CI_VERBOSE=1 ./scripts/ci-tests.sh required`
-  - `./scripts/viewer-visual-baseline.sh`
+  - 若 planner 命中 viewer 视觉面，再执行：`./scripts/viewer-visual-baseline.sh`
+  - 本地显式 `./scripts/ci-tests.sh required` 仍保持全量 required 语义；只有 CI `required-gate` 会根据 planner 输出注入选择性 skip 环境变量
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
@@ -116,7 +118,7 @@
 结论：
 - `commit` 是默认本地提交基线，目标是尽快暴露格式/治理/viewer-support 回归，但不承担 `oasis7 --tests` required shard；
 - `required/full` 是“核心链路测试层”的主入口（required 含 `oasis7 + consensus + distfs + viewer`，full 追加 `node + net/libp2p`）；
-- `required-gate` 已补充 viewer 视觉基线脚本（snapshot 基线 + 定向测试）；
+- `required-gate` 已补充 changed-path scope planner 与 viewer 视觉基线脚本（snapshot 基线 + 定向测试）；
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
 
@@ -968,7 +970,8 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `crates/oasis7_consensus/**` | S0 + S4（consensus） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | epoch / attest / finality 逻辑改动优先补 S10 |
 | `crates/oasis7_distfs/**` | S0 + S4（distfs） + S9/S10（按改动面至少一条） | S2 + S8 + 另一条在线长跑（S9 或 S10） | 存储复制 / challenge / 修复逻辑改动优先补 S9 |
 | `doc/**`（非 `doc/devlog/**`） | S0（含 `./scripts/doc-governance-check.sh`） | 命中模块的抽样 required 证据核验 | 若文档改变发布 / 测试口径，追加对应模块的最小必跑集 |
-| `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + S1 + `./scripts/viewer-visual-baseline.sh` + （full）`./scripts/llm-baseline-fixture-smoke.sh` | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10 |
+| `scripts/ci-tests.sh` / `.github/workflows/rust.yml` | S0（含 `./scripts/doc-governance-check.sh`） + `bash -n scripts/plan-rust-required-scope.sh` + planner 样例 + S1 + `./scripts/viewer-visual-baseline.sh` + （full）`./scripts/llm-baseline-fixture-smoke.sh` | S2 + S4 + S6（抽样） | 若更改默认 gate 组合，需抽样至少一条 S9 或 S10；docs-only / `.pm` / 无关元数据 PR 必须验证 planner 可输出 `scope=minimal` 且保留 stable `required-gate` 上下文 |
+| `scripts/plan-rust-required-scope.sh` | `bash -n scripts/plan-rust-required-scope.sh` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7_viewer/src/lib.rs` + `./scripts/plan-rust-required-scope.sh --changed-path crates/oasis7/src/runtime/mod.rs` + `./scripts/plan-rust-required-scope.sh --changed-path doc/testing/project.md` + `./scripts/plan-rust-required-scope.sh --changed-path scripts/ci-tests.sh` | 与 `required-gate` 同步执行；PR/push 上先规划 `minimal / targeted / full`，再决定 viewer/runtime/support 哪些重型组件实际执行 | 命中共享 CI / gate 输入或未分类代码路径时必须回退 `scope=full`；docs-only / `.pm` / 无关元数据应输出 `scope=minimal` 且不跳过治理/fmt |
 | `scripts/release-gate.sh` / `.github/workflows/release-packages.yml` | `./scripts/ci-tests.sh full` + `sync-m1/m4/m5 --check` + Web strict + S9 + S10 | `./scripts/release-gate.sh --quick` / `--dry-run` | 任何发布 gate 逻辑变更均不允许跳过 S9/S10 |
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |
 | `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --changed-path doc/testing/project.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |

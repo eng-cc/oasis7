@@ -72,6 +72,7 @@
 - [x] TASK-TESTING-039 (PRD-TESTING-005) [test_tier_required]: 收敛 builtin wasm identity 的 `source_hash` 输入范围并移除 workspace 根 `Cargo.lock` 依赖。
 - [x] TASK-TESTING-040 (PRD-TESTING-005) [test_tier_required]: 收敛 builtin wasm 独立 gate 到 `wasm-determinism-gate` / required checks 保护与本地只读校验策略；GitHub-hosted 默认 runner 为 Linux，外部 Docker-capable macOS summary 作为 full-tier 补充证据。
 - [x] wasm-determinism-gate-ondemand-scope (PRD-TESTING-005) [test_tier_required]: 为 `wasm-determinism-gate` 补 changed-path scope planner，保持 `verify-wasm-determinism (m1|m4|m5)` required contexts 稳定，同时把 docs-only / 无关 PR 收口为 job 内 no-op success。 Trace: .pm/tasks/task_3db20911d0a141cda3f990ea75bc5ea7.yaml
+- [x] rust-required-gate-ondemand-scope (PRD-TESTING-002/003) [test_tier_required]: 为 `.github/workflows/rust.yml` 的 `required-gate` 补 changed-path scope planner，保持 `required-gate` check context 稳定，同时把 docs-only / `.pm` / 无关元数据 PR 收口为 governance/fmt-only。 Trace: .pm/tasks/task_67ace00b259d423a8569f52a2f58c1fd.yaml
 - [x] TASK-TESTING-041 (PRD-TESTING-002/003) [test_tier_required]: 完成“启动器全功能可用性审查与闭环验收（2026-03-08）”专题执行（脚本审查 + agent-browser 真闭环 + 风险分级结论）。
 
 ## 专题任务映射（2026-03-02 批次）
@@ -246,9 +247,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-13
+- 更新日期: 2026-04-16
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `rust-required-gate-ondemand-scope`（已为 `.github/workflows/rust.yml` 的 `required-gate` 补 `scripts/plan-rust-required-scope.sh`，先按 changed paths 规划 `minimal / targeted / full`；无关 PR 保持 stable `required-gate` 上下文，但只执行 governance/fmt，viewer/runtime/support 重型组件按命中路径执行。）
 - 最新完成: `wasm-determinism-gate-ondemand-scope`（已为 `.github/workflows/wasm-determinism-gate.yml` 补 `scripts/plan-wasm-determinism-scope.sh`，先按 changed paths 规划 `m1/m4/m5` scope；无关 PR 保持 `verify-wasm-determinism (m1|m4|m5)` required contexts 稳定，但在 job 内 no-op，不再实际执行 builtin wasm summary collect。）
 - 最新完成: `TASK-TESTING-065`（已将 launcher 展示层使用的 `ProviderCompatibilityStatus` 收口为 `oasis7_client_launcher` 本地跨目标类型，并在 native loopback provider 检查结果中显式映射，恢复 `build-web-dist` 的 wasm compile + `trunk build` 闭环。）
 - 最新完成: `TASK-TESTING-064`（已为 `release-gate-soak` 的 S10 五节点样本补齐显式 replication listen/peer 拓扑，并将 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 收口为 `<=2` warning；canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
