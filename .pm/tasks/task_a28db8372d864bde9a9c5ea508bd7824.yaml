@@ -15,6 +15,6 @@ related_prd:
 acceptance:
   - "Reduce repeated peer-record/discovery request traffic without regressing real-env triad sync correctness."
 handoff_to: []
-updated_at: 2026-04-16T18:56:33+08:00
-last_started_at: 2026-04-16T18:45:40+08:00
-last_closed_at: 2026-04-16T18:56:33+08:00
+updated_at: 2026-04-16T23:22:13+08:00
+last_started_at: 2026-04-16T23:20:02+08:00
+last_closed_at: 2026-04-16T23:22:13+08:00
