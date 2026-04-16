@@ -100,6 +100,7 @@ pub(super) struct RuntimeLiveSession {
     pub(super) event_filters: Option<HashSet<ViewerEventKind>>,
     pub(super) playing: bool,
     pub(super) next_play_step_at: Option<Instant>,
+    pub(super) next_chain_poll_at: Option<Instant>,
     pub(super) metrics: RunnerMetrics,
     pub(super) transient_play_failures: u8,
 }
@@ -111,6 +112,7 @@ impl RuntimeLiveSession {
             event_filters: None,
             playing: false,
             next_play_step_at: None,
+            next_chain_poll_at: None,
             metrics: RunnerMetrics::default(),
             transient_play_failures: 0,
         }
@@ -137,6 +139,17 @@ impl RuntimeLiveSession {
             }
         }
         self.next_play_step_at = Some(now + interval);
+        true
+    }
+
+    pub(super) fn should_poll_chain(&mut self, interval: Duration) -> bool {
+        let now = Instant::now();
+        if let Some(next_poll_at) = self.next_chain_poll_at {
+            if now < next_poll_at {
+                return false;
+            }
+        }
+        self.next_chain_poll_at = Some(now + interval);
         true
     }
 }

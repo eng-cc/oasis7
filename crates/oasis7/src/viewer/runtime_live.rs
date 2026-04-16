@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::io::{self, BufRead, BufReader, BufWriter};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -8,8 +9,9 @@ use std::time::{Duration, Instant};
 use crate::geometry::GeoPos;
 use crate::runtime::{
     blake3_hex, Action as RuntimeAction, DomainEvent as RuntimeDomainEvent,
-    Journal as RuntimeJournal, Snapshot as RuntimeSnapshot, World as RuntimeWorld,
-    WorldError as RuntimeWorldError, WorldEventBody as RuntimeWorldEventBody,
+    Journal as RuntimeJournal, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
+    World as RuntimeWorld, WorldError as RuntimeWorldError,
+    WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
     build_world_model, AgentDecisionTrace, ChunkRuntimeConfig, PlayerGameplayRecentFeedback,
@@ -33,9 +35,13 @@ use super::protocol::{
     ViewerStream, VIEWER_PROTOCOL_VERSION,
 };
 mod authoritative;
+#[path = "runtime_live/chain_link.rs"]
+mod chain_link;
 mod claim_snapshot;
 #[path = "runtime_live/control_plane.rs"]
 mod control_plane;
+#[path = "runtime_live/control_utils.rs"]
+mod control_utils;
 mod gameplay_snapshot;
 mod mapping;
 mod player_gameplay;
@@ -51,6 +57,7 @@ use authoritative::{
 };
 use claim_snapshot::build_player_agent_claim_snapshot;
 use control_plane::RuntimeLlmSidecar;
+use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use gameplay_snapshot::{
     build_player_gameplay_snapshot, player_gameplay_feedback_from_control_ack,
 };
@@ -82,7 +89,9 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub world_id: String,
     pub decision_mode: ViewerLiveDecisionMode,
     pub play_step_interval: Duration,
+    pub chain_poll_interval: Duration,
     pub hosted_public_join_mode: bool,
+    pub chain_status_bind: Option<String>,
 }
 
 impl ViewerRuntimeLiveServerConfig {
@@ -93,7 +102,9 @@ impl ViewerRuntimeLiveServerConfig {
             scenario,
             decision_mode: ViewerLiveDecisionMode::Script,
             play_step_interval: Duration::from_millis(800),
+            chain_poll_interval: Duration::from_millis(200),
             hosted_public_join_mode: false,
+            chain_status_bind: None,
         }
     }
 
@@ -126,8 +137,18 @@ impl ViewerRuntimeLiveServerConfig {
         self
     }
 
+    pub fn with_chain_poll_interval(mut self, interval: Duration) -> Self {
+        self.chain_poll_interval = interval.max(Duration::from_millis(50));
+        self
+    }
+
     pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
         self.hosted_public_join_mode = enabled;
+        self
+    }
+
+    pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
+        self.chain_status_bind = Some(addr.into());
         self
     }
 }
@@ -156,6 +177,7 @@ pub struct ViewerRuntimeLiveServer {
     config: ViewerRuntimeLiveServerConfig,
     world: RuntimeWorld,
     initial_world_time: u64,
+    last_chain_committed_height: u64,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     script: RuntimeLiveScript,
@@ -189,6 +211,7 @@ impl ViewerRuntimeLiveServer {
             config,
             world,
             initial_world_time,
+            last_chain_committed_height: 0,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             script: RuntimeLiveScript::default(),
@@ -244,6 +267,14 @@ impl ViewerRuntimeLiveServer {
         self.config.hosted_public_join_mode
     }
 
+    fn chain_link_enabled(&self) -> bool {
+        self.config
+            .chain_status_bind
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+    }
+
     fn serve_shared_stream(
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
@@ -272,6 +303,20 @@ impl ViewerRuntimeLiveServer {
                 Err(err) if is_timeout_error(&err) => {}
                 Err(err) if is_expected_disconnect_error(&err) => return Ok(()),
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
+            }
+
+            let (chain_link_enabled, chain_poll_interval) = {
+                let server = lock_shared_server(&shared)?;
+                (
+                    server.chain_link_enabled(),
+                    server.config.chain_poll_interval,
+                )
+            };
+            if chain_link_enabled && session.should_poll_chain(chain_poll_interval) {
+                let mut server = lock_shared_server(&shared)?;
+                if let Err(err) = server.sync_chain_linked_runtime(&mut session, &mut writer) {
+                    eprintln!("viewer runtime live: chain sync skipped: {err:?}");
+                }
             }
 
             let play_step_interval = {
@@ -309,6 +354,14 @@ impl ViewerRuntimeLiveServer {
                 Err(err) if is_timeout_error(&err) => {}
                 Err(err) if is_expected_disconnect_error(&err) => return Ok(()),
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
+            }
+
+            if self.chain_link_enabled()
+                && session.should_poll_chain(self.config.chain_poll_interval)
+            {
+                if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
+                    eprintln!("viewer runtime live: chain sync skipped: {err:?}");
+                }
             }
 
             if session.should_advance_play_step(self.config.play_step_interval) {
@@ -1051,117 +1104,5 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())
-    }
-}
-
-fn control_mode_label(mode: &ViewerControl) -> &'static str {
-    match mode {
-        ViewerControl::Pause => "pause",
-        ViewerControl::Play => "play",
-        ViewerControl::Step { .. } => "step",
-        ViewerControl::Seek { .. } => "seek",
-    }
-}
-
-fn control_mode_for_action(action: &str, step_count: usize) -> ViewerControl {
-    match action {
-        "play" => ViewerControl::Play,
-        "pause" => ViewerControl::Pause,
-        "seek" => ViewerControl::Seek { tick: 0 },
-        _ => ViewerControl::Step {
-            count: step_count.max(1),
-        },
-    }
-}
-
-fn runtime_control_error_details(error: &ViewerRuntimeLiveServerError) -> (String, String, String) {
-    match error {
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::AgentNotFound { agent_id }) => (
-            "agent_not_found".to_string(),
-            format!("runtime step failed because agent `{agent_id}` is missing"),
-            "restore the missing agent or clear the stale action before stepping again"
-                .to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::PolicyDenied {
-            intent_id,
-            reason,
-        }) => (
-            "policy_denied".to_string(),
-            format!("runtime step failed because policy denied `{intent_id}`: {reason}"),
-            "inspect the policy gate or update the blocked action before stepping again"
-                .to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::ResourceBalanceInvalid {
-            reason,
-        }) => (
-            "resource_balance_invalid".to_string(),
-            format!("runtime step failed because resource balance became invalid: {reason}"),
-            "repair the broken resource ledger or roll back the stale action before stepping again"
-                .to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::ModuleCallFailed {
-            module_id,
-            trace_id,
-            detail,
-            ..
-        }) => (
-            "module_call_failed".to_string(),
-            format!(
-                "runtime step failed because module `{module_id}` call `{trace_id}` failed: {detail}"
-            ),
-            "inspect the failing module call and its inputs before stepping again".to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::NetworkProtocolUnavailable {
-            protocol,
-        }) => (
-            "network_protocol_unavailable".to_string(),
-            format!("runtime step failed because protocol `{protocol}` is unavailable"),
-            "restore the required runtime network protocol before stepping again".to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::NetworkRequestFailed {
-            message,
-            ..
-        }) => (
-            "network_request_failed".to_string(),
-            format!("runtime step failed because a network request failed: {message}"),
-            "restore the runtime network dependency before stepping again".to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::DistributedValidationFailed {
-            reason,
-        }) => (
-            "distributed_validation_failed".to_string(),
-            format!("runtime step failed because distributed validation failed: {reason}"),
-            "repair the invalid distributed/runtime state before stepping again".to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::Io(message)) => (
-            "runtime_io_failed".to_string(),
-            format!("runtime step failed because an I/O operation failed: {message}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(RuntimeWorldError::Serde(message)) => (
-            "runtime_serde_failed".to_string(),
-            format!("runtime step failed because serialization failed: {message}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Init(message) => (
-            "runtime_init_failed".to_string(),
-            format!("runtime step failed because initialization state is invalid: {message}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Io(error) => (
-            "runtime_io_failed".to_string(),
-            format!("runtime step failed because an I/O operation failed: {error}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Serde(message) => (
-            "runtime_serde_failed".to_string(),
-            format!("runtime step failed because serialization failed: {message}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
-        ViewerRuntimeLiveServerError::Runtime(error) => (
-            "runtime_step_failed".to_string(),
-            format!("runtime step failed: {error:?}"),
-            RUNTIME_CONTROL_REQUIRED_HINT.to_string(),
-        ),
     }
 }

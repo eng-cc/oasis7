@@ -50,6 +50,7 @@
   - SC-17: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须显式暴露节点网络流量观测快照，至少区分 `udp_gossip` 与 `libp2p_replication` 两条链路，并标明统计范围是否包含 transport/control-plane 开销。
   - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回“缺少 handler / 不支持该协议”签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避；业务语义层的 `ErrUnsupported` 不计入该退避条件，以避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
   - SC-19: `libp2p_net` peer discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 请求必须对同一 peer 保持短时协议级冷却，压制 DHT/routing/rendezvous/connection-established 事件造成的高频重复取件，同时保留单次 cached-peer-record 请求链里的多 proxy fallback。
+  - SC-20: chain-linked `oasis7_viewer_live` 必须默认被动跟随 `/v1/chain/status.consensus.committed_height` 对应的 execution world，不需要显式 `Play` 才能消费 committed action；若轮询没有新的 committed action 或没有新增 world event，则不得把该轮询记成逻辑 world progression。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -84,6 +85,7 @@
   - PRD-WORLD_RUNTIME-028: As a 节点运营者, I want traffic monitoring to be an env-gated node startup capability, so that local recent-window history can be enabled per node without hand-running an external triad script.
   - PRD-WORLD_RUNTIME-029: As a `runtime_engineer` / 节点运营者, I want `fetch-commit` retries to short-circuit peers that just returned protocol-unavailable, not-found, or timeout signatures, so that gap-sync traffic waste drops without relaxing replication correctness.
   - PRD-WORLD_RUNTIME-030: As a `runtime_engineer` / 节点运营者, I want peer-record/discovery requests to remember the same target peer for a short cooldown window, so that repeated DHT/routing/rendezvous triggers stop reissuing `get_local_peer_record` / `get_cached_peer_record` / `get_cached_discovery_peers` requests immediately after the previous attempt cleared.
+  - PRD-WORLD_RUNTIME-031: As a `runtime_engineer` / `viewer_engineer`, I want chain-linked viewer runtime to passively follow committed execution-world progress from `oasis7_chain_runtime`, so that the player no longer needs explicit `Play` just to consume committed chain actions and empty polls do not masquerade as world advancement.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -91,6 +93,7 @@
   4. Flow-WR-004: `运行一段时间 -> 采集 storage metrics -> 执行 retention / GC -> 重启恢复 -> 对比 latest state 与审计链`
   5. Flow-WR-005: `选择 retention policy 保留的目标高度 -> 定位 checkpoint -> 回放 canonical log -> 校验 execution_state_root -> 输出 replay 结论`
   6. Flow-WR-006: `源码/manifest 变更 -> pinned Docker builder image 构建 canonical packaged wasm -> canonical hash/identity/release evidence -> DistFS/release manifest -> runtime 仅按 binary hash 装载执行`
+  7. Flow-WR-007: `viewer 连接 chain-linked runtime -> 轮询 /v1/chain/status -> committed_height 增加时重载 execution world -> 仅在出现新 event / logical time 变化时向 viewer 发出 snapshot/events`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -155,6 +158,7 @@
   - 回放不一致：立即标记高风险阻断并输出差异快照。
   - 接口超时/失败：WASM 执行异常需返回结构化错误而非 panic。
   - 空事件流：空输入需稳定返回，无副作用写入。
+  - chain-linked 空轮询：`/v1/chain/status` 轮询若未观察到新的 `committed_height`，或新的 execution world 未产生新增 event / logical time，则 viewer 只能保持当前快照，不得伪造“自动推进中”的 world 进度。
   - 权限不足：未授权模块请求直接拒绝并记录审计事件。
   - 并发冲突：治理操作并发时按版本序列化处理，拒绝乱序变更。
   - 数据异常：receipt 校验失败时不得推进状态并触发安全告警。
@@ -215,6 +219,7 @@
 | PRD-WORLD_RUNTIME-028 | task_7863b156fce3484481310b33a263cc7c | `test_tier_required` | repo-owned node start wrapper、env-gated local traffic monitor、dry-run CLI 装配验证、单节点 live status 采样验证 | 节点级监控开关、真实环境启动入口可维护性 |
 | PRD-WORLD_RUNTIME-029 | task_df0a42e3efea4806bb3f41245c1ef4d5 | `test_tier_required` | `fetch-commit` peer cooldown 定向回归、协议级范围约束断言、`doc-governance-check` 与 `git diff --check` | libp2p 复制流量浪费收口、真实 triad gap-sync 降噪 |
 | PRD-WORLD_RUNTIME-030 | task_a28db8372d864bde9a9c5ea508bd7824 | `test_tier_required` | `oasis7_net` peer-record/discovery cooldown 定向回归、fallback proxy 连续性断言、`doc-governance-check` 与 `git diff --check` | peer-record/discovery 请求流量降噪、真实 triad 连续触发抑制 |
+| PRD-WORLD_RUNTIME-031 | task_c1149e15fef14f12925182a03f37e546 | `test_tier_required` | `oasis7_viewer_live` chain-linked 被动跟随回归、不开 `Play` 的 committed world 同步、空轮询不推进断言 | viewer live 与 chain runtime 的逻辑 world progress 一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
