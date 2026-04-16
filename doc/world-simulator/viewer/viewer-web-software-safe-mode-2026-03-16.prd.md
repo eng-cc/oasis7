@@ -218,6 +218,24 @@
   - 在 `software_safe` SolidJS 前端里为 prompt/chat/rollback/control 反馈补一层结构化摘要：
     - rollback 反馈明确区分当前生效版本、恢复来源版本与下一次 rollback target；
     - prompt/chat/control 默认展示可扫描的 summary/detail，raw payload 仍保留在可展开 diagnostics；
+
+## 增量需求（2026-04-16）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - 当前默认本地试玩会落到 `software_safe` 主 Web 入口，但该入口仍然缺少正式的中英语言切换；同时，仓库虽然已有带 `UiI18n` 的标准 Viewer 中英切换能力，本地试玩链路却没有把它作为一个显式可访问的 bilingual Viewer 入口暴露出来。
+- Proposed Solution:
+  - 为 `software_safe` 页面补齐 `zh/en` locale state、界面内语言切换与 locale query 支持；
+  - 为标准 Viewer 补 `locale=zh|en` / `language=zh|en` URL 初始化；
+  - 在本地试玩链路和 `software_safe` 页面内，都显式暴露“打开标准 Viewer（中文/英文）”入口，避免用户只能靠猜 query 参数进入 bilingual Viewer。
+- Functional Constraints:
+  - 不改变“默认 Web 主入口仍是 `software_safe`”这一产品约束；
+  - 不把 `software_safe` 和标准 Viewer 混成同一条 UI 实现，仍保持主入口 vs visual/bilingual Viewer 的边界；
+  - 标准 Viewer 的 locale 初始化只能是显式 query，不能偷改成按系统语言自动切换。
+- Acceptance Criteria:
+  - AC-15: `software_safe` 页面支持 `locale=zh|en`（或等价 `language=...`）初始化，并提供界面内切换入口。
+  - AC-16: 标准 Viewer Web 入口支持 `locale=zh|en`（或等价 `language=...`）初始化，且保持原有 in-app toggle 不回退。
+  - AC-17: 本地 `run-game-test.sh` / producer playtest 输出必须同时给出当前主入口 URL 与显式标准 Viewer 中文/英文 URL。
+  - AC-18: `software_safe` 页面内必须提供可脚本化、可点击的“打开标准 Viewer”入口，不要求替代主入口，但必须让 bilingual Viewer 成为可发现的一等入口。
     - 对 `llm_init_failed`、rollback target 缺失、rollback noop 等已知错误给出面向 QA/operator 的产品级解释。
   - 将上述 feedback 语义 contract 以 repo-owned、无 npm 前置的 deterministic Node regression 纳入正式 required automation，避免只剩专题文档里的手动命令。
 - Functional Constraints:

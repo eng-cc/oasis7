@@ -50,11 +50,19 @@ OASIS7_VIEWER_OFFLINE=1 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer
 env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ```
 - 打开浏览器访问：`http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011`
+- 显式中文标准 Viewer：`http://127.0.0.1:4173/?render_mode=standard&ws=ws://127.0.0.1:5011&locale=zh`
+- 显式英文标准 Viewer：`http://127.0.0.1:4173/?render_mode=standard&ws=ws://127.0.0.1:5011&locale=en`
 - Web 端通过 `oasis7_viewer_live --web-bind` 提供的 WebSocket bridge 在线连接 live server（Viewer + 网关路径）。
 - Web 端不直接运行 `oasis7_node` 的完整分布式协议栈（不承担 gossip/replication/共识职责）。
 - 首次运行前需安装：
   - `trunk`（`cargo install trunk`）
   - `wasm32-unknown-unknown`（`rustup target add wasm32-unknown-unknown`）
+
+### 5）software_safe 主入口语言切换
+- `software_safe` 主入口现在支持 `locale=zh|en`（兼容 `language=zh|en`）初始化。
+- 本地 `run-game-test.sh` / `run-producer-playtest.sh` 默认会给出带 `locale=zh` 的主入口 URL。
+- 进入 `software_safe` 页面后，可直接用页面内的 `中文 / English` 按钮切换语言。
+- 页面内同时会给出“打开标准 Viewer”入口，分别指向中文和英文的显式 bilingual Viewer URL。
 
 ## runtime 事件/快照覆盖
 - Live server 输出的 `WorldEvent` 会附带原始 runtime 事件载荷：`runtime_event`（JSON 透传）。

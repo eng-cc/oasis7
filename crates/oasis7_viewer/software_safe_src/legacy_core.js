@@ -7,6 +7,7 @@ const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
 const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
+const UI_LOCALE_STORAGE_PREFIX = "oasis7.software_safe.locale.v1";
 const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
 const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
 const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
@@ -30,6 +31,7 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
 const textEncoder = new TextEncoder();
 
 export const state = {
+  uiLocale: "en",
   connectionStatus: "connecting",
   logicalTime: 0,
   eventSeq: 0,
@@ -127,6 +129,75 @@ let pendingSessionRegisterWaiter = null;
 const elements = {};
 let renderHook = () => {};
 let bootstrapped = false;
+
+function normalizeUiLocale(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (["zh", "zh-cn", "zh_cn", "cn", "chinese"].includes(value)) {
+    return "zh";
+  }
+  if (["en", "en-us", "en_us", "english"].includes(value)) {
+    return "en";
+  }
+  return null;
+}
+
+export function isLocaleZh(locale = state.uiLocale) {
+  return normalizeUiLocale(locale) === "zh";
+}
+
+function uiLocaleStorageKey() {
+  return `${UI_LOCALE_STORAGE_PREFIX}:${window.location.pathname || "software_safe.html"}`;
+}
+
+function persistUiLocale(locale) {
+  try {
+    window.localStorage?.setItem(uiLocaleStorageKey(), locale);
+  } catch (_) {
+  }
+}
+
+function resolveStoredUiLocale() {
+  try {
+    return normalizeUiLocale(window.localStorage?.getItem(uiLocaleStorageKey()));
+  } catch (_) {
+    return null;
+  }
+}
+
+function resolveInitialUiLocale() {
+  const params = getSearchParams();
+  return normalizeUiLocale(params.get("locale") || params.get("language"))
+    || resolveStoredUiLocale()
+    || "en";
+}
+
+function applyUiLocaleToDocument(locale) {
+  document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+}
+
+function updateUiLocaleQuery(locale) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("locale", locale);
+  url.searchParams.delete("language");
+  window.history.replaceState({}, "", url.toString());
+}
+
+export function setSoftwareSafeLocale(locale) {
+  const normalized = normalizeUiLocale(locale);
+  if (!normalized) {
+    return state.uiLocale;
+  }
+  state.uiLocale = normalized;
+  persistUiLocale(normalized);
+  applyUiLocaleToDocument(normalized);
+  updateUiLocaleQuery(normalized);
+  render();
+  return state.uiLocale;
+}
+
+export function toggleSoftwareSafeLocale() {
+  return setSoftwareSafeLocale(state.uiLocale === "zh" ? "en" : "zh");
+}
 
 export function getSelectedSearch() {
   return selectedSearch;
@@ -737,7 +808,7 @@ function buildHostedActionMatrixView() {
   });
 }
 
-function buildHostedRecoveryHint() {
+function buildHostedRecoveryHint(locale = state.uiLocale) {
   if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
     return null;
   }
@@ -753,9 +824,11 @@ function buildHostedRecoveryHint() {
   if (errorText.includes("released locally")) {
     return {
       kind: "released",
-      title: "Hosted player session released",
-      detail: "This browser returned its hosted player slot locally. Acquire a new hosted player session if you want to resume gameplay.",
-      cta: "Acquire Hosted Player Session",
+      title: isLocaleZh(locale) ? "托管玩家会话已释放" : "Hosted player session released",
+      detail: isLocaleZh(locale)
+        ? "当前浏览器已经在本地释放托管玩家席位。若要继续试玩，需要重新获取托管玩家会话。"
+        : "This browser returned its hosted player slot locally. Acquire a new hosted player session if you want to resume gameplay.",
+      cta: isLocaleZh(locale) ? "获取托管玩家会话" : "Acquire Hosted Player Session",
     };
   }
   if (errorText.includes("revoked") || revokeReason || revokedBy) {
@@ -765,24 +838,28 @@ function buildHostedRecoveryHint() {
       : "";
     return {
       kind: "revoked",
-      title: "Hosted player session was revoked",
-      detail: `The runtime or operator revoked this browser session${actorText}.${reasonText} You need to acquire a fresh hosted player session before gameplay, chat, or prompt actions can continue.`,
-      cta: "Re-acquire Hosted Player Session",
+      title: isLocaleZh(locale) ? "托管玩家会话已被撤销" : "Hosted player session was revoked",
+      detail: isLocaleZh(locale)
+        ? `运行时或操作者撤销了这个浏览器会话${actorText}.${reasonText} 继续进行玩法、聊天或 prompt 操作前，需要重新获取新的托管玩家会话。`
+        : `The runtime or operator revoked this browser session${actorText}.${reasonText} You need to acquire a fresh hosted player session before gameplay, chat, or prompt actions can continue.`,
+      cta: isLocaleZh(locale) ? "重新获取托管玩家会话" : "Re-acquire Hosted Player Session",
     };
   }
   if (errorText.includes("session_not_found") || errorText.includes("not found")) {
     return {
       kind: "missing",
-      title: "Hosted player session is missing from runtime",
-      detail: "The browser-local key still exists, but the runtime no longer recognizes the session. Acquire a fresh hosted player session and register again.",
-      cta: "Re-acquire Hosted Player Session",
+      title: isLocaleZh(locale) ? "运行时中找不到托管玩家会话" : "Hosted player session is missing from runtime",
+      detail: isLocaleZh(locale)
+        ? "浏览器本地密钥仍存在，但运行时已经不再识别这个会话。请重新获取托管玩家会话并重新注册。"
+        : "The browser-local key still exists, but the runtime no longer recognizes the session. Acquire a fresh hosted player session and register again.",
+      cta: isLocaleZh(locale) ? "重新获取托管玩家会话" : "Re-acquire Hosted Player Session",
     };
   }
   return {
     kind: "guest",
-    title: "Hosted player session is unavailable",
+    title: isLocaleZh(locale) ? "托管玩家会话不可用" : "Hosted player session is unavailable",
     detail: errorText,
-    cta: "Acquire Hosted Player Session",
+    cta: isLocaleZh(locale) ? "获取托管玩家会话" : "Acquire Hosted Player Session",
   };
 }
 
@@ -871,7 +948,7 @@ function summarizeAppliedFields(feedback) {
   return fields.join(", ");
 }
 
-function describeSemanticFeedback(feedback) {
+function describeSemanticFeedback(feedback, locale = state.uiLocale) {
   if (!feedback) {
     return null;
   }
@@ -879,7 +956,7 @@ function describeSemanticFeedback(feedback) {
   const diagnostics = semanticFeedbackMessage(feedback);
   const description = {
     label: feedback.stage || "idle",
-    summary: feedback.effect || diagnostics || "Feedback updated.",
+    summary: feedback.effect || diagnostics || (isLocaleZh(locale) ? "反馈已更新。" : "Feedback updated."),
     detail: null,
     code,
     diagnostics,
@@ -888,39 +965,61 @@ function describeSemanticFeedback(feedback) {
 
   if (feedback.stage === "error") {
     if (code === "llm_init_failed") {
-      description.label = "LLM unavailable";
-      description.summary = "Chat cannot start because this stack has no usable LLM configuration.";
+      description.label = isLocaleZh(locale) ? "LLM 不可用" : "LLM unavailable";
+      description.summary = isLocaleZh(locale)
+        ? "当前栈没有可用的 LLM 配置，因此无法开始聊天。"
+        : "Chat cannot start because this stack has no usable LLM configuration.";
       description.detail =
-        "Add model, base URL, and API key to the active config.toml or OASIS7_LLM_* env, then restart the launcher stack.";
+        isLocaleZh(locale)
+          ? "请把 model、base URL 和 API key 写入当前 config.toml 或 OASIS7_LLM_* 环境变量，然后重启 launcher 栈。"
+          : "Add model, base URL, and API key to the active config.toml or OASIS7_LLM_* env, then restart the launcher stack.";
       return description;
     }
     if (code === "target_version_not_found") {
-      description.label = "Rollback target missing";
-      description.summary = "The selected rollback version is not available for this agent.";
-      description.detail = "Refresh prompt state or choose an existing saved version before retrying.";
+      description.label = isLocaleZh(locale) ? "找不到回滚目标" : "Rollback target missing";
+      description.summary = isLocaleZh(locale)
+        ? "当前 Agent 没有这个可回滚版本。"
+        : "The selected rollback version is not available for this agent.";
+      description.detail = isLocaleZh(locale)
+        ? "请先刷新 prompt 状态，或改选一个真实存在的保存版本后再重试。"
+        : "Refresh prompt state or choose an existing saved version before retrying.";
       return description;
     }
     if (code === "rollback_noop") {
-      description.label = "Rollback noop";
-      description.summary = "That rollback target would not change the current prompt.";
-      description.detail = "Pick an older version only when you need to restore different prompt content.";
+      description.label = isLocaleZh(locale) ? "回滚无变化" : "Rollback noop";
+      description.summary = isLocaleZh(locale)
+        ? "这个回滚目标不会改变当前 prompt。"
+        : "That rollback target would not change the current prompt.";
+      description.detail = isLocaleZh(locale)
+        ? "只有在你确实要恢复不同 prompt 内容时，才需要选择更旧的版本。"
+        : "Pick an older version only when you need to restore different prompt content.";
       return description;
     }
     if (feedback.kind === "prompt") {
-      description.label = "Prompt failed";
-      description.summary = "Prompt control did not complete.";
-      description.detail = "Open diagnostics for the exact backend rejection.";
+      description.label = isLocaleZh(locale) ? "Prompt 失败" : "Prompt failed";
+      description.summary = isLocaleZh(locale)
+        ? "Prompt 控制没有完成。"
+        : "Prompt control did not complete.";
+      description.detail = isLocaleZh(locale)
+        ? "展开诊断可查看后端拒绝的具体原因。"
+        : "Open diagnostics for the exact backend rejection.";
       return description;
     }
     if (feedback.kind === "chat") {
-      description.label = "Chat failed";
-      description.summary = "Agent chat did not complete.";
-      description.detail = "Open diagnostics for the exact backend rejection.";
+      description.label = isLocaleZh(locale) ? "聊天失败" : "Chat failed";
+      description.summary = isLocaleZh(locale)
+        ? "Agent 聊天没有完成。"
+        : "Agent chat did not complete.";
+      description.detail = isLocaleZh(locale)
+        ? "展开诊断可查看后端拒绝的具体原因。"
+        : "Open diagnostics for the exact backend rejection.";
       return description;
     }
     description.label = code || "Request failed";
-    description.summary = diagnostics || "The request failed.";
-    description.detail = "Open diagnostics for the raw backend payload.";
+    description.summary = diagnostics || (isLocaleZh(locale) ? "请求失败。" : "The request failed.");
+    description.detail = isLocaleZh(locale)
+      ? "展开诊断可查看后端原始载荷。"
+      : "Open diagnostics for the raw backend payload.";
     return description;
   }
 
@@ -928,52 +1027,70 @@ function describeSemanticFeedback(feedback) {
     const version = Number(feedback?.response?.version || 0);
     const appliedFields = summarizeAppliedFields(feedback);
     if (feedback.stage === "preview_ack") {
-      description.label = "Preview ready";
-      description.summary = `Prompt preview is ready from ${formatPromptVersionLabel(version)}.`;
-      description.detail = "Review the returned digest or prompt fields before applying.";
+      description.label = isLocaleZh(locale) ? "预览已就绪" : "Preview ready";
+      description.summary = isLocaleZh(locale)
+        ? `Prompt 预览已基于 ${formatPromptVersionLabel(version)} 准备完成。`
+        : `Prompt preview is ready from ${formatPromptVersionLabel(version)}.`;
+      description.detail = isLocaleZh(locale)
+        ? "应用前请先检查返回的摘要或 prompt 字段。"
+        : "Review the returned digest or prompt fields before applying.";
       return description;
     }
     if (feedback.stage === "apply_ack") {
-      description.label = "Prompt saved";
-      description.summary = `Prompt changes are now saved as ${formatPromptVersionLabel(version)}.`;
+      description.label = isLocaleZh(locale) ? "Prompt 已保存" : "Prompt saved";
+      description.summary = isLocaleZh(locale)
+        ? `Prompt 改动已保存为 ${formatPromptVersionLabel(version)}。`
+        : `Prompt changes are now saved as ${formatPromptVersionLabel(version)}.`;
       description.detail = appliedFields
-        ? `Applied fields: ${appliedFields}.`
-        : "Prompt changes were accepted and persisted.";
+        ? (isLocaleZh(locale) ? `已应用字段：${appliedFields}。` : `Applied fields: ${appliedFields}.`)
+        : (isLocaleZh(locale) ? "Prompt 改动已被接受并持久化。" : "Prompt changes were accepted and persisted.");
       return description;
     }
     if (feedback.stage === "rollback_ack") {
       const restoredVersion = Number(feedback?.response?.rolled_back_to_version || 0);
-      description.label = "Rollback applied";
+      description.label = isLocaleZh(locale) ? "回滚已应用" : "Rollback applied";
       description.summary =
-        `Active prompt is now saved as ${formatPromptVersionLabel(version)} after restoring content from ${formatPromptVersionLabel(restoredVersion)}.`;
+        isLocaleZh(locale)
+          ? `当前生效 prompt 已保存为 ${formatPromptVersionLabel(version)}，其内容恢复自 ${formatPromptVersionLabel(restoredVersion)}。`
+          : `Active prompt is now saved as ${formatPromptVersionLabel(version)} after restoring content from ${formatPromptVersionLabel(restoredVersion)}.`;
       description.detail =
-        "Rollback creates a new saved version; the rollback input below points to the next target, not the version that was just restored.";
+        isLocaleZh(locale)
+          ? "回滚会生成一个新的保存版本；下面输入框指向的是下一次回滚目标，不是刚刚恢复出来的版本。"
+          : "Rollback creates a new saved version; the rollback input below points to the next target, not the version that was just restored.";
       return description;
     }
-    description.label = "Prompt in progress";
-    description.summary = feedback.effect || "Prompt request is in flight.";
-    description.detail = "Wait for ack/error before issuing another prompt action.";
+    description.label = isLocaleZh(locale) ? "Prompt 进行中" : "Prompt in progress";
+    description.summary = feedback.effect || (isLocaleZh(locale) ? "Prompt 请求正在处理。" : "Prompt request is in flight.");
+    description.detail = isLocaleZh(locale)
+      ? "请等待 ack/error 返回后再发起下一次 prompt 操作。"
+      : "Wait for ack/error before issuing another prompt action.";
     return description;
   }
 
   if (feedback.kind === "chat") {
     if (feedback.stage === "ack") {
       const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
-      description.label = "Chat accepted";
-      description.summary = `Message entered the runtime queue at tick ${acceptedAtTick}.`;
-      description.detail = "Watch Message Flow for the outbound player message and any inbound agent reply.";
+      description.label = isLocaleZh(locale) ? "聊天已受理" : "Chat accepted";
+      description.summary = isLocaleZh(locale)
+        ? `消息已在 tick ${acceptedAtTick} 进入 runtime 队列。`
+        : `Message entered the runtime queue at tick ${acceptedAtTick}.`;
+      description.detail = isLocaleZh(locale)
+        ? "请查看 Message Flow，确认玩家出站消息和后续 Agent 回应。"
+        : "Watch Message Flow for the outbound player message and any inbound agent reply.";
       return description;
     }
-    description.label = "Chat in progress";
-    description.summary = feedback.effect || "Chat request is in flight.";
-    description.detail = "Wait for ack/error before sending another message.";
+    description.label = isLocaleZh(locale) ? "聊天进行中" : "Chat in progress";
+    description.summary = feedback.effect || (isLocaleZh(locale) ? "聊天请求正在处理。" : "Chat request is in flight.");
+    description.detail = isLocaleZh(locale)
+      ? "请等待 ack/error 返回后再发送下一条消息。"
+      : "Wait for ack/error before sending another message.";
     return description;
   }
 
   return description;
 }
 
-function describePromptVersionState(feedback = state.lastPromptFeedback) {
+function describePromptVersionState(feedback = state.lastPromptFeedback, locale = state.uiLocale) {
   const currentVersion = Math.max(0, Math.floor(Number(state.promptDraft.currentVersion || 0)));
   const nextRollbackTargetVersion = Math.max(
     0,
@@ -987,11 +1104,19 @@ function describePromptVersionState(feedback = state.lastPromptFeedback) {
       ? Math.max(0, Math.floor(responseRollbackVersion))
       : null;
   const summary = restoredFromVersion == null
-    ? `Active prompt version is ${formatPromptVersionLabel(currentVersion)}.`
-    : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}; content was restored from ${formatPromptVersionLabel(restoredFromVersion)}.`;
+    ? (isLocaleZh(locale)
+        ? `当前生效 prompt 版本是 ${formatPromptVersionLabel(currentVersion)}。`
+        : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}.`)
+    : (isLocaleZh(locale)
+        ? `当前生效 prompt 版本是 ${formatPromptVersionLabel(currentVersion)}；内容恢复自 ${formatPromptVersionLabel(restoredFromVersion)}。`
+        : `Active prompt version is ${formatPromptVersionLabel(currentVersion)}; content was restored from ${formatPromptVersionLabel(restoredFromVersion)}.`);
   const detail = restoredFromVersion == null
-    ? `The rollback input defaults to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}.`
-    : `The rollback created a new saved version ${formatPromptVersionLabel(ackVersion)}. The input below now points to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}, not the restored version.`;
+    ? (isLocaleZh(locale)
+        ? `回滚输入框默认指向下一次目标 ${formatPromptVersionLabel(nextRollbackTargetVersion)}。`
+        : `The rollback input defaults to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}.`)
+    : (isLocaleZh(locale)
+        ? `这次回滚生成了新的保存版本 ${formatPromptVersionLabel(ackVersion)}。下面输入框现在指向下一次目标 ${formatPromptVersionLabel(nextRollbackTargetVersion)}，不是刚恢复的版本。`
+        : `The rollback created a new saved version ${formatPromptVersionLabel(ackVersion)}. The input below now points to the next target ${formatPromptVersionLabel(nextRollbackTargetVersion)}, not the restored version.`);
   return {
     currentVersion,
     nextRollbackTargetVersion,
@@ -1002,7 +1127,7 @@ function describePromptVersionState(feedback = state.lastPromptFeedback) {
   };
 }
 
-function buildGameplaySummary() {
+function buildGameplaySummary(locale = state.uiLocale) {
   const gameplay = state.snapshot?.player_gameplay;
   if (!gameplay || typeof gameplay !== "object") {
     return null;
@@ -1049,8 +1174,9 @@ function buildGameplaySummary() {
     availableActions,
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
-    assetGovernanceHandoff:
-      "Asset/governance actions remain a separate lane. software_safe exposes no main token transfer form here.",
+    assetGovernanceHandoff: isLocaleZh(locale)
+      ? "资产 / 治理动作仍在单独 lane 处理；software_safe 这里不会直接暴露主代币转账表单。"
+      : "Asset/governance actions remain a separate lane. software_safe exposes no main token transfer form here.",
   };
 }
 
@@ -1082,6 +1208,7 @@ function getState() {
     renderer: state.renderer,
     vendor: state.vendor,
     webglVersion: state.webglVersion,
+    uiLocale: state.uiLocale,
     controlProfile: state.controlProfile,
     debugViewerMode: state.debugViewerMode,
     debugViewerStatus: state.debugViewerStatus,
@@ -3626,6 +3753,8 @@ function installTestApi() {
 }
 
 function bootstrap() {
+  state.uiLocale = resolveInitialUiLocale();
+  applyUiLocaleToDocument(state.uiLocale);
   Object.assign(state, detectRendererMeta());
   state.hostedAccess = resolveHostedAccessHint();
   state.auth = resolveViewerAuthState();
