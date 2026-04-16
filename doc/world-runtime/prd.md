@@ -48,6 +48,7 @@
   - SC-15: `compile_module_artifact_from_source` 及其 source package 限额/超时控制必须统一使用 `OASIS7_MODULE_SOURCE_*`；dev/test source compile 路径、simulator/runtime 回归与沙箱环境隔离断言不得再接受任何旧品牌前缀作为有效运行入口。
   - SC-16: `doc/world-runtime/project.md` 等模块主入口中的当前 cargo 回归命令、crate 路径与产物文件清单必须统一使用 `oasis7*` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试语义中。
   - SC-17: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须显式暴露节点网络流量观测快照，至少区分 `udp_gossip` 与 `libp2p_replication` 两条链路，并标明统计范围是否包含 transport/control-plane 开销。
+  - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避，避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -80,6 +81,7 @@
   - PRD-WORLD_RUNTIME-026: As a `runtime_engineer` / `qa_engineer` / 节点运营者, I want `/v1/chain/status` to expose network traffic counters for `udp_gossip` and `libp2p_replication`, so that real traffic spikes can be attributed to a concrete lane instead of only host-level bandwidth totals.
   - PRD-WORLD_RUNTIME-027: As a `runtime_engineer` / 节点运营者, I want a persistent triad traffic sampler to convert cumulative `/v1/chain/status.traffic` counters into recent-window deltas, so that questions like "last 10 minutes per node" can be answered without waiting for a process restart.
   - PRD-WORLD_RUNTIME-028: As a 节点运营者, I want traffic monitoring to be an env-gated node startup capability, so that local recent-window history can be enabled per node without hand-running an external triad script.
+  - PRD-WORLD_RUNTIME-029: As a `runtime_engineer` / 节点运营者, I want `fetch-commit` retries to short-circuit peers that just returned protocol-unavailable, not-found, or timeout signatures, so that gap-sync traffic waste drops without relaxing replication correctness.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -125,6 +127,7 @@
   - AC-25: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
   - AC-26: 节点本地 traffic monitor 必须能通过 `node.env` 功能开关启停，默认对单节点本地 `/v1/chain/status` 进行周期采样，输出持久化 history 与最近 N 分钟 summary；节点与 triad monitor 的窗口汇总必须复用共享 helper，且本地 history 也要做 bounded retention。
   - AC-27: 节点启动壳在开启 traffic monitor 时必须与 runtime 共享生命周期，runtime 退出或 service 停止时不能留下长期孤儿 monitor 进程；若开关开启但 monitor 脚本缺失，启动必须显式失败而不是静默跳过。
+  - AC-28: `libp2p_replication_network` 必须仅对 `fetch-commit` 请求中的 `ErrUnsupported`、`ErrNotFound`、`request failed: Timeout` 与连接缺口类错误触发短时 peer cooldown，并通过定向回归证明立即重试会被抑制、窗口过后可恢复请求、非 `fetch-commit` 协议与通用业务错误不受影响。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -170,6 +173,7 @@
   - NFR-WR-9: production runtime / node 默认策略必须保证 `allow_builtin_manifest_fallback=false`、`allow_identity_hash_signature=false`、`allow_local_finality_signing=false`、`allow_runtime_source_compile=false`；任何放宽都必须通过显式 dev/test 配置进入。
   - NFR-WR-10: `TASK-WORLD_RUNTIME-043` 完成前，发布文档与 gate 摘要必须明确标示“Linux-only stable gate”与“cross-host evidence pending”的区别，避免误报 closure。
   - NFR-WR-11: 网络流量观测快照必须在线程间安全可读、随节点生命周期累积，并在 payload 中明确标注统计范围，避免将逻辑 payload 计数误报成完整 wire-bandwidth 真值。
+  - NFR-WR-12: `fetch-commit` 失败退避必须保持 peer-scoped、protocol-scoped 且自动过期，默认只压制短时高频重试，不得把业务层永久不兼容或其他协议的错误扩大成全局节点隔离。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
 ## 5. Risks & Roadmap
@@ -205,6 +209,7 @@
 | PRD-WORLD_RUNTIME-026 | TASK-WORLD_RUNTIME-061 | `test_tier_required` | `/v1/chain/status` 流量快照、UDP gossip / libp2p replication counters、范围说明与定向回归 | 节点带宽归因、运行态网络可观测性 |
 | PRD-WORLD_RUNTIME-027 | task_370ce55ed73a490797055403164e8f41 | `test_tier_required` | triad traffic history 持久化、最近 N 分钟窗口汇总、`observed_since_unix_ms` reset-aware baseline 选择、live triad 短窗口采样验证 | 节点最近窗口流量归因、triad 运营监控可回答性 |
 | PRD-WORLD_RUNTIME-028 | task_7863b156fce3484481310b33a263cc7c | `test_tier_required` | repo-owned node start wrapper、env-gated local traffic monitor、dry-run CLI 装配验证、单节点 live status 采样验证 | 节点级监控开关、真实环境启动入口可维护性 |
+| PRD-WORLD_RUNTIME-029 | task_df0a42e3efea4806bb3f41245c1ef4d5 | `test_tier_required` | `fetch-commit` peer cooldown 定向回归、协议级范围约束断言、`doc-governance-check` 与 `git diff --check` | libp2p 复制流量浪费收口、真实 triad gap-sync 降噪 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

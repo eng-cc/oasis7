@@ -2,6 +2,8 @@ use super::*;
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
@@ -542,6 +544,129 @@ fn libp2p_replication_network_does_not_quarantine_not_found_response_as_unsuppor
             ..
         })
     ));
+}
+
+#[test]
+fn fetch_commit_retry_cooldown_detection_is_protocol_scoped() {
+    let not_found = WorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrNotFound,
+        message: "missing content".to_string(),
+        retryable: false,
+    };
+    assert!(peer_error_indicates_protocol_retry_cooldown(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        &not_found,
+    ));
+    assert!(!peer_error_indicates_protocol_retry_cooldown(
+        "/aw/node/replication/ping",
+        &not_found,
+    ));
+
+    let timeout = WorldError::NetworkProtocolUnavailable {
+        protocol: "libp2p-replication outbound request failed: request failed: Timeout".to_string(),
+    };
+    assert!(peer_error_indicates_protocol_retry_cooldown(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        &timeout,
+    ));
+    assert!(!peer_error_indicates_protocol_retry_cooldown(
+        "/aw/node/replication/ping",
+        &timeout,
+    ));
+
+    let business_unsupported = WorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrUnsupported,
+        message: "forced unsupported".to_string(),
+        retryable: false,
+    };
+    assert!(!peer_error_indicates_protocol_retry_cooldown(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        &business_unsupported,
+    ));
+}
+
+#[test]
+fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
+    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+        peer_record: Some(test_peer_record("listener-fetch-commit-not-found")),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let listen_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("listener bind", listen_deadline, || {
+        !listener.listening_addrs().is_empty()
+    });
+
+    let request_count = Arc::new(AtomicUsize::new(0));
+    listener
+        .register_handler(
+            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                move |_payload| {
+                    request_count.fetch_add(1, Ordering::SeqCst);
+                    Err(WorldError::NetworkRequestFailed {
+                        code: DistributedErrorCode::ErrNotFound,
+                        message: "missing commit".to_string(),
+                        retryable: false,
+                    })
+                }
+            }),
+        )
+        .expect("register listener handler");
+
+    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+        unsupported_protocol_retry_after: Duration::from_millis(250),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let connect_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("dialer connection", connect_deadline, || {
+        !dialer.connected_peers().is_empty()
+    });
+
+    let first = dialer.request(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        b"node",
+    );
+    assert!(matches!(
+        first,
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotFound,
+            ..
+        })
+    ));
+    assert_eq!(request_count.load(Ordering::SeqCst), 1);
+
+    let second = dialer.request(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        b"node",
+    );
+    assert!(matches!(
+        second,
+        Err(WorldError::NetworkProtocolUnavailable { .. })
+    ));
+    assert_eq!(
+        request_count.load(Ordering::SeqCst),
+        1,
+        "cooldown should suppress an immediate second fetch-commit request"
+    );
+
+    std::thread::sleep(Duration::from_millis(300));
+
+    let third = dialer.request(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        b"node",
+    );
+    assert!(matches!(
+        third,
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotFound,
+            ..
+        })
+    ));
+    assert_eq!(request_count.load(Ordering::SeqCst), 2);
 }
 
 #[test]
