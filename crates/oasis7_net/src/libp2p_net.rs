@@ -209,6 +209,9 @@ impl Libp2pNetwork {
             let mut pending_connected_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_peer_records: HashSet<PeerId> = HashSet::new();
             let mut pending_cached_discovery_peers: HashSet<PeerId> = HashSet::new();
+            let mut connected_peer_record_cooldowns: HashMap<PeerId, i64> = HashMap::new();
+            let mut cached_peer_record_cooldowns: HashMap<PeerId, i64> = HashMap::new();
+            let mut cached_discovery_peer_cooldowns: HashMap<PeerId, i64> = HashMap::new();
             let mut pending_rendezvous_registers: HashSet<PeerId> = HashSet::new();
             let mut pending_rendezvous_discovers: HashSet<PeerId> = HashSet::new();
             let mut registered_rendezvous_nodes: HashSet<PeerId> = HashSet::new();
@@ -330,6 +333,7 @@ impl Libp2pNetwork {
                                     discovered_peer_records: &discovered_peer_records,
                                     peer_healths_by_id: &peer_healths_by_id,
                                     pending_cached_discovery_peers: &mut pending_cached_discovery_peers,
+                                    cached_discovery_peer_cooldowns: &mut cached_discovery_peer_cooldowns,
                                     pending_rendezvous_registers: &mut pending_rendezvous_registers,
                                     pending_rendezvous_discovers: &mut pending_rendezvous_discovers,
                                     registered_rendezvous_nodes: &registered_rendezvous_nodes,
@@ -420,7 +424,7 @@ impl Libp2pNetwork {
                                                             response.payload.as_slice(),
                                                             &mut pending_peer_record_requests,
                                                             &mut pending_dht,
-                                                        &mut discovered_peer_records,
+                                                            &mut discovered_peer_records,
                                                             &mut known_transport_paths,
                                                             &mut last_dialed_transport_paths,
                                                             &active_transport_paths,
@@ -428,6 +432,7 @@ impl Libp2pNetwork {
                                                             &event_traffic_metrics,
                                                             &mut failed_transport_path_labels,
                                                             &mut pending_discovery_peer_records,
+                                                            &mut cached_peer_record_cooldowns,
                                                             peer_record_template.as_ref(),
                                                             local_peer_id,
                                                             &mut pending_connected_peer_records,
@@ -519,6 +524,7 @@ impl Libp2pNetwork {
                                                             &mut swarm,
                                                             &mut pending_peer_record_requests,
                                                             &mut pending_cached_peer_records,
+                                                            &mut cached_peer_record_cooldowns,
                                                             &event_traffic_metrics,
                                                             peers.as_slice(),
                                                             peer_id,
@@ -559,6 +565,7 @@ impl Libp2pNetwork {
                                                                     &mut swarm,
                                                                     &mut pending_peer_record_requests,
                                                                     &mut pending_cached_peer_records,
+                                                                    &mut cached_peer_record_cooldowns,
                                                                     &event_traffic_metrics,
                                                                     peers.as_slice(),
                                                                     peer_id,
@@ -589,6 +596,7 @@ impl Libp2pNetwork {
                                                                 &mut swarm,
                                                                 &mut pending_peer_record_requests,
                                                                 &mut pending_cached_peer_records,
+                                                                &mut cached_peer_record_cooldowns,
                                                                 &event_traffic_metrics,
                                                                 peers.as_slice(),
                                                                 peer_id,
@@ -606,6 +614,7 @@ impl Libp2pNetwork {
                                                                 &mut swarm,
                                                                 &mut pending_peer_record_requests,
                                                                 &mut pending_cached_peer_records,
+                                                                &mut cached_peer_record_cooldowns,
                                                                 &event_traffic_metrics,
                                                                 peers.as_slice(),
                                                                 peer_id,
@@ -639,6 +648,7 @@ impl Libp2pNetwork {
                                                     &mut swarm,
                                                     &mut pending_peer_record_requests,
                                                     &mut pending_connected_peer_records,
+                                                    &mut connected_peer_record_cooldowns,
                                                     &event_traffic_metrics,
                                                     peer,
                                                     local_peer_id,
@@ -748,6 +758,7 @@ impl Libp2pNetwork {
                                                 &mut pending_peer_record_requests,
                                                 &mut pending_discovery_peer_records,
                                                 &mut pending_cached_peer_records,
+                                                &mut cached_peer_record_cooldowns,
                                                 &event_traffic_metrics,
                                                 peers.as_slice(),
                                                 local_peer_id,
@@ -914,6 +925,7 @@ impl Libp2pNetwork {
                                         &mut swarm,
                                         &mut pending_peer_record_requests,
                                         &mut pending_connected_peer_records,
+                                        &mut connected_peer_record_cooldowns,
                                         &event_traffic_metrics,
                                         peer_id,
                                         local_peer_id,
@@ -922,6 +934,7 @@ impl Libp2pNetwork {
                                         &mut swarm,
                                         &mut pending_peer_record_requests,
                                         &mut pending_cached_discovery_peers,
+                                        &mut cached_discovery_peer_cooldowns,
                                         &event_traffic_metrics,
                                         peer_id,
                                         local_peer_id,
@@ -1023,6 +1036,9 @@ impl Libp2pNetwork {
                                             &mut pending_quarantine_disconnects,
                                             &mut active_transport_paths,
                                             &mut last_dialed_transport_paths,
+                                            &mut connected_peer_record_cooldowns,
+                                            &mut cached_peer_record_cooldowns,
+                                            &mut cached_discovery_peer_cooldowns,
                                             &mut pending_rendezvous_registers,
                                             &mut pending_rendezvous_discovers,
                                             &mut registered_rendezvous_nodes,

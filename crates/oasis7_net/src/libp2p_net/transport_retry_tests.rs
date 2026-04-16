@@ -110,6 +110,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
     let discovered_peer_records = HashMap::new();
     let peer_healths_by_id = HashMap::new();
     let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
     let mut pending_rendezvous_registers = HashSet::new();
     let mut pending_rendezvous_discovers = HashSet::new();
     let registered_rendezvous_nodes = HashSet::new();
@@ -143,6 +144,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             discovered_peer_records: &discovered_peer_records,
             peer_healths_by_id: &peer_healths_by_id,
             pending_cached_discovery_peers: &mut pending_cached_discovery_peers,
+            cached_discovery_peer_cooldowns: &mut cached_discovery_peer_cooldowns,
             pending_rendezvous_registers: &mut pending_rendezvous_registers,
             pending_rendezvous_discovers: &mut pending_rendezvous_discovers,
             registered_rendezvous_nodes: &registered_rendezvous_nodes,

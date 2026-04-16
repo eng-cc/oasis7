@@ -57,6 +57,34 @@ impl PendingPeerRecordRequest {
     }
 }
 
+const PEER_RECORD_REQUEST_COOLDOWN_MS: i64 = 10_000;
+
+fn peer_record_request_in_cooldown(
+    cooldowns: &mut HashMap<PeerId, i64>,
+    peer_id: PeerId,
+    now_ms: i64,
+) -> bool {
+    match cooldowns.get(&peer_id).copied() {
+        Some(retry_at_ms) if retry_at_ms > now_ms => true,
+        Some(_) => {
+            cooldowns.remove(&peer_id);
+            false
+        }
+        None => false,
+    }
+}
+
+fn note_peer_record_request_cooldown(
+    cooldowns: &mut HashMap<PeerId, i64>,
+    peer_id: PeerId,
+    now_ms: i64,
+) {
+    cooldowns.insert(
+        peer_id,
+        now_ms.saturating_add(PEER_RECORD_REQUEST_COOLDOWN_MS),
+    );
+}
+
 pub(super) fn start_peer_discovery_query(
     swarm: &mut Swarm<Behaviour>,
     pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
@@ -193,12 +221,17 @@ pub(super) fn maybe_request_connected_peer_record(
         PendingPeerRecordRequest,
     >,
     pending_connected_peer_records: &mut HashSet<PeerId>,
+    connected_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     peer_id: PeerId,
     local_peer_id: PeerId,
-) {
-    if peer_id == local_peer_id || pending_connected_peer_records.contains(&peer_id) {
-        return;
+) -> bool {
+    let now_ms = super::now_ms();
+    if peer_id == local_peer_id
+        || pending_connected_peer_records.contains(&peer_id)
+        || peer_record_request_in_cooldown(connected_peer_record_cooldowns, peer_id, now_ms)
+    {
+        return false;
     }
     record_request_outbound(traffic_metrics, super::RR_GET_LOCAL_PEER_RECORD, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
@@ -209,10 +242,12 @@ pub(super) fn maybe_request_connected_peer_record(
         },
     );
     pending_connected_peer_records.insert(peer_id);
+    note_peer_record_request_cooldown(connected_peer_record_cooldowns, peer_id, now_ms);
     pending_peer_record_requests.insert(
         request_id,
         PendingPeerRecordRequest::ConnectedPeerRecord { peer_id },
     );
+    true
 }
 
 fn request_cached_peer_record_via(
@@ -222,6 +257,7 @@ fn request_cached_peer_record_via(
         PendingPeerRecordRequest,
     >,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     ask_peer: PeerId,
     peer_id: PeerId,
@@ -250,6 +286,7 @@ fn request_cached_peer_record_via(
         },
     );
     pending_cached_peer_records.insert(peer_id);
+    note_peer_record_request_cooldown(cached_peer_record_cooldowns, peer_id, super::now_ms());
     pending_peer_record_requests.insert(
         request_id,
         PendingPeerRecordRequest::CachedPeerRecord {
@@ -279,12 +316,17 @@ pub(super) fn maybe_request_cached_peer_record(
         PendingPeerRecordRequest,
     >,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     connected_peers: &[PeerId],
     peer_id: PeerId,
     local_peer_id: PeerId,
 ) -> bool {
-    if peer_id == local_peer_id || pending_cached_peer_records.contains(&peer_id) {
+    let now_ms = super::now_ms();
+    if peer_id == local_peer_id
+        || pending_cached_peer_records.contains(&peer_id)
+        || peer_record_request_in_cooldown(cached_peer_record_cooldowns, peer_id, now_ms)
+    {
         return false;
     }
     let Some(ask_peer) =
@@ -296,6 +338,7 @@ pub(super) fn maybe_request_cached_peer_record(
         swarm,
         pending_peer_record_requests,
         pending_cached_peer_records,
+        cached_peer_record_cooldowns,
         traffic_metrics,
         ask_peer,
         peer_id,
@@ -311,12 +354,17 @@ pub(super) fn maybe_request_cached_discovery_peers(
         PendingPeerRecordRequest,
     >,
     pending_cached_discovery_peers: &mut HashSet<PeerId>,
+    cached_discovery_peer_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     peer_id: PeerId,
     local_peer_id: PeerId,
-) {
-    if peer_id == local_peer_id || pending_cached_discovery_peers.contains(&peer_id) {
-        return;
+) -> bool {
+    let now_ms = super::now_ms();
+    if peer_id == local_peer_id
+        || pending_cached_discovery_peers.contains(&peer_id)
+        || peer_record_request_in_cooldown(cached_discovery_peer_cooldowns, peer_id, now_ms)
+    {
+        return false;
     }
     record_request_outbound(traffic_metrics, super::RR_GET_CACHED_DISCOVERY_PEERS, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
@@ -327,10 +375,12 @@ pub(super) fn maybe_request_cached_discovery_peers(
         },
     );
     pending_cached_discovery_peers.insert(peer_id);
+    note_peer_record_request_cooldown(cached_discovery_peer_cooldowns, peer_id, now_ms);
     pending_peer_record_requests.insert(
         request_id,
         PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id },
     );
+    true
 }
 
 pub(super) fn handle_rendezvous_discovered(
@@ -344,6 +394,7 @@ pub(super) fn handle_rendezvous_discovered(
     >,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
     pending_cached_peer_records: &mut HashSet<PeerId>,
+    cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     connected_peers: &[PeerId],
     local_peer_id: PeerId,
@@ -383,6 +434,7 @@ pub(super) fn handle_rendezvous_discovered(
             swarm,
             pending_peer_record_requests,
             pending_cached_peer_records,
+            cached_peer_record_cooldowns,
             traffic_metrics,
             connected_peers,
             peer_id,
@@ -548,6 +600,7 @@ pub(super) fn handle_peer_record_response(
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     failed_transport_path_labels: &mut HashSet<String>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
+    cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     peer_record_template: Option<&PeerRecord>,
     local_peer_id: PeerId,
     pending_connected_peer_records: &mut HashSet<PeerId>,
@@ -586,6 +639,7 @@ pub(super) fn handle_peer_record_response(
                         swarm,
                         pending_peer_record_requests,
                         pending_cached_peer_records,
+                        cached_peer_record_cooldowns,
                         traffic_metrics,
                         *peer_id,
                         discovered_peer_id,
@@ -649,6 +703,7 @@ pub(super) fn handle_peer_record_response(
                         swarm,
                         pending_peer_record_requests,
                         pending_cached_peer_records,
+                        cached_peer_record_cooldowns,
                         traffic_metrics,
                         next_ask_peer,
                         peer_id,
