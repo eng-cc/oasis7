@@ -63,6 +63,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - 本地 `run-game-test.sh` / `run-producer-playtest.sh` 默认会给出带 `locale=zh` 的主入口 URL。
 - 进入 `software_safe` 页面后，可直接用页面内的 `中文 / English` 按钮切换语言。
 - 页面内同时会给出“打开标准 Viewer”入口，分别指向中文和英文的显式 bilingual Viewer URL。
+- `software_safe` 页面当前已收口为纯实时模式：不再提供 `play/pause/step`、tick jump、回放推进等控件；页面只保留实时观察、事件流、canonical gameplay 摘要，以及带 auth/bootstrap 时的 `prompt/chat/rollback` 等正式交互。
 
 ## runtime 事件/快照覆盖
 - Live server 输出的 `WorldEvent` 会附带原始 runtime 事件载荷：`runtime_event`（JSON 透传）。

@@ -103,6 +103,13 @@ const core = await import("../software_safe_src/legacy_core.js");
           target_agent_id: null,
           disabled_reason: null,
         },
+        {
+          action_id: "request_snapshot",
+          label: "Request snapshot",
+          protocol_action: "world.request_snapshot",
+          target_agent_id: null,
+          disabled_reason: null,
+        },
       ],
       recent_feedback: {
         action: "step",
@@ -120,7 +127,8 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.stageId, "post_onboarding");
   assert.equal(gameplaySummary.stageStatus, "blocked");
   assert.equal(gameplaySummary.progressPercent, 68);
-  assert.equal(gameplaySummary.availableActions[0].actionId, "advance_step");
+  assert.equal(gameplaySummary.availableActions.length, 1);
+  assert.equal(gameplaySummary.availableActions[0].actionId, "request_snapshot");
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
 }
@@ -155,9 +163,18 @@ const core = await import("../software_safe_src/legacy_core.js");
           target_agent_id: null,
           disabled_reason: "missing env variable: OASIS7_LLM_MODEL",
         },
+        {
+          action_id: "request_snapshot",
+          label: "Request snapshot",
+          protocol_action: "world.request_snapshot",
+          target_agent_id: null,
+          disabled_reason: null,
+        },
       ],
     },
   };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.deepEqual(gameplaySummary.availableActions.map((action) => action.actionId), ["request_snapshot"]);
   core.state.controlProfile = "live";
   const feedback = core.sendControl("step");
   assert.equal(feedback.accepted, false);

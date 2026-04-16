@@ -46,7 +46,7 @@
 - `software_safe` 模式下必须保留的能力：
   - 连接状态、`tick/logicalTime/eventSeq/error` 可见
   - 基础世界观察能力：目标列表、地点/Agent 语义概览、最近事件/反馈
-  - 基础交互能力：选中 1 个 Agent/地点、`play/pause/step`、查看控制反馈
+  - 基础交互能力：选中 1 个 Agent/地点，并以纯实时观察方式查看世界/语义反馈；页面内不再暴露 `play/pause/step`、tick jump 等回放控制
   - 浏览器正式玩法动作：带 auth/bootstrap 时可执行选中 Agent 的 `prompt/chat/rollback`，并显式展示 session/auth/recovery/blocking semantics
   - formal gameplay 叙事信息：至少能看到当前 `stage/goal/progress/blocker/next_step` 或等价的 canonical 玩家语义摘要
   - `__AW_TEST__` /脚本采证能力：agent-browser 可以在无硬件 GPU 的浏览器环境下完成正式 Web 主链路采证
@@ -91,12 +91,12 @@
   - 顶部世界摘要：`tick/logicalTime/eventSeq/connectionStatus/provider info`
   - 目标列表 / 语义地图（2D 简化视图即可）
   - 最近事件流 / 控制反馈
-  - `play/pause/step` 控制
   - 选中对象详情（Agent / Location）
   - hosted/public-join session acquire/release/recovery 与 auth tier 可视化
   - canonical 玩家语义摘要：`stage/goal/progress/blocker/next_step` 或等价字段
   - 当页面带有 viewer auth bootstrap 时，选中 Agent 的最小 `prompt/chat` 控制面（至少覆盖 Agent Chat 发送、消息流展示，以及 prompt override 的 preview/apply/rollback）
   - 明确的 blocked / not_exposed / handoff 文案，告诉玩家哪些正式动作仍需转到其他 surface
+- 作为纯实时主入口，`software_safe` 不再在页面或 canonical gameplay summary 中暴露 `live_control.play`、`live_control.step`、tick jump 一类回放/推进动作；若底层协议仍保留这些控制，仅允许内部测试/自动化显式调用。
 - 可延后/不保留：
   - 3D 摄像机、2D/3D 切换
   - 粒子、氛围、光照、景深、环境图生成
@@ -198,7 +198,7 @@
 - Problem Statement:
   - `software_safe.js` 已从单文件 imperative UI 演进到较大体量的多面板实现；继续在单个脚本内叠加 observer/debug/auth/chat/prompt 逻辑，会持续放大维护与回归成本。
 - Proposed Solution:
-  - 保持 `software_safe.html`、`software_safe.js`、`render_mode`、`__AW_TEST__`、viewer auth/bootstrap 与 play/pause/step/select 等对外契约不变；
+  - 保持 `software_safe.html`、`software_safe.js`、`render_mode`、`__AW_TEST__`、viewer auth/bootstrap 与 select 等主入口契约不变，同时把页面收口为纯实时模式，不再对外暴露回放/推进按钮与对应 gameplay summary action；
   - 将 UI 渲染层迁到 SolidJS 组件树，并把原有协议/状态/命令逻辑保留在可复用的 `legacy_core` 中；
   - freshness gate 必须把 Solid 构建输入与 finalize 脚本纳入 source scope，避免 source-tree Web 闭环错误消费旧 bundle。
 - Functional Constraints:
@@ -206,7 +206,7 @@
   - 不把当前页面收口成依赖框架运行时特性的“新产品”；只允许做组件化拆分与维护性改造。
   - 产物路径继续保持 `crates/oasis7_viewer/software_safe.js`，避免 launcher / script / freshness contract 额外漂移。
 - Acceptance Criteria:
-  - AC-12: `software_safe` UI 组件化后，真实 Web smoke 仍能完成“加载 -> 连接 -> 选择目标 -> `step` -> 看到 control feedback”最小闭环。
+  - AC-12: `software_safe` UI 组件化后，真实 Web smoke 仍能完成“加载 -> 连接 -> 选择目标 -> 观察实时事件/语义反馈”最小闭环，且页面不再暴露 `step/play/tick jump` 控件。
   - AC-13: `__AW_TEST__.getState()`、auth/bootstrap surface、observer/debug 标识与现有 `software_safe` 页面按钮/字段 contract 不得回退。
   - AC-14: Viewer Web freshness gate 必须把 `package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/` 与 `software_safe_src/` 作为 software-safe bundle 的正式输入。
 
