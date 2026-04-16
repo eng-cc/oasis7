@@ -282,6 +282,136 @@ fn maybe_request_cached_discovery_peers_respects_short_cooldown() {
 }
 
 #[test]
+fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let local_peer_id = PeerId::random();
+    let target_peer_id = PeerId::random();
+    let proxy_peer_id = PeerId::random();
+    let cooldown_until_ms = super::super::now_ms().saturating_add(60_000);
+    let mut peers = vec![target_peer_id];
+    let mut admitted_active_peers = HashSet::from([target_peer_id]);
+    let mut quarantined_active_peers = HashSet::new();
+    let mut pending_quarantine_disconnects = HashSet::new();
+    let mut active_transport_paths = HashMap::new();
+    let mut last_dialed_transport_paths = HashMap::new();
+    let mut connected_peer_record_cooldowns = HashMap::from([(target_peer_id, cooldown_until_ms)]);
+    let mut cached_peer_record_cooldowns = HashMap::from([(target_peer_id, cooldown_until_ms)]);
+    let mut cached_discovery_peer_cooldowns = HashMap::from([(target_peer_id, cooldown_until_ms)]);
+    let mut pending_rendezvous_registers = HashSet::new();
+    let mut pending_rendezvous_discovers = HashSet::new();
+    let mut registered_rendezvous_nodes = HashSet::new();
+    let mut rendezvous_cookies = HashMap::new();
+    let event_connected_peers = Arc::new(Mutex::new(HashSet::from([target_peer_id])));
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_connected_peer_records = HashSet::new();
+    let mut pending_cached_peer_records = HashSet::new();
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let traffic_metrics = super::super::traffic_metrics::init_shared_traffic_metrics();
+
+    assert!(
+        !super::super::discovery::maybe_request_connected_peer_record(
+            &mut swarm,
+            &mut pending_peer_record_requests,
+            &mut pending_connected_peer_records,
+            &mut connected_peer_record_cooldowns,
+            &traffic_metrics,
+            target_peer_id,
+            local_peer_id,
+        )
+    );
+    assert!(!super::super::discovery::maybe_request_cached_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &traffic_metrics,
+        &[proxy_peer_id],
+        target_peer_id,
+        local_peer_id,
+    ));
+    assert!(
+        !super::super::discovery::maybe_request_cached_discovery_peers(
+            &mut swarm,
+            &mut pending_peer_record_requests,
+            &mut pending_cached_discovery_peers,
+            &mut cached_discovery_peer_cooldowns,
+            &traffic_metrics,
+            target_peer_id,
+            local_peer_id,
+        )
+    );
+    assert!(pending_peer_record_requests.is_empty());
+
+    let quarantined = super::super::connection_lifecycle::clear_disconnected_peer_state(
+        &mut peers,
+        &mut admitted_active_peers,
+        &mut quarantined_active_peers,
+        &mut pending_quarantine_disconnects,
+        &mut active_transport_paths,
+        &mut last_dialed_transport_paths,
+        &mut connected_peer_record_cooldowns,
+        &mut cached_peer_record_cooldowns,
+        &mut cached_discovery_peer_cooldowns,
+        &mut pending_rendezvous_registers,
+        &mut pending_rendezvous_discovers,
+        &mut registered_rendezvous_nodes,
+        &mut rendezvous_cookies,
+        &event_connected_peers,
+        target_peer_id,
+    );
+
+    assert!(!quarantined);
+    assert!(!connected_peer_record_cooldowns.contains_key(&target_peer_id));
+    assert!(!cached_peer_record_cooldowns.contains_key(&target_peer_id));
+    assert!(!cached_discovery_peer_cooldowns.contains_key(&target_peer_id));
+    assert!(!peers.contains(&target_peer_id));
+    assert!(!admitted_active_peers.contains(&target_peer_id));
+    assert!(!event_connected_peers
+        .lock()
+        .expect("lock connected peers")
+        .contains(&target_peer_id));
+
+    let connected_requested = super::super::discovery::maybe_request_connected_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_connected_peer_records,
+        &mut connected_peer_record_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(connected_requested);
+    pending_peer_record_requests.clear();
+    pending_connected_peer_records.clear();
+
+    let cached_requested = super::super::discovery::maybe_request_cached_peer_record(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_peer_records,
+        &mut cached_peer_record_cooldowns,
+        &traffic_metrics,
+        &[proxy_peer_id],
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(cached_requested);
+    pending_peer_record_requests.clear();
+    pending_cached_peer_records.clear();
+
+    let cached_discovery_requested = super::super::discovery::maybe_request_cached_discovery_peers(
+        &mut swarm,
+        &mut pending_peer_record_requests,
+        &mut pending_cached_discovery_peers,
+        &mut cached_discovery_peer_cooldowns,
+        &traffic_metrics,
+        target_peer_id,
+        local_peer_id,
+    );
+    assert!(cached_discovery_requested);
+}
+
+#[test]
 fn cached_peer_record_request_handler_reports_not_found_on_cache_miss() {
     let request = NetworkRequest {
         protocol: super::super::RR_GET_CACHED_PEER_RECORD.to_string(),
