@@ -102,13 +102,12 @@ require_path "$BUNDLE_DIR/web/index.html" file
 require_path "$BUNDLE_DIR/web-launcher/index.html" file
 require_path "$BUNDLE_DIR/README.txt" file
 require_path "$BUNDLE_DIR/.oasis7-bundle-manifest.json" file
-require_path "$BUNDLE_DIR/run-client.sh" executable
-require_path "$BUNDLE_DIR/run-web-launcher.sh" executable
-require_path "$BUNDLE_DIR/run-game.sh" executable
-require_path "$BUNDLE_DIR/run-chain-runtime.sh" executable
-
 case "$PLATFORM" in
   linux-x64)
+    require_path "$BUNDLE_DIR/run-client.sh" executable
+    require_path "$BUNDLE_DIR/run-web-launcher.sh" executable
+    require_path "$BUNDLE_DIR/run-game.sh" executable
+    require_path "$BUNDLE_DIR/run-chain-runtime.sh" executable
     require_path "$BUNDLE_DIR/bin/oasis7_client_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_game_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
@@ -116,6 +115,10 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
     ;;
   macos-x64)
+    require_path "$BUNDLE_DIR/run-client.sh" executable
+    require_path "$BUNDLE_DIR/run-web-launcher.sh" executable
+    require_path "$BUNDLE_DIR/run-game.sh" executable
+    require_path "$BUNDLE_DIR/run-chain-runtime.sh" executable
     require_path "$BUNDLE_DIR/bin/oasis7_client_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_game_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
