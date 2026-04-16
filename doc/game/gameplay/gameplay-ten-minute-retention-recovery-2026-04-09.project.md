@@ -93,7 +93,7 @@
 
 ## 状态
 
-- 更新日期: 2026-04-14
+- 更新日期: 2026-04-15
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
 - 下一任务: 由 `producer_system_designer` 先按 `TASK-GAME-065` 的 `10-minute trust gate` 阻断签名继续拆 runtime/viewer 修复切片，再在 trust gate 稳定后单独重开 capability follow-up 复验。

@@ -7,7 +7,7 @@ status: done
 priority: P0
 source_signal: SIG-PM-0029
 source_refs:
-  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+  - doc/testing/evidence/gameplay-ten-minute-trust-gate-2026-04-09.md
   - doc/game/project.md
 doc_refs:
   - doc/game/project.md

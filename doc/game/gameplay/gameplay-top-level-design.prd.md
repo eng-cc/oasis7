@@ -222,7 +222,7 @@
 优先顺序固定为：
 
 1. 首次进入与最小控制地板。
-2. `PostOnboarding` 后 10 分钟工业中循环包。
+2. 首个持续能力包 / capability gate follow-up（`PostOnboarding` 后 `15~45` 分钟 / `1~3` sessions）。
 3. 首屏降噪与玩家身份收束。
 4. 后果可见化与奖励节奏。
 5. active-LLM 正式 10 分钟 trust gate。

@@ -11,7 +11,7 @@ source_refs:
 doc_refs:
   - doc/game/project.md
   - doc/world-simulator/project.md
-  - doc/testing/evidence/gameplay-ten-minute-retention-gate-2026-04-09.md
+  - doc/testing/evidence/gameplay-ten-minute-trust-gate-2026-04-09.md
 related_prd:
   - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
   - doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md
