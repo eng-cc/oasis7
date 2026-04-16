@@ -380,6 +380,8 @@ fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
         .collect();
 
     assert!(args.contains(&"--llm".to_string()));
+    assert!(args.contains(&"--chain-status-bind".to_string()));
+    assert!(args.contains(&options.chain_status_bind));
     assert_eq!(
         command_env_value(&command, LLM_TIMEOUT_MS_ENV),
         Some(Some(DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string()))

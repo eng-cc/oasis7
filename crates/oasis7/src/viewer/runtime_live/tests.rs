@@ -5,9 +5,10 @@ use crate::simulator::{
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
 use ed25519_dalek::SigningKey;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -167,6 +168,29 @@ fn test_writer_pair() -> (BufWriter<TcpStream>, TcpStream) {
     (BufWriter::new(server), client)
 }
 
+fn read_response_line(peer: &TcpStream, timeout: Duration) -> Option<String> {
+    let stream = peer.try_clone().expect("clone test peer");
+    stream
+        .set_read_timeout(Some(timeout))
+        .expect("set read timeout");
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    match reader.read_line(&mut line) {
+        Ok(0) => None,
+        Ok(_) => Some(line),
+        Err(err) => {
+            if matches!(
+                err.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ) {
+                None
+            } else {
+                panic!("read response line failed: {err}");
+            }
+        }
+    }
+}
+
 fn read_control_completion_ack(
     peer: &TcpStream,
     timeout: Duration,
@@ -215,6 +239,90 @@ fn wait_for_runtime_live_server(addr: &str) {
         thread::sleep(Duration::from_millis(20));
     }
     panic!("runtime live server did not start listening at {addr}");
+}
+
+struct TestChainStatusServer {
+    addr: String,
+    committed_height: Arc<AtomicU64>,
+    stop: Arc<AtomicBool>,
+    join_handle: Option<thread::JoinHandle<()>>,
+}
+
+impl TestChainStatusServer {
+    fn start(execution_world_dir: std::path::PathBuf) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind chain status server");
+        listener
+            .set_nonblocking(true)
+            .expect("set chain status listener nonblocking");
+        let addr = listener.local_addr().expect("chain status local addr");
+        let committed_height = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let committed_height_for_thread = Arc::clone(&committed_height);
+        let stop_for_thread = Arc::clone(&stop);
+        let execution_world_dir_for_thread = execution_world_dir.clone();
+        let join_handle = thread::spawn(move || loop {
+            if stop_for_thread.load(Ordering::SeqCst) {
+                break;
+            }
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request = [0_u8; 1024];
+                    let _ = stream.read(&mut request);
+                    let body = serde_json::json!({
+                        "consensus": {
+                            "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
+                        },
+                        "execution_world_dir": execution_world_dir_for_thread,
+                    });
+                    let body = serde_json::to_vec(&body).expect("encode chain status body");
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write chain status header");
+                    stream
+                        .write_all(body.as_slice())
+                        .expect("write chain status body");
+                    stream.flush().expect("flush chain status response");
+                }
+                Err(err) => {
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    panic!("accept chain status connection failed: {err}");
+                }
+            }
+        });
+        Self {
+            addr: addr.to_string(),
+            committed_height,
+            stop,
+            join_handle: Some(join_handle),
+        }
+    }
+}
+
+impl Drop for TestChainStatusServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+        let _ = TcpStream::connect(self.addr.as_str());
+        if let Some(join_handle) = self.join_handle.take() {
+            join_handle.join().expect("join chain status server");
+        }
+    }
+}
+
+fn runtime_live_temp_dir(label: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "oasis7_runtime_live_chain_status_{label}_{}_{}",
+        std::process::id(),
+        test_now_unix_ms()
+    ));
+    std::fs::create_dir_all(&dir).expect("create runtime live temp dir");
+    dir
 }
 
 fn signed_prompt_control_apply_request(
@@ -803,4 +911,83 @@ fn runtime_simulator_action_mapping_keeps_unmapped_actions_as_none() {
     assert!(
         control_plane::simulator_action_to_runtime(&transfer_to_location, &server.world).is_none()
     );
+}
+
+#[test]
+fn chain_linked_runtime_sync_advances_without_play() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_progress");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1.0, 2.0, 0.0),
+    });
+    execution_world.step().expect("advance execution world");
+    execution_world.submit_action(RuntimeAction::MoveAgent {
+        agent_id: "chain-agent".to_string(),
+        to: crate::geometry::GeoPos::new(5.0, 2.0, 0.0),
+    });
+    execution_world
+        .step()
+        .expect("advance execution world again");
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(progressed, "chain-linked sync should report progress");
+    assert_eq!(server.world.state().time, execution_world.state().time);
+    let line =
+        read_response_line(&peer, Duration::from_millis(200)).expect("expected sync response");
+    assert!(!line.trim().is_empty());
+}
+
+#[test]
+fn chain_linked_runtime_empty_poll_does_not_advance_world() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_idle");
+    let execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist empty execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(0, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let initial_time = server.world.state().time;
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(!progressed, "idle chain poll should not report progress");
+    assert_eq!(server.world.state().time, initial_time);
+    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }

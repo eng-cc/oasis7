@@ -24,6 +24,7 @@ struct CliOptions {
     web_bind_addr: Option<String>,
     llm_mode: bool,
     deployment_mode: String,
+    chain_status_bind: Option<String>,
 }
 
 impl Default for CliOptions {
@@ -34,6 +35,7 @@ impl Default for CliOptions {
             web_bind_addr: Some(DEFAULT_WEB_BIND.to_string()),
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
+            chain_status_bind: None,
         }
     }
 }
@@ -82,6 +84,11 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         } else {
             ViewerLiveDecisionMode::Script
         });
+    let config = if let Some(chain_status_bind) = options.chain_status_bind {
+        config.with_chain_status_bind(chain_status_bind)
+    } else {
+        config
+    };
     let server = ViewerRuntimeLiveServer::new(config)
         .map_err(|err| format!("failed to create runtime viewer server: {err:?}"))?;
     server
@@ -124,6 +131,10 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 let raw = parse_required_value(&mut iter, "--deployment-mode")?;
                 options.deployment_mode = parse_deployment_mode(raw.as_str())?.to_string();
             }
+            "--chain-status-bind" => {
+                options.chain_status_bind =
+                    Some(parse_required_value(&mut iter, "--chain-status-bind")?);
+            }
             "--runtime-world" => {
                 return Err(RUNTIME_ALIAS_REMOVAL_HINT.to_string());
             }
@@ -154,6 +165,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     parse_socket_addr(options.bind_addr.as_str(), "--bind")?;
     if let Some(web_bind_addr) = options.web_bind_addr.as_deref() {
         parse_socket_addr(web_bind_addr, "--web-bind")?;
+    }
+    if let Some(chain_status_bind) = options.chain_status_bind.as_deref() {
+        parse_socket_addr(chain_status_bind, "--chain-status-bind")?;
     }
     let _ = parse_deployment_mode(options.deployment_mode.as_str())?;
 
@@ -217,6 +231,7 @@ Options:\n\
   --no-web-bind             disable websocket bridge\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
+  --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
   -h, --help                show help\n\n\
 Removed:\n\
@@ -237,6 +252,7 @@ mod tests {
         assert_eq!(options.web_bind_addr.as_deref(), Some(DEFAULT_WEB_BIND));
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
+        assert_eq!(options.chain_status_bind, None);
     }
 
     #[test]
@@ -249,6 +265,8 @@ mod tests {
                 "--web-bind",
                 "127.0.0.1:6300",
                 "--llm",
+                "--chain-status-bind",
+                "127.0.0.1:7123",
                 "--deployment-mode",
                 "hosted_public_join",
             ]
@@ -260,6 +278,7 @@ mod tests {
         assert_eq!(options.web_bind_addr.as_deref(), Some("127.0.0.1:6300"));
         assert!(options.llm_mode);
         assert_eq!(options.deployment_mode, "hosted_public_join");
+        assert_eq!(options.chain_status_bind.as_deref(), Some("127.0.0.1:7123"));
     }
 
     #[test]
