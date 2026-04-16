@@ -24,14 +24,47 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: scope
+        name: Plan required gate scope
+        run: |
+          base_ref=""
+          head_ref="${GITHUB_SHA}"
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              base_ref="${{ github.event.pull_request.base.sha }}"
+              head_ref="${{ github.event.pull_request.head.sha }}"
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+          esac
+
+          ./scripts/plan-rust-required-scope.sh \
+            --event-name "${GITHUB_EVENT_NAME}" \
+            --base-ref "${base_ref}" \
+            --head-ref "${head_ref}" \
+            --github-output "${GITHUB_OUTPUT}"
+      - name: Report planned scope
+        run: |
+          echo "scope=${{ steps.scope.outputs.scope }}"
+          echo "reason_summary=${{ steps.scope.outputs.reason_summary }}"
+          echo "changed_path_count=${{ steps.scope.outputs.changed_path_count }}"
+          echo "run_oasis7_required_tests=${{ steps.scope.outputs.run_oasis7_required_tests }}"
+          echo "run_consensus_tests=${{ steps.scope.outputs.run_consensus_tests }}"
+          echo "run_distfs_tests=${{ steps.scope.outputs.run_distfs_tests }}"
+          echo "run_viewer_tests=${{ steps.scope.outputs.run_viewer_tests }}"
+          echo "run_viewer_visual_baseline=${{ steps.scope.outputs.run_viewer_visual_baseline }}"
       - name: Install pinned Rust toolchains
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt
-          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           rustup default "${RUST_TOOLCHAIN}"
-          rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
-          rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+          if [[ "${{ steps.scope.outputs.needs_wasm_target }}" == "true" ]]; then
+            rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          fi
       - name: Install system deps
+        if: ${{ steps.scope.outputs.needs_system_deps == 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -47,8 +80,16 @@ jobs:
             libasound2-dev \
             libudev-dev
       - name: Run required test tier
+        env:
+          OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
+          OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
+          OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}
+          OASIS7_CI_RUN_VIEWER_TESTS: ${{ steps.scope.outputs.run_viewer_tests }}
+          OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ steps.scope.outputs.run_viewer_contract_tests }}
+          OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
       - name: Run viewer visual baseline gate
+        if: ${{ steps.scope.outputs.run_viewer_visual_baseline == 'true' }}
         run: ./scripts/viewer-visual-baseline.sh
 
   full-regression:
