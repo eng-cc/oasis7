@@ -58,8 +58,9 @@ use config_helpers::{
     toml_value_to_string,
 };
 use openai_payload::{
-    build_responses_request_payload, completion_result_from_sdk_stream_events,
-    normalize_openai_api_base_url,
+    build_responses_request_payload, build_text_probe_request_payload,
+    build_tool_probe_request_payload, completion_result_from_sdk_stream_events,
+    normalize_openai_api_base_url, text_output_from_sdk_stream_events,
 };
 #[cfg(test)]
 use openai_payload::{
@@ -783,6 +784,51 @@ impl OpenAiChatCompletionClient {
         })
     }
 
+    pub fn probe_hello_response(&self, model: &str) -> Result<String, LlmClientError> {
+        let payload = build_text_probe_request_payload(model, "hello")?;
+        match self.send_responses_request_for_text(&self.client, payload) {
+            Ok(text) => Ok(text),
+            Err(OpenAiRequestError::ParseBody(raw_body)) => Err(LlmClientError::DecodeResponse {
+                message: format!(
+                    "responses sdk decode failed (text probe): {}",
+                    summarize_trace_text(raw_body.as_str(), 320)
+                ),
+            }),
+            Err(OpenAiRequestError::Timeout(err)) => Err(LlmClientError::Http {
+                message: format!(
+                    "request timed out after {}ms: {}",
+                    self.request_timeout_ms, err
+                ),
+            }),
+            Err(OpenAiRequestError::Completion(err)) => Err(err),
+            Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
+        }
+    }
+
+    pub fn probe_required_tool_response(
+        &self,
+        model: &str,
+    ) -> Result<LlmCompletionResult, LlmClientError> {
+        let payload = build_tool_probe_request_payload(model)?;
+        match self.send_responses_request(&self.client, payload) {
+            Ok(result) => Ok(result),
+            Err(OpenAiRequestError::ParseBody(raw_body)) => Err(LlmClientError::DecodeResponse {
+                message: format!(
+                    "responses sdk decode failed (tool probe): {}",
+                    summarize_trace_text(raw_body.as_str(), 320)
+                ),
+            }),
+            Err(OpenAiRequestError::Timeout(err)) => Err(LlmClientError::Http {
+                message: format!(
+                    "request timed out after {}ms: {}",
+                    self.request_timeout_ms, err
+                ),
+            }),
+            Err(OpenAiRequestError::Completion(err)) => Err(err),
+            Err(OpenAiRequestError::Other(err)) => Err(LlmClientError::Http { message: err }),
+        }
+    }
+
     fn build_http_client(timeout_ms: u64) -> Result<reqwest::Client, LlmClientError> {
         #[cfg(target_arch = "wasm32")]
         let builder = {
@@ -833,6 +879,30 @@ impl OpenAiChatCompletionClient {
                 events.push(event.map_err(OpenAiRequestError::from)?);
             }
             completion_result_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
+        })
+    }
+
+    fn send_responses_request_for_text(
+        &self,
+        client: &AsyncOpenAiClient<OpenAIConfig>,
+        payload: CreateResponse,
+    ) -> Result<String, OpenAiRequestError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|err| OpenAiRequestError::Other(err.to_string()))?;
+
+        runtime.block_on(async {
+            let mut stream = client
+                .responses()
+                .create_stream(payload)
+                .await
+                .map_err(OpenAiRequestError::from)?;
+            let mut events = Vec::<ResponseStreamEvent>::new();
+            while let Some(event) = stream.next().await {
+                events.push(event.map_err(OpenAiRequestError::from)?);
+            }
+            text_output_from_sdk_stream_events(events).map_err(OpenAiRequestError::Completion)
         })
     }
 }

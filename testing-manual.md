@@ -410,6 +410,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ./scripts/worktree-harness.sh status --json
 ./scripts/worktree-harness.sh down
 ./scripts/build-game-launcher-bundle.sh --out-dir output/release/game-launcher-local
+./scripts/check-active-llm-provider.sh --pretty
 ./scripts/run-game-test.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/run-game-test-ab.sh --bundle-dir output/release/game-launcher-local --with-llm
 ./scripts/viewer-post-onboarding-qa.sh --bundle-dir output/release/game-launcher-local --with-llm
@@ -421,6 +422,8 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 sna
 ./scripts/viewer-release-full-coverage.sh --quick
 ./scripts/viewer-release-art-baseline.sh
 ```
+  - active-LLM 预检：
+    `run-game-test.sh` 现在会在启动 launcher 前先跑一次 active LLM provider probe，复用同一套 `config.toml` / `OASIS7_LLM_*` 配置，并同时验证 Responses hello 文本响应与 required tool-call 合约；若 provider/model/auth/base URL 当前不可用，或模型能回文本但不能稳定返回 tool call，会直接 fail-fast，不再等到首个 `step` 才暴露。需要故意保留“stack 可启动但 formal lane 在首步 blocked”的负向验证时，显式加 `--skip-llm-provider-preflight`。
 
 ### S7：场景矩阵回归套件（L1 + L4）
 ```bash

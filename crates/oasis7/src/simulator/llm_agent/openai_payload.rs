@@ -574,6 +574,62 @@ where
     completion_result_from_sdk_response(response)
 }
 
+pub(super) fn text_output_from_sdk_stream_events<I>(events: I) -> Result<String, LlmClientError>
+where
+    I: IntoIterator<Item = ResponseStreamEvent>,
+{
+    let mut completed_response = None;
+    let mut completed_text_parts = BTreeMap::<(u32, u32), String>::new();
+
+    for event in events {
+        match event {
+            ResponseStreamEvent::ResponseCompleted(event) => {
+                completed_response = Some(event.response);
+            }
+            ResponseStreamEvent::ResponseOutputTextDone(event) => {
+                completed_text_parts.insert((event.output_index, event.content_index), event.text);
+            }
+            ResponseStreamEvent::ResponseFailed(event) => {
+                return Err(stream_terminal_response_error("failed", &event.response));
+            }
+            ResponseStreamEvent::ResponseIncomplete(event) => {
+                return Err(stream_terminal_response_error(
+                    "incomplete",
+                    &event.response,
+                ));
+            }
+            ResponseStreamEvent::ResponseError(event) => {
+                let code = event
+                    .code
+                    .as_deref()
+                    .map(|code| format!(" ({code})"))
+                    .unwrap_or_default();
+                return Err(LlmClientError::Http {
+                    message: format!("responses stream error{code}: {}", event.message),
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let response = completed_response.ok_or_else(|| LlmClientError::DecodeResponse {
+        message: "responses stream ended without response.completed".to_string(),
+    })?;
+    if let Some(text) = response
+        .output_text()
+        .filter(|text| !text.trim().is_empty())
+    {
+        return Ok(text);
+    }
+
+    let text = completed_text_parts.into_values().collect::<String>();
+    if text.trim().is_empty() {
+        Err(LlmClientError::EmptyChoice)
+    } else {
+        Ok(text)
+    }
+}
+
 pub(super) fn normalize_openai_api_base_url(base_url: &str) -> String {
     let normalized = base_url.trim().trim_end_matches('/');
     if let Some(stripped) = normalized.strip_suffix("/chat/completions") {
@@ -601,6 +657,52 @@ pub(super) fn build_responses_request_payload(
             }),
         ))]))
         .tools(responses_tools_with_debug_mode(request.debug_mode))
+        .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
+        .parallel_tool_calls(false)
+        .build()
+        .map_err(|err| LlmClientError::DecodeResponse {
+            message: err.to_string(),
+        })
+}
+
+pub(super) fn build_text_probe_request_payload(
+    model: &str,
+    user_prompt: &str,
+) -> Result<CreateResponse, LlmClientError> {
+    CreateResponseArgs::default()
+        .model(model.to_string())
+        .input(InputParam::Items(vec![InputItem::Item(Item::Message(
+            MessageItem::Input(InputMessage {
+                content: vec![InputContent::InputText(InputTextContent {
+                    text: user_prompt.to_string(),
+                })],
+                role: InputRole::User,
+                status: None,
+            }),
+        ))]))
+        .parallel_tool_calls(false)
+        .build()
+        .map_err(|err| LlmClientError::DecodeResponse {
+            message: err.to_string(),
+        })
+}
+
+pub(super) fn build_tool_probe_request_payload(
+    model: &str,
+) -> Result<CreateResponse, LlmClientError> {
+    CreateResponseArgs::default()
+        .model(model.to_string())
+        .instructions("You are a connectivity probe. Call exactly one available tool with minimal valid arguments to confirm tool-call support. Do not answer with plain text.".to_string())
+        .input(InputParam::Items(vec![InputItem::Item(Item::Message(
+            MessageItem::Input(InputMessage {
+                content: vec![InputContent::InputText(InputTextContent {
+                    text: "Call one tool now with the smallest valid argument object.".to_string(),
+                })],
+                role: InputRole::User,
+                status: None,
+            }),
+        ))]))
+        .tools(responses_tools_with_debug_mode(false))
         .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)
         .build()
