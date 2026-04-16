@@ -185,6 +185,7 @@ pub(super) fn resolve_config_guide_target(
     None
 }
 
+#[cfg(test)]
 pub(super) fn resolve_primary_disabled_cta(
     chain_enabled: bool,
     game_required_issues: &[ConfigIssue],
@@ -259,6 +260,7 @@ pub(super) fn load_launcher_ux_state() -> LauncherUxState {
 #[path = "self_guided_tests.rs"]
 mod tests;
 
+#[cfg(not(test))]
 pub(super) fn save_launcher_ux_state(state: &LauncherUxState) -> Result<(), String> {
     let content = serde_json::to_string(state)
         .map_err(|err| format!("serialize launcher ux state failed: {err}"))?;

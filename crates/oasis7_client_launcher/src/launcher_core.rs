@@ -489,6 +489,7 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
     issues
 }
 
+#[cfg(test)]
 pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, String> {
     if config.scenario.trim().is_empty() {
         return Err("scenario cannot be empty".to_string());
@@ -512,7 +513,6 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
     if config.viewer_static_dir.trim().is_empty() {
         return Err("viewer static dir cannot be empty".to_string());
     }
-
     let mut args = vec![
         "--deployment-mode".to_string(),
         deployment_mode.to_string(),
@@ -530,7 +530,6 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
         config.viewer_static_dir.trim().to_string(),
         "--chain-disable".to_string(),
     ];
-
     if config.llm_enabled {
         args.push("--with-llm".to_string());
         args.push("--agent-decision-source".to_string());
@@ -575,10 +574,10 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
     if !config.auto_open_browser {
         args.push("--no-open-browser".to_string());
     }
-
     Ok(args)
 }
 
+#[cfg(test)]
 pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<String>, String> {
     let chain_runtime_bin = config.chain_runtime_bin.trim();
     if chain_runtime_bin.is_empty() {
@@ -782,7 +781,7 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
     )
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 pub(super) fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
     let (host, port) = parse_host_port(bind, "chain status bind")?;
     let host = normalize_host_for_connect(host.as_str());

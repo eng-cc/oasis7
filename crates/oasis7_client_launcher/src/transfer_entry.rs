@@ -1,11 +1,18 @@
+#[cfg(test)]
 use serde::Deserialize;
+#[cfg(test)]
 use std::io::{Read, Write};
+#[cfg(test)]
 use std::net::TcpStream;
+#[cfg(test)]
 use std::time::Duration;
 
+#[cfg(test)]
 use super::WebTransferSubmitRequest;
 
+#[cfg(test)]
 const CHAIN_TRANSFER_SUBMIT_PATH: &str = "/v1/chain/transfer/submit";
+#[cfg(test)]
 const HTTP_TIMEOUT_MS: u64 = 3_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +34,7 @@ impl Default for TransferDraft {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TransferDraftIssue {
     FromAccountRequired,
@@ -36,6 +44,7 @@ pub(crate) enum TransferDraftIssue {
     NonceInvalid,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct TransferSubmitResponse {
     pub(crate) ok: bool,
@@ -45,6 +54,7 @@ pub(crate) struct TransferSubmitResponse {
     pub(crate) error: Option<String>,
 }
 
+#[cfg(test)]
 pub(crate) fn validate_transfer_draft(draft: &TransferDraft) -> Vec<TransferDraftIssue> {
     let mut issues = Vec::new();
     if draft.from_account_id.trim().is_empty() {
@@ -68,6 +78,7 @@ pub(crate) fn validate_transfer_draft(draft: &TransferDraft) -> Vec<TransferDraf
     issues
 }
 
+#[cfg(test)]
 pub(crate) fn submit_transfer_remote(
     draft: &TransferDraft,
     chain_status_bind: &str,
@@ -79,6 +90,7 @@ pub(crate) fn submit_transfer_remote(
     Ok(response)
 }
 
+#[cfg(test)]
 fn build_transfer_submit_request(
     draft: &TransferDraft,
 ) -> Result<WebTransferSubmitRequest, String> {
@@ -99,10 +111,12 @@ fn build_transfer_submit_request(
     )
 }
 
+#[cfg(test)]
 fn parse_positive_u64(raw: &str) -> Option<u64> {
     raw.trim().parse::<u64>().ok().filter(|value| *value > 0)
 }
 
+#[cfg(test)]
 fn post_json_request(
     bind: &str,
     path: &str,
@@ -142,6 +156,7 @@ fn post_json_request(
     parse_http_json_response(&response_bytes)
 }
 
+#[cfg(test)]
 fn parse_http_json_response(bytes: &[u8]) -> Result<TransferSubmitResponse, String> {
     let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
         return Err("invalid HTTP response: missing header terminator".to_string());
@@ -166,6 +181,7 @@ fn parse_http_json_response(bytes: &[u8]) -> Result<TransferSubmitResponse, Stri
     Ok(response)
 }
 
+#[cfg(test)]
 fn parse_http_status_code(header: &str) -> Result<u16, String> {
     let Some(status_line) = header.lines().next() else {
         return Err("invalid HTTP response: missing status line".to_string());
@@ -180,6 +196,7 @@ fn parse_http_status_code(header: &str) -> Result<u16, String> {
     Ok(code)
 }
 
+#[cfg(test)]
 fn parse_host_port(raw: &str, label: &str) -> Result<(String, u16), String> {
     let value = raw.trim();
     let (host_raw, port_raw) = if let Some(rest) = value.strip_prefix('[') {
@@ -213,6 +230,7 @@ fn parse_host_port(raw: &str, label: &str) -> Result<(String, u16), String> {
     Ok((host.to_string(), port))
 }
 
+#[cfg(test)]
 fn host_for_socket(host: &str) -> String {
     if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
         format!("[{host}]")
@@ -221,6 +239,7 @@ fn host_for_socket(host: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn host_for_http(host: &str) -> String {
     if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
         format!("[{host}]")
@@ -229,6 +248,7 @@ fn host_for_http(host: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn normalize_connect_host(host: &str) -> String {
     match host.trim() {
         "0.0.0.0" => "127.0.0.1".to_string(),

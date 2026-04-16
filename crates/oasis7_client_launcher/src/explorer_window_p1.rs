@@ -1,6 +1,7 @@
 use super::*;
 use serde::Deserialize;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerAddressResponse {
     pub(super) ok: bool,
@@ -20,6 +21,7 @@ pub(crate) struct WebExplorerAddressResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerContractListItem {
     pub(super) contract_id: String,
@@ -33,6 +35,7 @@ pub(crate) struct WebExplorerContractListItem {
     pub(super) summary: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerContractsResponse {
     pub(super) ok: bool,
@@ -47,6 +50,7 @@ pub(crate) struct WebExplorerContractsResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerContractResponse {
     pub(super) ok: bool,
@@ -69,6 +73,7 @@ pub(crate) struct WebExplorerAssetHolderItem {
     pub(super) next_nonce_hint: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerAssetsResponse {
     pub(super) ok: bool,
@@ -93,6 +98,7 @@ pub(crate) struct WebExplorerAssetsResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WebExplorerMempoolResponse {
     pub(super) ok: bool,

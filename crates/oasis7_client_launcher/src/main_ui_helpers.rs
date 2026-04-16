@@ -239,6 +239,7 @@ impl ClientLauncherApp {
         match domain {
             WebRequestDomain::StatePoll => self.web_request_inflight.state_poll,
             WebRequestDomain::ControlAction => self.web_request_inflight.control_action,
+            #[cfg(target_arch = "wasm32")]
             WebRequestDomain::FeedbackSubmit => self.web_request_inflight.feedback_submit,
             WebRequestDomain::TransferSubmit => self.web_request_inflight.transfer_submit,
             WebRequestDomain::TransferQuery => self.web_request_inflight.transfer_query,
@@ -250,6 +251,7 @@ impl ClientLauncherApp {
         match domain {
             WebRequestDomain::StatePoll => self.web_request_inflight.state_poll = inflight,
             WebRequestDomain::ControlAction => self.web_request_inflight.control_action = inflight,
+            #[cfg(target_arch = "wasm32")]
             WebRequestDomain::FeedbackSubmit => {
                 self.web_request_inflight.feedback_submit = inflight;
             }
