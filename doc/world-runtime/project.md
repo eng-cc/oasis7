@@ -288,6 +288,18 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime production_release_policy_status_payload_reports_effective_policy -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime status_payload_reports_effective_policy_when_raw_override_differs_from_recommendation -- --nocapture`
     - `./scripts/check-rust-file-size.sh`
+- [x] triad-traffic-window-monitor (PRD-WORLD_RUNTIME-027) [test_tier_required]: 为本机 observer + 两台 ECS triad 补持久化流量采样脚本，把 `/v1/chain/status.traffic` 的累计 counters 转成最近窗口 delta 汇总，并显式处理 `observed_since_unix_ms` reset/restart 缩窗。 Trace: .pm/tasks/task_370ce55ed73a490797055403164e8f41.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_370ce55ed73a490797055403164e8f41.yaml`
+    - `.pm/tasks/task_370ce55ed73a490797055403164e8f41.execution.md`
+    - `scripts/p2p-real-env-traffic-monitor.sh`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/p2p-real-env-traffic-monitor.sh`
+    - `./scripts/p2p-real-env-traffic-monitor.sh --samples 2 --interval-secs 2 --window-minutes 10`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -303,9 +315,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-15
+- 更新日期: 2026-04-16
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `triad-traffic-window-monitor`（已新增 `scripts/p2p-real-env-traffic-monitor.sh`，可将本机 observer + ECS sequencer/storage 的 `/v1/chain/status.traffic` 累计计数采样到持久化 history，并输出最近 N 分钟的 reset-aware delta 汇总，覆盖 UDP gossip / libp2p replication totals、top kind/topic/protocol、height 进度与 recent error counters。）
 - 最新完成: `chain-status-traffic-metrics`（已为 `/v1/chain/status` 增加 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组节点流量快照；UDP gossip 现按消息种类累计 datagram/payload bytes，libp2p replication 现按 gossip/request/response 与 topic/protocol 统计逻辑 payload，并在 payload 中显式标记排除 transport headers、Kademlia control-plane 与 gossipsub mesh fanout 的范围说明。）
 - 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；随后把 runtime 事件/动作路由切到 prepared subscription cache，移除了 `filters_value.to_string()` 热路径固定成本。release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router `parse_each_time -> prepared_once` 在 no-regex / regex 场景都约为 `5.1x~5.5x`。）
 - 最新完成: `TASK-WORLD_RUNTIME-059`（已保持 runtime 语义不放宽，并为 S10 五节点脚本补齐显式 replication listen/peer 拓扑；对 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 仅允许 `<=2` warning，canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
