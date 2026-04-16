@@ -21,3 +21,6 @@ resolver = "2"
 # On wasm32-unknown-unknown, `std::time::Instant` is unavailable.
 # epaint's debug deadlock checks call `parking_lot::try_*_for`, which panics there.
 debug-assertions = false
+
+[patch.crates-io]
+egui-winit = { path = "vendor-egui-winit-0.33.3" }

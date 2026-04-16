@@ -621,6 +621,11 @@ pub(super) fn handle_peer_record_response(
         | PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } => *peer_id,
         PendingPeerRecordRequest::CachedPeerRecord { peer_id, .. } => *peer_id,
     };
+    let response_via_peer_id = match &kind {
+        PendingPeerRecordRequest::ConnectedPeerRecord { .. } => None,
+        PendingPeerRecordRequest::CachedPeerRecord { ask_peer, .. }
+        | PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id: ask_peer } => Some(*ask_peer),
+    };
     if let PendingPeerRecordRequest::CachedDiscoveryPeers { peer_id } = &kind {
         match decode_cached_discovery_peers_response(payload) {
             Ok(peer_ids) => {
@@ -652,7 +657,10 @@ pub(super) fn handle_peer_record_response(
                 push_bounded_clone(
                     event_errors,
                     format!(
-                        "libp2p cached discovery peers decode failed peer={requested_peer_id}: {err:?}"
+                        "libp2p cached discovery peers decode failed peer={requested_peer_id}{}: {err:?}",
+                        response_via_peer_id
+                            .map(|peer_id| format!(" via={peer_id}"))
+                            .unwrap_or_default()
                     ),
                     max_error_messages,
                     "lock errors",
@@ -677,7 +685,10 @@ pub(super) fn handle_peer_record_response(
                 push_bounded_clone(
                     event_errors,
                     format!(
-                        "libp2p peer record response rejected peer={requested_peer_id}: {err:?}"
+                        "libp2p peer record response rejected peer={requested_peer_id}{}: {err:?}",
+                        response_via_peer_id
+                            .map(|peer_id| format!(" via={peer_id}"))
+                            .unwrap_or_default()
                     ),
                     max_error_messages,
                     "lock errors",
@@ -717,7 +728,10 @@ pub(super) fn handle_peer_record_response(
             push_bounded_clone(
                 event_errors,
                 format!(
-                    "libp2p peer record response decode failed peer={requested_peer_id}: {err:?}"
+                    "libp2p peer record response decode failed peer={requested_peer_id}{}: {err:?}",
+                    response_via_peer_id
+                        .map(|peer_id| format!(" via={peer_id}"))
+                        .unwrap_or_default()
                 ),
                 max_error_messages,
                 "lock errors",

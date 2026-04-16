@@ -27,14 +27,15 @@ mod oasis7_pure_api_client_support;
 #[path = "oasis7_pure_api_client/tests.rs"]
 mod tests;
 
+#[cfg(test)]
+use self::oasis7_pure_api_client_support::derive_public_key_hex;
 use self::oasis7_pure_api_client_support::{
     build_signed_agent_chat_request, build_signed_gameplay_action_request,
     build_signed_prompt_apply_request, build_signed_prompt_rollback_request, command_output,
-    derive_public_key_hex, is_terminal_error, keygen_output, latest_snapshot,
-    maybe_request_snapshot, next_u64_id, parse_bool_flag, parse_u64_flag, parse_usize_flag,
-    print_json, required_flag, resolve_public_key_hex, subscribe_for_control, terminal_agent_chat,
-    terminal_control_ack, terminal_gameplay_action, terminal_hello, terminal_prompt_control,
-    terminal_recovery, terminal_snapshot,
+    is_terminal_error, keygen_output, latest_snapshot, maybe_request_snapshot, next_u64_id,
+    parse_bool_flag, parse_u64_flag, parse_usize_flag, print_json, required_flag,
+    subscribe_for_control, terminal_agent_chat, terminal_control_ack, terminal_gameplay_action,
+    terminal_hello, terminal_prompt_control, terminal_recovery, terminal_snapshot,
 };
 
 fn main() {

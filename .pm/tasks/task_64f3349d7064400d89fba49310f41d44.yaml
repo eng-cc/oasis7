@@ -1,0 +1,32 @@
+task_uid: task_64f3349d7064400d89fba49310f41d44
+title: "Follow up remaining workspace compile issues"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workspace-compile-followup
+execution_log_path: .pm/tasks/task_64f3349d7064400d89fba49310f41d44.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - crates/oasis7_proto/src/distributed_dht.rs
+  - crates/oasis7_net/src/libp2p_net/discovery.rs
+  - Cargo.toml
+  - vendor-egui-winit-0.33.3/src/lib.rs
+  - crates/oasis7/src/bin/oasis7_pure_api_client.rs
+  - crates/oasis7/src/bin/oasis7_web_launcher.rs
+  - crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs
+  - crates/oasis7/src/bin/oasis7_chain_runtime.rs
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-001
+acceptance:
+  - "The next remaining workspace compile blocker after the prior proto fix is identified and closed within this task scope."
+  - "Validation records the exact workspace or targeted cargo commands used to confirm the follow-up compile cleanup."
+  - "Engineering tracking and execution log capture any residual blockers left outside this slice."
+handoff_to: []
+updated_at: 2026-04-16T22:59:10+08:00
+last_started_at: 2026-04-16T22:48:07+08:00
+last_closed_at: 2026-04-16T22:59:10+08:00

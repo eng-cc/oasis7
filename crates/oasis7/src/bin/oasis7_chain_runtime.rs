@@ -86,11 +86,14 @@ use reward_runtime_worker::{
     stop_reward_runtime_worker, RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics,
 };
 use status_payload::build_chain_status_payload;
+#[cfg(test)]
+use traffic_profile::feedback_p2p_config_for_role;
 use traffic_profile::{
     apply_traffic_profile_to_node_config, apply_traffic_profile_to_replication_network_config,
-    feedback_p2p_config_for_role,
 };
-use traffic_status::{build_chain_traffic_status, ChainTrafficStatus};
+use traffic_status::build_chain_traffic_status;
+#[cfg(test)]
+use traffic_status::ChainTrafficStatus;
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
