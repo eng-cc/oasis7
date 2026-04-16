@@ -42,14 +42,14 @@ pub struct ReplicationNetworkDebugSnapshot {
     pub connected_peers: Vec<String>,
     pub peer_healths: Vec<ReplicationPeerHealthDebug>,
     pub registered_protocols: Vec<String>,
-    pub unsupported_protocol_peers: HashMap<String, Vec<String>>,
+    pub protocol_retry_cooldown_peers: HashMap<String, Vec<String>>,
     pub recent_errors: Vec<String>,
 }
 
 const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
 const REQUEST_CONNECTION_REFRESH_RETRIES: usize = 12;
-const UNSUPPORTED_PROTOCOL_RETRY_AFTER_MS: u64 = 5_000;
+const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
 
 #[derive(Debug, Clone)]
 pub struct Libp2pReplicationNetworkConfig {
@@ -62,7 +62,7 @@ pub struct Libp2pReplicationNetworkConfig {
     pub discovery_query_interval_ms: i64,
     pub enable_autonat: bool,
     pub allow_local_handler_fallback_when_no_peers: bool,
-    pub unsupported_protocol_retry_after: Duration,
+    pub protocol_retry_cooldown_after: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -78,9 +78,7 @@ impl Default for Libp2pReplicationNetworkConfig {
             discovery_query_interval_ms: inner_defaults.discovery_query_interval_ms,
             enable_autonat: inner_defaults.enable_autonat,
             allow_local_handler_fallback_when_no_peers: false,
-            unsupported_protocol_retry_after: Duration::from_millis(
-                UNSUPPORTED_PROTOCOL_RETRY_AFTER_MS,
-            ),
+            protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
         }
     }
 }
@@ -91,8 +89,8 @@ pub struct Libp2pReplicationNetwork {
     allow_local_handler_fallback_when_no_peers: bool,
     handlers: Arc<Mutex<HashMap<String, Handler>>>,
     request_peer_cursor: Arc<AtomicUsize>,
-    unsupported_protocol_retry_after: Duration,
-    unsupported_protocol_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
+    protocol_retry_cooldown_after: Duration,
+    protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
 }
 
 impl Libp2pReplicationNetwork {
@@ -115,8 +113,8 @@ impl Libp2pReplicationNetwork {
                 .allow_local_handler_fallback_when_no_peers,
             handlers: Arc::new(Mutex::new(HashMap::new())),
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
-            unsupported_protocol_retry_after: config.unsupported_protocol_retry_after,
-            unsupported_protocol_peers: Arc::new(Mutex::new(HashMap::new())),
+            protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
+            protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -177,10 +175,10 @@ impl Libp2pReplicationNetwork {
             .collect();
         peer_healths.sort_by(|left, right| left.peer_id.cmp(&right.peer_id));
 
-        let mut unsupported_protocol_peers: HashMap<String, Vec<String>> = self
-            .unsupported_protocol_peers
+        let mut protocol_retry_cooldown_peers: HashMap<String, Vec<String>> = self
+            .protocol_retry_cooldown_peers
             .lock()
-            .expect("lock unsupported protocol peers")
+            .expect("lock protocol retry cooldown peers")
             .iter()
             .map(|(protocol, peers)| {
                 let mut peer_ids: Vec<String> = peers.keys().map(PeerId::to_string).collect();
@@ -189,7 +187,7 @@ impl Libp2pReplicationNetwork {
                 (protocol.clone(), peer_ids)
             })
             .collect();
-        for peer_ids in unsupported_protocol_peers.values_mut() {
+        for peer_ids in protocol_retry_cooldown_peers.values_mut() {
             peer_ids.sort();
             peer_ids.dedup();
         }
@@ -213,7 +211,7 @@ impl Libp2pReplicationNetwork {
             connected_peers,
             peer_healths,
             registered_protocols,
-            unsupported_protocol_peers,
+            protocol_retry_cooldown_peers,
             recent_errors,
         }
     }
@@ -260,14 +258,14 @@ impl Libp2pReplicationNetwork {
 
     fn filtered_request_peers(&self, protocol: &str, ordered_peers: Vec<PeerId>) -> Vec<PeerId> {
         let now = Instant::now();
-        let mut unsupported = self
-            .unsupported_protocol_peers
+        let mut protocol_retry_cooldown_peers = self
+            .protocol_retry_cooldown_peers
             .lock()
-            .expect("lock unsupported protocol peers");
-        let Some(peers) = unsupported.get_mut(protocol) else {
+            .expect("lock protocol retry cooldown peers");
+        let Some(peers) = protocol_retry_cooldown_peers.get_mut(protocol) else {
             return ordered_peers;
         };
-        peers.retain(|_, unsupported_until| *unsupported_until > now);
+        peers.retain(|_, cooldown_until| *cooldown_until > now);
         let keep_protocol_entry = !peers.is_empty();
         let filtered: Vec<PeerId> = ordered_peers
             .iter()
@@ -275,19 +273,19 @@ impl Libp2pReplicationNetwork {
             .filter(|peer| !peers.contains_key(peer))
             .collect();
         if !keep_protocol_entry {
-            unsupported.remove(protocol);
+            protocol_retry_cooldown_peers.remove(protocol);
         }
         filtered
     }
 
-    fn mark_peer_unsupported_for_protocol(&self, protocol: &str, peer: PeerId) {
-        let unsupported_until = Instant::now() + self.unsupported_protocol_retry_after;
-        self.unsupported_protocol_peers
+    fn mark_peer_for_protocol_retry_cooldown(&self, protocol: &str, peer: PeerId) {
+        let cooldown_until = Instant::now() + self.protocol_retry_cooldown_after;
+        self.protocol_retry_cooldown_peers
             .lock()
-            .expect("lock unsupported protocol peers")
+            .expect("lock protocol retry cooldown peers")
             .entry(protocol.to_string())
             .or_default()
-            .insert(peer, unsupported_until);
+            .insert(peer, cooldown_until);
     }
 
     fn call_local_handler(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
@@ -394,7 +392,7 @@ impl Libp2pReplicationNetwork {
                     Ok(reply) => return Ok(reply),
                     Err(err) => {
                         if peer_error_indicates_protocol_retry_cooldown(protocol, &err) {
-                            self.mark_peer_unsupported_for_protocol(protocol, peer);
+                            self.mark_peer_for_protocol_retry_cooldown(protocol, peer);
                         }
                         retryable_connection_gap |=
                             peer_error_indicates_retryable_connection_gap(&err);

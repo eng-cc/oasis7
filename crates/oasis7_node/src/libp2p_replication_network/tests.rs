@@ -250,11 +250,11 @@ fn libp2p_replication_network_request_waits_for_delayed_bootstrap_connection() {
 }
 
 #[test]
-fn filtered_request_peers_excludes_known_unsupported_peers_without_fallback() {
+fn filtered_request_peers_excludes_protocol_retry_cooldown_peers_without_fallback() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
     let observer_peer = PeerId::random();
     let sequencer_peer = PeerId::random();
-    network.mark_peer_unsupported_for_protocol(
+    network.mark_peer_for_protocol_retry_cooldown(
         "/aw/node/replication/fetch-commit/1.0.0",
         observer_peer,
     );
@@ -265,21 +265,21 @@ fn filtered_request_peers_excludes_known_unsupported_peers_without_fallback() {
     );
     assert_eq!(filtered, vec![sequencer_peer]);
 
-    let filtered_only_unsupported = network.filtered_request_peers(
+    let filtered_only_cooldown = network.filtered_request_peers(
         "/aw/node/replication/fetch-commit/1.0.0",
         vec![observer_peer],
     );
-    assert!(filtered_only_unsupported.is_empty());
+    assert!(filtered_only_cooldown.is_empty());
 }
 
 #[test]
-fn filtered_request_peers_retries_unsupported_peer_after_retry_window() {
+fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_window() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        unsupported_protocol_retry_after: Duration::from_millis(5),
+        protocol_retry_cooldown_after: Duration::from_millis(5),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let sequencer_peer = PeerId::random();
-    network.mark_peer_unsupported_for_protocol(
+    network.mark_peer_for_protocol_retry_cooldown(
         "/aw/node/replication/fetch-commit/1.0.0",
         sequencer_peer,
     );
@@ -437,7 +437,7 @@ fn libp2p_replication_network_request_retries_next_peer_when_remote_handler_fail
 }
 
 #[test]
-fn libp2p_replication_network_retries_previously_unsupported_single_peer_after_retry_window() {
+fn libp2p_replication_network_retries_previously_cooled_down_single_peer_after_retry_window() {
     let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
         peer_record: Some(test_peer_record("listener-not-found")),
@@ -462,7 +462,7 @@ fn libp2p_replication_network_retries_previously_unsupported_single_peer_after_r
     let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
         bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        unsupported_protocol_retry_after: Duration::from_millis(250),
+        protocol_retry_cooldown_after: Duration::from_millis(250),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let connect_deadline = Instant::now() + Duration::from_secs(10);
@@ -471,7 +471,7 @@ fn libp2p_replication_network_retries_previously_unsupported_single_peer_after_r
     });
 
     let listener_peer_id = listener.peer_id();
-    dialer.mark_peer_unsupported_for_protocol("/aw/node/replication/ping", listener_peer_id);
+    dialer.mark_peer_for_protocol_retry_cooldown("/aw/node/replication/ping", listener_peer_id);
 
     let immediate_retry = dialer.request("/aw/node/replication/ping", b"node");
     if let Ok(payload) = &immediate_retry {
@@ -519,7 +519,7 @@ fn libp2p_replication_network_does_not_quarantine_not_found_response_as_unsuppor
     let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
         bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        unsupported_protocol_retry_after: Duration::from_millis(250),
+        protocol_retry_cooldown_after: Duration::from_millis(250),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let connect_deadline = Instant::now() + Duration::from_secs(10);
@@ -618,7 +618,7 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
     let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
         bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        unsupported_protocol_retry_after: Duration::from_millis(250),
+        protocol_retry_cooldown_after: Duration::from_millis(250),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let connect_deadline = Instant::now() + Duration::from_secs(10);
@@ -787,7 +787,7 @@ fn libp2p_replication_network_preserves_remote_unsupported_error_code() {
     let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
         bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        unsupported_protocol_retry_after: Duration::from_millis(250),
+        protocol_retry_cooldown_after: Duration::from_millis(250),
         ..Libp2pReplicationNetworkConfig::default()
     });
     let connect_deadline = Instant::now() + Duration::from_secs(10);

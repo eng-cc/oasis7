@@ -13,8 +13,8 @@ doc_refs:
 related_prd:
   - PRD-WORLD_RUNTIME-029
 acceptance:
-  - "Reduce repeated fetch-commit retries for unavailable/unsupported/timeout peers while preserving healthy replication progress and observable diagnostics."
+  - "Reduce repeated fetch-commit retries for peers that just returned missing-handler/unsupported-signature ErrUnsupported, ErrNotFound, Timeout, or connection-gap failures while preserving healthy replication progress and observable diagnostics."
 handoff_to: []
-updated_at: 2026-04-16T14:44:16+08:00
-last_started_at: 2026-04-16T14:33:43+08:00
-last_closed_at: 2026-04-16T14:44:16+08:00
+updated_at: 2026-04-16T22:54:12+08:00
+last_started_at: 2026-04-16T22:49:01+08:00
+last_closed_at: 2026-04-16T22:54:12+08:00

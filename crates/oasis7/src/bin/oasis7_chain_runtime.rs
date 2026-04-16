@@ -186,7 +186,7 @@ struct ChainReplicationDebugStatus {
     connected_peers: Vec<String>,
     peer_healths: Vec<ChainPeerHealthStatus>,
     registered_protocols: Vec<String>,
-    unsupported_protocol_peers: BTreeMap<String, Vec<String>>,
+    protocol_retry_cooldown_peers: BTreeMap<String, Vec<String>>,
     recent_errors: Vec<String>,
 }
 
@@ -850,11 +850,11 @@ fn build_chain_replication_debug_status(
         })
         .collect();
 
-    let mut unsupported_protocol_peers: BTreeMap<String, Vec<String>> = debug_snapshot
-        .unsupported_protocol_peers
+    let mut protocol_retry_cooldown_peers: BTreeMap<String, Vec<String>> = debug_snapshot
+        .protocol_retry_cooldown_peers
         .into_iter()
         .collect();
-    for peer_ids in unsupported_protocol_peers.values_mut() {
+    for peer_ids in protocol_retry_cooldown_peers.values_mut() {
         peer_ids.sort();
         peer_ids.dedup();
     }
@@ -864,7 +864,7 @@ fn build_chain_replication_debug_status(
         connected_peers: debug_snapshot.connected_peers,
         peer_healths,
         registered_protocols: debug_snapshot.registered_protocols,
-        unsupported_protocol_peers,
+        protocol_retry_cooldown_peers,
         recent_errors: debug_snapshot.recent_errors,
     }
 }

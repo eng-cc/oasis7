@@ -172,7 +172,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_replication_storage_chall
 
 ## 2026-04-08 路由/候选残留收口
 ### 新增实机诊断
-1. `chain/status` 现已补充 replication debug payload：`local_peer_id`、`connected_peers`、`peer_healths`、`registered_protocols`、`unsupported_protocol_peers`、`recent_errors`。
+1. `chain/status` 现已补充 replication debug payload：`local_peer_id`、`connected_peers`、`peer_healths`、`registered_protocols`、`protocol_retry_cooldown_peers`、`recent_errors`。
 2. 借此确认 triad peer 对应关系：
    - observer=`12D3KooWF7hkwdUYKSnmLzuWsvqgtSuAcpZfq6xKkstJV1oaMqjF`
    - storage=`12D3KooWG1GJTjZe9PSCcLY74quNxjoSv6yqFRxuJPF48pbvnbGu`

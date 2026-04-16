@@ -48,7 +48,7 @@
   - SC-15: `compile_module_artifact_from_source` 及其 source package 限额/超时控制必须统一使用 `OASIS7_MODULE_SOURCE_*`；dev/test source compile 路径、simulator/runtime 回归与沙箱环境隔离断言不得再接受任何旧品牌前缀作为有效运行入口。
   - SC-16: `doc/world-runtime/project.md` 等模块主入口中的当前 cargo 回归命令、crate 路径与产物文件清单必须统一使用 `oasis7*` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试语义中。
   - SC-17: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须显式暴露节点网络流量观测快照，至少区分 `udp_gossip` 与 `libp2p_replication` 两条链路，并标明统计范围是否包含 transport/control-plane 开销。
-  - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避，避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
+  - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回“缺少 handler / 不支持该协议”签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避；业务语义层的 `ErrUnsupported` 不计入该退避条件，以避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -127,7 +127,7 @@
   - AC-25: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
   - AC-26: 节点本地 traffic monitor 必须能通过 `node.env` 功能开关启停，默认对单节点本地 `/v1/chain/status` 进行周期采样，输出持久化 history 与最近 N 分钟 summary；节点与 triad monitor 的窗口汇总必须复用共享 helper，且本地 history 也要做 bounded retention。
   - AC-27: 节点启动壳在开启 traffic monitor 时必须与 runtime 共享生命周期，runtime 退出或 service 停止时不能留下长期孤儿 monitor 进程；若开关开启但 monitor 脚本缺失，启动必须显式失败而不是静默跳过。
-  - AC-28: `libp2p_replication_network` 必须仅对 `fetch-commit` 请求中的 `ErrUnsupported`、`ErrNotFound`、`request failed: Timeout` 与连接缺口类错误触发短时 peer cooldown，并通过定向回归证明立即重试会被抑制、窗口过后可恢复请求、非 `fetch-commit` 协议与通用业务错误不受影响。
+  - AC-28: `libp2p_replication_network` 必须仅对 `fetch-commit` 请求中的 missing-handler/unsupported-protocol `ErrUnsupported` 签名、`ErrNotFound`、`request failed: Timeout` 与连接缺口类错误触发短时 peer cooldown，并通过定向回归证明立即重试会被抑制、窗口过后可恢复请求、非 `fetch-commit` 协议与通用业务错误（包括泛化业务态 `ErrUnsupported`）不受影响。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
