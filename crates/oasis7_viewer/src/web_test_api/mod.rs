@@ -38,7 +38,9 @@ use web_sys::UrlSearchParams;
 const TEST_API_QUERY_KEY: &str = "test_api";
 #[cfg(target_arch = "wasm32")]
 const TEST_API_GLOBAL_NAME: &str = "__AW_TEST__";
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 const WEB_TEST_API_CONTROL_ACTIONS: [&str; 4] = ["play", "pause", "step", "seek"];
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 const WEB_TEST_API_CONTROL_ACTIONS_LIVE: [&str; 3] = ["play", "pause", "step"];
 #[cfg(target_arch = "wasm32")]
 const CONTROL_STALL_FRAME_RATE_FALLBACK: f64 = 60.0;
@@ -148,6 +150,7 @@ thread_local! {
     static WEB_TEST_API_RUNTIME_FATAL_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn probe_control_for_action(action: &str) -> Option<ViewerControl> {
     match action {
         "play" => Some(ViewerControl::Play),
@@ -158,6 +161,7 @@ fn probe_control_for_action(action: &str) -> Option<ViewerControl> {
     }
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn supported_control_actions_for_profile(
     profile: Option<ViewerControlProfile>,
 ) -> &'static [&'static str] {
@@ -167,6 +171,7 @@ fn supported_control_actions_for_profile(
     }
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn control_action_supported_for_profile(
     action: &str,
     profile: Option<ViewerControlProfile>,
@@ -175,10 +180,12 @@ fn control_action_supported_for_profile(
         .is_some_and(|control| viewer_control_supported_for_profile(profile, &control))
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn supported_action_list(profile: Option<ViewerControlProfile>) -> String {
     supported_control_actions_for_profile(profile).join(", ")
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn unsupported_control_reason(
     profile: ViewerControlProfile,
     control: &ViewerControl,
@@ -195,6 +202,7 @@ fn unsupported_control_reason(
     }
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn unsupported_control_hint(
     profile: ViewerControlProfile,
     control: &ViewerControl,
@@ -211,6 +219,7 @@ fn unsupported_control_hint(
     }
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn unsupported_action_reason(
     action: &str,
     profile: Option<ViewerControlProfile>,
@@ -221,6 +230,7 @@ fn unsupported_action_reason(
     unsupported_control_reason(profile, &control, locale_zh)
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn unsupported_action_hint(
     action: &str,
     profile: Option<ViewerControlProfile>,

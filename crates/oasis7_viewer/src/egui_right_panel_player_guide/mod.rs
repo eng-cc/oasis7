@@ -1,12 +1,13 @@
 mod hud;
 mod post_onboarding;
 
+#[cfg(test)]
 pub(super) use self::hud::{
     build_player_minimap_points, player_control_result_summary, player_mission_hud_anchor_y,
-    player_mission_hud_compact_mode, player_mission_hud_minimap_reserved_bottom,
-    player_mission_hud_show_command_action, player_mission_hud_show_minimap,
-    render_player_mission_hud, resolve_selected_location_id_for_minimap,
+    player_mission_hud_compact_mode, player_mission_hud_show_command_action,
+    player_mission_hud_show_minimap, resolve_selected_location_id_for_minimap,
 };
+pub(super) use self::hud::{player_mission_hud_minimap_reserved_bottom, render_player_mission_hud};
 pub(super) use self::post_onboarding::build_player_post_onboarding_snapshot;
 
 use crate::web_test_api::WebTestApiControlFeedbackSnapshot;

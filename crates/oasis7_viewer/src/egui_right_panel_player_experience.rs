@@ -918,6 +918,7 @@ use egui_right_panel_player_experience_hud::{
     render_player_onboarding_card,
 };
 
+#[cfg(test)]
 pub(super) fn build_player_hud_snapshot(
     state: &ViewerState,
     selection: &ViewerSelection,
@@ -941,6 +942,7 @@ pub(super) fn should_show_player_onboarding_card(
     egui_right_panel_player_experience_hud::should_show_player_onboarding_card(onboarding, step)
 }
 
+#[cfg(test)]
 pub(super) fn dismiss_player_onboarding_step(
     onboarding: &mut PlayerOnboardingState,
     step: PlayerGuideStep,
@@ -974,6 +976,7 @@ pub(super) fn sync_player_stuck_hint_state(
     )
 }
 
+#[cfg(test)]
 pub(super) fn build_player_stuck_hint(
     step: PlayerGuideStep,
     locale: crate::i18n::UiLocale,
@@ -1004,10 +1007,12 @@ pub(super) fn sync_player_first_session_summary_state(
     )
 }
 
+#[cfg(test)]
 pub(super) fn dismiss_player_first_session_summary(onboarding: &mut PlayerOnboardingState) {
     egui_right_panel_player_experience_hud::dismiss_player_first_session_summary(onboarding)
 }
 
+#[cfg(test)]
 pub(super) fn build_player_first_session_summary_snapshot(
     onboarding: &PlayerOnboardingState,
     state: &ViewerState,

@@ -88,6 +88,7 @@ pub(super) struct TimelineRecoveryActionLabel {
     kind: TimelineRecoveryActionKind,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TimelineRecoveryActionKind {
     Play,
@@ -118,6 +119,7 @@ pub(super) struct TimelineMarkFilterButton {
     kind: TimelineMarkKind,
 }
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub(super) struct TimelineMarkFilterLabel;
 
@@ -137,6 +139,7 @@ struct TimelineKeyInsights {
     density_sparkline: String,
 }
 
+#[allow(dead_code)]
 pub(super) fn spawn_timeline_controls(
     parent: &mut ChildSpawnerCommands,
     font: Handle<Font>,
@@ -364,6 +367,7 @@ pub(super) fn spawn_timeline_controls(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_adjust_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -397,6 +401,7 @@ fn spawn_adjust_button(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_recovery_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -432,6 +437,7 @@ fn spawn_recovery_button(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_mark_filter_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -467,6 +473,7 @@ fn spawn_mark_filter_button(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_mark_jump_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -973,6 +980,7 @@ fn apply_mark_filters(
     insights
 }
 
+#[allow(dead_code)]
 fn mark_filter_background(kind: TimelineMarkKind, enabled: bool) -> Color {
     if !enabled {
         return Color::srgb(0.16, 0.16, 0.18);

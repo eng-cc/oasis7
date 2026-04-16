@@ -229,6 +229,7 @@ fn resolve_initial_ui_locale() -> Option<UiLocale> {
     None
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn parse_ui_locale_from_search(search: &str) -> Option<UiLocale> {
     #[cfg(target_arch = "wasm32")]
     {
@@ -259,6 +260,7 @@ fn parse_ui_locale_from_search(search: &str) -> Option<UiLocale> {
     }
 }
 
+#[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
 fn parse_ui_locale_param(raw: Option<&str>) -> Option<UiLocale> {
     match raw.unwrap_or_default().trim().to_ascii_lowercase().as_str() {
         "zh" | "zh-cn" | "zh_cn" | "cn" | "chinese" => Some(UiLocale::ZhCn),

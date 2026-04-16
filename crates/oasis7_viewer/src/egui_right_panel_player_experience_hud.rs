@@ -298,6 +298,7 @@ pub(super) fn sync_player_stuck_hint_state(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn build_player_stuck_hint(
     step: PlayerGuideStep,
     locale: crate::i18n::UiLocale,

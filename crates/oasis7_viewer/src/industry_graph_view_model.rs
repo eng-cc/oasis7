@@ -738,6 +738,7 @@ impl IndustryGraphViewModel {
         self.rollup.total_events > 0
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn routes_for_zoom(
         &self,
         zoom: IndustrySemanticZoomLevel,
@@ -769,6 +770,7 @@ impl IndustryGraphViewModel {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn graph_for_zoom(&self, zoom: IndustrySemanticZoomLevel) -> IndustryGraphSlice {
         let (nodes, edges) = self.graph_slice_for_zoom(zoom);
         IndustryGraphSlice {

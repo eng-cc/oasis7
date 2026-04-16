@@ -23,6 +23,7 @@ pub(super) struct EventClickButton {
     event_id: u64,
 }
 
+#[allow(dead_code)]
 pub(super) fn spawn_event_click_list(
     parent: &mut ChildSpawnerCommands,
     font: Handle<Font>,

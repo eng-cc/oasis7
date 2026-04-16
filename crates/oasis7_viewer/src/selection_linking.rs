@@ -42,12 +42,15 @@ pub(super) struct JumpSelectionEventsButton;
 #[derive(Component)]
 pub(super) struct EventObjectLinkText;
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub(super) struct LocateFocusEventButtonLabel;
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub(super) struct QuickLocateAgentButtonLabel;
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub(super) struct JumpSelectionEventsButtonLabel;
 
@@ -58,6 +61,7 @@ pub(super) struct SelectionTarget {
     pub(super) name: Option<String>,
 }
 
+#[allow(dead_code)]
 pub(super) fn spawn_event_object_link_controls(
     parent: &mut ChildSpawnerCommands,
     font: Handle<Font>,
@@ -106,6 +110,7 @@ pub(super) fn spawn_event_object_link_controls(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_locate_focus_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -140,6 +145,7 @@ fn spawn_locate_focus_button(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_jump_selection_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
@@ -174,6 +180,7 @@ fn spawn_jump_selection_button(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_quick_locate_agent_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,
