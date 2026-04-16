@@ -110,12 +110,12 @@
   - AC-12: `scripts/build-wasm-module.sh`、`scripts/sync-m1-builtin-wasm-artifacts.sh`、`scripts/ci-m1-wasm-summary.sh`、`tools/wasm_build_suite` 与 `docker/wasm-builder/Dockerfile` 必须只读取或写入 `OASIS7_WASM_*`；错误提示、usage、容器注入 env 与 build receipt 元数据采集不得再接受任何旧品牌前缀作为有效运行入口。
   - AC-13: `runtime/builtin_wasm_materializer`、`runtime/m{1,4,5}_builtin_wasm_artifact`、`runtime/world/release_manifest` 及对应测试必须只读取 `OASIS7_BUILTIN_WASM_DISTFS_ROOT`、`OASIS7_BUILTIN_WASM_FETCHER`、`OASIS7_BUILTIN_WASM_FETCH_URLS`、`OASIS7_BUILTIN_WASM_COMPILER`、`OASIS7_BUILTIN_WASM_FETCH_TIMEOUT_MS`；builtin wasm 取件、抓取、编译 fallback 与 release manifest 生产策略故障签名必须证明旧品牌前缀已失效。
   - AC-14: `runtime/module_source_compiler` 与 `runtime/simulator` 对应回归必须只读取 `OASIS7_MODULE_SOURCE_COMPILER`、`OASIS7_MODULE_SOURCE_MAX_FILES`、`OASIS7_MODULE_SOURCE_MAX_FILE_BYTES`、`OASIS7_MODULE_SOURCE_MAX_TOTAL_BYTES`、`OASIS7_MODULE_SOURCE_COMPILE_TIMEOUT_MS`；source compile 成功、旧 alias 已移除与 sandbox env 隔离断言必须覆盖当前前缀。
-  - AC-15: `/v1/chain/status` 必须输出 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组快照；其中 UDP gossip 至少提供按消息种类聚合的入/出站 datagram 与 payload bytes，libp2p replication 至少提供 gossip/request/response 的入/出站 payload counters、按 topic/protocol 聚合明细，以及 `scope`/排除项说明。
-  - AC-15: `doc/world-runtime/project.md` 中当前 `cargo test -p` 命令、crate 路径与产物清单必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试输入中。
-  - AC-16: `World::new()` / `RuntimeWorld::new()` 所服务的生产或默认运行入口不得依赖额外 `enable_production_release_policy()` 调用才能满足 hardened policy；若某入口必须放宽，必须以显式 dev/test 配置进入并留下验证证据。
-  - AC-17: `state.apply_domain_event*`、preflight preview 与恢复链路中不得因“prechecked / must be handled”类假设触发 panic；同类异常必须落为可断言的 `WorldError`，并有损坏事件回归样本覆盖。
-  - AC-18: `action_to_event_*`、`apply_domain_event_*`、`state.rs` 与其他 runtime 热路径 Rust 文件不得超过 1200 行；拆分后需保留现有 determinism / replay / persistence 回归覆盖，不得以降低测试强度换取拆分完成。
-  - AC-19: `oasis7_chain_runtime` 默认注入的 loopback replication fallback 仅可为 replication / feedback 提供本地兜底，不得在已配置 UDP gossip 的多机部署中抢占 PoS consensus 广播；显式共享 replication network 的 network-consensus 路径必须继续可用。
+- AC-15: `/v1/chain/status` 必须输出 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组快照；其中 UDP gossip 至少提供按消息种类聚合的入/出站 datagram 与 payload bytes，libp2p replication 至少提供 gossip/request/response 的入/出站 payload counters、按 topic/protocol 聚合明细，以及 `scope`/排除项说明。
+- AC-16: `doc/world-runtime/project.md` 中当前 `cargo test -p` 命令、crate 路径与产物清单必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在历史证据、兼容说明或负向测试输入中。
+- AC-17: `World::new()` / `RuntimeWorld::new()` 所服务的生产或默认运行入口不得依赖额外 `enable_production_release_policy()` 调用才能满足 hardened policy；若某入口必须放宽，必须以显式 dev/test 配置进入并留下验证证据。
+- AC-18: `state.apply_domain_event*`、preflight preview 与恢复链路中不得因“prechecked / must be handled”类假设触发 panic；同类异常必须落为可断言的 `WorldError`，并有损坏事件回归样本覆盖。
+- AC-19: `action_to_event_*`、`apply_domain_event_*`、`state.rs` 与其他 runtime 热路径 Rust 文件不得超过 1200 行；拆分后需保留现有 determinism / replay / persistence 回归覆盖，不得以降低测试强度换取拆分完成。
+- AC-20: `oasis7_chain_runtime` 默认注入的 loopback replication fallback 仅可为 replication / feedback 提供本地兜底，不得在已配置 UDP gossip 的多机部署中抢占 PoS consensus 广播；显式共享 replication network 的 network-consensus 路径必须继续可用。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。

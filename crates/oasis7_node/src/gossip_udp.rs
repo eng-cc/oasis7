@@ -145,14 +145,21 @@ impl GossipEndpoint {
 
     fn broadcast_bytes(&self, kind: &str, bytes: &[u8]) -> Result<(), NodeError> {
         let peers = self.snapshot_peers()?;
+        let mut sent_datagrams = 0u64;
         for peer in &peers {
-            self.socket
-                .send_to(bytes, peer)
-                .map_err(|err| NodeError::Gossip {
-                    reason: format!("send_to {} failed: {}", peer, err),
-                })?;
+            match self.socket.send_to(bytes, peer) {
+                Ok(_) => sent_datagrams = sent_datagrams.saturating_add(1),
+                Err(err) => {
+                    if sent_datagrams > 0 {
+                        self.record_outbound(kind, bytes.len(), sent_datagrams);
+                    }
+                    return Err(NodeError::Gossip {
+                        reason: format!("send_to {} failed: {}", peer, err),
+                    });
+                }
+            }
         }
-        self.record_outbound(kind, bytes.len(), peers.len() as u64);
+        self.record_outbound(kind, bytes.len(), sent_datagrams);
         Ok(())
     }
 
@@ -420,6 +427,58 @@ mod tests {
                 .by_kind
                 .get("commit")
                 .map(|lane| lane.inbound.datagrams),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn gossip_endpoint_records_partial_outbound_success_before_error() {
+        let socket_a = UdpSocket::bind("127.0.0.1:0").expect("bind a");
+        let socket_b = UdpSocket::bind("127.0.0.1:0").expect("bind b");
+        let addr_a = socket_a.local_addr().expect("addr a");
+        let addr_b = socket_b.local_addr().expect("addr b");
+        drop(socket_a);
+        drop(socket_b);
+
+        let invalid_peer: SocketAddr = "255.255.255.255:1".parse().expect("invalid peer");
+        let endpoint_a =
+            GossipEndpoint::bind(&gossip_config(addr_a, vec![addr_b, invalid_peer])).expect("a");
+        let endpoint_b = GossipEndpoint::bind(&gossip_config(addr_b, vec![addr_a])).expect("b");
+
+        let err = endpoint_a
+            .broadcast_commit(&GossipCommitMessage {
+                version: 1,
+                world_id: "w".to_string(),
+                node_id: "node-a".to_string(),
+                player_id: "player-a".to_string(),
+                height: 1,
+                slot: 1,
+                epoch: 0,
+                block_hash: "block-1".to_string(),
+                action_root: "root".to_string(),
+                actions: Vec::new(),
+                committed_at_ms: 1_000,
+                execution_block_hash: None,
+                execution_state_root: None,
+                public_key_hex: None,
+                signature_hex: None,
+            })
+            .expect_err("partial send should surface send_to error");
+        assert!(matches!(err, NodeError::Gossip { .. }));
+
+        thread::sleep(Duration::from_millis(20));
+
+        let received = endpoint_b.drain_messages().expect("drain");
+        assert_eq!(received.len(), 1);
+
+        let outbound = endpoint_a.traffic_metrics_snapshot();
+        assert_eq!(outbound.totals.outbound.datagrams, 1);
+        assert!(outbound.totals.outbound.payload_bytes > 0);
+        assert_eq!(
+            outbound
+                .by_kind
+                .get("commit")
+                .map(|lane| lane.outbound.datagrams),
             Some(1)
         );
     }
