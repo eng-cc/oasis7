@@ -109,7 +109,7 @@ const OASIS7_CLIENT_LAUNCHER_LANG_ENV: &str = "OASIS7_CLIENT_LAUNCHER_LANG";
 const GRACEFUL_STOP_TIMEOUT_MS: u64 = 4000;
 #[cfg(not(target_arch = "wasm32"))]
 const STOP_POLL_INTERVAL_MS: u64 = 80;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), test))]
 const CHAIN_STATUS_PROBE_TIMEOUT_MS: u64 = 300;
 #[cfg(not(target_arch = "wasm32"))]
 const OASIS7_CLIENT_LAUNCHER_CONTROL_URL_ENV: &str = "OASIS7_CLIENT_LAUNCHER_CONTROL_URL";
@@ -499,6 +499,7 @@ enum WebApiEvent {
 enum WebRequestDomain {
     StatePoll,
     ControlAction,
+    #[cfg(target_arch = "wasm32")]
     FeedbackSubmit,
     TransferSubmit,
     TransferQuery,
@@ -509,6 +510,7 @@ enum WebRequestDomain {
 struct WebRequestInflight {
     state_poll: bool,
     control_action: bool,
+    #[cfg(target_arch = "wasm32")]
     feedback_submit: bool,
     transfer_submit: bool,
     transfer_query: bool,
@@ -516,7 +518,16 @@ struct WebRequestInflight {
 }
 
 impl WebRequestInflight {
-    #[cfg(test)]
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    fn any(self) -> bool {
+        self.state_poll
+            || self.control_action
+            || self.transfer_submit
+            || self.transfer_query
+            || self.explorer_query
+    }
+
+    #[cfg(all(test, target_arch = "wasm32"))]
     fn any(self) -> bool {
         self.state_poll
             || self.control_action

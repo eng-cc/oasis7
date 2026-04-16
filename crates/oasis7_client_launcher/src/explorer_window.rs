@@ -67,6 +67,7 @@ pub(super) struct WebExplorerTxItem {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct WebExplorerBlocksResponse {
     pub(super) ok: bool,
@@ -81,6 +82,7 @@ pub(super) struct WebExplorerBlocksResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct WebExplorerBlockResponse {
     pub(super) ok: bool,
@@ -92,6 +94,7 @@ pub(super) struct WebExplorerBlockResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct WebExplorerTxsResponse {
     pub(super) ok: bool,
@@ -109,6 +112,7 @@ pub(super) struct WebExplorerTxsResponse {
     pub(super) error: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct WebExplorerTxResponse {
     pub(super) ok: bool,
@@ -127,6 +131,7 @@ pub(super) struct WebExplorerSearchHit {
     pub(super) summary: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct WebExplorerSearchResponse {
     pub(super) ok: bool,
