@@ -898,6 +898,7 @@ pub(super) fn build_game_url(config: &LauncherConfig, request_host: Option<&str>
     )
 }
 
+#[cfg(test)]
 pub(super) fn validate_game_config(config: &LauncherConfig) -> Vec<String> {
     let launcher_bin = resolve_launcher_bin_from_config(config, config.launcher_bin.as_str());
     validate_game_config_with_launcher_bin(config, launcher_bin.as_str())
@@ -1048,6 +1049,7 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     issues
 }
 
+#[cfg(test)]
 pub(super) fn build_launcher_args(config: &LauncherConfig) -> Result<Vec<String>, String> {
     let launcher_bin = resolve_launcher_bin_from_config(config, config.launcher_bin.as_str());
     build_launcher_args_with_launcher_bin(config, launcher_bin.as_str())

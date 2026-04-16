@@ -444,6 +444,8 @@ mod tests {
                     PeerDiscoverySource::Dht,
                 ],
                 capability_lanes: vec![NetworkLane::ConsensusGossip, NetworkLane::Control],
+                source_operator: None,
+                source_asn: None,
                 published_at_ms: 42,
                 ttl_ms: 60_000,
             },
@@ -472,6 +474,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: Vec::new(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -494,6 +498,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: Vec::new(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -515,6 +521,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: Vec::new(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -538,6 +546,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: Vec::new(),
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -562,6 +572,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: vec![NetworkLane::Control, NetworkLane::Sync],
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };
@@ -583,6 +595,8 @@ mod tests {
             relay_addrs: Vec::new(),
             discovery_sources: vec![PeerDiscoverySource::Dht],
             capability_lanes: vec![NetworkLane::Control, NetworkLane::Sync],
+            source_operator: None,
+            source_asn: None,
             published_at_ms: 1,
             ttl_ms: 1_000,
         };

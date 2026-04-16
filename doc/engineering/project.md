@@ -126,6 +126,7 @@
 - [x] TASK-ENGINEERING-116 (PRD-ENGINEERING-015/024) [test_tier_required]: 将 `engineering` 根目录治理专题按对象下沉到 `doc-governance/` 与 `rust-governance/`，清理 `module-root-md-allowlist` 中已过时的 root topic 白名单，并全仓回写引用与索引，恢复“根目录只保留模块入口文件”的结构边界。
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 - [x] drop-local-review-script (PRD-ENGINEERING-021) [test_tier_required]: 将默认评审边界完全切到 GitHub PR review，移除 `codex-review-snapshot.sh` 与相关 `workflow-report` / smoke / README / engineering 正式口径残留。 Trace: .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.yaml
+- [x] workspace-compile-followup (PRD-ENGINEERING-001) [test_tier_required]: 在新 worktree 重放前置 `oasis7_proto` / `oasis7_net` compile cleanup，并为 `egui-winit 0.33.3` 增加本地 `[patch.crates-io]` 修补，使 `./scripts/cargo-dev.sh check --workspace --all-targets` 恢复通过；同时清掉 `oasis7` crate 内一批仅供测试使用的导入/包装函数 warning。 Trace: .pm/tasks/task_64f3349d7064400d89fba49310f41d44.yaml
 - [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 `AGENTS.md`、角色职责卡与 handoff 模板的 `.pm` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 `doc/devlog` 必写残留要求。
   历史说明：本页更早阶段若出现“commit-before review”或固定使用 `codex-review-snapshot.sh` 的描述，均仅作历史追踪保留；现已被 `TASK-ENGINEERING-113` 与 `drop-local-review-script` supersede，当前默认口径为 GitHub PR review。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
@@ -174,7 +175,7 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-14
+- 更新日期: 2026-04-16
 - 当前状态: active
 - 下一任务: `TASK-ENGINEERING-116` 已完成 `engineering` 根目录治理专题下沉，当前 `engineering` 根目录重新收口为 5 个模块入口文件。后续若继续推进路径级治理，应优先评估 `scripts` 是否也出现“子目录已经清晰，但主题分册仍需要二次分层”的对象边界问题；若没有，再转入 round 追加或脚本门禁扩展。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
