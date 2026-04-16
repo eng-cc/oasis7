@@ -11,10 +11,11 @@ source_refs:
 doc_refs:
   - doc/engineering/prd.md
 related_prd:
-  - "PRD-ENGINEERING-021,PRD-ENGINEERING-029"
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-029
 acceptance:
   - "Provide a one-shot task worktree bootstrap path that creates the git worktree, creates the .pm task inside the target worktree, moves it to committed, and records workflow-report start without mutating the source worktree."
 handoff_to: []
-updated_at: 2026-04-16T22:45:30+08:00
+updated_at: 2026-04-16T23:16:51+08:00
 last_started_at: 2026-04-16T22:34:35+08:00
-last_closed_at: 2026-04-16T22:45:22+08:00
+last_closed_at: 2026-04-16T23:16:51+08:00

@@ -51,13 +51,14 @@ SOURCE_STATUS_BEFORE="$(git -C "$ROOT_DIR" status --short)"
 
 cleanup() {
   set +e
+  if [[ "$KEEP_TEMP" == "1" ]]; then
+    return
+  fi
   if [[ -d "$WORKTREE_PATH" ]]; then
     git -C "$ROOT_DIR" worktree remove --force "$WORKTREE_PATH" >/dev/null 2>&1 || true
   fi
   git -C "$ROOT_DIR" branch -D "$BRANCH_NAME" >/dev/null 2>&1 || true
-  if [[ "$KEEP_TEMP" != "1" ]]; then
-    rm -rf "$TMPDIR"
-  fi
+  rm -rf "$TMPDIR"
 }
 trap cleanup EXIT
 
