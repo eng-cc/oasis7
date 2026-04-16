@@ -1138,7 +1138,12 @@ function buildGameplaySummary(locale = state.uiLocale) {
     ? Math.max(0, Math.min(100, Math.floor(progressRaw)))
     : null;
   const availableActions = Array.isArray(gameplay.available_actions)
-    ? gameplay.available_actions.map((action) => ({
+    ? gameplay.available_actions
+      .filter((action) => {
+        const protocolAction = String(action?.protocol_action || "").trim();
+        return protocolAction !== "live_control.play" && protocolAction !== "live_control.step";
+      })
+      .map((action) => ({
         actionId: action?.action_id || null,
         label: action?.label || null,
         protocolAction: action?.protocol_action || null,

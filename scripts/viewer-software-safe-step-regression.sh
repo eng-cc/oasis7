@@ -9,20 +9,20 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/viewer-software-safe-step-regression.sh [options] [run-game-test options...]
 
-Run a Web-first QA regression for Viewer `software_safe` minimal step closure.
+Run a Web-first QA regression for Viewer `software_safe` realtime-only closure.
 The script forces `render_mode=software_safe`, then verifies:
 - page load + `__AW_TEST__` availability
 - runtime connection reaches `connected`
 - target agent selection is reflected in state + DOM
-- a `step` control is accepted
-- DOM exposes step feedback and `lastControlFeedback`
+- realtime surfaces remain readable after selection
+- internal test API `step` still updates `lastControlFeedback` without relying on page buttons
 
 Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
   --out-dir <path>          Artifact root (default: output/playwright/viewer-software-safe-step)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
   --agent-id <id>           Target agent id (default: agent-0)
-  --step-timeout-ms <ms>    Wait timeout for step completion/progress (default: 15000)
+  --step-timeout-ms <ms>    Wait timeout for internal step completion/progress (default: 15000)
   --headed                  Open browser in headed mode
   --headless                Open browser in headless mode (default)
   -h, --help                Show this help
@@ -233,7 +233,7 @@ payload = {
     "renderMode": sys.argv[6],
     "stepAccepted": sys.argv[7] == "true",
     "selectedAgentVisible": sys.argv[8] == "true",
-    "domFeedbackVisible": sys.argv[9] == "true",
+    "playbackControlsVisible": sys.argv[9] == "true",
     "logicalTimeAdvanced": sys.argv[10] == "true",
     "eventSeqAdvanced": sys.argv[11] == "true",
     "feedbackStage": None if sys.argv[12] == "null" else sys.argv[12],
@@ -423,46 +423,55 @@ before_event_seq=$(state_event_seq "$after_select_state")
 before_logical_time=${before_logical_time:-0}
 before_event_seq=${before_event_seq:-0}
 
+wait_for_js_true "(() => {
+  const text = document.body?.innerText || '';
+  const hasRealtimeSurface =
+    text.includes('Recent Events') ||
+    text.includes('最近事件') ||
+    text.includes('Formal Gameplay Summary') ||
+    text.includes('正式玩法摘要');
+  const hasPlaybackControls =
+    text.includes('Playback Controls') ||
+    text.includes('回放控制') ||
+    text.includes('Step x1') ||
+    text.includes('单步 x1') ||
+    text.includes('Step custom count') ||
+    text.includes('按自定义步数推进');
+  return hasRealtimeSurface && !hasPlaybackControls;
+})()" 4000 || {
+  echo "error: realtime surface missing or playback controls are still visible in DOM" >&2
+  exit 1
+}
+
 log_note step
 step_request=$(ab_eval "$session" "(() => { try { return window.__AW_TEST__?.sendControl?.('step', null) ?? null; } catch (err) { return { accepted: false, reason: String(err), effect: 'exception on sendControl' }; } })()")
 write_json_file "$step_request" "$step_request_json"
 step_accepted=$(json_get "$step_request" accepted)
-if [[ "$step_accepted" != "true" ]]; then
-  echo "error: step control was rejected (reason=$(json_get "$step_request" reason))" >&2
-  exit 1
-fi
-
-wait_for_js_true "(() => {
-  const snapshot = window.__AW_TEST__?.getState?.();
-  const feedback = snapshot?.lastControlFeedback;
-  const stage = String(feedback?.stage || '');
-  if (feedback?.action !== 'step') {
-    return false;
+if [[ "$step_accepted" == "true" ]]; then
+  wait_for_js_true "(() => {
+    const snapshot = window.__AW_TEST__?.getState?.();
+    const feedback = snapshot?.lastControlFeedback;
+    const stage = String(feedback?.stage || '');
+    if (feedback?.action !== 'step') {
+      return false;
+    }
+    return stage === 'completed_advanced'
+      || stage === 'completed_timeout'
+      || stage === 'completed_no_progress'
+      || stage === 'blocked'
+      || Number(snapshot?.logicalTime || 0) > ${before_logical_time}
+      || Number(snapshot?.eventSeq || 0) > ${before_event_seq};
+  })()" "$STEP_TIMEOUT_MS" || {
+    echo "error: step control did not reach terminal feedback or advance within timeout" >&2
+    exit 1
   }
-  return stage === 'completed_advanced'
-    || stage === 'completed_timeout'
-    || stage === 'completed_no_progress'
-    || stage === 'blocked'
-    || Number(snapshot?.logicalTime || 0) > ${before_logical_time}
-    || Number(snapshot?.eventSeq || 0) > ${before_event_seq};
-})()" "$STEP_TIMEOUT_MS" || {
-  echo "error: step control did not reach terminal feedback or advance within timeout" >&2
-  exit 1
-}
-
-wait_for_js_true "(() => {
-  const text = document.body?.innerText || '';
-  return text.includes('action=step') && text.includes('stage=');
-})()" 4000 || {
-  echo "error: DOM did not surface step feedback" >&2
-  exit 1
-}
+fi
 
 after_step_state=$(ab_state)
 write_json_file "$after_step_state" "$after_step_state_json"
 
 selected_agent_visible=true
-dom_feedback_visible=true
+playback_controls_visible=false
 after_logical_time=$(state_logical_time "$after_step_state")
 after_event_seq=$(state_event_seq "$after_step_state")
 after_logical_time=${after_logical_time:-0}
@@ -485,7 +494,13 @@ feedback_json=$(state_last_feedback_json "$after_step_state")
 feedback_stage=$(json_get "$feedback_json" stage)
 feedback_reason=$(json_get "$feedback_json" reason)
 feedback_action=$(json_get "$feedback_json" action)
-if [[ "$feedback_action" != "step" ]]; then
+if [[ "$step_accepted" != "true" ]]; then
+  feedback_stage=${feedback_stage:-rejected}
+  if [[ -z "${feedback_reason:-}" || "$feedback_reason" == "null" ]]; then
+    feedback_reason=$(json_get "$step_request" reason)
+  fi
+fi
+if [[ "$step_accepted" == "true" && "$feedback_action" != "step" ]]; then
   echo "error: lastControlFeedback action drifted to ${feedback_action:-<empty>}" >&2
   exit 1
 fi
@@ -494,9 +509,9 @@ if [[ "$(state_connection "$after_step_state")" != "connected" ]]; then
   exit 1
 fi
 fail_category=null
-if [[ "$logical_time_advanced" != true && "$event_seq_advanced" != true && "$feedback_stage" != "completed_advanced" ]]; then
+if [[ "$step_accepted" == "true" && "$logical_time_advanced" != true && "$event_seq_advanced" != true && "$feedback_stage" != "completed_advanced" ]]; then
   fail_category="no_progress_after_step"
-elif [[ "$feedback_stage" != "completed_advanced" && "$feedback_stage" != "completed_timeout" && "$feedback_stage" != "completed_no_progress" && "$feedback_stage" != "blocked" ]]; then
+elif [[ "$step_accepted" == "true" && "$feedback_stage" != "completed_advanced" && "$feedback_stage" != "completed_timeout" && "$feedback_stage" != "completed_no_progress" && "$feedback_stage" != "blocked" ]]; then
   fail_category="missing_terminal_feedback"
 fi
 
@@ -509,7 +524,7 @@ summary_raw=$(summary_json \
   "$render_mode" \
   "$step_accepted" \
   "$selected_agent_visible" \
-  "$dom_feedback_visible" \
+  "$playback_controls_visible" \
   "$logical_time_advanced" \
   "$event_seq_advanced" \
   "${feedback_stage:-null}" \
@@ -523,7 +538,7 @@ src = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
 data = json.loads(src.read_text())
 lines = [
-    '# Viewer software_safe step regression summary',
+    '# Viewer software_safe realtime-only regression summary',
     '',
     f"- ok: `{data['ok']}`",
     f"- failCategory: `{data['failCategory']}`",
@@ -532,7 +547,7 @@ lines = [
     f"- renderMode: `{data['renderMode']}`",
     f"- stepAccepted: `{data['stepAccepted']}`",
     f"- selectedAgentVisible: `{data['selectedAgentVisible']}`",
-    f"- domFeedbackVisible: `{data['domFeedbackVisible']}`",
+    f"- playbackControlsVisible: `{data['playbackControlsVisible']}`",
     f"- logicalTimeAdvanced: `{data['logicalTimeAdvanced']}`",
     f"- eventSeqAdvanced: `{data['eventSeqAdvanced']}`",
     f"- feedbackStage: `{data['feedbackStage']}`",

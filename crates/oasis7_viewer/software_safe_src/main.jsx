@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
@@ -219,7 +219,6 @@ function WorldSummaryPanel() {
   const locale = () => uiLocale();
   const state = core.state;
   const gameplaySummary = () => core.buildGameplaySummary(locale());
-  const controlFeedback = () => core.snapshotControlFeedback(state.lastControlFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
@@ -671,7 +670,6 @@ function WorldSummaryPanel() {
           </div>
         </PanelSection>
       </Show>
-      <PlaybackControls controlFeedback={controlFeedback()} />
       <div class="summary-grid">
         <MetricCard label={tr(locale(), "Prompt 反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
           <Show when={promptFeedbackDisplay()}>
@@ -707,61 +705,6 @@ function WorldSummaryPanel() {
         </div>
       </div>
     </div>
-  );
-}
-
-function PlaybackControls(props) {
-  const [stepCount, setStepCount] = createSignal(3);
-  const locale = () => uiLocale();
-
-  return (
-    <PanelSection title={tr(locale(), "回放控制", "Playback Controls")}>
-      <div class="toolbar">
-        <button data-action="play" onClick={() => core.sendControl("play", null)}>{tr(locale(), "播放", "Play")}</button>
-        <button data-action="pause" onClick={() => core.sendControl("pause", null)}>{tr(locale(), "暂停", "Pause")}</button>
-        <button data-action="step" onClick={() => core.sendControl("step", null)}>{tr(locale(), "单步 x1", "Step x1")}</button>
-      </div>
-      <div class="control-grid">
-        <div class="field">
-          <label for="step-count">{tr(locale(), "步数", "Step count")}</label>
-          <input
-            id="step-count"
-            type="number"
-            min="1"
-            step="1"
-            value={stepCount()}
-            onInput={(event) => setStepCount(Math.max(1, Math.floor(Number(event.currentTarget.value || 1))))}
-          />
-        </div>
-        <div class="field" style="align-self:end;">
-          <button
-            data-action="step-count"
-            onClick={() => core.sendControl("step", { count: Math.max(1, Math.floor(stepCount() || 1)) })}
-          >
-            {tr(locale(), "按自定义步数推进", "Step custom count")}
-          </button>
-        </div>
-      </div>
-      <Show
-        when={props.controlFeedback}
-        fallback={<EmptyState>{tr(locale(), "还没有控制反馈。", "No control feedback yet.")}</EmptyState>}
-      >
-        {(feedback) => (
-          <>
-            <div class="badge-row">
-              <Badge>{`action=${feedback().action}`}</Badge>
-              <Badge>{`stage=${feedback().stage}`}</Badge>
-              <Badge>{`Δtick=${feedback().deltaLogicalTime}`}</Badge>
-              <Badge>{`Δevent=${feedback().deltaEventSeq}`}</Badge>
-            </div>
-            <div class="feedback-summary">
-              {feedback().effect || feedback().reason || tr(locale(), "控制反馈已更新。", "Control feedback updated.")}
-            </div>
-            <DiagnosticDetails value={feedback()} locale={locale()} />
-          </>
-        )}
-      </Show>
-    </PanelSection>
   );
 }
 
