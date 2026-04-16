@@ -20,6 +20,7 @@ fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool
 
 #[test]
 fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
+    let deadline = || Instant::now() + Duration::from_secs(10);
     let peer_manager_policy = PeerManagerPolicy {
         min_active_discovery_sources: 0,
         min_peer_discovery_sources: 0,
@@ -59,9 +60,7 @@ fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
         peer_manager_policy: peer_manager_policy.clone(),
         ..Libp2pNetworkConfig::default()
     });
-
-    let deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("net1 listening", deadline, || {
+    wait_until("net1 listening", deadline(), || {
         !net1.listening_addrs().is_empty()
     });
     let dial_addr = net1
@@ -89,10 +88,10 @@ fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
         ..Libp2pNetworkConfig::default()
     });
 
-    wait_until("net2 connected", deadline, || {
+    wait_until("net2 connected", deadline(), || {
         !net2.connected_peers().is_empty()
     });
-    wait_until("request converges", deadline, || {
+    wait_until("request converges", deadline(), || {
         match net2.request("/aw/rr/1.0.0/ping", b"ping") {
             Ok(reply) => reply == b"ping-ok".to_vec(),
             Err(WorldError::NetworkProtocolUnavailable { .. }) => false,
@@ -104,7 +103,7 @@ fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
     let _sub1 = net1.subscribe("aw.traffic").expect("sub1");
     std::thread::sleep(Duration::from_millis(200));
     net1.publish("aw.traffic", b"hello").expect("publish");
-    wait_until("gossipsub", deadline, || {
+    wait_until("gossipsub", deadline(), || {
         sub2.drain().iter().any(|payload| payload == b"hello")
     });
 

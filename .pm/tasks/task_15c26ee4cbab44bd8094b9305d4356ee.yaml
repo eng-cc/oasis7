@@ -15,6 +15,6 @@ related_prd:
 acceptance:
   - "Expose udp_gossip and libp2p_replication traffic counters in /v1/chain/status and cover with runtime tests."
 handoff_to: []
-updated_at: 2026-04-15T22:06:45+08:00
-last_started_at: 2026-04-15T21:25:08+08:00
-last_closed_at: 2026-04-15T22:06:45+08:00
+updated_at: 2026-04-16T21:17:18+08:00
+last_started_at: 2026-04-16T21:14:25+08:00
+last_closed_at: 2026-04-16T21:17:18+08:00
