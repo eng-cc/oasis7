@@ -172,7 +172,7 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-14
+- 更新日期: 2026-04-15
 - 当前状态: in_progress
 - 下一任务: 由 `producer_system_designer` 基于 `TASK-GAME-065` 与后续 runtime 切片的正式阻断签名，继续拆出下一轮 runtime/viewer 修复切片，先恢复 `10-minute trust gate`，再单独复验 `post_onboarding.establish_first_capability / 20%` 这条 capability blocker；若 formal lane 仍再现 `logicalTime/eventSeq` 冻结，则继续按 run id 细分真实 stall 与 provider/decision 瞬时失败的剩余签名。
 - 已登记待排任务: 若后续 formal lane 再次回退到 provider timeout / latency / prompt budget blocker，则继续按 run id 追加失败签名；在 trust gate 与 capability gate 分别恢复前，不得把 active-LLM 正式体验对外表述为 `continue_playing` 或“首个持续能力已闭环”。

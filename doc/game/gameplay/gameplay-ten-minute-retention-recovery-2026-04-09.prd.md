@@ -111,7 +111,7 @@
 - Phased Rollout:
   - R0: 冻结 `PRD-GAME-012` 与 5 条 lane，停止需求蔓延。
   - R1: 完成首次控制地板与首屏降噪收口。
-  - R2: 完成 10 分钟工业中循环包与后果可见化。
+  - R2: 完成首个持续能力包（capability package）与后果可见化。
   - R3: 跑 active-LLM `10-minute trust gate`，并由 producer 决定 `continue_playing / hold`。
   - R4: 在 trust gate 通过后继续验证 `first capability gate`，确认首个持续能力闭环是否成立。
 - Technical Risks:
