@@ -1,0 +1,20 @@
+task_uid: task_df0a42e3efea4806bb3f41245c1ef4d5
+title: "Reduce fetch-commit retry traffic waste"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-fetch-commit-retry-backoff
+execution_log_path: .pm/tasks/task_df0a42e3efea4806bb3f41245c1ef4d5.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/prd.md
+related_prd:
+  - PRD-WORLD_RUNTIME-029
+acceptance:
+  - "Reduce repeated fetch-commit retries for unavailable/unsupported/timeout peers while preserving healthy replication progress and observable diagnostics."
+handoff_to: []
+updated_at: 2026-04-16T14:44:16+08:00
+last_started_at: 2026-04-16T14:33:43+08:00
+last_closed_at: 2026-04-16T14:44:16+08:00

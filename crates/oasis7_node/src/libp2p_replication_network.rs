@@ -20,6 +20,7 @@ use oasis7_proto::distributed_net::{
 };
 use oasis7_proto::world_error::WorldError;
 
+use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 use crate::NodeError;
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
@@ -392,7 +393,7 @@ impl Libp2pReplicationNetwork {
                 match self.request_via_peer(protocol, payload, peer) {
                     Ok(reply) => return Ok(reply),
                     Err(err) => {
-                        if peer_error_indicates_unsupported_protocol(&err) {
+                        if peer_error_indicates_protocol_retry_cooldown(protocol, &err) {
                             self.mark_peer_unsupported_for_protocol(protocol, peer);
                         }
                         retryable_connection_gap |=
@@ -662,6 +663,28 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
         }
         WorldError::NetworkProtocolUnavailable { protocol } => {
             peer_error_message_indicates_missing_handler(protocol)
+        }
+        _ => false,
+    }
+}
+
+fn peer_error_indicates_protocol_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
+    peer_error_indicates_unsupported_protocol(err)
+        || peer_error_indicates_fetch_commit_retry_cooldown(protocol, err)
+}
+
+fn peer_error_indicates_fetch_commit_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
+    if protocol != REPLICATION_FETCH_COMMIT_PROTOCOL {
+        return false;
+    }
+
+    match err {
+        WorldError::NetworkRequestFailed { code, .. } => {
+            matches!(code, DistributedErrorCode::ErrNotFound)
+                || peer_error_indicates_retryable_connection_gap(err)
+        }
+        WorldError::NetworkProtocolUnavailable { .. } => {
+            peer_error_indicates_retryable_connection_gap(err)
         }
         _ => false,
     }
