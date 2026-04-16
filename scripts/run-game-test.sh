@@ -21,6 +21,7 @@ OUTPUT_DIR=""
 RUN_ID=""
 META_FILE=""
 JSON_READY="0"
+SKIP_LLM_PROVIDER_PREFLIGHT="0"
 
 usage() {
   cat <<'USAGE'
@@ -52,6 +53,8 @@ Options:
   --run-id <id>            Override logical run id used for output dir / chain node id defaults
   --meta-file <path>       Override metadata file path (default: <output-dir>/session.meta)
   --json-ready             Emit one-line JSON ready payload after the stack becomes ready
+  --skip-llm-provider-preflight
+                           Skip the active-LLM provider probe before launcher startup
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
   -h, --help               Show this help
@@ -103,6 +106,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --json-ready)
       JSON_READY="1"
+      shift
+      ;;
+    --skip-llm-provider-preflight)
+      SKIP_LLM_PROVIDER_PREFLIGHT="1"
       shift
       ;;
     --chain-enable)
@@ -318,6 +325,19 @@ tail_logs_on_error() {
   fi
 }
 
+tail_probe_logs_on_error() {
+  local probe_json="$1"
+  local probe_log="$2"
+  if [[ -f "$probe_json" ]]; then
+    echo "--- oasis7_llm_provider_probe.json ---" >&2
+    cat "$probe_json" >&2 || true
+  fi
+  if [[ -s "$probe_log" ]]; then
+    echo "--- oasis7_llm_provider_probe.log ---" >&2
+    tail -n 80 "$probe_log" >&2 || true
+  fi
+}
+
 check_port_free "$VIEWER_PORT"
 check_port_free "$WEB_BRIDGE_PORT"
 
@@ -364,6 +384,8 @@ fi
 
 WORLD_LOG="$OUTPUT_DIR/oasis7_viewer_live.log"
 WEB_LOG="$OUTPUT_DIR/web_viewer.log"
+LLM_PROVIDER_PROBE_JSON="$OUTPUT_DIR/oasis7_llm_provider_probe.json"
+LLM_PROVIDER_PROBE_LOG="$OUTPUT_DIR/oasis7_llm_provider_probe.log"
 if [[ -n "$META_FILE" ]]; then
   if [[ "$META_FILE" != /* ]]; then
     META_FILE="$ROOT_DIR/$META_FILE"
@@ -414,6 +436,14 @@ WORLD_ARGS+=(--with-llm)
 if [[ -n "$BUNDLE_DIR" ]]; then
   LAUNCH_MODE="bundle"
   LAUNCH_CMD="$BUNDLE_DIR/run-game.sh"
+  if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
+    if ! "$ROOT_DIR/scripts/check-active-llm-provider.sh" >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
+      echo "error: active LLM provider preflight failed before launcher startup" >&2
+      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
+      tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
+      exit 1
+    fi
+  fi
   (
     cd "$BUNDLE_DIR"
     "$BUNDLE_DIR/run-game.sh" "${WORLD_ARGS[@]}" >"$WORLD_LOG" 2>&1
@@ -421,6 +451,7 @@ if [[ -n "$BUNDLE_DIR" ]]; then
 else
   LAUNCH_MODE="source"
   SOURCE_MODE_TARGET_DIR="$(resolve_source_mode_target_dir)"
+  SOURCE_MODE_PROBE_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_llm_provider_probe"
   SOURCE_MODE_LAUNCHER_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_game_launcher"
   SOURCE_MODE_VIEWER_LIVE_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_viewer_live"
   SOURCE_MODE_CHAIN_RUNTIME_BIN="$SOURCE_MODE_TARGET_DIR/oasis7_chain_runtime"
@@ -428,6 +459,8 @@ else
     build
     -p
     oasis7
+    --bin
+    oasis7_llm_provider_probe
     --bin
     oasis7_game_launcher
     --bin
@@ -437,10 +470,22 @@ else
     SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
   fi
   env -u RUSTC_WRAPPER cargo "${SOURCE_BUILD_ARGS[@]}"
+  [[ -x "$SOURCE_MODE_PROBE_BIN" ]] || { echo "error: built probe binary missing: $SOURCE_MODE_PROBE_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_LAUNCHER_BIN" ]] || { echo "error: built launcher binary missing: $SOURCE_MODE_LAUNCHER_BIN" >&2; exit 1; }
   [[ -x "$SOURCE_MODE_VIEWER_LIVE_BIN" ]] || { echo "error: built viewer live binary missing: $SOURCE_MODE_VIEWER_LIVE_BIN" >&2; exit 1; }
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
     [[ -x "$SOURCE_MODE_CHAIN_RUNTIME_BIN" ]] || { echo "error: built chain runtime binary missing: $SOURCE_MODE_CHAIN_RUNTIME_BIN" >&2; exit 1; }
+  fi
+  if [[ "$SKIP_LLM_PROVIDER_PREFLIGHT" != "1" ]]; then
+    if ! (
+      cd "$ROOT_DIR"
+      "$SOURCE_MODE_PROBE_BIN"
+    ) >"$LLM_PROVIDER_PROBE_JSON" 2>"$LLM_PROVIDER_PROBE_LOG"; then
+      echo "error: active LLM provider preflight failed before launcher startup" >&2
+      echo "hint: rerun with --skip-llm-provider-preflight only when intentionally validating blocked/failure behavior after stack bootstrap" >&2
+      tail_probe_logs_on_error "$LLM_PROVIDER_PROBE_JSON" "$LLM_PROVIDER_PROBE_LOG"
+      exit 1
+    fi
   fi
   LAUNCH_CMD="$SOURCE_MODE_LAUNCHER_BIN"
   (
@@ -472,6 +517,9 @@ INFO
   echo "LAUNCH_MODE=$LAUNCH_MODE"
   echo "LAUNCH_CMD=$LAUNCH_CMD"
   echo "BUNDLE_DIR=$BUNDLE_DIR"
+  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
+  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
+  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
   echo "STACK_READY=0"
 } >"$META_FILE"
 
@@ -524,6 +572,9 @@ STANDARD_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=st
   echo "LAUNCH_MODE=$LAUNCH_MODE"
   echo "LAUNCH_CMD=$LAUNCH_CMD"
   echo "BUNDLE_DIR=$BUNDLE_DIR"
+  echo "LLM_PROVIDER_PREFLIGHT_SKIPPED=$SKIP_LLM_PROVIDER_PREFLIGHT"
+  echo "LLM_PROVIDER_PROBE_JSON=$LLM_PROVIDER_PROBE_JSON"
+  echo "LLM_PROVIDER_PROBE_LOG=$LLM_PROVIDER_PROBE_LOG"
   echo "STACK_READY=1"
   echo "GAME_URL=$GAME_URL"
   echo "STANDARD_VIEWER_URL_ZH=$STANDARD_VIEWER_URL_ZH"
@@ -572,6 +623,7 @@ Game test stack is ready.
 - Chain enabled: $CHAIN_ENABLED
 - Chain node id: ${CHAIN_NODE_ID:-disabled}
 - Chain status bind: ${CHAIN_STATUS_BIND_ADDR:-disabled}
+- LLM provider preflight: $LLM_PROVIDER_PROBE_JSON
 
 Recommended use:
 - producer/release playtests: pass --bundle-dir <bundle>
