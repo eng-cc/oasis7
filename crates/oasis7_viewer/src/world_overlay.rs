@@ -63,6 +63,7 @@ pub(super) struct WorldOverlayUiState {
     pub status_text: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WorldOverlayKind {
     Chunk,
@@ -75,6 +76,7 @@ pub(super) struct WorldOverlayToggleButton {
     kind: WorldOverlayKind,
 }
 
+#[allow(dead_code)]
 #[derive(Component)]
 pub(super) struct WorldOverlayToggleLabel;
 
@@ -102,6 +104,7 @@ struct LocationHeatPoint {
     intensity: i64,
 }
 
+#[allow(dead_code)]
 pub(super) fn spawn_world_overlay_controls(
     parent: &mut ChildSpawnerCommands,
     font: Handle<Font>,
@@ -168,6 +171,7 @@ pub(super) fn spawn_world_overlay_controls(
         });
 }
 
+#[allow(dead_code)]
 fn spawn_overlay_button(
     buttons: &mut ChildSpawnerCommands,
     font: &Handle<Font>,

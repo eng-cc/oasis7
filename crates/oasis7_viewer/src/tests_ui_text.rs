@@ -44,6 +44,7 @@ pub(super) fn build_events_text(
     ui_locale_text::localize_events_summary_block(events_summary(&state.events, focus_tick), locale)
 }
 
+#[allow(dead_code)]
 pub(super) fn build_selection_text(selection: &ViewerSelection, locale: UiLocale) -> String {
     selection_line(selection, locale)
 }

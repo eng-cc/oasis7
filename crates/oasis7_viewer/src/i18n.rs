@@ -235,6 +235,7 @@ pub(super) fn step_button_label(locale: UiLocale, pending: bool) -> &'static str
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn selection_kind_label(kind: SelectionKind, locale: UiLocale) -> &'static str {
     match kind {
         SelectionKind::Agent => {

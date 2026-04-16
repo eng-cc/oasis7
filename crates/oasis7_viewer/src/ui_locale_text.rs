@@ -27,6 +27,7 @@ pub(super) fn status_line(status: &ConnectionStatus, locale: UiLocale) -> String
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn selection_line(selection: &ViewerSelection, locale: UiLocale) -> String {
     let Some(info) = selection.current.as_ref() else {
         return if locale.is_zh() {
@@ -56,6 +57,7 @@ pub(super) fn selection_line(selection: &ViewerSelection, locale: UiLocale) -> S
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn summary_no_snapshot(locale: UiLocale) -> &'static str {
     if locale.is_zh() {
         "世界: （无快照）"
@@ -64,6 +66,7 @@ pub(super) fn summary_no_snapshot(locale: UiLocale) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn agents_activity_no_snapshot(locale: UiLocale) -> &'static str {
     if locale.is_zh() {
         "Agent 活动:\n（无快照）"
@@ -72,6 +75,7 @@ pub(super) fn agents_activity_no_snapshot(locale: UiLocale) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn details_click_to_inspect(locale: UiLocale) -> &'static str {
     if locale.is_zh() {
         "详情:\n（点击对象查看）"
@@ -80,6 +84,7 @@ pub(super) fn details_click_to_inspect(locale: UiLocale) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn events_empty(locale: UiLocale) -> &'static str {
     if locale.is_zh() {
         "事件:\n（无事件）"
@@ -96,6 +101,7 @@ pub(super) fn diagnosis_waiting(locale: UiLocale) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn event_links_waiting(locale: UiLocale) -> &'static str {
     if locale.is_zh() {
         "事件联动:\n（等待事件）"

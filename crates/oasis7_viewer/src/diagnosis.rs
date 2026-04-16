@@ -23,6 +23,7 @@ impl Default for DiagnosisState {
 #[derive(Component)]
 pub(super) struct DiagnosisText;
 
+#[allow(dead_code)]
 pub(super) fn spawn_diagnosis_panel(
     parent: &mut ChildSpawnerCommands,
     font: Handle<Font>,
