@@ -96,8 +96,10 @@ done
 traffic_monitor_enable="${TRAFFIC_MONITOR_ENABLE:-0}"
 traffic_monitor_interval_secs="${TRAFFIC_MONITOR_INTERVAL_SECS:-60}"
 traffic_monitor_window_minutes="${TRAFFIC_MONITOR_WINDOW_MINUTES:-10}"
+traffic_monitor_history_retention_minutes="${TRAFFIC_MONITOR_HISTORY_RETENTION_MINUTES:-}"
 traffic_monitor_top_n="${TRAFFIC_MONITOR_TOP_N:-5}"
-traffic_monitor_script="${TRAFFIC_MONITOR_SCRIPT_PATH:-$APP_ROOT/bin/oasis7-node-traffic-monitor.sh}"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+traffic_monitor_script="${TRAFFIC_MONITOR_SCRIPT_PATH:-$script_dir/oasis7-node-traffic-monitor.sh}"
 traffic_monitor_output_dir="${TRAFFIC_MONITOR_OUTPUT_DIR:-$APP_ROOT/output/traffic-monitor}"
 traffic_monitor_status_url="${TRAFFIC_MONITOR_STATUS_URL:-http://$STATUS_BIND/v1/chain/status}"
 
@@ -128,6 +130,12 @@ if [[ "$traffic_monitor_enable" == "1" ]]; then
     --window-minutes "$traffic_monitor_window_minutes"
     --top-n "$traffic_monitor_top_n"
   )
+  if [[ -n "$traffic_monitor_history_retention_minutes" ]]; then
+    monitor_cmd+=(
+      --history-retention-minutes
+      "$traffic_monitor_history_retention_minutes"
+    )
+  fi
   printf '%q ' "${monitor_cmd[@]}" > "$monitor_command_file"
   printf '\n' >> "$monitor_command_file"
 fi
