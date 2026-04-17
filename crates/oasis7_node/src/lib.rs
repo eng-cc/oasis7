@@ -121,6 +121,7 @@ const STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK: usize = 3;
 const STORAGE_GATE_NETWORK_MIN_MATCHES_CAP: usize = 2;
 const STORAGE_GATE_NETWORK_WARMUP_HEIGHT: u64 = 32;
 const STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK: usize = 3;
+const STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS: u64 = 2;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
 const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
@@ -1146,6 +1147,7 @@ struct PosNodeEngine {
     network_committed_height: u64,
     replication_persisted_height: u64,
     storage_challenge_fallback_height: u64,
+    recent_storage_challenge_successes: BTreeMap<String, u64>,
     pending: Option<PendingProposal>,
     auto_attest_all_validators: bool,
     last_broadcast_proposal_height: u64,
@@ -1185,6 +1187,7 @@ struct PeerCommittedHead {
 }
 
 include!("lib_impl_part1.rs");
+include!("lib_impl_storage_challenge.rs");
 include!("lib_impl_part2.rs");
 
 #[cfg(test)]
