@@ -54,8 +54,9 @@ for path in files:
         module_counts[parts[0]] += 1
     elif parts:
         module_counts["(doc-root)"] += 1
-    if len(parts) >= 2:
-        subdir_counts[f"{parts[0]}/{parts[1]}"] += 1
+    if len(parts) >= 3:
+        parent_parts = rel.parent.parts
+        subdir_counts[f"{parent_parts[0]}/{parent_parts[1]}"] += 1
     try:
         line_count = sum(1 for _ in path.open("r", encoding="utf-8"))
     except UnicodeDecodeError:
@@ -104,7 +105,7 @@ print("| --- | --- | --- |")
 near_limit_rows = sorted(non_devlog_near_limit, reverse=True)
 if near_limit_rows:
     for line_count, path in near_limit_rows[:15]:
-        flag = "split_required" if line_count >= 1000 else "near_limit"
+        flag = "split_required" if line_count >= 1000 else "action_required"
         print(f"| `{path}` | {line_count} | {flag} |")
 else:
     print("| _none_ | 0 | normal |")
