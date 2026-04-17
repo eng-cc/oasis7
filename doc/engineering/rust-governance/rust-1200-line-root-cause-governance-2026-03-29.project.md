@@ -15,6 +15,7 @@
 - [x] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略，冻结残余 13 个测试尾债并建立下一批 burn-down 清单。
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/003/005) [test_tier_required]: 修复 `rust-oversized-file-baseline.tsv` 被误清空后的 required gate 阻断，按当前仓库实况重写 frozen baseline，并把专项状态从“已收口”拉回到继续 burn-down 的真实阶段。
 - [x] rust-structural-slicing-module-actions (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `runtime/world/module_actions` 从 `include!/impl_part` 切换为目录模块，拆出 `artifact_actions` / `release_actions` / `release_normalization` / `release_support`，把 `artifact_actions.rs` 压到 1019 行，并同步退役 4 条 structural slicing frozen baseline。 Trace: .pm/tasks/task_d8ad79d7c10646008fb684934160c0b7.yaml
+- [x] rust-structural-slicing-oasis7-node-lib (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/lib.rs` 从 `include!/impl_part` 切换为 `node_engine_core` / `node_engine_network` / `node_engine_storage_challenge` 三个真实子模块，根文件压到 1199 行，退役 `lib_impl_part1.rs` / `lib_impl_part2.rs` 对应 4 条 frozen structural slicing 记录。 Trace: .pm/tasks/task_a2ec08aaee744cdcbd32dc1677c59d28.yaml
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -36,10 +37,11 @@
 ## 状态
 - 更新日期: 2026-04-17
 - 当前阶段: active
-- 当前任务: `rust-structural-slicing-module-actions` 已完成，`runtime/world/module_actions` 已从 `include!/impl_part` 切换为目录模块，当前 frozen structural slicing baseline 已从 49 个 `slice_file` / 48 个 `include_target` 降到 47 / 46。
+- 当前任务: `rust-structural-slicing-module-actions` 与 `rust-structural-slicing-oasis7-node-lib` 已完成，`runtime/world/module_actions` 与 `crates/oasis7_node/src/lib.rs` 已从 `include!/impl_part` 切换为真实目录/子模块；当前 frozen structural slicing baseline 已降到 45 个 `slice_file` / 44 个 `include_target`。
 - 阻塞项: 无新的脚本阻断；当前真实约束是仓库仍存在 12 个生产 Rust 超限文件与 7 个测试 Rust 超限文件，后续治理不得再宣称 `oversized code files=0, test files=0` 已达成。
 - 最新完成:
   - `rust-structural-slicing-module-actions`：`crates/oasis7/src/runtime/world/module_actions` 已改为目录模块，原 `module_actions_impl_part1.rs` / `module_actions_impl_part2.rs` / `include!` 入口全部退役；新增 `release_normalization.rs` 承接 release 归一化与 shadow-hash helper，`artifact_actions.rs` 降到 1019 行。`env -u RUSTC_WRAPPER cargo check -p oasis7`、`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::module_action_loop:: -- --nocapture`、`./scripts/check-rust-file-size.sh` 与 `git diff --check` 通过。
+  - `rust-structural-slicing-oasis7-node-lib`：`crates/oasis7_node/src/lib.rs` 已改为正常 `mod` 入口，原 `lib_impl_part1.rs` / `lib_impl_part2.rs` / `lib_impl_storage_challenge.rs` 已迁移为 `node_engine_core.rs` / `node_engine_network.rs` / `node_engine_storage_challenge.rs`。`env -u RUSTC_WRAPPER cargo check -p oasis7_node`、`./scripts/check-rust-file-size.sh` 与 4 条 node engine 精确用例通过；`cargo test -p oasis7_node --lib -- --nocapture` 仍有 3 个现存失败签名未在本轮修复：`runtime_network_replication_respects_topic_isolation`、`runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode`、`runtime_gossip_replication_persists_guard_across_restart`。
   - `TASK-ENGINEERING-104`：确认 `doc/.governance/rust-oversized-file-baseline.tsv` 在 `2026-03-30` 被提交为只剩注释的空壳，导致 `scripts/check-rust-file-size.sh` 在 required gate 中把全部存量超限项误判为“相对 HEAD 新增”；现已按当前仓库实况重写 baseline，恢复 `scripts/ci-tests.sh required` 的 frozen baseline 语义，并把专项状态改回继续 burn-down。
   - `TASK-ENGINEERING-054`：`oasis7_chain_runtime.rs` 拆出 `cli.rs`，`execution_bridge.rs` 迁移为目录模块，门禁基线已退休旧入口超限项。
   - `TASK-ENGINEERING-055`：`viewer/runtime_live.rs` 与测试集拆为目录模块；同时把 `runtime/events.rs`、`state.rs`、`apply_domain_event_*`、`world/event_processing.rs` 压回 1200 行内，清零本批新增 runtime 超限。

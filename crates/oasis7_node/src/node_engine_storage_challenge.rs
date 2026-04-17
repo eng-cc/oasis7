@@ -1,12 +1,17 @@
+use super::*;
+
 impl PosNodeEngine {
-    fn is_storage_challenge_success_cache_height_valid(&self, checked_height: u64) -> bool {
+    pub(super) fn is_storage_challenge_success_cache_height_valid(
+        &self,
+        checked_height: u64,
+    ) -> bool {
         let min_height = self
             .committed_height
             .saturating_sub(STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS);
         checked_height > min_height && checked_height <= self.committed_height
     }
 
-    fn prune_storage_challenge_success_cache(&mut self) {
+    pub(super) fn prune_storage_challenge_success_cache(&mut self) {
         let committed_height = self.committed_height;
         let min_height =
             committed_height.saturating_sub(STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS);
@@ -16,7 +21,7 @@ impl PosNodeEngine {
             });
     }
 
-    fn storage_challenge_success_cache_hit(
+    pub(super) fn storage_challenge_success_cache_hit(
         &self,
         replication: &ReplicationRuntime,
         content_hash: &str,
@@ -31,19 +36,19 @@ impl PosNodeEngine {
         Ok(replication.load_blob_by_hash(content_hash)?.is_some())
     }
 
-    fn mark_storage_challenge_success(&mut self, content_hash: &str) {
+    pub(super) fn mark_storage_challenge_success(&mut self, content_hash: &str) {
         self.recent_storage_challenge_successes
             .insert(content_hash.to_string(), self.committed_height);
     }
 }
 
-enum StorageChallengeSampleOutcome {
+pub(super) enum StorageChallengeSampleOutcome {
     Matched,
     Unavailable { reason: String },
     HardFailure { reason: String },
 }
 
-fn evaluate_storage_challenge_sample(
+pub(super) fn evaluate_storage_challenge_sample(
     replication: &ReplicationRuntime,
     endpoint: &ReplicationNetworkEndpoint,
     world_id: &str,
