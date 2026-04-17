@@ -1,0 +1,21 @@
+task_uid: task_53b1918a361445f5bf678bcf525abc5c
+title: "fetch-blob traffic backoff"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-fetch-blob-traffic-backoff
+execution_log_path: .pm/tasks/task_53b1918a361445f5bf678bcf525abc5c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-032
+acceptance:
+  - "storage challenge gate should reuse recent fetch-blob success results for the same content hash"
+  - "expired success cache should trigger a fresh fetch-blob probe"
+handoff_to: []
+updated_at: 2026-04-17T11:30:28+08:00
+last_started_at: 2026-04-17T11:11:58+08:00
+last_closed_at: 2026-04-17T11:30:28+08:00

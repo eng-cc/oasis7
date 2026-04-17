@@ -361,6 +361,22 @@
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_net --tests`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] fetch-blob-traffic-backoff (PRD-WORLD_RUNTIME-032) [test_tier_required]: 为 sequencer 的 storage challenge gate 增加短窗口 `fetch-blob` success cache，避免对刚验证可读的同一 `content_hash` 在连续 commit 窗口里重复发网请求，同时保留缓存过期后的真实再探测。 Trace: .pm/tasks/task_53b1918a361445f5bf678bcf525abc5c.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/.governance/rust-oversized-file-baseline.tsv`
+    - `.pm/tasks/task_53b1918a361445f5bf678bcf525abc5c.yaml`
+    - `.pm/tasks/task_53b1918a361445f5bf678bcf525abc5c.execution.md`
+    - `crates/oasis7_node/src/lib.rs`
+    - `crates/oasis7_node/src/lib_impl_part1.rs`
+    - `crates/oasis7_node/src/lib_impl_storage_challenge.rs`
+    - `crates/oasis7_node/src/tests_network_gap_sync.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node storage_challenge_gate_reuses_recent_blob_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_node --tests`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`

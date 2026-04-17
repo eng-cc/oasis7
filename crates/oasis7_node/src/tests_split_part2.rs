@@ -1,5 +1,7 @@
 #[path = "tests_network_gap_sync.rs"]
 mod network_gap_sync_tests;
+#[path = "tests_storage_challenge_blob_cache.rs"]
+mod storage_challenge_blob_cache_tests;
 
 #[test]
 fn pos_engine_rejects_commit_without_execution_hashes_when_required() {
