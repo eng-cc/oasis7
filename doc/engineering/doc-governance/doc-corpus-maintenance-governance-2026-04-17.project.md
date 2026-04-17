@@ -21,8 +21,8 @@
 - `scripts/doc-inventory-report.sh`
 
 ## 状态
-- 当前阶段: M1 已完成（T0~T3）
-- 当前阶段: M1 已完成（formalize + report）
+- 当前阶段: M1 已完成
+- 阶段说明: formalize + report
 - 阻塞项: 无
 - 最近更新: 2026-04-17
 - 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 在默认阅读面层面已完成收口；当前继续留在该专题下只会掩盖“文档总量、热点路径、历史 backlog、近限文件”的第二阶段债。后续应按 `doc/devlog -> world-simulator -> p2p -> testing -> 季度复核` 的顺序切独立 worktree 执行，不再回到“只改 README/首屏”的处理方式。

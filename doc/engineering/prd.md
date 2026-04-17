@@ -111,7 +111,7 @@
   11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
-  13. Flow-ENG-013: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> workflow-report close -> `move-task --to-status done|deferred` -> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> workflow-report close -> `move-task --to-status done|deferred` -> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
