@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-10
+更新时间：2026-04-17
 
 ## 入口
 - 模块 PRD：`doc/world-simulator/prd.md`
@@ -12,12 +12,13 @@
 ## 首读分流
 - 想先回答模块在做什么、能力边界是什么：先读 `doc/world-simulator/prd.md`
 - 想先回答当前在推进什么、谁在负责、哪里被阻断：先读 `doc/world-simulator/project.md`
+- 想先进入 Viewer 热点子域，而不是直接面对近 300 份 Viewer 文档：先读 `doc/world-simulator/viewer/README.md`
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-10）
-- `doc/world-simulator/`：547 份文件
-- `doc/world-simulator/viewer/`：296 份文件
+## 密度快照（2026-04-17）
+- `doc/world-simulator/`：550 份文件
+- `doc/world-simulator/viewer/`：297 份文件
 - `doc/world-simulator/launcher/`：81 份文件
 - `doc/world-simulator/llm/`：54 份文件
 - `doc/world-simulator/kernel/`：36 份文件
@@ -37,6 +38,7 @@
 | `prd/` | 9 | 验收模板、评分卡、质量趋势与补充附件 |
 
 ## 活跃补充文档
+- `doc/world-simulator/viewer/README.md`：`viewer/` 热点子域 landing page，适合先做簇级分流，再决定进入 `manual`、`software_safe` 或 runtime live 专题。
 - `doc/world-simulator/viewer/viewer-manual.manual.md`：Viewer / Web 闭环 / operator 手册，不在下方 PRD 三件套长表中展开。
 - `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
 - `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
@@ -237,7 +239,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。
+- 默认入口面先在 `README.md` / `prd.index.md` 收紧；若热点子域进入后仍无首读入口，则继续追加路径级治理。当前 `viewer/README.md` 即为 `viewer/` 的首个已执行子域入口。
 - ROUND-002 物理合并（gameplay release）：`viewer-gameplay-release-experience-overhaul` 为主文档，`immersion-phase8~10` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 - ROUND-002 物理合并（live event-driven）：`viewer-live-full-event-driven-phase10-2026-02-27` 为主文档，`phase8/9` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 

@@ -1,0 +1,18 @@
+task_uid: task_7d222c2f13454b23889baad383fbdf7e
+title: "formalize world-simulator viewer path governance"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_7d222c2f13454b23889baad383fbdf7e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-17T21:27:13+08:00
+last_started_at: 2026-04-17T21:13:39+08:00
+last_closed_at: 2026-04-17T21:27:13+08:00
