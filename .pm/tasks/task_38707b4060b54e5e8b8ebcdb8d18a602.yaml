@@ -1,0 +1,29 @@
+task_uid: task_38707b4060b54e5e8b8ebcdb8d18a602
+title: "formalize testing evidence path governance"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_38707b4060b54e5e8b8ebcdb8d18a602.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md
+doc_refs:
+  - doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.prd.md
+  - doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.design.md
+  - doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.project.md
+  - doc/testing/evidence/README.md
+  - doc/testing/README.md
+  - doc/testing/prd.index.md
+related_prd:
+  - PRD-ENGINEERING-025
+  - PRD-ENGINEERING-029
+acceptance:
+  - "Formalize the testing/evidence path-governance trilogy under doc/engineering/doc-governance."
+  - "Add doc/testing/evidence/README.md as the canonical hotspot entrypoint."
+  - "Backwrite testing and engineering root entry documents to point at the new evidence hotspot entry."
+handoff_to: []
+updated_at: 2026-04-17T22:08:18+08:00
+last_started_at: 2026-04-17T21:56:07+08:00
+last_closed_at: 2026-04-17T22:08:18+08:00
