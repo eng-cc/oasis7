@@ -1,4 +1,5 @@
 use super::*;
+use std::net::ToSocketAddrs;
 
 #[derive(Debug, serde::Deserialize)]
 struct ChainStatusSyncSnapshot {
@@ -9,6 +10,16 @@ struct ChainStatusSyncSnapshot {
 #[derive(Debug, serde::Deserialize)]
 struct ChainStatusConsensusSnapshot {
     committed_height: u64,
+}
+
+struct PreparedChainLinkedRuntimeUpdate {
+    committed_height: u64,
+    world: RuntimeWorld,
+}
+
+struct ChainLinkedRuntimeDispatch {
+    advanced: bool,
+    responses: Vec<ViewerResponse>,
 }
 
 impl ViewerRuntimeLiveServer {
@@ -27,26 +38,75 @@ impl ViewerRuntimeLiveServer {
             return Ok(false);
         };
 
-        let chain_status = fetch_chain_status_snapshot(chain_status_bind)?;
-        if chain_status.consensus.committed_height <= self.last_chain_committed_height {
+        let prepared = prepare_chain_linked_runtime_update(chain_status_bind)?;
+        let dispatch = self.apply_chain_linked_runtime_update(prepared, session)?;
+        for response in dispatch.responses {
+            send_response(writer, &response)?;
+        }
+        Ok(dispatch.advanced)
+    }
+
+    pub(super) fn sync_chain_linked_runtime_minimized_lock(
+        shared: &Arc<Mutex<Self>>,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        let chain_status_bind = {
+            let server = lock_shared_server(shared)?;
+            server
+                .config
+                .chain_status_bind
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        let Some(chain_status_bind) = chain_status_bind else {
             return Ok(false);
+        };
+
+        let prepared = prepare_chain_linked_runtime_update(chain_status_bind.as_str())?;
+        let dispatch = {
+            let mut server = lock_shared_server(shared)?;
+            server.apply_chain_linked_runtime_update(prepared, session)?
+        };
+        for response in dispatch.responses {
+            send_response(writer, &response)?;
         }
 
-        self.last_chain_committed_height = chain_status.consensus.committed_height;
+        Ok(dispatch.advanced)
+    }
+
+    fn apply_chain_linked_runtime_update(
+        &mut self,
+        prepared: PreparedChainLinkedRuntimeUpdate,
+        session: &mut RuntimeLiveSession,
+    ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
+        if prepared.committed_height <= self.last_chain_committed_height {
+            return Ok(ChainLinkedRuntimeDispatch {
+                advanced: false,
+                responses: Vec::new(),
+            });
+        }
+
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
-        self.world = load_chain_execution_world(chain_status.execution_world_dir.as_path())?;
-
-        let delta_logical_time = self
+        let delta_logical_time = prepared
             .world
             .state()
             .time
             .saturating_sub(baseline_logical_time);
         let delta_event_seq =
-            latest_runtime_event_seq(&self.world).saturating_sub(baseline_event_seq);
+            latest_runtime_event_seq(&prepared.world).saturating_sub(baseline_event_seq);
         if delta_logical_time == 0 && delta_event_seq == 0 {
-            return Ok(false);
+            return Ok(ChainLinkedRuntimeDispatch {
+                advanced: false,
+                responses: Vec::new(),
+            });
         }
+
+        self.world = prepared.world;
+        self.last_chain_committed_height = prepared.committed_height;
         self.confirm_player_gameplay_progress();
 
         let mapped_events: Vec<_> = self
@@ -61,54 +121,85 @@ impl ViewerRuntimeLiveServer {
         let batch_finality_updates =
             self.advance_authoritative_batch_finality(self.world.state().time)?;
 
+        let mut responses = Vec::new();
         if session.subscribed.contains(&ViewerStream::Events) {
             for event in &mapped_events {
                 if session.event_allowed(event) {
-                    send_response(
-                        writer,
-                        &ViewerResponse::Event {
-                            event: event.clone(),
-                        },
-                    )?;
+                    responses.push(ViewerResponse::Event {
+                        event: event.clone(),
+                    });
                 }
             }
-            send_response(
-                writer,
-                &ViewerResponse::AuthoritativeBatch {
-                    batch: pending_batch,
-                },
-            )?;
+            responses.push(ViewerResponse::AuthoritativeBatch {
+                batch: pending_batch,
+            });
             for batch in batch_finality_updates {
-                send_response(writer, &ViewerResponse::AuthoritativeBatch { batch })?;
+                responses.push(ViewerResponse::AuthoritativeBatch { batch });
             }
         }
 
         if session.subscribed.contains(&ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot();
-            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+            responses.push(ViewerResponse::Snapshot { snapshot });
         }
 
         session.metrics = runtime_metrics(&self.world);
         if session.subscribed.contains(&ViewerStream::Metrics) {
-            send_response(
-                writer,
-                &ViewerResponse::Metrics {
-                    time: Some(self.world.state().time),
-                    metrics: session.metrics.clone(),
-                },
-            )?;
+            responses.push(ViewerResponse::Metrics {
+                time: Some(self.world.state().time),
+                metrics: session.metrics.clone(),
+            });
         }
 
-        Ok(true)
+        Ok(ChainLinkedRuntimeDispatch {
+            advanced: true,
+            responses,
+        })
     }
+}
+
+fn prepare_chain_linked_runtime_update(
+    chain_status_bind: &str,
+) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
+    let chain_status = fetch_chain_status_snapshot(chain_status_bind)?;
+    let world = load_chain_execution_world(chain_status.execution_world_dir.as_path())?;
+    Ok(PreparedChainLinkedRuntimeUpdate {
+        committed_height: chain_status.consensus.committed_height,
+        world,
+    })
 }
 
 fn fetch_chain_status_snapshot(
     chain_status_bind: &str,
 ) -> Result<ChainStatusSyncSnapshot, ViewerRuntimeLiveServerError> {
-    let mut stream = TcpStream::connect(chain_status_bind)?;
-    stream.set_read_timeout(Some(Duration::from_millis(300)))?;
-    stream.set_write_timeout(Some(Duration::from_millis(300)))?;
+    let timeout = Duration::from_millis(300);
+    let mut addrs = chain_status_bind.to_socket_addrs()?;
+    let first_addr = addrs.next().ok_or_else(|| {
+        ViewerRuntimeLiveServerError::Serde(format!(
+            "chain status bind resolved to no addresses: {chain_status_bind}"
+        ))
+    })?;
+
+    let mut connected = None;
+    let mut last_err = None;
+    for addr in std::iter::once(first_addr).chain(addrs) {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => {
+                connected = Some(stream);
+                break;
+            }
+            Err(err) => {
+                last_err = Some(err);
+            }
+        }
+    }
+    let mut stream = connected.ok_or_else(|| {
+        ViewerRuntimeLiveServerError::Io(
+            last_err.expect("last_err must be set after connect attempts"),
+        )
+    })?;
+    stream.set_read_timeout(Some(timeout))?;
+    stream.set_write_timeout(Some(timeout))?;
     let request = format!(
         "GET /v1/chain/status HTTP/1.1\r\nHost: {chain_status_bind}\r\nConnection: close\r\n\r\n"
     );
@@ -139,7 +230,17 @@ fn load_chain_execution_world(
     let snapshot_path = execution_world_dir.join("snapshot.json");
     let journal_path = execution_world_dir.join("journal.json");
     if !snapshot_path.exists() || !journal_path.exists() {
-        return Ok(RuntimeWorld::new_production_hardened());
+        let mut missing_files = Vec::new();
+        if !snapshot_path.exists() {
+            missing_files.push(snapshot_path.display().to_string());
+        }
+        if !journal_path.exists() {
+            missing_files.push(journal_path.display().to_string());
+        }
+        return Err(ViewerRuntimeLiveServerError::Serde(format!(
+            "execution world is not ready; missing persistence file(s): {}",
+            missing_files.join(", ")
+        )));
     }
 
     RuntimeWorld::load_from_dir(execution_world_dir)
