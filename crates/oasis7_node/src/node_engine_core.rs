@@ -1,5 +1,10 @@
+use super::node_engine_storage_challenge::{
+    evaluate_storage_challenge_sample, StorageChallengeSampleOutcome,
+};
+use super::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InboundSlotWindow {
+pub(super) enum InboundSlotWindow {
     Accept,
     Future,
     Stale,
@@ -12,7 +17,7 @@ struct ObservedPosTick {
 }
 
 impl PosNodeEngine {
-    fn new(config: &NodeConfig) -> Result<Self, NodeError> {
+    pub(super) fn new(config: &NodeConfig) -> Result<Self, NodeError> {
         let (validators, validator_players, validator_signers, total_stake, required_stake) =
             validated_pos_state(&config.pos_config)?;
         let (consensus_signer, consensus_signer_public_key, enforce_consensus_signature) =
@@ -135,7 +140,7 @@ impl PosNodeEngine {
         })
     }
 
-    fn tick(
+    pub(super) fn tick(
         &mut self,
         node_id: &str,
         world_id: &str,
@@ -346,7 +351,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn next_tick_wait_duration(&self, now_ms: i64, fallback: Duration) -> Duration {
+    pub(super) fn next_tick_wait_duration(&self, now_ms: i64, fallback: Duration) -> Duration {
         if !self.adaptive_tick_scheduler_enabled {
             return fallback;
         }
@@ -364,7 +369,7 @@ impl PosNodeEngine {
         Duration::from_millis(wait_ms.max(1))
     }
 
-    fn classify_inbound_slot_window(
+    pub(super) fn classify_inbound_slot_window(
         &self,
         message_slot: u64,
         current_slot: u64,
@@ -379,7 +384,7 @@ impl PosNodeEngine {
         InboundSlotWindow::Accept
     }
 
-    fn note_inbound_timing_reject(&mut self, reason: String) {
+    pub(super) fn note_inbound_timing_reject(&mut self, reason: String) {
         self.last_inbound_timing_reject_reason = Some(reason);
     }
 
@@ -463,7 +468,7 @@ impl PosNodeEngine {
         .map_err(node_pos_error)
     }
 
-    fn insert_attestation(
+    pub(super) fn insert_attestation(
         &self,
         proposal: &mut PendingProposal,
         validator_id: &str,
@@ -488,7 +493,7 @@ impl PosNodeEngine {
         .map_err(node_pos_error)
     }
 
-    fn apply_decision(&mut self, decision: &PosDecision) -> Result<(), NodeError> {
+    pub(super) fn apply_decision(&mut self, decision: &PosDecision) -> Result<(), NodeError> {
         match decision.status {
             PosConsensusStatus::Pending => {}
             PosConsensusStatus::Committed => {
@@ -527,7 +532,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn pending_consensus_action_capacity(&self) -> usize {
+    pub(super) fn pending_consensus_action_capacity(&self) -> usize {
         let reserved_requeue_actions = self
             .pending
             .as_ref()
@@ -607,7 +612,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn snapshot_from_decision(&self, decision: &PosDecision) -> NodeConsensusSnapshot {
+    pub(super) fn snapshot_from_decision(&self, decision: &PosDecision) -> NodeConsensusSnapshot {
         let peer_heads = self
             .peer_heads
             .iter()
@@ -674,7 +679,7 @@ impl PosNodeEngine {
         })
     }
 
-    fn commit_execution_binding_for_height(
+    pub(super) fn commit_execution_binding_for_height(
         &self,
         committed_height: u64,
     ) -> Result<(Option<&str>, Option<&str>), NodeError> {
@@ -692,7 +697,7 @@ impl PosNodeEngine {
         Ok((execution_block_hash, execution_state_root))
     }
 
-    fn execution_binding_for_height(&self, height: u64) -> Option<(&str, &str)> {
+    pub(super) fn execution_binding_for_height(&self, height: u64) -> Option<(&str, &str)> {
         if let Some((block_hash, state_root)) = self.execution_bindings.get(&height) {
             return Some((block_hash.as_str(), state_root.as_str()));
         }
@@ -708,7 +713,7 @@ impl PosNodeEngine {
         }
     }
 
-    fn remember_execution_binding_for_height(&mut self, height: u64) {
+    pub(super) fn remember_execution_binding_for_height(&mut self, height: u64) {
         let (Some(block_hash), Some(state_root)) = (
             self.last_execution_block_hash.as_ref(),
             self.last_execution_state_root.as_ref(),
@@ -725,7 +730,7 @@ impl PosNodeEngine {
         }
     }
 
-    fn validate_peer_commit_execution_binding(
+    pub(super) fn validate_peer_commit_execution_binding(
         &self,
         height: u64,
         execution_block_hash: Option<&str>,
@@ -820,7 +825,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn enforce_storage_challenge_gate(
+    pub(super) fn enforce_storage_challenge_gate(
         &mut self,
         replication: &ReplicationRuntime,
         network_endpoint: Option<&ReplicationNetworkEndpoint>,
@@ -1077,7 +1082,7 @@ impl PosNodeEngine {
         );
     }
 
-    fn sync_missing_replication_commits(
+    pub(super) fn sync_missing_replication_commits(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
@@ -1157,7 +1162,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn refresh_replication_persisted_height(
+    pub(super) fn refresh_replication_persisted_height(
         &mut self,
         replication_runtime: &ReplicationRuntime,
         world_id: &str,
