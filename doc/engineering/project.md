@@ -127,6 +127,7 @@
 - [x] doc-corpus-maintenance-governance (PRD-ENGINEERING-025) [test_tier_required]: 建立“文档存量维护成本治理”专题与 `scripts/doc-inventory-report.sh`，冻结从“阅读面噪音”转向“文档总量/热点路径/历史 backlog/near-limit 文件”的阶段判断，并回写 engineering 根入口、主 PRD、既有 `doc-surface-area-governance` 专题与主项目。 Trace: .pm/tasks/task_851d3d1452534a2c83355317ae385ade.yaml
 - [x] devlog-history-compaction (PRD-ENGINEERING-026) [test_tier_required]: 建立 `doc/devlog` 历史压缩与入口收口专题、新增 `doc/devlog/README.md` 作为 canonical archive 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的首个已执行 follow-up。 Trace: .pm/tasks/task_caaa7c575ec845dc9c0756c9e92d24f7.yaml
 - [x] world-simulator-viewer-path-governance (PRD-ENGINEERING-027) [test_tier_required]: 建立 `world-simulator/viewer` 路径级治理专题三件套、新增 `doc/world-simulator/viewer/README.md` 作为热点子域 canonical 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第二条已执行 follow-up。 Trace: .pm/tasks/task_7d222c2f13454b23889baad383fbdf7e.yaml
+- [x] p2p-node-path-governance (PRD-ENGINEERING-028) [test_tier_required]: 建立 `p2p/node` 路径级治理专题三件套、新增 `doc/p2p/node/README.md` 作为热点子域 canonical 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第三条已执行 follow-up。 Trace: .pm/tasks/task_533ac29c20a84ee8a5e6914839ad0761.yaml
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 - [x] drop-local-review-script (PRD-ENGINEERING-021) [test_tier_required]: 将默认评审边界完全切到 GitHub PR review，移除 `codex-review-snapshot.sh` 与相关 `workflow-report` / smoke / README / engineering 正式口径残留。 Trace: .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.yaml
 - [x] workspace-compile-followup (PRD-ENGINEERING-001) [test_tier_required]: 在新 worktree 重放前置 `oasis7_proto` / `oasis7_net` compile cleanup，并为 `egui-winit 0.33.3` 增加本地 `[patch.crates-io]` 修补，使 `./scripts/cargo-dev.sh check --workspace --all-targets` 恢复通过；同时清掉 `oasis7` crate 内一批仅供测试使用的导入/包装函数 warning。 Trace: .pm/tasks/task_64f3349d7064400d89fba49310f41d44.yaml
@@ -177,6 +178,9 @@
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md`
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md`
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md`
+- `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.prd.md`
+- `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.design.md`
+- `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.project.md`
 - `doc/devlog/README.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
@@ -195,7 +199,7 @@
 ## 状态
 - 更新日期: 2026-04-17
 - 当前状态: active
-- 下一任务: `world-simulator-viewer-path-governance (PRD-ENGINEERING-027)` 已完成 `world-simulator/viewer` 热点子域入口收口；后续应转入 `p2p` 路径级治理，再依次处理 `testing` 与季度复核，而不是继续在当前 PR 里横向扩到 `launcher/llm` 或只改根入口首屏。
+- 下一任务: `p2p-node-path-governance (PRD-ENGINEERING-028)` 已完成 `p2p/node` 热点子域入口收口；后续应转入 `testing` 路径级治理，再做季度复核，而不是在当前 PR 里横向扩到 `distfs/blockchain` 或回到只改根入口首屏。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -203,6 +207,7 @@
 - 当前规范补充: 已完成 `doc-corpus-maintenance-governance (PRD-ENGINEERING-025)`，明确文档治理债已进入“入口减重之后的存量维护成本”阶段；后续优先基于 `scripts/doc-inventory-report.sh` 判断 `doc/devlog` backlog、热点路径与 near-limit 文件，而不是继续以“入口已清爽”判定治理完成。
 - 当前规范补充: 已完成 `devlog-history-compaction (PRD-ENGINEERING-026)`，为 `doc/devlog` 增加 canonical archive 入口 `doc/devlog/README.md`，将历史回溯从“按天盲扫”收口为“按月导航 + 高体量热点表”，并保持所有日文件原样保留。
 - 当前规范补充: 已完成 `world-simulator-viewer-path-governance (PRD-ENGINEERING-027)`，为 `doc/world-simulator/viewer/` 增加 canonical 子域入口 `doc/world-simulator/viewer/README.md`，将进入热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
+- 当前规范补充: 已完成 `p2p-node-path-governance (PRD-ENGINEERING-028)`，为 `doc/p2p/node/` 增加 canonical 子域入口 `doc/p2p/node/README.md`，将进入 `p2p` 最高密度热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
