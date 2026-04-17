@@ -1,0 +1,23 @@
+task_uid: task_caaa7c575ec845dc9c0756c9e92d24f7
+title: "formalize doc devlog history compaction governance"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-devlog-history-compaction
+execution_log_path: .pm/tasks/task_caaa7c575ec845dc9c0756c9e92d24f7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md
+related_prd:
+  - PRD-ENGINEERING-025
+acceptance:
+  - "Establish a formal doc/devlog history compaction topic with explicit archive/index/retention boundaries."
+  - "Add a canonical devlog entrypoint that reduces blind day-file scanning without deleting historical files."
+  - "Update engineering governance docs to make doc/devlog the first completed follow-up under PRD-ENGINEERING-025."
+handoff_to: []
+updated_at: 2026-04-17T21:03:35+08:00
+last_started_at: 2026-04-17T20:54:33+08:00
+last_closed_at: 2026-04-17T21:03:35+08:00
