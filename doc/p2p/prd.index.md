@@ -1,8 +1,8 @@
 # p2p PRD 文件级索引
 
-审计轮次: 12
+审计轮次: 13
 
-更新时间：2026-04-10
+更新时间：2026-04-17
 
 ## 入口
 - 模块 PRD：`doc/p2p/prd.md`
@@ -12,6 +12,7 @@
 ## 首读分流
 - 想先回答模块在做什么、主链和 DistFS 的统一边界是什么：先读 `doc/p2p/prd.md`
 - 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
+- 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
 - 想先看主链安全、hosted world 接入或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -41,11 +42,13 @@
 | `consensus/` | 6 | 共识实现与内建 wasm 身份口径 |
 
 ## 活跃补充文档
+- `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
+- `node/README.md` 负责最高密度热点子域的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 覆盖规则（ROUND-005 统一）

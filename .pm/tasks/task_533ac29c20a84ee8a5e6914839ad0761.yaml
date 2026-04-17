@@ -1,0 +1,29 @@
+task_uid: task_533ac29c20a84ee8a5e6914839ad0761
+title: "formalize p2p node path governance"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_533ac29c20a84ee8a5e6914839ad0761.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md
+doc_refs:
+  - doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.prd.md
+  - doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.design.md
+  - doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.project.md
+  - doc/p2p/node/README.md
+  - doc/p2p/README.md
+  - doc/p2p/prd.index.md
+related_prd:
+  - PRD-ENGINEERING-025
+  - PRD-ENGINEERING-028
+acceptance:
+  - "Formalize the p2p/node path-governance trilogy under doc/engineering/doc-governance."
+  - "Add doc/p2p/node/README.md as the canonical hotspot entrypoint."
+  - "Backwrite p2p and engineering root entry documents to point at the new node hotspot entry."
+handoff_to: []
+updated_at: 2026-04-17T21:49:39+08:00
+last_started_at: 2026-04-17T21:34:19+08:00
+last_closed_at: 2026-04-17T21:49:39+08:00
