@@ -166,6 +166,12 @@ classify_changed_path() {
     crates/oasis7_distfs|crates/oasis7_distfs/*|crates/oasis7_distfs/**/*)
       mark_distfs "distfs:${path}"
       ;;
+    crates/oasis7_node|crates/oasis7_node/*|crates/oasis7_node/**/*)
+      mark_runtime "node:${path}"
+      ;;
+    crates/oasis7_net|crates/oasis7_net/*|crates/oasis7_net/**/*)
+      mark_runtime "net:${path}"
+      ;;
     crates/oasis7_viewer|crates/oasis7_viewer/*|crates/oasis7_viewer/**/*)
       mark_viewer "viewer:${path}"
       ;;
