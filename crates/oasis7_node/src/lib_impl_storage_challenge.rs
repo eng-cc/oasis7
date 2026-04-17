@@ -1,10 +1,19 @@
 impl PosNodeEngine {
-    fn prune_storage_challenge_success_cache(&mut self) {
+    fn is_storage_challenge_success_cache_height_valid(&self, checked_height: u64) -> bool {
         let min_height = self
             .committed_height
             .saturating_sub(STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS);
+        checked_height > min_height && checked_height <= self.committed_height
+    }
+
+    fn prune_storage_challenge_success_cache(&mut self) {
+        let committed_height = self.committed_height;
+        let min_height =
+            committed_height.saturating_sub(STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS);
         self.recent_storage_challenge_successes
-            .retain(|_, checked_height| *checked_height > min_height);
+            .retain(|_, checked_height| {
+                *checked_height > min_height && *checked_height <= committed_height
+            });
     }
 
     fn storage_challenge_success_cache_hit(
@@ -12,10 +21,11 @@ impl PosNodeEngine {
         replication: &ReplicationRuntime,
         content_hash: &str,
     ) -> Result<bool, NodeError> {
-        if !self
-            .recent_storage_challenge_successes
-            .contains_key(content_hash)
-        {
+        let Some(&checked_height) = self.recent_storage_challenge_successes.get(content_hash)
+        else {
+            return Ok(false);
+        };
+        if !self.is_storage_challenge_success_cache_height_valid(checked_height) {
             return Ok(false);
         }
         Ok(replication.load_blob_by_hash(content_hash)?.is_some())
@@ -23,7 +33,7 @@ impl PosNodeEngine {
 
     fn mark_storage_challenge_success(&mut self, content_hash: &str) {
         self.recent_storage_challenge_successes
-            .insert(content_hash.to_string(), self.committed_height.max(1));
+            .insert(content_hash.to_string(), self.committed_height);
     }
 }
 
