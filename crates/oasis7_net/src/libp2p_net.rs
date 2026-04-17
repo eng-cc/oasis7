@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 mod api;
 mod config;
 mod connection_lifecycle;
+mod constructor_support;
 mod discovery;
 mod error_mapping;
 mod kad_queries;
@@ -37,6 +38,10 @@ pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
     clear_disconnected_peer_state, failover_after_disconnect, record_established_connection,
     refresh_active_path_after_connection_close, refresh_peer_manager_views,
+};
+use constructor_support::{
+    enqueue_initial_bootstrap_dials, schedule_bootstrap_redial,
+    schedule_periodic_discovery_refresh, schedule_periodic_republish,
 };
 use discovery::{
     clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
@@ -227,57 +232,15 @@ impl Libp2pNetwork {
                 }
             }
 
-            if republish_interval_ms > 0 {
-                std::thread::spawn(move || {
-                    let mut republish_tx = republish_tx;
-                    loop {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            republish_interval_ms as u64,
-                        ));
-                        match republish_tx.try_send(Command::RepublishProviders) {
-                            Ok(()) => {}
-                            Err(err) if err.is_full() => {
-                                // Best effort: skip this republish tick if the command queue is saturated.
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                });
+            schedule_periodic_republish(republish_tx, republish_interval_ms);
+            if peer_record_template.is_some() {
+                schedule_periodic_discovery_refresh(discovery_tx, discovery_query_interval_ms);
             }
-
-            if discovery_query_interval_ms > 0 && peer_record_template.is_some() {
-                std::thread::spawn(move || {
-                    let mut discovery_tx = discovery_tx;
-                    loop {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            discovery_query_interval_ms as u64,
-                        ));
-                        match discovery_tx.try_send(Command::RefreshPeerDiscovery) {
-                            Ok(()) => {}
-                            Err(err) if err.is_full() => {}
-                            Err(_) => break,
-                        }
-                    }
-                });
-            }
-
-            if bootstrap_redial_interval_ms > 0 && !bootstrap_redial_peers.is_empty() {
-                std::thread::spawn(move || {
-                    let mut bootstrap_redial_tx = bootstrap_redial_tx;
-                    loop {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            bootstrap_redial_interval_ms as u64,
-                        ));
-                        for addr in &bootstrap_redial_peers {
-                            match bootstrap_redial_tx.try_send(Command::Dial(addr.clone())) {
-                                Ok(()) => {}
-                                Err(err) if err.is_full() => break,
-                                Err(_) => return,
-                            }
-                        }
-                    }
-                });
-            }
+            schedule_bootstrap_redial(
+                bootstrap_redial_tx,
+                bootstrap_redial_peers,
+                bootstrap_redial_interval_ms,
+            );
 
             async_std::task::block_on(async move {
                 let mut command_rx = command_rx;
@@ -1164,13 +1127,7 @@ impl Libp2pNetwork {
                 }
             });
         });
-        let mut bootstrap_tx = command_tx.clone();
-        for addr in bootstrap_peers {
-            // Best-effort: if the background task exits, dial requests can be dropped.
-            if bootstrap_tx.try_send(Command::Dial(addr)).is_err() {
-                break;
-            }
-        }
+        enqueue_initial_bootstrap_dials(command_tx.clone(), bootstrap_peers);
         Self {
             peer_id,
             keypair,
