@@ -20,7 +20,7 @@ use oasis7_proto::distributed_net::{
 };
 use oasis7_proto::world_error::WorldError;
 
-use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
+use crate::replication::{FetchCommitResponse, REPLICATION_FETCH_COMMIT_PROTOCOL};
 use crate::NodeError;
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
@@ -50,6 +50,13 @@ const REQUEST_CONNECTED_PEER_WAIT_RETRIES: usize = 12;
 const REQUEST_CONNECTED_PEER_WAIT_INTERVAL_MS: u64 = 150;
 const REQUEST_CONNECTION_REFRESH_RETRIES: usize = 12;
 const PROTOCOL_RETRY_COOLDOWN_AFTER_MS: u64 = 5_000;
+const FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS: u64 = 5_000;
+
+#[derive(Clone)]
+struct CachedFetchCommitResponse {
+    response: Vec<u8>,
+    valid_until: Instant,
+}
 
 #[derive(Debug, Clone)]
 pub struct Libp2pReplicationNetworkConfig {
@@ -63,6 +70,7 @@ pub struct Libp2pReplicationNetworkConfig {
     pub enable_autonat: bool,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub protocol_retry_cooldown_after: Duration,
+    pub fetch_commit_success_cache_after: Duration,
 }
 
 impl Default for Libp2pReplicationNetworkConfig {
@@ -79,6 +87,9 @@ impl Default for Libp2pReplicationNetworkConfig {
             enable_autonat: inner_defaults.enable_autonat,
             allow_local_handler_fallback_when_no_peers: false,
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
+            fetch_commit_success_cache_after: Duration::from_millis(
+                FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS,
+            ),
         }
     }
 }
@@ -91,6 +102,8 @@ pub struct Libp2pReplicationNetwork {
     request_peer_cursor: Arc<AtomicUsize>,
     protocol_retry_cooldown_after: Duration,
     protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
+    fetch_commit_success_cache_after: Duration,
+    recent_fetch_commit_successes: Arc<Mutex<HashMap<Vec<u8>, CachedFetchCommitResponse>>>,
 }
 
 impl Libp2pReplicationNetwork {
@@ -115,6 +128,8 @@ impl Libp2pReplicationNetwork {
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
             protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
+            fetch_commit_success_cache_after: config.fetch_commit_success_cache_after,
+            recent_fetch_commit_successes: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -297,6 +312,50 @@ impl Libp2pReplicationNetwork {
         }
     }
 
+    fn cached_fetch_commit_success_response(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+    ) -> Option<Vec<u8>> {
+        if protocol != REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return None;
+        }
+        let now = Instant::now();
+        let mut cache = self
+            .recent_fetch_commit_successes
+            .lock()
+            .expect("lock fetch-commit success cache");
+        cache.retain(|_, entry| entry.valid_until > now);
+        cache.get(payload).map(|entry| entry.response.clone())
+    }
+
+    fn remember_fetch_commit_success_response(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        response: &[u8],
+    ) {
+        if protocol != REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return;
+        }
+        let Ok(parsed) = serde_json::from_slice::<FetchCommitResponse>(response) else {
+            return;
+        };
+        if !parsed.found {
+            return;
+        }
+        self.recent_fetch_commit_successes
+            .lock()
+            .expect("lock fetch-commit success cache")
+            .insert(
+                payload.to_vec(),
+                CachedFetchCommitResponse {
+                    response: response.to_vec(),
+                    valid_until: Instant::now() + self.fetch_commit_success_cache_after,
+                },
+            );
+    }
+
     fn wait_for_connected_peers(&self) -> Vec<PeerId> {
         let mut peers = self.connected_peers_sorted();
         for _ in 0..REQUEST_CONNECTED_PEER_WAIT_RETRIES {
@@ -358,6 +417,9 @@ impl Libp2pReplicationNetwork {
         F: FnMut() -> Vec<PeerId>,
         G: Fn() -> WorldError,
     {
+        if let Some(response) = self.cached_fetch_commit_success_response(protocol, payload) {
+            return Ok(response);
+        }
         let cursor = self.request_peer_cursor.fetch_add(1, Ordering::Relaxed);
         let mut last_error = None;
 
@@ -389,7 +451,10 @@ impl Libp2pReplicationNetwork {
             let mut retryable_connection_gap = false;
             for peer in ordered_peers {
                 match self.request_via_peer(protocol, payload, peer) {
-                    Ok(reply) => return Ok(reply),
+                    Ok(reply) => {
+                        self.remember_fetch_commit_success_response(protocol, payload, &reply);
+                        return Ok(reply);
+                    }
                     Err(err) => {
                         if peer_error_indicates_protocol_retry_cooldown(protocol, &err) {
                             self.mark_peer_for_protocol_retry_cooldown(protocol, peer);

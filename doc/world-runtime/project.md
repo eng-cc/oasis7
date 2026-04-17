@@ -413,6 +413,19 @@
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_node --tests`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] fetch-commit-success-dedupe (PRD-WORLD_RUNTIME-034) [test_tier_required]: 为 `libp2p_replication_network` 的 `fetch-commit` 成功响应增加短窗口、本地、payload-scoped success cache，避免 gap-sync 紧环路里对同一已找到 commit 重复发网，同时保留缓存过期后的真实重取与 `found=false` 不缓存约束。 Trace: .pm/tasks/task_5b736236fdf5404099ef1d1aec37beb1.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_5b736236fdf5404099ef1d1aec37beb1.yaml`
+    - `.pm/tasks/task_5b736236fdf5404099ef1d1aec37beb1.execution.md`
+    - `crates/oasis7_node/src/libp2p_replication_network.rs`
+    - `crates/oasis7_node/src/libp2p_replication_network/tests.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network_fetch_commit_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network -- --nocapture`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
