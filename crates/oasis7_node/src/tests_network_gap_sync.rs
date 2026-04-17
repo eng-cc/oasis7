@@ -1,5 +1,332 @@
 use super::*;
 
+fn build_fetch_commit_success_cache_fixture(
+    world_id: &str,
+    dir_remote: &std::path::Path,
+    dir_local: &std::path::Path,
+    remote_seed: u8,
+    local_seed: u8,
+    network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync>,
+) -> (
+    PosNodeEngine,
+    ReplicationRuntime,
+    ReplicationNetworkEndpoint,
+    super::replication::GossipReplicationMessage,
+) {
+    let (_, remote_public_key_hex) = deterministic_keypair_hex(remote_seed);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", remote_seed)],
+    );
+    let local_replication_config = signed_replication_config(dir_local.to_path_buf(), local_seed)
+        .with_remote_writer_allowlist(vec![remote_public_key_hex])
+        .expect("local remote writer allowlist");
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(local_replication_config.clone());
+    let handle = NodeReplicationNetworkHandle::new(network);
+    let endpoint =
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("endpoint");
+    let mut remote_replication = super::replication::ReplicationRuntime::new(
+        &signed_replication_config(dir_remote.to_path_buf(), remote_seed),
+        "node-a",
+    )
+    .expect("remote replication runtime");
+    let decision = PosDecision {
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        status: PosConsensusStatus::Committed,
+        block_hash: "block-1".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 100,
+        rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+    };
+    let message = remote_replication
+        .build_local_commit_message("node-a", world_id, 1_000, &decision, None, None)
+        .expect("build local commit message")
+        .expect("commit payload");
+    let replication =
+        super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
+            .expect("local replication runtime");
+    (
+        PosNodeEngine::new(&config).expect("engine"),
+        replication,
+        endpoint,
+        message,
+    )
+}
+
+#[test]
+fn runtime_network_replication_gap_sync_fetch_commit_success_cache_reuses_validated_response() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-success-cache-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-success-cache-local");
+    let world_id = "world-gap-sync-fetch-commit-success-cache";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let blob_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (engine, mut replication, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        120,
+        121,
+        Arc::clone(&network),
+    );
+    let mut endpoint = endpoint;
+    endpoint.set_fetch_commit_success_cache_after_for_testing(Duration::from_millis(250));
+    let expected_hash = message.record.content_hash.clone();
+    let expected_blob = message.payload.clone();
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                let message = message.clone();
+                move |_payload| {
+                    *request_count.lock().expect("lock request count") += 1;
+                    serde_json::to_vec(&super::replication::FetchCommitResponse {
+                        found: true,
+                        message: Some(message.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch commit response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            Box::new({
+                let blob_count = Arc::clone(&blob_count);
+                move |payload| {
+                    *blob_count.lock().expect("lock blob count") += 1;
+                    let request =
+                        serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                            .map_err(|err| WorldError::DistributedValidationFailed {
+                                reason: format!("decode fetch blob request failed: {err}"),
+                            })?;
+                    serde_json::to_vec(&super::replication::FetchBlobResponse {
+                        found: request.content_hash == expected_hash,
+                        blob: (request.content_hash == expected_hash)
+                            .then(|| expected_blob.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch blob response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch blob handler");
+
+    let first = engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("first sync");
+    let second = engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("second sync");
+
+    assert!(matches!(first, GapSyncHeightOutcome::Synced { .. }));
+    assert!(matches!(second, GapSyncHeightOutcome::Synced { .. }));
+    assert_eq!(*request_count.lock().expect("lock request count"), 1);
+    assert_eq!(*blob_count.lock().expect("lock blob count"), 2);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn runtime_network_replication_gap_sync_fetch_commit_success_cache_skips_invalid_commit() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-invalid-cache-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-invalid-cache-local");
+    let world_id = "world-gap-sync-fetch-commit-invalid-cache";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let blob_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (engine, mut replication, endpoint, valid_message) =
+        build_fetch_commit_success_cache_fixture(
+            world_id,
+            dir_remote.as_path(),
+            dir_local.as_path(),
+            122,
+            123,
+            Arc::clone(&network),
+        );
+    let mut invalid_message = valid_message.clone();
+    invalid_message.world_id = "wrong-world".to_string();
+    let expected_hash = valid_message.record.content_hash.clone();
+    let expected_blob = valid_message.payload.clone();
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                let invalid_message = invalid_message.clone();
+                let valid_message = valid_message.clone();
+                move |_payload| {
+                    let mut count = request_count.lock().expect("lock request count");
+                    *count += 1;
+                    let message = if *count == 1 {
+                        invalid_message.clone()
+                    } else {
+                        valid_message.clone()
+                    };
+                    serde_json::to_vec(&super::replication::FetchCommitResponse {
+                        found: true,
+                        message: Some(message),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch commit response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            Box::new({
+                let blob_count = Arc::clone(&blob_count);
+                move |payload| {
+                    *blob_count.lock().expect("lock blob count") += 1;
+                    let request =
+                        serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                            .map_err(|err| WorldError::DistributedValidationFailed {
+                                reason: format!("decode fetch blob request failed: {err}"),
+                            })?;
+                    serde_json::to_vec(&super::replication::FetchBlobResponse {
+                        found: request.content_hash == expected_hash,
+                        blob: (request.content_hash == expected_hash)
+                            .then(|| expected_blob.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch blob response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch blob handler");
+
+    let first =
+        engine.sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1);
+    assert!(matches!(
+        first,
+        Err(NodeError::Replication { reason }) if reason.contains("world mismatch")
+    ));
+    let second = engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("second sync");
+
+    assert!(matches!(second, GapSyncHeightOutcome::Synced { .. }));
+    assert_eq!(*request_count.lock().expect("lock request count"), 2);
+    assert_eq!(
+        *blob_count.lock().expect("lock blob count"),
+        1,
+        "invalid fetch-commit response should fail before any fetch-blob request",
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn runtime_network_replication_gap_sync_fetch_commit_success_cache_expires() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-cache-expiry-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-cache-expiry-local");
+    let world_id = "world-gap-sync-fetch-commit-cache-expiry";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (engine, mut replication, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        124,
+        125,
+        Arc::clone(&network),
+    );
+    let mut endpoint = endpoint;
+    endpoint.set_fetch_commit_success_cache_after_for_testing(Duration::from_millis(250));
+    let expected_hash = message.record.content_hash.clone();
+    let expected_blob = message.payload.clone();
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                let message = message.clone();
+                move |_payload| {
+                    *request_count.lock().expect("lock request count") += 1;
+                    serde_json::to_vec(&super::replication::FetchCommitResponse {
+                        found: true,
+                        message: Some(message.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch commit response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            Box::new(move |payload| {
+                let request =
+                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                        .map_err(|err| WorldError::DistributedValidationFailed {
+                            reason: format!("decode fetch blob request failed: {err}"),
+                        })?;
+                serde_json::to_vec(&super::replication::FetchBlobResponse {
+                    found: request.content_hash == expected_hash,
+                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                })
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("encode fetch blob response failed: {err}"),
+                })
+            }),
+        )
+        .expect("register fetch blob handler");
+
+    engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("first sync");
+    engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("second sync");
+    assert_eq!(*request_count.lock().expect("lock request count"), 1);
+
+    let expiry_deadline = Instant::now() + Duration::from_secs(5);
+    wait_until(expiry_deadline, || {
+        engine
+            .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+            .expect("post-expiry sync");
+        *request_count.lock().expect("lock request count") == 2
+    });
+    assert_eq!(*request_count.lock().expect("lock request count"), 2);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
 #[test]
 fn runtime_network_replication_gap_sync_fetches_missing_commits() {
     let world_id = "world-network-gap";

@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
@@ -13,13 +15,37 @@ use serde::Serialize;
 use crate::gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipMessage, GossipProposalMessage,
 };
-use crate::replication::GossipReplicationMessage;
+use crate::replication::{
+    FetchCommitRequest, FetchCommitResponse, GossipReplicationMessage,
+    REPLICATION_FETCH_COMMIT_PROTOCOL,
+};
 use crate::{NodeError, NodeNetworkPolicy};
 
 pub(crate) const DEFAULT_REPLICATION_TOPIC_PREFIX: &str = "aw";
 pub(crate) const DEFAULT_CONSENSUS_PROPOSAL_TOPIC_SUFFIX: &str = "consensus.proposal";
 pub(crate) const DEFAULT_CONSENSUS_ATTESTATION_TOPIC_SUFFIX: &str = "consensus.attestation";
 pub(crate) const DEFAULT_CONSENSUS_COMMIT_TOPIC_SUFFIX: &str = "consensus.commit";
+const FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS: u64 = 5_000;
+const FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES: usize = 64;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct FetchCommitSuccessCacheKey {
+    world_id: String,
+    height: u64,
+    requester_public_key_hex: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedFetchCommitSuccess {
+    response: FetchCommitResponse,
+    cached_at: Instant,
+    valid_until: Instant,
+}
+
+pub(crate) struct GapSyncFetchCommitResponse {
+    pub response: FetchCommitResponse,
+    pub from_cache: bool,
+}
 
 pub(crate) fn default_replication_topic(world_id: &str) -> String {
     format!("{DEFAULT_REPLICATION_TOPIC_PREFIX}.{world_id}.replication")
@@ -158,6 +184,9 @@ pub(crate) struct ReplicationNetworkEndpoint {
     network_policy: NodeNetworkPolicy,
     topic: String,
     subscription: Option<NetworkSubscription>,
+    fetch_commit_success_cache_after: Duration,
+    recent_fetch_commit_successes:
+        Mutex<HashMap<FetchCommitSuccessCacheKey, CachedFetchCommitSuccess>>,
 }
 
 impl ReplicationNetworkEndpoint {
@@ -192,7 +221,16 @@ impl ReplicationNetworkEndpoint {
             network_policy: network_policy.clone(),
             topic,
             subscription,
+            fetch_commit_success_cache_after: Duration::from_millis(
+                FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS,
+            ),
+            recent_fetch_commit_successes: Mutex::new(HashMap::new()),
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_fetch_commit_success_cache_after_for_testing(&mut self, duration: Duration) {
+        self.fetch_commit_success_cache_after = duration;
     }
 
     pub(crate) fn publish_replication(
@@ -254,6 +292,56 @@ impl ReplicationNetworkEndpoint {
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })
+    }
+
+    pub(crate) fn request_fetch_commit_for_gap_sync(
+        &self,
+        request: &FetchCommitRequest,
+    ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        if let Some(response) = self.cached_fetch_commit_success_response(request) {
+            return Ok(GapSyncFetchCommitResponse {
+                response,
+                from_cache: true,
+            });
+        }
+        let response = self.request_json(REPLICATION_FETCH_COMMIT_PROTOCOL, request)?;
+        Ok(GapSyncFetchCommitResponse {
+            response,
+            from_cache: false,
+        })
+    }
+
+    pub(crate) fn remember_validated_fetch_commit_success(
+        &self,
+        request: &FetchCommitRequest,
+        response: &FetchCommitResponse,
+    ) {
+        let Some(response) = cacheable_fetch_commit_success_response(response) else {
+            return;
+        };
+        let now = Instant::now();
+        let mut cache = self
+            .recent_fetch_commit_successes
+            .lock()
+            .expect("lock fetch-commit success cache");
+        cache.retain(|_, entry| entry.valid_until > now);
+        if cache.len() >= FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES {
+            if let Some(oldest_key) = cache
+                .iter()
+                .min_by_key(|(_, entry)| entry.cached_at)
+                .map(|(key, _)| key.clone())
+            {
+                cache.remove(&oldest_key);
+            }
+        }
+        cache.insert(
+            fetch_commit_success_cache_key(request),
+            CachedFetchCommitSuccess {
+                response,
+                cached_at: now,
+                valid_until: now + self.fetch_commit_success_cache_after,
+            },
+        );
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -341,6 +429,41 @@ impl ReplicationNetworkEndpoint {
         dht.publish_provider(world_id, content_hash, local_provider_id)
             .map_err(network_err)
     }
+
+    fn cached_fetch_commit_success_response(
+        &self,
+        request: &FetchCommitRequest,
+    ) -> Option<FetchCommitResponse> {
+        let now = Instant::now();
+        let mut cache = self
+            .recent_fetch_commit_successes
+            .lock()
+            .expect("lock fetch-commit success cache");
+        cache.retain(|_, entry| entry.valid_until > now);
+        cache
+            .get(&fetch_commit_success_cache_key(request))
+            .map(|entry| entry.response.clone())
+    }
+}
+
+fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {
+    FetchCommitSuccessCacheKey {
+        world_id: request.world_id.clone(),
+        height: request.height,
+        requester_public_key_hex: request.requester_public_key_hex.clone(),
+    }
+}
+
+fn cacheable_fetch_commit_success_response(
+    response: &FetchCommitResponse,
+) -> Option<FetchCommitResponse> {
+    if !response.found {
+        return None;
+    }
+    let mut cached = response.clone();
+    let message = cached.message.as_mut()?;
+    message.payload.clear();
+    Some(cached)
 }
 
 pub(crate) struct ConsensusNetworkEndpoint {
