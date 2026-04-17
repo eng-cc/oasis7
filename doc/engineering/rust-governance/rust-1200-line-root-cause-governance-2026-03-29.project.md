@@ -15,6 +15,7 @@
 - [x] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略，冻结残余 13 个测试尾债并建立下一批 burn-down 清单。
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/003/005) [test_tier_required]: 修复 `rust-oversized-file-baseline.tsv` 被误清空后的 required gate 阻断，按当前仓库实况重写 frozen baseline，并把专项状态从“已收口”拉回到继续 burn-down 的真实阶段。
 - [x] libp2p-net-orchestrator-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 抽离 `Libp2pNetwork::new` 内 bootstrap / periodic 调度样板到 `crates/oasis7_net/src/libp2p_net/constructor_support.rs`，将 `crates/oasis7_net/src/libp2p_net.rs` 从 1199 行压到 1156 行，并保持 `rust-structural-slicing-baseline.tsv` 冻结值不变。 Trace: .pm/tasks/task_fbffb4f8dc5b4326b6a09751f4779526.yaml
+- [x] rust-node-types-controller-binding-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/types.rs` 的 main-token controller binding 逻辑抽到 `crates/oasis7_node/src/types/main_token_controller_binding.rs`，把根文件从 1277 行压到 1069 行，并保持 structural slicing baseline 不变。 Trace: .pm/tasks/task_5c651f038f1b48e78460ad7f95f6e187.yaml
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -36,10 +37,11 @@
 ## 状态
 - 更新日期: 2026-04-17
 - 当前阶段: active
-- 当前任务: `libp2p-net-orchestrator-burn-down` 已完成，`Libp2pNetwork::new` 的 bootstrap / periodic 调度样板已抽离到独立 helper，`crates/oasis7_net/src/libp2p_net.rs` 已从 1199 行降到 1156 行；当前 frozen oversized baseline 仍为 12 个生产文件 / 7 个测试文件，structural slicing baseline 保持不变。
-- 阻塞项: 无新的脚本阻断；当前真实约束是仓库仍存在 12 个生产 Rust 超限文件与 7 个测试 Rust 超限文件，后续治理不得再宣称 `oversized code files=0, test files=0` 已达成。
+- 当前任务: `libp2p-net-orchestrator-burn-down` 与 `rust-node-types-controller-binding-burn-down` 已完成，`crates/oasis7_net/src/libp2p_net.rs` 已从 1199 行降到 1156 行，`crates/oasis7_node/src/types.rs` 已从 1277 行降到 1069 行并从 frozen oversized baseline 退休；当前 frozen baseline 收敛为 4 个生产文件 / 6 个测试文件，structural slicing baseline 保持不变。
+- 阻塞项: 无新的脚本阻断；当前真实约束是仓库仍存在 4 个生产 Rust 超限文件与 6 个测试 Rust 超限文件，后续治理不得再宣称 `oversized code files=0, test files=0` 已达成。
 - 最新完成:
   - `TASK-ENGINEERING-104`：确认 `doc/.governance/rust-oversized-file-baseline.tsv` 在 `2026-03-30` 被提交为只剩注释的空壳，导致 `scripts/check-rust-file-size.sh` 在 required gate 中把全部存量超限项误判为“相对 HEAD 新增”；现已按当前仓库实况重写 baseline，恢复 `scripts/ci-tests.sh required` 的 frozen baseline 语义，并把专项状态改回继续 burn-down。
+  - `rust-node-types-controller-binding-burn-down`：`crates/oasis7_node/src/types.rs` 新增子模块 `types/main_token_controller_binding.rs`，将 main-token controller binding 常量、默认值、builder 与校验 helper 外提，根文件已从 1277 行降到 1069 行，并同步从 `rust-oversized-file-baseline.tsv` 退休旧冻结条目；`cargo check -p oasis7_node`、`cargo test -p oasis7_node types::tests:: -- --nocapture` 以及两条 controller-binding 授权定向测试通过，`cargo test -p oasis7_node --lib -- --nocapture` 仍存在 3 条与 replication/network 相关的现有失败签名，已在 execution log 留痕。
   - `TASK-ENGINEERING-054`：`oasis7_chain_runtime.rs` 拆出 `cli.rs`，`execution_bridge.rs` 迁移为目录模块，门禁基线已退休旧入口超限项。
   - `TASK-ENGINEERING-055`：`viewer/runtime_live.rs` 与测试集拆为目录模块；同时把 `runtime/events.rs`、`state.rs`、`apply_domain_event_*`、`world/event_processing.rs` 压回 1200 行内，清零本批新增 runtime 超限。
   - `TASK-ENGINEERING-056`：`oasis7_viewer` 首批治理与本轮 runtime / launcher 收尾已完成，退役了 `egui_right_panel_player_guide.rs`、`web_test_api.rs`、`viewer_automation.rs` 以及 `oasis7_provider_parity_bench.rs`、`oasis7_pure_api_client.rs`、`oasis7_provider_local_bridge.rs`、`oasis7_web_launcher/control_plane.rs`、`runtime/world/persistence.rs`、`viewer/live_split_part1.rs`、`runtime/world/governance.rs`、`runtime/world/module_actions_impl_part2.rs` 的生产超限基线。
@@ -60,5 +62,5 @@
   - 测试尾债 burn-down：`crates/oasis7/src/runtime/tests/economy_priority_logistics.rs` 已拆出 `crates/oasis7/src/runtime/tests/economy_priority_governance_tests.rs`，根文件降到 1174 行；`cargo test -p oasis7 runtime::tests::economy_priority_logistics::governance_tests::govern_profile_actions_emit_events_and_update_profile_state -- --nocapture` 与 `cargo test -p oasis7 runtime::tests::economy_priority_logistics::governance_tests::industry_stage_progresses_from_bootstrap_to_scale_out_and_governance -- --nocapture` 通过，`rust-oversized-file-baseline.tsv` 已同步移除该冻结项。
   - 测试尾债 burn-down：`crates/oasis7/src/runtime/tests/module_action_loop_split_part3.rs` 已拆出 `crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs`，根文件降到 1147 行；`cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::module_release_shadow_rejects_missing_artifact_identity -- --nocapture`、`cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::rollback_module_instance_reverts_to_historical_version_and_emits_audit -- --nocapture` 与 `cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::module_release_apply_with_finality_succeeds_in_production_policy -- --nocapture` 通过，`rust-oversized-file-baseline.tsv` 已同步移除最后一条冻结测试基线。
 - 下一步:
-  - 继续按既有门禁链路执行 `./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`，确保当前 12 个生产文件 / 7 个测试文件之外不再新增超限项。
-  - 重新拆解下一批 Rust 1200 行 burn-down 任务，优先处理 `oasis7_game_launcher.rs`、`viewer/runtime_live/llm_sidecar.rs`、`oasis7_node/src/types.rs` 与对应高体量测试文件。
+  - 继续按既有门禁链路执行 `./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`，确保当前 4 个生产文件 / 6 个测试文件之外不再新增超限项。
+  - 重新拆解下一批 Rust 1200 行 burn-down 任务，优先处理 `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`、`crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs`、`crates/oasis7_client_launcher/src/launcher_core.rs`、`crates/oasis7_node/src/replication.rs` 与剩余高体量测试文件。
