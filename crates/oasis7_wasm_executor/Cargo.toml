@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 oasis7_wasm_abi = { path = "../oasis7_wasm_abi" }
 serde_cbor = "0.11"
+sha2 = "0.10"
 
 wasmtime = { version = "41", optional = true }
 
