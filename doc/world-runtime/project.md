@@ -256,6 +256,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
+- [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将 `oasis7_wasm_executor` 的磁盘 compiled cache 从“原始 `.wasm` 回盘 + 再次 `Module::new(...)`”修正为“序列化 compiled artifact 回盘 + `Module::deserialize_file(...)` 命中”，并补齐 serialized artifact round-trip / 损坏恢复回归，以及 executor perf probe 的测试编译裂缝。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml
+  - 产物文件:
+    - `doc/world-runtime/project.md`
+    - `doc/world-runtime/wasm/wasm-executor.prd.md`
+    - `doc/world-runtime/wasm/wasm-executor.project.md`
+    - `.pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml`
+    - `.pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.execution.md`
+    - `crates/oasis7_wasm_executor/src/lib.rs`
+    - `crates/oasis7_wasm_executor/src/tests.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead -- --ignored --nocapture`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] post-action-wasm-contract-drift-fix (PRD-WORLD_RUNTIME-001/002) [test_tier_required]: 修复 `post_action` WASM 路由的 contract drift，让订阅者收到实际执行后的 action 与结果事件，并补齐 override / rejection 回归。 Trace: .pm/tasks/task_e053e8a306e44c53921430c2499751be.yaml
 - [x] chain-status-traffic-metrics (PRD-WORLD_RUNTIME-026) [test_tier_required]: 为 `oasis7_chain_runtime` 的 `/v1/chain/status` 增加节点流量观测快照，分别暴露 `udp_gossip` 与 `libp2p_replication` counters，并在 payload 中标明统计范围；同时补齐 gossip/libp2p/status 定向回归与 oversized baseline 同步。 Trace: .pm/tasks/task_15c26ee4cbab44bd8094b9305d4356ee.yaml
   - 产物文件:

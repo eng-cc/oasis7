@@ -4,6 +4,7 @@ use oasis7_wasm_abi::ModuleLimits;
 use std::fs;
 #[cfg(feature = "wasmtime")]
 use std::path::PathBuf;
+use std::sync::Arc;
 #[cfg(feature = "wasmtime")]
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -391,6 +392,33 @@ fn wasm_executor_disk_cache_hits_when_memory_cache_disabled() {
     executor
         .compile_module_cached("hash-disk-hit", &invalid_wasm)
         .expect("load compiled module from disk cache");
+
+    let _ = fs::remove_dir_all(cache_dir);
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_disk_cache_persists_serialized_compiled_artifact() {
+    let cache_dir = unique_temp_cache_dir("serialized");
+    let executor = test_executor(WasmExecutorConfig {
+        max_cache_entries: 0,
+        compiled_cache_dir: Some(cache_dir.clone()),
+        ..WasmExecutorConfig::default()
+    });
+    let wasm = trivial_success_wasm();
+    let wasm_hash = "hash-disk-serialized";
+
+    executor.compile_module_cached(wasm_hash, &wasm).unwrap();
+
+    let cache_file = executor
+        .compiled_disk_cache_path_for_test(wasm_hash)
+        .expect("cache path");
+    let cached_bytes = fs::read(&cache_file).expect("read serialized cache");
+    assert_ne!(cached_bytes, wasm);
+    assert!(
+        cached_bytes.len() > wasm.len(),
+        "serialized compiled artifact should not look like the original wasm payload"
+    );
 
     let _ = fs::remove_dir_all(cache_dir);
 }
