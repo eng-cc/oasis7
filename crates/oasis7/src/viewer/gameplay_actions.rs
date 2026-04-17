@@ -1,5 +1,9 @@
-use crate::runtime::{Action as RuntimeAction, RecipeExecutionPlan};
-use crate::viewer::{GameplayActionError, GameplayActionRequest};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::{
+    runtime::{Action as RuntimeAction, RecipeExecutionPlan},
+    viewer::{GameplayActionError, GameplayActionRequest},
+};
+#[cfg(not(target_arch = "wasm32"))]
 use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 
 pub const ACTION_BUILD_SMELTER_MK1: &str = "build_factory_smelter_mk1";
@@ -19,18 +23,30 @@ pub const ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE: &str = "schedule_recipe_assemb
 pub const FACTORY_SMELTER_MK1: &str = "factory.smelter.mk1";
 pub const FACTORY_ASSEMBLER_MK1: &str = "factory.assembler.mk1";
 
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_IRON_INGOT: &str = "recipe.smelter.iron_ingot";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_COPPER_WIRE: &str = "recipe.smelter.copper_wire";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_POLYMER_RESIN: &str = "recipe.smelter.polymer_resin";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_SMELTER_ALLOY_PLATE: &str = "recipe.smelter.alloy_plate";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_GEAR: &str = "recipe.assembler.gear";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_CONTROL_CHIP: &str = "recipe.assembler.control_chip";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_MOTOR_MK1: &str = "recipe.assembler.motor_mk1";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_LOGISTICS_DRONE: &str = "recipe.assembler.logistics_drone";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_SENSOR_PACK: &str = "recipe.assembler.sensor_pack";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_MODULE_RACK: &str = "recipe.assembler.module_rack";
+#[cfg(not(target_arch = "wasm32"))]
 const RECIPE_ASSEMBLER_FACTORY_CORE: &str = "recipe.assembler.factory_core";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_runtime_action_from_gameplay_request(
     request: &GameplayActionRequest,
 ) -> Result<RuntimeAction, GameplayActionError> {
@@ -136,6 +152,7 @@ pub fn build_runtime_action_from_gameplay_request(
     Ok(action)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn smelter_factory_spec() -> FactoryModuleSpec {
     FactoryModuleSpec {
         factory_id: FACTORY_SMELTER_MK1.to_string(),
@@ -155,6 +172,7 @@ fn smelter_factory_spec() -> FactoryModuleSpec {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn assembler_factory_spec() -> FactoryModuleSpec {
     FactoryModuleSpec {
         factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
@@ -174,6 +192,7 @@ fn assembler_factory_spec() -> FactoryModuleSpec {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_smelter_iron_ingot() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         12,
@@ -188,6 +207,7 @@ fn plan_smelter_iron_ingot() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_smelter_copper_wire() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         12,
@@ -199,6 +219,7 @@ fn plan_smelter_copper_wire() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_smelter_polymer_resin() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         4,
@@ -213,6 +234,7 @@ fn plan_smelter_polymer_resin() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_smelter_alloy_plate() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         4,
@@ -227,6 +249,7 @@ fn plan_smelter_alloy_plate() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_gear() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         4,
@@ -238,6 +261,7 @@ fn plan_assembler_gear() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_control_chip() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         4,
@@ -252,6 +276,7 @@ fn plan_assembler_control_chip() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_motor_mk1() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         2,
@@ -266,6 +291,7 @@ fn plan_assembler_motor_mk1() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_logistics_drone() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         1,
@@ -281,6 +307,7 @@ fn plan_assembler_logistics_drone() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_sensor_pack() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         2,
@@ -295,6 +322,7 @@ fn plan_assembler_sensor_pack() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_module_rack() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         1,
@@ -309,6 +337,7 @@ fn plan_assembler_module_rack() -> RecipeExecutionPlan {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn plan_assembler_factory_core() -> RecipeExecutionPlan {
     RecipeExecutionPlan::accepted(
         1,

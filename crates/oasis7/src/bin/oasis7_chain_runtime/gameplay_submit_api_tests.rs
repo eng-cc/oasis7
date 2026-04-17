@@ -10,7 +10,7 @@ use oasis7_node::{
 };
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 fn tcp_stream_pair() -> (TcpStream, TcpStream) {
@@ -100,8 +100,17 @@ fn wait_for_committed_height(runtime: &Arc<Mutex<NodeRuntime>>, minimum_height: 
     panic!("timed out waiting for committed height >= {minimum_height}, got {height}");
 }
 
+fn gameplay_submit_test_guard() -> MutexGuard<'static, ()> {
+    static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+    TEST_MUTEX
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[test]
 fn parse_gameplay_submit_request_round_trips_viewer_payload() {
+    let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();
     let request = signed_gameplay_submit_request("node-gameplay-submit-parse", 7);
     let body = serde_json::to_vec(&request).expect("serialize gameplay submit request");
@@ -115,6 +124,7 @@ fn parse_gameplay_submit_request_round_trips_viewer_payload() {
 
 #[test]
 fn gameplay_submit_handler_rejects_missing_auth_proof() {
+    let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();
     let runtime = Arc::new(Mutex::new(NodeRuntime::new(
         NodeConfig::new(
@@ -164,6 +174,7 @@ fn gameplay_submit_handler_rejects_missing_auth_proof() {
 
 #[test]
 fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
+    let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();
     let config = NodeConfig::new(
         "node-gameplay-submit-ok",
@@ -226,6 +237,7 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
 
 #[test]
 fn gameplay_submit_handler_rejects_nonce_replay() {
+    let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();
     let config = NodeConfig::new(
         "node-gameplay-submit-replay",
