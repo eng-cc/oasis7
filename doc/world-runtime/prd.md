@@ -141,7 +141,7 @@
   - AC-29: `libp2p_net` 必须仅对 peer-record/discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 触发 peer-scoped、protocol-scoped 短时冷却；定向回归需证明同一 peer 在窗口内不会被立刻重复请求、窗口过后可恢复请求、断连会清理对应 peer 冷却、且 cached-peer-record 在单次请求链中的 fallback proxy 仍可继续尝试。
   - AC-30: storage challenge gate 对近期已验证成功的 `content_hash` 必须提供短窗口 success cache，只允许在缓存过期、命中新 hash、或本地 blob 缺失时重新发起 `fetch-blob` 网络探测；定向回归需证明连续两次 gate 调用不会对同一已验证 blob 重复发网请求，同时缓存过期后仍会恢复真实探测。
   - AC-31: chain-linked `gameplay_action` 必须通过 `oasis7_chain_runtime` 的 `/v1/chain/gameplay/submit` 进入 consensus queue；提交路径必须复用 viewer auth proof、拒绝 nonce replay、返回 consensus `action_id` 作为提交回执，并证明 viewer 本地 world 在提交时不会立即变更，只会在 committed execution world sync 后观察到新工厂/配方结果。
-  - AC-32: `libp2p_replication_network` 必须仅对 `fetch-commit` 的成功响应建立短时、本地、payload-scoped success cache；定向回归需证明相同 payload 的立即重复成功请求不会再次发网、窗口过后会恢复真实请求、且 `found=false` 响应不会进入 success cache。
+  - AC-32: gap-sync `fetch-commit` 路径必须仅在高层校验接受 commit 后建立短时、本地、payload-scoped success cache；定向回归需证明相同 payload 的立即重复成功请求不会再次发网、窗口过后会恢复真实请求、且校验失败或 `found=false` 响应不会进入 success cache。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -233,7 +233,7 @@
 | PRD-WORLD_RUNTIME-031 | task_c1149e15fef14f12925182a03f37e546 | `test_tier_required` | `oasis7_viewer_live` chain-linked 被动跟随回归、不开 `Play` 的 committed world 同步、空轮询不推进断言 | viewer live 与 chain runtime 的逻辑 world progress 一致性 |
 | PRD-WORLD_RUNTIME-032 | task_53b1918a361445f5bf678bcf525abc5c | `test_tier_required` | storage challenge `fetch-blob` success cache 定向回归、缓存过期恢复探测断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-blob` 重复成功拉取降噪、sequencer↔storage 热点流量收口 |
 | PRD-WORLD_RUNTIME-033 | task_dd49ad3480d14922993ceb3acf2555c6 | `test_tier_required` | `/v1/chain/gameplay/submit` handler 回归、viewer chain-linked gameplay submit 回归、`cargo check`、`git diff --check` | viewer gameplay action 与 chain runtime committed world 的一致性闭环 |
-| PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、`found=false` 不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
+| PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、校验失败不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

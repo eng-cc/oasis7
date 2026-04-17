@@ -8,19 +8,19 @@ impl PosNodeEngine {
         height: u64,
     ) -> Result<GapSyncHeightOutcome, NodeError> {
         let request = replication_runtime.build_fetch_commit_request(world_id, height)?;
-        let response = endpoint.request_json::<FetchCommitRequest, FetchCommitResponse>(
-            REPLICATION_FETCH_COMMIT_PROTOCOL,
-            &request,
-        )?;
-        if !response.found {
+        let fetch_commit = endpoint.request_fetch_commit_for_gap_sync(&request)?;
+        if !fetch_commit.response.found {
             return Ok(GapSyncHeightOutcome::NotFound);
         }
-        let mut message = response.message.ok_or_else(|| NodeError::Replication {
-            reason: format!(
-                "gap sync height {} commit response missing payload (found=true)",
-                height
-            ),
-        })?;
+        let mut message = fetch_commit
+            .response
+            .message
+            .ok_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "gap sync height {} commit response missing payload (found=true)",
+                    height
+                ),
+            })?;
         if message.world_id != world_id || message.record.world_id != world_id {
             return Err(NodeError::Replication {
                 reason: format!(
@@ -123,6 +123,15 @@ impl PosNodeEngine {
                     height, message.record.content_hash
                 ),
             });
+        }
+        if !fetch_commit.from_cache {
+            endpoint.remember_validated_fetch_commit_success(
+                &request,
+                &FetchCommitResponse {
+                    found: true,
+                    message: Some(message.clone()),
+                },
+            );
         }
         Ok(GapSyncHeightOutcome::Synced {
             block_hash: payload.block_hash.clone(),

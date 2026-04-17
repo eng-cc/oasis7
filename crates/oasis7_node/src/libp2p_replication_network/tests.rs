@@ -1,5 +1,4 @@
 use super::*;
-use oasis7_distfs::FileReplicationRecord;
 use oasis7_proto::distributed::DistributedErrorCode;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use std::net::TcpListener;
@@ -48,31 +47,6 @@ fn listening_addr_with_peer_id(network: &Libp2pReplicationNetwork) -> Multiaddr 
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("listener visible addr")
         .with(libp2p::multiaddr::Protocol::P2p(network.peer_id().into()))
-}
-
-fn fetch_commit_success_response_bytes(height: u64) -> Vec<u8> {
-    serde_json::to_vec(&crate::replication::FetchCommitResponse {
-        found: true,
-        message: Some(crate::replication::GossipReplicationMessage {
-            version: 1,
-            world_id: "world-a".to_string(),
-            node_id: "listener".to_string(),
-            record: FileReplicationRecord {
-                world_id: "world-a".to_string(),
-                writer_id: "listener".to_string(),
-                writer_epoch: 1,
-                sequence: height,
-                path: format!("consensus/commits/{height:020}.json"),
-                content_hash: format!("hash-{height}"),
-                size_bytes: 4,
-                updated_at_ms: 0,
-            },
-            payload: vec![height as u8],
-            public_key_hex: None,
-            signature_hex: None,
-        }),
-    })
-    .expect("encode fetch-commit response")
 }
 
 #[test]
@@ -704,139 +678,6 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
         })
     ));
     assert_eq!(request_count.load(Ordering::SeqCst), 2);
-}
-
-#[test]
-fn libp2p_replication_network_fetch_commit_success_response_enters_short_cache() {
-    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-        peer_record: Some(test_peer_record("listener-fetch-commit-success-cache")),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-    let listen_deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("listener bind", listen_deadline, || {
-        !listener.listening_addrs().is_empty()
-    });
-
-    let request_count = Arc::new(AtomicUsize::new(0));
-    listener
-        .register_handler(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            Box::new({
-                let request_count = Arc::clone(&request_count);
-                move |_payload| {
-                    request_count.fetch_add(1, Ordering::SeqCst);
-                    Ok(fetch_commit_success_response_bytes(7))
-                }
-            }),
-        )
-        .expect("register listener handler");
-
-    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        fetch_commit_success_cache_after: Duration::from_millis(250),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-    let connect_deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("dialer connection", connect_deadline, || {
-        !dialer.connected_peers().is_empty()
-    });
-
-    let first = dialer
-        .request(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            b"height-7",
-        )
-        .expect("first fetch-commit request");
-    let second = dialer
-        .request(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            b"height-7",
-        )
-        .expect("second fetch-commit request");
-
-    assert_eq!(first, second);
-    assert_eq!(
-        request_count.load(Ordering::SeqCst),
-        1,
-        "success cache should suppress an immediate duplicate fetch-commit request",
-    );
-
-    std::thread::sleep(Duration::from_millis(300));
-
-    let third = dialer
-        .request(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            b"height-7",
-        )
-        .expect("third fetch-commit request");
-    assert_eq!(third, first);
-    assert_eq!(request_count.load(Ordering::SeqCst), 2);
-}
-
-#[test]
-fn libp2p_replication_network_fetch_commit_not_found_does_not_enter_success_cache() {
-    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
-        peer_record: Some(test_peer_record("listener-fetch-commit-not-found-cache")),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-    let listen_deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("listener bind", listen_deadline, || {
-        !listener.listening_addrs().is_empty()
-    });
-
-    let request_count = Arc::new(AtomicUsize::new(0));
-    listener
-        .register_handler(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            Box::new({
-                let request_count = Arc::clone(&request_count);
-                move |_payload| {
-                    request_count.fetch_add(1, Ordering::SeqCst);
-                    serde_json::to_vec(&crate::replication::FetchCommitResponse {
-                        found: false,
-                        message: None,
-                    })
-                    .map_err(|err| WorldError::DistributedValidationFailed {
-                        reason: format!("encode fetch-commit response failed: {err}"),
-                    })
-                }
-            }),
-        )
-        .expect("register listener handler");
-
-    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
-        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
-        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
-        fetch_commit_success_cache_after: Duration::from_millis(250),
-        ..Libp2pReplicationNetworkConfig::default()
-    });
-    let connect_deadline = Instant::now() + Duration::from_secs(10);
-    wait_until("dialer connection", connect_deadline, || {
-        !dialer.connected_peers().is_empty()
-    });
-
-    let first = dialer
-        .request(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            b"height-9",
-        )
-        .expect("first fetch-commit request");
-    let second = dialer
-        .request(
-            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
-            b"height-9",
-        )
-        .expect("second fetch-commit request");
-
-    assert_eq!(first, second);
-    assert_eq!(
-        request_count.load(Ordering::SeqCst),
-        2,
-        "not-found responses should not enter the fetch-commit success cache",
-    );
 }
 
 #[test]
