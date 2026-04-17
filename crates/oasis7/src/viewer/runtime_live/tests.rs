@@ -990,4 +990,78 @@ fn chain_linked_runtime_empty_poll_does_not_advance_world() {
     assert!(!progressed, "idle chain poll should not report progress");
     assert_eq!(server.world.state().time, initial_time);
     assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+    assert_eq!(server.last_chain_committed_height, 0);
+}
+
+#[test]
+fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_delta_height");
+    let execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist empty execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let initial_time = server.world.state().time;
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(
+        !progressed,
+        "zero-delta chain poll should not report progress"
+    );
+    assert_eq!(server.world.state().time, initial_time);
+    assert_eq!(server.last_chain_committed_height, 0);
+    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+}
+
+#[test]
+fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_missing_persistence");
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let initial_time = server.world.state().time;
+    let (mut writer, peer) = test_writer_pair();
+
+    let err = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect_err("chain sync should retry when persistence files are missing");
+
+    match err {
+        ViewerRuntimeLiveServerError::Serde(message) => {
+            assert!(message.contains("execution world is not ready"));
+            assert!(message.contains("snapshot.json"));
+            assert!(message.contains("journal.json"));
+        }
+        other => panic!("unexpected chain sync error: {other:?}"),
+    }
+    assert_eq!(server.world.state().time, initial_time);
+    assert_eq!(server.last_chain_committed_height, 0);
+    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }

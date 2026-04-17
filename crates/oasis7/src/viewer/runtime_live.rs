@@ -313,8 +313,11 @@ impl ViewerRuntimeLiveServer {
                 )
             };
             if chain_link_enabled && session.should_poll_chain(chain_poll_interval) {
-                let mut server = lock_shared_server(&shared)?;
-                if let Err(err) = server.sync_chain_linked_runtime(&mut session, &mut writer) {
+                if let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
+                    &shared,
+                    &mut session,
+                    &mut writer,
+                ) {
                     eprintln!("viewer runtime live: chain sync skipped: {err:?}");
                 }
             }
