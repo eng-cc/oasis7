@@ -97,6 +97,7 @@
   - PRD-ENGINEERING-023: As a `.pm` workflow owner, I want task identity to be a merge-stable `task_uid` instead of a sequential display number, so that task creation in parallel worktrees no longer collides during rebase/landing.
   - PRD-ENGINEERING-024: As a 项目经理/模块 owner, I want doc surface area governance formalized, so that I can distinguish active reading surfaces from audit/archive material and keep the default reading path usable even when `doc/` keeps growing.
   - PRD-ENGINEERING-025: As a 项目经理/模块 owner, I want doc corpus maintenance cost formalized, so that I can see when doc governance has shifted from reading-surface clutter to path-level maintenance debt and open the right follow-up task.
+  - PRD-ENGINEERING-026: As a 项目经理/文档治理评审者, I want a canonical `doc/devlog` archive entrypoint, so that I can navigate historical daily logs by month and hotspot instead of scanning day files blindly.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -165,6 +166,7 @@
   - AC-26: 仓库若显式提交 `.codex/config.toml` 作为 repo-local Codex 默认执行配置，则该文件必须可被 Git 追踪，且默认 `sandbox_mode` 需以仓库工作流要求的显式值落盘，不得依赖用户本机全局配置隐式兜底。
   - AC-27: engineering 模块需存在一份正式“文档体量治理”专题，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的判定标准、默认入口面收敛规则、密度触发条件和首批高风险模块优先级。
   - AC-27A: engineering 必须存在 `doc-corpus-maintenance-governance` 正式专题与 `scripts/doc-inventory-report.sh` 报告入口，能够复算 `doc/` 总量、模块密度、热点子目录、`doc/devlog` backlog 与非归档 near-limit 文件，并把文档债从“入口混乱”与“存量维护成本”两阶段明确区分。
+  - AC-27B: `doc/devlog` 必须存在一个 canonical archive entrypoint，用于按月份和高体量热点导航历史日文件；该入口只能承担历史归档职责，不得重新成为运行态真值。
   - AC-28: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须降级为 git-ignored 的本地生成视图；PM lint/report/read-path 在这些文件缺失时必须可自动重建，而 engineering 根 `project.md` 不再手工追加 `最新完成` 长列表热点。
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree。
@@ -203,6 +205,10 @@
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
+  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.prd.md`
+  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.design.md`
+  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.project.md`
+  - `doc/devlog/README.md`
   - `scripts/doc-inventory-report.sh`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
@@ -290,6 +296,7 @@
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 | PRD-ENGINEERING-024 | TASK-ENGINEERING-106/107/108/109/110/111/112/114 | `test_tier_required` | 文档体量治理专题三件套、engineering 根入口/主项目/索引回写、`world-simulator` / `p2p` / `testing` / `readme` / `core` / `world-runtime` / `game` / `site` 模块 `README.md` / `prd.index.md` 的默认阅读面收紧、module-root allowlist 更新与 `doc-governance-check` 通过；人工核对默认阅读面不再把 `doc/devlog` / round reviews / evidence 直接提升为主入口，也不再把高密度模块近期专题长名单平铺在模块 README 首屏 | 仓库文档消费层、项目经理视角导航效率与后续减重批次规划 |
 | PRD-ENGINEERING-025 | `doc-corpus-maintenance-governance` | `test_tier_required` | 存量维护成本专题三件套、`scripts/doc-inventory-report.sh` 输出当前仓库体量快照、engineering 根入口/主项目/索引与 `doc-surface-area-governance` handoff 回写、`doc-governance-check` 通过 | 文档治理阶段判断、路径级治理优先级、`doc/devlog` backlog 处理与季度治理输入 |
+| PRD-ENGINEERING-026 | `devlog-history-compaction` | `test_tier_required` | `devlog-history-compaction` 专题三件套、`doc/devlog/README.md` 月份导航与高体量热点表、engineering 根入口/主项目/索引与 `doc-corpus-maintenance-governance` 项目页回写、`doc-governance-check` 通过 | `doc/devlog` 历史入口、`PRD-ENGINEERING-025` 第一条 follow-up 收口与后续月度摘要拆项 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

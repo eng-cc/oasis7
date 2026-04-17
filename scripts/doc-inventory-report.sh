@@ -62,7 +62,7 @@ for path in files:
     except UnicodeDecodeError:
         line_count = sum(1 for _ in path.open("r", encoding="utf-8", errors="ignore"))
     line_counts.append((line_count, path.as_posix()))
-    if path.parts[:2] == ("doc", "devlog"):
+    if path.parts[:2] == ("doc", "devlog") and path.name != "README.md":
         devlog_rows.append((line_count, path.as_posix()))
     elif line_count >= NEAR_LIMIT:
         non_devlog_near_limit.append((line_count, path.as_posix()))

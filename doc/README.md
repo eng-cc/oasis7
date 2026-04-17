@@ -58,7 +58,7 @@
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。
 - `.pm/tasks/task_<32hex>.execution.md`：按任务维护的 canonical 过程日志。
-- `doc/devlog/`：历史归档，仅作回溯参考，不再作为运行态真值。
+- `doc/devlog/README.md`：历史归档入口；原始 `doc/devlog/*.md` 仅作回溯参考，不再作为运行态真值。
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
 - `doc/**/archive/` 目录已移除；历史专题仅在模块目录内保留并在索引中标注。
 
