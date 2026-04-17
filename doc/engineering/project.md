@@ -136,6 +136,7 @@
   历史说明：本页更早阶段若出现“commit-before review”或固定使用 `codex-review-snapshot.sh` 的描述，均仅作历史追踪保留；现已被 `TASK-ENGINEERING-113` 与 `drop-local-review-script` supersede，当前默认口径为 GitHub PR review。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 - [x] task-worktree-pm-bootstrap (PRD-ENGINEERING-021) [test_tier_required]: 给 `scripts/new-task-worktree.sh` 增加 `--pm-*` 原子 bootstrap，确保 `.pm` task 在目标 worktree 内完成创建、提升到 committed 并记录 workflow start，同时新增 source-worktree-clean smoke。 Trace: .pm/tasks/task_c1560decfc2b40fab17803fa78909b34.yaml
+- [x] rust-node-types-controller-binding-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/types.rs` 的 main-token controller binding 默认值、校验与 builder 逻辑抽到 `types/main_token_controller_binding.rs`，把根文件从 1277 行压到 1069 行，同时保持对外类型名与 targeted `oasis7_node` 验证链路不变。 Trace: .pm/tasks/task_5c651f038f1b48e78460ad7f95f6e187.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
