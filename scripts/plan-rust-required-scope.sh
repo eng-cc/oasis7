@@ -87,13 +87,9 @@ mark_viewer() {
   append_reason "$1"
 }
 
-csv_join() {
-  local IFS=,
-  echo "$*"
-}
-
 resolve_changed_paths_from_git() {
   local diff_base=""
+  local diff_output=""
 
   if [[ -z "$head_ref" ]]; then
     head_ref="HEAD"
@@ -121,7 +117,10 @@ resolve_changed_paths_from_git() {
 
   case "$event_name" in
     pull_request)
-      diff_base="$(git merge-base "$base_ref" "$head_ref")"
+      if ! diff_base="$(git merge-base "$base_ref" "$head_ref" 2>/dev/null)"; then
+        mark_full "unresolvable_merge_base"
+        return 0
+      fi
       ;;
     *)
       diff_base="$base_ref"
@@ -133,10 +132,15 @@ resolve_changed_paths_from_git() {
     return 0
   fi
 
+  if ! diff_output="$(git diff --name-only "$diff_base" "$head_ref" 2>/dev/null)"; then
+    mark_full "unresolvable_changed_paths"
+    return 0
+  fi
+
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     changed_paths+=("$path")
-  done < <(git diff --name-only "$diff_base" "$head_ref")
+  done <<< "$diff_output"
 }
 
 classify_changed_path() {
@@ -241,7 +245,12 @@ fi
 
 reason_summary="$(printf '%s\n' "${reasons[@]-}" | paste -sd ';' -)"
 changed_paths_summary="$(printf '%s\n' "${changed_paths[@]-}" | paste -sd ';' -)"
-needs_system_deps="$([[ "$scope" == "minimal" ]] && echo false || echo true)"
+needs_system_deps="$([[ \
+  "$run_full" -eq 1 || \
+  "$run_viewer_tests" -eq 1 || \
+  "$run_viewer_contract_tests" -eq 1 || \
+  "$run_viewer_visual_baseline" -eq 1 \
+  ]] && echo true || echo false)"
 needs_wasm_target="$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
 
 emit_output() {
