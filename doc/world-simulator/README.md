@@ -5,6 +5,7 @@
 ## 从这里开始
 - 想先回答 world-simulator 在做什么、覆盖哪些边界：`doc/world-simulator/prd.md`
 - 想看当前执行任务、负责人、测试层级与最新完成态：`doc/world-simulator/project.md`
+- 想先进入 Viewer 热点子域，而不是在接近 300 份 Viewer 文档里盲扫：`doc/world-simulator/viewer/README.md`
 - 想执行 Viewer、走 Web 闭环或查操作步骤：`doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/world-simulator/prd.index.md`
 - 想给仓库外读者分享公开可读手册：`site/doc/cn/viewer-manual.html` / `site/doc/en/viewer-manual.html`
@@ -20,6 +21,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解 world-simulator 的范围、主线能力与跨模块接口。
 - `project.md` 是执行台账，适合确认当前活跃任务、测试层级、阻断与最新完成项。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按文件名查找，不是新读者的首读入口。
+- `viewer/README.md` 是 `viewer/` 热点子域的 landing page，负责把近 300 份 Viewer 文档按问题分流。
 - `viewer/viewer-manual.manual.md` 是仓库内 canonical 操作手册；静态 `site/doc/**/viewer-manual.html` 仅作为公开只读镜像，不反向替代仓库权威源。
 
 ## 活跃阅读面边界
@@ -32,8 +34,8 @@
 - 汇总 Web 闭环、启动器可用性、场景初始化与规则执行相关专题。
 - 承接 world-simulator 与 runtime / viewer / testing 的跨模块体验收口。
 
-## 热点子域导航（2026-04-10 快照）
-- `viewer/`（296）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer-manual.manual.md`，再去 `prd.index.md` 定向找专题。
+## 热点子域导航（2026-04-17 快照）
+- `viewer/`（297）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
 - `launcher/`（81）：启动器、控制面、转账、explorer 与自引导体验。
 - `llm/`（54）：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
 - `kernel/`（36）：规则桥接、WASM 执行、资源与 runtime 约束。
@@ -42,7 +44,8 @@
 - `prd/`（9）：验收模板、质量趋势与补充附件。
 
 ## 高密度提示
-- `doc/world-simulator/` 当前共有 547 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- `doc/world-simulator/` 当前共有 550 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- `doc/world-simulator/viewer/` 当前共有 297 份文件；模块级入口只负责把你送到 `viewer/README.md`，不再在根入口直接承担 Viewer 子域分流。
 - 需要完整活跃专题清单时，进入 `doc/world-simulator/prd.index.md`；需要历史回溯时，再按具体任务或专题路径进入。
 
 ## 根目录 legacy

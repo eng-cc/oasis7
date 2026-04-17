@@ -27,7 +27,7 @@
 - `self-evolution/`：仓库内文件化项目管理、自我进化 memory/backlog、signal inbox 与 stage/gate 专题。
 
 ## 高频专题
-- 文档治理分三层：`doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md` 负责默认阅读面减重，`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md` 负责入口减重后的存量维护成本治理，`doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.prd.md` 负责首个已执行的 `doc/devlog` 历史压缩 follow-up；结构落位规则仍由 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 统一维护。
+- 文档治理分四层：`doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md` 负责默认阅读面减重，`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md` 负责入口减重后的存量维护成本治理，`doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.prd.md` 负责 `doc/devlog` 历史压缩入口收口，`doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md` 负责首个热点子域 `world-simulator/viewer` 的路径级治理；结构落位规则仍由 `doc/engineering/doc-governance/doc-structure-standard.prd.md` 统一维护。
 - Rust 结构治理：`doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `.pm` / self-evolution：`doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`、`doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`、`doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - 趋势 / 迁移 / 审读：`doc/engineering/governance/engineering-governance-trend-tracking-2026-03-11.prd.md`、`doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.prd.md`、`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`、`doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
