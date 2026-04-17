@@ -25,5 +25,5 @@
 ## 状态
 - 当前阶段: 已完成（T0~T4）
 - 阻塞项: 无
-- 最近更新: 2026-04-14
-- 后续动作: `world-simulator / p2p / testing / readme / core / world-runtime / game / site` 的高密度模块入口减重，以及 `engineering / scripts / playability_test_result / headless-runtime` 的低密度模块复核均已回到 engineering 主项目收口。当前专题不再继续堆叠模块级任务；后续仅在入口再次失去 `what / where / next / risk` 首读分流能力时，才重开新一轮减重，否则转入路径级治理、round 追加或脚本门禁扩展评估。
+- 最近更新: 2026-04-17
+- 后续动作: `world-simulator / p2p / testing / readme / core / world-runtime / game / site` 的默认阅读面减重已完成，本专题到此收口。当前仓库已出现新的第二阶段债: 总量、热点路径、`doc/devlog` backlog 与 near-limit 长文件持续抬高维护成本，因此后续不再把这些问题继续挂在本专题下，而是转由 `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md` 专题承接；只有当入口再次失去 `what / where / next / risk` 首读分流能力时，才重开新一轮阅读面减重。

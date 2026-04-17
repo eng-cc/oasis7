@@ -61,6 +61,7 @@
   - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
   - SC-28: `codex-working-memory.sh` 默认不得隐式读取当前/最近 Codex live session；若 owner 确实需要从 `.codex` transcript 提炼 working_memory，必须显式提供 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。
   - SC-29: 文档体量治理必须具备正式专题口径，明确 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型；高密度模块的默认阅读面只保留“what / where / next / risk”所需入口，不再把审计与归档材料直接暴露为主入口。
+  - SC-29A: 当文档治理债已从“默认阅读面混乱”转向“文档存量维护成本”时，engineering 必须存在一份正式 follow-up 专题，提供可复算的库存报告入口，并明确 `历史压缩 / 路径级治理 / 近限文件拆分 / 季度复核` 四类后续动作。
   - SC-30: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须是 git-ignored 的本地生成视图，不再作为 Git 提交真值；engineering 根 `project.md` 不再承担手工 `最新完成` 长列表热点，新任务在 `project.md` 中默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，而不是新增 `TASK-XXX-123` 这类顺序编号；每个新任务项还必须固定提供 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）以追溯 canonical runtime task。
   - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 `.pm` task 创建顺序、task execution log canonical 路径和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
@@ -95,6 +96,7 @@
   - PRD-ENGINEERING-022: As a `producer_system_designer`, I want external memory and reflection patterns benchmarked against our file-native governance model, so that future self-evolution upgrades borrow structure without replacing repo-native truth.
   - PRD-ENGINEERING-023: As a `.pm` workflow owner, I want task identity to be a merge-stable `task_uid` instead of a sequential display number, so that task creation in parallel worktrees no longer collides during rebase/landing.
   - PRD-ENGINEERING-024: As a 项目经理/模块 owner, I want doc surface area governance formalized, so that I can distinguish active reading surfaces from audit/archive material and keep the default reading path usable even when `doc/` keeps growing.
+  - PRD-ENGINEERING-025: As a 项目经理/模块 owner, I want doc corpus maintenance cost formalized, so that I can see when doc governance has shifted from reading-surface clutter to path-level maintenance debt and open the right follow-up task.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -108,6 +110,7 @@
   10. Flow-ENG-010: `评估外部 memory/reflective-agent 方案 -> 冻结 adopted/rejected/deferred 边界 -> 将可借鉴对象映射到 .pm/doc 现有结构 -> 再拆实现任务`
   11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
+  13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
   13. Flow-ENG-013: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> workflow-report close -> `move-task --to-status done|deferred` -> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -161,6 +164,7 @@
   - AC-25: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 只允许引用 task execution log、`doc/devlog/**` 之外的正式文档或其他显式 evidence；若仍指向 `doc/devlog/*.md`，lint/promote/set-stage 必须阻断。
   - AC-26: 仓库若显式提交 `.codex/config.toml` 作为 repo-local Codex 默认执行配置，则该文件必须可被 Git 追踪，且默认 `sandbox_mode` 需以仓库工作流要求的显式值落盘，不得依赖用户本机全局配置隐式兜底。
   - AC-27: engineering 模块需存在一份正式“文档体量治理”专题，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的判定标准、默认入口面收敛规则、密度触发条件和首批高风险模块优先级。
+  - AC-27A: engineering 必须存在 `doc-corpus-maintenance-governance` 正式专题与 `scripts/doc-inventory-report.sh` 报告入口，能够复算 `doc/` 总量、模块密度、热点子目录、`doc/devlog` backlog 与非归档 near-limit 文件，并把文档债从“入口混乱”与“存量维护成本”两阶段明确区分。
   - AC-28: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须降级为 git-ignored 的本地生成视图；PM lint/report/read-path 在这些文件缺失时必须可自动重建，而 engineering 根 `project.md` 不再手工追加 `最新完成` 长列表热点。
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree。
@@ -196,6 +200,10 @@
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
   - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
+  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
+  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
+  - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
+  - `scripts/doc-inventory-report.sh`
   - `scripts/doc-governance-check.sh`
   - `doc/*/README.md`
   - `testing-manual.md`
@@ -281,6 +289,7 @@
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091/103 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、默认禁用当前 live session 隐式自读、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 | PRD-ENGINEERING-024 | TASK-ENGINEERING-106/107/108/109/110/111/112/114 | `test_tier_required` | 文档体量治理专题三件套、engineering 根入口/主项目/索引回写、`world-simulator` / `p2p` / `testing` / `readme` / `core` / `world-runtime` / `game` / `site` 模块 `README.md` / `prd.index.md` 的默认阅读面收紧、module-root allowlist 更新与 `doc-governance-check` 通过；人工核对默认阅读面不再把 `doc/devlog` / round reviews / evidence 直接提升为主入口，也不再把高密度模块近期专题长名单平铺在模块 README 首屏 | 仓库文档消费层、项目经理视角导航效率与后续减重批次规划 |
+| PRD-ENGINEERING-025 | `doc-corpus-maintenance-governance` | `test_tier_required` | 存量维护成本专题三件套、`scripts/doc-inventory-report.sh` 输出当前仓库体量快照、engineering 根入口/主项目/索引与 `doc-surface-area-governance` handoff 回写、`doc-governance-check` 通过 | 文档治理阶段判断、路径级治理优先级、`doc/devlog` backlog 处理与季度治理输入 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
