@@ -223,7 +223,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::{Read, Write};
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
     use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -292,14 +292,54 @@ mod tests {
         );
     }
 
+    fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set read timeout");
+        let mut bytes = Vec::new();
+        let mut buffer = [0_u8; 4096];
+        let mut expected_len = None;
+
+        loop {
+            let read = stream.read(&mut buffer).expect("read request");
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&buffer[..read]);
+            if expected_len.is_none() {
+                if let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                    let header = std::str::from_utf8(&bytes[..boundary])
+                        .expect("request header should be utf-8");
+                    let content_length = header
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(":")?;
+                            if name.trim().eq_ignore_ascii_case("content-length") {
+                                value.trim().parse::<usize>().ok()
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(0);
+                    expected_len = Some(boundary + 4 + content_length);
+                }
+            }
+            if let Some(expected_len) = expected_len {
+                if bytes.len() >= expected_len {
+                    break;
+                }
+            }
+        }
+
+        bytes
+    }
+
     fn spawn_success_responses_server() -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind success server");
         let bind = listener.local_addr().expect("listener addr");
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept request");
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
-            let mut buffer = [0_u8; 8192];
-            let _ = stream.read(&mut buffer);
+            let _request = read_http_request(&mut stream);
 
             let event_one = serde_json::json!({
                 "type": "response.output_text.done",
@@ -350,9 +390,7 @@ mod tests {
         let bind = listener.local_addr().expect("listener addr");
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept request");
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
-            let mut buffer = [0_u8; 4096];
-            let _ = stream.read(&mut buffer);
+            let _request = read_http_request(&mut stream);
             thread::sleep(response_delay);
             let body = "data: [DONE]\n\n";
             let response = format!(
@@ -370,9 +408,7 @@ mod tests {
         let bind = listener.local_addr().expect("listener addr");
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept request");
-            let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
-            let mut buffer = [0_u8; 8192];
-            let _ = stream.read(&mut buffer);
+            let _request = read_http_request(&mut stream);
 
             let event_one = serde_json::json!({
                 "type": "response.output_item.done",

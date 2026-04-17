@@ -256,6 +256,27 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime perf_probe_executor_call_and_watchdog_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router perf_probe_subscription_filter_parse_overhead --release -- --ignored --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi perf_probe_module_cache_clone_cost_scales_with_wasm_size --release -- --ignored --nocapture`
+- [x] chain-linked-gameplay-action-submit (PRD-WORLD_RUNTIME-033) [test_tier_required]: 为 chain-linked viewer gameplay action 增加 `/v1/chain/gameplay/submit` 提交路径，要求 viewer 提交只返回 consensus action ack、本地 world 不做 optimistic mutation，最终结果仅通过 committed execution world sync 回流。 Trace: .pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.yaml`
+    - `.pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.execution.md`
+    - `crates/oasis7/src/viewer/gameplay_actions.rs`
+    - `crates/oasis7/src/viewer/mod.rs`
+    - `crates/oasis7/src/viewer/runtime_live/chain_link.rs`
+    - `crates/oasis7/src/viewer/runtime_live/player_gameplay.rs`
+    - `crates/oasis7/src/viewer/runtime_live/tests.rs`
+    - `crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/gameplay_submit_api.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/gameplay_submit_api_tests.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime gameplay_submit -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将 `oasis7_wasm_executor` 的磁盘 compiled cache 从“原始 `.wasm` 回盘 + 再次 `Module::new(...)`”修正为“序列化 compiled artifact 回盘 + `Module::deserialize_file(...)` 命中”，并补齐 serialized artifact round-trip / 损坏恢复回归，以及 executor perf probe 的测试编译裂缝。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml
   - 产物文件:
     - `doc/world-runtime/project.md`

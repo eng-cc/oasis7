@@ -1,44 +1,25 @@
 use super::*;
 
 use super::super::auth::{verify_gameplay_action_auth_proof, VerifiedPlayerAuth};
+use super::super::gameplay_actions::{
+    build_runtime_action_from_gameplay_request, ACTION_BUILD_ASSEMBLER_MK1,
+    ACTION_BUILD_SMELTER_MK1, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
+    ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE, ACTION_SCHEDULE_ASSEMBLER_GEAR,
+    ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE, ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
+    ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1, ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
+    ACTION_SCHEDULE_SMELTER_ALLOY_PLATE, ACTION_SCHEDULE_SMELTER_COPPER_WIRE,
+    ACTION_SCHEDULE_SMELTER_IRON_INGOT, ACTION_SCHEDULE_SMELTER_POLYMER_RESIN,
+    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1,
+};
 use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
 use super::control_plane::{
     ensure_agent_player_access_runtime, map_auth_verify_error_code, normalize_optional_public_key,
 };
-use crate::runtime::{
-    Action as RuntimeAction, IndustryStage, MaterialLedgerId, RecipeExecutionPlan, WorldState,
-};
+use crate::runtime::{IndustryStage, MaterialLedgerId, WorldState};
 use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback};
-use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
-const ACTION_BUILD_SMELTER_MK1: &str = "build_factory_smelter_mk1";
-const ACTION_BUILD_ASSEMBLER_MK1: &str = "build_factory_assembler_mk1";
-const ACTION_SCHEDULE_SMELTER_IRON_INGOT: &str = "schedule_recipe_smelter_iron_ingot";
-const ACTION_SCHEDULE_SMELTER_COPPER_WIRE: &str = "schedule_recipe_smelter_copper_wire";
-const ACTION_SCHEDULE_SMELTER_POLYMER_RESIN: &str = "schedule_recipe_smelter_polymer_resin";
-const ACTION_SCHEDULE_SMELTER_ALLOY_PLATE: &str = "schedule_recipe_smelter_alloy_plate";
-const ACTION_SCHEDULE_ASSEMBLER_GEAR: &str = "schedule_recipe_assembler_gear";
-const ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP: &str = "schedule_recipe_assembler_control_chip";
-const ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1: &str = "schedule_recipe_assembler_motor_mk1";
-const ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE: &str = "schedule_recipe_assembler_logistics_drone";
-const ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK: &str = "schedule_recipe_assembler_sensor_pack";
-const ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK: &str = "schedule_recipe_assembler_module_rack";
-const ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE: &str = "schedule_recipe_assembler_factory_core";
-pub(super) const FACTORY_SMELTER_MK1: &str = "factory.smelter.mk1";
-const FACTORY_ASSEMBLER_MK1: &str = "factory.assembler.mk1";
-const RECIPE_SMELTER_IRON_INGOT: &str = "recipe.smelter.iron_ingot";
-const RECIPE_SMELTER_COPPER_WIRE: &str = "recipe.smelter.copper_wire";
-const RECIPE_SMELTER_POLYMER_RESIN: &str = "recipe.smelter.polymer_resin";
-const RECIPE_SMELTER_ALLOY_PLATE: &str = "recipe.smelter.alloy_plate";
-const RECIPE_ASSEMBLER_GEAR: &str = "recipe.assembler.gear";
-const RECIPE_ASSEMBLER_CONTROL_CHIP: &str = "recipe.assembler.control_chip";
-const RECIPE_ASSEMBLER_MOTOR_MK1: &str = "recipe.assembler.motor_mk1";
-const RECIPE_ASSEMBLER_LOGISTICS_DRONE: &str = "recipe.assembler.logistics_drone";
-const RECIPE_ASSEMBLER_SENSOR_PACK: &str = "recipe.assembler.sensor_pack";
-const RECIPE_ASSEMBLER_MODULE_RACK: &str = "recipe.assembler.module_rack";
-const RECIPE_ASSEMBLER_FACTORY_CORE: &str = "recipe.assembler.factory_core";
 pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
 }
@@ -256,7 +237,50 @@ impl ViewerRuntimeLiveServer {
             self.enqueue_virtual_event(event);
         }
 
-        let runtime_action = runtime_action_from_request(&request)?;
+        let accepted_at_tick = self.world.state().time;
+        let chain_status_bind = self
+            .config
+            .chain_status_bind
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let Some(chain_status_bind) = chain_status_bind {
+            let _ = build_runtime_action_from_gameplay_request(&request)?;
+            let submitted =
+                chain_link::submit_chain_linked_gameplay_action(chain_status_bind, &request)?;
+            let submitted_action_id = submitted
+                .action_id
+                .expect("chain gameplay submit must include action_id after ok=true validation");
+            self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+                action: format!("gameplay_action:{}", request.action_id),
+                stage: "submitted".to_string(),
+                effect: format!(
+                    "submitted industrial action {} for {} to chain runtime as consensus action {}",
+                    request.action_id, request.target_agent_id, submitted_action_id
+                ),
+                reason: None,
+                hint: Some(
+                    "wait for committed world sync to observe the industrial action outcome"
+                        .to_string(),
+                ),
+                delta_logical_time: 0,
+                delta_event_seq: 0,
+            });
+
+            return Ok(GameplayActionAck {
+                action_id: request.action_id,
+                target_agent_id: request.target_agent_id,
+                player_id: verified.player_id,
+                runtime_action_id: submitted_action_id,
+                accepted_at_tick,
+                message: Some(
+                    "submitted to chain runtime; wait for committed world sync to observe the industrial action"
+                        .to_string(),
+                ),
+            });
+        }
+
+        let runtime_action = build_runtime_action_from_gameplay_request(&request)?;
         let runtime_action_id = self.world.submit_action(runtime_action);
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
             action: format!("gameplay_action:{}", request.action_id),
@@ -276,7 +300,7 @@ impl ViewerRuntimeLiveServer {
             target_agent_id: request.target_agent_id,
             player_id: verified.player_id,
             runtime_action_id,
-            accepted_at_tick: self.world.state().time,
+            accepted_at_tick,
             message: Some("advance 1-2 steps to apply the queued industrial action".to_string()),
         })
     }
@@ -362,296 +386,4 @@ fn industry_stage_label(stage: IndustryStage) -> &'static str {
         IndustryStage::ScaleOut => "scale_out",
         IndustryStage::Governance => "governance",
     }
-}
-
-fn runtime_action_from_request(
-    request: &GameplayActionRequest,
-) -> Result<RuntimeAction, GameplayActionError> {
-    let target_agent_id = request.target_agent_id.trim();
-    if target_agent_id.is_empty() {
-        return Err(GameplayActionError {
-            code: "target_agent_required".to_string(),
-            message: "gameplay_action requires non-empty target_agent_id".to_string(),
-            action_id: Some(request.action_id.clone()),
-            target_agent_id: Some(request.target_agent_id.clone()),
-        });
-    }
-
-    let action = match request.action_id.as_str() {
-        ACTION_BUILD_SMELTER_MK1 => RuntimeAction::BuildFactory {
-            builder_agent_id: target_agent_id.to_string(),
-            site_id: "site-smelter".to_string(),
-            spec: smelter_factory_spec(),
-        },
-        ACTION_BUILD_ASSEMBLER_MK1 => RuntimeAction::BuildFactory {
-            builder_agent_id: target_agent_id.to_string(),
-            site_id: "site-assembler".to_string(),
-            spec: assembler_factory_spec(),
-        },
-        ACTION_SCHEDULE_SMELTER_IRON_INGOT => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_SMELTER_MK1.to_string(),
-            recipe_id: RECIPE_SMELTER_IRON_INGOT.to_string(),
-            plan: plan_smelter_iron_ingot(),
-        },
-        ACTION_SCHEDULE_SMELTER_COPPER_WIRE => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_SMELTER_MK1.to_string(),
-            recipe_id: RECIPE_SMELTER_COPPER_WIRE.to_string(),
-            plan: plan_smelter_copper_wire(),
-        },
-        ACTION_SCHEDULE_SMELTER_POLYMER_RESIN => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_SMELTER_MK1.to_string(),
-            recipe_id: RECIPE_SMELTER_POLYMER_RESIN.to_string(),
-            plan: plan_smelter_polymer_resin(),
-        },
-        ACTION_SCHEDULE_SMELTER_ALLOY_PLATE => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_SMELTER_MK1.to_string(),
-            recipe_id: RECIPE_SMELTER_ALLOY_PLATE.to_string(),
-            plan: plan_smelter_alloy_plate(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_GEAR => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_GEAR.to_string(),
-            plan: plan_assembler_gear(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_CONTROL_CHIP.to_string(),
-            plan: plan_assembler_control_chip(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1 => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_MOTOR_MK1.to_string(),
-            plan: plan_assembler_motor_mk1(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_LOGISTICS_DRONE.to_string(),
-            plan: plan_assembler_logistics_drone(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_SENSOR_PACK.to_string(),
-            plan: plan_assembler_sensor_pack(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_MODULE_RACK.to_string(),
-            plan: plan_assembler_module_rack(),
-        },
-        ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE => RuntimeAction::ScheduleRecipe {
-            requester_agent_id: target_agent_id.to_string(),
-            factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-            recipe_id: RECIPE_ASSEMBLER_FACTORY_CORE.to_string(),
-            plan: plan_assembler_factory_core(),
-        },
-        _ => {
-            return Err(GameplayActionError {
-                code: "unknown_gameplay_action".to_string(),
-                message: format!(
-                    "unknown gameplay action `{}` for target `{}`",
-                    request.action_id, request.target_agent_id
-                ),
-                action_id: Some(request.action_id.clone()),
-                target_agent_id: Some(request.target_agent_id.clone()),
-            });
-        }
-    };
-    Ok(action)
-}
-
-fn smelter_factory_spec() -> FactoryModuleSpec {
-    FactoryModuleSpec {
-        factory_id: FACTORY_SMELTER_MK1.to_string(),
-        display_name: "Smelter MK1".to_string(),
-        tier: 2,
-        tags: vec!["smelter".to_string(), "thermal".to_string()],
-        build_cost: vec![
-            MaterialStack::new("structural_frame", 12),
-            MaterialStack::new("heat_coil", 4),
-            MaterialStack::new("refractory_brick", 6),
-        ],
-        build_time_ticks: 1,
-        base_power_draw: 20,
-        recipe_slots: 2,
-        throughput_bps: 10_000,
-        maintenance_per_tick: 1,
-    }
-}
-
-fn assembler_factory_spec() -> FactoryModuleSpec {
-    FactoryModuleSpec {
-        factory_id: FACTORY_ASSEMBLER_MK1.to_string(),
-        display_name: "Assembler MK1".to_string(),
-        tier: 3,
-        tags: vec!["assembler".to_string(), "precision".to_string()],
-        build_cost: vec![
-            MaterialStack::new("structural_frame", 8),
-            MaterialStack::new("iron_ingot", 10),
-            MaterialStack::new("copper_wire", 8),
-        ],
-        build_time_ticks: 1,
-        base_power_draw: 20,
-        recipe_slots: 2,
-        throughput_bps: 10_000,
-        maintenance_per_tick: 1,
-    }
-}
-
-fn plan_smelter_iron_ingot() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        12,
-        vec![
-            MaterialStack::new("iron_ore", 48),
-            MaterialStack::new("carbon_fuel", 12),
-        ],
-        vec![MaterialStack::new("iron_ingot", 36)],
-        vec![MaterialStack::new("slag", 12)],
-        96,
-        1,
-    )
-}
-
-fn plan_smelter_copper_wire() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        12,
-        vec![MaterialStack::new("copper_ore", 36)],
-        vec![MaterialStack::new("copper_wire", 48)],
-        Vec::new(),
-        72,
-        1,
-    )
-}
-
-fn plan_smelter_polymer_resin() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        4,
-        vec![
-            MaterialStack::new("carbon_fuel", 8),
-            MaterialStack::new("silicate_ore", 8),
-        ],
-        vec![MaterialStack::new("polymer_resin", 8)],
-        vec![MaterialStack::new("waste_resin", 4)],
-        28,
-        1,
-    )
-}
-
-fn plan_smelter_alloy_plate() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        4,
-        vec![
-            MaterialStack::new("iron_ingot", 8),
-            MaterialStack::new("copper_wire", 8),
-        ],
-        vec![MaterialStack::new("alloy_plate", 8)],
-        vec![MaterialStack::new("slag", 4)],
-        36,
-        1,
-    )
-}
-
-fn plan_assembler_gear() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        4,
-        vec![MaterialStack::new("iron_ingot", 8)],
-        vec![MaterialStack::new("gear", 4)],
-        Vec::new(),
-        16,
-        1,
-    )
-}
-
-fn plan_assembler_control_chip() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        4,
-        vec![
-            MaterialStack::new("copper_wire", 16),
-            MaterialStack::new("polymer_resin", 8),
-        ],
-        vec![MaterialStack::new("control_chip", 4)],
-        vec![MaterialStack::new("waste_resin", 4)],
-        24,
-        1,
-    )
-}
-
-fn plan_assembler_motor_mk1() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        2,
-        vec![
-            MaterialStack::new("gear", 4),
-            MaterialStack::new("copper_wire", 6),
-        ],
-        vec![MaterialStack::new("motor_mk1", 2)],
-        Vec::new(),
-        14,
-        1,
-    )
-}
-
-fn plan_assembler_logistics_drone() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        1,
-        vec![
-            MaterialStack::new("motor_mk1", 2),
-            MaterialStack::new("control_chip", 1),
-            MaterialStack::new("iron_ingot", 2),
-        ],
-        vec![MaterialStack::new("logistics_drone", 1)],
-        vec![MaterialStack::new("assembly_scrap", 1)],
-        12,
-        1,
-    )
-}
-
-fn plan_assembler_sensor_pack() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        2,
-        vec![
-            MaterialStack::new("control_chip", 2),
-            MaterialStack::new("copper_wire", 4),
-        ],
-        vec![MaterialStack::new("sensor_pack", 2)],
-        vec![MaterialStack::new("calibration_scrap", 2)],
-        16,
-        1,
-    )
-}
-
-fn plan_assembler_module_rack() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        1,
-        vec![
-            MaterialStack::new("sensor_pack", 2),
-            MaterialStack::new("control_chip", 1),
-        ],
-        vec![MaterialStack::new("module_rack", 1)],
-        vec![MaterialStack::new("precision_scrap", 1)],
-        10,
-        1,
-    )
-}
-
-fn plan_assembler_factory_core() -> RecipeExecutionPlan {
-    RecipeExecutionPlan::accepted(
-        1,
-        vec![
-            MaterialStack::new("module_rack", 1),
-            MaterialStack::new("alloy_plate", 3),
-        ],
-        vec![MaterialStack::new("factory_core", 1)],
-        vec![MaterialStack::new("structural_waste", 1)],
-        14,
-        1,
-    )
 }
