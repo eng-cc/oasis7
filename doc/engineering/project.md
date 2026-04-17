@@ -124,6 +124,7 @@
 - [x] TASK-ENGINEERING-114 (PRD-ENGINEERING-024) [test_tier_required]: 继续对 `site` 执行同批次活跃阅读面收敛，把 `README.md` / `prd.index.md` 的首屏改为首读分流、密度快照、热点子域导航与活跃补充文档边界，去掉模块入口对 github-pages/manual 活跃专题长名单的默认暴露。
 - [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-024) [test_tier_required]: 评估 `engineering / scripts / playability_test_result / headless-runtime` 四个剩余低密度模块的默认阅读面；仅对仍有长名单或重复入口噪音的入口页继续减重，并明确“不进入路径级治理”的当前边界。
 - [x] TASK-ENGINEERING-116 (PRD-ENGINEERING-015/024) [test_tier_required]: 将 `engineering` 根目录治理专题按对象下沉到 `doc-governance/` 与 `rust-governance/`，清理 `module-root-md-allowlist` 中已过时的 root topic 白名单，并全仓回写引用与索引，恢复“根目录只保留模块入口文件”的结构边界。
+- [x] doc-corpus-maintenance-governance (PRD-ENGINEERING-025) [test_tier_required]: 建立“文档存量维护成本治理”专题与 `scripts/doc-inventory-report.sh`，冻结从“阅读面噪音”转向“文档总量/热点路径/历史 backlog/near-limit 文件”的阶段判断，并回写 engineering 根入口、主 PRD、既有 `doc-surface-area-governance` 专题与主项目。 Trace: .pm/tasks/task_851d3d1452534a2c83355317ae385ade.yaml
 - [x] TASK-ENGINEERING-113 (PRD-ENGINEERING-021) [test_tier_required]: 将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并同步回写 `AGENTS.md`、`.pm/README`、engineering / self-evolution 正式追踪、scripts 模块文档与旧 landing 兼容边界。
 - [x] drop-local-review-script (PRD-ENGINEERING-021) [test_tier_required]: 将默认评审边界完全切到 GitHub PR review，移除 `codex-review-snapshot.sh` 与相关 `workflow-report` / smoke / README / engineering 正式口径残留。 Trace: .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.yaml
 - [x] workspace-compile-followup (PRD-ENGINEERING-001) [test_tier_required]: 在新 worktree 重放前置 `oasis7_proto` / `oasis7_net` compile cleanup，并为 `egui-winit 0.33.3` 增加本地 `[patch.crates-io]` 修补，使 `./scripts/cargo-dev.sh check --workspace --all-targets` 恢复通过；同时清掉 `oasis7` crate 内一批仅供测试使用的导入/包装函数 warning。 Trace: .pm/tasks/task_64f3349d7064400d89fba49310f41d44.yaml
@@ -165,6 +166,9 @@
 - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
 - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
 - `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md`
+- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
+- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
+- `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
@@ -176,16 +180,18 @@
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
 - `doc/engineering/prd-review/checklists/`
 - `scripts/doc-governance-check.sh`
+- `scripts/doc-inventory-report.sh`
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-16
+- 更新日期: 2026-04-17
 - 当前状态: active
-- 下一任务: `TASK-ENGINEERING-116` 已完成 `engineering` 根目录治理专题下沉，当前 `engineering` 根目录重新收口为 5 个模块入口文件。后续若继续推进路径级治理，应优先评估 `scripts` 是否也出现“子目录已经清晰，但主题分册仍需要二次分层”的对象边界问题；若没有，再转入 round 追加或脚本门禁扩展。
+- 下一任务: `doc-corpus-maintenance-governance (PRD-ENGINEERING-025)` 已完成阶段判断与库存报告入口；后续应先切独立 worktree 处理 `doc/devlog` 历史压缩，再分别为 `world-simulator / p2p / testing` 建路径级治理任务，而不是继续把问题压回“只改入口”。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-106`，冻结“活跃真值 / 审计留痕 / 历史归档 / 兼容跳转”四层消费模型，并明确默认阅读面先减重、后迁路径的执行顺序。
+- 当前规范补充: 已完成 `doc-corpus-maintenance-governance (PRD-ENGINEERING-025)`，明确文档治理债已进入“入口减重之后的存量维护成本”阶段；后续优先基于 `scripts/doc-inventory-report.sh` 判断 `doc/devlog` backlog、热点路径与 near-limit 文件，而不是继续以“入口已清爽”判定治理完成。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
