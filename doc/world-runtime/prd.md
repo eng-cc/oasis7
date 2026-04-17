@@ -88,6 +88,7 @@
   - PRD-WORLD_RUNTIME-031: As a `runtime_engineer` / `viewer_engineer`, I want chain-linked viewer runtime to passively follow committed execution-world progress from `oasis7_chain_runtime`, so that the player no longer needs explicit `Play` just to consume committed chain actions and empty polls do not masquerade as world advancement.
   - PRD-WORLD_RUNTIME-032: As a `runtime_engineer` / 节点运营者, I want storage challenge `fetch-blob` probes to reuse a short-lived success cache for recently verified content hashes, so that triad nodes stop re-fetching the same reachable blob every commit while still rechecking new blobs and expiring old proofs quickly.
   - PRD-WORLD_RUNTIME-033: As a `runtime_engineer` / `viewer_engineer`, I want chain-linked viewer gameplay actions to submit through `oasis7_chain_runtime` and only become visible after committed execution-world sync, so that player controls follow the same consensus-backed path as chain observation instead of mutating the local viewer runtime optimistically.
+  - PRD-WORLD_RUNTIME-034: As a `runtime_engineer` / 节点运营者, I want repeated successful `fetch-commit` requests with the same deterministic payload to reuse a short-lived local success cache, so that followers stop re-asking the network for the same already-found commit during tight gap-sync loops without hiding not-found or timeout recovery.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -140,6 +141,7 @@
   - AC-29: `libp2p_net` 必须仅对 peer-record/discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 触发 peer-scoped、protocol-scoped 短时冷却；定向回归需证明同一 peer 在窗口内不会被立刻重复请求、窗口过后可恢复请求、断连会清理对应 peer 冷却、且 cached-peer-record 在单次请求链中的 fallback proxy 仍可继续尝试。
   - AC-30: storage challenge gate 对近期已验证成功的 `content_hash` 必须提供短窗口 success cache，只允许在缓存过期、命中新 hash、或本地 blob 缺失时重新发起 `fetch-blob` 网络探测；定向回归需证明连续两次 gate 调用不会对同一已验证 blob 重复发网请求，同时缓存过期后仍会恢复真实探测。
   - AC-31: chain-linked `gameplay_action` 必须通过 `oasis7_chain_runtime` 的 `/v1/chain/gameplay/submit` 进入 consensus queue；提交路径必须复用 viewer auth proof、拒绝 nonce replay、返回 consensus `action_id` 作为提交回执，并证明 viewer 本地 world 在提交时不会立即变更，只会在 committed execution world sync 后观察到新工厂/配方结果。
+  - AC-32: `libp2p_replication_network` 必须仅对 `fetch-commit` 的成功响应建立短时、本地、payload-scoped success cache；定向回归需证明相同 payload 的立即重复成功请求不会再次发网、窗口过后会恢复真实请求、且 `found=false` 响应不会进入 success cache。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -189,6 +191,8 @@
   - NFR-WR-12: `fetch-commit` 失败退避必须保持 peer-scoped、protocol-scoped 且自动过期，默认只压制短时高频重试，不得把业务层永久不兼容或其他协议的错误扩大成全局节点隔离。
   - NFR-WR-13: peer-record/discovery 请求冷却必须局限于同 peer 的单协议短窗抑制，默认只减少重复取件噪音，不得把一次 cached-peer-record cache miss 扩大成长期 peer 隔离，也不得阻断同一请求链中的备选 proxy fallback。
   - NFR-WR-14: storage challenge `fetch-blob` success cache 必须只复用短窗口内的正向验证结果，默认只减少最近重复取件噪音，不得把过期网络可达性证明长期当真，也不得掩盖本地 blob 缺失等硬失败。
+  - NFR-WR-15: chain-linked gameplay submit 必须保持“提交成功不等于本地 world 立即可见”的 committed-only 可见性边界，viewer 只能在 committed execution world sync 之后反映新状态，不得因本地 optimistic mutation 伪造链上结果。
+  - NFR-WR-16: `fetch-commit` success cache 必须只复用近期、相同 deterministic request payload 的正向响应，不得缓存 `found=false` 或协议错误，也不得把 peer-scoped 失败冷却扩大成全局成功假象。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
 ## 5. Risks & Roadmap
@@ -229,6 +233,7 @@
 | PRD-WORLD_RUNTIME-031 | task_c1149e15fef14f12925182a03f37e546 | `test_tier_required` | `oasis7_viewer_live` chain-linked 被动跟随回归、不开 `Play` 的 committed world 同步、空轮询不推进断言 | viewer live 与 chain runtime 的逻辑 world progress 一致性 |
 | PRD-WORLD_RUNTIME-032 | task_53b1918a361445f5bf678bcf525abc5c | `test_tier_required` | storage challenge `fetch-blob` success cache 定向回归、缓存过期恢复探测断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-blob` 重复成功拉取降噪、sequencer↔storage 热点流量收口 |
 | PRD-WORLD_RUNTIME-033 | task_dd49ad3480d14922993ceb3acf2555c6 | `test_tier_required` | `/v1/chain/gameplay/submit` handler 回归、viewer chain-linked gameplay submit 回归、`cargo check`、`git diff --check` | viewer gameplay action 与 chain runtime committed world 的一致性闭环 |
+| PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、`found=false` 不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
