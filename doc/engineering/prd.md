@@ -101,6 +101,7 @@
   - PRD-ENGINEERING-026: As a 项目经理/文档治理评审者, I want a canonical `doc/devlog` archive entrypoint, so that I can navigate historical daily logs by month and hotspot instead of scanning day files blindly.
   - PRD-ENGINEERING-027: As a 项目经理/Viewer owner, I want a canonical `doc/world-simulator/viewer/` path entrypoint, so that I can navigate the largest hotspot path by intent instead of scanning nearly 300 files blindly.
   - PRD-ENGINEERING-028: As a 项目经理/P2P owner, I want a canonical `doc/p2p/node/` path entrypoint, so that I can navigate the densest `p2p` hotspot path by intent instead of scanning nearly 70 files blindly.
+  - PRD-ENGINEERING-029: As a 项目经理/Testing owner, I want a canonical `doc/testing/evidence/` path entrypoint, so that I can navigate the densest testing hotspot path by intent instead of scanning nearly 50 evidence files blindly.
 - Critical User Flows:
   1. Flow-ENG-001: `提交前执行必要测试/门禁 -> 提交 commit -> 执行 prepare-task-pr GitHub PR preflight / create -> 进入 required checks + review/approval`
   2. Flow-ENG-002: `CI 失败 -> 定位规则来源 -> 判断误报/真实问题 -> 更新脚本或文档`
@@ -172,6 +173,7 @@
   - AC-27B: `doc/devlog` 必须存在一个 canonical archive entrypoint，用于按月份和高体量热点导航历史日文件；该入口只能承担历史归档职责，不得重新成为运行态真值。
   - AC-27C: 对已进入路径级治理的热点子域，必须存在一个子目录级 canonical landing page；至少 `doc/world-simulator/viewer/` 需要通过 `viewer/README.md` 把 `manual`、`software_safe`、runtime live 与定向检索区分开来，避免继续由 `viewer-manual.manual.md` 或 `prd.index.md` 单独承担全部首读分流。
   - AC-27D: `doc/p2p/node/` 必须存在一个 canonical 子目录入口 `node/README.md`，能把节点奖励/资产、复制链路、PoS 时间、身份引导与 WASM 编译护栏分开导航，避免继续让 `p2p` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
+  - AC-27E: `doc/testing/evidence/` 必须存在一个 canonical 子目录入口 `evidence/README.md`，能把 release gate、hosted-world/browser、p2p/shared-network triad、governance drill、claim/audit matrix 与定向验证 evidence 分开导航，避免继续让 `testing` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
   - AC-28: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须降级为 git-ignored 的本地生成视图；PM lint/report/read-path 在这些文件缺失时必须可自动重建，而 engineering 根 `project.md` 不再手工追加 `最新完成` 长列表热点。
   - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
   - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree。
@@ -219,6 +221,9 @@
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.project.md`
+  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.prd.md`
+  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.design.md`
+  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.project.md`
   - `doc/devlog/README.md`
   - `doc/world-simulator/viewer/README.md`
   - `scripts/doc-inventory-report.sh`
@@ -311,6 +316,7 @@
 | PRD-ENGINEERING-026 | `devlog-history-compaction` | `test_tier_required` | `devlog-history-compaction` 专题三件套、`doc/devlog/README.md` 月份导航与高体量热点表、engineering 根入口/主项目/索引与 `doc-corpus-maintenance-governance` 项目页回写、`doc-governance-check` 通过 | `doc/devlog` 历史入口、`PRD-ENGINEERING-025` 第一条 follow-up 收口与后续月度摘要拆项 |
 | PRD-ENGINEERING-027 | `world-simulator-viewer-path-governance` | `test_tier_required` | `world-simulator-viewer-path-governance` 专题三件套、`doc/world-simulator/viewer/README.md` 首读分流、`doc/world-simulator/README.md` / `doc/world-simulator/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `world-simulator/viewer` 热点子域入口、`PRD-ENGINEERING-025` 第二条 follow-up 收口与后续 `p2p` 路径级治理 |
 | PRD-ENGINEERING-028 | `p2p-node-path-governance` | `test_tier_required` | `p2p-node-path-governance` 专题三件套、`doc/p2p/node/README.md` 首读分流、`doc/p2p/README.md` / `doc/p2p/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `p2p/node` 热点子域入口、`PRD-ENGINEERING-025` 第三条 follow-up 收口与后续 `testing` 路径级治理 |
+| PRD-ENGINEERING-029 | `testing-evidence-path-governance` | `test_tier_required` | `testing-evidence-path-governance` 专题三件套、`doc/testing/evidence/README.md` 首读分流、`doc/testing/README.md` / `doc/testing/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `testing/evidence` 热点子域入口、`PRD-ENGINEERING-025` 第四条 follow-up 收口与后续季度复核 |
 
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
