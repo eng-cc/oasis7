@@ -94,9 +94,8 @@ fn build_storage_challenge_blob_cache_fixture(
     let handle = NodeReplicationNetworkHandle::new(Arc::clone(&network))
         .with_dht(dht)
         .with_local_provider_id("node-a");
-    let leaked_handle: &'static NodeReplicationNetworkHandle = Box::leak(Box::new(handle));
     let endpoint =
-        ReplicationNetworkEndpoint::new(leaked_handle, world_id, false, &config.network_policy)
+        ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
             .expect("endpoint");
 
     (config, network, request_count, replication, endpoint)
@@ -172,6 +171,50 @@ fn storage_challenge_gate_reuses_recent_blob_success_cache_expires() {
         *request_count.lock().expect("lock request count"),
         2,
         "expired success cache should trigger a fresh network probe"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn storage_challenge_gate_ignores_future_cache_heights_after_rewind() {
+    let dir = temp_dir("storage-challenge-success-cache-rewind");
+    let world_id = "world-storage-challenge-success-cache-rewind";
+    let (config, _network, request_count, replication, endpoint) =
+        build_storage_challenge_blob_cache_fixture(119, world_id, dir.as_path());
+
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.network_committed_height = STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8;
+    engine.peer_heads.insert(
+        "storage-provider-1".to_string(),
+        PeerCommittedHead {
+            height: STORAGE_GATE_NETWORK_WARMUP_HEIGHT + 8,
+            block_hash: "rewind-peer-head".to_string(),
+            committed_at_ms: 1_234,
+            execution_block_hash: None,
+            execution_state_root: None,
+        },
+    );
+
+    let content_hash = replication
+        .recent_replicated_content_refs(world_id, 1)
+        .expect("load content refs")
+        .into_iter()
+        .next()
+        .expect("one content ref")
+        .1;
+    engine
+        .recent_storage_challenge_successes
+        .insert(content_hash, engine.committed_height.saturating_add(10));
+
+    engine
+        .enforce_storage_challenge_gate(&replication, Some(&endpoint), "node-a", world_id, 1_234)
+        .expect("gate after rewind");
+
+    assert_eq!(
+        *request_count.lock().expect("lock request count"),
+        1,
+        "future-height cache entry should not suppress the required network probe"
     );
     let _ = fs::remove_dir_all(&dir);
 }

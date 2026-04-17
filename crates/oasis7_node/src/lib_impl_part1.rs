@@ -845,23 +845,25 @@ impl PosNodeEngine {
         {
             return Ok(());
         }
+        self.prune_storage_challenge_success_cache();
         let primary_samples = replication
             .recent_replicated_content_refs(world_id, STORAGE_GATE_NETWORK_SAMPLES_PER_CHECK)?;
         if primary_samples.is_empty() {
             return Ok(());
         }
-        self.prune_storage_challenge_success_cache();
 
         let mut successful_matches = 0usize;
-        let mut attempted_samples = 0usize;
+        let mut attempted_probes = 0usize;
+        let mut total_samples = 0usize;
         let mut failure_reasons = Vec::new();
         let mut hard_failure = false;
         for (_, content_hash) in primary_samples.iter() {
+            total_samples = total_samples.saturating_add(1);
             if self.storage_challenge_success_cache_hit(replication, content_hash.as_str())? {
                 successful_matches = successful_matches.saturating_add(1);
                 continue;
             }
-            attempted_samples = attempted_samples.saturating_add(1);
+            attempted_probes = attempted_probes.saturating_add(1);
             match evaluate_storage_challenge_sample(
                 replication,
                 endpoint,
@@ -899,6 +901,7 @@ impl PosNodeEngine {
                 STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK,
             )?;
             for (height, content_hash) in fallback_samples {
+                total_samples = total_samples.saturating_add(1);
                 if self.storage_challenge_success_cache_hit(replication, content_hash.as_str())? {
                     successful_matches = successful_matches.saturating_add(1);
                     if successful_matches >= required_matches {
@@ -907,7 +910,7 @@ impl PosNodeEngine {
                     }
                     continue;
                 }
-                attempted_samples = attempted_samples.saturating_add(1);
+                attempted_probes = attempted_probes.saturating_add(1);
                 match evaluate_storage_challenge_sample(
                     replication,
                     endpoint,
@@ -936,8 +939,9 @@ impl PosNodeEngine {
         if successful_matches < required_matches {
             return Err(NodeError::Consensus {
                 reason: format!(
-                    "storage challenge gate network threshold unmet: samples={} required_matches={} successful_matches={} reasons={:?}",
-                    attempted_samples,
+                    "storage challenge gate network threshold unmet: total_samples={} attempted_probes={} required_matches={} successful_matches={} reasons={:?}",
+                    total_samples,
+                    attempted_probes,
                     required_matches,
                     successful_matches,
                     failure_reasons
