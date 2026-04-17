@@ -1,10 +1,7 @@
-const MODULE_RELEASE_PROFILE_CHANGE_LIMIT: usize = 50;
-const MODULE_RELEASE_ATTESTATION_LIMIT: usize = 128;
-#[path = "module_actions_impl_part2/release_support.rs"]
-mod release_support;
+use super::*;
 
 impl World {
-    pub(super) fn try_apply_runtime_module_action(
+    pub(in crate::runtime::world) fn try_apply_runtime_module_action(
         &mut self,
         envelope: &ActionEnvelope,
     ) -> Result<bool, WorldError> {
@@ -58,7 +55,7 @@ impl World {
 
                 let source_bytes_len = source_package.files.values().map(Vec::len).sum::<usize>();
                 let compiled_bytes =
-                    match super::super::module_source_compiler::compile_module_artifact_from_source(
+                    match super::super::super::module_source_compiler::compile_module_artifact_from_source(
                         module_id.as_str(),
                         source_package,
                     ) {
@@ -79,7 +76,7 @@ impl World {
                         }
                     };
 
-                let wasm_hash = super::super::util::sha256_hex(&compiled_bytes);
+                let wasm_hash = super::super::super::util::sha256_hex(&compiled_bytes);
                 let fee_kind = ResourceKind::Electricity;
                 let fee_amount =
                     Self::module_compile_fee_amount(source_bytes_len, compiled_bytes.len());
@@ -139,7 +136,7 @@ impl World {
                     return Ok(true);
                 }
 
-                let computed_hash = super::super::util::sha256_hex(wasm_bytes);
+                let computed_hash = super::super::super::util::sha256_hex(wasm_bytes);
                 if computed_hash != *wasm_hash {
                     self.append_event(
                         WorldEventBody::Domain(DomainEvent::ActionRejected {
@@ -927,5 +924,4 @@ impl World {
             _ => Ok(false),
         }
     }
-
 }

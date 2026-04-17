@@ -1,19 +1,21 @@
+use super::*;
+
 impl World {
-    fn module_deploy_fee_amount(bytes_len: usize) -> i64 {
+    pub(super) fn module_deploy_fee_amount(bytes_len: usize) -> i64 {
         let bytes_len = bytes_len as i64;
         (bytes_len.saturating_add(MODULE_DEPLOY_FEE_BYTES_PER_ELECTRICITY - 1)
             / MODULE_DEPLOY_FEE_BYTES_PER_ELECTRICITY)
             .max(1)
     }
 
-    fn module_compile_fee_amount(source_bytes_len: usize, wasm_bytes_len: usize) -> i64 {
+    pub(super) fn module_compile_fee_amount(source_bytes_len: usize, wasm_bytes_len: usize) -> i64 {
         let total_bytes = source_bytes_len.saturating_add(wasm_bytes_len) as i64;
         (total_bytes.saturating_add(MODULE_COMPILE_FEE_BYTES_PER_ELECTRICITY - 1)
             / MODULE_COMPILE_FEE_BYTES_PER_ELECTRICITY)
             .max(2)
     }
 
-    fn module_install_fee_amount(manifest: &oasis7_wasm_abi::ModuleManifest) -> i64 {
+    pub(super) fn module_install_fee_amount(manifest: &oasis7_wasm_abi::ModuleManifest) -> i64 {
         let export_cost = manifest.exports.len() as i64;
         let subscription_cost = manifest.subscriptions.len() as i64;
         1_i64
@@ -22,12 +24,12 @@ impl World {
             .max(1)
     }
 
-    fn next_module_instance_id(&self, module_id: &str) -> String {
+    pub(super) fn next_module_instance_id(&self, module_id: &str) -> String {
         let seq = self.state.next_module_instance_id.max(1);
         format!("{module_id}#{seq}")
     }
 
-    fn validate_upgrade_interface_compatible(
+    pub(super) fn validate_upgrade_interface_compatible(
         current: &oasis7_wasm_abi::ModuleManifest,
         next: &oasis7_wasm_abi::ModuleManifest,
     ) -> Result<(), String> {
@@ -95,7 +97,7 @@ impl World {
         Ok(())
     }
 
-    fn ensure_module_fee_affordable(
+    pub(super) fn ensure_module_fee_affordable(
         &mut self,
         action_id: u64,
         agent_id: &str,
@@ -129,7 +131,7 @@ impl World {
         Ok(true)
     }
 
-    fn has_active_module_using_artifact(&self, wasm_hash: &str) -> bool {
+    pub(super) fn has_active_module_using_artifact(&self, wasm_hash: &str) -> bool {
         if self
             .state
             .module_instances
@@ -159,202 +161,19 @@ impl World {
             })
     }
 
-    fn peek_next_module_market_order_id(&self) -> u64 {
+    pub(super) fn peek_next_module_market_order_id(&self) -> u64 {
         self.state.next_module_market_order_id.max(1)
     }
 
-    fn peek_next_module_market_sale_id(&self) -> u64 {
+    pub(super) fn peek_next_module_market_sale_id(&self) -> u64 {
         self.state.next_module_market_sale_id.max(1)
     }
 
-    fn peek_next_module_release_request_id(&self) -> u64 {
+    pub(super) fn peek_next_module_release_request_id(&self) -> u64 {
         self.state.next_module_release_request_id.max(1)
     }
 
-    fn normalize_module_release_required_roles(required_roles: &[String]) -> Vec<String> {
-        let mut normalized: Vec<String> = required_roles
-            .iter()
-            .map(|role| role.trim().to_ascii_lowercase())
-            .filter(|role| !role.is_empty())
-            .collect();
-        normalized.sort();
-        normalized.dedup();
-        if normalized.is_empty() {
-            normalized = MODULE_RELEASE_DEFAULT_REQUIRED_ROLES
-                .iter()
-                .map(|role| role.to_string())
-                .collect();
-        }
-        normalized
-    }
-
-    fn normalize_module_release_role_set(roles: &[String]) -> Vec<String> {
-        let mut normalized: Vec<String> = roles
-            .iter()
-            .map(|role| role.trim().to_ascii_lowercase())
-            .filter(|role| !role.is_empty())
-            .collect();
-        normalized.sort();
-        normalized.dedup();
-        normalized
-    }
-
-    fn normalize_module_release_role(role: &str) -> Option<String> {
-        let normalized = role.trim().to_ascii_lowercase();
-        if normalized.is_empty() {
-            None
-        } else {
-            Some(normalized)
-        }
-    }
-
-    fn module_release_roles_satisfied(
-        required_roles: &[String],
-        role_approvals: &std::collections::BTreeMap<String, String>,
-    ) -> bool {
-        required_roles
-            .iter()
-            .all(|required| role_approvals.contains_key(required))
-    }
-
-    fn module_release_attestation_key(signer_node_id: &str, platform: &str) -> String {
-        format!(
-            "{}|{}",
-            signer_node_id.trim(),
-            platform.trim().to_ascii_lowercase()
-        )
-    }
-
-    fn normalize_module_release_attestation_platform(platform: &str) -> Option<String> {
-        let normalized = platform.trim().to_ascii_lowercase();
-        if normalized.is_empty() {
-            None
-        } else {
-            Some(normalized)
-        }
-    }
-
-    fn normalize_module_release_attestation_hash(raw: &str, field: &str) -> Result<String, String> {
-        let normalized = raw.trim().to_ascii_lowercase();
-        if normalized.len() != 64 || !normalized.chars().all(|ch| ch.is_ascii_hexdigit()) {
-            return Err(format!(
-                "module release attestation rejected: {field} must be 64-char hex"
-            ));
-        }
-        Ok(normalized)
-    }
-
-    fn normalize_module_release_attestation_builder_image_digest(
-        raw: &str,
-    ) -> Result<String, String> {
-        let normalized = raw.trim().to_ascii_lowercase();
-        let Some(digest_hex) = normalized.strip_prefix("sha256:") else {
-            return Err(
-                "module release attestation rejected: builder_image_digest must be sha256:<64-hex>"
-                    .to_string(),
-            );
-        };
-        if digest_hex.len() != 64 || !digest_hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
-            return Err(
-                "module release attestation rejected: builder_image_digest must be sha256:<64-hex>"
-                    .to_string(),
-            );
-        }
-        Ok(normalized)
-    }
-
-    fn normalize_module_release_attestation_label(
-        raw: &str,
-        field: &str,
-    ) -> Result<String, String> {
-        let normalized = raw.trim().to_string();
-        if normalized.is_empty() {
-            return Err(format!(
-                "module release attestation rejected: {field} is empty"
-            ));
-        }
-        if normalized.len() > 128 {
-            return Err(format!(
-                "module release attestation rejected: {field} exceeds 128 chars"
-            ));
-        }
-        Ok(normalized)
-    }
-
-    fn normalize_module_release_attestation_proof_cid(proof_cid: &str) -> Option<String> {
-        let normalized = proof_cid.trim().to_string();
-        if normalized.is_empty() {
-            return None;
-        }
-        if normalized.len() > 256 {
-            return None;
-        }
-        Some(normalized)
-    }
-
-    fn evaluate_module_release_shadow_hash(
-        &self,
-        manifest: &oasis7_wasm_abi::ModuleManifest,
-        activate: bool,
-    ) -> Result<String, String> {
-        let mut changes = ModuleChangeSet::default();
-        let record_key = oasis7_wasm_abi::ModuleRegistry::record_key(
-            manifest.module_id.as_str(),
-            manifest.version.as_str(),
-        );
-        if let Some(record) = self.module_registry.records.get(record_key.as_str()) {
-            if record.manifest != *manifest {
-                return Err(format!(
-                    "module release shadow rejected: existing manifest mismatch for {}",
-                    record_key
-                ));
-            }
-        } else {
-            changes.register.push(manifest.clone());
-        }
-
-        if activate {
-            let already_active_same = self
-                .module_registry
-                .active
-                .get(&manifest.module_id)
-                .map(|version| version == &manifest.version)
-                .unwrap_or(false);
-            if !already_active_same {
-                changes.activate.push(ModuleActivation {
-                    module_id: manifest.module_id.clone(),
-                    version: manifest.version.clone(),
-                });
-            }
-        }
-
-        if changes.is_empty() {
-            return self
-                .current_manifest_hash()
-                .map_err(|err| format!("module release shadow hash failed: {err:?}"));
-        }
-
-        self.validate_module_changes(&changes)
-            .map_err(|err| format!("module release shadow validate failed: {err:?}"))?;
-        self.shadow_validate_module_changes(&changes)
-            .map_err(|err| format!("module release shadow dry-run failed: {err:?}"))?;
-
-        let module_changes_value = serde_json::to_value(&changes)
-            .map_err(|err| format!("module release shadow serialize failed: {err}"))?;
-        let mut manifest_update = self.manifest.clone();
-        manifest_update.version = manifest_update.version.saturating_add(1);
-        let serde_json::Value::Object(content) = &mut manifest_update.content else {
-            return Err(
-                "module release shadow rejected: current manifest content must be object"
-                    .to_string(),
-            );
-        };
-        content.insert("module_changes".to_string(), module_changes_value);
-        super::super::util::hash_json(&manifest_update)
-            .map_err(|err| format!("module release shadow hash failed: {err:?}"))
-    }
-
-    fn best_bid_for_listing(
+    pub(super) fn best_bid_for_listing(
         &self,
         wasm_hash: &str,
         listing: &ModuleArtifactListingState,
@@ -395,7 +214,7 @@ impl World {
         best
     }
 
-    fn try_match_module_listing(
+    pub(super) fn try_match_module_listing(
         &mut self,
         wasm_hash: &str,
         action_id: u64,
@@ -427,7 +246,7 @@ impl World {
         Ok(())
     }
 
-    fn apply_module_governance_proposal(
+    pub(super) fn apply_module_governance_proposal(
         &mut self,
         proposal_id: ProposalId,
         finality_certificate: Option<&GovernanceFinalityCertificate>,
@@ -438,7 +257,7 @@ impl World {
         }
     }
 
-    fn apply_install_module_action(
+    pub(super) fn apply_install_module_action(
         &mut self,
         action_id: u64,
         installer_agent_id: &str,
@@ -649,7 +468,7 @@ impl World {
         Ok(true)
     }
 
-    fn apply_upgrade_module_action(
+    pub(super) fn apply_upgrade_module_action(
         &mut self,
         action_id: u64,
         upgrader_agent_id: &str,
@@ -938,7 +757,7 @@ impl World {
         Ok(true)
     }
 
-    fn apply_rollback_module_instance_action(
+    pub(super) fn apply_rollback_module_instance_action(
         &mut self,
         action_id: u64,
         operator_agent_id: &str,

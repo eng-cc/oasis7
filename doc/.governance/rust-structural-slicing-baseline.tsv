@@ -14,8 +14,6 @@ include_target	crates/oasis7/src/runtime/tests/reward_asset.rs	reward_asset_spli
 include_target	crates/oasis7/src/runtime/tests/reward_asset.rs	reward_asset_split_part2.rs
 include_target	crates/oasis7/src/runtime/tests/rules.rs	rules_split_part1.rs
 include_target	crates/oasis7/src/runtime/tests/rules.rs	rules_split_part2.rs
-include_target	crates/oasis7/src/runtime/world/module_actions.rs	module_actions_impl_part1.rs
-include_target	crates/oasis7/src/runtime/world/module_actions.rs	module_actions_impl_part2.rs
 include_target	crates/oasis7/src/simulator/kernel/actions.rs	actions_impl_part1.rs
 include_target	crates/oasis7/src/simulator/kernel/actions.rs	actions_impl_part2.rs
 include_target	crates/oasis7/src/simulator/kernel/actions.rs	actions_impl_part3.rs
@@ -62,8 +60,6 @@ slice_file	crates/oasis7/src/runtime/tests/reward_asset_split_part1.rs	-
 slice_file	crates/oasis7/src/runtime/tests/reward_asset_split_part2.rs	-
 slice_file	crates/oasis7/src/runtime/tests/rules_split_part1.rs	-
 slice_file	crates/oasis7/src/runtime/tests/rules_split_part2.rs	-
-slice_file	crates/oasis7/src/runtime/world/module_actions_impl_part1.rs	-
-slice_file	crates/oasis7/src/runtime/world/module_actions_impl_part2.rs	-
 slice_file	crates/oasis7/src/simulator/kernel/actions_impl_part1.rs	-
 slice_file	crates/oasis7/src/simulator/kernel/actions_impl_part2.rs	-
 slice_file	crates/oasis7/src/simulator/kernel/actions_impl_part3.rs	-

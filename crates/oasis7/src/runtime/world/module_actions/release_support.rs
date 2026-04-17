@@ -841,8 +841,11 @@ impl World {
         }
         let epoch_id = self.current_governance_epoch();
         let snapshot = self.governance_finality_epoch_snapshot_for_epoch(epoch_id);
-        let snapshot_signers: BTreeSet<&str> =
-            snapshot.signer_node_ids.iter().map(String::as_str).collect();
+        let snapshot_signers: BTreeSet<&str> = snapshot
+            .signer_node_ids
+            .iter()
+            .map(String::as_str)
+            .collect();
         let aggregated_signers: BTreeSet<String> = request
             .attestations
             .values()
