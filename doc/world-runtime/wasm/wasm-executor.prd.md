@@ -62,7 +62,8 @@
 - 编译缓存以 `wasm_hash` 为键，LRU 策略，容量由 `max_cache_entries` 控制。
 - 缓存通过 `Arc<Mutex<...>>` 共享，允许多执行器克隆共享已编译模块。
 - 编译过程与缓存锁分离，避免长时间持锁。
-- 若配置 `compiled_cache_dir`，磁盘层必须持久化 Wasmtime `Module::serialize()` 产物，而不是原始 `.wasm` 字节；命中后优先走 `Module::deserialize_file()` 复用已编译工件，避免重启后再次 `Module::new(...)`。
+- 若配置 `compiled_cache_dir`，磁盘层必须持久化 Wasmtime `Module::serialize()` 产物，而不是原始 `.wasm` 字节；缓存文件需带自定义 magic/version/checksum wrapper，并在反序列化前先做 wrapper 校验与 precompiled marker 检测，失败按 cache miss + 删除处理。
+- 磁盘 cache 目录必须按当前 engine 的 precompile compatibility key 与宿主 `arch/os` 隔离，避免不同 Wasmtime 兼容域或宿主目标复用旧 `.cwasm`。
 
 ### 实现要点（E4）
 - Wasmtime 执行器使用 `memory`/`alloc`/`reduce|call` 导出进行最小调用（`reduce/call(i32, i32) -> (i32, i32)`，入口取决于 ModuleKind）。

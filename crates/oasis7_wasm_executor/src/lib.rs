@@ -6,16 +6,25 @@ use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox,
 };
 #[cfg(feature = "wasmtime")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "wasmtime")]
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
 #[cfg(feature = "wasmtime")]
 use std::fs;
+#[cfg(feature = "wasmtime")]
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
 #[cfg(feature = "wasmtime")]
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     mpsc, Arc, Mutex,
 };
+
+#[cfg(feature = "wasmtime")]
+const COMPILED_CACHE_MAGIC: &[u8; 8] = b"O7CWASM1";
+#[cfg(feature = "wasmtime")]
+const COMPILED_CACHE_VERSION: u32 = 1;
 
 fn count_exceeds_limit(count: usize, limit: u32) -> bool {
     match u32::try_from(count) {
@@ -289,7 +298,7 @@ impl WasmExecutor {
                 .compiled_cache_dir
                 .clone()
                 .map(|root| {
-                    let fingerprint = compiled_engine_fingerprint(&config);
+                    let fingerprint = compiled_engine_fingerprint(&engine, &config);
                     DiskCompiledModuleCache::new(root, fingerprint)
                 })
                 .transpose()
@@ -373,7 +382,25 @@ impl WasmExecutor {
         if !path.exists() {
             return None;
         }
-        match unsafe { wasmtime::Module::deserialize_file(&self.engine, &path) } {
+        let wrapped = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                let _ = fs::remove_file(&path);
+                return None;
+            }
+        };
+        let serialized = match unwrap_compiled_cache_artifact(&wrapped) {
+            Some(bytes) => bytes,
+            None => {
+                let _ = fs::remove_file(&path);
+                return None;
+            }
+        };
+        if wasmtime::Engine::detect_precompiled(&serialized).is_none() {
+            let _ = fs::remove_file(&path);
+            return None;
+        }
+        match unsafe { wasmtime::Module::deserialize(&self.engine, &serialized) } {
             Ok(module) => Some(Arc::new(module)),
             Err(_) => {
                 let _ = fs::remove_file(&path);
@@ -398,8 +425,9 @@ impl WasmExecutor {
             Ok(serialized) => serialized,
             Err(_) => return,
         };
+        let wrapped = wrap_compiled_cache_artifact(&serialized);
         let temp_path = path.with_extension("tmp");
-        if fs::write(&temp_path, serialized).is_err() {
+        if fs::write(&temp_path, wrapped).is_err() {
             let _ = fs::remove_file(&temp_path);
             return;
         }
@@ -786,11 +814,68 @@ impl ModuleSandbox for WasmExecutor {
 }
 
 #[cfg(feature = "wasmtime")]
-fn compiled_engine_fingerprint(config: &WasmExecutorConfig) -> String {
+fn compiled_engine_fingerprint(engine: &wasmtime::Engine, config: &WasmExecutorConfig) -> String {
+    let mut hasher = DefaultHasher::new();
+    engine.precompile_compatibility_hash().hash(&mut hasher);
+    let precompile_key = hasher.finish();
     format!(
-        "wasmtime-cf-v1-fuel{}-mem{}-out{}-call{}",
-        config.max_fuel, config.max_mem_bytes, config.max_output_bytes, config.max_call_ms
+        "wasmtime-cf-v2-key{:016x}-{}-{}-fuel{}-mem{}-out{}-call{}",
+        precompile_key,
+        std::env::consts::ARCH,
+        std::env::consts::OS,
+        config.max_fuel,
+        config.max_mem_bytes,
+        config.max_output_bytes,
+        config.max_call_ms
     )
+}
+
+#[cfg(feature = "wasmtime")]
+fn wrap_compiled_cache_artifact(serialized: &[u8]) -> Vec<u8> {
+    let checksum = Sha256::digest(serialized);
+    let mut wrapped =
+        Vec::with_capacity(COMPILED_CACHE_MAGIC.len() + 4 + 8 + checksum.len() + serialized.len());
+    wrapped.extend_from_slice(COMPILED_CACHE_MAGIC);
+    wrapped.extend_from_slice(&COMPILED_CACHE_VERSION.to_le_bytes());
+    wrapped.extend_from_slice(&(serialized.len() as u64).to_le_bytes());
+    wrapped.extend_from_slice(checksum.as_slice());
+    wrapped.extend_from_slice(serialized);
+    wrapped
+}
+
+#[cfg(feature = "wasmtime")]
+fn unwrap_compiled_cache_artifact(wrapped: &[u8]) -> Option<Vec<u8>> {
+    let header_len = COMPILED_CACHE_MAGIC.len() + 4 + 8 + 32;
+    if wrapped.len() < header_len {
+        return None;
+    }
+    if &wrapped[..COMPILED_CACHE_MAGIC.len()] != COMPILED_CACHE_MAGIC {
+        return None;
+    }
+    let version_offset = COMPILED_CACHE_MAGIC.len();
+    let version = u32::from_le_bytes(
+        wrapped[version_offset..version_offset + 4]
+            .try_into()
+            .ok()?,
+    );
+    if version != COMPILED_CACHE_VERSION {
+        return None;
+    }
+    let len_offset = version_offset + 4;
+    let payload_len = u64::from_le_bytes(wrapped[len_offset..len_offset + 8].try_into().ok()?);
+    let checksum_offset = len_offset + 8;
+    let payload_offset = checksum_offset + 32;
+    let payload_len = usize::try_from(payload_len).ok()?;
+    let payload = wrapped.get(payload_offset..payload_offset + payload_len)?;
+    if payload_offset + payload_len != wrapped.len() {
+        return None;
+    }
+    let expected_checksum = wrapped.get(checksum_offset..checksum_offset + 32)?;
+    let actual_checksum = Sha256::digest(payload);
+    if actual_checksum.as_slice() != expected_checksum {
+        return None;
+    }
+    Some(payload.to_vec())
 }
 
 #[cfg(feature = "wasmtime")]

@@ -5947,6 +5947,7 @@ version = "0.1.0"
 dependencies = [
  "oasis7_wasm_abi",
  "serde_cbor",
+ "sha2",
  "wasmtime",
  "wat",
 ]

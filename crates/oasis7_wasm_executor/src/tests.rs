@@ -416,8 +416,8 @@ fn wasm_executor_disk_cache_persists_serialized_compiled_artifact() {
     let cached_bytes = fs::read(&cache_file).expect("read serialized cache");
     assert_ne!(cached_bytes, wasm);
     assert!(
-        cached_bytes.len() > wasm.len(),
-        "serialized compiled artifact should not look like the original wasm payload"
+        !cached_bytes.starts_with(&[0x00, 0x61, 0x73, 0x6d]),
+        "serialized compiled artifact should not start with the raw wasm magic header"
     );
 
     let _ = fs::remove_dir_all(cache_dir);
