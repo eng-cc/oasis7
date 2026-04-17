@@ -37,6 +37,7 @@
 - [x] E12 执行器初始化错误结构化返回，移除 `panic` 路径
 - [x] E12 `oasis7_wasm_sdk::wire` 改为显式暴露 CBOR 解码失败，builtin 模块调用点改为显式 fallback
 - [x] E12 补充磁盘缓存初始化失败与执行器调用点回归
+- [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将磁盘 compiled cache 从“原始 wasm 字节回盘”修正为“Wasmtime 序列化 compiled artifact 回盘”，并补齐 round-trip / 损坏恢复 / perf probe 测试可编译性。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml
 
 ## 依赖
 - doc/world-runtime/wasm/wasm-executor.prd.md
@@ -44,4 +45,4 @@
 - 模块加载缓存与存储实现（`doc/world-runtime/module/module-storage.prd.md`）
 
 ## 状态
-- 当前阶段：E12（初始化失败结构化错误与 SDK wire 显式错误闭环完成）
+- 当前阶段：E13（真实 compiled artifact 磁盘缓存与回归闭环完成）

@@ -17,7 +17,7 @@
 ### In Scope（V1）
 - 以 `ModuleSandbox` 为适配层的执行器实现（不改动 world 内核调用流程）。
 - 基本资源限制：内存上限、燃料/指令预算、超时、输出大小。
-- 最小编译缓存：按 `wasm_hash` 缓存已编译模块。
+- 最小编译缓存：按 `wasm_hash` 缓存已编译模块，并可把 Wasmtime 序列化产物持久化到磁盘。
 - 可配置的执行器参数（燃料、超时、并发上限、缓存容量）。
 - 过渡期占位实现：未接入引擎时返回 `SandboxUnavailable`。
 - 基础依赖通过 Cargo feature `wasmtime` 引入。
@@ -62,6 +62,7 @@
 - 编译缓存以 `wasm_hash` 为键，LRU 策略，容量由 `max_cache_entries` 控制。
 - 缓存通过 `Arc<Mutex<...>>` 共享，允许多执行器克隆共享已编译模块。
 - 编译过程与缓存锁分离，避免长时间持锁。
+- 若配置 `compiled_cache_dir`，磁盘层必须持久化 Wasmtime `Module::serialize()` 产物，而不是原始 `.wasm` 字节；命中后优先走 `Module::deserialize_file()` 复用已编译工件，避免重启后再次 `Module::new(...)`。
 
 ### 实现要点（E4）
 - Wasmtime 执行器使用 `memory`/`alloc`/`reduce|call` 导出进行最小调用（`reduce/call(i32, i32) -> (i32, i32)`，入口取决于 ModuleKind）。
@@ -113,6 +114,7 @@
 - **E10**：模块状态输入/更新接入并补齐回放一致性测试。
 - **E11**：升级 Wasmtime 版本（18 -> 41）并完成兼容性回归验证。
 - **E12**：清理执行器初始化 `panic` 与 SDK wire 静默吞错路径，补足失败路径结构化错误回归。
+- **E13**：将磁盘编译缓存从“原始 wasm 回盘”修正为“序列化 compiled artifact 回盘”，补齐 round-trip 与损坏恢复回归。
 
 ### Technical Risks
 - 引擎版本升级导致行为变化（需锁定版本/回放验证）。
