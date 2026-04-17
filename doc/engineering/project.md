@@ -136,6 +136,7 @@
   历史说明：本页更早阶段若出现“commit-before review”或固定使用 `codex-review-snapshot.sh` 的描述，均仅作历史追踪保留；现已被 `TASK-ENGINEERING-113` 与 `drop-local-review-script` supersede，当前默认口径为 GitHub PR review。
 - [x] TASK-ENGINEERING-PMVIEW-001 (PRD-ENGINEERING-021/015) [test_tier_required] + [test_tier_full]: 将 `.pm` registry/backlog 降级为 git-ignored 本地生成视图，新增 `sync-views` 入口并让 PM 读路径在缺失时自动重建；同时收口 engineering 根 `project.md` 的热点写法，并冻结“新工程治理任务允许使用 topic-scoped 稳定 task ID”的口径。
 - [x] task-worktree-pm-bootstrap (PRD-ENGINEERING-021) [test_tier_required]: 给 `scripts/new-task-worktree.sh` 增加 `--pm-*` 原子 bootstrap，确保 `.pm` task 在目标 worktree 内完成创建、提升到 committed 并记录 workflow start，同时新增 source-worktree-clean smoke。 Trace: .pm/tasks/task_c1560decfc2b40fab17803fa78909b34.yaml
+- [x] libp2p-net-orchestrator-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 抽离 `Libp2pNetwork::new` 的 bootstrap / periodic 调度样板到 `constructor_support.rs`，将 `crates/oasis7_net/src/libp2p_net.rs` 从 1199 行压到 1156 行，并保持 frozen structural slicing baseline 不变。 Trace: .pm/tasks/task_fbffb4f8dc5b4326b6a09751f4779526.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
