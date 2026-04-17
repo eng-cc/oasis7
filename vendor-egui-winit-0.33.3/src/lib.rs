@@ -1,7 +1,7 @@
 //! [`egui`] bindings for [`winit`](https://github.com/rust-windowing/winit).
 //!
-//! The library translates winit events to egui, handled copy/paste,
-//! updates the cursor, open links clicked in egui, etc.
+//! The library translates winit events to egui, handles copy/paste,
+//! updates the cursor, opens links clicked in egui, etc.
 //!
 //! ## Feature flags
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
@@ -1592,7 +1592,7 @@ fn process_viewport_command(
     }
 }
 
-/// Build and intitlaize a window.
+/// Build and initialize a window.
 ///
 /// Wrapper around `create_winit_window_builder` and `apply_viewport_builder_to_window`.
 ///
@@ -1732,7 +1732,6 @@ pub fn create_winit_window_attributes(
     {
         // Unused:
         _ = egui_ctx;
-        _ = pixels_per_point;
         _ = position;
         _ = inner_size;
         _ = min_inner_size;
@@ -1835,15 +1834,11 @@ pub fn apply_viewport_builder_to_window(
 
         let pixels_per_point = pixels_per_point(egui_ctx, window);
 
-        if let Some(size) = builder.inner_size
-            && window
-                .request_inner_size(PhysicalSize::new(
-                    pixels_per_point * size.x,
-                    pixels_per_point * size.y,
-                ))
-                .is_some()
-        {
-            log::debug!("Failed to set window size");
+        if let Some(size) = builder.inner_size {
+            let _ = window.request_inner_size(PhysicalSize::new(
+                pixels_per_point * size.x,
+                pixels_per_point * size.y,
+            ));
         }
         if let Some(size) = builder.min_inner_size {
             window.set_min_inner_size(Some(PhysicalSize::new(

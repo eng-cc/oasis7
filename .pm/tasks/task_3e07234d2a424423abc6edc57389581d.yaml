@@ -1,0 +1,26 @@
+task_uid: task_3e07234d2a424423abc6edc57389581d
+title: "Resolve PR 108 vendor egui review comments"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workspace-compile-followup
+execution_log_path: .pm/tasks/task_3e07234d2a424423abc6edc57389581d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - vendor-egui-winit-0.33.3/src/lib.rs
+  - vendor-egui-winit-0.33.3/README.md
+doc_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-001
+acceptance:
+  - "PR 108 vendor egui review comments are addressed without reopening workspace compile issues."
+  - "Validation records the commands used after the comment fixes."
+  - "Updated PR threads are resolved after push when the fixes land."
+handoff_to: []
+updated_at: 2026-04-17T11:14:36+08:00
+last_started_at: 2026-04-17T11:11:27+08:00
+last_closed_at: 2026-04-17T11:14:36+08:00
