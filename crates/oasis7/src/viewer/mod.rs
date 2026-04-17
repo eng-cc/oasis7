@@ -1,6 +1,7 @@
 mod auth;
 #[cfg(not(target_arch = "wasm32"))]
 mod demo;
+mod gameplay_actions;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 mod protocol;
@@ -24,6 +25,16 @@ pub use auth::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use demo::{generate_viewer_demo, ViewerDemoError, ViewerDemoSummary};
+pub use gameplay_actions::{
+    build_runtime_action_from_gameplay_request, ACTION_BUILD_ASSEMBLER_MK1,
+    ACTION_BUILD_SMELTER_MK1, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
+    ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE, ACTION_SCHEDULE_ASSEMBLER_GEAR,
+    ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE, ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
+    ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1, ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
+    ACTION_SCHEDULE_SMELTER_ALLOY_PLATE, ACTION_SCHEDULE_SMELTER_COPPER_WIRE,
+    ACTION_SCHEDULE_SMELTER_IRON_INGOT, ACTION_SCHEDULE_SMELTER_POLYMER_RESIN,
+    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use live::{
     ViewerLiveDecisionMode, ViewerLiveServer, ViewerLiveServerConfig, ViewerLiveServerError,

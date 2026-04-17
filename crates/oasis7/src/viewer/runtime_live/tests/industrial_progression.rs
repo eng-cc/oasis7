@@ -571,3 +571,102 @@ fn runtime_gameplay_action_keeps_primary_goal_when_secondary_factory_blocks() {
     );
     assert_eq!(gameplay.blocker_kind, None);
 }
+
+#[test]
+fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync() {
+    let _guard = lock_test_llm_env();
+    let execution_world_dir = runtime_live_temp_dir("chain_gameplay_submit");
+    crate::runtime::World::new_production_hardened()
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist initial execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(41);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        40,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    server
+        .world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist viewer baseline execution world");
+
+    let submit_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: "build_factory_smelter_mk1".to_string(),
+            target_agent_id: agent_id.clone(),
+            player_id: "player-a".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        41,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let submit_ack = server
+        .handle_gameplay_action(submit_request)
+        .expect("submit gameplay action to chain runtime");
+    assert_eq!(submit_ack.action_id, "build_factory_smelter_mk1");
+    assert_eq!(submit_ack.runtime_action_id, 1);
+    assert!(
+        !server.world.has_factory("factory.smelter.mk1"),
+        "chain-linked submit must not mutate local world before committed sync"
+    );
+
+    let submitted = chain_status.submitted_gameplay_requests();
+    assert_eq!(submitted.len(), 1);
+    assert_eq!(submitted[0].action_id, "build_factory_smelter_mk1");
+    assert_eq!(submitted[0].target_agent_id, agent_id);
+
+    let mut execution_world = server.world.clone();
+    let runtime_action = crate::viewer::build_runtime_action_from_gameplay_request(&submitted[0])
+        .expect("rebuild runtime action from submitted request");
+    execution_world.submit_action(runtime_action);
+    for _ in 0..2 {
+        execution_world.step().expect("advance execution world");
+    }
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist committed execution world");
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut writer, peer) = test_writer_pair();
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(
+        progressed,
+        "committed chain world should advance viewer state"
+    );
+    assert!(server.world.has_factory("factory.smelter.mk1"));
+    assert_eq!(server.last_chain_committed_height, 1);
+    assert!(read_response_line(&peer, Duration::from_millis(200)).is_some());
+}

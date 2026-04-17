@@ -1,5 +1,10 @@
 use super::*;
+
+use super::super::protocol::{GameplayActionError, GameplayActionRequest};
 use std::net::ToSocketAddrs;
+
+const CHAIN_GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
+const CHAIN_LINK_TIMEOUT_MS: u64 = 300;
 
 #[derive(Debug, serde::Deserialize)]
 struct ChainStatusSyncSnapshot {
@@ -10,6 +15,19 @@ struct ChainStatusSyncSnapshot {
 #[derive(Debug, serde::Deserialize)]
 struct ChainStatusConsensusSnapshot {
     committed_height: u64,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(super) struct ChainGameplaySubmitResponse {
+    ok: bool,
+    #[serde(default)]
+    pub(super) action_id: Option<u64>,
+    #[serde(default)]
+    submitted_at_unix_ms: Option<i64>,
+    #[serde(default)]
+    error_code: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 struct PreparedChainLinkedRuntimeUpdate {
@@ -158,6 +176,45 @@ impl ViewerRuntimeLiveServer {
     }
 }
 
+pub(super) fn submit_chain_linked_gameplay_action(
+    chain_status_bind: &str,
+    request: &GameplayActionRequest,
+) -> Result<ChainGameplaySubmitResponse, GameplayActionError> {
+    let response =
+        post_chain_linked_gameplay_action(chain_status_bind, request).map_err(|err| {
+            gameplay_chain_submit_error(
+                request,
+                "chain_submit_unavailable",
+                format!("chain gameplay submit transport failed: {err:?}"),
+            )
+        })?;
+
+    if !response.ok {
+        return Err(gameplay_chain_submit_error(
+            request,
+            response
+                .error_code
+                .clone()
+                .unwrap_or_else(|| "chain_submit_failed".to_string()),
+            response
+                .error
+                .clone()
+                .unwrap_or_else(|| "chain gameplay submit was rejected".to_string()),
+        ));
+    }
+
+    if response.action_id.is_none() {
+        return Err(gameplay_chain_submit_error(
+            request,
+            "chain_submit_failed",
+            "chain gameplay submit succeeded without consensus action id",
+        ));
+    }
+
+    let _ = response.submitted_at_unix_ms;
+    Ok(response)
+}
+
 fn prepare_chain_linked_runtime_update(
     chain_status_bind: &str,
 ) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
@@ -172,7 +229,62 @@ fn prepare_chain_linked_runtime_update(
 fn fetch_chain_status_snapshot(
     chain_status_bind: &str,
 ) -> Result<ChainStatusSyncSnapshot, ViewerRuntimeLiveServerError> {
-    let timeout = Duration::from_millis(300);
+    let mut stream = connect_chain_status_stream(
+        chain_status_bind,
+        Duration::from_millis(CHAIN_LINK_TIMEOUT_MS),
+    )?;
+    let request = format!(
+        "GET /v1/chain/status HTTP/1.1\r\nHost: {chain_status_bind}\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(request.as_bytes())?;
+    stream.flush()?;
+
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response)?;
+    let (status_code, payload): (u16, ChainStatusSyncSnapshot) =
+        parse_http_json_response(response.as_slice(), "chain status")?;
+    if status_code != 200 {
+        return Err(ViewerRuntimeLiveServerError::Serde(format!(
+            "chain status request returned non-200 response: HTTP {status_code}"
+        )));
+    }
+    Ok(payload)
+}
+
+fn post_chain_linked_gameplay_action(
+    chain_status_bind: &str,
+    request: &GameplayActionRequest,
+) -> Result<ChainGameplaySubmitResponse, ViewerRuntimeLiveServerError> {
+    let mut stream = connect_chain_status_stream(
+        chain_status_bind,
+        Duration::from_millis(CHAIN_LINK_TIMEOUT_MS),
+    )?;
+    let payload = serde_json::to_vec(request)
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+    let request_head = format!(
+        "POST {CHAIN_GAMEPLAY_SUBMIT_PATH} HTTP/1.1\r\nHost: {chain_status_bind}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        payload.len()
+    );
+    stream.write_all(request_head.as_bytes())?;
+    stream.write_all(payload.as_slice())?;
+    stream.flush()?;
+
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response)?;
+    let (status_code, payload): (u16, ChainGameplaySubmitResponse) =
+        parse_http_json_response(response.as_slice(), "chain gameplay submit")?;
+    if !(200..=299).contains(&status_code) && payload.ok {
+        return Err(ViewerRuntimeLiveServerError::Serde(format!(
+            "chain gameplay submit returned HTTP {status_code} with invalid success payload"
+        )));
+    }
+    Ok(payload)
+}
+
+fn connect_chain_status_stream(
+    chain_status_bind: &str,
+    timeout: Duration,
+) -> Result<TcpStream, ViewerRuntimeLiveServerError> {
     let mut addrs = chain_status_bind.to_socket_addrs()?;
     let first_addr = addrs.next().ok_or_else(|| {
         ViewerRuntimeLiveServerError::Serde(format!(
@@ -193,35 +305,53 @@ fn fetch_chain_status_snapshot(
             }
         }
     }
-    let mut stream = connected.ok_or_else(|| {
+    let stream = connected.ok_or_else(|| {
         ViewerRuntimeLiveServerError::Io(
             last_err.expect("last_err must be set after connect attempts"),
         )
     })?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
-    let request = format!(
-        "GET /v1/chain/status HTTP/1.1\r\nHost: {chain_status_bind}\r\nConnection: close\r\n\r\n"
-    );
-    stream.write_all(request.as_bytes())?;
-    stream.flush()?;
+    Ok(stream)
+}
 
-    let mut response = Vec::new();
-    stream.read_to_end(&mut response)?;
+fn parse_http_json_response<T: serde::de::DeserializeOwned>(
+    response: &[u8],
+    label: &str,
+) -> Result<(u16, T), ViewerRuntimeLiveServerError> {
     let Some(body_start) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return Err(ViewerRuntimeLiveServerError::Serde(
-            "chain status response missing HTTP body".to_string(),
-        ));
-    };
-    let header = String::from_utf8_lossy(&response[..body_start]);
-    if !header.starts_with("HTTP/1.1 200") && !header.starts_with("HTTP/1.0 200") {
         return Err(ViewerRuntimeLiveServerError::Serde(format!(
-            "chain status request returned non-200 response: {}",
-            header.lines().next().unwrap_or("unknown_status")
+            "{label} response missing HTTP body"
         )));
+    };
+    let header = std::str::from_utf8(&response[..body_start])
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+    let status_code = header
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|token| token.parse::<u16>().ok())
+        .ok_or_else(|| {
+            ViewerRuntimeLiveServerError::Serde(format!(
+                "{label} response missing HTTP status code"
+            ))
+        })?;
+    let payload = serde_json::from_slice::<T>(&response[(body_start + 4)..])
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+    Ok((status_code, payload))
+}
+
+fn gameplay_chain_submit_error(
+    request: &GameplayActionRequest,
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> GameplayActionError {
+    GameplayActionError {
+        code: code.into(),
+        message: message.into(),
+        action_id: Some(request.action_id.clone()),
+        target_agent_id: Some(request.target_agent_id.clone()),
     }
-    serde_json::from_slice(&response[body_start + 4..])
-        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))
 }
 
 fn load_chain_execution_world(

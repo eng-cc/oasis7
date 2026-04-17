@@ -38,6 +38,8 @@ mod execution_bridge;
 mod explorer_p0_api;
 #[path = "oasis7_chain_runtime/feedback_submit_api.rs"]
 mod feedback_submit_api;
+#[path = "oasis7_chain_runtime/gameplay_submit_api.rs"]
+mod gameplay_submit_api;
 #[path = "oasis7_chain_runtime/governance_registry.rs"]
 mod governance_registry;
 #[path = "oasis7_chain_runtime/module_release_attestation_submit_api.rs"]
@@ -418,37 +420,12 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         feedback_submit_signer,
     )?;
 
-    println!("oasis7_chain_runtime ready.");
-    println!("- node_id: {}", options.node_id);
-    println!("- world_id: {}", options.world_id);
-    println!("- storage_profile: {}", options.storage_profile.as_str());
-    println!("- role: {}", options.node_role.as_str());
-    println!(
-        "- status: http://{}:{}/v1/chain/status",
-        status_host, status_port
+    runtime_status_util::print_runtime_ready_summary(
+        &options,
+        &paths,
+        status_host.as_str(),
+        status_port,
     );
-    println!(
-        "- balances: http://{}:{}/v1/chain/balances",
-        status_host, status_port
-    );
-    println!(
-        "- feedback_submit: http://{}:{}/v1/chain/feedback/submit",
-        status_host, status_port
-    );
-    println!(
-        "- module_release_attestation_submit: http://{}:{}/v1/chain/module-release/attestation/submit",
-        status_host, status_port
-    );
-    println!(
-        "- reward_runtime: {} ({})",
-        if options.reward_runtime_enabled {
-            "enabled"
-        } else {
-            "disabled"
-        },
-        paths.reward_runtime_report_dir.display()
-    );
-    println!("Press Ctrl+C to stop.");
 
     let mut last_error = String::new();
     let mut current_degraded_reason: Option<String> = None;
@@ -704,6 +681,16 @@ fn handle_chain_status_connection(
         node_id,
         world_id,
         execution_world_dir,
+    )? {
+        return Ok(());
+    }
+
+    if gameplay_submit_api::maybe_handle_gameplay_submit_request(
+        &mut stream,
+        &buffer[..bytes],
+        &runtime,
+        method,
+        path,
     )? {
         return Ok(());
     }
