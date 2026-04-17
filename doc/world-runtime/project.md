@@ -264,6 +264,7 @@
     - `.pm/tasks/task_dd49ad3480d14922993ceb3acf2555c6.execution.md`
     - `crates/oasis7/src/viewer/gameplay_actions.rs`
     - `crates/oasis7/src/viewer/mod.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/gameplay_submit_api_tests.rs`
     - `crates/oasis7/src/viewer/runtime_live/chain_link.rs`
     - `crates/oasis7/src/viewer/runtime_live/player_gameplay.rs`
     - `crates/oasis7/src/viewer/runtime_live/tests.rs`
@@ -275,6 +276,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime gameplay_submit -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+- [x] latest-main-launch-regression-fix (PRD-WORLD_RUNTIME-033) [test_tier_required]: 修复 latest-main 本地 `oasis7-run.sh play` 启动回归，避免 wasm viewer 构建误编入 runtime-only gameplay action，并确保 launcher 在源码树路径下能找到 `oasis7_viewer_live` 与 `oasis7_chain_runtime` 后完成 chain-linked 本地试玩拉起。 Trace: .pm/tasks/task_8576146ff00d42fda6ea097db93de90e.yaml
+  - 产物文件:
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_8576146ff00d42fda6ea097db93de90e.yaml`
+    - `.pm/tasks/task_8576146ff00d42fda6ea097db93de90e.execution.md`
+    - `crates/oasis7/src/viewer/gameplay_actions.rs`
+    - `crates/oasis7/src/viewer/mod.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
+    - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_provider_local_bridge --bin oasis7_viewer_live --bin oasis7_game_launcher --bin oasis7_chain_runtime`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime gameplay_submit -- --nocapture`
+    - `.agents/skills/oasis7/scripts/oasis7-run.sh play --repo-root <task-worktree> --execution-mode player_parity --reuse-bridge --skip-agent-setup --no-open-browser`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将 `oasis7_wasm_executor` 的磁盘 compiled cache 从“原始 `.wasm` 回盘 + 再次 `Module::new(...)`”修正为“序列化 compiled artifact 回盘 + `Module::deserialize_file(...)` 命中”，并补齐 serialized artifact round-trip / 损坏恢复回归，以及 executor perf probe 的测试编译裂缝。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml

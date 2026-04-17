@@ -25,9 +25,10 @@ pub use auth::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use demo::{generate_viewer_demo, ViewerDemoError, ViewerDemoSummary};
+#[cfg(not(target_arch = "wasm32"))]
+pub use gameplay_actions::build_runtime_action_from_gameplay_request;
 pub use gameplay_actions::{
-    build_runtime_action_from_gameplay_request, ACTION_BUILD_ASSEMBLER_MK1,
-    ACTION_BUILD_SMELTER_MK1, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
+    ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
     ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE, ACTION_SCHEDULE_ASSEMBLER_GEAR,
     ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE, ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
     ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1, ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
