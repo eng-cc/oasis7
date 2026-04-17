@@ -49,6 +49,9 @@ mod libp2p_replication_network;
 #[cfg(target_arch = "wasm32")]
 mod libp2p_replication_network_wasm;
 mod network_bridge;
+mod node_engine_core;
+mod node_engine_network;
+mod node_engine_storage_challenge;
 mod node_runtime_core;
 mod pos_engine_gossip;
 mod pos_schedule;
@@ -1185,10 +1188,6 @@ struct PeerCommittedHead {
     execution_block_hash: Option<String>,
     execution_state_root: Option<String>,
 }
-
-include!("lib_impl_part1.rs");
-include!("lib_impl_storage_challenge.rs");
-include!("lib_impl_part2.rs");
 
 #[cfg(test)]
 mod tests;

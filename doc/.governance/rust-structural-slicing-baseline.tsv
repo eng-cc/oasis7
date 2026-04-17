@@ -43,8 +43,6 @@ include_target	crates/oasis7_consensus/src/membership_recovery/replay_audit.rs	r
 include_target	crates/oasis7_consensus/src/membership_recovery/replay_audit.rs	replay_audit_split_part2.rs
 include_target	crates/oasis7_consensus/src/membership_recovery_tests.rs	membership_recovery_tests_split_part1.rs
 include_target	crates/oasis7_consensus/src/membership_recovery_tests.rs	membership_recovery_tests_split_part2.rs
-include_target	crates/oasis7_node/src/lib.rs	lib_impl_part1.rs
-include_target	crates/oasis7_node/src/lib.rs	lib_impl_part2.rs
 include_target	crates/oasis7_node/src/tests.rs	tests_split_part1.rs
 include_target	crates/oasis7_node/src/tests.rs	tests_split_part2.rs
 include_target	crates/oasis7_node/src/tests.rs	tests_split_part3.rs
@@ -92,8 +90,6 @@ slice_file	crates/oasis7_consensus/src/membership_recovery_tests_split_part1.rs	
 slice_file	crates/oasis7_consensus/src/membership_recovery_tests_split_part2.rs	-
 slice_file	crates/oasis7_consensus/src/membership_split_part1.rs	-
 slice_file	crates/oasis7_consensus/src/membership_split_part2.rs	-
-slice_file	crates/oasis7_node/src/lib_impl_part1.rs	-
-slice_file	crates/oasis7_node/src/lib_impl_part2.rs	-
 slice_file	crates/oasis7_node/src/tests_split_part1.rs	-
 slice_file	crates/oasis7_node/src/tests_split_part2.rs	-
 slice_file	crates/oasis7_node/src/tests_split_part3.rs	-

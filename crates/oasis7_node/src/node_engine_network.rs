@@ -1,5 +1,8 @@
+use super::node_engine_core::InboundSlotWindow;
+use super::*;
+
 impl PosNodeEngine {
-    fn sync_replication_height_once(
+    pub(super) fn sync_replication_height_once(
         &self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
@@ -130,7 +133,7 @@ impl PosNodeEngine {
         })
     }
 
-    fn record_synced_replication_height(
+    pub(super) fn record_synced_replication_height(
         &mut self,
         height: u64,
         block_hash: String,
@@ -149,7 +152,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn ingest_proposal_message(
+    pub(super) fn ingest_proposal_message(
         &mut self,
         world_id: &str,
         message: &GossipProposalMessage,
@@ -260,7 +263,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn ingest_attestation_message(
+    pub(super) fn ingest_attestation_message(
         &mut self,
         world_id: &str,
         message: &GossipAttestationMessage,
@@ -369,7 +372,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn ingest_consensus_network_messages(
+    pub(super) fn ingest_consensus_network_messages(
         &mut self,
         endpoint: &ConsensusNetworkEndpoint,
         world_id: &str,
@@ -482,7 +485,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn ingest_peer_messages(
+    pub(super) fn ingest_peer_messages(
         &mut self,
         endpoint: &GossipEndpoint,
         node_id: &str,
@@ -622,7 +625,7 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    fn compute_block_hash(
+    pub(super) fn compute_block_hash(
         &self,
         world_id: &str,
         height: u64,
