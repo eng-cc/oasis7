@@ -94,7 +94,7 @@
   - 选中对象详情（Agent / Location）
   - hosted/public-join session acquire/release/recovery 与 auth tier 可视化
   - canonical 玩家语义摘要：`stage/goal/progress/blocker/next_step` 或等价字段
-  - 当页面带有 viewer auth bootstrap 时，选中 Agent 的最小 `prompt/chat` 控制面（至少覆盖 Agent Chat 发送、消息流展示，以及 prompt override 的 preview/apply/rollback）
+  - 当页面带有 viewer auth bootstrap 时，选中 Agent 的最小 `prompt/chat` 控制面（至少覆盖 Agent Chat 发送、消息流展示，以及 prompt override 的 preview/apply/rollback）；其中 prompt override 编辑表单允许收纳为显式 settings toggle，默认不必直接展开，但 automation API 与 ack/error 可观测性必须保持可用
   - 明确的 blocked / not_exposed / handoff 文案，告诉玩家哪些正式动作仍需转到其他 surface
 - 作为纯实时主入口，`software_safe` 不再在页面或 canonical gameplay summary 中暴露 `live_control.play`、`live_control.step`、tick jump 一类回放/推进动作；若底层协议仍保留这些控制，仅允许内部测试/自动化显式调用。
 - 可延后/不保留：
@@ -126,7 +126,7 @@
 ## 5. Acceptance Criteria
 - AC-1: 默认浏览器产品入口必须落到 `software_safe`，且页面必须显式显示自身正在承担“formal Web gameplay”角色，而不是“fallback only”。
 - AC-2: `software_safe` 模式下，agent-browser 可以完成正式 Web 主链路：加载页面 -> 连接世界 -> 看到 canonical 玩家语义摘要 -> 选择目标 -> `step/play/pause` 推进 -> 观察新反馈。
-- AC-3: 在带 viewer auth bootstrap 的 `software_safe` 页面中，玩家可对选中 Agent 发起最小 `prompt/chat/rollback` 闭环，且 `__AW_TEST__` 能返回对应 ack/error 反馈。
+- AC-3: 在带 viewer auth bootstrap 的 `software_safe` 页面中，玩家可对选中 Agent 发起最小 `prompt/chat/rollback` 闭环；prompt override 编辑表单可作为显式 settings toggle 默认收起，但 `__AW_TEST__` 与对应 ack/error 反馈必须保持可用。
 - AC-4: `__AW_TEST__.getState()` 能明确区分 `standard` / `software_safe`，并给出主入口路由原因或显式 visual-mode 原因。
 - AC-5: `oasis7` 与 testing/manual 口径必须把 `software_safe` 写成浏览器正式主路径，把 `standard` 写成 visual QA/screenshot 路径，而不是相反。
 - AC-6: `standard` 在硬件可用时仍可独立验证高保真画面，但其 PASS 不得替代 `software_safe` 的 formal Web gameplay PASS。

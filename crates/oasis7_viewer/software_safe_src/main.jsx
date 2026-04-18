@@ -728,6 +728,7 @@ function InteractionPanel() {
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
       .slice(0, 12);
   const interactionEnabled = () => promptCapability().enabled;
+  const promptOverridesVisible = () => !!core.state.promptOverridesVisible;
   const assetLaneStatusText = () =>
     mainTokenTransferCapability().enabled
       ? tr(locale(), "仅预览", "preview_only")
@@ -740,6 +741,22 @@ function InteractionPanel() {
           "Contract marks main_token_transfer as strong_auth-capable on this lane, but software_safe still exposes no transfer form here.",
         )
       : mainTokenTransferCapability().reason;
+  const promptSettingsSummary = () =>
+    promptOverridesVisible()
+      ? tr(
+          locale(),
+          "高级 Prompt 设置已展开；你可以继续做 preview/apply/rollback，页面也会显示最近一次反馈。",
+          "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.",
+        )
+      : tr(
+          locale(),
+          "Prompt Overrides 默认收起，避免把 operator 级编辑控件直接堆在主入口。显式展开后仍可做 preview/apply/rollback，`__AW_TEST__.sendPromptControl(...)` 也保持可用。",
+          "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.",
+        );
+  const promptSettingsButtonLabel = () =>
+    promptOverridesVisible()
+      ? tr(locale(), "收起 Prompt Overrides", "Hide Prompt Overrides")
+      : tr(locale(), "显示 Prompt Overrides", "Show Prompt Overrides");
 
   if (!agentId()) {
     return <EmptyState>{tr(locale(), "先选中一个 Agent，才能解锁 prompt/chat 控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
@@ -796,126 +813,147 @@ function InteractionPanel() {
         </Badge>
       </div>
       <EmptyState>{assetLaneDetail()}</EmptyState>
-      <PanelSection title="Prompt Overrides">
-        <div class="feedback-detail">{promptVersionState().summary}</div>
-        <div class="feedback-detail">{promptVersionState().detail}</div>
-        <Show
-          when={
-            authSurface().capabilities.prompt_control.enabled
-            && String(core.state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
-          }
-        >
-          <div class="field">
-            <label for="strong-auth-approval-code">{tr(locale(), "后端审批码", "Backend Approval Code")}</label>
-            <input
-              id="strong-auth-approval-code"
-              type="password"
-              autocomplete="off"
-              value={core.state.strongAuth.approvalCode || ""}
-              onInput={(event) => {
-                core.state.strongAuth.approvalCode = String(event.currentTarget.value || "");
-              }}
-            />
-          </div>
-        </Show>
-        <div class="field">
-          <label for="prompt-system">{tr(locale(), "System Prompt 覆盖", "System Prompt Override")}</label>
-          <textarea
-            id="prompt-system"
-            rows="4"
-            disabled={!promptCapability().enabled}
-            value={core.state.promptDraft.systemPrompt}
-            onInput={(event) => {
-              core.state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
-              core.state.promptDraft.dirty = true;
-            }}
-          />
+      <PanelSection title={tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings")}>
+        <div class="badge-row">
+          <Badge class={promptOverridesVisible() ? "badge badge--good" : "badge"}>
+            {promptOverridesVisible()
+              ? tr(locale(), "状态=已展开", "state=expanded")
+              : tr(locale(), "状态=默认收起", "state=hidden_by_default")}
+          </Badge>
+          <Badge>{tr(locale(), "本地设置持久化", "locally persisted")}</Badge>
         </div>
-        <div class="field">
-          <label for="prompt-short">{tr(locale(), "短期目标覆盖", "Short-Term Goal Override")}</label>
-          <textarea
-            id="prompt-short"
-            rows="3"
-            disabled={!promptCapability().enabled}
-            value={core.state.promptDraft.shortTermGoal}
-            onInput={(event) => {
-              core.state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
-              core.state.promptDraft.dirty = true;
-            }}
-          />
-        </div>
-        <div class="field">
-          <label for="prompt-long">{tr(locale(), "长期目标覆盖", "Long-Term Goal Override")}</label>
-          <textarea
-            id="prompt-long"
-            rows="3"
-            disabled={!promptCapability().enabled}
-            value={core.state.promptDraft.longTermGoal}
-            onInput={(event) => {
-              core.state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
-              core.state.promptDraft.dirty = true;
-            }}
-          />
-        </div>
+        <EmptyState>{promptSettingsSummary()}</EmptyState>
         <div class="toolbar">
           <button
-            data-prompt-action="preview"
-            disabled={!promptCapability().enabled}
-            onClick={() => core.sendPromptControl("preview", null)}
+            data-prompt-visibility-toggle="1"
+            onClick={() => core.togglePromptOverridesVisible()}
           >
-            {tr(locale(), "预览 Prompt", "Preview Prompt")}
-          </button>
-          <button
-            data-prompt-action="apply"
-            disabled={!promptCapability().enabled}
-            onClick={() => core.sendPromptControl("apply", null)}
-          >
-            {tr(locale(), "应用 Prompt", "Apply Prompt")}
+            {promptSettingsButtonLabel()}
           </button>
         </div>
-        <div class="toolbar">
-          <div class="field" style="margin:0; min-width:180px; flex:1;">
-            <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
-            <input
-              id="prompt-rollback-version"
-              type="number"
-              min="0"
-              step="1"
-              disabled={!promptCapability().enabled}
-              value={Number(core.state.promptDraft.rollbackTargetVersion || 0)}
-              onInput={(event) => {
-                const nextValue = Number(event.currentTarget.value || 0);
-                core.state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
-                core.requestRender();
-              }}
-            />
-          </div>
-          <button
-            data-prompt-action="rollback"
-            disabled={!promptCapability().enabled}
-            onClick={() => {
-              core.sendPromptControl("rollback", {
-                toVersion: Number(core.state.promptDraft.rollbackTargetVersion || 0),
-              });
-            }}
-          >
-            {tr(locale(), "回滚 Prompt", "Rollback Prompt")}
-          </button>
-        </div>
-        <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有 Prompt 反馈。", "No prompt feedback yet.")}</EmptyState>}>
-          {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
-        </Show>
-        <Show when={core.state.strongAuth.lastGrantActionId}>
-          <EmptyState>
-            {`lastGrant=${core.state.strongAuth.lastGrantActionId} expiresAt=${
-              core.state.strongAuth.lastGrantExpiresAtUnixMs || "-"
-            }`}
-          </EmptyState>
-        </Show>
-        <Show when={core.state.strongAuth.lastGrantError}>
-          <EmptyState style="color:var(--bad);">{core.state.strongAuth.lastGrantError}</EmptyState>
-        </Show>
       </PanelSection>
+      <Show when={promptOverridesVisible()}>
+        <PanelSection title="Prompt Overrides">
+          <div class="feedback-detail">{promptVersionState().summary}</div>
+          <div class="feedback-detail">{promptVersionState().detail}</div>
+          <Show
+            when={
+              authSurface().capabilities.prompt_control.enabled
+              && String(core.state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+            }
+          >
+            <div class="field">
+              <label for="strong-auth-approval-code">{tr(locale(), "后端审批码", "Backend Approval Code")}</label>
+              <input
+                id="strong-auth-approval-code"
+                type="password"
+                autocomplete="off"
+                value={core.state.strongAuth.approvalCode || ""}
+                onInput={(event) => {
+                  core.state.strongAuth.approvalCode = String(event.currentTarget.value || "");
+                }}
+              />
+            </div>
+          </Show>
+          <div class="field">
+            <label for="prompt-system">{tr(locale(), "System Prompt 覆盖", "System Prompt Override")}</label>
+            <textarea
+              id="prompt-system"
+              rows="4"
+              disabled={!promptCapability().enabled}
+              value={core.state.promptDraft.systemPrompt}
+              onInput={(event) => {
+                core.state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
+                core.state.promptDraft.dirty = true;
+              }}
+            />
+          </div>
+          <div class="field">
+            <label for="prompt-short">{tr(locale(), "短期目标覆盖", "Short-Term Goal Override")}</label>
+            <textarea
+              id="prompt-short"
+              rows="3"
+              disabled={!promptCapability().enabled}
+              value={core.state.promptDraft.shortTermGoal}
+              onInput={(event) => {
+                core.state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
+                core.state.promptDraft.dirty = true;
+              }}
+            />
+          </div>
+          <div class="field">
+            <label for="prompt-long">{tr(locale(), "长期目标覆盖", "Long-Term Goal Override")}</label>
+            <textarea
+              id="prompt-long"
+              rows="3"
+              disabled={!promptCapability().enabled}
+              value={core.state.promptDraft.longTermGoal}
+              onInput={(event) => {
+                core.state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
+                core.state.promptDraft.dirty = true;
+              }}
+            />
+          </div>
+          <div class="toolbar">
+            <button
+              data-prompt-action="preview"
+              disabled={!promptCapability().enabled}
+              onClick={() => core.sendPromptControl("preview", null)}
+            >
+              {tr(locale(), "预览 Prompt", "Preview Prompt")}
+            </button>
+            <button
+              data-prompt-action="apply"
+              disabled={!promptCapability().enabled}
+              onClick={() => core.sendPromptControl("apply", null)}
+            >
+              {tr(locale(), "应用 Prompt", "Apply Prompt")}
+            </button>
+          </div>
+          <div class="toolbar">
+            <div class="field" style="margin:0; min-width:180px; flex:1;">
+              <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
+              <input
+                id="prompt-rollback-version"
+                type="number"
+                min="0"
+                step="1"
+                disabled={!promptCapability().enabled}
+                value={Number(core.state.promptDraft.rollbackTargetVersion || 0)}
+                onInput={(event) => {
+                  const nextValue = Number(event.currentTarget.value || 0);
+                  core.state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
+                  core.requestRender();
+                }}
+              />
+            </div>
+            <button
+              data-prompt-action="rollback"
+              disabled={!promptCapability().enabled}
+              onClick={() => {
+                core.sendPromptControl("rollback", {
+                  toVersion: Number(core.state.promptDraft.rollbackTargetVersion || 0),
+                });
+              }}
+            >
+              {tr(locale(), "回滚 Prompt", "Rollback Prompt")}
+            </button>
+          </div>
+          <Show when={promptFeedback()} fallback={<EmptyState>{tr(locale(), "还没有 Prompt 反馈。", "No prompt feedback yet.")}</EmptyState>}>
+            {(feedback) => <FeedbackCard feedback={feedback()} display={promptFeedbackDisplay()} />}
+          </Show>
+          <Show when={core.state.strongAuth.lastGrantActionId}>
+            <EmptyState>
+              {`lastGrant=${core.state.strongAuth.lastGrantActionId} expiresAt=${
+                core.state.strongAuth.lastGrantExpiresAtUnixMs || "-"
+              }`}
+            </EmptyState>
+          </Show>
+          <Show when={core.state.strongAuth.lastGrantError}>
+            <EmptyState style="color:var(--bad);">{core.state.strongAuth.lastGrantError}</EmptyState>
+          </Show>
+        </PanelSection>
+      </Show>
       <PanelSection title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}>
         <div class="badge-row">
           <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
