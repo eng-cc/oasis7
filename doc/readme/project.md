@@ -936,6 +936,7 @@
     - `file site/social/xiaohongshu-future-ownership-cover.png site/social/xiaohongshu-future-ownership-carousel-slide1.png site/social/xiaohongshu-future-ownership-carousel-slide2.png site/social/xiaohongshu-future-ownership-carousel-slide3.png site/social/xiaohongshu-future-ownership-carousel-slide4.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立热点路径治理专题三件套、新增 `doc/readme/governance/README.md` 作为 canonical 子域入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 
 ## 依赖
 - `doc/readme/prd.index.md`、`README.md`、`world-rule.md`、`testing-manual.md`
@@ -943,9 +944,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-15
+- 更新日期: 2026-04-18
 - 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务；若后续继续扩展公开定位或进入真实发布，再新开独立任务。）
+- 下一任务: 无（当前模块主项目无未完成任务；若后续继续做 `governance/` 季度复核或簇内治理，再新开独立任务。）
+- 最新完成: `readme-governance-path-governance`（已为 `doc/readme/governance/` 补齐 canonical 子域入口 `doc/readme/governance/README.md`，并把模块首屏从“若干具体 liveops/operator 文档直链”收口为“先进入热点子域再按主题分流”。）
 - 最新完成: `game-positioning-alignment`（已将根 README、世界规则入口与站点首页中英首页的公开主定位统一收口为“文明模拟游戏”，并保持技术预览 / 尚不可玩边界不变。）
 - 最新完成: `TASK-README-080`（已将第十三篇的多轮文案迭代、共同参与主题收口、封面与 4 页轮播资产统一折叠到同一任务追踪中，PR 只保留一个 task 文档入口。）
 - 最新完成: `TASK-README-074/073`（已把普通 merged PR 的 contributor reward ceiling 收紧到 `150 OC`，并对 planned grant 做 actual-value review，下调过高计划值后同步回写 reward ledger 相关文档。）

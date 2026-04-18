@@ -1,35 +1,36 @@
 # readme PRD 文件级索引
 
-审计轮次: 12
+审计轮次: 13
 
-更新时间：2026-04-14
+更新时间：2026-04-18
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
 - 模块设计总览：`doc/readme/design.md`
 - 模块标准执行入口：`doc/readme/project.md`
-- 当前高频 liveops 入口：`doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`
+- 当前热点子域入口：`doc/readme/governance/README.md`
 
 ## 首读分流
 - 想先回答 README 模块在管什么、哪些内容属于正式对外口径：先读 `doc/readme/prd.md`
 - 想先回答当前在推进什么、哪些治理或运营专题仍是 active：先读 `doc/readme/project.md`
-- 想直接进入高频渠道运营入口：先读 `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`、`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` 与 `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
+- 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-13）
-- `doc/readme/`：140 份文件
-- `doc/readme/governance/`：96 份文件
+## 密度快照（2026-04-18）
+- `doc/readme/`：141 份文件
+- `doc/readme/governance/`：97 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 96 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
+| `governance/` | 97 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 12 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
 ## 活跃补充文档
+- `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流读者。
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
 - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
@@ -119,4 +120,4 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
-- 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。
+- `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。

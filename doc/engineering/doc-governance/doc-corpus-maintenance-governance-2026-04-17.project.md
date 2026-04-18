@@ -11,9 +11,10 @@
 - [x] world-simulator-viewer-path-followup (PRD-ENGINEERING-025/027) [test_tier_required]: 作为第二条 follow-up，建立 `world-simulator-viewer-path-governance` 专题并新增 `doc/world-simulator/viewer/README.md`，把 `world-simulator/viewer` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_7d222c2f13454b23889baad383fbdf7e.yaml
 - [x] p2p-node-path-followup (PRD-ENGINEERING-025/028) [test_tier_required]: 作为第三条 follow-up，建立 `p2p-node-path-governance` 专题并新增 `doc/p2p/node/README.md`，把 `p2p/node` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_533ac29c20a84ee8a5e6914839ad0761.yaml
 - [x] testing-evidence-path-followup (PRD-ENGINEERING-025/029) [test_tier_required]: 作为第四条 follow-up，建立 `testing-evidence-path-governance` 专题并新增 `doc/testing/evidence/README.md`，把 `testing/evidence` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_38707b4060b54e5e8b8ebcdb8d18a602.yaml
+- [x] readme-governance-path-followup (PRD-ENGINEERING-025/030) [test_tier_required]: 作为第五条 follow-up，建立 `readme-governance-path-governance` 专题并新增 `doc/readme/governance/README.md`，把 `readme/governance` 从“热点路径内无首读入口”收口到按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流的 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 
 说明:
-`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node` 与 `testing/evidence` 路径级治理都已完成首批入口收口。后续若要做季度复核或继续扩 `ci/longrun` 类路径治理，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
+`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。后续若要做季度复核或继续扩 `ci/longrun`、`gap`、`production` 等路径治理，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -28,5 +29,5 @@
 - 当前阶段: M2 已完成
 - 阶段说明: formalize + report + first four follow-ups closed
 - 阻塞项: 无
-- 最近更新: 2026-04-17
-- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 在默认阅读面层面已完成收口，`doc/devlog`、`world-simulator/viewer`、`p2p/node` 与 `testing/evidence` 也已完成首批 follow-up。当前这一轮后续应转入季度复核，不再回到“只改 README/首屏”的处理方式。
+- 最近更新: 2026-04-18
+- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 在默认阅读面层面已完成收口，`doc/devlog`、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 也已完成首批 follow-up。当前这一轮后续应转入季度复核，不再回到“只改 README/首屏”的处理方式。
