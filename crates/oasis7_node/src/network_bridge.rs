@@ -298,6 +298,14 @@ impl ReplicationNetworkEndpoint {
         &self,
         request: &FetchCommitRequest,
     ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        if let Some(lane) = classify_network_protocol(REPLICATION_FETCH_COMMIT_PROTOCOL) {
+            validate_lane_access(
+                &self.network_policy,
+                lane,
+                NetworkLaneOperation::Request,
+                REPLICATION_FETCH_COMMIT_PROTOCOL,
+            )?;
+        }
         if let Some(response) = self.cached_fetch_commit_success_response(request) {
             return Ok(GapSyncFetchCommitResponse {
                 response,
@@ -462,8 +470,46 @@ fn cacheable_fetch_commit_success_response(
     }
     let mut cached = response.clone();
     let message = cached.message.as_mut()?;
-    message.payload.clear();
+    message.payload = Vec::new();
     Some(cached)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oasis7_distfs::FileReplicationRecord;
+
+    #[test]
+    fn cacheable_fetch_commit_success_response_drops_payload_allocation() {
+        let mut payload = Vec::with_capacity(4096);
+        payload.extend_from_slice(b"replicated-commit-payload");
+        let response = FetchCommitResponse {
+            found: true,
+            message: Some(GossipReplicationMessage {
+                version: 1,
+                world_id: "world-cache".to_string(),
+                node_id: "node-a".to_string(),
+                record: FileReplicationRecord {
+                    world_id: "world-cache".to_string(),
+                    writer_id: "writer-a".to_string(),
+                    writer_epoch: 1,
+                    sequence: 1,
+                    path: "consensus/commits/00000000000000000001.json".to_string(),
+                    content_hash: "hash-1".to_string(),
+                    size_bytes: payload.len() as u64,
+                    updated_at_ms: 1,
+                },
+                payload,
+                public_key_hex: None,
+                signature_hex: None,
+            }),
+        };
+
+        let cached = cacheable_fetch_commit_success_response(&response).expect("cached response");
+        let payload = &cached.message.expect("cached message").payload;
+        assert!(payload.is_empty());
+        assert_eq!(payload.capacity(), 0);
+    }
 }
 
 pub(crate) struct ConsensusNetworkEndpoint {
