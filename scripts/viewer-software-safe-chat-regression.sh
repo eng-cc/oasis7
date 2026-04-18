@@ -443,6 +443,11 @@ wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.selectedId === ${AGEN
   echo "error: failed to select agent ${AGENT_ID}" >&2
   exit 1
 }
+ab_eval "$session" "window.__AW_TEST__.setPromptOverridesVisible(true)" >>"$ab_log" 2>&1
+wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.promptOverridesVisible === true && !!document.getElementById('prompt-short'))()" 6000 || {
+  echo "error: prompt overrides settings failed to expand" >&2
+  exit 1
+}
 
 ab_eval "$session" "window.__AW_TEST__.sendPromptControl('apply', { agentId: ${AGENT_ID@Q}, shortTermGoal: ${PROMPT_GOAL@Q} })" >>"$ab_log" 2>&1
 wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.lastPromptFeedback?.stage === 'apply_ack')()" 8000 || {

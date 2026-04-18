@@ -8,6 +8,7 @@ const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
 const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
 const UI_LOCALE_STORAGE_PREFIX = "oasis7.software_safe.locale.v1";
+const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.software_safe.prompt_overrides_visible.v1";
 const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
 const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
 const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
@@ -32,6 +33,7 @@ const textEncoder = new TextEncoder();
 
 export const state = {
   uiLocale: "en",
+  promptOverridesVisible: false,
   connectionStatus: "connecting",
   logicalTime: 0,
   eventSeq: 0,
@@ -171,6 +173,26 @@ function resolveInitialUiLocale() {
     || "en";
 }
 
+function promptOverridesVisibilityStorageKey() {
+  return `${PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX}:${window.location.pathname || "software_safe.html"}`;
+}
+
+function persistPromptOverridesVisibility(visible) {
+  try {
+    window.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
+  } catch (_) {
+  }
+}
+
+function resolveStoredPromptOverridesVisibility() {
+  try {
+    const raw = window.localStorage?.getItem(promptOverridesVisibilityStorageKey());
+    return raw === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
 function applyUiLocaleToDocument(locale) {
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
 }
@@ -197,6 +219,17 @@ export function setSoftwareSafeLocale(locale) {
 
 export function toggleSoftwareSafeLocale() {
   return setSoftwareSafeLocale(state.uiLocale === "zh" ? "en" : "zh");
+}
+
+export function setPromptOverridesVisible(visible) {
+  state.promptOverridesVisible = !!visible;
+  persistPromptOverridesVisibility(state.promptOverridesVisible);
+  render();
+  return state.promptOverridesVisible;
+}
+
+export function togglePromptOverridesVisible() {
+  return setPromptOverridesVisible(!state.promptOverridesVisible);
 }
 
 export function getSelectedSearch() {
@@ -1214,6 +1247,7 @@ function getState() {
     vendor: state.vendor,
     webglVersion: state.webglVersion,
     uiLocale: state.uiLocale,
+    promptOverridesVisible: state.promptOverridesVisible,
     controlProfile: state.controlProfile,
     debugViewerMode: state.debugViewerMode,
     debugViewerStatus: state.debugViewerStatus,
@@ -3750,6 +3784,8 @@ function installTestApi() {
     select,
     sendAgentChat,
     sendPromptControl,
+    setPromptOverridesVisible,
+    togglePromptOverridesVisible,
     setStrongAuthApprovalCode,
     logoutHostedPlayerSession,
     retryHostedPlayerIdentityIssue,
@@ -3759,6 +3795,7 @@ function installTestApi() {
 
 function bootstrap() {
   state.uiLocale = resolveInitialUiLocale();
+  state.promptOverridesVisible = resolveStoredPromptOverridesVisibility();
   applyUiLocaleToDocument(state.uiLocale);
   Object.assign(state, detectRendererMeta());
   state.hostedAccess = resolveHostedAccessHint();
