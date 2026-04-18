@@ -166,6 +166,7 @@ pub(super) struct ExplorerP1State {
     pub(super) mempool_cursor: usize,
     pub(super) mempool_limit: usize,
     pub(super) mempool_response: Option<WebExplorerMempoolResponse>,
+    pub(super) selected_mempool_tx: Option<WebExplorerTxItem>,
     pub(super) pending_mempool_refresh: bool,
 }
 
@@ -193,12 +194,13 @@ impl Default for ExplorerP1State {
             mempool_cursor: 0,
             mempool_limit: EXPLORER_DEFAULT_LIMIT,
             mempool_response: None,
+            selected_mempool_tx: None,
             pending_mempool_refresh: false,
         }
     }
 }
 
-fn explorer_mempool_status_filter_text(
+pub(super) fn explorer_mempool_status_filter_text(
     ui_language: UiLanguage,
     filter: ExplorerMempoolStatusFilter,
 ) -> &'static str {
@@ -347,6 +349,7 @@ impl ClientLauncherApp {
                 self.explorer_panel_state.p1.mempool_status_filter =
                     ExplorerMempoolStatusFilter::All;
                 self.explorer_panel_state.p1.mempool_cursor = 0;
+                self.explorer_panel_state.p1.selected_mempool_tx = None;
                 self.explorer_panel_state.p1.pending_mempool_refresh = true;
             }
         }
@@ -422,8 +425,16 @@ impl ClientLauncherApp {
 
     pub(super) fn apply_explorer_mempool_response(&mut self, response: WebExplorerMempoolResponse) {
         if response.ok {
+            let selected_hash = self
+                .explorer_panel_state
+                .p1
+                .selected_mempool_tx
+                .as_ref()
+                .map(|tx| tx.tx_hash.clone());
             self.explorer_panel_state.p1.mempool_cursor = response.cursor;
             self.explorer_panel_state.p1.mempool_limit = response.limit;
+            self.explorer_panel_state.p1.selected_mempool_tx = selected_hash
+                .and_then(|hash| response.items.iter().find(|tx| tx.tx_hash == hash).cloned());
             self.explorer_panel_state.p1.mempool_response = Some(response);
         } else {
             self.log_explorer_error(
@@ -435,436 +446,677 @@ impl ClientLauncherApp {
     }
 
     pub(super) fn render_address_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(self.tr("地址查询", "Address"));
-        ui.horizontal_wrapped(|ui| {
-            ui.label("account_id");
-            ui.text_edit_singleline(&mut self.explorer_panel_state.p1.address_account_input);
-            if ui.button(self.tr("查询地址", "Query Address")).clicked() {
-                self.explorer_panel_state.p1.address_cursor = 0;
-                self.explorer_panel_state.p1.pending_address_refresh = true;
-            }
-            if ui.button(self.tr("清空", "Clear")).clicked() {
-                self.explorer_panel_state.p1.address_account_input.clear();
-                self.explorer_panel_state.p1.address_cursor = 0;
-                self.explorer_panel_state.p1.address_response = None;
-            }
-        });
-
-        if let Some(response) = self.explorer_panel_state.p1.address_response.clone() {
-            ui.small(format!(
-                "observed_at={} | cursor={} limit={} total={}",
-                response.observed_at_unix_ms, response.cursor, response.limit, response.total,
-            ));
-
-            if response.ok {
-                ui.small(format!(
-                    "account={} | liquid={} | vested={} | last_nonce={} | next_nonce_hint={}",
-                    response.account_id.as_deref().unwrap_or("n/a"),
-                    response.liquid_balance,
-                    response.vested_balance,
-                    response
-                        .last_transfer_nonce
-                        .map(|value| value.to_string())
-                        .unwrap_or_else(|| "n/a".to_string()),
-                    response.next_nonce_hint,
-                ));
-
+        Self::explorer_card(
+            ui,
+            self.tr("Address", "Address"),
+            self.tr(
+                "地址页优先展示账户快照，再看关联交易流。",
+                "Address view is summary-first: account snapshot first, related transactions second.",
+            ),
+            |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    let prev_disabled = response.cursor == 0;
-                    if ui
-                        .add_enabled(!prev_disabled, egui::Button::new(self.tr("上一页", "Prev")))
-                        .clicked()
-                    {
-                        self.explorer_panel_state.p1.address_cursor = self
-                            .explorer_panel_state
-                            .p1
-                            .address_cursor
-                            .saturating_sub(self.explorer_panel_state.p1.address_limit);
+                    ui.label("account_id");
+                    ui.text_edit_singleline(&mut self.explorer_panel_state.p1.address_account_input);
+                    if ui.button(self.tr("查询地址", "Query Address")).clicked() {
+                        self.explorer_panel_state.p1.address_cursor = 0;
                         self.explorer_panel_state.p1.pending_address_refresh = true;
                     }
-                    let next_disabled = response.next_cursor.is_none();
-                    if ui
-                        .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
-                        .clicked()
-                    {
-                        if let Some(next_cursor) = response.next_cursor {
-                            self.explorer_panel_state.p1.address_cursor = next_cursor;
-                            self.explorer_panel_state.p1.pending_address_refresh = true;
-                        }
+                    if ui.button(self.tr("清空", "Clear")).clicked() {
+                        self.explorer_panel_state.p1.address_account_input.clear();
+                        self.explorer_panel_state.p1.address_cursor = 0;
+                        self.explorer_panel_state.p1.address_response = None;
+                    }
+                    if let Some(response) = self.explorer_panel_state.p1.address_response.as_ref() {
+                        Self::explorer_status_chip(
+                            ui,
+                            format!(
+                                "cursor {} / limit {} / total {}",
+                                response.cursor, response.limit, response.total
+                            ),
+                            egui::Color32::from_rgb(112, 121, 130),
+                        );
                     }
                 });
+            },
+        );
 
-                let mut clicked_hash = None;
-                egui::ScrollArea::vertical()
-                    .max_height(220.0)
-                    .show(ui, |ui| {
-                        for tx in &response.items {
+        ui.add_space(6.0);
+        if let Some(response) = self.explorer_panel_state.p1.address_response.clone() {
+            if response.ok {
+                ui.columns(4, |cols| {
+                    Self::explorer_metric_card(
+                        &mut cols[0],
+                        self.tr("账户", "Account"),
+                        response
+                            .account_id
+                            .clone()
+                            .unwrap_or_else(|| "n/a".to_string()),
+                        Some(self.tr("query target", "query target").to_string()),
+                        egui::Color32::from_rgb(74, 116, 168),
+                    );
+                    Self::explorer_metric_card(
+                        &mut cols[1],
+                        self.tr("流动余额", "Liquid"),
+                        response.liquid_balance.to_string(),
+                        None,
+                        egui::Color32::from_rgb(62, 152, 92),
+                    );
+                    Self::explorer_metric_card(
+                        &mut cols[2],
+                        self.tr("冻结余额", "Vested"),
+                        response.vested_balance.to_string(),
+                        None,
+                        egui::Color32::from_rgb(201, 146, 44),
+                    );
+                    Self::explorer_metric_card(
+                        &mut cols[3],
+                        self.tr("下一 nonce", "Next Nonce"),
+                        response.next_nonce_hint.to_string(),
+                        Some(
+                            response
+                                .last_transfer_nonce
+                                .map(|value| format!("last {}", value))
+                                .unwrap_or_else(|| "last n/a".to_string()),
+                        ),
+                        egui::Color32::from_rgb(81, 104, 132),
+                    );
+                });
+
+                ui.add_space(6.0);
+                ui.columns(2, |cols| {
+                    Self::explorer_card(
+                        &mut cols[0],
+                        self.tr("地址交易流", "Address Transactions"),
+                        self.tr(
+                            "按该账户命中的交易集，可直接跳转全局 Txs inspector。",
+                            "Transactions matching this account. Jump into the global Txs inspector when needed.",
+                        ),
+                        |ui| {
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(
-                                    egui::RichText::new(format!(
-                                        "[{}]",
-                                        self.explorer_lifecycle_text(tx.status)
-                                    ))
-                                    .color(self.explorer_lifecycle_color(tx.status)),
-                                );
-                                let line = format!(
-                                    "{} | {} -> {} | amount={} | {}",
-                                    short_hash(tx.tx_hash.as_str()),
-                                    tx.from_account_id,
-                                    tx.to_account_id,
-                                    tx.amount,
-                                    tx.submitted_at_unix_ms,
-                                );
-                                if ui.selectable_label(false, line).clicked() {
-                                    clicked_hash = Some(tx.tx_hash.clone());
+                                let prev_disabled = response.cursor == 0;
+                                if ui
+                                    .add_enabled(
+                                        !prev_disabled,
+                                        egui::Button::new(self.tr("上一页", "Prev")),
+                                    )
+                                    .clicked()
+                                {
+                                    self.explorer_panel_state.p1.address_cursor = self
+                                        .explorer_panel_state
+                                        .p1
+                                        .address_cursor
+                                        .saturating_sub(self.explorer_panel_state.p1.address_limit);
+                                    self.explorer_panel_state.p1.pending_address_refresh = true;
+                                }
+                                let next_disabled = response.next_cursor.is_none();
+                                if ui
+                                    .add_enabled(
+                                        !next_disabled,
+                                        egui::Button::new(self.tr("下一页", "Next")),
+                                    )
+                                    .clicked()
+                                {
+                                    if let Some(next_cursor) = response.next_cursor {
+                                        self.explorer_panel_state.p1.address_cursor = next_cursor;
+                                        self.explorer_panel_state.p1.pending_address_refresh = true;
+                                    }
                                 }
                             });
-                        }
-                        if response.items.is_empty() {
-                            ui.small(self.tr("暂无地址交易", "No address txs"));
-                        }
-                    });
-                if let Some(tx_hash) = clicked_hash {
-                    self.explorer_panel_state.active_tab = ExplorerTab::Txs;
-                    self.explorer_panel_state.tx_hash_input = tx_hash.clone();
-                    self.explorer_panel_state.pending_tx_hash = Some(tx_hash);
-                    self.explorer_panel_state.pending_tx_action_id = None;
-                    self.explorer_panel_state.pending_tx_refresh = true;
-                }
+
+                            let mut clicked_hash = None;
+                            egui::ScrollArea::vertical()
+                                .max_height(420.0)
+                                .show(ui, |ui| {
+                                    for tx in &response.items {
+                                        if Self::render_tx_row_card(
+                                            ui,
+                                            tx,
+                                            false,
+                                            self.explorer_lifecycle_text(tx.status),
+                                            self.explorer_lifecycle_color(tx.status),
+                                        ) {
+                                            clicked_hash = Some(tx.tx_hash.clone());
+                                        }
+                                        ui.add_space(4.0);
+                                    }
+                                    if response.items.is_empty() {
+                                        Self::render_explorer_empty_panel(
+                                            ui,
+                                            self.tr("暂无地址交易", "No Address Transactions"),
+                                            self.tr(
+                                                "该地址当前没有命中任何 explorer 交易记录。",
+                                                "This address currently has no matching explorer transaction records.",
+                                            ),
+                                        );
+                                    }
+                                });
+                            if let Some(tx_hash) = clicked_hash {
+                                self.explorer_panel_state.active_tab = ExplorerTab::Txs;
+                                self.explorer_panel_state.tx_hash_input = tx_hash.clone();
+                                self.explorer_panel_state.pending_tx_hash = Some(tx_hash);
+                                self.explorer_panel_state.pending_tx_action_id = None;
+                                self.explorer_panel_state.pending_tx_refresh = true;
+                            }
+                        },
+                    );
+
+                    Self::explorer_card(
+                        &mut cols[1],
+                        self.tr("地址检查板", "Address Inspector"),
+                        self.tr(
+                            "用于核对余额、nonce 和本次查询元信息。",
+                            "Inspect balances, nonce hints, and query metadata.",
+                        ),
+                        |ui| {
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "account_id",
+                                response.account_id.as_deref().unwrap_or("n/a"),
+                                true,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "liquid_balance",
+                                &response.liquid_balance.to_string(),
+                                false,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "vested_balance",
+                                &response.vested_balance.to_string(),
+                                false,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "last_transfer_nonce",
+                                &response
+                                    .last_transfer_nonce
+                                    .map(|value| value.to_string())
+                                    .unwrap_or_else(|| "n/a".to_string()),
+                                false,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "next_nonce_hint",
+                                &response.next_nonce_hint.to_string(),
+                                false,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "observed_at",
+                                &response.observed_at_unix_ms.to_string(),
+                                false,
+                            );
+                        },
+                    );
+                });
             } else {
-                ui.small(
-                    egui::RichText::new(format!(
+                Self::render_explorer_error_panel(
+                    ui,
+                    self.tr("地址查询失败", "Address Query Failed"),
+                    format!(
                         "{} ({})",
                         response.error.as_deref().unwrap_or("n/a"),
                         response.error_code.as_deref().unwrap_or("unknown")
-                    ))
-                    .color(egui::Color32::from_rgb(196, 84, 84)),
+                    ),
                 );
             }
         } else {
-            ui.small(self.tr("暂无地址数据", "No address data"));
+            Self::render_explorer_empty_panel(
+                ui,
+                self.tr("暂无地址数据", "No Address Data"),
+                self.tr(
+                    "输入一个 account_id 后即可读取余额、nonce 和关联交易。",
+                    "Enter an account_id to inspect balances, nonce hints, and related transactions.",
+                ),
+            );
         }
     }
 
     pub(super) fn render_contracts_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(self.tr("系统合约", "Contracts"));
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .button(self.tr("刷新合约目录", "Refresh Contracts"))
-                .clicked()
-            {
-                self.explorer_panel_state.p1.pending_contracts_refresh = true;
-            }
-            ui.label("contract_id");
-            ui.text_edit_singleline(&mut self.explorer_panel_state.p1.contract_id_input);
-            if ui.button(self.tr("查询合约", "Query Contract")).clicked() {
-                self.explorer_panel_state.p1.pending_contract_refresh = true;
-            }
-            if ui.button(self.tr("清空", "Clear")).clicked() {
-                self.explorer_panel_state.p1.contract_id_input.clear();
-                self.explorer_panel_state.p1.contract_response = None;
-            }
-        });
-
-        if let Some(response) = self.explorer_panel_state.p1.contracts_response.clone() {
-            ui.small(format!(
-                "observed_at={} | cursor={} limit={} total={}",
-                response.observed_at_unix_ms, response.cursor, response.limit, response.total,
-            ));
-            if response.ok {
+        Self::explorer_card(
+            ui,
+            self.tr("Contracts", "Contracts"),
+            self.tr(
+                "系统合约目录 + 单合约详情检查板。",
+                "System contract directory plus a single-contract inspector.",
+            ),
+            |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    let prev_disabled = response.cursor == 0;
                     if ui
-                        .add_enabled(!prev_disabled, egui::Button::new(self.tr("上一页", "Prev")))
+                        .button(self.tr("刷新合约目录", "Refresh Contracts"))
                         .clicked()
                     {
-                        self.explorer_panel_state.p1.contracts_cursor = self
-                            .explorer_panel_state
-                            .p1
-                            .contracts_cursor
-                            .saturating_sub(self.explorer_panel_state.p1.contracts_limit);
                         self.explorer_panel_state.p1.pending_contracts_refresh = true;
                     }
-                    let next_disabled = response.next_cursor.is_none();
-                    if ui
-                        .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
-                        .clicked()
+                    ui.label("contract_id");
+                    ui.text_edit_singleline(&mut self.explorer_panel_state.p1.contract_id_input);
+                    if ui.button(self.tr("查询合约", "Query Contract")).clicked() {
+                        self.explorer_panel_state.p1.pending_contract_refresh = true;
+                    }
+                    if ui.button(self.tr("清空", "Clear")).clicked() {
+                        self.explorer_panel_state.p1.contract_id_input.clear();
+                        self.explorer_panel_state.p1.contract_response = None;
+                    }
+                    if let Some(response) = self.explorer_panel_state.p1.contracts_response.as_ref()
                     {
-                        if let Some(next_cursor) = response.next_cursor {
-                            self.explorer_panel_state.p1.contracts_cursor = next_cursor;
-                            self.explorer_panel_state.p1.pending_contracts_refresh = true;
-                        }
-                    }
-                });
-
-                let mut selected_contract_id = None;
-                egui::ScrollArea::vertical()
-                    .max_height(180.0)
-                    .show(ui, |ui| {
-                        for contract in &response.items {
-                            let line = format!(
-                                "{} [{}] {} -> {} | {}",
-                                contract.contract_id,
-                                contract.status,
-                                contract.creator_agent_id,
-                                contract.counterparty_agent_id,
-                                contract.summary,
-                            );
-                            if ui.selectable_label(false, line).clicked() {
-                                selected_contract_id = Some(contract.contract_id.clone());
-                            }
-                        }
-                        if response.items.is_empty() {
-                            ui.small(self.tr("暂无合约记录", "No contracts"));
-                        }
-                    });
-                if let Some(contract_id) = selected_contract_id {
-                    self.explorer_panel_state.p1.contract_id_input = contract_id;
-                    self.explorer_panel_state.p1.pending_contract_refresh = true;
-                }
-            }
-        }
-
-        ui.separator();
-        ui.label(self.tr("合约详情", "Contract Detail"));
-        if let Some(response) = self.explorer_panel_state.p1.contract_response.as_ref() {
-            ui.small(format!(
-                "contract_id={} | observed_at={}",
-                response.contract_id.as_deref().unwrap_or("n/a"),
-                response.observed_at_unix_ms,
-            ));
-            if response.ok {
-                if let Some(contract) = response.contract.as_ref() {
-                    if let Ok(pretty) = serde_json::to_string_pretty(contract) {
-                        ui.code(pretty);
-                    }
-                }
-                if !response.recent_txs.is_empty() {
-                    ui.small(self.tr("近期交易", "Recent txs"));
-                    ui.horizontal_wrapped(|ui| {
-                        for tx in &response.recent_txs {
-                            if ui.button(short_hash(tx.tx_hash.as_str())).clicked() {
-                                self.explorer_panel_state.active_tab = ExplorerTab::Txs;
-                                self.explorer_panel_state.tx_hash_input = tx.tx_hash.clone();
-                                self.explorer_panel_state.pending_tx_hash =
-                                    Some(tx.tx_hash.clone());
-                                self.explorer_panel_state.pending_tx_action_id = None;
-                                self.explorer_panel_state.pending_tx_refresh = true;
-                            }
-                        }
-                    });
-                }
-            } else {
-                ui.small(
-                    egui::RichText::new(format!(
-                        "{} ({})",
-                        response.error.as_deref().unwrap_or("n/a"),
-                        response.error_code.as_deref().unwrap_or("unknown")
-                    ))
-                    .color(egui::Color32::from_rgb(196, 84, 84)),
-                );
-            }
-        } else {
-            ui.small(self.tr("未选择合约", "No contract selected"));
-        }
-    }
-
-    pub(super) fn render_assets_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(self.tr("资产总览", "Assets"));
-        ui.horizontal_wrapped(|ui| {
-            ui.label(self.tr("账户过滤", "Account Filter"));
-            ui.text_edit_singleline(&mut self.explorer_panel_state.p1.assets_account_filter);
-            if ui.button(self.tr("查询资产", "Query Assets")).clicked() {
-                self.explorer_panel_state.p1.assets_cursor = 0;
-                self.explorer_panel_state.p1.pending_assets_refresh = true;
-            }
-            if ui.button(self.tr("清空过滤", "Clear Filter")).clicked() {
-                self.explorer_panel_state.p1.assets_account_filter.clear();
-                self.explorer_panel_state.p1.assets_cursor = 0;
-                self.explorer_panel_state.p1.pending_assets_refresh = true;
-            }
-        });
-
-        if let Some(response) = self.explorer_panel_state.p1.assets_response.clone() {
-            ui.small(format!(
-                "{} decimals={} | total_supply={} circulating={} issued={} burned={}",
-                response.token_symbol,
-                response.token_decimals,
-                response.total_supply,
-                response.circulating_supply,
-                response.total_issued,
-                response.total_burned,
-            ));
-            ui.small(format!(
-                "nft_supported={} | nft_collections={}",
-                response.nft_supported,
-                response.nft_collections.len(),
-            ));
-            ui.small(format!(
-                "cursor={} limit={} total={}",
-                response.cursor, response.limit, response.total,
-            ));
-
-            ui.horizontal_wrapped(|ui| {
-                let prev_disabled = response.cursor == 0;
-                if ui
-                    .add_enabled(!prev_disabled, egui::Button::new(self.tr("上一页", "Prev")))
-                    .clicked()
-                {
-                    self.explorer_panel_state.p1.assets_cursor = self
-                        .explorer_panel_state
-                        .p1
-                        .assets_cursor
-                        .saturating_sub(self.explorer_panel_state.p1.assets_limit);
-                    self.explorer_panel_state.p1.pending_assets_refresh = true;
-                }
-                let next_disabled = response.next_cursor.is_none();
-                if ui
-                    .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
-                    .clicked()
-                {
-                    if let Some(next_cursor) = response.next_cursor {
-                        self.explorer_panel_state.p1.assets_cursor = next_cursor;
-                        self.explorer_panel_state.p1.pending_assets_refresh = true;
-                    }
-                }
-            });
-
-            egui::ScrollArea::vertical()
-                .max_height(220.0)
-                .show(ui, |ui| {
-                    for holder in &response.holders {
-                        ui.small(format!(
-                            "{} | liquid={} vested={} total={} | nonce={} -> next={}",
-                            holder.account_id,
-                            holder.liquid_balance,
-                            holder.vested_balance,
-                            holder.total_balance,
-                            holder
-                                .last_transfer_nonce
-                                .map(|value| value.to_string())
-                                .unwrap_or_else(|| "n/a".to_string()),
-                            holder.next_nonce_hint,
-                        ));
-                    }
-                    if response.holders.is_empty() {
-                        ui.small(self.tr("暂无持仓记录", "No holders"));
-                    }
-                });
-        } else {
-            ui.small(self.tr("暂无资产数据", "No assets data"));
-        }
-    }
-
-    pub(super) fn render_mempool_tab(&mut self, ui: &mut egui::Ui) {
-        ui.label(self.tr("内存池", "Mempool"));
-        ui.horizontal_wrapped(|ui| {
-            let ui_language = self.ui_language;
-            egui::ComboBox::from_id_salt("explorer_mempool_status_filter")
-                .selected_text(explorer_mempool_status_filter_text(
-                    ui_language,
-                    self.explorer_panel_state.p1.mempool_status_filter,
-                ))
-                .show_ui(ui, |ui| {
-                    for filter in [
-                        ExplorerMempoolStatusFilter::All,
-                        ExplorerMempoolStatusFilter::Accepted,
-                        ExplorerMempoolStatusFilter::Pending,
-                    ] {
-                        ui.selectable_value(
-                            &mut self.explorer_panel_state.p1.mempool_status_filter,
-                            filter,
-                            explorer_mempool_status_filter_text(ui_language, filter),
+                        Self::explorer_status_chip(
+                            ui,
+                            format!(
+                                "cursor {} / limit {} / total {}",
+                                response.cursor, response.limit, response.total
+                            ),
+                            egui::Color32::from_rgb(112, 121, 130),
                         );
                     }
                 });
-            if ui.button(self.tr("查询内存池", "Query Mempool")).clicked() {
-                self.explorer_panel_state.p1.mempool_cursor = 0;
-                self.explorer_panel_state.p1.pending_mempool_refresh = true;
-            }
-            if ui.button(self.tr("清空过滤", "Clear Filter")).clicked() {
-                self.explorer_panel_state.p1.mempool_status_filter =
-                    ExplorerMempoolStatusFilter::All;
-                self.explorer_panel_state.p1.mempool_cursor = 0;
-                self.explorer_panel_state.p1.pending_mempool_refresh = true;
-            }
-        });
+            },
+        );
 
-        if let Some(response) = self.explorer_panel_state.p1.mempool_response.clone() {
-            ui.small(format!(
-                "status={} | accepted={} pending={} | cursor={} limit={} total={}",
-                response.status_filter,
-                response.accepted_count,
-                response.pending_count,
-                response.cursor,
-                response.limit,
-                response.total,
-            ));
+        ui.add_space(6.0);
+        ui.columns(2, |cols| {
+            Self::explorer_card(
+                &mut cols[0],
+                self.tr("合约目录", "Contract Directory"),
+                self.tr(
+                    "浏览系统合约条目，再点进单合约详情。",
+                    "Browse the system contract catalog, then drill into a single contract.",
+                ),
+                |ui| {
+                    if let Some(response) = self.explorer_panel_state.p1.contracts_response.clone() {
+                        if response.ok {
+                            ui.horizontal_wrapped(|ui| {
+                                let prev_disabled = response.cursor == 0;
+                                if ui
+                                    .add_enabled(
+                                        !prev_disabled,
+                                        egui::Button::new(self.tr("上一页", "Prev")),
+                                    )
+                                    .clicked()
+                                {
+                                    self.explorer_panel_state.p1.contracts_cursor = self
+                                        .explorer_panel_state
+                                        .p1
+                                        .contracts_cursor
+                                        .saturating_sub(self.explorer_panel_state.p1.contracts_limit);
+                                    self.explorer_panel_state.p1.pending_contracts_refresh = true;
+                                }
+                                let next_disabled = response.next_cursor.is_none();
+                                if ui
+                                    .add_enabled(
+                                        !next_disabled,
+                                        egui::Button::new(self.tr("下一页", "Next")),
+                                    )
+                                    .clicked()
+                                {
+                                    if let Some(next_cursor) = response.next_cursor {
+                                        self.explorer_panel_state.p1.contracts_cursor = next_cursor;
+                                        self.explorer_panel_state.p1.pending_contracts_refresh = true;
+                                    }
+                                }
+                            });
 
-            ui.horizontal_wrapped(|ui| {
-                let prev_disabled = response.cursor == 0;
-                if ui
-                    .add_enabled(!prev_disabled, egui::Button::new(self.tr("上一页", "Prev")))
-                    .clicked()
-                {
-                    self.explorer_panel_state.p1.mempool_cursor = self
-                        .explorer_panel_state
-                        .p1
-                        .mempool_cursor
-                        .saturating_sub(self.explorer_panel_state.p1.mempool_limit);
-                    self.explorer_panel_state.p1.pending_mempool_refresh = true;
-                }
-                let next_disabled = response.next_cursor.is_none();
-                if ui
-                    .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
-                    .clicked()
-                {
-                    if let Some(next_cursor) = response.next_cursor {
-                        self.explorer_panel_state.p1.mempool_cursor = next_cursor;
-                        self.explorer_panel_state.p1.pending_mempool_refresh = true;
-                    }
-                }
-            });
-
-            let mut clicked_hash = None;
-            egui::ScrollArea::vertical()
-                .max_height(220.0)
-                .show(ui, |ui| {
-                    for tx in &response.items {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "[{}]",
-                                    self.explorer_lifecycle_text(tx.status)
-                                ))
-                                .color(self.explorer_lifecycle_color(tx.status)),
-                            );
-                            let line = format!(
-                                "{} | {} -> {} | amount={} | {}",
-                                short_hash(tx.tx_hash.as_str()),
-                                tx.from_account_id,
-                                tx.to_account_id,
-                                tx.amount,
-                                tx.submitted_at_unix_ms,
-                            );
-                            if ui.selectable_label(false, line).clicked() {
-                                clicked_hash = Some(tx.tx_hash.clone());
+                            let mut selected_contract_id = None;
+                            egui::ScrollArea::vertical()
+                                .max_height(430.0)
+                                .show(ui, |ui| {
+                                    for contract in &response.items {
+                                        ui.group(|ui| {
+                                            if ui
+                                                .selectable_label(
+                                                    false,
+                                                    format!(
+                                                        "{} · {}",
+                                                        contract.contract_id, contract.contract_type
+                                                    ),
+                                                )
+                                                .clicked()
+                                            {
+                                                selected_contract_id =
+                                                    Some(contract.contract_id.clone());
+                                            }
+                                            ui.small(format!(
+                                                "{} -> {} · {}",
+                                                contract.creator_agent_id,
+                                                contract.counterparty_agent_id,
+                                                contract.summary
+                                            ));
+                                            Self::explorer_status_chip(
+                                                ui,
+                                                contract.status.as_str(),
+                                                egui::Color32::from_rgb(74, 116, 168),
+                                            );
+                                        });
+                                        ui.add_space(4.0);
+                                    }
+                                    if response.items.is_empty() {
+                                        Self::render_explorer_empty_panel(
+                                            ui,
+                                            self.tr("暂无合约记录", "No Contracts"),
+                                            self.tr(
+                                                "当前目录没有返回任何系统合约。",
+                                                "The directory returned no system contracts.",
+                                            ),
+                                        );
+                                    }
+                                });
+                            if let Some(contract_id) = selected_contract_id {
+                                self.explorer_panel_state.p1.contract_id_input = contract_id;
+                                self.explorer_panel_state.p1.pending_contract_refresh = true;
                             }
-                        });
+                        } else {
+                            Self::render_explorer_error_panel(
+                                ui,
+                                self.tr("合约目录查询失败", "Contract Directory Failed"),
+                                format!(
+                                    "{} ({})",
+                                    response.error.as_deref().unwrap_or("n/a"),
+                                    response.error_code.as_deref().unwrap_or("unknown")
+                                ),
+                            );
+                        }
+                    } else {
+                        Self::render_explorer_empty_panel(
+                            ui,
+                            self.tr("目录未加载", "Directory Not Loaded"),
+                            self.tr(
+                                "先刷新合约目录，再选择一个 contract_id。",
+                                "Refresh the contract directory first, then choose a contract_id.",
+                            ),
+                        );
                     }
-                    if response.items.is_empty() {
-                        ui.small(self.tr("暂无待处理交易", "No pending txs"));
+                },
+            );
+
+            Self::explorer_card(
+                &mut cols[1],
+                self.tr("合约检查板", "Contract Inspector"),
+                self.tr(
+                    "检查单合约 JSON 快照以及近期交易。",
+                    "Inspect a single contract JSON snapshot and its recent transactions.",
+                ),
+                |ui| {
+                    if let Some(response) = self.explorer_panel_state.p1.contract_response.as_ref() {
+                        if response.ok {
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "contract_id",
+                                response.contract_id.as_deref().unwrap_or("n/a"),
+                                true,
+                            );
+                            Self::render_explorer_detail_row(
+                                ui,
+                                "observed_at",
+                                &response.observed_at_unix_ms.to_string(),
+                                false,
+                            );
+                            if let Some(contract) = response.contract.as_ref() {
+                                if let Ok(pretty) = serde_json::to_string_pretty(contract) {
+                                    egui::ScrollArea::vertical()
+                                        .max_height(260.0)
+                                        .show(ui, |ui| {
+                                            ui.code(pretty);
+                                        });
+                                }
+                            }
+                            if !response.recent_txs.is_empty() {
+                                ui.add_space(6.0);
+                                ui.strong(self.tr("近期交易", "Recent Transactions"));
+                                ui.horizontal_wrapped(|ui| {
+                                    for tx in &response.recent_txs {
+                                        if ui.button(short_hash(tx.tx_hash.as_str())).clicked() {
+                                            self.explorer_panel_state.active_tab = ExplorerTab::Txs;
+                                            self.explorer_panel_state.tx_hash_input =
+                                                tx.tx_hash.clone();
+                                            self.explorer_panel_state.pending_tx_hash =
+                                                Some(tx.tx_hash.clone());
+                                            self.explorer_panel_state.pending_tx_action_id = None;
+                                            self.explorer_panel_state.pending_tx_refresh = true;
+                                        }
+                                    }
+                                });
+                            }
+                        } else {
+                            Self::render_explorer_error_panel(
+                                ui,
+                                self.tr("合约详情查询失败", "Contract Query Failed"),
+                                format!(
+                                    "{} ({})",
+                                    response.error.as_deref().unwrap_or("n/a"),
+                                    response.error_code.as_deref().unwrap_or("unknown")
+                                ),
+                            );
+                        }
+                    } else {
+                        Self::render_explorer_empty_panel(
+                            ui,
+                            self.tr("未选择合约", "No Contract Selected"),
+                            self.tr(
+                                "从左侧目录挑一个 contract_id，右侧会展开 JSON 明细。",
+                                "Pick a contract_id from the left directory to inspect JSON detail here.",
+                            ),
+                        );
+                    }
+                },
+            );
+        });
+    }
+
+    pub(super) fn render_assets_tab(&mut self, ui: &mut egui::Ui) {
+        Self::explorer_card(
+            ui,
+            self.tr("Assets", "Assets"),
+            self.tr(
+                "资产页以供应与持仓概览为核心，而不是逐行余额日志。",
+                "Assets view is supply-and-holders first, not a balance log dump.",
+            ),
+            |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(self.tr("账户过滤", "Account Filter"));
+                    ui.text_edit_singleline(
+                        &mut self.explorer_panel_state.p1.assets_account_filter,
+                    );
+                    if ui.button(self.tr("查询资产", "Query Assets")).clicked() {
+                        self.explorer_panel_state.p1.assets_cursor = 0;
+                        self.explorer_panel_state.p1.pending_assets_refresh = true;
+                    }
+                    if ui.button(self.tr("清空过滤", "Clear Filter")).clicked() {
+                        self.explorer_panel_state.p1.assets_account_filter.clear();
+                        self.explorer_panel_state.p1.assets_cursor = 0;
+                        self.explorer_panel_state.p1.pending_assets_refresh = true;
+                    }
+                    if let Some(response) = self.explorer_panel_state.p1.assets_response.as_ref() {
+                        Self::explorer_status_chip(
+                            ui,
+                            format!(
+                                "cursor {} / limit {} / total {}",
+                                response.cursor, response.limit, response.total
+                            ),
+                            egui::Color32::from_rgb(112, 121, 130),
+                        );
                     }
                 });
-            if let Some(tx_hash) = clicked_hash {
-                self.explorer_panel_state.active_tab = ExplorerTab::Txs;
-                self.explorer_panel_state.tx_hash_input = tx_hash.clone();
-                self.explorer_panel_state.pending_tx_hash = Some(tx_hash);
-                self.explorer_panel_state.pending_tx_action_id = None;
-                self.explorer_panel_state.pending_tx_refresh = true;
-            }
+            },
+        );
+
+        ui.add_space(6.0);
+        if let Some(response) = self.explorer_panel_state.p1.assets_response.clone() {
+            ui.columns(5, |cols| {
+                Self::explorer_metric_card(
+                    &mut cols[0],
+                    self.tr("Token", "Token"),
+                    response.token_symbol.clone(),
+                    Some(format!("decimals {}", response.token_decimals)),
+                    egui::Color32::from_rgb(74, 116, 168),
+                );
+                Self::explorer_metric_card(
+                    &mut cols[1],
+                    self.tr("总供应", "Total Supply"),
+                    response.total_supply.to_string(),
+                    None,
+                    egui::Color32::from_rgb(62, 152, 92),
+                );
+                Self::explorer_metric_card(
+                    &mut cols[2],
+                    self.tr("流通量", "Circulating"),
+                    response.circulating_supply.to_string(),
+                    None,
+                    egui::Color32::from_rgb(81, 104, 132),
+                );
+                Self::explorer_metric_card(
+                    &mut cols[3],
+                    self.tr("已发行", "Issued"),
+                    response.total_issued.to_string(),
+                    None,
+                    egui::Color32::from_rgb(201, 146, 44),
+                );
+                Self::explorer_metric_card(
+                    &mut cols[4],
+                    self.tr("已销毁", "Burned"),
+                    response.total_burned.to_string(),
+                    Some(format!(
+                        "nft {}",
+                        if response.nft_supported { "on" } else { "off" }
+                    )),
+                    egui::Color32::from_rgb(188, 60, 60),
+                );
+            });
+
+            ui.add_space(6.0);
+            ui.columns(2, |cols| {
+                Self::explorer_card(
+                    &mut cols[0],
+                    self.tr("持仓排行", "Holder Book"),
+                    self.tr(
+                        "按账户读取持仓，适合快速核对供应分布。",
+                        "Read holder balances account by account to verify supply distribution.",
+                    ),
+                    |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            let prev_disabled = response.cursor == 0;
+                            if ui
+                                .add_enabled(
+                                    !prev_disabled,
+                                    egui::Button::new(self.tr("上一页", "Prev")),
+                                )
+                                .clicked()
+                            {
+                                self.explorer_panel_state.p1.assets_cursor = self
+                                    .explorer_panel_state
+                                    .p1
+                                    .assets_cursor
+                                    .saturating_sub(self.explorer_panel_state.p1.assets_limit);
+                                self.explorer_panel_state.p1.pending_assets_refresh = true;
+                            }
+                            let next_disabled = response.next_cursor.is_none();
+                            if ui
+                                .add_enabled(
+                                    !next_disabled,
+                                    egui::Button::new(self.tr("下一页", "Next")),
+                                )
+                                .clicked()
+                            {
+                                if let Some(next_cursor) = response.next_cursor {
+                                    self.explorer_panel_state.p1.assets_cursor = next_cursor;
+                                    self.explorer_panel_state.p1.pending_assets_refresh = true;
+                                }
+                            }
+                        });
+
+                        egui::ScrollArea::vertical()
+                            .max_height(420.0)
+                            .show(ui, |ui| {
+                                for holder in &response.holders {
+                                    ui.group(|ui| {
+                                        ui.label(
+                                            egui::RichText::new(holder.account_id.as_str())
+                                                .monospace(),
+                                        );
+                                        ui.small(format!(
+                                            "liquid {} · vested {} · total {}",
+                                            holder.liquid_balance,
+                                            holder.vested_balance,
+                                            holder.total_balance
+                                        ));
+                                        ui.small(format!(
+                                            "last nonce {} · next {}",
+                                            holder
+                                                .last_transfer_nonce
+                                                .map(|value| value.to_string())
+                                                .unwrap_or_else(|| "n/a".to_string()),
+                                            holder.next_nonce_hint
+                                        ));
+                                    });
+                                    ui.add_space(4.0);
+                                }
+                                if response.holders.is_empty() {
+                                    Self::render_explorer_empty_panel(
+                                        ui,
+                                        self.tr("暂无持仓记录", "No Holders"),
+                                        self.tr(
+                                            "当前过滤条件没有命中任何持仓账户。",
+                                            "No holders matched the current filter.",
+                                        ),
+                                    );
+                                }
+                            });
+                    },
+                );
+
+                Self::explorer_card(
+                    &mut cols[1],
+                    self.tr("资产检查板", "Asset Inspector"),
+                    self.tr(
+                        "检查供应元数据、NFT 能力和当前过滤条件。",
+                        "Inspect supply metadata, NFT capability, and the active filter.",
+                    ),
+                    |ui| {
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "token_symbol",
+                            response.token_symbol.as_str(),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "token_decimals",
+                            &response.token_decimals.to_string(),
+                            false,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "account_filter",
+                            response.account_filter.as_deref().unwrap_or("n/a"),
+                            true,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "nft_supported",
+                            if response.nft_supported {
+                                "true"
+                            } else {
+                                "false"
+                            },
+                            false,
+                        );
+                        Self::render_explorer_detail_row(
+                            ui,
+                            "nft_collections",
+                            &response.nft_collections.len().to_string(),
+                            false,
+                        );
+                    },
+                );
+            });
         } else {
-            ui.small(self.tr("暂无内存池数据", "No mempool data"));
+            Self::render_explorer_empty_panel(
+                ui,
+                self.tr("暂无资产数据", "No Asset Data"),
+                self.tr(
+                    "打开资产页后可查看 token 供应和 holders 分布。",
+                    "Open the Assets view to inspect token supply and holder distribution.",
+                ),
+            );
         }
     }
 }

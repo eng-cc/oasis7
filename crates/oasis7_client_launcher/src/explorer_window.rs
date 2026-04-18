@@ -6,6 +6,9 @@ const EXPLORER_DEFAULT_LIMIT: usize = 50;
 #[path = "explorer_window_p1.rs"]
 mod explorer_window_p1;
 
+#[path = "explorer_window_p1_mempool_view.rs"]
+mod explorer_window_p1_mempool_view;
+
 #[path = "explorer_window_view.rs"]
 mod explorer_window_view;
 

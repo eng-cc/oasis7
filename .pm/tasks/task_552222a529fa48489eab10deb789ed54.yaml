@@ -1,0 +1,22 @@
+task_uid: task_552222a529fa48489eab10deb789ed54
+title: "launcher blockchain explorer mainnet-grade refactor"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-chain-explorer-mainnet-refactor
+execution_log_path: .pm/tasks/task_552222a529fa48489eab10deb789ed54.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+  - doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.prd.md
+  - crates/oasis7_client_launcher/src/explorer_window.rs
+  - crates/oasis7_client_launcher/src/explorer_window_p1.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Explorer 信息架构对标主链浏览器完成重构，概览/列表/详情层级显著提升。"
+  - "Native 与 wasm 同源 explorer 行为保持一致并完成 required 验证。"
+handoff_to: []
+updated_at: 2026-04-19T01:30:34+08:00
+last_started_at: 2026-04-18T23:49:37+08:00
+last_closed_at: 2026-04-19T01:29:49+08:00

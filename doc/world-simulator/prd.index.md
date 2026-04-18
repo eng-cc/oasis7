@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-17
+更新时间：2026-04-18
 
 ## 入口
 - 模块 PRD：`doc/world-simulator/prd.md`
@@ -16,10 +16,10 @@
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-17）
-- `doc/world-simulator/`：550 份文件
+## 密度快照（2026-04-18）
+- `doc/world-simulator/`：553 份文件
 - `doc/world-simulator/viewer/`：297 份文件
-- `doc/world-simulator/launcher/`：81 份文件
+- `doc/world-simulator/launcher/`：84 份文件
 - `doc/world-simulator/llm/`：54 份文件
 - `doc/world-simulator/kernel/`：36 份文件
 - `doc/world-simulator/m4/`：36 份文件
@@ -30,7 +30,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `viewer/` | 296 | Viewer UI、Web 闭环、`software_safe`、2D/3D、操作手册与 QA/发布闭环 |
-| `launcher/` | 81 | 启动器、控制面、链上转账、explorer、自引导体验 |
+| `launcher/` | 84 | 启动器、控制面、链上转账、explorer、自引导体验 |
 | `llm/` | 54 | provider、本地桥接、direct-connect、体验等价与双模式策略 |
 | `kernel/` | 36 | 规则桥接、WASM 执行、runtime 约束、资源与制度规则 |
 | `m4/` | 36 | M4 路线、阶段拆分与配套设计 |
@@ -92,6 +92,7 @@
 | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p1-address-contract-assets-mempool-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p1-address-contract-assets-mempool-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p1-address-contract-assets-mempool-2026-03-08.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-availability-ux-hardening-2026-03-08.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.project.md` |
+| `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.prd.md` | `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.design.md` | `doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.project.md` |
