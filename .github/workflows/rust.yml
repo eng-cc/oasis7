@@ -63,6 +63,9 @@ jobs:
           if [[ "${{ steps.scope.outputs.needs_wasm_target }}" == "true" ]]; then
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           fi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-required-gate-v1
       - name: Install system deps
         if: ${{ steps.scope.outputs.needs_system_deps == 'true' }}
         run: |
@@ -104,6 +107,9 @@ jobs:
           rustup default "${RUST_TOOLCHAIN}"
           rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
           rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-full-regression-v1
       - name: Install system deps
         run: |
           sudo apt-get update
