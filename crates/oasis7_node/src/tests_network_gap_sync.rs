@@ -68,6 +68,35 @@ fn build_fetch_commit_success_cache_fixture(
     )
 }
 
+fn build_gap_sync_endpoint_with_policy(
+    world_id: &str,
+    dir_local: &std::path::Path,
+    local_seed: u8,
+    network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync>,
+    network_policy: NodeNetworkPolicy,
+) -> ReplicationNetworkEndpoint {
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", local_seed)],
+    );
+    let local_replication_config = signed_replication_config(dir_local.to_path_buf(), local_seed);
+    let config = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(local_replication_config)
+        .with_network_policy(network_policy)
+        .expect("network policy");
+    let handle = NodeReplicationNetworkHandle::new(network);
+    ReplicationNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+        .expect("endpoint")
+}
+
 #[test]
 fn runtime_network_replication_gap_sync_fetch_commit_success_cache_reuses_validated_response() {
     let dir_remote = temp_dir("gap-sync-fetch-commit-success-cache-remote");
@@ -324,6 +353,62 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_expires() {
     assert_eq!(*request_count.lock().expect("lock request count"), 2);
 
     let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
+fn runtime_network_replication_gap_sync_fetch_commit_cache_still_enforces_lane_access() {
+    let dir_local = temp_dir("gap-sync-fetch-commit-cache-policy-local");
+    let world_id = "world-gap-sync-fetch-commit-cache-policy";
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let mut endpoint = build_gap_sync_endpoint_with_policy(
+        world_id,
+        dir_local.as_path(),
+        126,
+        Arc::clone(&network),
+        NodeNetworkPolicy {
+            deployment_mode: oasis7_proto::distributed_dht::PeerDeploymentMode::Public,
+            node_role_claim: oasis7_proto::distributed_dht::PeerNodeRole::Relay,
+        },
+    );
+    endpoint.set_fetch_commit_success_cache_after_for_testing(Duration::from_secs(5));
+    let request = signed_fetch_commit_request_for_test(world_id, 7, 126);
+    endpoint.remember_validated_fetch_commit_success(
+        &request,
+        &super::replication::FetchCommitResponse {
+            found: true,
+            message: Some(super::replication::GossipReplicationMessage {
+                version: 1,
+                world_id: world_id.to_string(),
+                node_id: "node-a".to_string(),
+                record: oasis7_distfs::FileReplicationRecord {
+                    world_id: world_id.to_string(),
+                    writer_id: "writer-a".to_string(),
+                    writer_epoch: 1,
+                    sequence: 1,
+                    path: "consensus/commits/00000000000000000007.json".to_string(),
+                    content_hash: "hash-7".to_string(),
+                    size_bytes: 7,
+                    updated_at_ms: 7,
+                },
+                payload: b"payload".to_vec(),
+                public_key_hex: None,
+                signature_hex: None,
+            }),
+        },
+    );
+
+    let result = endpoint.request_fetch_commit_for_gap_sync(&request);
+    assert!(matches!(
+        result,
+        Err(NodeError::InvalidConfig { reason })
+            if reason.contains("cannot Request")
+                && reason.contains(super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL)
+                && reason.contains("lane=sync")
+    ));
+
     let _ = fs::remove_dir_all(&dir_local);
 }
 
