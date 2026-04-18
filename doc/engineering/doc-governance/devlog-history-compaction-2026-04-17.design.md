@@ -9,6 +9,7 @@
 `doc/devlog` 已经退出运行态真值，但目前仍只有 57 个日文件散放在目录里，没有 canonical archive entrypoint。第一步应先把入口从“文件系统目录”收口到一份可读的 `README.md`。
 
 ## 2. 当前快照
+- 统计口径: 基于 `bash scripts/doc-inventory-report.sh` 与 `wc -l` 于 2026-04-18 复算。
 - 日文件总数: 57
 - 月份分布:
   - `2026-02`: 26

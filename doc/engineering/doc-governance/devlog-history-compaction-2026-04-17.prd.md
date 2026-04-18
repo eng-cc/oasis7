@@ -3,10 +3,10 @@
 - 对应设计文档: `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.design.md`
 - 对应项目管理文档: `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.project.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 1. Executive Summary
-- Problem Statement: `PRD-ENGINEERING-025` 已经明确 `doc/devlog` 是当前文档维护成本的第一优先级对象，但仓库里仍保留 57 份日文件，集中在 `2026-02`（26 份）与 `2026-03`（30 份），且至少 13 份单文件超过 1000 行、最大达到 3288 行。当前仓库只有“`doc/devlog` 是历史归档”的声明，没有一个 canonical 入口来回答“该从哪一天开始看、哪些是高体量热点、哪些应该避免盲扫”。
+- Problem Statement: `PRD-ENGINEERING-025` 已经明确 `doc/devlog` 是当前文档维护成本的第一优先级对象，但仓库里仍保留 57 份日文件，集中在 `2026-02`（26 份）与 `2026-03`（30 份），且至少 13 份单文件超过 1000 行、最大达到 3288 行。以上数值已按 `bash scripts/doc-inventory-report.sh` 与 `wc -l` 于 2026-04-18 复算。当前仓库只有“`doc/devlog` 是历史归档”的声明，没有一个 canonical 入口来回答“该从哪一天开始看、哪些是高体量热点、哪些应该避免盲扫”。
 - Proposed Solution: 建立 `devlog-history-compaction` 专题，冻结 `doc/devlog` 的 archive/index/retention 边界；在不删除任何日文件的前提下新增 `doc/devlog/README.md` 作为 canonical 入口，按月份、重文件和使用场景分流历史日志，并把上游 `PRD-ENGINEERING-025` 的第一条 follow-up 正式收口。
 - Success Criteria:
   - SC-1: engineering 存在正式专题，明确 `doc/devlog` 从“历史归档声明”升级为“首个已执行的维护成本 follow-up”。
@@ -53,7 +53,7 @@
   - 不在本批建立新的 merge gate。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: 主要依赖 `find`、`wc`、`python3` 做日文件统计，配合 Markdown 入口文档回写。
+- Tool Requirements: 主要依赖 `bash scripts/doc-inventory-report.sh`、`wc -l` 与 Markdown 入口文档回写。
 - Evaluation Strategy:
   - 复算 `doc/devlog` 文件数、月份分布和高体量文件，确认 README 与专题正文中的数值可重现。
   - 人工验证从 `doc/devlog/README.md` 可以在 2 分钟内定位某个月或某个重文件。

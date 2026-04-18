@@ -13,11 +13,12 @@ doc_refs:
   - doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md
 related_prd:
   - PRD-ENGINEERING-025
+  - PRD-ENGINEERING-026
 acceptance:
   - "Establish a formal doc/devlog history compaction topic with explicit archive/index/retention boundaries."
   - "Add a canonical devlog entrypoint that reduces blind day-file scanning without deleting historical files."
   - "Update engineering governance docs to make doc/devlog the first completed follow-up under PRD-ENGINEERING-025."
 handoff_to: []
-updated_at: 2026-04-17T21:03:35+08:00
-last_started_at: 2026-04-17T20:54:33+08:00
-last_closed_at: 2026-04-17T21:03:35+08:00
+updated_at: 2026-04-18T10:13:12+08:00
+last_started_at: 2026-04-18T10:12:22+08:00
+last_closed_at: 2026-04-18T10:13:12+08:00
