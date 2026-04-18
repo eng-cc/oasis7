@@ -66,6 +66,7 @@ jobs:
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           fi
       - uses: Swatinem/rust-cache@v2
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install system deps
@@ -112,6 +113,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ci-full-regression-v1
+          cache-on-failure: true
       - name: Install system deps
         run: |
           sudo apt-get update
