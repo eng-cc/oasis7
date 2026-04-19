@@ -813,6 +813,73 @@ function InteractionPanel() {
         </Badge>
       </div>
       <EmptyState>{assetLaneDetail()}</EmptyState>
+      <PanelSection title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}>
+        <div class="badge-row">
+          <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
+            {`main_token_transfer=${assetLaneStatusText()}`}
+          </Badge>
+          <Badge>{`required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`}</Badge>
+          <Badge>{`availability=${mainTokenTransferPolicy()?.availability || "-"}`}</Badge>
+        </div>
+        <EmptyState>{assetLaneDetail()}</EmptyState>
+        <EmptyState>
+          {mainTokenTransferPolicy()?.reason
+            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
+        </EmptyState>
+        <div class="toolbar">
+          <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
+        </div>
+      </PanelSection>
+      <PanelSection title={tr(locale(), "Agent 聊天", "Agent Chat")}>
+        <div class="field">
+          <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
+          <textarea
+            id="agent-chat-message"
+            rows="4"
+            placeholder={tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent")}
+            disabled={!chatCapability().enabled}
+            value={core.state.chatDraft.message}
+            onInput={(event) => {
+              core.state.chatDraft.message = String(event.currentTarget.value || "");
+              core.state.chatDraft.dirty = true;
+            }}
+          />
+        </div>
+        <div class="toolbar">
+          <button
+            data-chat-send="1"
+            disabled={!chatCapability().enabled}
+            onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
+          >
+            {tr(locale(), "发送聊天", "Send Chat")}
+          </button>
+        </div>
+        <Show when={chatFeedback()} fallback={<EmptyState>{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</EmptyState>}>
+          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
+        </Show>
+        <div>
+          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
+          <div class="event-list">
+            <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
+              <For each={chatHistory()}>
+                {(entry) => (
+                  <EventCard
+                    title={
+                      entry.source === "player"
+                        ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
+                        : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`
+                    }
+                    badge={`tick=${Number(entry.tick || 0)}`}
+                    meta={`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}
+                  >
+                    <JsonBlock value={entry} />
+                  </EventCard>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </PanelSection>
       <PanelSection title={tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings")}>
         <div class="badge-row">
           <Badge class={promptOverridesVisible() ? "badge badge--good" : "badge"}>
@@ -954,73 +1021,6 @@ function InteractionPanel() {
           </Show>
         </PanelSection>
       </Show>
-      <PanelSection title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}>
-        <div class="badge-row">
-          <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
-            {`main_token_transfer=${assetLaneStatusText()}`}
-          </Badge>
-          <Badge>{`required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`}</Badge>
-          <Badge>{`availability=${mainTokenTransferPolicy()?.availability || "-"}`}</Badge>
-        </div>
-        <EmptyState>{assetLaneDetail()}</EmptyState>
-        <EmptyState>
-          {mainTokenTransferPolicy()?.reason
-            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
-        </EmptyState>
-        <div class="toolbar">
-          <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
-        </div>
-      </PanelSection>
-      <PanelSection title={tr(locale(), "Agent 聊天", "Agent Chat")}>
-        <div class="field">
-          <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
-          <textarea
-            id="agent-chat-message"
-            rows="4"
-            placeholder={tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent")}
-            disabled={!chatCapability().enabled}
-            value={core.state.chatDraft.message}
-            onInput={(event) => {
-              core.state.chatDraft.message = String(event.currentTarget.value || "");
-              core.state.chatDraft.dirty = true;
-            }}
-          />
-        </div>
-        <div class="toolbar">
-          <button
-            data-chat-send="1"
-            disabled={!chatCapability().enabled}
-            onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
-          >
-            {tr(locale(), "发送聊天", "Send Chat")}
-          </button>
-        </div>
-        <Show when={chatFeedback()} fallback={<EmptyState>{tr(locale(), "还没有聊天反馈。", "No chat feedback yet.")}</EmptyState>}>
-          {(feedback) => <FeedbackCard feedback={feedback()} display={chatFeedbackDisplay()} />}
-        </Show>
-        <div>
-          <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "消息流", "Message Flow")}</div>
-          <div class="event-list">
-            <Show when={chatHistory().length > 0} fallback={<EmptyState>{tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.")}</EmptyState>}>
-              <For each={chatHistory()}>
-                {(entry) => (
-                  <EventCard
-                    title={
-                      entry.source === "player"
-                        ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}`
-                        : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`
-                    }
-                    badge={`tick=${Number(entry.tick || 0)}`}
-                    meta={`speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`}
-                  >
-                    <JsonBlock value={entry} />
-                  </EventCard>
-                )}
-              </For>
-            </Show>
-          </div>
-        </div>
-      </PanelSection>
     </div>
   );
 }
