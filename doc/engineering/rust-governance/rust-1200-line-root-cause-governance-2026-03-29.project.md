@@ -18,6 +18,7 @@
 - [x] rust-structural-slicing-oasis7-node-lib (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/lib.rs` 从 `include!/impl_part` 切换为 `node_engine_core` / `node_engine_network` / `node_engine_storage_challenge` 三个真实子模块，根文件压到 1199 行，退役 `lib_impl_part1.rs` / `lib_impl_part2.rs` 对应 4 条 frozen structural slicing 记录。 Trace: .pm/tasks/task_a2ec08aaee744cdcbd32dc1677c59d28.yaml
 - [x] libp2p-net-orchestrator-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 抽离 `Libp2pNetwork::new` 内 bootstrap / periodic 调度样板到 `crates/oasis7_net/src/libp2p_net/constructor_support.rs`，将 `crates/oasis7_net/src/libp2p_net.rs` 从 1199 行压到 1156 行，并保持 `rust-structural-slicing-baseline.tsv` 冻结值不变。 Trace: .pm/tasks/task_fbffb4f8dc5b4326b6a09751f4779526.yaml
 - [x] rust-node-types-controller-binding-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/types.rs` 的 main-token controller binding 逻辑抽到 `crates/oasis7_node/src/types/main_token_controller_binding.rs`，把根文件从 1277 行压到 1069 行，并保持 structural slicing baseline 不变。 Trace: .pm/tasks/task_5c651f038f1b48e78460ad7f95f6e187.yaml
+- [x] clear-rust-structural-slicing-baseline (PRD-ENGINEERING-R1200-002/003/005) [test_tier_required]: 退役 `rust-structural-slicing-baseline.tsv`，把全部 `split_part/impl_part` 存量债改成语义化文件名，并将 `check-rust-file-size` 收口为结构切片扫描归零。 Trace: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.yaml
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -30,17 +31,16 @@
 - `scripts/ci-tests.sh`
 - `scripts/doc-governance-check.sh`
 - `doc/.governance/rust-oversized-file-baseline.tsv`
-- `doc/.governance/rust-structural-slicing-baseline.tsv`
 - `scripts/check-rust-file-size.sh`
 - `AGENTS.md`
 - Batch A (`TASK-ENGINEERING-052/053`) 依赖 `TASK-ENGINEERING-051` 完成并冻结规则口径。
 - Batch B/C/D (`TASK-ENGINEERING-054~057`) 依赖 `TASK-ENGINEERING-052/053` 先把门禁、基线与完成态建立起来。
 
 ## 状态
-- 更新日期: 2026-04-17
+- 更新日期: 2026-04-20
 - 当前阶段: active
-- 当前任务: `rust-structural-slicing-module-actions`、`rust-structural-slicing-oasis7-node-lib`、`libp2p-net-orchestrator-burn-down` 与 `rust-node-types-controller-binding-burn-down` 已完成；`runtime/world/module_actions`、`crates/oasis7_node/src/lib.rs`、`crates/oasis7_net/src/libp2p_net.rs` 与 `crates/oasis7_node/src/types.rs` 已分别完成本批 structural slicing 退役 / root-cause 减重，当前 frozen structural slicing baseline 为 45 个 `slice_file` / 44 个 `include_target`，frozen oversized baseline 收敛为 4 个生产文件 / 6 个测试文件。
-- 阻塞项: 无新的脚本阻断；当前真实约束是仓库仍存在 4 个生产 Rust 超限文件与 6 个测试 Rust 超限文件，后续治理不得再宣称 `oversized code files=0, test files=0` 已达成。
+- 当前任务: `clear-rust-structural-slicing-baseline` 已完成，`scripts/check-rust-file-size.sh` 不再依赖 `rust-structural-slicing-baseline.tsv`，当前结构切片扫描结果必须保持 `slice files=0, include targets=0`；与此同时，测试 frozen baseline 已同步退役 `tests_conversation_flow.rs`、`tests_consensus_signatures.rs` 与 `tests_storage_replication.rs` 对应旧路径。
+- 阻塞项: 无结构切片残留；当前真实约束收口为仓库仍存在 4 个生产 Rust 超限文件与 3 个测试 Rust 超限文件，后续治理不得再宣称 `oversized code files=0, test files=0` 已达成。
 - 最新完成:
   - `rust-structural-slicing-module-actions`：`crates/oasis7/src/runtime/world/module_actions` 已改为目录模块，原 `module_actions_impl_part1.rs` / `module_actions_impl_part2.rs` / `include!` 入口全部退役；新增 `release_normalization.rs` 承接 release 归一化与 shadow-hash helper，`artifact_actions.rs` 降到 1019 行。`env -u RUSTC_WRAPPER cargo check -p oasis7`、`env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::module_action_loop:: -- --nocapture`、`./scripts/check-rust-file-size.sh` 与 `git diff --check` 通过。
   - `rust-structural-slicing-oasis7-node-lib`：`crates/oasis7_node/src/lib.rs` 已改为正常 `mod` 入口，原 `lib_impl_part1.rs` / `lib_impl_part2.rs` / `lib_impl_storage_challenge.rs` 已迁移为 `node_engine_core.rs` / `node_engine_network.rs` / `node_engine_storage_challenge.rs`。`env -u RUSTC_WRAPPER cargo check -p oasis7_node`、`./scripts/check-rust-file-size.sh` 与 4 条 node engine 精确用例通过；`cargo test -p oasis7_node --lib -- --nocapture` 仍有 3 个现存失败签名未在本轮修复：`runtime_network_replication_respects_topic_isolation`、`runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode`、`runtime_gossip_replication_persists_guard_across_restart`。
@@ -66,6 +66,7 @@
   - 测试尾债 burn-down：`crates/oasis7/src/runtime/tests/economy.rs` 已拆出 `crates/oasis7/src/runtime/tests/economy_module_validation_tests.rs`，根文件降到 883 行；`cargo test -p oasis7 runtime::tests::economy::module_validation_tests::validate_product_with_module_uses_module_decision -- --nocapture` 与 `cargo test -p oasis7 runtime::tests::economy::module_validation_tests::schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover -- --nocapture` 通过，`rust-oversized-file-baseline.tsv` 已同步移除该冻结项。
   - 测试尾债 burn-down：`crates/oasis7/src/runtime/tests/economy_priority_logistics.rs` 已拆出 `crates/oasis7/src/runtime/tests/economy_priority_governance_tests.rs`，根文件降到 1174 行；`cargo test -p oasis7 runtime::tests::economy_priority_logistics::governance_tests::govern_profile_actions_emit_events_and_update_profile_state -- --nocapture` 与 `cargo test -p oasis7 runtime::tests::economy_priority_logistics::governance_tests::industry_stage_progresses_from_bootstrap_to_scale_out_and_governance -- --nocapture` 通过，`rust-oversized-file-baseline.tsv` 已同步移除该冻结项。
   - 测试尾债 burn-down：`crates/oasis7/src/runtime/tests/module_action_loop_split_part3.rs` 已拆出 `crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs`，根文件降到 1147 行；`cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::module_release_shadow_rejects_missing_artifact_identity -- --nocapture`、`cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::rollback_module_instance_reverts_to_historical_version_and_emits_audit -- --nocapture` 与 `cargo test -p oasis7 runtime::tests::module_action_loop::release_controls_tests::module_release_apply_with_finality_succeeds_in_production_policy -- --nocapture` 通过，`rust-oversized-file-baseline.tsv` 已同步移除最后一条冻结测试基线。
+  - `clear-rust-structural-slicing-baseline`：`crates/oasis7` / `crates/oasis7_consensus` / `crates/oasis7_node` 内全部 `split_part` / `impl_part` 存量文件已批量改成语义化文件名；`scripts/check-rust-file-size.sh` 改成对结构切片执行实时归零门禁，`doc/.governance/rust-structural-slicing-baseline.tsv` 已退役删除，当前扫描结果为 `structural slice files=0, include targets=0`。
 - 下一步:
-  - 继续按既有门禁链路执行 `./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`，确保当前 4 个生产文件 / 6 个测试文件之外不再新增超限项。
+  - 继续按既有门禁链路执行 `./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh` 与 `git diff --check`，确保当前 4 个生产文件 / 3 个测试文件之外不再新增超限项。
   - 重新拆解下一批 Rust 1200 行 burn-down 任务，优先处理 `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`、`crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs`、`crates/oasis7_client_launcher/src/launcher_core.rs`、`crates/oasis7_node/src/replication.rs` 与剩余高体量测试文件。

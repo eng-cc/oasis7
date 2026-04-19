@@ -1,2 +1,2 @@
-include!("membership_recovery_tests_split_part1.rs");
-include!("membership_recovery_tests_split_part2.rs");
+include!("membership_recovery_core_tests.rs");
+include!("membership_recovery_regression_tests.rs");

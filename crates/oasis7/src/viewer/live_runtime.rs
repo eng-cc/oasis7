@@ -33,10 +33,10 @@ use super::protocol::{
     ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
     ViewerStream, VIEWER_PROTOCOL_VERSION,
 };
-#[path = "live/live_helpers.rs"]
-mod live_helpers;
 #[path = "live/live_auth_prompt.rs"]
 mod live_auth_prompt;
+#[path = "live/live_helpers.rs"]
+mod live_helpers;
 use live_helpers::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -814,7 +814,6 @@ impl LiveWorld {
             LiveDriver::Llm(_) => self.llm_mailbox_has_pending(),
         }
     }
-
 }
 
 fn map_auth_verify_error_code(message: &str) -> &'static str {

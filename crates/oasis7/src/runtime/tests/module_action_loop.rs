@@ -1,4 +1,4 @@
-include!("module_action_loop_split_part1.rs");
-include!("module_action_loop_split_part2.rs");
-include!("module_action_loop_split_part3.rs");
-include!("module_action_loop_split_part4.rs");
+include!("module_action_loop_core.rs");
+include!("module_action_loop_validation.rs");
+include!("module_action_loop_release_controls.rs");
+include!("module_action_loop_regressions.rs");
