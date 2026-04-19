@@ -161,7 +161,7 @@ window.__AW_TEST__.sendPromptControl("apply", { agentId: "agent-0", shortTermGoa
 window.__AW_TEST__.sendAgentChat("agent-0", "hello from software_safe");
 window.__AW_TEST__.getState();</code></pre>
         <p>当页面由 <code>oasis7_game_launcher</code> 提供并注入 viewer auth bootstrap 时，<code>software_safe</code> 还会开放选中 Agent 的最小 prompt/chat 控制面；对应自动化接口为 <code>sendPromptControl(mode, payload)</code> 与 <code>sendAgentChat(agentId, message)</code>。</p>
-        <p>`Prompt Overrides` 已改为默认收起的“高级 Prompt 设置”项；选中 Agent 后手动展开，才会显示 `preview/apply/rollback` 编辑表单。该开关会记住本地浏览器上一次的展开状态，但不影响 `__AW_TEST__.sendPromptControl(...)`。</p>
+        <p><code>Prompt Overrides</code> 已改为默认收起的“高级 Prompt 设置”项；选中 Agent 后手动展开，才会显示 <code>preview/apply/rollback</code> 编辑表单。该开关会记住本地浏览器上一次的展开状态，但不影响 <code>__AW_TEST__.sendPromptControl(...)</code>。</p>
 
         <h3>输出目录与最小验收</h3>
         <ul>
