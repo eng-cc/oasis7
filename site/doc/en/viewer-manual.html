@@ -161,7 +161,7 @@ window.__AW_TEST__.sendPromptControl("apply", { agentId: "agent-0", shortTermGoa
 window.__AW_TEST__.sendAgentChat("agent-0", "hello from software_safe");
 window.__AW_TEST__.getState();</code></pre>
         <p>When the page is served by <code>oasis7_game_launcher</code> with viewer auth bootstrap injected, <code>software_safe</code> also exposes a minimal selected-agent prompt/chat surface. The matching automation methods are <code>sendPromptControl(mode, payload)</code> and <code>sendAgentChat(agentId, message)</code>.</p>
-        <p>`Prompt Overrides` now lives behind the default-collapsed “Advanced Prompt Settings” item. The `preview/apply/rollback` form appears only after you select an agent and expand that setting. The toggle remembers its last browser-local state and does not affect `__AW_TEST__.sendPromptControl(...)`.</p>
+        <p><code>Prompt Overrides</code> now lives behind the default-collapsed “Advanced Prompt Settings” item. The <code>preview/apply/rollback</code> form appears only after you select an agent and expand that setting. The toggle remembers its last browser-local state and does not affect <code>__AW_TEST__.sendPromptControl(...)</code>.</p>
 
         <h3>Outputs and Minimum Acceptance</h3>
         <ul>
