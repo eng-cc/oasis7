@@ -833,7 +833,7 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
         let bytes = stream.read(&mut request).expect("read request");
         let request_text = String::from_utf8_lossy(&request[..bytes]);
         assert!(request_text.starts_with("GET /v1/chain/status HTTP/1.1"));
-        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]}}"#;
+        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_height_lag":2,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),
@@ -844,14 +844,17 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
             .expect("write response should succeed");
     });
 
-    let p2p_status =
+    let status_snapshot =
         query_chain_status_endpoint(format!("127.0.0.1:{}", bind.port()).as_str()).expect("ok");
+    let p2p_status = status_snapshot.p2p;
     assert_eq!(p2p_status.recommended_user_mode, "public_entry");
     assert_eq!(
         p2p_status.applied_effective_user_mode.as_deref(),
         Some("private_safe")
     );
     assert!(p2p_status.requires_explicit_public_entry_confirmation);
+    assert_eq!(status_snapshot.observability.status, "warn");
+    assert_eq!(status_snapshot.observability.network_height_lag, 2);
     server.join().expect("server thread should finish");
 }
 
@@ -878,6 +881,26 @@ fn snapshot_from_state_includes_chain_p2p_status() {
         node_role_claim: "validator_core".to_string(),
         rationale: vec!["observed_reachability=public".to_string()],
     });
+    state.chain_observability_status = Some(super::ChainNodeObservabilitySnapshot {
+        status: "warn".to_string(),
+        summary: "network committed height is ahead by 2".to_string(),
+        connected_peer_count: 1,
+        active_peer_count: 1,
+        candidate_peer_count: 0,
+        suspect_peer_count: 0,
+        blocked_peer_count: 0,
+        peer_with_issues_count: 0,
+        known_peer_heads: 1,
+        network_height_lag: 2,
+        recent_replication_error_count: 0,
+        storage_degraded: false,
+        reward_runtime_degraded: false,
+        alerts: vec![super::ChainNodeObservabilityAlertSnapshot {
+            severity: "warn".to_string(),
+            code: "consensus_network_lag".to_string(),
+            summary: "network committed height is ahead by 2".to_string(),
+        }],
+    });
 
     let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));
     let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
@@ -888,6 +911,14 @@ fn snapshot_from_state_includes_chain_p2p_status() {
     assert_eq!(
         encoded["chain_p2p_status"]["requires_explicit_public_entry_confirmation"],
         serde_json::json!(true)
+    );
+    assert_eq!(
+        encoded["chain_observability_status"]["status"],
+        serde_json::json!("warn")
+    );
+    assert_eq!(
+        encoded["chain_observability_status"]["network_height_lag"],
+        serde_json::json!(2)
     );
 }
 

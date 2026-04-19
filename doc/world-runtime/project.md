@@ -367,6 +367,33 @@
     - `OASIS7_NODE_START_DRY_RUN=1 APP_ROOT=<tmp_app_root> ./scripts/p2p-triad-node-start.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] node-observability-system (PRD-WORLD_RUNTIME-035) [test_tier_required]: 为 `/v1/chain/status` 增加稳定的 `observability` 摘要与结构化 alerts，把 peer 连接数、peer health 分布、network lag、storage/reward degraded 等收口为单一真值；`oasis7_web_launcher` / `oasis7_client_launcher` 直接透传该契约，并补 repo-owned 观测报告脚本把 live status 与最近 traffic window 摘要合成 operator 可读输出。 Trace: .pm/tasks/task_0c817eead8024055b841eb1be55adac3.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_0c817eead8024055b841eb1be55adac3.yaml`
+    - `.pm/tasks/task_0c817eead8024055b841eb1be55adac3.execution.md`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/status_payload.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`
+    - `crates/oasis7_client_launcher/src/main.rs`
+    - `crates/oasis7_client_launcher/src/app_process.rs`
+    - `crates/oasis7_client_launcher/src/app_process_web.rs`
+    - `crates/oasis7_client_launcher/src/main_ui_helpers.rs`
+    - `crates/oasis7_client_launcher/src/main_app_shell.rs`
+    - `crates/oasis7_client_launcher/src/main_tests.rs`
+    - `scripts/oasis7-node-observability-report.sh`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/oasis7-node-observability-report.sh`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime build_chain_status_payload_includes_storage_metrics -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher query_chain_status_endpoint_reads_p2p_payload -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher apply_web_snapshot_tracks_chain_p2p_status_payload -- --nocapture`
+    - `./scripts/oasis7-node-observability-report.sh --status-json-path <sample_status_json> --traffic-summary-json <optional_sample_traffic_summary_json> --out-dir .tmp/oasis7_node_observability_test`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] fetch-commit-retry-backoff (PRD-WORLD_RUNTIME-029) [test_tier_required]: 为 `libp2p_replication_network` 增加 `fetch-commit` 单协议短时 peer cooldown，把最近刚返回缺失 handler/不支持协议签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的目标暂时排除出下一轮候选，减少真实 triad 的 gap-sync 重试流量浪费。 Trace: .pm/tasks/task_df0a42e3efea4806bb3f41245c1ef4d5.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
@@ -444,9 +471,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-16
+- 更新日期: 2026-04-18
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `node-observability-system`（已为 `/v1/chain/status` 增加 `observability` 摘要与结构化 alerts，把 peer 连接数、peer health 分布、network lag、storage/reward degraded 收口为单一真值；`oasis7_web_launcher` 和 `oasis7_client_launcher` 现直接透传并显示节点观测卡片，repo-owned `scripts/oasis7-node-observability-report.sh` 可把 live status 与最近 traffic window 合成 operator 报告。）
 - 最新完成: `fetch-commit-retry-backoff`（已将 `libp2p_replication_network` 对 `fetch-commit` 的短时 peer cooldown 从“仅缺失 handler / 不支持协议签名的 `ErrUnsupported`”扩展到 `ErrNotFound`、`Timeout` 与连接缺口类失败；定向回归证明立即重试会被抑制，窗口过后仍可恢复请求，且 `ping` 等其他协议与泛化业务态 `ErrUnsupported` 不被误隔离。）
 - 最新完成: `node-traffic-monitor-feature-toggle`（已补 repo-owned `scripts/p2p-triad-node-start.sh` 与 `scripts/oasis7-node-traffic-monitor.sh`，可通过 `node.env` 中的 `TRAFFIC_MONITOR_ENABLE` 等开关，让单节点在启动后自动对本地 `/v1/chain/status` 做周期采样，并把 monitor 生命周期绑定到 runtime/service 收口；节点与 triad monitor 现共用 `scripts/traffic-monitor-summary.py`，history 会按 retention 窗口自动裁剪。）
 - 最新完成: `peer-record-request-backoff`（已为 `libp2p_net` 的 `get_local_peer_record`、`get_cached_peer_record`、`get_cached_discovery_peers` 增加 peer-scoped 10 秒短时协议冷却，压制 DHT/routing/rendezvous/connection-established 连续触发造成的重复取件；定向回归证明窗口内重试被抑制、窗口过后可恢复请求，且 cached-peer-record 的多 proxy fallback 仍保留。）

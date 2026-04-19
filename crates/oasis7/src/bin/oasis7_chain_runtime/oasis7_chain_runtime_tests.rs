@@ -841,157 +841,6 @@ fn derive_node_libp2p_identity_keypair_is_deterministic_and_node_scoped() {
 }
 
 #[test]
-fn build_chain_status_payload_includes_storage_metrics() {
-    let snapshot = NodeSnapshot {
-        node_id: "node-a".to_string(),
-        player_id: "player-a".to_string(),
-        world_id: "live-a".to_string(),
-        role: NodeRole::Storage,
-        running: true,
-        tick_count: 42,
-        last_tick_unix_ms: Some(1_700_000_000_000),
-        consensus: NodeConsensusSnapshot::default(),
-        last_error: None,
-    };
-    let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
-        enabled: true,
-        metrics_available: true,
-        report_dir: "/tmp/reports".to_string(),
-        report_count: 2,
-        latest_epoch_index: 1,
-        latest_report_observed_at_unix_ms: 1_700_000_000_000,
-        latest_total_distributed_points: 10,
-        latest_minted_record_count: 1,
-        cumulative_minted_record_count: 1,
-        distfs_total_checks: 0,
-        distfs_failed_checks: 0,
-        distfs_failure_ratio: 0.0,
-        settlement_apply_attempts_total: 0,
-        settlement_apply_failures_total: 0,
-        settlement_apply_failure_ratio: 0.0,
-        invariant_ok: true,
-        last_error: None,
-    };
-    let storage = super::storage_metrics::StorageMetricsSnapshot {
-        storage_profile: "dev_local".to_string(),
-        effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
-        bytes_by_dir: BTreeMap::from([("runtime_root".to_string(), 128)]),
-        blob_counts: BTreeMap::from([("execution_store_blobs".to_string(), 2)]),
-        ref_count: 5,
-        pin_count: 3,
-        retained_heights: vec![1, 2],
-        checkpoint_count: 1,
-        replay_summary: super::storage_metrics::StorageReplaySummary {
-            retained_height_count: 2,
-            earliest_retained_height: Some(1),
-            latest_retained_height: Some(2),
-            earliest_checkpoint_height: Some(2),
-            latest_checkpoint_height: Some(2),
-            mode: "checkpoint_plus_log".to_string(),
-        },
-        orphan_blob_count: 0,
-        last_gc_at_ms: Some(1_700_000_000_000),
-        last_gc_result: "failed".to_string(),
-        last_gc_error: Some("gc failed".to_string()),
-        degraded_reason: Some("storage degraded".to_string()),
-    };
-
-    let payload = build_chain_status_payload(
-        snapshot,
-        Path::new("/tmp/execution-world"),
-        &NodeNetworkPolicy::recommend_for_user_mode(
-            NodeRole::Storage,
-            NodeUserMode::AutoJoin,
-            NodeReachabilityAutoDetection {
-                observed_reachability: Some(PeerReachabilityClass::Public),
-                hole_punch_viability: NodeHolePunchViability::Viable,
-                relay_available: true,
-                probe_stable: true,
-                autonat_status: NodeAutoNatStatus::Public,
-                public_port_reachability: NodePublicPortReachability::Reachable,
-            },
-            false,
-        )
-        .expect("recommendation"),
-        Some("private_safe".to_string()),
-        NodeNetworkPolicy {
-            deployment_mode: PeerDeploymentMode::Private,
-            node_role_claim: PeerNodeRole::FullStorage,
-        },
-        &Libp2pReachabilitySnapshot {
-            autonat_status: LiveAutoNatStatus::Public,
-            public_port_reachability: LivePublicPortReachability::Reachable,
-            observed_public_addr: Some("/dns4/public.example/tcp/4001".to_string()),
-            confirmed_external_direct_addrs: vec!["/dns4/public.example/tcp/4001".to_string()],
-            ..Libp2pReachabilitySnapshot::default()
-        },
-        NodeReachabilityAutoDetection {
-            observed_reachability: Some(PeerReachabilityClass::Public),
-            hole_punch_viability: NodeHolePunchViability::Viable,
-            relay_available: true,
-            probe_stable: true,
-            autonat_status: NodeAutoNatStatus::Public,
-            public_port_reachability: NodePublicPortReachability::Reachable,
-        },
-        ReleaseSecurityPolicy::default(),
-        reward_runtime,
-        storage.clone(),
-        super::ChainTrafficStatus {
-            udp_gossip: None,
-            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
-        },
-    );
-
-    assert_eq!(payload.storage.storage_profile, "dev_local");
-    assert_eq!(payload.storage.ref_count, 5);
-    assert_eq!(payload.storage.pin_count, 3);
-    assert_eq!(payload.storage.checkpoint_count, 1);
-    assert_eq!(
-        payload.storage.effective_budget.profile,
-        StorageProfile::DevLocal
-    );
-    assert_eq!(payload.storage.replay_summary.mode, "checkpoint_plus_log");
-    assert_eq!(
-        payload.storage.replay_summary.latest_retained_height,
-        Some(2)
-    );
-    assert_eq!(payload.storage.last_gc_result, "failed");
-    assert_eq!(payload.storage.last_gc_error.as_deref(), Some("gc failed"));
-    assert_eq!(
-        payload.storage.degraded_reason.as_deref(),
-        Some("storage degraded")
-    );
-    assert_eq!(payload.p2p.requested_user_mode, "auto_join");
-    assert_eq!(payload.p2p.recommended_user_mode, "public_entry");
-    assert_eq!(payload.p2p.effective_user_mode, "private_safe");
-    assert_eq!(
-        payload.p2p.applied_effective_user_mode.as_deref(),
-        Some("private_safe")
-    );
-    assert!(payload.p2p.requires_explicit_public_entry_confirmation);
-    assert_eq!(payload.p2p.detected_reachability.as_deref(), Some("public"));
-    assert_eq!(payload.p2p.autonat_status, "public");
-    assert_eq!(payload.p2p.public_port_reachability, "reachable");
-    assert_eq!(
-        payload.p2p.observed_public_addr.as_deref(),
-        Some("/dns4/public.example/tcp/4001")
-    );
-    assert_eq!(
-        payload.p2p.confirmed_external_direct_addrs,
-        vec!["/dns4/public.example/tcp/4001".to_string()]
-    );
-    assert_eq!(
-        payload.release_security_policy,
-        ReleaseSecurityPolicy::default()
-    );
-    assert_eq!(
-        payload.traffic.libp2p_replication.scope,
-        "application_payload_only"
-    );
-    assert!(payload.traffic.udp_gossip.is_none());
-}
-
-#[test]
 fn production_release_policy_status_payload_reports_effective_policy() {
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
@@ -1066,6 +915,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
         },
+        super::ChainReplicationDebugStatus::default(),
     );
 
     assert_eq!(
@@ -1154,6 +1004,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
         },
+        super::ChainReplicationDebugStatus::default(),
     );
 
     assert_eq!(payload.p2p.requested_user_mode, "private_safe");

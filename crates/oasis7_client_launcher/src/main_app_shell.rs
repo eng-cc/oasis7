@@ -136,6 +136,8 @@ impl eframe::App for ClientLauncherApp {
             );
             ui.separator();
             self.render_chain_p2p_summary(ui);
+            ui.separator();
+            self.render_chain_observability_summary(ui);
 
             ui.separator();
             if self.is_expert_mode() {

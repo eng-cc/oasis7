@@ -51,6 +51,7 @@
   - SC-18: `fetch-commit` gap-sync 请求必须对最近刚返回“缺少 handler / 不支持该协议”签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的 peer 做短时协议级退避；业务语义层的 `ErrUnsupported` 不计入该退避条件，以避免在真实 triad 中对同一无效目标反复发起 libp2p 请求。
   - SC-19: `libp2p_net` peer discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 请求必须对同一 peer 保持短时协议级冷却，压制 DHT/routing/rendezvous/connection-established 事件造成的高频重复取件，同时保留单次 cached-peer-record 请求链里的多 proxy fallback。
   - SC-20: chain-linked `oasis7_viewer_live` 必须默认被动跟随 `/v1/chain/status.consensus.committed_height` 对应的 execution world，不需要显式 `Play` 才能消费 committed action；若轮询没有新的 committed action 或没有新增 world event，则不得把该轮询记成逻辑 world progression。
+  - SC-21: 节点运营者与 launcher 用户必须能从同一份 `/v1/chain/status.observability` 真值回答“当前连了多少 peer、是否落后、是否有存储/复制/奖励子系统告警”，并可由 repo-owned 脚本与 launcher UI 直接消费，无需各自重复推导。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -89,6 +90,7 @@
   - PRD-WORLD_RUNTIME-032: As a `runtime_engineer` / 节点运营者, I want storage challenge `fetch-blob` probes to reuse a short-lived success cache for recently verified content hashes, so that triad nodes stop re-fetching the same reachable blob every commit while still rechecking new blobs and expiring old proofs quickly.
   - PRD-WORLD_RUNTIME-033: As a `runtime_engineer` / `viewer_engineer`, I want chain-linked viewer gameplay actions to submit through `oasis7_chain_runtime` and only become visible after committed execution-world sync, so that player controls follow the same consensus-backed path as chain observation instead of mutating the local viewer runtime optimistically.
   - PRD-WORLD_RUNTIME-034: As a `runtime_engineer` / 节点运营者, I want repeated successful `fetch-commit` requests with the same deterministic payload to reuse a short-lived local success cache, so that followers stop re-asking the network for the same already-found commit during tight gap-sync loops without hiding not-found or timeout recovery.
+  - PRD-WORLD_RUNTIME-035: As a `runtime_engineer` / `viewer_engineer` / 节点运营者, I want node observability to be published as a stable summary plus alerts contract and surfaced through launcher/UI and repo-owned reports, so that current peer count, lag, degraded subsystems, and active alerts are directly visible without reading raw payload internals.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -142,6 +144,7 @@
   - AC-30: storage challenge gate 对近期已验证成功的 `content_hash` 必须提供短窗口 success cache，只允许在缓存过期、命中新 hash、或本地 blob 缺失时重新发起 `fetch-blob` 网络探测；定向回归需证明连续两次 gate 调用不会对同一已验证 blob 重复发网请求，同时缓存过期后仍会恢复真实探测。
   - AC-31: chain-linked `gameplay_action` 必须通过 `oasis7_chain_runtime` 的 `/v1/chain/gameplay/submit` 进入 consensus queue；提交路径必须复用 viewer auth proof、拒绝 nonce replay、返回 consensus `action_id` 作为提交回执，并证明 viewer 本地 world 在提交时不会立即变更，只会在 committed execution world sync 后观察到新工厂/配方结果。
   - AC-32: gap-sync `fetch-commit` 路径必须仅在高层校验接受 commit 后建立短时、本地、payload-scoped success cache；定向回归需证明相同 payload 的立即重复成功请求不会再次发网、窗口过后会恢复真实请求、且校验失败或 `found=false` 响应不会进入 success cache。
+  - AC-33: `/v1/chain/status` 必须新增稳定的 `observability` 摘要契约，至少暴露 `status/summary`、`connected_peer_count`、`active/candidate/suspect/blocked` peer 计数、`known_peer_heads`、`network_height_lag`、`recent_replication_error_count`、`storage_degraded`、`reward_runtime_degraded` 与结构化 `alerts[{severity,code,summary}]`；repo-owned 报告脚本与 launcher/control-plane 必须直接消费该契约而不是各自重算，并能补充最近 traffic window 摘要。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -193,6 +196,7 @@
   - NFR-WR-14: storage challenge `fetch-blob` success cache 必须只复用短窗口内的正向验证结果，默认只减少最近重复取件噪音，不得把过期网络可达性证明长期当真，也不得掩盖本地 blob 缺失等硬失败。
   - NFR-WR-15: chain-linked gameplay submit 必须保持“提交成功不等于本地 world 立即可见”的 committed-only 可见性边界，viewer 只能在 committed execution world sync 之后反映新状态，不得因本地 optimistic mutation 伪造链上结果。
   - NFR-WR-16: `fetch-commit` success cache 必须只复用近期、相同 deterministic request payload 的正向响应，不得缓存 `found=false` 或协议错误，也不得把 peer-scoped 失败冷却扩大成全局成功假象。
+  - NFR-WR-17: 节点观测摘要必须来自 runtime 已发布的单一真值，launcher、web control plane 与 repo-owned 报告脚本只做透传与格式化，不得各自维护独立健康判定逻辑，避免不同入口对同一节点给出互相冲突的状态。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
 ## 5. Risks & Roadmap
@@ -234,6 +238,7 @@
 | PRD-WORLD_RUNTIME-032 | task_53b1918a361445f5bf678bcf525abc5c | `test_tier_required` | storage challenge `fetch-blob` success cache 定向回归、缓存过期恢复探测断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-blob` 重复成功拉取降噪、sequencer↔storage 热点流量收口 |
 | PRD-WORLD_RUNTIME-033 | task_dd49ad3480d14922993ceb3acf2555c6 | `test_tier_required` | `/v1/chain/gameplay/submit` handler 回归、viewer chain-linked gameplay submit 回归、`cargo check`、`git diff --check` | viewer gameplay action 与 chain runtime committed world 的一致性闭环 |
 | PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、校验失败不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
+| PRD-WORLD_RUNTIME-035 | task_0c817eead8024055b841eb1be55adac3 | `test_tier_required` | status payload `observability` 合同回归、web launcher probe/snapshot 透传回归、client launcher snapshot 消费回归、repo-owned node observability report 脚本验证 | 节点健康摘要统一真值、launcher/operator 可读观测面 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

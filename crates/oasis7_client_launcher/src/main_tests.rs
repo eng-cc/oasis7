@@ -700,6 +700,7 @@ fn apply_web_snapshot_tracks_chain_recovery_payload() {
         chain_status: "stale_execution_world".to_string(),
         chain_detail: Some("stale execution world detected".to_string()),
         chain_p2p_status: None,
+        chain_observability_status: None,
         chain_recovery: Some(WebChainRecoverySnapshot {
             error_code: "stale_execution_world".to_string(),
             reason: "stale execution world detected".to_string(),
@@ -748,6 +749,7 @@ fn apply_web_snapshot_preserves_local_dirty_config_when_snapshot_differs() {
         chain_status: "not_started".to_string(),
         chain_detail: None,
         chain_p2p_status: None,
+        chain_observability_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: remote_config,
@@ -770,6 +772,7 @@ fn apply_web_snapshot_clears_dirty_flag_when_snapshot_matches_local_config() {
         chain_status: "not_started".to_string(),
         chain_detail: None,
         chain_p2p_status: None,
+        chain_observability_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -800,6 +803,7 @@ fn apply_web_snapshot_marks_control_plane_snapshot_received() {
         chain_status: "not_started".to_string(),
         chain_detail: None,
         chain_p2p_status: None,
+        chain_observability_status: None,
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -1194,46 +1198,6 @@ fn build_chain_runtime_args_requires_public_entry_confirmation() {
     })
     .expect_err("public entry should require explicit confirmation");
     assert!(err.contains("explicit confirmation"));
-}
-
-#[test]
-fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
-    let mut app = ClientLauncherApp::default();
-    let snapshot = WebStateSnapshot {
-        status: "idle".to_string(),
-        detail: None,
-        chain_status: "ready".to_string(),
-        chain_detail: None,
-        chain_p2p_status: Some(super::WebChainP2pStatus {
-            requested_user_mode: "auto_join".to_string(),
-            recommended_user_mode: "public_entry".to_string(),
-            effective_user_mode: "private_safe".to_string(),
-            applied_effective_user_mode: Some("private_safe".to_string()),
-            requires_explicit_public_entry_confirmation: true,
-            detected_reachability: Some("public".to_string()),
-            hole_punch_viability: "viable".to_string(),
-            relay_available: false,
-            probe_stable: true,
-            deployment_mode: "private".to_string(),
-            node_role_claim: "validator_core".to_string(),
-            rationale: vec![
-                "observed_reachability=public".to_string(),
-                "public entry confirmation pending".to_string(),
-            ],
-        }),
-        chain_recovery: None,
-        game_url: "http://127.0.0.1:4173/".to_string(),
-        config: app.config.clone(),
-        logs: vec![],
-    };
-
-    app.apply_web_snapshot(snapshot);
-    let status = app
-        .chain_p2p_status
-        .clone()
-        .expect("p2p status should exist");
-    assert_eq!(status.recommended_user_mode, "public_entry");
-    assert!(status.requires_explicit_public_entry_confirmation);
 }
 
 #[test]

@@ -786,7 +786,9 @@ fn handle_chain_status_connection(
                 build_live_node_network_policy_recommendation(options, Some(&live_snapshot))?;
             let applied_effective_user_mode =
                 applied_runtime_user_mode_label(options).map(str::to_string);
-            let mut payload = build_chain_status_payload(
+            let replication_debug_status =
+                build_chain_replication_debug_status(replication_network.as_ref());
+            let payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
                 &p2p_recommendation,
@@ -798,9 +800,8 @@ fn handle_chain_status_connection(
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
+                replication_debug_status,
             );
-            payload.replication =
-                build_chain_replication_debug_status(replication_network.as_ref());
             let body = serde_json::to_vec_pretty(&payload)
                 .map_err(|err| format!("failed to encode status payload: {err}"))?;
             write_json_response(&mut stream, 200, body.as_slice(), head_only)
@@ -1182,6 +1183,9 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[path = "oasis7_chain_runtime/execution_bridge_real_tests.rs"]
 mod execution_bridge_real_tests;
 
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs"]
+mod observability_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_tests.rs"]
 mod tests;
