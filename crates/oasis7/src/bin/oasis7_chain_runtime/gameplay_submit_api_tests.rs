@@ -108,14 +108,6 @@ fn wait_for_committed_height(runtime: &Arc<Mutex<NodeRuntime>>, minimum_height: 
     panic!("timed out waiting for committed height >= {minimum_height}, got {height}");
 }
 
-fn gameplay_submit_test_guard() -> MutexGuard<'static, ()> {
-    static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
-    TEST_MUTEX
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 #[test]
 fn parse_gameplay_submit_request_round_trips_viewer_payload() {
     let _guard = gameplay_submit_test_guard();
