@@ -571,6 +571,31 @@ struct WebChainP2pStatus {
     rationale: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct WebChainNodeObservabilityAlert {
+    severity: String,
+    code: String,
+    summary: String,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct WebChainNodeObservabilityStatus {
+    status: String,
+    summary: String,
+    connected_peer_count: usize,
+    active_peer_count: usize,
+    candidate_peer_count: usize,
+    suspect_peer_count: usize,
+    blocked_peer_count: usize,
+    peer_with_issues_count: usize,
+    known_peer_heads: usize,
+    network_height_lag: u64,
+    recent_replication_error_count: usize,
+    storage_degraded: bool,
+    reward_runtime_degraded: bool,
+    alerts: Vec<WebChainNodeObservabilityAlert>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct WebStateSnapshot {
     status: String,
@@ -578,6 +603,7 @@ struct WebStateSnapshot {
     chain_status: String,
     chain_detail: Option<String>,
     chain_p2p_status: Option<WebChainP2pStatus>,
+    chain_observability_status: Option<WebChainNodeObservabilityStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     game_url: String,
     config: LaunchConfig,
@@ -1054,6 +1080,7 @@ struct ClientLauncherApp {
     status: LauncherStatus,
     chain_runtime_status: ChainRuntimeStatus,
     chain_p2p_status: Option<WebChainP2pStatus>,
+    chain_observability_status: Option<WebChainNodeObservabilityStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     #[cfg(not(target_arch = "wasm32"))]
     running: Option<RunningProcess>,
@@ -1114,6 +1141,7 @@ impl Default for ClientLauncherApp {
             status: LauncherStatus::Idle,
             chain_runtime_status,
             chain_p2p_status: None,
+            chain_observability_status: None,
             chain_recovery: None,
             #[cfg(not(target_arch = "wasm32"))]
             running: None,
@@ -1150,6 +1178,9 @@ impl Default for ClientLauncherApp {
     }
 }
 
+#[cfg(test)]
+#[path = "main_observability_tests.rs"]
+mod observability_tests;
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;

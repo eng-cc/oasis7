@@ -43,6 +43,28 @@ impl ClientLauncherApp {
         }
     }
 
+    fn observability_status_text(&self, status: &str) -> &'static str {
+        match (status, self.ui_language) {
+            ("ok", UiLanguage::ZhCn) => "正常",
+            ("ok", UiLanguage::EnUs) => "OK",
+            ("warn", UiLanguage::ZhCn) => "告警",
+            ("warn", UiLanguage::EnUs) => "Warn",
+            ("critical", UiLanguage::ZhCn) => "严重",
+            ("critical", UiLanguage::EnUs) => "Critical",
+            (_, UiLanguage::ZhCn) => "未知",
+            (_, UiLanguage::EnUs) => "Unknown",
+        }
+    }
+
+    fn observability_status_color(&self, status: &str) -> egui::Color32 {
+        match status {
+            "ok" => egui::Color32::from_rgb(54, 132, 74),
+            "warn" => egui::Color32::from_rgb(184, 122, 36),
+            "critical" => egui::Color32::from_rgb(188, 60, 60),
+            _ => egui::Color32::from_rgb(110, 110, 110),
+        }
+    }
+
     pub(super) fn render_chain_p2p_summary(&mut self, ui: &mut egui::Ui) {
         if !self.config.chain_enabled {
             return;
@@ -176,6 +198,103 @@ impl ClientLauncherApp {
                 ui.small(self.tr(
                     "启动区块链后，这里会显示自动检测得到的推荐模式、运行态和证据摘要。",
                     "After blockchain starts, this card will show the recommended mode, applied runtime mode, and detection evidence.",
+                ));
+            }
+        });
+    }
+
+    pub(super) fn render_chain_observability_summary(&mut self, ui: &mut egui::Ui) {
+        if !self.config.chain_enabled {
+            return;
+        }
+
+        let status = self.chain_observability_status.clone();
+        ui.group(|ui| {
+            ui.label(self.tr("节点观测", "Node Observability"));
+
+            if let Some(status) = status {
+                ui.horizontal_wrapped(|ui| {
+                    ui.small(format!(
+                        "{}: ",
+                        self.tr("状态", "Status"),
+                    ));
+                    ui.colored_label(
+                        self.observability_status_color(status.status.as_str()),
+                        self.observability_status_text(status.status.as_str()),
+                    );
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("已连接 Peer", "Connected Peers"),
+                        status.connected_peer_count
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("Peer Heads", "Peer Heads"),
+                        status.known_peer_heads
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("网络落后高度", "Network Lag"),
+                        status.network_height_lag
+                    ));
+                });
+
+                ui.horizontal_wrapped(|ui| {
+                    ui.small(format!(
+                        "{}: active={} candidate={} suspect={} blocked={}",
+                        self.tr("Peer 健康", "Peer Health"),
+                        status.active_peer_count,
+                        status.candidate_peer_count,
+                        status.suspect_peer_count,
+                        status.blocked_peer_count
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("带问题 Peer", "Peers With Issues"),
+                        status.peer_with_issues_count
+                    ));
+                    ui.separator();
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("复制近期错误", "Recent Replication Errors"),
+                        status.recent_replication_error_count
+                    ));
+                });
+
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("摘要", "Summary"),
+                    status.summary
+                ));
+
+                if !status.alerts.is_empty() {
+                    let alert_lines = status
+                        .alerts
+                        .iter()
+                        .take(3)
+                        .map(|alert| {
+                            format!(
+                                "[{}] {}",
+                                self.observability_status_text(alert.severity.as_str()),
+                                alert.summary
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" | ");
+                    ui.small(format!(
+                        "{}: {}",
+                        self.tr("活动告警", "Active Alerts"),
+                        alert_lines
+                    ));
+                }
+            } else {
+                ui.small(self.tr(
+                    "启动区块链后，这里会显示节点健康、Peer 数、网络滞后和当前告警。",
+                    "After blockchain starts, this card will show node health, peer counts, network lag, and active alerts.",
                 ));
             }
         });

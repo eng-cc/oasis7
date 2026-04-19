@@ -262,6 +262,31 @@ struct ChainP2pStatusSnapshot {
     rationale: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ChainNodeObservabilityAlertSnapshot {
+    severity: String,
+    code: String,
+    summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ChainNodeObservabilitySnapshot {
+    status: String,
+    summary: String,
+    connected_peer_count: usize,
+    active_peer_count: usize,
+    candidate_peer_count: usize,
+    suspect_peer_count: usize,
+    blocked_peer_count: usize,
+    peer_with_issues_count: usize,
+    known_peer_heads: usize,
+    network_height_lag: u64,
+    recent_replication_error_count: usize,
+    storage_degraded: bool,
+    reward_runtime_degraded: bool,
+    alerts: Vec<ChainNodeObservabilityAlertSnapshot>,
+}
+
 #[derive(Debug, Clone)]
 enum ChainRuntimeStatus {
     Disabled,
@@ -306,6 +331,7 @@ struct ServiceState {
     running: Option<RunningProcess>,
     chain_runtime_status: ChainRuntimeStatus,
     chain_p2p_status: Option<ChainP2pStatusSnapshot>,
+    chain_observability_status: Option<ChainNodeObservabilitySnapshot>,
     chain_recovery: Option<ChainRecoverySnapshot>,
     chain_running: Option<RunningProcess>,
     chain_started_at: Option<Instant>,
@@ -335,6 +361,7 @@ impl ServiceState {
             running: None,
             chain_runtime_status,
             chain_p2p_status: None,
+            chain_observability_status: None,
             chain_recovery: None,
             chain_running: None,
             chain_started_at: None,
@@ -370,6 +397,8 @@ struct StateSnapshot {
     chain_runtime_bin: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_p2p_status: Option<ChainP2pStatusSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chain_observability_status: Option<ChainNodeObservabilitySnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     chain_recovery: Option<ChainRecoverySnapshot>,
     hosted_access: hosted_access::HostedPlayerAccessContract,

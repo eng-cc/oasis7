@@ -47,11 +47,37 @@ pub(super) struct ChainStatusResponse {
     pub(super) last_error: Option<String>,
     pub(super) execution_world_dir: String,
     pub(super) p2p: ChainP2pStatus,
+    pub(super) observability: ChainNodeObservabilityStatus,
     pub(super) release_security_policy: ReleaseSecurityPolicy,
     pub(super) reward_runtime: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     pub(super) storage: storage_metrics::StorageMetricsSnapshot,
     pub(super) traffic: ChainTrafficStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainNodeObservabilityStatus {
+    pub(super) status: String,
+    pub(super) summary: String,
+    pub(super) connected_peer_count: usize,
+    pub(super) active_peer_count: usize,
+    pub(super) candidate_peer_count: usize,
+    pub(super) suspect_peer_count: usize,
+    pub(super) blocked_peer_count: usize,
+    pub(super) peer_with_issues_count: usize,
+    pub(super) known_peer_heads: usize,
+    pub(super) network_height_lag: u64,
+    pub(super) recent_replication_error_count: usize,
+    pub(super) storage_degraded: bool,
+    pub(super) reward_runtime_degraded: bool,
+    pub(super) alerts: Vec<ChainNodeObservabilityAlert>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainNodeObservabilityAlert {
+    pub(super) severity: String,
+    pub(super) code: String,
+    pub(super) summary: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -117,6 +143,175 @@ pub(super) fn build_chain_p2p_status(
     }
 }
 
+fn push_observability_alert(
+    alerts: &mut Vec<ChainNodeObservabilityAlert>,
+    severity: &str,
+    code: &str,
+    summary: String,
+) {
+    alerts.push(ChainNodeObservabilityAlert {
+        severity: severity.to_string(),
+        code: code.to_string(),
+        summary,
+    });
+}
+
+fn observability_status_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
+    if alerts.iter().any(|alert| alert.severity == "critical") {
+        "critical".to_string()
+    } else if alerts.iter().any(|alert| alert.severity == "warn") {
+        "warn".to_string()
+    } else {
+        "ok".to_string()
+    }
+}
+
+fn observability_summary_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
+    match alerts {
+        [] => "no active node alerts".to_string(),
+        [only] => only.summary.clone(),
+        _ => format!("{}; +{} more alerts", alerts[0].summary, alerts.len() - 1),
+    }
+}
+
+fn build_chain_node_observability_status(
+    snapshot: &NodeSnapshot,
+    storage_metrics: &storage_metrics::StorageMetricsSnapshot,
+    reward_runtime_metrics: &super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
+    replication: &super::ChainReplicationDebugStatus,
+) -> ChainNodeObservabilityStatus {
+    let connected_peer_count = replication.connected_peers.len();
+    let mut active_peer_count = 0usize;
+    let mut candidate_peer_count = 0usize;
+    let mut suspect_peer_count = 0usize;
+    let mut blocked_peer_count = 0usize;
+    for health in &replication.peer_healths {
+        match health.status.as_str() {
+            "active" => active_peer_count += 1,
+            "candidate" => candidate_peer_count += 1,
+            "suspect" => suspect_peer_count += 1,
+            "blocked" => blocked_peer_count += 1,
+            _ => {}
+        }
+    }
+    let peer_with_issues_count = replication
+        .peer_healths
+        .iter()
+        .filter(|health| !health.issues.is_empty())
+        .count();
+    let known_peer_heads = snapshot.consensus.known_peer_heads;
+    let network_height_lag = snapshot
+        .consensus
+        .network_committed_height
+        .saturating_sub(snapshot.consensus.committed_height);
+    let recent_replication_error_count = replication.recent_errors.len();
+    let storage_degraded = storage_metrics.degraded_reason.is_some()
+        || matches!(storage_metrics.last_gc_result.as_str(), "failed");
+    let reward_runtime_degraded = reward_runtime_metrics.enabled
+        && (!reward_runtime_metrics.metrics_available
+            || !reward_runtime_metrics.invariant_ok
+            || reward_runtime_metrics.last_error.is_some());
+
+    let mut alerts = Vec::new();
+    if let Some(err) = snapshot.last_error.as_ref() {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "runtime_last_error",
+            format!("runtime last_error is set: {err}"),
+        );
+    }
+    if network_height_lag > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "consensus_network_lag",
+            format!("network committed height is ahead by {network_height_lag}"),
+        );
+    }
+    if suspect_peer_count > 0 || blocked_peer_count > 0 || peer_with_issues_count > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "replication_peer_health_degraded",
+            format!(
+                "peer health degraded: suspect={suspect_peer_count}, blocked={blocked_peer_count}, peers_with_issues={peer_with_issues_count}"
+            ),
+        );
+    }
+    if !replication.peer_healths.is_empty() && connected_peer_count == 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "replication_no_connected_peers",
+            "replication discovered peers but has no connected peers".to_string(),
+        );
+    }
+    if recent_replication_error_count > 0 {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "replication_recent_errors",
+            format!(
+                "replication reported {recent_replication_error_count} recent transport/protocol errors"
+            ),
+        );
+    }
+    if storage_degraded {
+        let reason = storage_metrics
+            .degraded_reason
+            .clone()
+            .or_else(|| {
+                (storage_metrics.last_gc_result == "failed")
+                    .then(|| "latest GC result is failed".to_string())
+            })
+            .unwrap_or_else(|| "storage reported degraded state".to_string());
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "storage_degraded",
+            format!("storage degraded: {reason}"),
+        );
+    }
+    if reward_runtime_degraded {
+        let reason = reward_runtime_metrics
+            .last_error
+            .clone()
+            .unwrap_or_else(|| {
+                if !reward_runtime_metrics.metrics_available {
+                    "reward runtime metrics unavailable".to_string()
+                } else if !reward_runtime_metrics.invariant_ok {
+                    "reward runtime invariant failed".to_string()
+                } else {
+                    "reward runtime degraded".to_string()
+                }
+            });
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "reward_runtime_degraded",
+            format!("reward runtime degraded: {reason}"),
+        );
+    }
+
+    ChainNodeObservabilityStatus {
+        status: observability_status_for_alerts(alerts.as_slice()),
+        summary: observability_summary_for_alerts(alerts.as_slice()),
+        connected_peer_count,
+        active_peer_count,
+        candidate_peer_count,
+        suspect_peer_count,
+        blocked_peer_count,
+        peer_with_issues_count,
+        known_peer_heads,
+        network_height_lag,
+        recent_replication_error_count,
+        storage_degraded,
+        reward_runtime_degraded,
+        alerts,
+    }
+}
+
 pub(super) fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
@@ -129,11 +324,18 @@ pub(super) fn build_chain_status_payload(
     reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage_metrics: storage_metrics::StorageMetricsSnapshot,
     traffic: ChainTrafficStatus,
+    replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
     let last_status = snapshot
         .consensus
         .last_status
         .map(consensus_status_to_string);
+    let observability = build_chain_node_observability_status(
+        &snapshot,
+        &storage_metrics,
+        &reward_runtime_metrics,
+        &replication,
+    );
 
     ChainStatusResponse {
         ok: true,
@@ -175,10 +377,11 @@ pub(super) fn build_chain_status_payload(
             live_snapshot,
             p2p_detection,
         ),
+        observability,
         release_security_policy,
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,
         traffic,
-        replication: super::ChainReplicationDebugStatus::default(),
+        replication,
     }
 }
