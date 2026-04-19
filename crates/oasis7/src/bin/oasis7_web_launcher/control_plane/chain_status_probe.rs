@@ -9,12 +9,12 @@ use super::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ChainStatusProbeSnapshot {
-    pub(super) p2p: ChainP2pStatusSnapshot,
-    pub(super) observability: ChainNodeObservabilitySnapshot,
+pub(crate) struct ChainStatusProbeSnapshot {
+    pub(crate) p2p: ChainP2pStatusSnapshot,
+    pub(crate) observability: ChainNodeObservabilitySnapshot,
 }
 
-pub(super) fn query_chain_status_endpoint(bind: &str) -> Result<ChainStatusProbeSnapshot, String> {
+pub(crate) fn query_chain_status_endpoint(bind: &str) -> Result<ChainStatusProbeSnapshot, String> {
     let (host, port) = parse_host_port(bind, "chain status bind")?;
     let host = runtime_paths::normalize_bind_host_for_local_access(host.as_str());
     let socket_addr = (host.as_str(), port)
