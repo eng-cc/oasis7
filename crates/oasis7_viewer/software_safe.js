@@ -3555,7 +3555,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$11 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English`), _tmpl$14 = /* @__PURE__ */ template(`<div class=toolbar><button data-entry=software-safe-current-locale></button><button data-entry=standard-viewer-current-locale>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$18 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$11 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English`), _tmpl$14 = /* @__PURE__ */ template(`<div class=toolbar><button data-entry=software-safe-current-locale></button><button data-entry=standard-viewer-current-locale>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$18 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
 function uiLocale() {
   return state.uiLocale;
 }
@@ -4969,12 +4969,143 @@ function InteractionPanel() {
     }), null);
     insert(_el$94, createComponent(PanelSection, {
       get title() {
-        return tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings");
+        return tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane");
       },
       get children() {
         return [(() => {
           var _el$98 = _tmpl$15();
           insert(_el$98, createComponent(Badge, {
+            get ["class"]() {
+              return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
+            },
+            get children() {
+              return `main_token_transfer=${assetLaneStatusText()}`;
+            }
+          }), null);
+          insert(_el$98, createComponent(Badge, {
+            get children() {
+              return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
+            }
+          }), null);
+          insert(_el$98, createComponent(Badge, {
+            get children() {
+              return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
+            }
+          }), null);
+          return _el$98;
+        })(), createComponent(EmptyState, {
+          get children() {
+            return assetLaneDetail();
+          }
+        }), createComponent(EmptyState, {
+          get children() {
+            return mainTokenTransferPolicy()?.reason || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.");
+          }
+        }), (() => {
+          var _el$99 = _tmpl$23(), _el$100 = _el$99.firstChild;
+          insert(_el$100, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+          return _el$99;
+        })()];
+      }
+    }), null);
+    insert(_el$94, createComponent(PanelSection, {
+      get title() {
+        return tr(locale(), "Agent 聊天", "Agent Chat");
+      },
+      get children() {
+        return [(() => {
+          var _el$101 = _tmpl$24(), _el$102 = _el$101.firstChild, _el$103 = _el$102.nextSibling;
+          insert(_el$102, () => tr(locale(), "消息", "Message"));
+          _el$103.$$input = (event) => {
+            state.chatDraft.message = String(event.currentTarget.value || "");
+            state.chatDraft.dirty = true;
+          };
+          createRenderEffect((_p$) => {
+            var _v$7 = tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent"), _v$8 = !chatCapability().enabled;
+            _v$7 !== _p$.e && setAttribute(_el$103, "placeholder", _p$.e = _v$7);
+            _v$8 !== _p$.t && (_el$103.disabled = _p$.t = _v$8);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0
+          });
+          createRenderEffect(() => _el$103.value = state.chatDraft.message);
+          return _el$101;
+        })(), (() => {
+          var _el$104 = _tmpl$25(), _el$105 = _el$104.firstChild;
+          _el$105.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
+          insert(_el$105, () => tr(locale(), "发送聊天", "Send Chat"));
+          createRenderEffect(() => _el$105.disabled = !chatCapability().enabled);
+          return _el$104;
+        })(), createComponent(Show, {
+          get when() {
+            return chatFeedback();
+          },
+          get fallback() {
+            return createComponent(EmptyState, {
+              get children() {
+                return tr(locale(), "还没有聊天反馈。", "No chat feedback yet.");
+              }
+            });
+          },
+          children: (feedback) => createComponent(FeedbackCard, {
+            get feedback() {
+              return feedback();
+            },
+            get display() {
+              return chatFeedbackDisplay();
+            }
+          })
+        }), (() => {
+          var _el$106 = _tmpl$21(), _el$107 = _el$106.firstChild, _el$108 = _el$107.nextSibling;
+          insert(_el$107, () => tr(locale(), "消息流", "Message Flow"));
+          insert(_el$108, createComponent(Show, {
+            get when() {
+              return chatHistory().length > 0;
+            },
+            get fallback() {
+              return createComponent(EmptyState, {
+                get children() {
+                  return tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.");
+                }
+              });
+            },
+            get children() {
+              return createComponent(For, {
+                get each() {
+                  return chatHistory();
+                },
+                children: (entry) => createComponent(EventCard, {
+                  get title() {
+                    return memo(() => entry.source === "player")() ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}` : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`;
+                  },
+                  get badge() {
+                    return `tick=${Number(entry.tick || 0)}`;
+                  },
+                  get meta() {
+                    return `speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`;
+                  },
+                  get children() {
+                    return createComponent(JsonBlock, {
+                      value: entry
+                    });
+                  }
+                })
+              });
+            }
+          }));
+          return _el$106;
+        })()];
+      }
+    }), null);
+    insert(_el$94, createComponent(PanelSection, {
+      get title() {
+        return tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings");
+      },
+      get children() {
+        return [(() => {
+          var _el$109 = _tmpl$15();
+          insert(_el$109, createComponent(Badge, {
             get ["class"]() {
               return promptOverridesVisible() ? "badge badge--good" : "badge";
             },
@@ -4982,21 +5113,21 @@ function InteractionPanel() {
               return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
             }
           }), null);
-          insert(_el$98, createComponent(Badge, {
+          insert(_el$109, createComponent(Badge, {
             get children() {
               return tr(locale(), "本地设置持久化", "locally persisted");
             }
           }), null);
-          return _el$98;
+          return _el$109;
         })(), createComponent(EmptyState, {
           get children() {
             return promptSettingsSummary();
           }
         }), (() => {
-          var _el$99 = _tmpl$23(), _el$100 = _el$99.firstChild;
-          _el$100.$$click = () => togglePromptOverridesVisible();
-          insert(_el$100, promptSettingsButtonLabel);
-          return _el$99;
+          var _el$110 = _tmpl$26(), _el$111 = _el$110.firstChild;
+          _el$111.$$click = () => togglePromptOverridesVisible();
+          insert(_el$111, promptSettingsButtonLabel);
+          return _el$110;
         })()];
       }
     }), null);
@@ -5009,97 +5140,97 @@ function InteractionPanel() {
           title: "Prompt Overrides",
           get children() {
             return [(() => {
-              var _el$101 = _tmpl$4();
-              insert(_el$101, () => promptVersionState().summary);
-              return _el$101;
+              var _el$112 = _tmpl$4();
+              insert(_el$112, () => promptVersionState().summary);
+              return _el$112;
             })(), (() => {
-              var _el$102 = _tmpl$4();
-              insert(_el$102, () => promptVersionState().detail);
-              return _el$102;
+              var _el$113 = _tmpl$4();
+              insert(_el$113, () => promptVersionState().detail);
+              return _el$113;
             })(), createComponent(Show, {
               get when() {
                 return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
               },
               get children() {
-                var _el$103 = _tmpl$24(), _el$104 = _el$103.firstChild, _el$105 = _el$104.nextSibling;
-                insert(_el$104, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                _el$105.$$input = (event) => {
+                var _el$114 = _tmpl$27(), _el$115 = _el$114.firstChild, _el$116 = _el$115.nextSibling;
+                insert(_el$115, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                _el$116.$$input = (event) => {
                   state.strongAuth.approvalCode = String(event.currentTarget.value || "");
                 };
-                createRenderEffect(() => _el$105.value = state.strongAuth.approvalCode || "");
-                return _el$103;
+                createRenderEffect(() => _el$116.value = state.strongAuth.approvalCode || "");
+                return _el$114;
               }
             }), (() => {
-              var _el$106 = _tmpl$25(), _el$107 = _el$106.firstChild, _el$108 = _el$107.nextSibling;
-              insert(_el$107, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
-              _el$108.$$input = (event) => {
+              var _el$117 = _tmpl$28(), _el$118 = _el$117.firstChild, _el$119 = _el$118.nextSibling;
+              insert(_el$118, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
+              _el$119.$$input = (event) => {
                 state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$108.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$108.value = state.promptDraft.systemPrompt);
-              return _el$106;
+              createRenderEffect(() => _el$119.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$119.value = state.promptDraft.systemPrompt);
+              return _el$117;
             })(), (() => {
-              var _el$109 = _tmpl$26(), _el$110 = _el$109.firstChild, _el$111 = _el$110.nextSibling;
-              insert(_el$110, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-              _el$111.$$input = (event) => {
+              var _el$120 = _tmpl$29(), _el$121 = _el$120.firstChild, _el$122 = _el$121.nextSibling;
+              insert(_el$121, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+              _el$122.$$input = (event) => {
                 state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$111.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$111.value = state.promptDraft.shortTermGoal);
-              return _el$109;
+              createRenderEffect(() => _el$122.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$122.value = state.promptDraft.shortTermGoal);
+              return _el$120;
             })(), (() => {
-              var _el$112 = _tmpl$27(), _el$113 = _el$112.firstChild, _el$114 = _el$113.nextSibling;
-              insert(_el$113, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-              _el$114.$$input = (event) => {
+              var _el$123 = _tmpl$30(), _el$124 = _el$123.firstChild, _el$125 = _el$124.nextSibling;
+              insert(_el$124, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+              _el$125.$$input = (event) => {
                 state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$114.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$114.value = state.promptDraft.longTermGoal);
-              return _el$112;
+              createRenderEffect(() => _el$125.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$125.value = state.promptDraft.longTermGoal);
+              return _el$123;
             })(), (() => {
-              var _el$115 = _tmpl$28(), _el$116 = _el$115.firstChild, _el$117 = _el$116.nextSibling;
-              _el$116.$$click = () => sendPromptControl("preview", null);
-              insert(_el$116, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
-              _el$117.$$click = () => sendPromptControl("apply", null);
-              insert(_el$117, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
+              var _el$126 = _tmpl$31(), _el$127 = _el$126.firstChild, _el$128 = _el$127.nextSibling;
+              _el$127.$$click = () => sendPromptControl("preview", null);
+              insert(_el$127, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
+              _el$128.$$click = () => sendPromptControl("apply", null);
+              insert(_el$128, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
               createRenderEffect((_p$) => {
-                var _v$7 = !promptCapability().enabled, _v$8 = !promptCapability().enabled;
-                _v$7 !== _p$.e && (_el$116.disabled = _p$.e = _v$7);
-                _v$8 !== _p$.t && (_el$117.disabled = _p$.t = _v$8);
+                var _v$9 = !promptCapability().enabled, _v$0 = !promptCapability().enabled;
+                _v$9 !== _p$.e && (_el$127.disabled = _p$.e = _v$9);
+                _v$0 !== _p$.t && (_el$128.disabled = _p$.t = _v$0);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              return _el$115;
+              return _el$126;
             })(), (() => {
-              var _el$118 = _tmpl$29(), _el$119 = _el$118.firstChild, _el$120 = _el$119.firstChild, _el$121 = _el$120.nextSibling, _el$122 = _el$119.nextSibling;
-              insert(_el$120, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-              _el$121.$$input = (event) => {
+              var _el$129 = _tmpl$32(), _el$130 = _el$129.firstChild, _el$131 = _el$130.firstChild, _el$132 = _el$131.nextSibling, _el$133 = _el$130.nextSibling;
+              insert(_el$131, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+              _el$132.$$input = (event) => {
                 const nextValue = Number(event.currentTarget.value || 0);
                 state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
                 requestRender();
               };
-              _el$122.$$click = () => {
+              _el$133.$$click = () => {
                 sendPromptControl("rollback", {
                   toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                 });
               };
-              insert(_el$122, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
+              insert(_el$133, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
               createRenderEffect((_p$) => {
-                var _v$9 = !promptCapability().enabled, _v$0 = !promptCapability().enabled;
-                _v$9 !== _p$.e && (_el$121.disabled = _p$.e = _v$9);
-                _v$0 !== _p$.t && (_el$122.disabled = _p$.t = _v$0);
+                var _v$1 = !promptCapability().enabled, _v$10 = !promptCapability().enabled;
+                _v$1 !== _p$.e && (_el$132.disabled = _p$.e = _v$1);
+                _v$10 !== _p$.t && (_el$133.disabled = _p$.t = _v$10);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              createRenderEffect(() => _el$121.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-              return _el$118;
+              createRenderEffect(() => _el$132.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+              return _el$129;
             })(), createComponent(Show, {
               get when() {
                 return promptFeedback();
@@ -5145,137 +5276,6 @@ function InteractionPanel() {
             })];
           }
         });
-      }
-    }), null);
-    insert(_el$94, createComponent(PanelSection, {
-      get title() {
-        return tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane");
-      },
-      get children() {
-        return [(() => {
-          var _el$123 = _tmpl$15();
-          insert(_el$123, createComponent(Badge, {
-            get ["class"]() {
-              return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
-            },
-            get children() {
-              return `main_token_transfer=${assetLaneStatusText()}`;
-            }
-          }), null);
-          insert(_el$123, createComponent(Badge, {
-            get children() {
-              return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
-            }
-          }), null);
-          insert(_el$123, createComponent(Badge, {
-            get children() {
-              return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
-            }
-          }), null);
-          return _el$123;
-        })(), createComponent(EmptyState, {
-          get children() {
-            return assetLaneDetail();
-          }
-        }), createComponent(EmptyState, {
-          get children() {
-            return mainTokenTransferPolicy()?.reason || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.");
-          }
-        }), (() => {
-          var _el$124 = _tmpl$30(), _el$125 = _el$124.firstChild;
-          insert(_el$125, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-          return _el$124;
-        })()];
-      }
-    }), null);
-    insert(_el$94, createComponent(PanelSection, {
-      get title() {
-        return tr(locale(), "Agent 聊天", "Agent Chat");
-      },
-      get children() {
-        return [(() => {
-          var _el$126 = _tmpl$31(), _el$127 = _el$126.firstChild, _el$128 = _el$127.nextSibling;
-          insert(_el$127, () => tr(locale(), "消息", "Message"));
-          _el$128.$$input = (event) => {
-            state.chatDraft.message = String(event.currentTarget.value || "");
-            state.chatDraft.dirty = true;
-          };
-          createRenderEffect((_p$) => {
-            var _v$1 = tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent"), _v$10 = !chatCapability().enabled;
-            _v$1 !== _p$.e && setAttribute(_el$128, "placeholder", _p$.e = _v$1);
-            _v$10 !== _p$.t && (_el$128.disabled = _p$.t = _v$10);
-            return _p$;
-          }, {
-            e: void 0,
-            t: void 0
-          });
-          createRenderEffect(() => _el$128.value = state.chatDraft.message);
-          return _el$126;
-        })(), (() => {
-          var _el$129 = _tmpl$32(), _el$130 = _el$129.firstChild;
-          _el$130.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
-          insert(_el$130, () => tr(locale(), "发送聊天", "Send Chat"));
-          createRenderEffect(() => _el$130.disabled = !chatCapability().enabled);
-          return _el$129;
-        })(), createComponent(Show, {
-          get when() {
-            return chatFeedback();
-          },
-          get fallback() {
-            return createComponent(EmptyState, {
-              get children() {
-                return tr(locale(), "还没有聊天反馈。", "No chat feedback yet.");
-              }
-            });
-          },
-          children: (feedback) => createComponent(FeedbackCard, {
-            get feedback() {
-              return feedback();
-            },
-            get display() {
-              return chatFeedbackDisplay();
-            }
-          })
-        }), (() => {
-          var _el$131 = _tmpl$21(), _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling;
-          insert(_el$132, () => tr(locale(), "消息流", "Message Flow"));
-          insert(_el$133, createComponent(Show, {
-            get when() {
-              return chatHistory().length > 0;
-            },
-            get fallback() {
-              return createComponent(EmptyState, {
-                get children() {
-                  return tr(locale(), "这个 Agent 还没有聊天历史。", "No chat history for this agent yet.");
-                }
-              });
-            },
-            get children() {
-              return createComponent(For, {
-                get each() {
-                  return chatHistory();
-                },
-                children: (entry) => createComponent(EventCard, {
-                  get title() {
-                    return memo(() => entry.source === "player")() ? `${tr(locale(), "玩家", "player")} → ${entry.targetAgentId || entry.agentId || "agent"}` : `${entry.agentId || "agent"} ${tr(locale(), "已发言", "spoke")}`;
-                  },
-                  get badge() {
-                    return `tick=${Number(entry.tick || 0)}`;
-                  },
-                  get meta() {
-                    return `speaker=${entry.speaker || entry.playerId || "-"} · location=${entry.locationId || "-"}`;
-                  },
-                  get children() {
-                    return createComponent(JsonBlock, {
-                      value: entry
-                    });
-                  }
-                })
-              });
-            }
-          }));
-          return _el$131;
-        })()];
       }
     }), null);
     return _el$94;
