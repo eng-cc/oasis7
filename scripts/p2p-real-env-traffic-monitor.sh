@@ -55,6 +55,8 @@ Notes:
     repeated cron/systemd runs do not grow `history.ndjson` without bound.
   - Use repeated invocations (cron/systemd timer) or a longer single run to
     accumulate enough history for a full 10-minute answer.
+  - `latest_summary.json` includes both per-node full detail maps and a triad
+    aggregate section with merged total-flow distribution.
 USAGE
 }
 

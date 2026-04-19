@@ -39,6 +39,8 @@ Notes:
   - The summary logic compares only records whose
     `traffic.*.observed_since_unix_ms` matches the latest successful sample, so
     node restarts shrink the covered window instead of producing bogus deltas.
+  - `latest_summary.json` now keeps full delta detail maps (`by_kind`,
+    `by_topic`, `by_protocol`) in addition to the top-N markdown summary.
 USAGE
 }
 

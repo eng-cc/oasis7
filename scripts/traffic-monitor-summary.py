@@ -121,15 +121,32 @@ def delta_named_map(current_map, baseline_map, counter_key):
     return result
 
 
+def total_count_and_payload(entry, counter_key):
+    inbound = (entry or {}).get("inbound") or {}
+    outbound = (entry or {}).get("outbound") or {}
+    total_count = int(inbound.get(counter_key, 0)) + int(outbound.get(counter_key, 0))
+    total_payload = int(inbound.get("payload_bytes", 0)) + int(
+        outbound.get("payload_bytes", 0)
+    )
+    return total_count, total_payload
+
+
+def nonzero_named_map(delta_map, counter_key):
+    result = {}
+    for name, entry in (delta_map or {}).items():
+        total_count, total_payload = total_count_and_payload(entry, counter_key)
+        if total_count == 0 and total_payload == 0:
+            continue
+        result[name] = entry
+    return result
+
+
 def top_entries(delta_map, counter_key, top_n):
     items = []
     for name, entry in (delta_map or {}).items():
         inbound = (entry or {}).get("inbound") or {}
         outbound = (entry or {}).get("outbound") or {}
-        total_count = int(inbound.get(counter_key, 0)) + int(outbound.get(counter_key, 0))
-        total_payload = int(inbound.get("payload_bytes", 0)) + int(
-            outbound.get("payload_bytes", 0)
-        )
+        total_count, total_payload = total_count_and_payload(entry, counter_key)
         if total_count == 0 and total_payload == 0:
             continue
         items.append(
@@ -150,6 +167,48 @@ def top_entries(delta_map, counter_key, top_n):
         reverse=True,
     )
     return items[:top_n]
+
+
+def sum_direction(current, added, counter_key):
+    current = current or {}
+    added = added or {}
+    return {
+        counter_key: int(current.get(counter_key, 0)) + int(added.get(counter_key, 0)),
+        "payload_bytes": int(current.get("payload_bytes", 0))
+        + int(added.get("payload_bytes", 0)),
+    }
+
+
+def sum_lane_entry(current, added, counter_key):
+    current = current or {}
+    added = added or {}
+    return {
+        "inbound": sum_direction(current.get("inbound"), added.get("inbound"), counter_key),
+        "outbound": sum_direction(current.get("outbound"), added.get("outbound"), counter_key),
+    }
+
+
+def sum_named_maps(named_maps, counter_key):
+    result = {}
+    for named_map in named_maps:
+        for name, entry in (named_map or {}).items():
+            result[name] = sum_lane_entry(result.get(name), entry, counter_key)
+    return nonzero_named_map(result, counter_key)
+
+
+def payload_totals_for_lane(lane):
+    if not lane or lane.get("available") is not True:
+        return 0
+    totals = lane.get("totals") or {}
+    inbound = totals.get("inbound") or {}
+    outbound = totals.get("outbound") or {}
+    return int(inbound.get("payload_bytes", 0)) + int(outbound.get("payload_bytes", 0))
+
+
+def share_percent(numerator, denominator):
+    if denominator <= 0:
+        return 0.0
+    return round((float(numerator) * 100.0) / float(denominator), 2)
 
 
 def lane_observed_since(record, lane_name):
@@ -177,23 +236,27 @@ def summarize_lane(lane_name, current_lane, baseline_lane, top_n):
     if current_lane is None:
         return {"available": False}
     counter_key = counter_key_for_lane(lane_name)
+    totals = delta_lane_entry(
+        current_lane.get("totals"), (baseline_lane or {}).get("totals"), counter_key
+    )
     result = {
         "available": True,
         "scope": current_lane.get("scope"),
         "observed_since_unix_ms": current_lane.get("observed_since_unix_ms"),
         "counter_key": counter_key,
-        "totals": delta_lane_entry(
-            current_lane.get("totals"), (baseline_lane or {}).get("totals"), counter_key
-        ),
+        "totals": totals,
+        "total_payload_bytes": payload_totals_for_lane({"available": True, "totals": totals}),
     }
     if lane_name == "udp_gossip":
-        result["top_kinds"] = top_entries(
+        by_kind = nonzero_named_map(
             delta_named_map(
                 current_lane.get("by_kind"), (baseline_lane or {}).get("by_kind"), counter_key
             ),
             counter_key,
-            top_n,
         )
+        result["by_kind"] = by_kind
+        result["detail_entry_counts"] = {"by_kind": len(by_kind)}
+        result["top_kinds"] = top_entries(by_kind, counter_key, top_n)
     else:
         result["gossip"] = delta_lane_entry(
             current_lane.get("gossip"), (baseline_lane or {}).get("gossip"), counter_key
@@ -204,23 +267,83 @@ def summarize_lane(lane_name, current_lane, baseline_lane, top_n):
         result["response"] = delta_lane_entry(
             current_lane.get("response"), (baseline_lane or {}).get("response"), counter_key
         )
-        result["top_topics"] = top_entries(
+        by_topic = nonzero_named_map(
             delta_named_map(
                 current_lane.get("by_topic"), (baseline_lane or {}).get("by_topic"), counter_key
             ),
             counter_key,
-            top_n,
         )
-        result["top_protocols"] = top_entries(
+        by_protocol = nonzero_named_map(
             delta_named_map(
                 current_lane.get("by_protocol"),
                 (baseline_lane or {}).get("by_protocol"),
                 counter_key,
             ),
             counter_key,
-            top_n,
         )
+        result["by_topic"] = by_topic
+        result["by_protocol"] = by_protocol
+        result["detail_entry_counts"] = {
+            "by_topic": len(by_topic),
+            "by_protocol": len(by_protocol),
+        }
+        result["top_topics"] = top_entries(by_topic, counter_key, top_n)
+        result["top_protocols"] = top_entries(by_protocol, counter_key, top_n)
     return result
+
+
+def aggregate_lane_summaries(lane_name, lanes, top_n):
+    available = [lane for lane in lanes if lane and lane.get("available") is True]
+    if not available:
+        return {"available": False}
+
+    counter_key = counter_key_for_lane(lane_name)
+    aggregate = {
+        "available": True,
+        "counter_key": counter_key,
+        "scope": sorted(
+            {
+                lane.get("scope")
+                for lane in available
+                if lane.get("scope") not in (None, "")
+            }
+        ),
+        "node_count": len(available),
+        "totals": {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}},
+    }
+
+    for lane in available:
+        aggregate["totals"] = sum_lane_entry(aggregate["totals"], lane.get("totals"), counter_key)
+
+    aggregate["total_payload_bytes"] = payload_totals_for_lane(aggregate)
+
+    if lane_name == "udp_gossip":
+        by_kind = sum_named_maps([lane.get("by_kind") for lane in available], counter_key)
+        aggregate["by_kind"] = by_kind
+        aggregate["detail_entry_counts"] = {"by_kind": len(by_kind)}
+        aggregate["top_kinds"] = top_entries(by_kind, counter_key, top_n)
+    else:
+        aggregate["gossip"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
+        aggregate["request"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
+        aggregate["response"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
+        for lane in available:
+            aggregate["gossip"] = sum_lane_entry(aggregate["gossip"], lane.get("gossip"), counter_key)
+            aggregate["request"] = sum_lane_entry(aggregate["request"], lane.get("request"), counter_key)
+            aggregate["response"] = sum_lane_entry(aggregate["response"], lane.get("response"), counter_key)
+
+        by_topic = sum_named_maps([lane.get("by_topic") for lane in available], counter_key)
+        by_protocol = sum_named_maps(
+            [lane.get("by_protocol") for lane in available], counter_key
+        )
+        aggregate["by_topic"] = by_topic
+        aggregate["by_protocol"] = by_protocol
+        aggregate["detail_entry_counts"] = {
+            "by_topic": len(by_topic),
+            "by_protocol": len(by_protocol),
+        }
+        aggregate["top_topics"] = top_entries(by_topic, counter_key, top_n)
+        aggregate["top_protocols"] = top_entries(by_protocol, counter_key, top_n)
+    return aggregate
 
 
 def summarize_record_set(records, window_minutes, top_n):
@@ -341,6 +464,75 @@ def summarize_record_set(records, window_minutes, top_n):
     }
 
 
+def aggregate_node_payload_distribution(nodes):
+    rows = []
+    total_payload_bytes = 0
+    for label, node in nodes.items():
+        if node.get("available") is not True:
+            continue
+        udp_payload_bytes = payload_totals_for_lane(node["traffic"].get("udp_gossip"))
+        libp2p_payload_bytes = payload_totals_for_lane(
+            node["traffic"].get("libp2p_replication")
+        )
+        node_total = udp_payload_bytes + libp2p_payload_bytes
+        total_payload_bytes += node_total
+        latest = node.get("latest") or {}
+        rows.append(
+            {
+                "label": label,
+                "node_id": latest.get("node_id"),
+                "role": latest.get("role"),
+                "udp_payload_bytes": udp_payload_bytes,
+                "libp2p_payload_bytes": libp2p_payload_bytes,
+                "total_payload_bytes": node_total,
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            row["total_payload_bytes"],
+            row["label"],
+        ),
+        reverse=True,
+    )
+    for row in rows:
+        row["share_percent"] = share_percent(row["total_payload_bytes"], total_payload_bytes)
+    return total_payload_bytes, rows
+
+
+def summarize_triad_aggregate(nodes, top_n):
+    udp = aggregate_lane_summaries(
+        "udp_gossip", [node.get("traffic", {}).get("udp_gossip") for node in nodes.values()], top_n
+    )
+    libp2p = aggregate_lane_summaries(
+        "libp2p_replication",
+        [node.get("traffic", {}).get("libp2p_replication") for node in nodes.values()],
+        top_n,
+    )
+    total_payload_bytes, node_payload_distribution = aggregate_node_payload_distribution(nodes)
+    lane_distribution = {
+        "udp_gossip": {
+            "payload_bytes": payload_totals_for_lane(udp),
+        },
+        "libp2p_replication": {
+            "payload_bytes": payload_totals_for_lane(libp2p),
+        },
+    }
+    for entry in lane_distribution.values():
+        entry["share_percent"] = share_percent(entry["payload_bytes"], total_payload_bytes)
+
+    return {
+        "node_count": len([node for node in nodes.values() if node.get("available") is True]),
+        "total_payload_bytes": total_payload_bytes,
+        "lane_distribution": lane_distribution,
+        "node_payload_distribution": node_payload_distribution,
+        "traffic": {
+            "udp_gossip": udp,
+            "libp2p_replication": libp2p,
+        },
+    }
+
+
 def fmt_num(value):
     if value is None:
         return "n/a"
@@ -391,6 +583,21 @@ def render_traffic_totals(name, lane):
     )
 
 
+def render_payload_distribution_block(title, entries):
+    if not entries:
+        return [f"- {title}: none"]
+    lines = [f"- {title}:"]
+    for entry in entries:
+        lines.append(
+            "  "
+            + f"{entry['label']} ({entry.get('role') or 'unknown'}): "
+            + f"{fmt_bytes(entry['total_payload_bytes'])} ({entry['share_percent']:.2f}%), "
+            + f"udp {fmt_bytes(entry['udp_payload_bytes'])}, "
+            + f"libp2p {fmt_bytes(entry['libp2p_payload_bytes'])}"
+        )
+    return lines
+
+
 def render_single_node_markdown(summary, history_path, generated_at):
     lines = [
         "# Oasis7 Node Traffic Monitor Summary",
@@ -434,6 +641,9 @@ def render_single_node_markdown(summary, history_path, generated_at):
 
     lines.append(render_traffic_totals("UDP gossip", udp))
     if udp.get("available"):
+        lines.append(
+            f"- Full UDP detail rows in JSON: `{udp['detail_entry_counts']['by_kind']}` by_kind entries"
+        )
         lines.extend(render_top_block("Top UDP kinds", udp.get("top_kinds"), "datagrams"))
 
     lines.append(render_traffic_totals("Libp2p replication", libp2p))
@@ -443,6 +653,9 @@ def render_single_node_markdown(summary, history_path, generated_at):
             + f"gossip +{fmt_bytes(libp2p['gossip']['inbound']['payload_bytes'] + libp2p['gossip']['outbound']['payload_bytes'])}, "
             + f"request +{fmt_bytes(libp2p['request']['inbound']['payload_bytes'] + libp2p['request']['outbound']['payload_bytes'])}, "
             + f"response +{fmt_bytes(libp2p['response']['inbound']['payload_bytes'] + libp2p['response']['outbound']['payload_bytes'])}"
+        )
+        lines.append(
+            f"- Full libp2p detail rows in JSON: `{libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{libp2p['detail_entry_counts']['by_topic']}` by_topic"
         )
         lines.extend(
             render_top_block(
@@ -468,6 +681,52 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
         f"- Top contributors per map: `{summary['top_n']}`",
         "",
     ]
+
+    aggregate = summary.get("aggregate") or {}
+    aggregate_udp = (aggregate.get("traffic") or {}).get("udp_gossip") or {}
+    aggregate_libp2p = (aggregate.get("traffic") or {}).get("libp2p_replication") or {}
+    if aggregate:
+        lines.extend(
+            [
+                "## aggregate",
+                f"- Nodes with successful data: `{aggregate.get('node_count', 0)}`",
+                f"- Total payload across all nodes: `{fmt_bytes(aggregate.get('total_payload_bytes'))}`",
+                f"- Lane distribution: udp `{fmt_bytes(aggregate['lane_distribution']['udp_gossip']['payload_bytes'])}` ({aggregate['lane_distribution']['udp_gossip']['share_percent']:.2f}%), libp2p `{fmt_bytes(aggregate['lane_distribution']['libp2p_replication']['payload_bytes'])}` ({aggregate['lane_distribution']['libp2p_replication']['share_percent']:.2f}%)",
+            ]
+        )
+        lines.extend(
+            render_payload_distribution_block(
+                "Node payload distribution", aggregate.get("node_payload_distribution")
+            )
+        )
+        if aggregate_udp.get("available"):
+            lines.append(
+                f"- Full aggregate UDP detail rows in JSON: `{aggregate_udp['detail_entry_counts']['by_kind']}` by_kind entries"
+            )
+            lines.extend(
+                render_top_block(
+                    "Top aggregate UDP kinds", aggregate_udp.get("top_kinds"), "datagrams"
+                )
+            )
+        if aggregate_libp2p.get("available"):
+            lines.append(
+                f"- Full aggregate libp2p detail rows in JSON: `{aggregate_libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{aggregate_libp2p['detail_entry_counts']['by_topic']}` by_topic"
+            )
+            lines.extend(
+                render_top_block(
+                    "Top aggregate libp2p protocols",
+                    aggregate_libp2p.get("top_protocols"),
+                    "messages",
+                )
+            )
+            lines.extend(
+                render_top_block(
+                    "Top aggregate libp2p topics",
+                    aggregate_libp2p.get("top_topics"),
+                    "messages",
+                )
+            )
+        lines.append("")
 
     for label in labels:
         node = summary["nodes"][label]
@@ -502,6 +761,9 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
 
         udp = node["traffic"]["udp_gossip"]
         if udp.get("available"):
+            lines.append(
+                f"- Full UDP detail rows in JSON: `{udp['detail_entry_counts']['by_kind']}` by_kind entries"
+            )
             lines.extend(render_top_block("Top UDP kinds", udp.get("top_kinds"), "datagrams"))
 
         libp2p = node["traffic"]["libp2p_replication"]
@@ -511,6 +773,9 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
                 + f"gossip +{fmt_bytes(libp2p['gossip']['inbound']['payload_bytes'] + libp2p['gossip']['outbound']['payload_bytes'])}, "
                 + f"request +{fmt_bytes(libp2p['request']['inbound']['payload_bytes'] + libp2p['request']['outbound']['payload_bytes'])}, "
                 + f"response +{fmt_bytes(libp2p['response']['inbound']['payload_bytes'] + libp2p['response']['outbound']['payload_bytes'])}"
+            )
+            lines.append(
+                f"- Full libp2p detail rows in JSON: `{libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{libp2p['detail_entry_counts']['by_topic']}` by_topic"
             )
             lines.extend(
                 render_top_block(
@@ -569,6 +834,7 @@ def main():
                 records_by_label[label], args.window_minutes, args.top_n
             )
             summary["nodes"][label]["label"] = label
+        summary["aggregate"] = summarize_triad_aggregate(summary["nodes"], args.top_n)
         markdown_lines = render_triad_markdown(
             summary, history_path, generated_at, labels
         )
