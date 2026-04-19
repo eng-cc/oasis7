@@ -1,0 +1,25 @@
+task_uid: task_d2e428f00e5047e581061c8cb75963ef
+title: "clear rust structural slicing baseline"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-clear-rust-structural-slicing-baseline
+execution_log_path: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md
+  - scripts/check-rust-file-size.sh
+  - doc/.governance/rust-oversized-file-baseline.tsv
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-R1200-002
+  - PRD-ENGINEERING-R1200-003
+  - PRD-ENGINEERING-R1200-005
+acceptance:
+  - "retire structural slicing baseline entries for crates/oasis7_node/src/tests.rs and its split_part targets via real modules"
+  - "rerun rust-size, doc governance, pm lint, and targeted oasis7_node tests"
+handoff_to: []
+updated_at: 2026-04-20T01:09:40+08:00
+last_started_at: 2026-04-19T22:00:45+08:00
+last_closed_at: 2026-04-20T01:09:38+08:00

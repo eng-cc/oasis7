@@ -7,7 +7,7 @@
 
 ## 目标
 - 把 Rust 1200 行限制从一次性结构治理升级为持续执行的工程门禁。
-- 为后续 runtime / viewer / launcher 超限文件治理冻结统一完成态，禁止继续用 `split_part` 伪装治理完成。
+- 为后续 runtime / viewer / launcher 超限文件治理冻结统一完成态，禁止继续用 `split_part` 伪装治理完成，并把结构切片门禁收口为实时扫描归零。
 
 ## 当前现状
 - 当前扫描结果：31 个生产 Rust 文件和 14 个测试 Rust 文件超过 1200 行。
@@ -29,7 +29,7 @@
 - 基线层：
   - 冻结当前超限清单，记录 `path / line_count / is_test / owner / priority_batch`。
   - 基线文件固定为 `doc/.governance/rust-oversized-file-baseline.tsv`。
-  - 结构切片基线固定为 `doc/.governance/rust-structural-slicing-baseline.tsv`，记录存量 `slice_file` 与 `include_target` 债务。
+  - 结构切片不再保留 frozen baseline；`scripts/check-rust-file-size.sh` 直接要求当前 `slice_file` / `include_target` 扫描结果为 0。
   - 新文件一律不得进入基线。
 - 规则层：
   - 新增或重命名出的 `split_part*` / `part1` / `part2` / `include!` 完成态一律阻断。
@@ -43,7 +43,7 @@
 
 ## 分批策略
 ### Batch A: 门禁与基线
-- 产出扫描脚本、冻结超限/结构切片双基线、接入 `scripts/ci-tests.sh required`。
+- 产出扫描脚本、冻结超限基线、接入 `scripts/ci-tests.sh required`，并把结构切片门禁改成实时清零。
 - 新增命名与 `include!` 完成态阻断，并对触碰到的超限文件执行 `touch-and-shrink`。
 
 ### Batch B: 高风险入口治理
@@ -95,5 +95,4 @@
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`
 - `doc/.governance/rust-oversized-file-baseline.tsv`
-- `doc/.governance/rust-structural-slicing-baseline.tsv`
 - `doc/devlog/2026-03-29.md`

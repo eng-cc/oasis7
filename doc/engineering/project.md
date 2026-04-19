@@ -113,11 +113,8 @@
 - [x] TASK-ENGINEERING-102 (PRD-ENGINEERING-021) [test_tier_required]: 清理正式流程中残留的旧 review 文案，并将 commit 前 review 固定为通过 `./scripts/pm/codex-review-snapshot.sh` 在临时隔离快照中执行 `codex exec review --uncommitted`，同时同步回写 engineering / self-evolution 正式追踪、`.pm` 运行态口径与 `workflow-report` smoke。
 - [x] TASK-ENGINEERING-103 (PRD-ENGINEERING-021/022) [test_tier_required]: 默认关闭同一/最近 live Codex session 的 working_memory 隐式自读；`codex-working-memory.sh` 改为默认要求显式 `--session-id`，仅在显式 `--allow-auto-session` 时允许 registry / worktree pattern 自动解析，并同步收口 `workflow-report`、README、self-evolution 专题与 smoke。
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 回填 `rust-oversized-file-baseline.tsv` 真值、修复 `check-rust-file-size.sh` 在空 baseline 首次回填场景下把同提交基线更新误判为“新增超限文件”的 bootstrap 逻辑，并把 `egui_right_panel_player_experience.rs` 的 test-only 访问器拆到独立 test API 模块，恢复 oversized Rust gate 的可执行性并清掉一份 viewer 热点超限文件。
-<<<<<<< HEAD
 - [x] rust-structural-slicing-module-actions (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `runtime/world/module_actions` 从 `include!/impl_part` 切换为目录模块，拆出 `artifact_actions` / `release_actions` / `release_normalization` / `release_support`，退役 4 条 structural slicing frozen baseline，并用 `cargo test -p oasis7 runtime::tests::module_action_loop:: -- --nocapture`、`./scripts/check-rust-file-size.sh` 与 `git diff --check` 验证。 Trace: .pm/tasks/task_d8ad79d7c10646008fb684934160c0b7.yaml
-=======
 - [x] rust-structural-slicing-oasis7-node-lib (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/lib.rs` 从 `include!/impl_part` 切换为 `node_engine_core` / `node_engine_network` / `node_engine_storage_challenge` 模块，退役 4 条 structural slicing frozen baseline，并用 `cargo check -p oasis7_node`、`./scripts/check-rust-file-size.sh`、4 条 node engine 精确用例与 `git diff --check` 验证。补充说明：`cargo test -p oasis7_node --lib` 当前仍有 3 个现存失败签名未在本轮修复。 Trace: .pm/tasks/task_a2ec08aaee744cdcbd32dc1677c59d28.yaml
->>>>>>> d94bf66f (runtime: retire oasis7_node lib structural slicing debt)
 - [x] TASK-ENGINEERING-105 (PRD-ENGINEERING-015) [test_tier_required]: 收口仓库入口、模块 README、legacy redirect 与 engineering 项目状态中的重复治理话术，统一改为“共享规则集中维护，入口页只保留特有分流”。
 - [x] TASK-ENGINEERING-106 (PRD-ENGINEERING-024) [test_tier_required]: 建立“文档体量治理与活跃阅读面收敛”专题 `prd/design/project`，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型、默认阅读面减重规则与高密度模块优先级，并同步回写 engineering 主入口、allowlist 与 task execution log。
 - [x] TASK-ENGINEERING-107 (PRD-ENGINEERING-024) [test_tier_required]: 先对 `world-simulator` 执行首批活跃阅读面收敛，回写 `README.md` / `prd.index.md` 的首读分流、热点子域导航与密度提示，去掉模块入口对近期专题长名单的默认暴露。
@@ -167,7 +164,6 @@
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `doc/.governance/rust-oversized-file-baseline.tsv`
-- `doc/.governance/rust-structural-slicing-baseline.tsv`
 - `scripts/check-rust-file-size.sh`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`

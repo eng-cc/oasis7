@@ -46,8 +46,8 @@ impl oasis7_wasm_abi::ModuleSandbox for CaptureContextSandbox {
     }
 }
 
-include!("modules_split_part1.rs");
-include!("modules_split_part2.rs");
+include!("modules_registry.rs");
+include!("modules_permissions.rs");
 
 #[test]
 #[ignore = "perf harness"]

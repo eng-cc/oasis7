@@ -33,6 +33,6 @@ struct PreparedPowerTransfer {
     quoted_price_per_pu: i64,
 }
 
-include!("actions_impl_part1.rs");
-include!("actions_impl_part2.rs");
-include!("actions_impl_part3.rs");
+include!("actions_core.rs");
+include!("actions_resolution.rs");
+include!("actions_regressions.rs");

@@ -573,9 +573,8 @@ impl ViewerLiveSession {
                     &ViewerResponse::GameplayActionError {
                         error: crate::viewer::GameplayActionError {
                             code: "unsupported_in_live_server".to_string(),
-                            message:
-                                "gameplay_action is only available in runtime live mode"
-                                    .to_string(),
+                            message: "gameplay_action is only available in runtime live mode"
+                                .to_string(),
                             action_id: Some(request.action_id),
                             target_agent_id: Some(request.target_agent_id),
                         },

@@ -123,8 +123,8 @@ fn llm_agent_force_replan_plan_can_finalize_without_module_call_when_missing_is_
         .any(|step| step.output_summary.contains("deprecated in dialogue mode")));
 }
 
-#[path = "tests_part2.rs"]
-mod tests_part2;
+#[path = "tests_followups.rs"]
+mod tests_followups;
 
 #[path = "tests_part3_module_lifecycle.rs"]
 mod tests_part3_module_lifecycle;

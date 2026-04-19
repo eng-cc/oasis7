@@ -1,3 +1,3 @@
-include!("kernel_split_part1.rs");
-include!("kernel_split_part2.rs");
-include!("kernel_split_part3.rs");
+include!("kernel_actions.rs");
+include!("kernel_recovery.rs");
+include!("kernel_regressions.rs");

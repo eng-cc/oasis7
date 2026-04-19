@@ -1,3 +1,3 @@
-include!("tests_split_part1.rs");
-include!("tests_split_part2.rs");
-include!("tests_split_part3.rs");
+include!("tests_conversation_flow.rs");
+include!("tests_tool_execution.rs");
+include!("tests_edge_cases.rs");
