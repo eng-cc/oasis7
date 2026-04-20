@@ -96,6 +96,10 @@ state_tick() {
   json_get "$1" tick
 }
 
+state_logical_time() {
+  json_get "$1" logicalTime
+}
+
 state_event_seq() {
   json_get "$1" eventSeq
 }
@@ -140,12 +144,67 @@ feedback_stage() {
   json_get "$1" stage
 }
 
+feedback_action() {
+  json_get "$1" action
+}
+
+feedback_accepted() {
+  json_get "$1" accepted
+}
+
 feedback_reason() {
   json_get "$1" reason
 }
 
+feedback_delta_logical_time() {
+  json_get "$1" deltaLogicalTime
+}
+
+feedback_delta_event_seq() {
+  json_get "$1" deltaEventSeq
+}
+
 gameplay_blocker_kind() {
   json_get "$1" blockerKind
+}
+
+software_safe_control_feedback_ok() {
+  local state_json=$1
+  local expected_action=$2
+  local feedback_json stage action accepted
+  feedback_json=$(state_last_feedback_json "$state_json")
+  stage=$(feedback_stage "$feedback_json")
+  action=$(feedback_action "$feedback_json")
+  accepted=$(feedback_accepted "$feedback_json")
+  [[ "$(state_connection "$state_json")" == "connected" ]] || return 1
+  [[ "$action" == "$expected_action" ]] || return 1
+  [[ "$accepted" == "true" ]] || return 1
+  case "$stage" in
+    queued|completed_advanced|completed_no_progress)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+software_safe_completed_advance_ok() {
+  local state_json=$1
+  local expected_action=$2
+  local feedback_json stage action accepted delta_logical_time delta_event_seq
+  feedback_json=$(state_last_feedback_json "$state_json")
+  stage=$(feedback_stage "$feedback_json")
+  action=$(feedback_action "$feedback_json")
+  accepted=$(feedback_accepted "$feedback_json")
+  delta_logical_time=$(feedback_delta_logical_time "$feedback_json")
+  delta_event_seq=$(feedback_delta_event_seq "$feedback_json")
+  delta_logical_time=${delta_logical_time:-0}
+  delta_event_seq=${delta_event_seq:-0}
+  [[ "$(state_connection "$state_json")" == "connected" ]] || return 1
+  [[ "$action" == "$expected_action" ]] || return 1
+  [[ "$accepted" == "true" ]] || return 1
+  [[ "$stage" == "completed_advanced" ]] || return 1
+  (( ${delta_logical_time%%.*} > 0 || ${delta_event_seq%%.*} > 0 )) || return 1
+  return 0
 }
 
 software_safe_llm_blocked_contract_ok() {
@@ -231,6 +290,35 @@ wait_for_selected_kind() {
     if [[ "$(state_selected_kind "$state")" == "$expected_kind" ]]; then
       printf '%s\n' "$state"
       return 0
+    fi
+    sleep_ms 250
+  done
+  printf '%s\n' "$state"
+  return 1
+}
+
+wait_for_feedback_terminal() {
+  local expected_action=$1
+  local timeout_ms=${2:-18000}
+  local deadline=$((SECONDS * 1000 + timeout_ms))
+  local state='null'
+  local feedback='null'
+  local stage=''
+  while (( SECONDS * 1000 < deadline )); do
+    state=$(ab_state)
+    if [[ -n "$(state_last_error "$state")" ]]; then
+      printf '%s\n' "$state"
+      return 2
+    fi
+    feedback=$(state_last_feedback_json "$state")
+    if [[ "$(feedback_action "$feedback")" == "$expected_action" ]]; then
+      stage=$(feedback_stage "$feedback")
+      case "$stage" in
+        completed_advanced|completed_no_progress|blocked)
+          printf '%s\n' "$state"
+          return 0
+          ;;
+      esac
     fi
     sleep_ms 250
   done
@@ -428,11 +516,16 @@ software_safe_llm_blocked=0
 
 log_note send_play
 ab_send_control play '{}' 2>&1 | tee -a "$pw_log" >/dev/null || true
-if ! after_play=$(wait_for_tick_advance "${initial_tick%%.*}" 3500); then
+if [[ "$software_safe_mode" -eq 1 ]]; then
   after_play=$(ab_state)
-  if [[ "$software_safe_mode" -eq 1 ]] && software_safe_llm_blocked_contract_ok "$after_play"; then
+  if software_safe_llm_blocked_contract_ok "$after_play"; then
     software_safe_llm_blocked=1
-  else
+  elif ! software_safe_control_feedback_ok "$after_play" play; then
+    semantic_ok=0
+  fi
+else
+  if ! after_play=$(wait_for_tick_advance "${initial_tick%%.*}" 3500); then
+    after_play=$(ab_state)
     seek_target=$(( ${initial_tick%%.*} + 1 ))
     log_note seek_fallback
     ab_send_control seek "{\"tick\":${seek_target}}" 2>&1 | tee -a "$pw_log" >/dev/null || true
@@ -467,21 +560,23 @@ if [[ "$software_safe_mode" -eq 1 ]]; then
 else
   ab_run_steps 'mode=3d;focus=first_location;zoom=0.85;select=first_agent;wait=0.3' 2>&1 | tee -a "$pw_log" >/dev/null || true
 fi
-if ! selected_state=$(wait_for_selected_kind agent 6000); then
-  semantic_ok=0
-fi
 if [[ "$software_safe_mode" -eq 1 ]]; then
-  paused_followup_tick=$(state_tick "$paused_followup")
-  paused_followup_tick=${paused_followup_tick:-0}
-  if ! final_state=$(wait_for_tick_advance "${paused_followup_tick%%.*}" 6000); then
-    final_state=$(ab_state)
-    if software_safe_llm_blocked_contract_ok "$final_state"; then
+  if ! selected_state=$(wait_for_feedback_terminal step 30000); then
+    selected_state=$(ab_state)
+    if software_safe_llm_blocked_contract_ok "$selected_state"; then
       software_safe_llm_blocked=1
     else
       semantic_ok=0
     fi
   fi
+  final_state="$selected_state"
+  if [[ "$software_safe_llm_blocked" -ne 1 ]] && ! software_safe_completed_advance_ok "$final_state" step; then
+    semantic_ok=0
+  fi
 else
+  if ! selected_state=$(wait_for_selected_kind agent 6000); then
+    semantic_ok=0
+  fi
   if ! final_state=$(wait_for_connected 6000); then
     semantic_ok=0
   fi
