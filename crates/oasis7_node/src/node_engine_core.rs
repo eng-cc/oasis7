@@ -38,7 +38,7 @@ impl PosNodeEngine {
                     replication.enforce_consensus_signature(),
                 )
             } else {
-                (None, None, false)
+                (None::<NodeConsensusMessageSigner>, None::<String>, false)
             };
         if enforce_consensus_signature && validator_signers.len() != validators.len() {
             let missing_validator_signers = validators
