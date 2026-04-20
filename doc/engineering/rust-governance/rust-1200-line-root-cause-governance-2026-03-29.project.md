@@ -15,7 +15,6 @@
 - [x] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略，冻结残余 13 个测试尾债并建立下一批 burn-down 清单。
 - [x] TASK-ENGINEERING-104 (PRD-ENGINEERING-R1200-001/003/005) [test_tier_required]: 修复 `rust-oversized-file-baseline.tsv` 被误清空后的 required gate 阻断，按当前仓库实况重写 frozen baseline，并把专项状态从“已收口”拉回到继续 burn-down 的真实阶段。
 - [x] rust-size-gate-recovery-and-mid-burn-down (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 合并记录 Rust-size 治理中段收口，包括 oversized gate 真值修复，以及 `runtime/world/module_actions`、`oasis7_node/src/lib.rs`、`oasis7_net/src/libp2p_net.rs`、`oasis7_node/src/types.rs` 四个热点文件的语义化拆分/热点抽离。 Trace: .pm/tasks/task_19e73f36db1040ccbf5eb579ade2e310.yaml
-  历史 traces: `.pm/tasks/task_d8ad79d7c10646008fb684934160c0b7.yaml`, `.pm/tasks/task_a2ec08aaee744cdcbd32dc1677c59d28.yaml`, `.pm/tasks/task_fbffb4f8dc5b4326b6a09751f4779526.yaml`, `.pm/tasks/task_5c651f038f1b48e78460ad7f95f6e187.yaml`
 - [x] clear-rust-size-baselines (PRD-ENGINEERING-R1200-001/002/003/005) [test_tier_required]: 作为最终收口任务，在同一治理任务内退役 `rust-structural-slicing-baseline.tsv` 与 `rust-oversized-file-baseline.tsv`，把全部 `split_part/impl_part` 存量债和最后 7 个超限 Rust 文件改成语义化模块，并将 `check-rust-file-size` 收口为 oversized/structural 双零扫描门禁。 Trace: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.yaml
 
 ## 依赖
