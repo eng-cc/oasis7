@@ -3,19 +3,19 @@
 - 对应设计文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - 对应项目管理文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
-审计轮次: 6
+审计轮次: 7
 
 - 对应标准执行入口: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 
 ## 1. Executive Summary
 - Problem Statement: 仓库已重新出现大规模 Rust 超限文件，当前实况为 31 个生产文件和 14 个测试文件超过 1200 行，说明“拆一次大文件”没有真正解决文件继续膨胀的问题。现有 round3 治理偏向 `include!`/`split_part` 结构切片，未把职责边界、目录模型和 CI 阻断做成长期机制。
-- Proposed Solution: 将“1200 行限制”从一次性清债任务升级为长期工程治理专题：冻结当前超限基线、在 required gate 中引入 Rust 文件体量检查、直接要求结构切片扫描归零、禁止新增 `split_part` 作为完成态、对被触碰的超限文件执行“touch-and-shrink”规则，并按 runtime/viewer/launcher 三个高风险域分批做职责拆分。
+- Proposed Solution: 将“1200 行限制”从一次性清债任务升级为长期工程治理专题：先完成分批 burn-down，再在 required gate 中把 Rust 文件体量检查收口为实时零扫描，直接要求 oversized scan=0、结构切片 scan=0，并禁止新增 `split_part` 作为完成态。
 - Success Criteria:
-  - SC-1: 基线冻结后，新增生产 Rust 超限文件数为 0，新增测试 Rust 超限文件数为 0。
+  - SC-1: 当前生产 Rust 超限文件数为 0，当前测试 Rust 超限文件数为 0。
   - SC-2: `scripts/ci-tests.sh required` 默认包含 Rust 文件体量检查，且该检查单次执行时间 <= 15 秒。
   - SC-3: 新增或改动文件中，`split_part` / `part1` / `part2` / `include!` 不再被用作超限治理完成态；新增违规数为 0。
-  - SC-4: 被本次任务触碰的超限文件，行数必须单调下降，且对应职责边界说明与回归证据齐全率 100%。
-  - SC-5: Phase-2 收口时，生产 Rust 超限文件从 31 降到 0，测试 Rust 超限文件从 14 降到 <= 3，并为剩余测试债务建立冻结清单与下一批治理计划。
+  - SC-4: 最后一批被触碰的 7 个超限文件均完成语义化拆分，且对应职责边界说明与回归证据齐全率 100%。
+  - SC-5: `doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv` 均已退役，required gate 不再依赖 frozen baseline 放行任何存量债务。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -29,32 +29,32 @@
   - required gate 扫描：每次本地提交前和 CI required gate 触发时执行。
   - 季度工程复盘：每季度至少 1 次，核对超限趋势、误报和余量。
 - User Stories:
-  - PRD-ENGINEERING-R1200-001: As an 工程维护者, I want a frozen oversized-file baseline plus a blocking gate, so that the repository can stop growing new 1200-line debt immediately.
-  - PRD-ENGINEERING-R1200-002: As a 开发者, I want explicit touch-and-shrink rules and target module boundaries, so that I can refactor oversized files without guessing the acceptable end state.
+  - PRD-ENGINEERING-R1200-001: As an 工程维护者, I want the required gate to reject any current oversized Rust file, so that the repository no longer carries a 1200-line allowlist.
+  - PRD-ENGINEERING-R1200-002: As a 开发者, I want explicit target module boundaries for the remaining burn-down files, so that I can refactor oversized files without guessing the acceptable end state.
   - PRD-ENGINEERING-R1200-003: As a 评审者, I want split-part and include-only refactors rejected as final state, so that mechanical file slicing does not masquerade as real debt reduction.
   - PRD-ENGINEERING-R1200-004: As a QA / 发布维护者, I want each oversized-file治理批次 tied to concrete regression suites, so that structure changes do not silently weaken validation.
   - PRD-ENGINEERING-R1200-005: As a 技术负责人, I want a phased burn-down plan by subsystem, so that the largest god modules are reduced in a controlled order instead of via one risky mega-refactor.
 - Critical User Flows:
-  1. Flow-R1200-001: `开发者修改超限文件 -> 文件体量检查识别当前文件已在冻结基线内 -> 校验本次改动是否让文件继续变大 -> 若变大则阻断，若缩小或完成模块迁移则允许继续`
+  1. Flow-R1200-001: `开发者修改 Rust 文件 -> 文件体量检查扫描当前工作树 -> 若任一文件 > 1200 行则阻断 -> 完成职责拆分并降到阈值内后才允许继续`
   2. Flow-R1200-002: `开发者准备通过 split_part/include! 做机械切片 -> 门禁识别新增 split-part 完成态 -> 失败并提示改为目录模块/职责模块拆分`
-  3. Flow-R1200-003: `owner 为超限文件创建治理任务 -> 在 project 中声明目标边界、目标目录和回归集 -> 实施拆分 -> 执行对应 required/full 回归 -> 回写 devlog 和基线`
+  3. Flow-R1200-003: `owner 为超限文件创建治理任务 -> 在 project 中声明目标边界、目标目录和回归集 -> 实施拆分 -> 执行对应 required/full 回归 -> 回写 project 与 execution log`
   4. Flow-R1200-004: `评审者审查治理提交 -> 比较文件行数、职责边界和测试证据 -> 决定 pass / blocked / needs further split`
   5. Flow-R1200-005: `季度治理复盘 -> 重新扫描超限清单 -> 对照基线和趋势 -> 调整下一批 subsystem burn-down 顺序`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Rust 超限扫描 | `path`、`line_count`、`is_test`、`baseline_status`、`delta_vs_baseline` | 执行 `scripts/check-rust-file-size.sh` 输出超限列表与 delta | `pass/fail` | 先按 `is_new_violation`，再按 `line_count desc` | 所有人可执行；engineering owner 可更新冻结基线 |
-| 冻结基线 | `frozen_at`、`path`、`baseline_line_count`、`owner_module`、`priority_batch` | 生成/更新基线清单；非治理任务不得扩大同路径基线 | `draft -> frozen -> retired` | 生产代码优先于测试代码；行数越大优先级越高 | 仅治理 owner 可改，评审者需复核 |
-| touch-and-shrink | `touched_path`、`before_lines`、`after_lines`、`target_module_dir`、`shrink_reason` | 若本次提交触碰超限文件则强制检查是否变小或完成迁移 | `pending -> blocked -> satisfied` | `after_lines` 必须 < `before_lines`，或旧文件被职责模块替代后从基线移除 | 触碰者必须满足；评审者不可豁免 |
+| Rust 超限扫描 | `path`、`line_count`、`is_test` | 执行 `scripts/check-rust-file-size.sh` 输出当前超限列表 | `pass/fail` | 先按 `is_test`，再按 `line_count desc` | 所有人可执行；任何提交都不得豁免 |
+| 归零门禁 | `oversized_count`、`structural_slice_count`、`limit` | 若当前超限或结构切片扫描非 0 则阻断 | `pass/fail` | 任一计数非 0 即失败 | 所有人受限；无 allowlist |
+| burn-down 迁移 | `touched_path`、`before_lines`、`after_lines`、`target_module_dir`、`shrink_reason` | 对最后存量 god module 做语义拆分并补齐验证 | `planned -> verified -> retired` | `after_lines` 必须 <= 1200，旧职责需迁到真实子模块 | 触碰者必须满足；评审者不可豁免 |
 | split-part 禁止规则 | `new_file_path`、`naming_pattern`、`parent_module`、`migration_ticket` | 检查新增 `split_part/part1/part2/include!` 完成态并阻断 | `pass/fail` | 新增命名违规优先报错；存量文件允许在治理批次中逐步消化 | 所有人受限；仅主题治理任务可在迁移中短暂保留 |
 | 子系统 burn-down | `subsystem`、`owner_role`、`target_files`、`target_boundaries`、`required_tests`、`full_tests` | 在 project 中分批登记 runtime/viewer/launcher 治理任务 | `planned -> in_progress -> verified -> closed` | 优先级按风险和行数叠加排序；`chain_runtime`、`runtime_live`、`viewer guide` 为首批 | owner role 牵头，QA 负责验证结论 |
-| 评审结论 | `finding`、`boundary_ok`、`test_evidence`、`baseline_update` | 评审时输出 `pass / blocked / risky` | `draft -> reviewed -> merged/rejected` | 优先关注边界真实性，其次关注行数结果 | reviewer / qa_engineer 主判，owner 回写 |
+| 评审结论 | `finding`、`boundary_ok`、`test_evidence`、`zero_scan_ok` | 评审时输出 `pass / blocked / risky` | `draft -> reviewed -> merged/rejected` | 优先关注边界真实性，其次关注 zero-scan 结果 | reviewer / qa_engineer 主判，owner 回写 |
 - Acceptance Criteria:
   - AC-1: 新增专题将当前“31 个生产文件 + 14 个测试文件超限”的事实基线写入正式文档，并在 project 中拆成可执行批次。
-  - AC-2: required gate 的目标态明确要求默认执行 Rust 文件体量检查，并区分生产代码、测试代码、`third_party/` 与生成目录；脚本需同时校验超限基线、触碰即缩小与结构切片基线。
+  - AC-2: required gate 的目标态明确要求默认执行 Rust 文件体量检查，并区分生产代码、测试代码、`third_party/` 与生成目录；脚本需同时校验当前超限扫描与结构切片扫描均为 0。
   - AC-3: PRD 明确禁止把 `split_part` / `include!` 机械切片作为治理完成态，并定义可接受的目录模块化完成态。
   - AC-4: 每个治理批次都必须声明目标目录边界、触碰即缩小规则、回归命令和证据落点。
-  - AC-5: 主题 project 至少覆盖：基线冻结、门禁脚本、迁移规则、runtime 首批治理、viewer 首批治理、测试债务收口六类任务。
+  - AC-5: 主题 project 至少覆盖：门禁脚本、迁移规则、runtime 首批治理、viewer 首批治理、测试债务收口、双 baseline 退役六类任务。
   - AC-6: 文档入口、索引、module project 与 devlog 均可追溯到该专题和对应任务。
 - Non-Goals:
   - 不在本专题一次性完成全部超限文件代码重构。
@@ -69,8 +69,8 @@
 ## 4. Technical Specifications
 - Architecture Overview:
   - 治理入口层：`doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.{prd,design,project}.md` 定义规则、批次和追踪。
-  - 扫描与门禁层：新增 `scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 `crates/**/src/*.rs` 与测试文件并输出基线差异；`scripts/ci-tests.sh required` 调用该脚本。
-  - 基线层：在工程治理目录中维护 `rust-oversized-file-baseline.tsv` 冻结清单，记录当前允许存在但必须逐步收缩的超限文件；结构切片债务不再通过 frozen baseline 放行，而是要求 `split_part/include!` 当前扫描结果保持为 0。
+  - 扫描与门禁层：`scripts/check-rust-file-size.sh` 作为单一事实源，负责扫描 `crates/**/src/*.rs` 与测试文件并要求当前超限结果为 0；`scripts/ci-tests.sh required` 调用该脚本。
+  - 退役层：`doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv` 已删除，仓库不再维护任何 Rust 文件体量 allowlist。
   - 迁移层：以目录模块（`mod.rs + 子模块文件`）或按职责拆分的独立模块替代 `include!` 分段；每次迁移必须在 project 中定义目标边界与回归集。
   - 验证层：每批治理至少执行 `test_tier_required` 定向回归，涉及 viewer live、链运行时或 launcher 等关键入口时追加 `test_tier_full`、脚本 smoke 或 Web 闭环验证。
 - Integration Points:
@@ -81,7 +81,6 @@
   - `doc/engineering/README.md`
   - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
   - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
-  - `doc/.governance/rust-oversized-file-baseline.tsv`
   - `scripts/ci-tests.sh`
   - `scripts/doc-governance-check.sh`
   - `testing-manual.md`
@@ -91,9 +90,9 @@
   - `crates/oasis7_viewer/src/egui_right_panel_player_guide.rs`
   - `crates/oasis7_viewer/src/web_test_api.rs`
 - Edge Cases & Error Handling:
-  - 存量超限文件但本次未触碰：允许保留在冻结基线中，但不能新增同类文件。
-  - 触碰超限文件仅增加注释/测试 helper：仍视为扩大体量，必须同步做 shrink 或抽离。
-  - 测试文件暂时难以拆到 <= 1200：允许通过冻结清单保留少量尾债，但必须标明 owner、阻塞原因和下一批计划。
+  - 任一文件再次超过 1200 行：直接阻断，不再存在“未触碰可保留”的例外。
+  - 触碰高体量文件仅增加注释/测试 helper：若导致超过 1200 行，必须同步做职责抽离。
+  - 测试文件再次接近阈值：仍应优先按行为域拆测试文件，而不是恢复冻结清单。
   - 平台条件编译导致单文件被双端共用：必须优先抽共用逻辑到子模块，不能用条件编译继续堆高单文件。
   - 紧急 hotfix 需要修改超限文件：允许短期修复，但 merge 前必须补最小 shrink 或创建同日治理任务补偿，不允许静默放行。
   - 生成文件或外部模板误入扫描范围：脚本必须排除 `third_party/`、`target/`、worktree 产物和非仓库源码目录。
@@ -105,7 +104,7 @@
   - NFR-R1200-3: 新增 `split_part` / `part1` / `part2` / `include!` 机械切片完成态违规数为 0。
   - NFR-R1200-4: 被触碰的超限文件“行数单调下降 + 目标边界说明 + 回归证据”覆盖率 100%。
   - NFR-R1200-5: 首批高风险文件治理任务必须全部绑定 `test_tier_required`，涉及入口/联机/Viewer Web 的任务再追加 `test_tier_full` 或 Web 闭环。
-  - NFR-R1200-6: 冻结基线更新必须与对应治理任务和 devlog 同提交回写，追溯完整率 100%。
+  - NFR-R1200-6: baseline 退役与最后一批 burn-down 必须与对应治理任务和 execution log 同提交回写，追溯完整率 100%。
   - NFR-R1200-7: Phase-1 结束时，`chain_runtime`、`runtime_live`、`viewer player guide` 三个首批文件均完成目录边界设计并至少清掉一个实际超限文件。
   - NFR-R1200-8: 任何治理任务不得通过复制类型定义、复制测试 helper 或新建平行 god file 来“转移”超限债务。
 - Security & Privacy:
@@ -114,12 +113,12 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP (2026-03-29): 建立 root-cause 治理专题、冻结超限基线、明确门禁与拆分完成态。
-  - v1.1: 落地 Rust 文件体量检查脚本、接入 required gate，并建立 `touch-and-shrink` / `split-part` 阻断规则。
+  - MVP (2026-03-29): 建立 root-cause 治理专题、冻结当时超限实况、明确门禁与拆分完成态。
+  - v1.1: 落地 Rust 文件体量检查脚本、接入 required gate，并建立 `split-part` 阻断规则。
   - v2.0: 分三批治理 `chain_runtime`、`runtime_live`、`viewer` 侧超限文件，持续下降生产代码超限数。
-  - v2.1: 收口测试债务，压缩超限测试文件数量，并把残余债务转成冻结清单与季度治理节奏。
+  - v2.1 (2026-04-20): 收口最后 7 个超限文件，退役全部 Rust size baseline，切换到实时零扫描治理。
 - Technical Risks:
-  - 风险-1: 规则过硬但没有基线冻结，会导致现有仓库无法渐进演进。
+  - 风险-1: 若后续再次接受 allowlist 回归，Rust 1200 行治理会重新退化成纸面规则。
   - 风险-2: 仅以行数为目标，开发者可能继续通过 `include!` 或复制粘贴制造伪治理。
   - 风险-3: 高风险入口文件拆分时可能破坏 viewer live、链运行时或 launcher 测试稳定性。
   - 风险-4: 若 project 不提前定义职责边界，多人并行治理会相互覆盖并造成冲突。
@@ -128,7 +127,7 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-ENGINEERING-R1200-001 | TASK-ENGINEERING-051/052 | `test_tier_required` | 专题文档检查、基线扫描脚本、required gate 接入验证 | 工程治理入口、提交门禁 |
+| PRD-ENGINEERING-R1200-001 | TASK-ENGINEERING-051/052/clear-rust-size-baselines | `test_tier_required` | 专题文档检查、零扫描脚本、required gate 接入验证 | 工程治理入口、提交门禁 |
 | PRD-ENGINEERING-R1200-002 | TASK-ENGINEERING-053/054/055 | `test_tier_required` + `test_tier_full` | touch-and-shrink 规则校验、目标目录边界抽样、定向回归 | runtime/viewer/launcher 拆分策略 |
 | PRD-ENGINEERING-R1200-003 | TASK-ENGINEERING-052/053 | `test_tier_required` | split-part 命名阻断、include-only 完成态审查、基线 delta 校验 | 结构治理真实性 |
 | PRD-ENGINEERING-R1200-004 | TASK-ENGINEERING-054/055/056 | `test_tier_required` + `test_tier_full` | 首批超限文件治理定向回归、脚本 smoke、必要时 Web 闭环 | 入口文件、联机链路、Viewer 可用性 |
@@ -136,11 +135,11 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-R1200-001 | 采用“冻结基线 + 禁止新增 + 触碰即缩小”的渐进治理 | 再做一轮一次性全仓大拆分 | 当前超限范围已回弹，一次性大拆风险高且难持续执行。 |
+| DEC-R1200-001 | 采用“burn-down 到零后删除 baseline”的渐进治理 | 长期保留 frozen baseline 放行存量债务 | baseline 只适合作为中间过渡；当存量债清零后必须删除，否则会重新演化成 allowlist。 |
 | DEC-R1200-002 | 目录模块/职责模块作为最终完成态 | `include!` / `split_part` 机械切片作为完成态 | 机械切片没有减少认知复杂度，只是把大文件换了文件名。 |
 | DEC-R1200-003 | 将 required gate 接入 Rust 文件体量检查 | 继续仅靠 PRD/人工评审提醒 | 当前规则已写在文档里但未形成持续阻断，治理已失效。 |
 | DEC-R1200-004 | 先治 `chain_runtime`、`runtime_live`、`viewer` 三个高风险域 | 按字母序或随机顺序清债 | 这些文件最大、耦合最重，也是新功能最容易继续堆积的入口。 |
-| DEC-R1200-005 | 测试文件允许少量尾债基线，但必须冻结并计划退场 | 强行要求单批把全部测试文件也降到 1200 以下 | 测试体量大且覆盖关键入口，允许少量尾债能降低重构风险，但不能放任不管。 |
+| DEC-R1200-005 | 测试文件尾债只允许作为过渡状态，最终仍必须归零 | 长期维持测试尾债 baseline | 测试入口同样会持续膨胀，过渡策略必须带明确退场点。 |
 
 ## PRD 自审（按 `.agents/skills/prd/check.md`）
 - 目标与背景（Why 层）:

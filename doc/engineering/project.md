@@ -147,6 +147,7 @@
 - [x] rust-structural-slicing-oasis7-node-lib (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/lib.rs` 从 `include!/impl_part` 切换为 `node_engine_core` / `node_engine_network` / `node_engine_storage_challenge` 三个真实子模块，根文件压到 1199 行，退役 `lib_impl_part1.rs` / `lib_impl_part2.rs` 对应 4 条 frozen structural slicing 记录。 Trace: .pm/tasks/task_a2ec08aaee744cdcbd32dc1677c59d28.yaml
 - [x] libp2p-net-orchestrator-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 抽离 `Libp2pNetwork::new` 的 bootstrap / periodic 调度样板到 `constructor_support.rs`，将 `crates/oasis7_net/src/libp2p_net.rs` 从 1199 行压到 1156 行，并保持 frozen structural slicing baseline 不变。 Trace: .pm/tasks/task_fbffb4f8dc5b4326b6a09751f4779526.yaml
 - [x] rust-node-types-controller-binding-burn-down (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 将 `crates/oasis7_node/src/types.rs` 的 main-token controller binding 默认值、校验与 builder 逻辑抽到 `types/main_token_controller_binding.rs`，把根文件从 1277 行压到 1069 行，同时保持对外类型名与 targeted `oasis7_node` 验证链路不变。 Trace: .pm/tasks/task_5c651f038f1b48e78460ad7f95f6e187.yaml
+- [x] clear-rust-size-baselines (PRD-ENGINEERING-R1200-001/002/003/005) [test_tier_required]: 在同一治理任务内完成最后 7 个 Rust 超限文件的语义化拆分，退役 `doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv`，并将 `scripts/check-rust-file-size.sh` 收口为 oversized/structural 双零扫描门禁。 Trace: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -163,7 +164,6 @@
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
-- `doc/.governance/rust-oversized-file-baseline.tsv`
 - `scripts/check-rust-file-size.sh`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
