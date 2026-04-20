@@ -18,6 +18,6 @@ acceptance:
   - "Release packages workflow no longer contains Windows-invalid tracked paths that break checkout on windows-2022."
   - "A rerun-ready release path exists: Windows package-native can pass checkout and proceed to packaging."
 handoff_to: []
-updated_at: 2026-04-20T17:11:02+08:00
+updated_at: 2026-04-20T20:00:47+08:00
 last_started_at: 2026-04-20T16:38:30+08:00
-last_closed_at: 2026-04-20T17:10:17+08:00
+last_closed_at: 2026-04-20T20:00:47+08:00
