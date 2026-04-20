@@ -1,5 +1,5 @@
 task_uid: task_a0af51c6073b4bd182e48d11a0750fac
-title: "Aggregate full triad traffic detail summaries"
+title: "Aggregate full triad traffic and control-plane detail summaries"
 owner_role: runtime_engineer
 worktree_hint: /home/scc/worktrees/oasis7-world-runtime-traffic-monitor-aggregate-detail
 execution_log_path: .pm/tasks/task_a0af51c6073b4bd182e48d11a0750fac.execution.md
@@ -16,7 +16,8 @@ related_prd:
 acceptance:
   - "Triad traffic summary persists aggregate totals and full-detail breakdowns across all nodes."
   - "Aggregate output includes total UDP/libp2p distribution and merged by_kind/by_topic/by_protocol detail maps for the requested window."
+  - "Libp2p replication traffic status and summaries expose control-plane cumulative event counts with per-kind detail for unattributed overhead analysis."
 handoff_to: []
-updated_at: 2026-04-20T15:19:42+08:00
-last_started_at: 2026-04-20T14:32:33+08:00
-last_closed_at: 2026-04-20T15:19:42+08:00
+updated_at: 2026-04-20T22:05:07+08:00
+last_started_at: 2026-04-20T19:49:12+08:00
+last_closed_at: 2026-04-20T22:05:07+08:00

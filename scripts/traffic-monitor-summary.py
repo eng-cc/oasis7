@@ -169,6 +169,37 @@ def top_entries(delta_map, counter_key, top_n):
     return items[:top_n]
 
 
+def delta_counter(current, baseline):
+    return clamp_delta(current, baseline)
+
+
+def delta_counter_map(current_map, baseline_map):
+    current_map = current_map or {}
+    baseline_map = baseline_map or {}
+    result = {}
+    for name in sorted(set(current_map) | set(baseline_map)):
+        result[name] = delta_counter(current_map.get(name), baseline_map.get(name))
+    return result
+
+
+def nonzero_counter_map(counter_map):
+    return {
+        name: int(value)
+        for name, value in (counter_map or {}).items()
+        if int(value) > 0
+    }
+
+
+def top_counter_entries(counter_map, top_n):
+    items = [
+        {"name": name, "count": int(value)}
+        for name, value in (counter_map or {}).items()
+        if int(value) > 0
+    ]
+    items.sort(key=lambda item: (item["count"], item["name"]), reverse=True)
+    return items[:top_n]
+
+
 def sum_direction(current, added, counter_key):
     current = current or {}
     added = added or {}
@@ -194,6 +225,14 @@ def sum_named_maps(named_maps, counter_key):
         for name, entry in (named_map or {}).items():
             result[name] = sum_lane_entry(result.get(name), entry, counter_key)
     return nonzero_named_map(result, counter_key)
+
+
+def sum_counter_maps(named_maps):
+    result = {}
+    for named_map in named_maps:
+        for name, value in (named_map or {}).items():
+            result[name] = int(result.get(name, 0)) + int(value)
+    return nonzero_counter_map(result)
 
 
 def payload_totals_for_lane(lane):
@@ -325,6 +364,25 @@ def summarize_lane(lane_name, current_lane, baseline_lane, top_n):
         )
         result["by_topic"] = by_topic
         result["by_protocol"] = by_protocol
+        control_plane_current = current_lane.get("control_plane") or {}
+        control_plane_baseline = (baseline_lane or {}).get("control_plane") or {}
+        control_plane_by_kind = nonzero_counter_map(
+            delta_counter_map(
+                control_plane_current.get("by_kind"),
+                control_plane_baseline.get("by_kind"),
+            )
+        )
+        result["control_plane"] = {
+            "available": bool(control_plane_current),
+            "units": control_plane_current.get("units", "events"),
+            "total_events": delta_counter(
+                control_plane_current.get("total_events"),
+                control_plane_baseline.get("total_events"),
+            ),
+            "by_kind": control_plane_by_kind,
+            "detail_entry_counts": {"by_kind": len(control_plane_by_kind)},
+            "top_kinds": top_counter_entries(control_plane_by_kind, top_n),
+        }
         result["detail_entry_counts"] = {
             "by_topic": len(by_topic),
             "by_protocol": len(by_protocol),
@@ -377,8 +435,35 @@ def aggregate_lane_summaries(lane_name, lanes, top_n):
         by_protocol = sum_named_maps(
             [lane.get("by_protocol") for lane in available], counter_key
         )
+        control_plane_by_kind = sum_counter_maps(
+            [
+                (lane.get("control_plane") or {}).get("by_kind")
+                for lane in available
+            ]
+        )
         aggregate["by_topic"] = by_topic
         aggregate["by_protocol"] = by_protocol
+        aggregate["control_plane"] = {
+            "available": any(
+                (lane.get("control_plane") or {}).get("available") is True
+                for lane in available
+            ),
+            "units": next(
+                (
+                    (lane.get("control_plane") or {}).get("units")
+                    for lane in available
+                    if (lane.get("control_plane") or {}).get("units")
+                ),
+                "events",
+            ),
+            "total_events": sum(
+                int((lane.get("control_plane") or {}).get("total_events", 0))
+                for lane in available
+            ),
+            "by_kind": control_plane_by_kind,
+            "detail_entry_counts": {"by_kind": len(control_plane_by_kind)},
+            "top_kinds": top_counter_entries(control_plane_by_kind, top_n),
+        }
         aggregate["detail_entry_counts"] = {
             "by_topic": len(by_topic),
             "by_protocol": len(by_protocol),
@@ -699,6 +784,15 @@ def render_top_block(title, entries, counter_key):
     return lines
 
 
+def render_top_counter_block(title, entries, units):
+    if not entries:
+        return [f"- {title}: none"]
+    lines = [f"- {title}:"]
+    for entry in entries:
+        lines.append("  " + f"{entry['name']}: +{fmt_num(entry['count'])} {units}")
+    return lines
+
+
 def render_traffic_totals(name, lane):
     if not lane.get("available"):
         return f"- {name}: unavailable"
@@ -809,6 +903,18 @@ def render_single_node_markdown(summary, history_path, generated_at):
         lines.append(
             f"- Full libp2p detail rows in JSON: `{libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{libp2p['detail_entry_counts']['by_topic']}` by_topic"
         )
+        control_plane = libp2p.get("control_plane") or {}
+        if control_plane.get("available"):
+            lines.append(
+                f"- Libp2p control-plane counters: `+{fmt_num(control_plane['total_events'])}` {control_plane.get('units', 'events')} over `{control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+            )
+            lines.extend(
+                render_top_counter_block(
+                    "Top libp2p control-plane kinds",
+                    control_plane.get("top_kinds"),
+                    control_plane.get("units", "events"),
+                )
+            )
         lines.extend(
             render_top_block(
                 "Top libp2p protocols", libp2p.get("top_protocols"), "messages"
@@ -875,6 +981,18 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             lines.append(
                 f"- Full aggregate libp2p detail rows in JSON: `{aggregate_libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{aggregate_libp2p['detail_entry_counts']['by_topic']}` by_topic"
             )
+            aggregate_control_plane = aggregate_libp2p.get("control_plane") or {}
+            if aggregate_control_plane.get("available"):
+                lines.append(
+                    f"- Aggregate libp2p control-plane counters: `+{fmt_num(aggregate_control_plane['total_events'])}` {aggregate_control_plane.get('units', 'events')} over `{aggregate_control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+                )
+                lines.extend(
+                    render_top_counter_block(
+                        "Top aggregate libp2p control-plane kinds",
+                        aggregate_control_plane.get("top_kinds"),
+                        aggregate_control_plane.get("units", "events"),
+                    )
+                )
             lines.extend(
                 render_top_block(
                     "Top aggregate libp2p protocols",
@@ -947,6 +1065,18 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             lines.append(
                 f"- Full libp2p detail rows in JSON: `{libp2p['detail_entry_counts']['by_protocol']}` by_protocol, `{libp2p['detail_entry_counts']['by_topic']}` by_topic"
             )
+            control_plane = libp2p.get("control_plane") or {}
+            if control_plane.get("available"):
+                lines.append(
+                    f"- Libp2p control-plane counters: `+{fmt_num(control_plane['total_events'])}` {control_plane.get('units', 'events')} over `{control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+                )
+                lines.extend(
+                    render_top_counter_block(
+                        "Top libp2p control-plane kinds",
+                        control_plane.get("top_kinds"),
+                        control_plane.get("units", "events"),
+                    )
+                )
             lines.extend(
                 render_top_block(
                     "Top libp2p protocols", libp2p.get("top_protocols"), "messages"

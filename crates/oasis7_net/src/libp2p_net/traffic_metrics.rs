@@ -2,7 +2,14 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use libp2p::kad;
+use libp2p::relay;
+use libp2p::rendezvous;
+use libp2p::request_response;
+use libp2p::swarm::SwarmEvent;
 use serde::{Deserialize, Serialize};
+
+use super::swarm_behaviour::BehaviourEvent;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TrafficDirectionMetricsSnapshot {
@@ -17,6 +24,23 @@ pub struct TrafficLaneMetricsSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Libp2pControlPlaneMetricsSnapshot {
+    pub units: String,
+    pub total_events: u64,
+    pub by_kind: BTreeMap<String, u64>,
+}
+
+impl Default for Libp2pControlPlaneMetricsSnapshot {
+    fn default() -> Self {
+        Self {
+            units: "events".to_string(),
+            total_events: 0,
+            by_kind: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Libp2pTrafficMetricsSnapshot {
     pub observed_since_unix_ms: i64,
     pub scope: String,
@@ -27,6 +51,7 @@ pub struct Libp2pTrafficMetricsSnapshot {
     pub gossip: TrafficLaneMetricsSnapshot,
     pub request: TrafficLaneMetricsSnapshot,
     pub response: TrafficLaneMetricsSnapshot,
+    pub control_plane: Libp2pControlPlaneMetricsSnapshot,
     pub by_topic: BTreeMap<String, TrafficLaneMetricsSnapshot>,
     pub by_protocol: BTreeMap<String, TrafficLaneMetricsSnapshot>,
 }
@@ -43,6 +68,7 @@ impl Default for Libp2pTrafficMetricsSnapshot {
             gossip: TrafficLaneMetricsSnapshot::default(),
             request: TrafficLaneMetricsSnapshot::default(),
             response: TrafficLaneMetricsSnapshot::default(),
+            control_plane: Libp2pControlPlaneMetricsSnapshot::default(),
             by_topic: BTreeMap::new(),
             by_protocol: BTreeMap::new(),
         }
@@ -157,6 +183,80 @@ pub(crate) fn record_response_inbound(
     );
 }
 
+pub(crate) fn record_control_plane_event(metrics: &SharedLibp2pTrafficMetrics, kind: &str) {
+    let Ok(mut snapshot) = metrics.lock() else {
+        return;
+    };
+    snapshot.control_plane.total_events = snapshot.control_plane.total_events.saturating_add(1);
+    let entry = snapshot
+        .control_plane
+        .by_kind
+        .entry(kind.to_string())
+        .or_insert(0);
+    *entry = entry.saturating_add(1);
+}
+
+pub(crate) fn classify_control_plane_event(
+    event: &SwarmEvent<BehaviourEvent>,
+) -> Option<&'static str> {
+    match event {
+        SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
+            request_response::Event::OutboundFailure { .. },
+        )) => Some("request_response.outbound_failure"),
+        SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
+            request_response::Event::InboundFailure { .. },
+        )) => Some("request_response.inbound_failure"),
+        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
+            ..
+        })) => Some("kademlia.outbound_query_progressed"),
+        SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::RoutingUpdated { .. })) => {
+            Some("kademlia.routing_updated")
+        }
+        SwarmEvent::Behaviour(BehaviourEvent::Autonat(_)) => Some("autonat.event"),
+        SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
+            relay::client::Event::ReservationReqAccepted { .. },
+        )) => Some("relay_client.reservation_accepted"),
+        SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
+            relay::client::Event::OutboundCircuitEstablished { .. },
+        )) => Some("relay_client.outbound_circuit_established"),
+        SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
+            relay::client::Event::InboundCircuitEstablished { .. },
+        )) => Some("relay_client.inbound_circuit_established"),
+        SwarmEvent::Behaviour(BehaviourEvent::Dcutr(_)) => Some("dcutr.event"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(
+            rendezvous::client::Event::Registered { .. },
+        )) => Some("rendezvous_client.registered"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(
+            rendezvous::client::Event::RegisterFailed { .. },
+        )) => Some("rendezvous_client.register_failed"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(
+            rendezvous::client::Event::Discovered { .. },
+        )) => Some("rendezvous_client.discovered"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(
+            rendezvous::client::Event::DiscoverFailed { .. },
+        )) => Some("rendezvous_client.discover_failed"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousClient(
+            rendezvous::client::Event::Expired { .. },
+        )) => Some("rendezvous_client.expired"),
+        SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(
+            rendezvous::server::Event::PeerNotRegistered { .. },
+        )) => Some("rendezvous_server.peer_not_registered"),
+        SwarmEvent::NewExternalAddrCandidate { .. } => {
+            Some("transport.new_external_addr_candidate")
+        }
+        SwarmEvent::ExternalAddrConfirmed { .. } => Some("transport.external_addr_confirmed"),
+        SwarmEvent::ExternalAddrExpired { .. } => Some("transport.external_addr_expired"),
+        SwarmEvent::NewListenAddr { .. } => Some("transport.new_listen_addr"),
+        SwarmEvent::ExpiredListenAddr { .. } => Some("transport.expired_listen_addr"),
+        SwarmEvent::ListenerClosed { .. } => Some("transport.listener_closed"),
+        SwarmEvent::ConnectionEstablished { .. } => Some("transport.connection_established"),
+        SwarmEvent::ConnectionClosed { .. } => Some("transport.connection_closed"),
+        SwarmEvent::OutgoingConnectionError { .. } => Some("transport.outgoing_connection_error"),
+        SwarmEvent::IncomingConnectionError { .. } => Some("transport.incoming_connection_error"),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy)]
 enum TrafficFamily {
     Gossip,
@@ -239,6 +339,9 @@ mod tests {
         record_gossip_inbound(&metrics, "aw.smoke", 7);
         record_request_outbound(&metrics, "/aw/rr/1.0.0/ping", 11);
         record_response_inbound(&metrics, "/aw/rr/1.0.0/ping", 13);
+        record_control_plane_event(&metrics, "transport.connection_established");
+        record_control_plane_event(&metrics, "transport.connection_established");
+        record_control_plane_event(&metrics, "kademlia.routing_updated");
 
         let snapshot = snapshot_traffic_metrics(&metrics);
         assert_eq!(snapshot.scope, "application_payload_only");
@@ -262,6 +365,22 @@ mod tests {
                 .get("/aw/rr/1.0.0/ping")
                 .map(|lane| lane.inbound.payload_bytes),
             Some(13)
+        );
+        assert_eq!(snapshot.control_plane.units, "events");
+        assert_eq!(snapshot.control_plane.total_events, 3);
+        assert_eq!(
+            snapshot
+                .control_plane
+                .by_kind
+                .get("transport.connection_established"),
+            Some(&2)
+        );
+        assert_eq!(
+            snapshot
+                .control_plane
+                .by_kind
+                .get("kademlia.routing_updated"),
+            Some(&1)
         );
     }
 }

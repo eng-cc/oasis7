@@ -45,7 +45,8 @@ Notes:
     when the interface can be resolved, so summaries can compare payload-only
     traffic against whole-interface bandwidth.
   - `latest_summary.json` now keeps full delta detail maps (`by_kind`,
-    `by_topic`, `by_protocol`) in addition to the top-N markdown summary.
+    `by_topic`, `by_protocol`) plus libp2p control-plane event counters, in
+    addition to the top-N markdown summary.
 USAGE
 }
 
