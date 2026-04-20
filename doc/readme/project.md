@@ -936,7 +936,7 @@
     - `file site/social/xiaohongshu-future-ownership-cover.png site/social/xiaohongshu-future-ownership-carousel-slide1.png site/social/xiaohongshu-future-ownership-carousel-slide2.png site/social/xiaohongshu-future-ownership-carousel-slide3.png site/social/xiaohongshu-future-ownership-carousel-slide4.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] xiaohongshu-token-usage-post-pack (PRD-README-047) [test_tier_required]: 为小红书第十四篇补齐“项目累计 token 用量”素材包，明确推荐标题、正文、短版 caption、评论区引导、关键词、事实基线与禁滑坡边界，并把累计账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断。 Trace: .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml
+- [x] xiaohongshu-token-usage-post-pack (PRD-README-047) [test_tier_required]: 为小红书第十四篇补齐“项目累计 token 用量”素材包与单图封面，明确推荐标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG、事实基线与禁滑坡边界，并把累计账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断。 Trace: .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml
   - 产物文件:
     - `doc/readme/prd.md`
     - `doc/readme/project.md`
@@ -944,10 +944,13 @@
     - `doc/readme/governance/README.md`
     - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`
     - `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`
+    - `site/social/xiaohongshu-token-usage-cover.html`
+    - `site/social/xiaohongshu-token-usage-cover.png`
     - `.pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml`
     - `.pm/tasks/task_79a3b9140bb54e73984e9893485614e7.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "PRD-README-047|AC-36|DEC-RM-047|readme-xiaohongshu-token-usage-post-pack-2026-04-20|11780\\.14M|\\$4680\\.42|研发流程参与成本" doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/README.md doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.execution.md`
+    - `rg -n "PRD-README-047|AC-36|DEC-RM-047|readme-xiaohongshu-token-usage-post-pack-2026-04-20|xiaohongshu-token-usage-cover|11780\\.14M|\\$4680\\.42|研发流程参与成本" doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/README.md doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md site/social/xiaohongshu-token-usage-cover.html .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.yaml .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.execution.md`
+    - `file site/social/xiaohongshu-token-usage-cover.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立热点路径治理专题三件套、新增 `doc/readme/governance/README.md` 作为 canonical 子域入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml

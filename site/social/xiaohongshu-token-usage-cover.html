@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xiaohongshu Token Usage Cover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=Noto+Serif+SC:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f4ead9;
+        --paper-deep: #e3d5c3;
+        --ink: #171411;
+        --muted: rgba(23, 20, 17, 0.6);
+        --line: rgba(23, 20, 17, 0.14);
+        --signal: #b63d2d;
+        --signal-soft: rgba(182, 61, 45, 0.12);
+        --ledger: #224b46;
+        --gold: #cb8a3b;
+        --shadow: rgba(23, 20, 17, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 16% 14%, rgba(182, 61, 45, 0.18), transparent 24%),
+          radial-gradient(circle at 84% 18%, rgba(34, 75, 70, 0.14), transparent 22%),
+          linear-gradient(180deg, #f8f0e6 0%, #e8dccd 100%);
+        color: var(--ink);
+        font-family: "Noto Serif SC", serif;
+      }
+
+      .cover {
+        position: relative;
+        width: 1080px;
+        height: 1440px;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 20%),
+          linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+      }
+
+      .grain,
+      .grid,
+      .wash,
+      .ledger-lines,
+      .stamps {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .grain {
+        opacity: 0.1;
+        background-image:
+          radial-gradient(circle at 20% 24%, rgba(0, 0, 0, 0.6) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 72% 62%, rgba(0, 0, 0, 0.28) 0.8px, transparent 0.9px),
+          radial-gradient(circle at 42% 82%, rgba(0, 0, 0, 0.22) 0.8px, transparent 0.9px);
+        background-size: 30px 30px, 42px 42px, 56px 56px;
+      }
+
+      .grid {
+        background-image:
+          linear-gradient(to right, var(--line) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 88%);
+      }
+
+      .wash {
+        background:
+          radial-gradient(circle at 78% 28%, rgba(182, 61, 45, 0.12), transparent 18%),
+          radial-gradient(circle at 76% 72%, rgba(34, 75, 70, 0.1), transparent 24%);
+      }
+
+      .ledger-lines::before,
+      .ledger-lines::after {
+        content: "";
+        position: absolute;
+        background: var(--line);
+      }
+
+      .ledger-lines::before {
+        left: 140px;
+        top: 102px;
+        bottom: 118px;
+        width: 1px;
+      }
+
+      .ledger-lines::after {
+        left: 140px;
+        right: 102px;
+        bottom: 184px;
+        height: 1px;
+      }
+
+      .stamp {
+        position: absolute;
+        padding: 16px 20px 14px;
+        border: 1px solid rgba(23, 20, 17, 0.14);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        background: rgba(255, 255, 255, 0.34);
+        box-shadow: 0 12px 28px rgba(23, 20, 17, 0.05);
+      }
+
+      .stamp-signal {
+        right: 118px;
+        top: 132px;
+        color: var(--signal);
+        transform: rotate(-7deg);
+      }
+
+      .stamp-ledger {
+        left: 168px;
+        top: 174px;
+        color: var(--ledger);
+        transform: rotate(5deg);
+      }
+
+      .meta {
+        position: absolute;
+        top: 92px;
+        left: 170px;
+        right: 118px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .meta strong {
+        color: var(--signal);
+        font-weight: 700;
+      }
+
+      .hero {
+        position: absolute;
+        left: 172px;
+        top: 294px;
+        width: 718px;
+      }
+
+      .eyebrow {
+        margin: 0 0 26px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 20px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--signal);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 128px;
+        line-height: 0.98;
+        letter-spacing: -0.09em;
+        font-weight: 900;
+      }
+
+      h1 .line {
+        display: block;
+      }
+
+      h1 .shift {
+        margin-left: 146px;
+      }
+
+      .divider {
+        width: 192px;
+        height: 6px;
+        margin: 46px 0 30px;
+        background: linear-gradient(90deg, var(--ink), var(--gold));
+      }
+
+      .subcopy {
+        max-width: 540px;
+        margin: 0;
+        font-size: 33px;
+        line-height: 1.58;
+        color: rgba(23, 20, 17, 0.82);
+      }
+
+      .board {
+        position: absolute;
+        right: 110px;
+        bottom: 224px;
+        width: 378px;
+        padding: 26px 28px 30px;
+        border: 1px solid rgba(23, 20, 17, 0.16);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.16)),
+          rgba(244, 234, 217, 0.84);
+        box-shadow: 0 28px 52px var(--shadow);
+      }
+
+      .board::before {
+        content: "";
+        position: absolute;
+        left: 24px;
+        right: 24px;
+        top: 62px;
+        height: 1px;
+        background: rgba(23, 20, 17, 0.1);
+      }
+
+      .board-title {
+        margin: 0 0 26px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 17px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .metric {
+        display: grid;
+        grid-template-columns: 104px 1fr;
+        gap: 18px;
+        align-items: start;
+        padding: 18px 0;
+        border-bottom: 1px solid rgba(23, 20, 17, 0.08);
+      }
+
+      .metric:last-of-type {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .metric-label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 15px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .metric-value {
+        font-size: 38px;
+        line-height: 1.06;
+        font-weight: 700;
+      }
+
+      .metric-note {
+        display: block;
+        margin-top: 8px;
+        font-size: 18px;
+        line-height: 1.45;
+        color: rgba(23, 20, 17, 0.72);
+      }
+
+      .tagline {
+        position: absolute;
+        left: 172px;
+        bottom: 238px;
+        width: 420px;
+        padding: 28px 30px 30px;
+        border: 1px solid rgba(23, 20, 17, 0.14);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18)),
+          rgba(244, 234, 217, 0.8);
+        box-shadow: 0 24px 52px rgba(23, 20, 17, 0.06);
+      }
+
+      .tagline .label {
+        display: block;
+        margin-bottom: 14px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .tagline strong {
+        display: block;
+        font-size: 34px;
+        line-height: 1.42;
+      }
+
+      .accent {
+        color: var(--signal);
+      }
+
+      .footer {
+        position: absolute;
+        left: 172px;
+        right: 116px;
+        bottom: 112px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .footer strong {
+        color: var(--ledger);
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="cover">
+      <div class="grain"></div>
+      <div class="grid"></div>
+      <div class="wash"></div>
+      <div class="ledger-lines"></div>
+      <div class="stamps">
+        <div class="stamp stamp-signal">process cost</div>
+        <div class="stamp stamp-ledger">audit ledger</div>
+      </div>
+
+      <div class="meta">
+        <span>xiaohongshu cover / <strong>token usage</strong></span>
+        <span>2026.04</span>
+      </div>
+
+      <section class="hero">
+        <p class="eyebrow">long-run project bill</p>
+        <h1>
+          <span class="line">117亿</span>
+          <span class="line shift">Token</span>
+        </h1>
+        <div class="divider"></div>
+        <p class="subcopy">
+          烧得最凶的不是那一下
+          <br />
+          是后面反复迭代
+        </p>
+      </section>
+
+      <aside class="board">
+        <p class="board-title">snapshot</p>
+        <div class="metric">
+          <div class="metric-label">request</div>
+          <div>
+            <div class="metric-value">95,524</div>
+            <span class="metric-note">长期项目的累计往返</span>
+          </div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">cost</div>
+          <div>
+            <div class="metric-value">$4680.42</div>
+            <span class="metric-note">不是一次生成，是持续流程</span>
+          </div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">primary</div>
+          <div>
+            <div class="metric-value">63.5%</div>
+            <span class="metric-note">gpt-5.4 占比</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="tagline">
+        <span class="label">what really burns tokens</span>
+        <strong>
+          改需求<span class="accent"> / </span>补文档<span class="accent"> / </span>返工
+          <br />
+          验证<span class="accent"> / </span>review<span class="accent"> / </span>上下文切换
+        </strong>
+      </section>
+
+      <div class="footer">
+        <span>iteration / review / context switch</span>
+        <span><strong>not demo hype</strong></span>
+      </div>
+    </main>
+  </body>
+</html>
