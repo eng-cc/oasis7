@@ -120,6 +120,8 @@ fn minimal_template_real_build_writes_wasm_and_metadata() {
         .clone()
         .expect("real build should expose build timing");
     assert!(timing.total_build_wall_ms >= timing.cargo_build_ms);
+    assert!(timing.total_build_wall_ms >= timing.receipt_write_ms);
+    assert!(timing.total_build_wall_ms >= timing.metadata_write_ms);
     let packaged_wasm_bytes = fs::read(&output.packaged_wasm_path).expect("read packaged wasm");
     assert!(
         !contains_custom_section(&packaged_wasm_bytes),
@@ -141,11 +143,20 @@ fn minimal_template_real_build_writes_wasm_and_metadata() {
         output.receipt_path.to_string_lossy()
     );
     assert!(metadata.recorded_at_unix_ms > 0);
-    assert_eq!(metadata.build_timing, timing);
+    assert_eq!(metadata.build_timing.cargo_build_ms, timing.cargo_build_ms);
+    assert_eq!(
+        metadata.build_timing.canonicalize_ms,
+        timing.canonicalize_ms
+    );
+    assert_eq!(metadata.build_timing.hash_ms, timing.hash_ms);
+    assert!(metadata.build_timing.total_build_wall_ms >= metadata.build_timing.cargo_build_ms);
+    assert!(metadata.build_timing.total_build_wall_ms >= metadata.build_timing.receipt_write_ms);
+    assert!(metadata.build_timing.total_build_wall_ms >= metadata.build_timing.metadata_write_ms);
 
     let receipt_bytes = fs::read(&output.receipt_path).expect("read build receipt json");
     let receipt: BuildReceipt =
         serde_json::from_slice(&receipt_bytes).expect("parse build receipt json");
+    assert_eq!(receipt.schema_version, 2);
     assert_eq!(receipt.module_id, module_id);
     assert_eq!(receipt.target, DEFAULT_TARGET);
     assert_eq!(receipt.profile, "dev");

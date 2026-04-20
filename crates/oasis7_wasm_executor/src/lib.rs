@@ -877,6 +877,10 @@ impl ModuleSandbox for WasmExecutor {
                 let decode_started = Instant::now();
                 let mut output: ModuleOutput =
                     serde_cbor::from_slice(&output_buf).map_err(|err| {
+                        metrics::observe_wasm_executor_decode(
+                            &self.metrics,
+                            elapsed_ms(decode_started),
+                        );
                         self.failure(
                             request,
                             ModuleCallErrorCode::InvalidOutput,

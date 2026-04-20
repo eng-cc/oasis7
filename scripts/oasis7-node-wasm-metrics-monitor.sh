@@ -5,8 +5,8 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/oasis7-node-wasm-metrics-monitor.sh [options]
 
-Summarize live `/v1/chain/status.wasm` into a machine-readable json plus a short
-markdown report.
+Summarize the live `wasm` section from `/v1/chain/status` into a
+machine-readable json plus a short markdown report.
 
 Options:
   --status-url <url>            status endpoint to fetch

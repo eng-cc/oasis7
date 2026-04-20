@@ -70,17 +70,20 @@ impl WasmExecutorMetricsSnapshot {
     fn observe_call_bucket(&mut self, elapsed_ms: u64) {
         for (upper_bound_ms, label) in CALL_WALL_BUCKETS {
             if elapsed_ms <= *upper_bound_ms {
-                *self
-                    .call_wall_ms_buckets
-                    .entry((*label).to_string())
-                    .or_insert(0) += 1;
+                if let Some(bucket) = self.call_wall_ms_buckets.get_mut(*label) {
+                    *bucket = bucket.saturating_add(1);
+                } else {
+                    self.call_wall_ms_buckets.insert((*label).to_string(), 1);
+                }
                 return;
             }
         }
-        *self
-            .call_wall_ms_buckets
-            .entry(CALL_WALL_OVERFLOW_BUCKET.to_string())
-            .or_insert(0) += 1;
+        if let Some(bucket) = self.call_wall_ms_buckets.get_mut(CALL_WALL_OVERFLOW_BUCKET) {
+            *bucket = bucket.saturating_add(1);
+        } else {
+            self.call_wall_ms_buckets
+                .insert(CALL_WALL_OVERFLOW_BUCKET.to_string(), 1);
+        }
     }
 }
 

@@ -23,6 +23,7 @@ pub const DEFAULT_OUT_DIR: &str = ".tmp/wasm-build-suite";
 pub const DEFAULT_CANONICALIZER_VERSION: &str = "strip-custom-sections-v1";
 pub const DEFAULT_CONTAINER_PLATFORM: &str = "linux-x86_64";
 const WASM_ENV_PREFIX: &str = "OASIS7_WASM_";
+const BUILD_RECEIPT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildRequest {
@@ -390,7 +391,7 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
 
     let receipt_started = Instant::now();
     let receipt_payload = BuildReceipt {
-        schema_version: 1,
+        schema_version: BUILD_RECEIPT_SCHEMA_VERSION,
         recorded_at_unix_ms,
         module_id: request.module_id.clone(),
         target: request.target.clone(),
@@ -468,19 +469,24 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         source,
     })?;
     let metadata_write_ms = elapsed_ms(metadata_started);
-    let total_build_wall_ms = elapsed_ms(total_started);
-    let build_timing = BuildTimingSnapshot {
-        total_build_wall_ms,
+    // Persisted timing must include the final rewrite pass as well. We budget
+    // that pass using the first measured write durations, then return the
+    // exact end-to-end timing in BuildOutput after the rewrites complete.
+    let persisted_build_timing = BuildTimingSnapshot {
+        total_build_wall_ms: elapsed_ms(total_started)
+            .saturating_add(receipt_write_ms)
+            .saturating_add(metadata_write_ms),
         cargo_build_ms,
         canonicalize_ms,
         hash_ms,
-        receipt_write_ms,
-        metadata_write_ms,
+        receipt_write_ms: receipt_write_ms.saturating_mul(2),
+        metadata_write_ms: metadata_write_ms.saturating_mul(2),
     };
     let final_receipt_payload = BuildReceipt {
-        build_timing: build_timing.clone(),
+        build_timing: persisted_build_timing.clone(),
         ..receipt_payload
     };
+    let final_receipt_started = Instant::now();
     let final_receipt_json =
         serde_json::to_vec_pretty(&final_receipt_payload).map_err(|source| BuildError::Json {
             source,
@@ -490,10 +496,12 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         path: Some(receipt_path.clone()),
         source,
     })?;
+    let final_receipt_write_ms = elapsed_ms(final_receipt_started);
     let final_metadata_payload = BuildMetadata {
-        build_timing: build_timing.clone(),
+        build_timing: persisted_build_timing.clone(),
         ..metadata_payload
     };
+    let final_metadata_started = Instant::now();
     let final_metadata_json =
         serde_json::to_vec_pretty(&final_metadata_payload).map_err(|source| BuildError::Json {
             source,
@@ -503,6 +511,15 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         path: Some(metadata_path.clone()),
         source,
     })?;
+    let final_metadata_write_ms = elapsed_ms(final_metadata_started);
+    let build_timing = BuildTimingSnapshot {
+        total_build_wall_ms: elapsed_ms(total_started),
+        cargo_build_ms,
+        canonicalize_ms,
+        hash_ms,
+        receipt_write_ms: receipt_write_ms.saturating_add(final_receipt_write_ms),
+        metadata_write_ms: metadata_write_ms.saturating_add(final_metadata_write_ms),
+    };
 
     Ok(BuildOutput {
         module_id: request.module_id.clone(),

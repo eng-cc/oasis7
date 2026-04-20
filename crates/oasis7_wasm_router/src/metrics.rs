@@ -121,11 +121,19 @@ fn empty_bucket_map() -> BTreeMap<String, u64> {
 fn observe_bucket(buckets: &mut BTreeMap<String, u64>, elapsed_ms: u64) {
     for (upper_bound_ms, label) in WALL_BUCKETS {
         if elapsed_ms <= *upper_bound_ms {
-            *buckets.entry((*label).to_string()).or_insert(0) += 1;
+            if let Some(count) = buckets.get_mut(*label) {
+                *count = count.saturating_add(1);
+            } else {
+                buckets.insert((*label).to_string(), 1);
+            }
             return;
         }
     }
-    *buckets.entry(WALL_OVERFLOW_BUCKET.to_string()).or_insert(0) += 1;
+    if let Some(count) = buckets.get_mut(WALL_OVERFLOW_BUCKET) {
+        *count = count.saturating_add(1);
+    } else {
+        buckets.insert(WALL_OVERFLOW_BUCKET.to_string(), 1);
+    }
 }
 
 fn now_unix_ms() -> i64 {
