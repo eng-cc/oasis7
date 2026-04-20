@@ -18,3 +18,8 @@ Example:
 - 完成内容: 同步 `doc/testing/prd.md`、`doc/testing/project.md`、`testing-manual.md`，把 release Web gate 对 `software_safe` 的当前验收口径回写到 testing 真值文档。
 - 完成内容: 运行 `bash -n scripts/viewer-release-qa-loop.sh`、`node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`、`git diff --check`，并本地复跑 `./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`；结果 summary ` .tmp/release_gate_web_fix/release-qa-summary-20260420-221529.md` 显示 `Render mode=software_safe`、`Semantic web gate: passed`、`Overall: PASS`。
 - 遗留事项: 该 worktree 当前只完成本地验证与 PM 收口，后续仍需 commit / push / PR 合流后再从最新 `main` 重新触发 GitHub release，确认线上 `release-gate-web` 与 tag publish 全链路恢复。
+
+## 2026-04-20 23:08:00 CST / qa_engineer
+- 完成内容: 处理 PR #128 review comments，修正 `doc/testing/prd.md` 中 Success Criteria 的 markdown 层级缩进，并删除 `scripts/viewer-release-qa-loop.sh` 中未使用的 `state_logical_time` helper，避免 review 指出的结构与死代码问题残留。
+- 完成内容: 复跑 `bash -n scripts/viewer-release-qa-loop.sh` 与 `git diff --check`，确认 follow-up patch 不引入新的脚本语法或格式问题。
+- 遗留事项: 需将 follow-up commit push 到 `task/testing-release-web-semantic-gate-drift` 并回收 review thread，之后再检查 PR merge 状态是否只剩 required review / checks。
