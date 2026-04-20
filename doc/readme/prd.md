@@ -175,7 +175,7 @@
 - AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
 - AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `技术预览（尚不可玩）` 边界不变。
-- AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
+- AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -285,7 +285,7 @@
 | PRD-README-044 | TASK-README-070 | `test_tier_required` | merged PR reward round scan 脚本支持按时间窗批量扫描、离线 smoke 输入、状态汇总与 ledger-ready row 输出，并与单 PR intake contract 保持一致 | reward review 周期性归集与首轮台账准备效率 |
 | PRD-README-045 | TASK-README-080 | `test_tier_required` | 将第十三篇推荐版从所有权讨论继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，同时保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
 | PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留技术预览与尚不可玩边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
-| PRD-README-047 | xiaohongshu-token-usage-post-pack | `test_tier_required` | 小红书第十四篇素材包明确“项目累计 token 用量”的推荐标题、正文、短版 caption、评论区引导、关键词、事实基线与禁滑坡边界，并把这组真实账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断 | 小红书内容链路从关系和参与讨论继续推进到真实项目成本结构，让读者看到 AI 成本主要消耗在长期迭代而不是单次生成炫技 |
+| PRD-README-047 | xiaohongshu-token-usage-post-pack | `test_tier_required` | 小红书第十四篇素材包明确“项目累计 token 用量”的推荐标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG、事实基线与禁滑坡边界，并把这组真实账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断 | 小红书内容链路从关系和参与讨论继续推进到真实项目成本结构，让读者看到 AI 成本主要消耗在长期迭代而不是单次生成炫技 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
