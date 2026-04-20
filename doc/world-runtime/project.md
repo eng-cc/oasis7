@@ -223,6 +223,30 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] wasm-observability-timing-metrics-mvp-implementation (PRD-WORLD_RUNTIME-036) [test_tier_required]: 在同一专题下落地首期 build timing、executor/router cumulative snapshot、`/v1/chain/status.wasm` 与最小 repo-owned summary 入口，避免 WASM 热点继续只靠 ignored perf probe 与临时日志归因。 Trace: .pm/tasks/task_90d0ee7aa1464f248f717ff600e22b21.yaml
+- [x] wasm-module-observability-standardization (PRD-WORLD_RUNTIME-037) [test_tier_required]: 落地 module-local observe spec、通用 `wasm_module_observe` runner、repo-owned wrapper script、模板与 `m1_rule_move` 代表样例，让新 wasm 模块默认能产出统一的功能和性能证据。 Trace: .pm/tasks/task_20b6ee42182247ccbebe6a6a2c2db469.yaml
+  - 产物文件:
+    - `tools/wasm_module_observe/Cargo.toml`
+    - `tools/wasm_module_observe/src/lib.rs`
+    - `tools/wasm_module_observe/src/main.rs`
+    - `tools/wasm_module_observe/src/spec.rs`
+    - `tools/wasm_module_observe/src/report.rs`
+    - `tools/wasm_module_observe/tests/m1_rule_move.rs`
+    - `scripts/oasis7-wasm-module-observe.sh`
+    - `crates/oasis7_builtin_wasm_modules/_templates/module_observe.json`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/world-runtime/README.md`
+    - `doc/world-runtime/prd.index.md`
+    - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
+    - `doc/world-runtime/wasm/wasm-module-observability-standardization.design.md`
+    - `doc/world-runtime/wasm/wasm-module-observability-standardization.project.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`
+    - `env -u RUSTC_WRAPPER cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json --out-dir .tmp/wasm_module_observe_m1_check`
+    - `bash -n scripts/oasis7-wasm-module-observe.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-058 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 修复 `oasis7_chain_runtime` 默认 loopback replication network 劫持多机 PoS 共识广播的问题，保留 replication/feedback fallback，但让已配置 UDP gossip 的三节点部署继续通过 gossip 同步 peer heads；显式共享 replication network 的 network-consensus 路径保持不变。
   - 产物文件:
     - `doc/world-runtime/prd.md`

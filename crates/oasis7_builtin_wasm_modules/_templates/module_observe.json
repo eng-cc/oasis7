@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "module": {
+    "module_id": "replace.with.module.id",
+    "manifest_path": "../Cargo.toml",
+    "entrypoint": "reduce",
+    "profile": "release",
+    "target": "wasm32-unknown-unknown",
+    "limits": {
+      "max_mem_bytes": 67108864,
+      "max_gas": 2000000,
+      "max_call_rate": 10,
+      "max_output_bytes": 4096,
+      "max_effects": 8,
+      "max_emits": 8
+    }
+  },
+  "subscriptions": [
+    {
+      "event_kinds": [],
+      "action_kinds": [
+        "action.replace_me"
+      ],
+      "stage": "pre_action",
+      "filters": null
+    }
+  ],
+  "cases": [
+    {
+      "name": "replace-with-happy-path",
+      "repeat": 3,
+      "request": {
+        "time": 1,
+        "origin_kind": "observe_runner",
+        "origin_id": "template",
+        "stage": "pre_action",
+        "action_json": {
+          "id": 1,
+          "action": {
+            "type": "ReplaceMe",
+            "data": {}
+          }
+        }
+      },
+      "expect": {
+        "success": true,
+        "emit_count": 1,
+        "effect_count": 0,
+        "new_state_present": false,
+        "tick_lifecycle": {
+          "mode": "absent"
+        },
+        "emits": [
+          {
+            "kind": "replace.emit.kind",
+            "payload_json": {}
+          }
+        ]
+      }
+    }
+  ],
+  "router_probes": [
+    {
+      "name": "replace-router-probe",
+      "repeat": 5,
+      "use_prepared": true,
+      "probe": {
+        "kind": "action",
+        "stage": "pre_action",
+        "action_kind": "action.replace_me",
+        "payload_json": {
+          "type": "ReplaceMe"
+        }
+      },
+      "expect_match": true
+    }
+  ]
+}

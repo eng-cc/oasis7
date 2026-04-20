@@ -53,6 +53,7 @@
   - SC-20: chain-linked `oasis7_viewer_live` 必须默认被动跟随 `/v1/chain/status.consensus.committed_height` 对应的 execution world，不需要显式 `Play` 才能消费 committed action；若轮询没有新的 committed action 或没有新增 world event，则不得把该轮询记成逻辑 world progression。
   - SC-21: 节点运营者与 launcher 用户必须能从同一份 `/v1/chain/status.observability` 真值回答“当前连了多少 peer、是否落后、是否有存储/复制/奖励子系统告警”，并可由 repo-owned 脚本与 launcher UI 直接消费，无需各自重复推导。
   - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
+  - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -93,6 +94,7 @@
   - PRD-WORLD_RUNTIME-034: As a `runtime_engineer` / 节点运营者, I want repeated successful `fetch-commit` requests with the same deterministic payload to reuse a short-lived local success cache, so that followers stop re-asking the network for the same already-found commit during tight gap-sync loops without hiding not-found or timeout recovery.
   - PRD-WORLD_RUNTIME-035: As a `runtime_engineer` / `viewer_engineer` / 节点运营者, I want node observability to be published as a stable summary plus alerts contract and surfaced through launcher/UI and repo-owned reports, so that current peer count, lag, degraded subsystems, and active alerts are directly visible without reading raw payload internals.
   - PRD-WORLD_RUNTIME-036: As a `wasm_platform_engineer` / `runtime_engineer` / `qa_engineer`, I want the WASM build, executor, and router paths to emit bounded cumulative timing metrics and status snapshots, so that hotspot attribution no longer depends on ad hoc logs or ignored local perf probes.
+  - PRD-WORLD_RUNTIME-037: As a `wasm_platform_engineer` / `qa_engineer`, I want each wasm module to expose a standard local observe spec consumable by a shared runner, so that every new module can inherit consistent contract and perf evidence without bespoke glue code.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -113,6 +115,7 @@
 | 回放契约治理 | `canonical_log`、`checkpoint_anchor`、`retained_heights`、`execution_state_root` | 对保留范围内目标高度执行 replay 验证 | `requested -> replaying -> matched/mismatched` | 以 checkpoint + canonical log 为重建基准 | QA / 审计维护者可读取结果 |
 | WASM Docker 确定性构建与工件治理 | `builder_image_digest`、`source_hash`、`build_manifest_hash`、`wasm_hash`、`canonicalizer_version`、`canonical_token` | 统一 Docker canonical build、manifest/identity、DistFS 与 runtime binary-only 消费 | `source -> container-built -> canonicalized -> manifested -> verified/executed` | 发布级只允许一个 canonical hash；宿主差异不得进入发布 hash 空间 | `wasm_platform_engineer` 定义 builder image；CI 仅校验；生产发布不由 CI 写入 |
 | WASM 可观测性与耗时指标 | `/v1/chain/status.wasm`、`build timing`、`executor cache/call buckets`、`router prepare/match timings`、`degraded_reason` | build suite / executor / router 更新本地 snapshot，节点按 status 请求返回 bounded machine-readable 指标 | `metrics_unavailable -> available -> degraded` | 默认只保留累计 counters、sum、fixed buckets 与 bounded top-N；重启/reset 需缩窗 | `wasm_platform_engineer` 设计 schema，`runtime_engineer` 暴露 status，`qa_engineer` 复核窗口汇总 |
+| WASM 模块标准化观测与契约测试 | `module_observe.json`、`cases`、`router_probes`、`summary.json/md`、`executor/router delta` | 通用 runner 根据 module-local spec 构建模块、执行 contract cases、采样 perf、验证 router probe | `spec_authored -> built -> observed -> summarized` | 模块差异通过 spec 表达；默认只输出 bounded summary，不允许 bespoke runner 分叉 | `wasm_platform_engineer` 维护 schema/runner，模块作者维护 module-local spec |
 | 历史标题治理 | 标题前缀、专题路径、历史命名说明 | 将仍可读 runtime/module/governance/wasm/testing 专题标题切到 `oasis7 Runtime` | `legacy_title -> current_title -> audited` | 先改主入口/治理/运行时专题，再改更深历史专题 | `producer_system_designer` 定口径，`runtime_engineer` 承接 |
 | chain-linked gameplay 提交 | `GameplayActionRequest`、auth proof、nonce、consensus `action_id`、`committed_height` | viewer action 通过 `/v1/chain/gameplay/submit` 入链，提交成功只返回 consensus action id，不直接改本地 world | `requested -> submitted -> committed_visible/rejected` | viewer 只在 committed execution world 产生新 logical time/event 后更新快照 | 需要 viewer auth proof 且 chain runtime 必须拒绝 nonce replay |
 - Acceptance Criteria:
@@ -138,6 +141,7 @@
   - AC-20: `oasis7_chain_runtime` 默认注入的 loopback replication fallback 仅可为 replication / feedback 提供本地兜底，不得在已配置 UDP gossip 的多机部署中抢占 PoS consensus 广播；显式共享 replication network 的 network-consensus 路径必须继续可用。
   - AC-21: repo 内必须提供可复用的 triad traffic monitor 脚本，默认面向本机 observer + 两台 ECS 节点，能抓取 `/v1/chain/status` 并写入持久化 history。
   - AC-22: triad traffic monitor 必须支持最近 N 分钟窗口汇总，至少输出每节点的 UDP gossip / libp2p replication totals delta、top `by_kind` / `by_topic` / `by_protocol` 贡献项，以及 committed/network heights 与 recent error counters 的窗口变化。
+  - AC-23: repo 内必须提供标准化 wasm module observe 入口，至少覆盖 module-local spec、共享 runner、wrapper script、模板与一个真实模块样例；新模块接入默认不得要求 bespoke runner 代码改动。
   - AC-23: triad traffic monitor 的窗口基线选择必须识别 `observed_since_unix_ms` 变化并在进程重启或 counter reset 时自动缩短覆盖窗口，而不是跨 reset 计算负值或伪增量。
   - AC-24: triad traffic monitor 的持久化 history 不得无限增长；脚本必须只保留“最近窗口 + buffer”范围内的样本，并以 NDJSON 流式读取/裁剪 history，而不是整文件 `read_text` 后一次性解码。
   - AC-25: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
@@ -168,6 +172,7 @@
   - `doc/world-runtime/wasm/wasm-executor.prd.md`
   - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
   - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+  - `doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
   - `doc/world-runtime/governance/governance-events.md`
   - `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`
   - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
@@ -210,6 +215,7 @@
   - NFR-WR-19: WASM timing 指标的本地采集不得改变 deterministic execution 输出；所有 wall-clock 数据只允许存在于本地观测层。
   - NFR-WR-20: 默认配置下，WASM metrics instrumentation 对现有 release perf probe 的额外 wall-clock 开销目标不高于 `10%`。
   - NFR-WR-21: 默认 `/v1/chain/status.wasm` payload 预算建议 `<=64 KiB`，开启 bounded top-N 明细后的预算建议 `<=128 KiB`。
+  - NFR-WR-22: 标准化 wasm module observe runner 不得因模块特例膨胀成分支集合；默认新增模块只允许通过 module-local spec/fixture 接入，不得要求 runner 增加模块专属逻辑。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
 ## 5. Risks & Roadmap
@@ -253,9 +259,11 @@
 | PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、校验失败不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
 | PRD-WORLD_RUNTIME-035 | task_0c817eead8024055b841eb1be55adac3 | `test_tier_required` | status payload `observability` 合同回归、web launcher probe/snapshot 透传回归、client launcher snapshot 消费回归、repo-owned node observability report 脚本验证 | 节点健康摘要统一真值、launcher/operator 可读观测面 |
 | PRD-WORLD_RUNTIME-036 | task_f0830d708c3b4f7abeea8cecf73053e4 | `test_tier_required` | WASM observability 设计文档、根 PRD/project/README/prd.index 回写、`doc-governance-check` 与 `git diff --check` | WASM build/executor/router 热点归因、节点 status 可观测性专题入口 |
+| PRD-WORLD_RUNTIME-037 | task_20b6ee42182247ccbebe6a6a2c2db469 | `test_tier_required` | `cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`、`cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`、`bash -n scripts/oasis7-wasm-module-observe.sh`、`doc-governance-check`、`git diff --check` | 模块级 contract/perf 证据标准化、未来 wasm 模块接入路径 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-WR-001 | 以确定性回放作为运行时验收核心 | 仅执行结果正确即可 | 可追溯和审计需求要求强确定性。 |
 | DEC-WR-002 | WASM 生命周期走治理流程 | 模块直接热替换 | 无治理热替换难以保证安全与一致性。 |
 | DEC-WR-003 | 安全事件必须输出可验证 receipt | 仅日志文本记录 | 签名收据可支撑事后审计与取证。 |
+| DEC-WR-004 | 每个 wasm 模块通过 module-local observe spec 接入共享 runner | 每个模块自写 perf/contract harness | 标准入口更适合长期扩展，也能让新模块自然继承观测与契约测试能力。 |

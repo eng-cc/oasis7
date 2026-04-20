@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "module": {
+    "module_id": "m1.rule.move",
+    "manifest_path": "../Cargo.toml",
+    "entrypoint": "reduce",
+    "profile": "release",
+    "target": "wasm32-unknown-unknown",
+    "limits": {
+      "max_mem_bytes": 67108864,
+      "max_gas": 2000000,
+      "max_call_rate": 10,
+      "max_output_bytes": 2048,
+      "max_effects": 0,
+      "max_emits": 1
+    }
+  },
+  "subscriptions": [
+    {
+      "event_kinds": [
+        "domain.agent_registered",
+        "domain.agent_moved"
+      ],
+      "action_kinds": [],
+      "stage": "post_event",
+      "filters": null
+    },
+    {
+      "event_kinds": [],
+      "action_kinds": [
+        "action.move_agent"
+      ],
+      "stage": "pre_action",
+      "filters": null
+    }
+  ],
+  "cases": [
+    {
+      "name": "track-agent-registration-event",
+      "repeat": 1,
+      "request": {
+        "time": 1,
+        "origin_kind": "observe_runner",
+        "origin_id": "m1_rule_move_fixture",
+        "stage": "post_event",
+        "event_json": {
+          "body": {
+            "kind": "Domain",
+            "payload": {
+              "type": "AgentRegistered",
+              "data": {
+                "agent_id": "agent-1",
+                "pos": {
+                  "x_cm": 0.0,
+                  "y_cm": 0.0,
+                  "z_cm": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "success": true,
+        "emit_count": 0,
+        "effect_count": 0,
+        "new_state_present": true,
+        "tick_lifecycle": {
+          "mode": "absent"
+        },
+        "state_json": {
+          "agents": {
+            "agent-1": {
+              "x_cm": 0.0,
+              "y_cm": 0.0,
+              "z_cm": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "allow-move-with-electricity-cost",
+      "repeat": 6,
+      "request": {
+        "time": 2,
+        "origin_kind": "observe_runner",
+        "origin_id": "m1_rule_move_fixture",
+        "stage": "pre_action",
+        "state_json": {
+          "agents": {
+            "agent-1": {
+              "x_cm": 0.0,
+              "y_cm": 0.0,
+              "z_cm": 0.0
+            }
+          }
+        },
+        "action_json": {
+          "id": 1,
+          "action": {
+            "type": "MoveAgent",
+            "data": {
+              "agent_id": "agent-1",
+              "to": {
+                "x_cm": 100000.0,
+                "y_cm": 0.0,
+                "z_cm": 0.0
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "success": true,
+        "emit_count": 1,
+        "effect_count": 0,
+        "new_state_present": false,
+        "tick_lifecycle": {
+          "mode": "absent"
+        },
+        "emits": [
+          {
+            "kind": "rule.decision",
+            "payload_json": {
+              "action_id": 1,
+              "verdict": "allow",
+              "cost": {
+                "entries": {
+                  "electricity": -1
+                }
+              },
+              "notes": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deny-noop-move",
+      "repeat": 3,
+      "request": {
+        "time": 3,
+        "origin_kind": "observe_runner",
+        "origin_id": "m1_rule_move_fixture",
+        "stage": "pre_action",
+        "state_json": {
+          "agents": {
+            "agent-1": {
+              "x_cm": 0.0,
+              "y_cm": 0.0,
+              "z_cm": 0.0
+            }
+          }
+        },
+        "action_json": {
+          "id": 2,
+          "action": {
+            "type": "MoveAgent",
+            "data": {
+              "agent_id": "agent-1",
+              "to": {
+                "x_cm": 0.0,
+                "y_cm": 0.0,
+                "z_cm": 0.0
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "success": true,
+        "emit_count": 1,
+        "effect_count": 0,
+        "new_state_present": false,
+        "tick_lifecycle": {
+          "mode": "absent"
+        },
+        "emits": [
+          {
+            "kind": "rule.decision",
+            "payload_json": {
+              "action_id": 2,
+              "verdict": "deny",
+              "cost": {
+                "entries": {}
+              },
+              "notes": [
+                "move target equals current position"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "router_probes": [
+    {
+      "name": "prepared-post-event-match",
+      "repeat": 5,
+      "use_prepared": true,
+      "probe": {
+        "kind": "event",
+        "event_kind": "domain.agent_registered",
+        "payload_json": {
+          "body": {
+            "kind": "Domain",
+            "payload": {
+              "type": "AgentRegistered",
+              "data": {
+                "agent_id": "agent-1"
+              }
+            }
+          }
+        }
+      },
+      "expect_match": true
+    },
+    {
+      "name": "fallback-pre-action-match",
+      "repeat": 5,
+      "use_prepared": false,
+      "probe": {
+        "kind": "action",
+        "stage": "pre_action",
+        "action_kind": "action.move_agent",
+        "payload_json": {
+          "type": "MoveAgent",
+          "data": {
+            "agent_id": "agent-1"
+          }
+        }
+      },
+      "expect_match": true
+    }
+  ]
+}
