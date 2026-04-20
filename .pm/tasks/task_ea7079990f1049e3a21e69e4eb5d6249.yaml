@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - doc/engineering/prd.md
   - doc/engineering/project.md
-  - doc/.governance/rust-oversized-file-baseline.tsv
+  - scripts/check-rust-file-size.sh
   - crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs
   - crates/oasis7_client_launcher/src/launcher_core.rs
 doc_refs:
