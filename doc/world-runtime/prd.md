@@ -53,9 +53,6 @@
   - SC-20: chain-linked `oasis7_viewer_live` 必须默认被动跟随 `/v1/chain/status.consensus.committed_height` 对应的 execution world，不需要显式 `Play` 才能消费 committed action；若轮询没有新的 committed action 或没有新增 world event，则不得把该轮询记成逻辑 world progression。
   - SC-21: 节点运营者与 launcher 用户必须能从同一份 `/v1/chain/status.observability` 真值回答“当前连了多少 peer、是否落后、是否有存储/复制/奖励子系统告警”，并可由 repo-owned 脚本与 launcher UI 直接消费，无需各自重复推导。
   - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
-  - SC-23: triad traffic monitor 的 JSON 汇总必须同时保留每节点完整 delta detail maps，并额外输出三节点合并后的总流量分布与 merged `by_kind` / `by_topic` / `by_protocol` 明细，避免“只能看 top-N、不能看全量构成”。
-  - SC-24: traffic monitor 必须同时记录主机默认路由网卡的 `rx_bytes/tx_bytes`，并在汇总中显式给出“payload 流量 vs 网卡总流量”的覆盖差，避免把 payload-only 统计误当成服务器总带宽真值。
-  - SC-25: 当主机网卡总流量显著高于 payload-only 统计时，`/v1/chain/status.traffic.libp2p_replication` 与 monitor 汇总必须额外输出 libp2p 控制面累计事件计数，用于定位未归因流量的大头来源；该计数明确是 event count，不冒充 wire byte 真值。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -96,7 +93,6 @@
   - PRD-WORLD_RUNTIME-034: As a `runtime_engineer` / 节点运营者, I want repeated successful `fetch-commit` requests with the same deterministic payload to reuse a short-lived local success cache, so that followers stop re-asking the network for the same already-found commit during tight gap-sync loops without hiding not-found or timeout recovery.
   - PRD-WORLD_RUNTIME-035: As a `runtime_engineer` / `viewer_engineer` / 节点运营者, I want node observability to be published as a stable summary plus alerts contract and surfaced through launcher/UI and repo-owned reports, so that current peer count, lag, degraded subsystems, and active alerts are directly visible without reading raw payload internals.
   - PRD-WORLD_RUNTIME-036: As a `wasm_platform_engineer` / `runtime_engineer` / `qa_engineer`, I want the WASM build, executor, and router paths to emit bounded cumulative timing metrics and status snapshots, so that hotspot attribution no longer depends on ad hoc logs or ignored local perf probes.
-  - PRD-WORLD_RUNTIME-037: As a `runtime_engineer` / 节点运营者, I want triad traffic summaries to persist aggregate total-flow distribution、主机网卡 byte counters 与 libp2p control-plane event detail, so that recent-window traffic analysis can inspect merged totals, payload-vs-host gaps, and unattributed control-plane hotspots instead of only per-node top-N snippets.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -156,9 +152,6 @@
   - AC-34: `tools/wasm_build_suite`、`oasis7_wasm_executor` 与 `oasis7_wasm_router` 必须形成统一的 bounded timing 指标面，至少覆盖 canonical build、cache hit/miss、executor call 与 router prepare/match 四段热点；正式候选归因不得只依赖 ignored perf probe 的 `eprintln!`。
   - AC-35: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须新增 `wasm` section，显式输出 `metrics_available`、`observed_since_unix_ms`、`degraded_reason` 与 build/executor/router 的 machine-readable snapshot；这些字段不得进入 world state、event log 或 replay contract。
   - AC-36: 默认 WASM status payload 不得暴露 `trace_id`、原始 payload bytes 或无界 `module_id -> timing` map；若提供模块级热点明细，必须限制为 bounded top-N 或显式 allowlist，并在裁剪时输出可观测标记。
-  - AC-37: triad traffic monitor 的 `latest_summary.json` 必须同时输出每节点完整 delta detail maps（UDP `by_kind`、libp2p `by_topic` / `by_protocol`，非仅 top-N），并新增 triad aggregate section，至少包含总 payload 分布、各节点 payload 占比、aggregate UDP / libp2p totals，以及 merged `by_kind` / `by_topic` / `by_protocol` 明细。
-  - AC-38: 节点本地与 triad monitor 的 history 样本必须尽量携带默认路由网卡 `network_interface.{name,rx_bytes,tx_bytes}`；summary JSON/Markdown 必须在有数据时输出网卡 delta、平均 bit/s、payload share 与 non-payload 差值，并在 triad aggregate 中给出三节点合计网卡流量与按节点分布。
-  - AC-39: `/v1/chain/status.traffic.libp2p_replication` 必须新增 `control_plane` 累计计数并透传到单节点/triad summary；summary JSON/Markdown 至少输出窗口内 `total_events`、完整 `by_kind` 明细和 top kinds，且文档需明确它们用于归因控制面活动而不是代表 transport wire bytes。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。
@@ -260,7 +253,6 @@
 | PRD-WORLD_RUNTIME-034 | task_5b736236fdf5404099ef1d1aec37beb1 | `test_tier_required` | `fetch-commit` success cache 定向回归、缓存过期恢复请求断言、校验失败不缓存断言、`doc-governance-check` 与 `git diff --check` | triad `fetch-commit` 重复成功拉取降噪、gap-sync 紧环路请求收口 |
 | PRD-WORLD_RUNTIME-035 | task_0c817eead8024055b841eb1be55adac3 | `test_tier_required` | status payload `observability` 合同回归、web launcher probe/snapshot 透传回归、client launcher snapshot 消费回归、repo-owned node observability report 脚本验证 | 节点健康摘要统一真值、launcher/operator 可读观测面 |
 | PRD-WORLD_RUNTIME-036 | task_f0830d708c3b4f7abeea8cecf73053e4 | `test_tier_required` | WASM observability 设计文档、根 PRD/project/README/prd.index 回写、`doc-governance-check` 与 `git diff --check` | WASM build/executor/router 热点归因、节点 status 可观测性专题入口 |
-| PRD-WORLD_RUNTIME-037 | task_a0af51c6073b4bd182e48d11a0750fac | `test_tier_required` | `traffic-monitor-summary.py` aggregate/detail/network/control-plane 合成 history 验证、libp2p traffic snapshot 定向回归、真实 triad history 汇总 smoke、`bash -n` / `py_compile` / `git diff --check` | triad 总流量分布可回答性、全量流量明细与网卡总流量差值可追溯性、未归因控制面活动可追溯性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

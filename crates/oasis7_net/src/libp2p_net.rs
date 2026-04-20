@@ -76,6 +76,11 @@ pub use reachability::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     LiveTransportKind,
 };
+#[cfg(test)]
+use runtime_loop::{
+    admitted_active_transport_paths, collect_quarantined_active_peers,
+    filter_request_peers_by_health, filter_request_peers_by_lane,
+};
 use runtime_loop::{
     handle_command, Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
 };
@@ -85,29 +90,22 @@ use swarm_reachability_events::{
     handle_listener_closed, handle_new_listen_addr,
 };
 use traffic_metrics::{
-    init_shared_traffic_metrics, record_gossip_inbound, record_request_inbound,
-    record_response_inbound, record_response_outbound, snapshot_traffic_metrics,
-    SharedLibp2pTrafficMetrics,
+    classify_control_plane_event, init_shared_traffic_metrics, record_control_plane_event,
+    record_gossip_inbound, record_request_inbound, record_response_inbound,
+    record_response_outbound, snapshot_traffic_metrics, SharedLibp2pTrafficMetrics,
 };
 pub use traffic_metrics::{
-    Libp2pTrafficMetricsSnapshot, TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot,
+    Libp2pControlPlaneMetricsSnapshot, Libp2pTrafficMetricsSnapshot,
+    TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot,
 };
 use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
     try_send_command,
 };
-
-#[cfg(test)]
-use runtime_loop::{
-    admitted_active_transport_paths, collect_quarantined_active_peers,
-    filter_request_peers_by_health, filter_request_peers_by_lane,
-};
-
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
-
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,
@@ -312,6 +310,9 @@ impl Libp2pNetwork {
                             }
                         }
                         event = swarm.select_next_some().fuse() => {
+                            if let Some(kind) = classify_control_plane_event(&event) {
+                                record_control_plane_event(&event_traffic_metrics, kind);
+                            }
                             match event {
                                 SwarmEvent::Behaviour(BehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. })) => {
                                     let topic = topic_map

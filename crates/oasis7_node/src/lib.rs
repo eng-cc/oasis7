@@ -85,8 +85,8 @@ pub use libp2p_replication_network_wasm::{
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
 pub use oasis7_net::{
-    Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot, LiveAutoNatStatus,
-    LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,
+    Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
+    LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,
 };
 pub use replication::NodeReplicationConfig;
 pub use types::{
