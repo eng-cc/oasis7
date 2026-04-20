@@ -143,6 +143,7 @@
 - [x] task-worktree-pm-bootstrap (PRD-ENGINEERING-021) [test_tier_required]: 给 `scripts/new-task-worktree.sh` 增加 `--pm-*` 原子 bootstrap，确保 `.pm` task 在目标 worktree 内完成创建、提升到 committed 并记录 workflow start，同时新增 source-worktree-clean smoke。 Trace: .pm/tasks/task_c1560decfc2b40fab17803fa78909b34.yaml
 - [x] rust-size-gate-recovery-and-mid-burn-down (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 合并记录 Rust-size 治理中段收口，包括 oversized gate 真值修复，以及 `runtime/world/module_actions`、`oasis7_node/src/lib.rs`、`oasis7_net/src/libp2p_net.rs`、`oasis7_node/src/types.rs` 四个热点文件的语义化拆分/热点抽离。 Trace: .pm/tasks/task_19e73f36db1040ccbf5eb579ade2e310.yaml
 - [x] clear-rust-size-baselines (PRD-ENGINEERING-R1200-001/002/003/005) [test_tier_required]: 作为最终收口任务，完成最后 7 个 Rust 超限文件的语义化拆分，退役 `doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv`，并将 `scripts/check-rust-file-size.sh` 收口为 oversized/structural 双零扫描门禁。 Trace: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.yaml
+- [x] shrink-near-limit-rust-hotspots (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 对 5 个逼近 1200 行阈值的 Rust 热点文件执行预防性职责拆分，抽离 `llm_sidecar` runtime support、`oasis7_node` consensus/replica maintenance support、`self_guided` storage、`oasis7_provider_parity_bench` io support 与 `oasis7_wasm_router` filtering，避免零扫描门禁回弹。 Trace: .pm/tasks/task_fd49238273e0447d8189df40519a51b0.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -205,7 +206,7 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-18
+- 更新日期: 2026-04-20
 - 当前状态: active
 - 下一任务: `readme-governance-path-governance (PRD-ENGINEERING-030)` 已完成 `readme/governance` 热点子域入口收口；当前这一轮后续应正式转入季度复核，而不是在当前 PR 里继续横向扩到 `ci/longrun/templates`、`gap/production` 或回到只改根入口首屏。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
@@ -222,6 +223,7 @@
 - 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
 - 当前流程补充: 已完成 `drop-local-review-script`，默认评审边界已完全切到 GitHub PR review；`workflow-report` close、required-tier smoke、`.pm/README` 与 `AGENTS.md` 不再要求本地 snapshot review 脚本。
+- 当前治理切片: 已完成 `shrink-near-limit-rust-hotspots`，对 `llm_sidecar.rs`、`oasis7_node/src/lib.rs`、`oasis7_provider_parity_bench.rs`、`oasis7_wasm_router/src/lib.rs`、`self_guided.rs` 做预防性职责拆分；当前 5 个热点文件已降到 `858 / 841 / 981 / 860 / 1131` 行，继续维持 Rust 体量零扫描。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。
