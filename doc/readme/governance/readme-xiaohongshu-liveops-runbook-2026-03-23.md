@@ -26,6 +26,7 @@
   - `doc/readme/governance/readme-xiaohongshu-cycle-carousel-pack-2026-04-09.md`
   - `doc/readme/governance/readme-xiaohongshu-cycle-post-pack-2026-04-08.md`
   - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
+  - `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在小红书进入“持续发帖与持续看反馈”阶段后的日常运营。

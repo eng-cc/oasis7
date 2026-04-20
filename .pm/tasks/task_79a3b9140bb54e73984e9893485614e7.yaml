@@ -1,0 +1,19 @@
+task_uid: task_79a3b9140bb54e73984e9893485614e7
+title: "xiaohongshu token usage post pack"
+owner_role: liveops_community
+worktree_hint: /home/scc/worktrees/oasis7-readme-xiaohongshu-token-usage-post-pack
+execution_log_path: .pm/tasks/task_79a3b9140bb54e73984e9893485614e7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+doc_refs:
+  - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-20T23:17:44+08:00
+last_started_at: 2026-04-20T23:05:30+08:00
+last_closed_at: 2026-04-20T23:17:44+08:00
