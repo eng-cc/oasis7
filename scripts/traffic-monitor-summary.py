@@ -211,6 +211,48 @@ def share_percent(numerator, denominator):
     return round((float(numerator) * 100.0) / float(denominator), 2)
 
 
+def average_bits_per_second(total_bytes, duration_seconds):
+    if duration_seconds <= 0:
+        return 0.0
+    return round((float(total_bytes) * 8.0) / float(duration_seconds), 2)
+
+
+def summarize_network_interface(latest, baseline, payload_total_bytes, duration_seconds):
+    latest_interface = (latest or {}).get("network_interface") or {}
+    baseline_interface = (baseline or {}).get("network_interface") or {}
+    interface_name = latest_interface.get("name")
+    if not interface_name:
+        return {"available": False, "reason": "missing_latest_interface"}
+    if baseline_interface.get("name") != interface_name:
+        return {"available": False, "reason": "baseline_interface_mismatch"}
+    if latest_interface.get("rx_bytes") is None or latest_interface.get("tx_bytes") is None:
+        return {"available": False, "reason": "missing_latest_counters"}
+    if (
+        baseline_interface.get("rx_bytes") is None
+        or baseline_interface.get("tx_bytes") is None
+    ):
+        return {"available": False, "reason": "missing_baseline_counters"}
+
+    rx_bytes = clamp_delta(latest_interface.get("rx_bytes"), baseline_interface.get("rx_bytes"))
+    tx_bytes = clamp_delta(latest_interface.get("tx_bytes"), baseline_interface.get("tx_bytes"))
+    total_bytes = rx_bytes + tx_bytes
+    non_payload_bytes = max(0, total_bytes - int(payload_total_bytes))
+    return {
+        "available": True,
+        "name": interface_name,
+        "rx_bytes": rx_bytes,
+        "tx_bytes": tx_bytes,
+        "total_bytes": total_bytes,
+        "average_rx_bps": average_bits_per_second(rx_bytes, duration_seconds),
+        "average_tx_bps": average_bits_per_second(tx_bytes, duration_seconds),
+        "average_total_bps": average_bits_per_second(total_bytes, duration_seconds),
+        "payload_total_bytes": int(payload_total_bytes),
+        "payload_share_percent": share_percent(payload_total_bytes, total_bytes),
+        "non_payload_bytes": non_payload_bytes,
+        "non_payload_share_percent": share_percent(non_payload_bytes, total_bytes),
+    }
+
+
 def lane_observed_since(record, lane_name):
     traffic = (record or {}).get("traffic") or {}
     lane = traffic.get(lane_name) or {}
@@ -377,10 +419,32 @@ def summarize_record_set(records, window_minutes, top_n):
         / 60000.0,
         2,
     )
+    duration_seconds = max(
+        0.0,
+        (
+            int(latest["captured_at_unix_ms"]) - int(baseline["captured_at_unix_ms"])
+        )
+        / 1000.0,
+    )
     restart_detected = any(not compatible_with_latest(record, latest) for record in in_window)
 
     traffic_latest = latest.get("traffic") or {}
     traffic_baseline = baseline.get("traffic") or {}
+    udp_summary = summarize_lane(
+        "udp_gossip",
+        traffic_latest.get("udp_gossip"),
+        traffic_baseline.get("udp_gossip"),
+        top_n,
+    )
+    libp2p_summary = summarize_lane(
+        "libp2p_replication",
+        traffic_latest.get("libp2p_replication"),
+        traffic_baseline.get("libp2p_replication"),
+        top_n,
+    )
+    payload_total_bytes = payload_totals_for_lane(udp_summary) + payload_totals_for_lane(
+        libp2p_summary
+    )
     return {
         "available": True,
         "sample_count_total": len(records),
@@ -447,19 +511,12 @@ def summarize_record_set(records, window_minutes, top_n):
                 ),
             },
         },
+        "network_interface": summarize_network_interface(
+            latest, baseline, payload_total_bytes, duration_seconds
+        ),
         "traffic": {
-            "udp_gossip": summarize_lane(
-                "udp_gossip",
-                traffic_latest.get("udp_gossip"),
-                traffic_baseline.get("udp_gossip"),
-                top_n,
-            ),
-            "libp2p_replication": summarize_lane(
-                "libp2p_replication",
-                traffic_latest.get("libp2p_replication"),
-                traffic_baseline.get("libp2p_replication"),
-                top_n,
-            ),
+            "udp_gossip": udp_summary,
+            "libp2p_replication": libp2p_summary,
         },
     }
 
@@ -500,6 +557,63 @@ def aggregate_node_payload_distribution(nodes):
     return total_payload_bytes, rows
 
 
+def aggregate_node_network_distribution(nodes):
+    rows = []
+    total_network_bytes = 0
+    total_payload_bytes = 0
+    total_average_rx_bps = 0.0
+    total_average_tx_bps = 0.0
+    total_average_total_bps = 0.0
+    for label, node in nodes.items():
+        if node.get("available") is not True:
+            continue
+        network = node.get("network_interface") or {}
+        if network.get("available") is not True:
+            continue
+        latest = node.get("latest") or {}
+        total_network_bytes += int(network.get("total_bytes", 0))
+        total_payload_bytes += int(network.get("payload_total_bytes", 0))
+        total_average_rx_bps += float(network.get("average_rx_bps", 0.0))
+        total_average_tx_bps += float(network.get("average_tx_bps", 0.0))
+        total_average_total_bps += float(network.get("average_total_bps", 0.0))
+        rows.append(
+            {
+                "label": label,
+                "node_id": latest.get("node_id"),
+                "role": latest.get("role"),
+                "interface_name": network.get("name"),
+                "network_total_bytes": int(network.get("total_bytes", 0)),
+                "payload_total_bytes": int(network.get("payload_total_bytes", 0)),
+                "payload_share_percent": float(network.get("payload_share_percent", 0.0)),
+                "average_total_bps": float(network.get("average_total_bps", 0.0)),
+            }
+        )
+
+    rows.sort(
+        key=lambda row: (
+            row["network_total_bytes"],
+            row["label"],
+        ),
+        reverse=True,
+    )
+    for row in rows:
+        row["share_percent"] = share_percent(row["network_total_bytes"], total_network_bytes)
+    return {
+        "node_count": len(rows),
+        "total_bytes": total_network_bytes,
+        "payload_total_bytes": total_payload_bytes,
+        "payload_share_percent": share_percent(total_payload_bytes, total_network_bytes),
+        "non_payload_bytes": max(0, total_network_bytes - total_payload_bytes),
+        "non_payload_share_percent": share_percent(
+            max(0, total_network_bytes - total_payload_bytes), total_network_bytes
+        ),
+        "average_rx_bps": round(total_average_rx_bps, 2),
+        "average_tx_bps": round(total_average_tx_bps, 2),
+        "average_total_bps": round(total_average_total_bps, 2),
+        "nodes": rows,
+    }
+
+
 def summarize_triad_aggregate(nodes, top_n):
     udp = aggregate_lane_summaries(
         "udp_gossip", [node.get("traffic", {}).get("udp_gossip") for node in nodes.values()], top_n
@@ -520,12 +634,14 @@ def summarize_triad_aggregate(nodes, top_n):
     }
     for entry in lane_distribution.values():
         entry["share_percent"] = share_percent(entry["payload_bytes"], total_payload_bytes)
+    network_interface = aggregate_node_network_distribution(nodes)
 
     return {
         "node_count": len([node for node in nodes.values() if node.get("available") is True]),
         "total_payload_bytes": total_payload_bytes,
         "lane_distribution": lane_distribution,
         "node_payload_distribution": node_payload_distribution,
+        "network_interface": network_interface,
         "traffic": {
             "udp_gossip": udp,
             "libp2p_replication": libp2p,
@@ -551,6 +667,20 @@ def fmt_bytes(value):
             return f"{amount:.2f} {unit}"
         amount /= 1024.0
     return f"{int(value)} B"
+
+
+def fmt_bps(value):
+    if value is None:
+        return "n/a"
+    units = ["bit/s", "Kbit/s", "Mbit/s", "Gbit/s"]
+    amount = float(value)
+    for unit in units:
+        if amount < 1000.0 or unit == units[-1]:
+            if unit == "bit/s":
+                return f"{amount:.0f} {unit}"
+            return f"{amount:.2f} {unit}"
+        amount /= 1000.0
+    return f"{float(value):.2f} bit/s"
 
 
 def render_top_block(title, entries, counter_key):
@@ -598,6 +728,21 @@ def render_payload_distribution_block(title, entries):
     return lines
 
 
+def render_network_distribution_block(title, entries):
+    if not entries:
+        return [f"- {title}: none"]
+    lines = [f"- {title}:"]
+    for entry in entries:
+        lines.append(
+            "  "
+            + f"{entry['label']} ({entry.get('role') or 'unknown'} {entry.get('interface_name') or 'n/a'}): "
+            + f"{fmt_bytes(entry['network_total_bytes'])} ({entry['share_percent']:.2f}%), "
+            + f"payload share {entry['payload_share_percent']:.2f}%, "
+            + f"avg {fmt_bps(entry['average_total_bps'])}"
+        )
+    return lines
+
+
 def render_single_node_markdown(summary, history_path, generated_at):
     lines = [
         "# Oasis7 Node Traffic Monitor Summary",
@@ -623,6 +768,7 @@ def render_single_node_markdown(summary, history_path, generated_at):
     latest = node["latest"]
     consensus = node["consensus"]
     errors = node["recent_errors"]
+    network = node["network_interface"]
     udp = node["traffic"]["udp_gossip"]
     libp2p = node["traffic"]["libp2p_replication"]
     lines.extend(
@@ -638,6 +784,12 @@ def render_single_node_markdown(summary, history_path, generated_at):
             f"- Last error: `{latest['last_error']}`",
         ]
     )
+    if network.get("available"):
+        lines.append(
+            f"- Network interface `{network['name']}`: rx +{fmt_bytes(network['rx_bytes'])}, tx +{fmt_bytes(network['tx_bytes'])}, total +{fmt_bytes(network['total_bytes'])}, avg rx {fmt_bps(network['average_rx_bps'])}, avg tx {fmt_bps(network['average_tx_bps'])}, payload share {network['payload_share_percent']:.2f}%"
+        )
+    else:
+        lines.append(f"- Network interface: unavailable ({network.get('reason', 'missing')})")
 
     lines.append(render_traffic_totals("UDP gossip", udp))
     if udp.get("available"):
@@ -685,6 +837,7 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
     aggregate = summary.get("aggregate") or {}
     aggregate_udp = (aggregate.get("traffic") or {}).get("udp_gossip") or {}
     aggregate_libp2p = (aggregate.get("traffic") or {}).get("libp2p_replication") or {}
+    aggregate_network = aggregate.get("network_interface") or {}
     if aggregate:
         lines.extend(
             [
@@ -694,11 +847,21 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
                 f"- Lane distribution: udp `{fmt_bytes(aggregate['lane_distribution']['udp_gossip']['payload_bytes'])}` ({aggregate['lane_distribution']['udp_gossip']['share_percent']:.2f}%), libp2p `{fmt_bytes(aggregate['lane_distribution']['libp2p_replication']['payload_bytes'])}` ({aggregate['lane_distribution']['libp2p_replication']['share_percent']:.2f}%)",
             ]
         )
+        if aggregate_network.get("node_count", 0) > 0:
+            lines.append(
+                f"- Total network interface bytes across all nodes: `{fmt_bytes(aggregate_network['total_bytes'])}`, payload share `{aggregate_network['payload_share_percent']:.2f}%`, avg rx `{fmt_bps(aggregate_network['average_rx_bps'])}`, avg tx `{fmt_bps(aggregate_network['average_tx_bps'])}`"
+            )
         lines.extend(
             render_payload_distribution_block(
                 "Node payload distribution", aggregate.get("node_payload_distribution")
             )
         )
+        if aggregate_network.get("node_count", 0) > 0:
+            lines.extend(
+                render_network_distribution_block(
+                    "Node network distribution", aggregate_network.get("nodes")
+                )
+            )
         if aggregate_udp.get("available"):
             lines.append(
                 f"- Full aggregate UDP detail rows in JSON: `{aggregate_udp['detail_entry_counts']['by_kind']}` by_kind entries"
@@ -742,6 +905,7 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
         latest = node["latest"]
         consensus = node["consensus"]
         errors = node["recent_errors"]
+        network = node["network_interface"]
         lines.extend(
             [
                 f"- Node: `{latest.get('node_id')}` role=`{latest.get('role')}` running=`{latest.get('running')}`",
@@ -758,6 +922,12 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
                 ),
             ]
         )
+        if network.get("available"):
+            lines.append(
+                f"- Network interface `{network['name']}`: rx +{fmt_bytes(network['rx_bytes'])}, tx +{fmt_bytes(network['tx_bytes'])}, total +{fmt_bytes(network['total_bytes'])}, avg total {fmt_bps(network['average_total_bps'])}, payload share {network['payload_share_percent']:.2f}%"
+            )
+        else:
+            lines.append(f"- Network interface: unavailable ({network.get('reason', 'missing')})")
 
         udp = node["traffic"]["udp_gossip"]
         if udp.get("available"):

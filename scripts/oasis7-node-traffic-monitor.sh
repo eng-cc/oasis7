@@ -16,6 +16,8 @@ Options:
                                    (default: http://127.0.0.1:5633/v1/chain/status)
   --node-label <label>             label written into summary/history
                                    (default: local_node)
+  --network-interface <iface>      interface for host-level byte counters
+                                   (default: auto-detect via `ip route get`)
   --out-dir <path>                 output root (default: .tmp/oasis7_node_traffic_monitor)
   --history-path <path>            override persistent history file
   --summary-json <path>            override latest summary json path
@@ -39,6 +41,9 @@ Notes:
   - The summary logic compares only records whose
     `traffic.*.observed_since_unix_ms` matches the latest successful sample, so
     node restarts shrink the covered window instead of producing bogus deltas.
+  - Each sample also records host-level `network_interface` rx/tx byte counters
+    when the interface can be resolved, so summaries can compare payload-only
+    traffic against whole-interface bandwidth.
   - `latest_summary.json` now keeps full delta detail maps (`by_kind`,
     `by_topic`, `by_protocol`) in addition to the top-N markdown summary.
 USAGE
@@ -55,6 +60,7 @@ ensure_positive_int() {
 
 status_url="http://127.0.0.1:5633/v1/chain/status"
 node_label="local_node"
+network_interface=""
 out_dir=".tmp/oasis7_node_traffic_monitor"
 history_path=""
 summary_json_path=""
@@ -73,6 +79,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --node-label)
       node_label=${2:-}
+      shift 2
+      ;;
+    --network-interface)
+      network_interface=${2:-}
       shift 2
       ;;
     --out-dir)
@@ -155,13 +165,45 @@ summary_script="$repo_root/scripts/traffic-monitor-summary.py"
   exit 1
 }
 
+detect_default_network_interface() {
+  ip route get 1.1.1.1 2>/dev/null | awk '
+    /dev/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i == "dev" && (i + 1) <= NF) {
+          print $(i + 1)
+          exit
+        }
+      }
+    }
+  '
+}
+
+read_network_interface_counter() {
+  local iface=$1
+  local counter_name=$2
+  local counter_path="/sys/class/net/$iface/statistics/${counter_name}_bytes"
+  [[ -r "$counter_path" ]] || return 1
+  cat "$counter_path"
+}
+
 sample_once() {
   local sample_tmp
   sample_tmp=$(mktemp)
   local captured_at
   local captured_at_unix_ms
+  local sample_network_interface=${network_interface:-}
+  local network_rx_bytes=""
+  local network_tx_bytes=""
   captured_at=$(date -Iseconds)
   captured_at_unix_ms=$(( $(date +%s) * 1000 ))
+
+  if [[ -z "$sample_network_interface" ]]; then
+    sample_network_interface=$(detect_default_network_interface || true)
+  fi
+  if [[ -n "$sample_network_interface" ]]; then
+    network_rx_bytes=$(read_network_interface_counter "$sample_network_interface" rx || true)
+    network_tx_bytes=$(read_network_interface_counter "$sample_network_interface" tx || true)
+  fi
 
   if ! curl -fsS "$status_url" >"$sample_tmp" 2>"$sample_tmp.stderr"; then
     printf '{"ok":false,"fetch_error":"curl_failed"}\n' >"$sample_tmp"
@@ -171,6 +213,9 @@ sample_once() {
     --arg captured_at "$captured_at" \
     --arg captured_at_unix_ms "$captured_at_unix_ms" \
     --arg node_label "$node_label" \
+    --arg network_interface_name "$sample_network_interface" \
+    --arg network_rx_bytes "${network_rx_bytes:-}" \
+    --arg network_tx_bytes "${network_tx_bytes:-}" \
     --arg status_url "$status_url" \
     --slurpfile status "$sample_tmp" \
     '{
@@ -193,6 +238,18 @@ sample_once() {
       },
       storage_recent_errors_count: ($status[0].storage.recent_errors_count // null),
       reward_runtime_recent_errors_count: ($status[0].reward_runtime.recent_errors_count // null),
+      network_interface: (
+        if ($network_interface_name | length) > 0
+           and ($network_rx_bytes | length) > 0
+           and ($network_tx_bytes | length) > 0
+        then {
+          name: $network_interface_name,
+          rx_bytes: ($network_rx_bytes | tonumber),
+          tx_bytes: ($network_tx_bytes | tonumber)
+        }
+        else null
+        end
+      ),
       traffic: {
         udp_gossip: ($status[0].traffic.udp_gossip // null),
         libp2p_replication: ($status[0].traffic.libp2p_replication // null)

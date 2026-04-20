@@ -408,7 +408,6 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher query_chain_status_endpoint_reads_p2p_payload -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher apply_web_snapshot_tracks_chain_p2p_status_payload -- --nocapture`
     - `./scripts/oasis7-node-observability-report.sh --status-json-path <sample_status_json> --traffic-summary-json <optional_sample_traffic_summary_json> --out-dir .tmp/oasis7_node_observability_test`
-- [x] triad-traffic-aggregate-detail-summary (PRD-WORLD_RUNTIME-037) [test_tier_required]: 为共享 `traffic-monitor-summary.py` 与 `/v1/chain/status.traffic` 补 triad aggregate section、完整 delta detail maps、主机网卡 byte counters 与 libp2p control-plane event counters，让 `latest_summary.json` 同时提供每节点全量 `by_kind` / `by_topic` / `by_protocol` 明细、libp2p `control_plane.by_kind`、三节点总 payload 分布、节点 payload 占比、默认路由网卡 `rx/tx` delta、平均 bit/s，以及 payload-only 与网卡总流量的覆盖差，而不是只保留 top-N 摘要。 Trace: .pm/tasks/task_a0af51c6073b4bd182e48d11a0750fac.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
