@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-10
+更新时间：2026-04-20
 
 ## 入口
 - 模块 PRD：`doc/world-runtime/prd.md`
@@ -14,14 +14,15 @@
 - 想先回答 world-runtime 模块在管什么、哪些边界是当前真值：先读 `doc/world-runtime/prd.md`
 - 想先回答当前还在推进什么、阻断在哪里、下一步是什么：先读 `doc/world-runtime/project.md`
 - 想直接进入 Docker canonical build / release evidence 主入口：先读 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
+- 想直接进入 WASM build / executor / router 的观测与耗时指标：先读 `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
 - 想直接进入 retention / GC / replay contract：先读 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-10）
-- `doc/world-runtime/`：115 份文件
+## 密度快照（2026-04-20）
+- `doc/world-runtime/`：118 份文件
 - `doc/world-runtime/runtime/`：55 份文件
-- `doc/world-runtime/wasm/`：19 份文件
+- `doc/world-runtime/wasm/`：22 份文件
 - `doc/world-runtime/module/`：16 份文件
 - 根目录入口与 handoff：9 份文件
 - `doc/world-runtime/evidence/`：6 份文件
@@ -41,6 +42,7 @@
 
 ## 活跃补充文档
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`：Docker canonical build、receipt、identity 与 release evidence 主入口。
+- `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`：build/executor/router timing、`/v1/chain/status.wasm` 与外部窗口汇总主入口。
 - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`：玩家发布实体与模块发布链路衔接入口。
@@ -87,6 +89,7 @@
 | `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.prd.md` | `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.design.md` | `doc/world-runtime/wasm/wasm-agent-os-alignment-hardening.project.md` |
 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md` | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md` |
 | `doc/world-runtime/wasm/wasm-executor.prd.md` | `doc/world-runtime/wasm/wasm-executor.design.md` | `doc/world-runtime/wasm/wasm-executor.project.md` |
+| `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md` | `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md` |
 | `doc/world-runtime/wasm/wasm-sandbox-security-hardening.prd.md` | `doc/world-runtime/wasm/wasm-sandbox-security-hardening.design.md` | `doc/world-runtime/wasm/wasm-sandbox-security-hardening.project.md` |
 | `doc/world-runtime/wasm/wasm-sdk-no-std.prd.md` | `doc/world-runtime/wasm/wasm-sdk-no-std.design.md` | `doc/world-runtime/wasm/wasm-sdk-no-std.project.md` |
 | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.prd.md` | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.design.md` | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.project.md` |
