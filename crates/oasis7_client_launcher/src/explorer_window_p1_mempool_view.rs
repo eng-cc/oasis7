@@ -65,9 +65,13 @@ impl ClientLauncherApp {
                     "Select a record to inspect it on the right, or open the global Txs inspector.",
                 ),
                 |ui| {
-                    if let Some(response) = self.explorer_panel_state.p1.mempool_response.clone() {
+                    if self.explorer_panel_state.p1.mempool_response.is_some() {
+                        let mut selected_tx = None;
                         ui.horizontal_wrapped(|ui| {
-                            let prev_disabled = response.cursor == 0;
+                            let prev_disabled =
+                                self.explorer_panel_state.p1.mempool_response.as_ref().is_some_and(
+                                    |response| response.cursor == 0,
+                                );
                             if ui
                                 .add_enabled(
                                     !prev_disabled,
@@ -82,7 +86,13 @@ impl ClientLauncherApp {
                                     .saturating_sub(self.explorer_panel_state.p1.mempool_limit);
                                 self.explorer_panel_state.p1.pending_mempool_refresh = true;
                             }
-                            let next_disabled = response.next_cursor.is_none();
+                            let next_disabled = self
+                                .explorer_panel_state
+                                .p1
+                                .mempool_response
+                                .as_ref()
+                                .and_then(|response| response.next_cursor)
+                                .is_none();
                             if ui
                                 .add_enabled(
                                     !next_disabled,
@@ -90,46 +100,62 @@ impl ClientLauncherApp {
                                 )
                                 .clicked()
                             {
-                                if let Some(next_cursor) = response.next_cursor {
+                                if let Some(next_cursor) = self
+                                    .explorer_panel_state
+                                    .p1
+                                    .mempool_response
+                                    .as_ref()
+                                    .and_then(|response| response.next_cursor)
+                                {
                                     self.explorer_panel_state.p1.mempool_cursor = next_cursor;
                                     self.explorer_panel_state.p1.pending_mempool_refresh = true;
                                 }
                             }
                         });
 
-                        egui::ScrollArea::vertical()
-                            .max_height(420.0)
-                            .show(ui, |ui| {
-                                for tx in &response.items {
-                                    let is_selected = self
-                                        .explorer_panel_state
-                                        .p1
-                                        .selected_mempool_tx
-                                        .as_ref()
-                                        .is_some_and(|selected| selected.tx_hash == tx.tx_hash);
-                                    if Self::render_tx_row_card(
-                                        ui,
-                                        tx,
-                                        is_selected,
-                                        self.explorer_lifecycle_text(tx.status),
-                                        self.explorer_lifecycle_color(tx.status),
-                                    ) {
-                                        self.explorer_panel_state.p1.selected_mempool_tx =
-                                            Some(tx.clone());
+                        {
+                            let response = self
+                                .explorer_panel_state
+                                .p1
+                                .mempool_response
+                                .as_ref()
+                                .expect("checked above");
+                            egui::ScrollArea::vertical()
+                                .max_height(420.0)
+                                .show(ui, |ui| {
+                                    for tx in &response.items {
+                                        let is_selected = self
+                                            .explorer_panel_state
+                                            .p1
+                                            .selected_mempool_tx
+                                            .as_ref()
+                                            .is_some_and(|selected| selected.tx_hash == tx.tx_hash);
+                                        if Self::render_tx_row_card(
+                                            ui,
+                                            tx,
+                                            is_selected,
+                                            self.explorer_lifecycle_text(tx.status),
+                                            self.explorer_lifecycle_color(tx.status),
+                                        ) {
+                                            selected_tx = Some(tx.clone());
+                                        }
+                                        ui.add_space(4.0);
                                     }
-                                    ui.add_space(4.0);
-                                }
-                                if response.items.is_empty() {
-                                    Self::render_explorer_empty_panel(
-                                        ui,
-                                        self.tr("暂无待处理交易", "No Pending Transactions"),
-                                        self.tr(
-                                            "当前过滤条件没有命中任何 mempool 交易。",
-                                            "No mempool transactions matched the current filter.",
-                                        ),
-                                    );
-                                }
-                            });
+                                    if response.items.is_empty() {
+                                        Self::render_explorer_empty_panel(
+                                            ui,
+                                            self.tr("暂无待处理交易", "No Pending Transactions"),
+                                            self.tr(
+                                                "当前过滤条件没有命中任何 mempool 交易。",
+                                                "No mempool transactions matched the current filter.",
+                                            ),
+                                        );
+                                    }
+                                });
+                        }
+                        if let Some(tx) = selected_tx {
+                            self.explorer_panel_state.p1.selected_mempool_tx = Some(tx);
+                        }
                     } else {
                         Self::render_explorer_empty_panel(
                             ui,
