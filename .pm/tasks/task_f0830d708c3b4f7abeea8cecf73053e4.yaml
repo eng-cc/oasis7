@@ -12,9 +12,10 @@ source_refs:
   - doc/world-runtime/wasm/wasm-executor.prd.md
   - doc/world-runtime/wasm/wasm-executor.project.md
 doc_refs: []
-related_prd: []
+related_prd:
+  - PRD-WORLD_RUNTIME-036
 acceptance: []
 handoff_to: []
-updated_at: 2026-04-20T11:15:42+08:00
+updated_at: 2026-04-20T12:05:05+08:00
 last_started_at: 2026-04-19T22:01:58+08:00
 last_closed_at: 2026-04-20T11:15:40+08:00

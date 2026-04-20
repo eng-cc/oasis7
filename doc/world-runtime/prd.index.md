@@ -34,7 +34,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `runtime/` | 55 | 确定性运行时主链路、数值正确性、retention / GC、replay contract 与存储预算 |
-| `wasm/` | 19 | Docker canonical build、执行器、SDK、sandbox、ABI 与发布工件治理 |
+| `wasm/` | 22 | Docker canonical build、执行器、SDK、sandbox、ABI 与发布工件治理 |
 | `module/` | 16 | 模块生命周期、线上发布合法性、模块存储与订阅过滤边界 |
 | 根目录入口与 handoff | 9 | 模块主入口、候选收口交接与当前高频导航 |
 | `evidence/` | 6 | 候选级指标、storage gate、profile consistency 与 soak 采证 |

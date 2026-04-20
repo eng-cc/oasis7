@@ -98,7 +98,7 @@ oasis7_wasm_router        |
 - `memory_cache_hits`
 - `disk_cache_hits`
 - `compile_misses`
-- `failures_by_code`
+- `failure_by_code`
 - `compile_ms_total`
 - `deserialize_ms_total`
 - `instantiate_ms_total`
