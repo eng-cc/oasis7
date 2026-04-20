@@ -260,9 +260,12 @@ def summarize_network_interface(latest, baseline, payload_total_bytes, duration_
     latest_interface = (latest or {}).get("network_interface") or {}
     baseline_interface = (baseline or {}).get("network_interface") or {}
     interface_name = latest_interface.get("name")
+    baseline_interface_name = baseline_interface.get("name")
     if not interface_name:
         return {"available": False, "reason": "missing_latest_interface"}
-    if baseline_interface.get("name") != interface_name:
+    if not baseline_interface_name:
+        return {"available": False, "reason": "missing_baseline_interface"}
+    if baseline_interface_name != interface_name:
         return {"available": False, "reason": "baseline_interface_mismatch"}
     if latest_interface.get("rx_bytes") is None or latest_interface.get("tx_bytes") is None:
         return {"available": False, "reason": "missing_latest_counters"}
@@ -646,9 +649,9 @@ def aggregate_node_network_distribution(nodes):
     rows = []
     total_network_bytes = 0
     total_payload_bytes = 0
-    total_average_rx_bps = 0.0
-    total_average_tx_bps = 0.0
-    total_average_total_bps = 0.0
+    combined_rx_bps = 0.0
+    combined_tx_bps = 0.0
+    combined_total_bps = 0.0
     for label, node in nodes.items():
         if node.get("available") is not True:
             continue
@@ -658,9 +661,9 @@ def aggregate_node_network_distribution(nodes):
         latest = node.get("latest") or {}
         total_network_bytes += int(network.get("total_bytes", 0))
         total_payload_bytes += int(network.get("payload_total_bytes", 0))
-        total_average_rx_bps += float(network.get("average_rx_bps", 0.0))
-        total_average_tx_bps += float(network.get("average_tx_bps", 0.0))
-        total_average_total_bps += float(network.get("average_total_bps", 0.0))
+        combined_rx_bps += float(network.get("average_rx_bps", 0.0))
+        combined_tx_bps += float(network.get("average_tx_bps", 0.0))
+        combined_total_bps += float(network.get("average_total_bps", 0.0))
         rows.append(
             {
                 "label": label,
@@ -692,9 +695,9 @@ def aggregate_node_network_distribution(nodes):
         "non_payload_share_percent": share_percent(
             max(0, total_network_bytes - total_payload_bytes), total_network_bytes
         ),
-        "average_rx_bps": round(total_average_rx_bps, 2),
-        "average_tx_bps": round(total_average_tx_bps, 2),
-        "average_total_bps": round(total_average_total_bps, 2),
+        "combined_rx_bps": round(combined_rx_bps, 2),
+        "combined_tx_bps": round(combined_tx_bps, 2),
+        "combined_total_bps": round(combined_total_bps, 2),
         "nodes": rows,
     }
 
@@ -955,7 +958,7 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
         )
         if aggregate_network.get("node_count", 0) > 0:
             lines.append(
-                f"- Total network interface bytes across all nodes: `{fmt_bytes(aggregate_network['total_bytes'])}`, payload share `{aggregate_network['payload_share_percent']:.2f}%`, avg rx `{fmt_bps(aggregate_network['average_rx_bps'])}`, avg tx `{fmt_bps(aggregate_network['average_tx_bps'])}`"
+                f"- Total network interface bytes across all nodes: `{fmt_bytes(aggregate_network['total_bytes'])}`, payload share `{aggregate_network['payload_share_percent']:.2f}%`, combined rx `{fmt_bps(aggregate_network['combined_rx_bps'])}`, combined tx `{fmt_bps(aggregate_network['combined_tx_bps'])}`"
             )
         lines.extend(
             render_payload_distribution_block(
