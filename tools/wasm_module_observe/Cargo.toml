@@ -1,0 +1,15 @@
+[package]
+name = "wasm_module_observe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+oasis7_wasm_abi = { path = "../../crates/oasis7_wasm_abi" }
+oasis7_wasm_executor = { path = "../../crates/oasis7_wasm_executor", features = ["wasmtime"] }
+oasis7_wasm_router = { path = "../../crates/oasis7_wasm_router" }
+serde = { version = "1", features = ["derive"] }
+serde_cbor = "0.11"
+serde_json = "1"
+tools_wasm_build_suite = { package = "wasm_build_suite", path = "../wasm_build_suite" }
+
+[workspace]
