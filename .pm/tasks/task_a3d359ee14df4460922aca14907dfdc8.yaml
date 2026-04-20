@@ -1,0 +1,23 @@
+task_uid: task_a3d359ee14df4460922aca14907dfdc8
+title: "fix release windows invalid path blocker"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-release-windows-invalid-path-blocker
+execution_log_path: .pm/tasks/task_a3d359ee14df4460922aca14907dfdc8.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+  - .github/workflows/release-packages.yml
+doc_refs:
+  - doc/testing/prd.md
+related_prd:
+  - PRD-TESTING-002
+  - PRD-TESTING-003
+acceptance:
+  - "Release packages workflow no longer contains Windows-invalid tracked paths that break checkout on windows-2022."
+  - "A rerun-ready release path exists: Windows package-native can pass checkout and proceed to packaging."
+handoff_to: []
+updated_at: 2026-04-20T17:11:02+08:00
+last_started_at: 2026-04-20T16:38:30+08:00
+last_closed_at: 2026-04-20T17:10:17+08:00

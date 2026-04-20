@@ -158,6 +158,18 @@
   - 验收命令 (`test_tier_required`):
     - `bash -n scripts/ci-tests.sh`
     - `rg -n "full-core|full-support|oasis7 --features wasmtime --lib --bins" scripts/ci-tests.sh doc/testing/prd.md doc/testing/project.md`
+- [x] release-windows-invalid-path-blocker (PRD-TESTING-002) [test_tier_required]: 修复会让 `windows-2022` 在 `actions/checkout@v6` 直接失败的 tracked path，补充 `scripts/check-windows-paths.sh` 并接入 `scripts/ci-tests.sh` 的 required gate，让 release 在进入 Windows `package-native` 前就能阻断非法路径。 Trace: .pm/tasks/task_a3d359ee14df4460922aca14907dfdc8.yaml
+  - 产物文件:
+    - `.github/instructions/pr-review.instructions.md`
+    - `scripts/check-windows-paths.sh`
+    - `scripts/ci-tests.sh`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/check-windows-paths.sh scripts/ci-tests.sh`
+    - `./scripts/check-windows-paths.sh`
+    - `git ls-files '.github/instructions/*'`
+    - `git diff --check`
 - [x] TASK-TESTING-057 (PRD-TESTING-WEB-001/002/003) [test_tier_required]: 为 `renderMode=software_safe` 补专用 prompt/chat 回归方案与 `viewer-software-safe-chat-regression.sh`，覆盖 apply/rollback/chat ack、消息流采样以及 `agent_spoke` 缺失签名。
   - 产物文件:
     - `scripts/viewer-software-safe-chat-regression.sh`
