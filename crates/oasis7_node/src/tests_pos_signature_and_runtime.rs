@@ -10,7 +10,7 @@ fn runtime_execution_hook_updates_consensus_snapshot() {
     let hook = RecordingExecutionHook::new(Arc::clone(&calls));
     let mut runtime = NodeRuntime::new(config).with_execution_hook(hook);
     runtime.start().expect("start");
-    thread::sleep(Duration::from_millis(120));
+    std::thread::sleep(Duration::from_millis(120));
     runtime.stop().expect("stop");
 
     let snapshot = runtime.snapshot();

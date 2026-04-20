@@ -30,8 +30,7 @@ mod support;
 
 use self::commit_retention::{
     build_commit_message_retention_plan, has_commit_message_cold_index,
-    load_commit_message_cold_index_from_root, resolve_commit_message_readback_source,
-    write_commit_message_cold_index_to_root, CommitMessageReadbackSource,
+    load_commit_message_cold_index_from_root, write_commit_message_cold_index_to_root,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,

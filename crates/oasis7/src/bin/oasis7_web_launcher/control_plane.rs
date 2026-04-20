@@ -17,17 +17,17 @@ const CHAIN_RECOVERY_PORT_SCAN_LIMIT: u16 = 32;
 const DEFAULT_CHAIN_STATUS_BIND_PORT: u16 = 5121;
 const GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 
-#[path = "control_plane/chain_status_probe.rs"]
-mod chain_status_probe;
 #[path = "control_plane_chain_requests.rs"]
 mod chain_requests;
+#[path = "control_plane/chain_status_probe.rs"]
+mod chain_status_probe;
 #[path = "control_plane/support.rs"]
 mod support;
 #[cfg(test)]
 #[path = "control_plane/tests.rs"]
 mod tests;
-pub(super) use self::chain_status_probe::{query_chain_status_endpoint, ChainStatusProbeSnapshot};
 use self::chain_requests::{submit_chain_feedback_remote, submit_chain_transfer_remote};
+pub(super) use self::chain_status_probe::query_chain_status_endpoint;
 #[cfg(test)]
 use self::support::resolve_viewer_static_env_override;
 use self::support::{

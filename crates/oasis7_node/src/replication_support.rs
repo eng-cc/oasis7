@@ -153,12 +153,14 @@ pub(crate) fn load_commit_message_from_root(
     world_id: &str,
     height: u64,
 ) -> Result<Option<GossipReplicationMessage>, NodeError> {
-    let Some(source) = resolve_commit_message_readback_source(root_dir, height)? else {
+    let Some(source) =
+        super::commit_retention::resolve_commit_message_readback_source(root_dir, height)?
+    else {
         return Ok(None);
     };
 
     let message = match source {
-        CommitMessageReadbackSource::HotMirror { path } => {
+        super::commit_retention::CommitMessageReadbackSource::HotMirror { path } => {
             let bytes = fs::read(&path).map_err(|err| NodeError::Replication {
                 reason: format!("read {} failed: {}", path.display(), err),
             })?;
@@ -168,7 +170,7 @@ pub(crate) fn load_commit_message_from_root(
                 }
             })?
         }
-        CommitMessageReadbackSource::ColdArchive { content_hash } => {
+        super::commit_retention::CommitMessageReadbackSource::ColdArchive { content_hash } => {
             let store = LocalCasStore::new(root_dir.join("store"));
             let bytes = store
                 .get_verified(content_hash.as_str())
