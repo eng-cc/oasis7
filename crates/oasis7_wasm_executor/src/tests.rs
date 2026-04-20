@@ -65,6 +65,19 @@ fn trivial_success_wasm() -> Vec<u8> {
     wat::parse_str(wat).expect("compile trivial success wat")
 }
 
+#[cfg(feature = "wasmtime")]
+fn invalid_cbor_output_wasm() -> Vec<u8> {
+    let wat = r#"(module
+         (memory (export "memory") 1)
+         (data (i32.const 16) "\ff")
+         (func (export "alloc") (param i32) (result i32)
+           i32.const 1024)
+         (func (export "call") (param i32 i32) (result i32 i32)
+           i32.const 16
+           i32.const 1))"#;
+    wat::parse_str(wat).expect("compile invalid cbor wat")
+}
+
 #[test]
 fn fixed_sandbox_succeed_returns_cloned_output() {
     let output = ModuleOutput {
@@ -384,9 +397,53 @@ fn wasm_executor_metrics_track_compile_call_and_failure_paths() {
         snapshot.failure_by_code.get("trap").copied().unwrap_or(0),
         1
     );
-    assert!(
-        snapshot.instantiate_ms_total
-            <= snapshot.entrypoint_call_ms_total + snapshot.instantiate_ms_total
+    assert_eq!(
+        snapshot.calls_total - snapshot.failure_by_code.get("trap").copied().unwrap_or(0),
+        2
+    );
+    assert_eq!(
+        snapshot.call_wall_ms_buckets.values().copied().sum::<u64>(),
+        snapshot.calls_total
+    );
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_metrics_track_decode_timing_for_invalid_output() {
+    let metrics = init_shared_wasm_executor_metrics();
+    let mut executor = test_executor_with_metrics(WasmExecutorConfig::default(), metrics.clone());
+    let request = ModuleCallRequest {
+        module_id: "m.invalid-output".to_string(),
+        wasm_hash: "hash-invalid-output".to_string(),
+        trace_id: "trace-invalid-output".to_string(),
+        entrypoint: "call".to_string(),
+        input: Vec::new(),
+        limits: ModuleLimits {
+            max_mem_bytes: 64 * 1024,
+            max_gas: 10_000_000,
+            max_call_rate: 0,
+            max_output_bytes: 1024,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(invalid_cbor_output_wasm()),
+    };
+
+    let failure = executor
+        .call(&request)
+        .expect_err("invalid cbor output should fail");
+    assert_eq!(failure.code, ModuleCallErrorCode::InvalidOutput);
+
+    let snapshot = snapshot_wasm_executor_metrics(&metrics);
+    assert_eq!(snapshot.calls_total, 1);
+    assert_eq!(snapshot.compile_misses, 1);
+    assert_eq!(
+        snapshot
+            .failure_by_code
+            .get("invalid_output")
+            .copied()
+            .unwrap_or(0),
+        1
     );
     assert_eq!(
         snapshot.call_wall_ms_buckets.values().copied().sum::<u64>(),
