@@ -1,8 +1,8 @@
 # readme PRD 文件级索引
 
-审计轮次: 13
+审计轮次: 14
 
-更新时间：2026-04-18
+更新时间：2026-04-20
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,9 +16,9 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-18）
-- `doc/readme/`：141 份文件
-- `doc/readme/governance/`：97 份文件
+## 密度快照（2026-04-20）
+- `doc/readme/`：142 份文件
+- `doc/readme/governance/`：98 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：12 份文件
 
@@ -33,6 +33,7 @@
 - `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流读者。
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
+- `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
 - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
 - `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
 - `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md`：根 README 正式状态同步入口，适合判断对外口径和仓库当前承诺边界。
@@ -94,6 +95,7 @@
 | --- | --- | --- |
 | `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
+| `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md` | `material` | 小红书真实累计 token 用量主题帖素材包，已收口为“AI 进入长期项目后会变成研发流程参与成本”的推荐发布版 |
 | `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md` | `material` | 小红书“共同参与把游戏做起来”主题帖素材包，已收口为开发者、玩家和传播者共同参与的推荐发布版，并补齐封面与 4 页轮播 HTML/PNG 资产 |
 | `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md` | `material` | 小红书博主 / 微信公众号绿洲币激励操作包 |
 | `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md` | `runbook` | 小红书持续运营 SOP |
