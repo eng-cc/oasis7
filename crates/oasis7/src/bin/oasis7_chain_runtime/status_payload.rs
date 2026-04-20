@@ -11,6 +11,7 @@ use super::p2p_status::peer_reachability_as_str;
 use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
 use super::traffic_status::ChainTrafficStatus;
+use super::wasm_status::ChainWasmStatus;
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainP2pStatus {
@@ -51,6 +52,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) release_security_policy: ReleaseSecurityPolicy,
     pub(super) reward_runtime: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     pub(super) storage: storage_metrics::StorageMetricsSnapshot,
+    pub(super) wasm: ChainWasmStatus,
     pub(super) traffic: ChainTrafficStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
 }
@@ -323,6 +325,7 @@ pub(super) fn build_chain_status_payload(
     release_security_policy: ReleaseSecurityPolicy,
     reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage_metrics: storage_metrics::StorageMetricsSnapshot,
+    wasm: ChainWasmStatus,
     traffic: ChainTrafficStatus,
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
@@ -381,6 +384,7 @@ pub(super) fn build_chain_status_payload(
         release_security_policy,
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,
+        wasm,
         traffic,
         replication,
     }

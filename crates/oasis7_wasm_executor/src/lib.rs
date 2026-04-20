@@ -1,5 +1,13 @@
 //! Sandbox execution scaffolding for WASM modules.
 
+mod metrics;
+
+pub use metrics::{
+    global_wasm_executor_metrics, init_shared_wasm_executor_metrics,
+    snapshot_global_wasm_executor_metrics, snapshot_wasm_executor_metrics, CompileCachePathKind,
+    SharedWasmExecutorMetrics, WasmExecutorMetricsSnapshot,
+};
+
 #[cfg(feature = "wasmtime")]
 use oasis7_wasm_abi::ModuleLimits;
 use oasis7_wasm_abi::{
@@ -15,11 +23,13 @@ use std::fs;
 #[cfg(feature = "wasmtime")]
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::Arc;
 #[cfg(feature = "wasmtime")]
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    mpsc, Arc, Mutex,
+    mpsc, Mutex,
 };
+use std::time::Instant;
 
 #[cfg(feature = "wasmtime")]
 const COMPILED_CACHE_MAGIC: &[u8; 8] = b"O7CWASM1";
@@ -92,6 +102,7 @@ impl Default for WasmExecutorConfig {
 /// Placeholder WASM executor implementation.
 pub struct WasmExecutor {
     config: WasmExecutorConfig,
+    metrics: SharedWasmExecutorMetrics,
     #[cfg(feature = "wasmtime")]
     engine: wasmtime::Engine,
     #[cfg(feature = "wasmtime")]
@@ -230,6 +241,7 @@ impl Clone for WasmExecutor {
         let engine = self.engine.clone();
         Self {
             config: self.config.clone(),
+            metrics: Arc::clone(&self.metrics),
             compiled_cache: Arc::clone(&self.compiled_cache),
             compiled_disk_cache: self.compiled_disk_cache.clone(),
             watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
@@ -243,6 +255,7 @@ impl Clone for WasmExecutor {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
+            metrics: Arc::clone(&self.metrics),
         }
     }
 }
@@ -279,6 +292,13 @@ impl std::error::Error for WasmExecutorInitError {}
 
 impl WasmExecutor {
     pub fn new(config: WasmExecutorConfig) -> Result<Self, WasmExecutorInitError> {
+        Self::new_with_metrics(config, global_wasm_executor_metrics())
+    }
+
+    pub fn new_with_metrics(
+        config: WasmExecutorConfig,
+        metrics: SharedWasmExecutorMetrics,
+    ) -> Result<Self, WasmExecutorInitError> {
         #[cfg(feature = "wasmtime")]
         {
             let mut engine_config = wasmtime::Config::new();
@@ -305,6 +325,7 @@ impl WasmExecutor {
                 .map_err(|err| WasmExecutorInitError::DiskCacheInit(err.to_string()))?;
             Ok(Self {
                 config,
+                metrics,
                 watchdog: Arc::new(EpochWatchdogController::new(engine.clone())),
                 engine,
                 compiled_cache,
@@ -314,12 +335,16 @@ impl WasmExecutor {
 
         #[cfg(not(feature = "wasmtime"))]
         {
-            Ok(Self { config })
+            Ok(Self { config, metrics })
         }
     }
 
     pub fn config(&self) -> &WasmExecutorConfig {
         &self.config
+    }
+
+    pub fn metrics_snapshot(&self) -> WasmExecutorMetricsSnapshot {
+        snapshot_wasm_executor_metrics(&self.metrics)
     }
 
     #[cfg(feature = "wasmtime")]
@@ -335,24 +360,47 @@ impl WasmExecutor {
             .len()
     }
 
+    #[allow(dead_code)]
     #[cfg(feature = "wasmtime")]
     pub(crate) fn compile_module_cached(
         &self,
         wasm_hash: &str,
         wasm_bytes: &[u8],
     ) -> Result<Arc<wasmtime::Module>, ModuleCallFailure> {
+        self.compile_module_cached_with_metrics(wasm_hash, wasm_bytes)
+            .map(|outcome| outcome.module)
+    }
+
+    #[cfg(feature = "wasmtime")]
+    fn compile_module_cached_with_metrics(
+        &self,
+        wasm_hash: &str,
+        wasm_bytes: &[u8],
+    ) -> Result<CompileModuleOutcome, ModuleCallFailure> {
         let mut cache = self.compiled_cache.lock().expect("compiled cache poisoned");
         if let Some(module) = cache.get(wasm_hash) {
-            return Ok(module);
+            return Ok(CompileModuleOutcome {
+                module,
+                cache_path: CompileCachePathKind::MemoryHit,
+                compile_ms: 0,
+                deserialize_ms: 0,
+            });
         }
         drop(cache);
 
+        let deserialize_started = Instant::now();
         if let Some(module) = self.load_compiled_module_from_disk(wasm_hash) {
             let mut cache = self.compiled_cache.lock().expect("compiled cache poisoned");
             cache.insert(wasm_hash.to_string(), module.clone());
-            return Ok(module);
+            return Ok(CompileModuleOutcome {
+                module,
+                cache_path: CompileCachePathKind::DiskHit,
+                compile_ms: 0,
+                deserialize_ms: elapsed_ms(deserialize_started),
+            });
         }
 
+        let compile_started = Instant::now();
         let module = wasmtime::Module::new(&self.engine, wasm_bytes).map_err(|err| {
             self.failure(
                 &ModuleCallRequest {
@@ -372,7 +420,12 @@ impl WasmExecutor {
         self.store_compiled_module_to_disk(wasm_hash, module.as_ref());
         let mut cache = self.compiled_cache.lock().expect("compiled cache poisoned");
         cache.insert(wasm_hash.to_string(), module.clone());
-        Ok(module)
+        Ok(CompileModuleOutcome {
+            module,
+            cache_path: CompileCachePathKind::CompileMiss,
+            compile_ms: elapsed_ms(compile_started),
+            deserialize_ms: 0,
+        })
     }
 
     #[cfg(feature = "wasmtime")]
@@ -556,99 +609,126 @@ impl WasmExecutor {
 
 impl ModuleSandbox for WasmExecutor {
     fn call(&mut self, request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
+        let total_started = Instant::now();
         #[cfg(feature = "wasmtime")]
         {
-            if let Err(failure) = self.validate_request_limits(request) {
-                return Err(failure);
-            }
+            let result = (|| {
+                if let Err(failure) = self.validate_request_limits(request) {
+                    return Err(failure);
+                }
 
-            if request.wasm_bytes.is_empty() {
-                return Err(self.failure(request, ModuleCallErrorCode::Trap, "missing wasm bytes"));
-            }
+                if request.wasm_bytes.is_empty() {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::Trap,
+                        "missing wasm bytes",
+                    ));
+                }
 
-            let module =
-                self.compile_module_cached(&request.wasm_hash, request.wasm_bytes.as_ref())?;
-            let start = std::time::Instant::now();
-            let mut store = wasmtime::Store::new(
-                &self.engine,
-                WasmStoreState {
-                    limits: self.build_store_limits(request),
-                },
-            );
-            store.limiter(|state| &mut state.limits);
-            store.epoch_deadline_trap();
-            store.set_epoch_deadline(1);
-            let _watchdog = self.watchdog.arm(self.config.max_call_ms);
-            store
-                .set_fuel(self.requested_fuel(request))
-                .map_err(|err| self.failure(request, ModuleCallErrorCode::Trap, err.to_string()))?;
-            let linker = wasmtime::Linker::new(&self.engine);
-            let instance = linker
-                .instantiate(&mut store, &module)
-                .map_err(|err| self.map_wasmtime_error(request, err))?;
-            let memory = instance.get_memory(&mut store, "memory").ok_or_else(|| {
-                self.failure(
-                    request,
-                    ModuleCallErrorCode::InvalidOutput,
-                    "missing memory export",
-                )
-            })?;
-            let alloc = instance
-                .get_typed_func::<i32, i32>(&mut store, "alloc")
-                .map_err(|err| {
+                let compile_outcome = self.compile_module_cached_with_metrics(
+                    &request.wasm_hash,
+                    request.wasm_bytes.as_ref(),
+                )?;
+                metrics::observe_wasm_executor_compile(
+                    &self.metrics,
+                    compile_outcome.cache_path,
+                    compile_outcome.compile_ms,
+                    compile_outcome.deserialize_ms,
+                );
+                let mut store = wasmtime::Store::new(
+                    &self.engine,
+                    WasmStoreState {
+                        limits: self.build_store_limits(request),
+                    },
+                );
+                store.limiter(|state| &mut state.limits);
+                store.epoch_deadline_trap();
+                store.set_epoch_deadline(1);
+                let _watchdog = self.watchdog.arm(self.config.max_call_ms);
+                store
+                    .set_fuel(self.requested_fuel(request))
+                    .map_err(|err| {
+                        self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
+                    })?;
+                let linker = wasmtime::Linker::new(&self.engine);
+                let instantiate_started = Instant::now();
+                let instance = linker.instantiate(&mut store, &compile_outcome.module);
+                metrics::observe_wasm_executor_instantiate(
+                    &self.metrics,
+                    elapsed_ms(instantiate_started),
+                );
+                let instance = instance.map_err(|err| self.map_wasmtime_error(request, err))?;
+                let memory = instance.get_memory(&mut store, "memory").ok_or_else(|| {
                     self.failure(
                         request,
                         ModuleCallErrorCode::InvalidOutput,
-                        format!("missing alloc export: {err}"),
+                        "missing memory export",
                     )
                 })?;
-            enum EntrypointAbi {
-                Multi(wasmtime::TypedFunc<(i32, i32), (i32, i32)>),
-                PackedI64(wasmtime::TypedFunc<(i32, i32), i64>),
-                SRet(wasmtime::TypedFunc<(i32, i32, i32), ()>),
-            }
-            let multi = instance
-                .get_typed_func::<(i32, i32), (i32, i32)>(&mut store, request.entrypoint.as_str());
-            let packed = if multi.is_err() {
-                instance
-                    .get_typed_func::<(i32, i32), i64>(&mut store, request.entrypoint.as_str())
-                    .ok()
-            } else {
-                None
-            };
-            let sret = if multi.is_err() && packed.is_none() {
-                instance
-                    .get_typed_func::<(i32, i32, i32), ()>(&mut store, request.entrypoint.as_str())
-                    .ok()
-            } else {
-                None
-            };
-            let call = if let Ok(func) = multi {
-                EntrypointAbi::Multi(func)
-            } else if let Some(func) = packed {
-                EntrypointAbi::PackedI64(func)
-            } else if let Some(func) = sret {
-                EntrypointAbi::SRet(func)
-            } else {
-                let multi_err = instance
-                    .get_typed_func::<(i32, i32), (i32, i32)>(
-                        &mut store,
-                        request.entrypoint.as_str(),
-                    )
-                    .err()
-                    .map(|err| err.to_string())
-                    .unwrap_or_else(|| "unavailable".to_string());
-                let i64_err = instance
-                    .get_typed_func::<(i32, i32), i64>(&mut store, request.entrypoint.as_str())
-                    .err()
-                    .map(|err| err.to_string())
-                    .unwrap_or_else(|| "unavailable".to_string());
-                let sret_err = instance
-                    .get_typed_func::<(i32, i32, i32), ()>(&mut store, request.entrypoint.as_str())
-                    .err()
-                    .map(|err| err.to_string())
-                    .unwrap_or_else(|| "unavailable".to_string());
-                return Err(self.failure(
+                let alloc = instance
+                    .get_typed_func::<i32, i32>(&mut store, "alloc")
+                    .map_err(|err| {
+                        self.failure(
+                            request,
+                            ModuleCallErrorCode::InvalidOutput,
+                            format!("missing alloc export: {err}"),
+                        )
+                    })?;
+                enum EntrypointAbi {
+                    Multi(wasmtime::TypedFunc<(i32, i32), (i32, i32)>),
+                    PackedI64(wasmtime::TypedFunc<(i32, i32), i64>),
+                    SRet(wasmtime::TypedFunc<(i32, i32, i32), ()>),
+                }
+                let multi = instance.get_typed_func::<(i32, i32), (i32, i32)>(
+                    &mut store,
+                    request.entrypoint.as_str(),
+                );
+                let packed = if multi.is_err() {
+                    instance
+                        .get_typed_func::<(i32, i32), i64>(&mut store, request.entrypoint.as_str())
+                        .ok()
+                } else {
+                    None
+                };
+                let sret = if multi.is_err() && packed.is_none() {
+                    instance
+                        .get_typed_func::<(i32, i32, i32), ()>(
+                            &mut store,
+                            request.entrypoint.as_str(),
+                        )
+                        .ok()
+                } else {
+                    None
+                };
+                let call = if let Ok(func) = multi {
+                    EntrypointAbi::Multi(func)
+                } else if let Some(func) = packed {
+                    EntrypointAbi::PackedI64(func)
+                } else if let Some(func) = sret {
+                    EntrypointAbi::SRet(func)
+                } else {
+                    let multi_err = instance
+                        .get_typed_func::<(i32, i32), (i32, i32)>(
+                            &mut store,
+                            request.entrypoint.as_str(),
+                        )
+                        .err()
+                        .map(|err| err.to_string())
+                        .unwrap_or_else(|| "unavailable".to_string());
+                    let i64_err = instance
+                        .get_typed_func::<(i32, i32), i64>(&mut store, request.entrypoint.as_str())
+                        .err()
+                        .map(|err| err.to_string())
+                        .unwrap_or_else(|| "unavailable".to_string());
+                    let sret_err = instance
+                        .get_typed_func::<(i32, i32, i32), ()>(
+                            &mut store,
+                            request.entrypoint.as_str(),
+                        )
+                        .err()
+                        .map(|err| err.to_string())
+                        .unwrap_or_else(|| "unavailable".to_string());
+                    return Err(self.failure(
                     request,
                     ModuleCallErrorCode::InvalidOutput,
                     format!(
@@ -656,161 +736,194 @@ impl ModuleSandbox for WasmExecutor {
                         request.entrypoint
                     ),
                 ));
-            };
+                };
 
-            let input_len = i32::try_from(request.input.len()).map_err(|_| {
-                self.failure(
-                    request,
-                    ModuleCallErrorCode::Trap,
-                    "input too large for wasm32",
-                )
-            })?;
-            let input_ptr = alloc
-                .call(&mut store, input_len)
-                .map_err(|err| self.map_wasmtime_error(request, err))?;
-            if input_ptr < 0 {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::InvalidOutput,
-                    "alloc returned negative pointer",
-                ));
-            }
-            if input_len > 0 {
-                const WASM_PAGE_SIZE: u64 = 65_536;
-                let current_pages = memory.size(&store) as u64;
-                let current_size = current_pages.saturating_mul(WASM_PAGE_SIZE);
-                let needed_size = (input_ptr as u64).saturating_add(input_len as u64);
-                if needed_size > current_size {
-                    let required_pages = (needed_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
-                    let delta = required_pages.saturating_sub(current_pages);
-                    if delta > 0 {
-                        memory.grow(&mut store, delta).map_err(|err| {
-                            self.failure(
-                                request,
-                                ModuleCallErrorCode::Trap,
-                                format!("memory grow failed: {err}"),
-                            )
-                        })?;
-                    }
-                }
-            }
-            if input_len > 0 {
-                memory
-                    .write(&mut store, input_ptr as usize, &request.input)
-                    .map_err(|err| {
-                        self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
-                    })?;
-            }
-            let (output_ptr, output_len) = match call {
-                EntrypointAbi::Multi(func) => func
-                    .call(&mut store, (input_ptr, input_len))
-                    .map_err(|err| self.map_wasmtime_error(request, err))?,
-                EntrypointAbi::PackedI64(func) => {
-                    let packed = func
-                        .call(&mut store, (input_ptr, input_len))
-                        .map_err(|err| self.map_wasmtime_error(request, err))?
-                        as u64;
-                    (
-                        (packed & 0xffff_ffff) as u32 as i32,
-                        ((packed >> 32) & 0xffff_ffff) as u32 as i32,
+                let input_len = i32::try_from(request.input.len()).map_err(|_| {
+                    self.failure(
+                        request,
+                        ModuleCallErrorCode::Trap,
+                        "input too large for wasm32",
                     )
+                })?;
+                let input_ptr = alloc
+                    .call(&mut store, input_len)
+                    .map_err(|err| self.map_wasmtime_error(request, err))?;
+                if input_ptr < 0 {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::InvalidOutput,
+                        "alloc returned negative pointer",
+                    ));
                 }
-                EntrypointAbi::SRet(func) => {
-                    let out_pair_ptr = alloc
-                        .call(&mut store, 8)
-                        .map_err(|err| self.map_wasmtime_error(request, err))?;
-                    if out_pair_ptr < 0 {
-                        return Err(self.failure(
-                            request,
-                            ModuleCallErrorCode::InvalidOutput,
-                            "alloc returned negative output pair pointer",
-                        ));
+                if input_len > 0 {
+                    const WASM_PAGE_SIZE: u64 = 65_536;
+                    let current_pages = memory.size(&store) as u64;
+                    let current_size = current_pages.saturating_mul(WASM_PAGE_SIZE);
+                    let needed_size = (input_ptr as u64).saturating_add(input_len as u64);
+                    if needed_size > current_size {
+                        let required_pages = (needed_size + WASM_PAGE_SIZE - 1) / WASM_PAGE_SIZE;
+                        let delta = required_pages.saturating_sub(current_pages);
+                        if delta > 0 {
+                            memory.grow(&mut store, delta).map_err(|err| {
+                                self.failure(
+                                    request,
+                                    ModuleCallErrorCode::Trap,
+                                    format!("memory grow failed: {err}"),
+                                )
+                            })?;
+                        }
                     }
-                    func.call(&mut store, (out_pair_ptr, input_ptr, input_len))
-                        .map_err(|err| self.map_wasmtime_error(request, err))?;
-                    let mut pair = [0_u8; 8];
+                }
+                if input_len > 0 {
                     memory
-                        .read(&mut store, out_pair_ptr as usize, &mut pair)
+                        .write(&mut store, input_ptr as usize, &request.input)
                         .map_err(|err| {
                             self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
                         })?;
-                    let output_ptr = i32::from_le_bytes([pair[0], pair[1], pair[2], pair[3]]);
-                    let output_len = i32::from_le_bytes([pair[4], pair[5], pair[6], pair[7]]);
-                    (output_ptr, output_len)
                 }
-            };
-            let memory_size = memory.data_size(&store) as u64;
-            if memory_size > request.limits.max_mem_bytes {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::Trap,
-                    "memory limit exceeded",
-                ));
-            }
-            let output_len = usize::try_from(output_len).map_err(|_| {
-                self.failure(request, ModuleCallErrorCode::Trap, "negative output length")
-            })?;
-            if output_len as u64 > request.limits.max_output_bytes {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::OutputTooLarge,
-                    "output bytes exceeded",
-                ));
-            }
-            if output_ptr < 0 {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::InvalidOutput,
-                    "output pointer negative",
-                ));
-            }
-            let memory_bytes = memory.data_size(&store) as u64;
-            let output_end = (output_ptr as u64).saturating_add(output_len as u64);
-            if output_end > memory_bytes {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::Trap,
-                    "output exceeds memory bounds",
-                ));
-            }
-            let mut output_buf = vec![0u8; output_len];
-            if output_len > 0 {
-                memory
-                    .read(&mut store, output_ptr as usize, &mut output_buf)
-                    .map_err(|err| {
-                        self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
+                let entrypoint_started = Instant::now();
+                let output_pair = match call {
+                    EntrypointAbi::Multi(func) => func
+                        .call(&mut store, (input_ptr, input_len))
+                        .map_err(|err| self.map_wasmtime_error(request, err))?,
+                    EntrypointAbi::PackedI64(func) => {
+                        let packed = func
+                            .call(&mut store, (input_ptr, input_len))
+                            .map_err(|err| self.map_wasmtime_error(request, err))?
+                            as u64;
+                        (
+                            (packed & 0xffff_ffff) as u32 as i32,
+                            ((packed >> 32) & 0xffff_ffff) as u32 as i32,
+                        )
+                    }
+                    EntrypointAbi::SRet(func) => {
+                        let out_pair_ptr = alloc
+                            .call(&mut store, 8)
+                            .map_err(|err| self.map_wasmtime_error(request, err))?;
+                        if out_pair_ptr < 0 {
+                            return Err(self.failure(
+                                request,
+                                ModuleCallErrorCode::InvalidOutput,
+                                "alloc returned negative output pair pointer",
+                            ));
+                        }
+                        func.call(&mut store, (out_pair_ptr, input_ptr, input_len))
+                            .map_err(|err| self.map_wasmtime_error(request, err))?;
+                        let mut pair = [0_u8; 8];
+                        memory
+                            .read(&mut store, out_pair_ptr as usize, &mut pair)
+                            .map_err(|err| {
+                                self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
+                            })?;
+                        let output_ptr = i32::from_le_bytes([pair[0], pair[1], pair[2], pair[3]]);
+                        let output_len = i32::from_le_bytes([pair[4], pair[5], pair[6], pair[7]]);
+                        (output_ptr, output_len)
+                    }
+                };
+                metrics::observe_wasm_executor_entrypoint_call(
+                    &self.metrics,
+                    elapsed_ms(entrypoint_started),
+                );
+                let (output_ptr, output_len) = output_pair;
+                let memory_size = memory.data_size(&store) as u64;
+                if memory_size > request.limits.max_mem_bytes {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::Trap,
+                        "memory limit exceeded",
+                    ));
+                }
+                let output_len = usize::try_from(output_len).map_err(|_| {
+                    self.failure(request, ModuleCallErrorCode::Trap, "negative output length")
+                })?;
+                if output_len as u64 > request.limits.max_output_bytes {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::OutputTooLarge,
+                        "output bytes exceeded",
+                    ));
+                }
+                if output_ptr < 0 {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::InvalidOutput,
+                        "output pointer negative",
+                    ));
+                }
+                let memory_bytes = memory.data_size(&store) as u64;
+                let output_end = (output_ptr as u64).saturating_add(output_len as u64);
+                if output_end > memory_bytes {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::Trap,
+                        "output exceeds memory bounds",
+                    ));
+                }
+                let mut output_buf = vec![0u8; output_len];
+                if output_len > 0 {
+                    memory
+                        .read(&mut store, output_ptr as usize, &mut output_buf)
+                        .map_err(|err| {
+                            self.failure(request, ModuleCallErrorCode::Trap, err.to_string())
+                        })?;
+                }
+                if total_started.elapsed().as_millis() as u64 > self.config.max_call_ms {
+                    return Err(self.failure(
+                        request,
+                        ModuleCallErrorCode::Timeout,
+                        "execution exceeded max_call_ms",
+                    ));
+                }
+                let decode_started = Instant::now();
+                let mut output: ModuleOutput =
+                    serde_cbor::from_slice(&output_buf).map_err(|err| {
+                        self.failure(
+                            request,
+                            ModuleCallErrorCode::InvalidOutput,
+                            format!("output CBOR decode failed: {err}"),
+                        )
                     })?;
-            }
-            if start.elapsed().as_millis() as u64 > self.config.max_call_ms {
-                return Err(self.failure(
-                    request,
-                    ModuleCallErrorCode::Timeout,
-                    "execution exceeded max_call_ms",
-                ));
-            }
-            let mut output: ModuleOutput = serde_cbor::from_slice(&output_buf).map_err(|err| {
-                self.failure(
-                    request,
-                    ModuleCallErrorCode::InvalidOutput,
-                    format!("output CBOR decode failed: {err}"),
-                )
-            })?;
-            output.output_bytes = output_buf.len() as u64;
-            self.validate_output_limits(request, &output)?;
-            return Ok(output);
+                metrics::observe_wasm_executor_decode(&self.metrics, elapsed_ms(decode_started));
+                output.output_bytes = output_buf.len() as u64;
+                self.validate_output_limits(request, &output)?;
+                Ok(output)
+            })();
+            metrics::observe_wasm_executor_call_result(
+                &self.metrics,
+                elapsed_ms(total_started),
+                result.as_ref().err().map(|failure| failure.code.clone()),
+            );
+            return result;
         }
 
         #[cfg(not(feature = "wasmtime"))]
         {
-            let detail = "wasmtime feature not enabled";
-            return Err(ModuleCallFailure {
+            let result = Err(ModuleCallFailure {
                 module_id: request.module_id.clone(),
                 trace_id: request.trace_id.clone(),
                 code: ModuleCallErrorCode::SandboxUnavailable,
-                detail: detail.to_string(),
+                detail: "wasmtime feature not enabled".to_string(),
             });
+            metrics::observe_wasm_executor_call_result(
+                &self.metrics,
+                elapsed_ms(total_started),
+                result.as_ref().err().map(|failure| failure.code.clone()),
+            );
+            return result;
         }
     }
+}
+
+#[cfg(feature = "wasmtime")]
+struct CompileModuleOutcome {
+    module: Arc<wasmtime::Module>,
+    cache_path: CompileCachePathKind,
+    compile_ms: u64,
+    deserialize_ms: u64,
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 #[cfg(feature = "wasmtime")]

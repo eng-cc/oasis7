@@ -25,6 +25,14 @@ fn test_executor(config: WasmExecutorConfig) -> WasmExecutor {
 }
 
 #[cfg(feature = "wasmtime")]
+fn test_executor_with_metrics(
+    config: WasmExecutorConfig,
+    metrics: SharedWasmExecutorMetrics,
+) -> WasmExecutor {
+    WasmExecutor::new_with_metrics(config, metrics).expect("initialize wasm executor")
+}
+
+#[cfg(feature = "wasmtime")]
 fn trivial_output_bytes() -> Vec<u8> {
     serde_cbor::to_vec(&ModuleOutput {
         new_state: None,
@@ -327,6 +335,62 @@ fn wasm_executor_epoch_watchdog_preempts_infinite_loop() {
     assert!(
         started.elapsed().as_millis() < 3_000,
         "watchdog timeout should preempt quickly"
+    );
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_metrics_track_compile_call_and_failure_paths() {
+    let metrics = init_shared_wasm_executor_metrics();
+    let mut executor = test_executor_with_metrics(WasmExecutorConfig::default(), metrics.clone());
+    let wasm = trivial_success_wasm();
+    let request = ModuleCallRequest {
+        module_id: "m.metrics".to_string(),
+        wasm_hash: "hash-metrics".to_string(),
+        trace_id: "trace-metrics".to_string(),
+        entrypoint: "call".to_string(),
+        input: Vec::new(),
+        limits: ModuleLimits {
+            max_mem_bytes: 64 * 1024,
+            max_gas: 10_000_000,
+            max_call_rate: 0,
+            max_output_bytes: 1024,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(wasm),
+    };
+
+    executor.call(&request).expect("first call should succeed");
+    executor
+        .call(&request)
+        .expect("second call should hit memory cache");
+    let missing_wasm = ModuleCallRequest {
+        trace_id: "trace-missing".to_string(),
+        wasm_hash: "hash-missing".to_string(),
+        wasm_bytes: Arc::<[u8]>::from([]),
+        ..request.clone()
+    };
+    let failure = executor
+        .call(&missing_wasm)
+        .expect_err("missing wasm bytes should fail");
+    assert_eq!(failure.code, ModuleCallErrorCode::Trap);
+
+    let snapshot = snapshot_wasm_executor_metrics(&metrics);
+    assert_eq!(snapshot.calls_total, 3);
+    assert_eq!(snapshot.compile_misses, 1);
+    assert_eq!(snapshot.memory_cache_hits, 1);
+    assert_eq!(
+        snapshot.failure_by_code.get("trap").copied().unwrap_or(0),
+        1
+    );
+    assert!(
+        snapshot.instantiate_ms_total
+            <= snapshot.entrypoint_call_ms_total + snapshot.instantiate_ms_total
+    );
+    assert_eq!(
+        snapshot.call_wall_ms_buckets.values().copied().sum::<u64>(),
+        snapshot.calls_total
     );
 }
 
