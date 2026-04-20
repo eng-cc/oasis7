@@ -17,6 +17,7 @@ use oasis7::simulator::{
 };
 use serde::{Deserialize, Serialize};
 
+#[path = "oasis7_provider_parity_bench/io_support.rs"]
 mod io_support;
 
 use self::io_support::{parse_options, print_help, sanitize_filename, write_json, write_jsonl};
