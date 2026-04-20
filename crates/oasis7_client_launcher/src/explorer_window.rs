@@ -192,7 +192,7 @@ impl ExplorerStatusFilter {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExplorerTab {
+pub(super) enum ExplorerTab {
     Blocks,
     Txs,
     Search,
@@ -552,6 +552,64 @@ impl ClientLauncherApp {
 
         if self.maybe_request_explorer_p1_data() {
             return;
+        }
+    }
+
+    pub(super) fn schedule_active_explorer_tab_refresh(&mut self, tab: ExplorerTab) {
+        match tab {
+            ExplorerTab::Blocks => self.explorer_panel_state.pending_blocks_refresh = true,
+            ExplorerTab::Txs => self.explorer_panel_state.pending_txs_refresh = true,
+            ExplorerTab::Search => self.explorer_panel_state.pending_search_refresh = true,
+            ExplorerTab::Address
+            | ExplorerTab::Contracts
+            | ExplorerTab::Assets
+            | ExplorerTab::Mempool => self.schedule_explorer_p1_tab_refresh(tab),
+        }
+    }
+
+    pub(super) fn activate_explorer_tab(&mut self, tab: ExplorerTab) {
+        self.explorer_panel_state.active_tab = tab;
+        // Explicit user navigation should refresh the chosen tab immediately instead
+        // of waiting behind the next periodic overview poll.
+        self.explorer_panel_state.last_poll_at = Some(Instant::now());
+        self.schedule_active_explorer_tab_refresh(tab);
+    }
+
+    pub(super) fn active_explorer_tab(&self) -> ExplorerTab {
+        self.explorer_panel_state.active_tab
+    }
+
+    pub(super) fn apply_explorer_search_result(&mut self, item_type: &str, key: String) {
+        match item_type {
+            "block" => {
+                self.activate_explorer_tab(ExplorerTab::Blocks);
+                if let Some(height) = parse_positive_u64(key.as_str()) {
+                    self.explorer_panel_state.block_height_input = key;
+                    self.explorer_panel_state.block_hash_input.clear();
+                    self.explorer_panel_state.pending_block_height = Some(height);
+                    self.explorer_panel_state.pending_block_hash = None;
+                } else {
+                    self.explorer_panel_state.block_height_input.clear();
+                    self.explorer_panel_state.block_hash_input = key.clone();
+                    self.explorer_panel_state.pending_block_height = None;
+                    self.explorer_panel_state.pending_block_hash = Some(key);
+                }
+                self.explorer_panel_state.pending_block_refresh = true;
+            }
+            "tx" => {
+                self.activate_explorer_tab(ExplorerTab::Txs);
+                self.explorer_panel_state.tx_hash_input = key.clone();
+                self.explorer_panel_state.pending_tx_hash = Some(key);
+                self.explorer_panel_state.pending_tx_action_id = None;
+                self.explorer_panel_state.pending_tx_refresh = true;
+            }
+            _ => {
+                self.append_log(format!(
+                    "{}: {}",
+                    self.tr("未支持的搜索类型", "Unsupported search item type"),
+                    item_type,
+                ));
+            }
         }
     }
 

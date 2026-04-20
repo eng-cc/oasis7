@@ -350,22 +350,7 @@ impl ClientLauncherApp {
                         self.explorer_tab_count(tab)
                     );
                     if ui.selectable_label(selected, label).clicked() {
-                        self.explorer_panel_state.active_tab = tab;
-                        match tab {
-                            ExplorerTab::Blocks => {
-                                self.explorer_panel_state.pending_blocks_refresh = true
-                            }
-                            ExplorerTab::Txs => {
-                                self.explorer_panel_state.pending_txs_refresh = true
-                            }
-                            ExplorerTab::Search => {
-                                self.explorer_panel_state.pending_search_refresh = true
-                            }
-                            ExplorerTab::Address
-                            | ExplorerTab::Contracts
-                            | ExplorerTab::Assets
-                            | ExplorerTab::Mempool => self.schedule_explorer_p1_tab_refresh(tab),
-                        }
+                        self.activate_explorer_tab(tab);
                     }
                 }
             });
@@ -546,18 +531,21 @@ impl ClientLauncherApp {
                         if !block.tx_hashes.is_empty() {
                             ui.add_space(6.0);
                             ui.strong(self.tr("关联交易", "Related Transactions"));
-                            let hashes = block.tx_hashes.clone();
+                            let mut clicked_hash = None;
                             ui.horizontal_wrapped(|ui| {
-                                for hash in hashes {
+                                for hash in block.tx_hashes.iter() {
                                     if ui.button(short_hash(hash.as_str())).clicked() {
-                                        self.explorer_panel_state.active_tab = ExplorerTab::Txs;
-                                        self.explorer_panel_state.tx_hash_input = hash.clone();
-                                        self.explorer_panel_state.pending_tx_hash = Some(hash);
-                                        self.explorer_panel_state.pending_tx_action_id = None;
-                                        self.explorer_panel_state.pending_tx_refresh = true;
+                                        clicked_hash = Some(hash.clone());
                                     }
                                 }
                             });
+                            if let Some(hash) = clicked_hash {
+                                self.activate_explorer_tab(ExplorerTab::Txs);
+                                self.explorer_panel_state.tx_hash_input = hash.clone();
+                                self.explorer_panel_state.pending_tx_hash = Some(hash);
+                                self.explorer_panel_state.pending_tx_action_id = None;
+                                self.explorer_panel_state.pending_tx_refresh = true;
+                            }
                         }
                     } else {
                         Self::render_explorer_empty_panel(
@@ -912,31 +900,7 @@ impl ClientLauncherApp {
                     });
 
                 if let Some((item_type, key)) = clicked {
-                    match item_type.as_str() {
-                        "block" => {
-                            self.explorer_panel_state.active_tab = ExplorerTab::Blocks;
-                            self.explorer_panel_state.block_height_input = key.clone();
-                            self.explorer_panel_state.block_hash_input = key.clone();
-                            self.explorer_panel_state.pending_block_height =
-                                parse_positive_u64(key.as_str());
-                            self.explorer_panel_state.pending_block_hash = Some(key);
-                            self.explorer_panel_state.pending_block_refresh = true;
-                        }
-                        "tx" => {
-                            self.explorer_panel_state.active_tab = ExplorerTab::Txs;
-                            self.explorer_panel_state.tx_hash_input = key.clone();
-                            self.explorer_panel_state.pending_tx_hash = Some(key);
-                            self.explorer_panel_state.pending_tx_action_id = None;
-                            self.explorer_panel_state.pending_tx_refresh = true;
-                        }
-                        _ => {
-                            self.append_log(format!(
-                                "{}: {}",
-                                self.tr("未支持的搜索类型", "Unsupported search item type"),
-                                item_type,
-                            ));
-                        }
-                    }
+                    self.apply_explorer_search_result(item_type.as_str(), key);
                 }
             },
         );
