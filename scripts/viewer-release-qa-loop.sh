@@ -96,10 +96,6 @@ state_tick() {
   json_get "$1" tick
 }
 
-state_logical_time() {
-  json_get "$1" logicalTime
-}
-
 state_event_seq() {
   json_get "$1" eventSeq
 }
