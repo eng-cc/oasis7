@@ -51,6 +51,9 @@ Notes:
   - Counter deltas are derived only from samples whose `observed_since_unix_ms`
     matches the latest sample for that node, so process restarts/reset windows
     shrink coverage instead of producing negative deltas.
+  - Each sample also records host-level `network_interface` rx/tx byte counters
+    when the default route interface can be resolved, so summaries can compare
+    payload-only traffic against whole-interface bandwidth.
   - History is pruned to a bounded retention window before summarization, so
     repeated cron/systemd runs do not grow `history.ndjson` without bound.
   - Use repeated invocations (cron/systemd timer) or a longer single run to
@@ -113,6 +116,53 @@ capture_status() {
   printf '{"ok":false,"fetch_error":"ssh_or_curl_failed"}\n' >"$status_file"
 }
 
+capture_network_interface() {
+  local label=$1
+  local mode=$2
+  local sample_index=$3
+  local target=${4:-}
+  local password=${5:-}
+  local sample_dir="$run_dir/raw/$label/sample-$(printf '%03d' "$sample_index")"
+  mkdir -p "$sample_dir"
+  local network_file="$sample_dir/network.json"
+
+  if [[ "$mode" == "local" ]]; then
+    local iface=""
+    local rx_bytes=""
+    local tx_bytes=""
+    iface=$(ip route get 1.1.1.1 2>/dev/null | awk '
+      /dev/ {
+        for (i = 1; i <= NF; i++) {
+          if ($i == "dev" && (i + 1) <= NF) {
+            print $(i + 1)
+            exit
+          }
+        }
+      }
+    ')
+    if [[ -n "$iface" ]] \
+      && [[ -r "/sys/class/net/$iface/statistics/rx_bytes" ]] \
+      && [[ -r "/sys/class/net/$iface/statistics/tx_bytes" ]]; then
+      rx_bytes=$(cat "/sys/class/net/$iface/statistics/rx_bytes")
+      tx_bytes=$(cat "/sys/class/net/$iface/statistics/tx_bytes")
+      jq -n \
+        --arg iface "$iface" \
+        --arg rx_bytes "$rx_bytes" \
+        --arg tx_bytes "$tx_bytes" \
+        '{available: true, name: $iface, rx_bytes: ($rx_bytes | tonumber), tx_bytes: ($tx_bytes | tonumber)}' \
+        >"$network_file"
+      return 0
+    fi
+    printf '{"available":false}\n' >"$network_file"
+    return 0
+  fi
+
+  if run_ssh "$target" "$password" "iface=\$(ip route get 1.1.1.1 2>/dev/null | awk '/dev/ {for (i = 1; i <= NF; i++) if (\$i == \"dev\" && (i + 1) <= NF) {print \$(i + 1); exit}}'); if [ -n \"\$iface\" ] && [ -r \"/sys/class/net/\$iface/statistics/rx_bytes\" ] && [ -r \"/sys/class/net/\$iface/statistics/tx_bytes\" ]; then rx=\$(cat \"/sys/class/net/\$iface/statistics/rx_bytes\"); tx=\$(cat \"/sys/class/net/\$iface/statistics/tx_bytes\"); printf '{\"available\":true,\"name\":\"%s\",\"rx_bytes\":%s,\"tx_bytes\":%s}\n' \"\$iface\" \"\$rx\" \"\$tx\"; else printf '{\"available\":false}\n'; fi" >"$network_file" 2>"$sample_dir/network.stderr.log"; then
+    return 0
+  fi
+  printf '{"available":false,"fetch_error":"ssh_failed"}\n' >"$network_file"
+}
+
 append_sample_record() {
   local label=$1
   local mode=$2
@@ -127,6 +177,7 @@ append_sample_record() {
     --arg sample_index "$sample_index" \
     --arg captured_at "$captured_at" \
     --arg captured_at_unix_ms "$captured_at_unix_ms" \
+    --slurpfile network "$sample_dir/network.json" \
     --slurpfile status "$sample_dir/status.json" \
     '{
       run_id: $run_id,
@@ -151,6 +202,16 @@ append_sample_record() {
       },
       storage_recent_errors_count: ($status[0].storage.recent_errors_count // null),
       reward_runtime_recent_errors_count: ($status[0].reward_runtime.recent_errors_count // null),
+      network_interface: (
+        if ($network[0].available // false)
+        then {
+          name: ($network[0].name // null),
+          rx_bytes: ($network[0].rx_bytes // null),
+          tx_bytes: ($network[0].tx_bytes // null)
+        }
+        else null
+        end
+      ),
       traffic: {
         udp_gossip: ($status[0].traffic.udp_gossip // null),
         libp2p_replication: ($status[0].traffic.libp2p_replication // null)
@@ -344,12 +405,15 @@ if (( summary_only == 0 )); then
     echo "sample $sample_index/$samples @ $captured_at"
 
     capture_status observer_local local "$observer_status_url" "$sample_index"
+    capture_network_interface observer_local local "$sample_index"
     append_sample_record observer_local local "$observer_status_url"
 
     capture_status sequencer_ecs remote "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password"
+    capture_network_interface sequencer_ecs remote "$sample_index" "$sequencer_target" "$seq_password"
     append_sample_record sequencer_ecs remote "$sequencer_status_url"
 
     capture_status storage_ecs remote "$storage_status_url" "$sample_index" "$storage_target" "$storage_password"
+    capture_network_interface storage_ecs remote "$sample_index" "$storage_target" "$storage_password"
     append_sample_record storage_ecs remote "$storage_status_url"
 
     if (( sample_index < samples )); then

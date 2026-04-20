@@ -17,6 +17,6 @@ acceptance:
   - "Triad traffic summary persists aggregate totals and full-detail breakdowns across all nodes."
   - "Aggregate output includes total UDP/libp2p distribution and merged by_kind/by_topic/by_protocol detail maps for the requested window."
 handoff_to: []
-updated_at: 2026-04-20T00:53:31+08:00
-last_started_at: 2026-04-19T21:50:47+08:00
-last_closed_at: 2026-04-20T00:53:31+08:00
+updated_at: 2026-04-20T15:19:42+08:00
+last_started_at: 2026-04-20T14:32:33+08:00
+last_closed_at: 2026-04-20T15:19:42+08:00
