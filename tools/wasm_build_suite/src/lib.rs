@@ -1,3 +1,9 @@
+mod build_timing;
+mod build_util;
+
+pub use build_timing::BuildTimingSnapshot;
+
+use build_util::{canonical_or_original, elapsed_ms, normalize_artifact_name, now_unix_ms};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
@@ -7,6 +13,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 use wasm_encoder::{Module, RawSection};
 use wasmparser::Parser;
 
@@ -42,6 +49,7 @@ impl BuildRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildMetadata {
+    pub recorded_at_unix_ms: i64,
     pub module_id: String,
     pub target: String,
     pub profile: String,
@@ -60,6 +68,7 @@ pub struct BuildMetadata {
     pub container_platform: String,
     pub builder_image_ref: String,
     pub builder_image_digest: String,
+    pub build_timing: BuildTimingSnapshot,
     pub wasm_hash_sha256: String,
     pub wasm_size_bytes: u64,
 }
@@ -67,6 +76,7 @@ pub struct BuildMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildReceipt {
     pub schema_version: u32,
+    pub recorded_at_unix_ms: i64,
     pub module_id: String,
     pub target: String,
     pub profile: String,
@@ -85,6 +95,7 @@ pub struct BuildReceipt {
     pub container_platform: String,
     pub builder_image_ref: String,
     pub builder_image_digest: String,
+    pub build_timing: BuildTimingSnapshot,
     pub wasm_hash_sha256: String,
     pub wasm_size_bytes: u64,
 }
@@ -99,6 +110,7 @@ pub struct BuildOutput {
     pub wasm_hash_sha256: Option<String>,
     pub source_hash: Option<String>,
     pub build_manifest_hash: Option<String>,
+    pub build_timing: Option<BuildTimingSnapshot>,
     pub wasm_size_bytes: Option<u64>,
     pub dry_run: bool,
 }
@@ -259,6 +271,7 @@ impl BuildStdConfig {
 
 pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
     validate_request(request)?;
+    let total_started = Instant::now();
     let manifest_path = canonical_or_original(&request.manifest_path);
     if !manifest_path.exists() {
         return Err(BuildError::ManifestNotFound(manifest_path));
@@ -295,16 +308,19 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
             wasm_hash_sha256: None,
             source_hash: None,
             build_manifest_hash: None,
+            build_timing: None,
             wasm_size_bytes: None,
             dry_run: true,
         });
     }
 
+    let cargo_started = Instant::now();
     run_cargo_build(
         manifest_path.as_path(),
         request.target.as_str(),
         request.profile.as_str(),
     )?;
+    let cargo_build_ms = elapsed_ms(cargo_started);
 
     if !artifact_path.exists() {
         return Err(BuildError::ArtifactNotFound(artifact_path));
@@ -313,7 +329,10 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         path: Some(artifact_path.clone()),
         source,
     })?;
+    let canonicalize_started = Instant::now();
     let canonical_wasm_bytes = canonicalize_wasm_bytes(&wasm_bytes)?;
+    let canonicalize_ms = elapsed_ms(canonicalize_started);
+    let hash_started = Instant::now();
     let wasm_size_bytes = u64::try_from(canonical_wasm_bytes.len()).map_err(|_| {
         BuildError::MetadataInvalid("wasm size overflow while converting usize to u64".to_string())
     })?;
@@ -322,7 +341,8 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
     let source_hash = compute_source_hash(package, &metadata, &manifest_path)?;
     let wasm_toolchain = wasm_env_value_or_default("TOOLCHAIN", "");
     let wasm_build_std = wasm_env_value_or_default("BUILD_STD", "0");
-    let wasm_build_std_components = wasm_env_value_or_default("BUILD_STD_COMPONENTS", "std,panic_abort");
+    let wasm_build_std_components =
+        wasm_env_value_or_default("BUILD_STD_COMPONENTS", "std,panic_abort");
     let wasm_build_std_features = wasm_env_value_or_default("BUILD_STD_FEATURES", "");
     let wasm_deterministic_guard = wasm_env_value_or_default("DETERMINISTIC_GUARD", "1");
     let canonicalizer_version =
@@ -344,6 +364,7 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         builder_image_ref.as_str(),
         builder_image_digest.as_str(),
     )?;
+    let hash_ms = elapsed_ms(hash_started);
 
     if let Some(parent) = packaged_wasm_path.parent() {
         fs::create_dir_all(parent).map_err(|source| BuildError::Io {
@@ -357,8 +378,20 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         source,
     })?;
 
+    let recorded_at_unix_ms = now_unix_ms();
+    let build_timing = BuildTimingSnapshot {
+        total_build_wall_ms: 0,
+        cargo_build_ms,
+        canonicalize_ms,
+        hash_ms,
+        receipt_write_ms: 0,
+        metadata_write_ms: 0,
+    };
+
+    let receipt_started = Instant::now();
     let receipt_payload = BuildReceipt {
         schema_version: 1,
+        recorded_at_unix_ms,
         module_id: request.module_id.clone(),
         target: request.target.clone(),
         profile: request.profile.clone(),
@@ -377,6 +410,7 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         container_platform: container_platform.clone(),
         builder_image_ref: builder_image_ref.clone(),
         builder_image_digest: builder_image_digest.clone(),
+        build_timing: build_timing.clone(),
         wasm_hash_sha256: wasm_hash_sha256.clone(),
         wasm_size_bytes,
     };
@@ -389,8 +423,11 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         path: Some(receipt_path.clone()),
         source,
     })?;
+    let receipt_write_ms = elapsed_ms(receipt_started);
 
+    let metadata_started = Instant::now();
     let metadata_payload = BuildMetadata {
+        recorded_at_unix_ms,
         module_id: request.module_id.clone(),
         target: request.target.clone(),
         profile: request.profile.clone(),
@@ -409,6 +446,14 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         container_platform,
         builder_image_ref,
         builder_image_digest,
+        build_timing: BuildTimingSnapshot {
+            total_build_wall_ms: 0,
+            cargo_build_ms,
+            canonicalize_ms,
+            hash_ms,
+            receipt_write_ms,
+            metadata_write_ms: 0,
+        },
         wasm_hash_sha256: wasm_hash_sha256.clone(),
         wasm_size_bytes,
     };
@@ -422,6 +467,42 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         path: Some(metadata_path.clone()),
         source,
     })?;
+    let metadata_write_ms = elapsed_ms(metadata_started);
+    let total_build_wall_ms = elapsed_ms(total_started);
+    let build_timing = BuildTimingSnapshot {
+        total_build_wall_ms,
+        cargo_build_ms,
+        canonicalize_ms,
+        hash_ms,
+        receipt_write_ms,
+        metadata_write_ms,
+    };
+    let final_receipt_payload = BuildReceipt {
+        build_timing: build_timing.clone(),
+        ..receipt_payload
+    };
+    let final_receipt_json =
+        serde_json::to_vec_pretty(&final_receipt_payload).map_err(|source| BuildError::Json {
+            source,
+            context: "serialize final build receipt".to_string(),
+        })?;
+    fs::write(&receipt_path, final_receipt_json).map_err(|source| BuildError::Io {
+        path: Some(receipt_path.clone()),
+        source,
+    })?;
+    let final_metadata_payload = BuildMetadata {
+        build_timing: build_timing.clone(),
+        ..metadata_payload
+    };
+    let final_metadata_json =
+        serde_json::to_vec_pretty(&final_metadata_payload).map_err(|source| BuildError::Json {
+            source,
+            context: "serialize final build metadata".to_string(),
+        })?;
+    fs::write(&metadata_path, final_metadata_json).map_err(|source| BuildError::Io {
+        path: Some(metadata_path.clone()),
+        source,
+    })?;
 
     Ok(BuildOutput {
         module_id: request.module_id.clone(),
@@ -432,6 +513,7 @@ pub fn run_build(request: &BuildRequest) -> Result<BuildOutput, BuildError> {
         wasm_hash_sha256: Some(wasm_hash_sha256),
         source_hash: Some(source_hash),
         build_manifest_hash: Some(build_manifest_hash),
+        build_timing: Some(build_timing),
         wasm_size_bytes: Some(wasm_size_bytes),
         dry_run: false,
     })
@@ -841,14 +923,6 @@ fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
-}
-
-fn canonical_or_original(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn normalize_artifact_name(name: &str) -> String {
-    name.replace('-', "_")
 }
 
 #[cfg(test)]

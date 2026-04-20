@@ -74,6 +74,7 @@ fn minimal_template_dry_run_resolves_paths() {
     assert!(output.wasm_hash_sha256.is_none());
     assert!(output.source_hash.is_none());
     assert!(output.build_manifest_hash.is_none());
+    assert!(output.build_timing.is_none());
     assert!(output.wasm_size_bytes.is_none());
 }
 
@@ -114,6 +115,11 @@ fn minimal_template_real_build_writes_wasm_and_metadata() {
         output.wasm_hash_sha256.as_ref().map(|hash| hash.len()),
         Some(64)
     );
+    let timing = output
+        .build_timing
+        .clone()
+        .expect("real build should expose build timing");
+    assert!(timing.total_build_wall_ms >= timing.cargo_build_ms);
     let packaged_wasm_bytes = fs::read(&output.packaged_wasm_path).expect("read packaged wasm");
     assert!(
         !contains_custom_section(&packaged_wasm_bytes),
@@ -134,6 +140,8 @@ fn minimal_template_real_build_writes_wasm_and_metadata() {
         metadata.build_receipt_path,
         output.receipt_path.to_string_lossy()
     );
+    assert!(metadata.recorded_at_unix_ms > 0);
+    assert_eq!(metadata.build_timing, timing);
 
     let receipt_bytes = fs::read(&output.receipt_path).expect("read build receipt json");
     let receipt: BuildReceipt =
@@ -143,6 +151,8 @@ fn minimal_template_real_build_writes_wasm_and_metadata() {
     assert_eq!(receipt.profile, "dev");
     assert_eq!(receipt.wasm_hash_sha256, metadata.wasm_hash_sha256);
     assert_eq!(receipt.build_manifest_hash, metadata.build_manifest_hash);
+    assert_eq!(receipt.recorded_at_unix_ms, metadata.recorded_at_unix_ms);
+    assert_eq!(receipt.build_timing, metadata.build_timing);
 
     let _ = fs::remove_dir_all(out_dir);
 }

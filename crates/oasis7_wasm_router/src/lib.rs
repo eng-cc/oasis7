@@ -1,53 +1,15 @@
+mod cache;
+mod metrics;
+
+use cache::{BoundedCache, RegexCache, MAX_CACHE_ENTRIES};
+pub use metrics::snapshot_global_wasm_router_metrics;
+pub use metrics::WasmRouterMetricsSnapshot;
+
 use oasis7_wasm_abi::{ModuleSubscription, ModuleSubscriptionStage};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
-use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
-
-const MAX_CACHE_ENTRIES: usize = 1024;
-
-struct BoundedCache<V> {
-    capacity: usize,
-    entries: HashMap<String, Arc<V>>,
-    insertion_order: VecDeque<String>,
-}
-
-impl<V> BoundedCache<V> {
-    fn new(capacity: usize) -> Self {
-        Self {
-            capacity,
-            entries: HashMap::new(),
-            insertion_order: VecDeque::new(),
-        }
-    }
-
-    fn get_cloned(&self, key: &str) -> Option<Arc<V>> {
-        self.entries.get(key).cloned()
-    }
-
-    fn insert(&mut self, key: String, value: Arc<V>) {
-        if self.capacity == 0 {
-            self.entries.clear();
-            self.insertion_order.clear();
-            return;
-        }
-        if self.entries.contains_key(&key) {
-            self.entries.insert(key, value);
-            return;
-        }
-        while self.entries.len() >= self.capacity {
-            if let Some(oldest_key) = self.insertion_order.pop_front() {
-                self.entries.remove(&oldest_key);
-            } else {
-                break;
-            }
-        }
-        self.insertion_order.push_back(key.clone());
-        self.entries.insert(key, value);
-    }
-}
-
-type RegexCache = Mutex<BoundedCache<regex::Regex>>;
+use std::time::Instant;
 
 fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     match mutex.lock() {
@@ -72,7 +34,9 @@ fn cached_regex(pattern: &str) -> Option<Arc<regex::Regex>> {
     if let Some(cached) = lock_recover(regex_cache()).get_cloned(pattern) {
         return Some(cached);
     }
+    let compile_started = Instant::now();
     let compiled = Arc::new(regex::Regex::new(pattern).ok()?);
+    metrics::observe_wasm_router_regex_compile(elapsed_ms(compile_started));
     lock_recover(regex_cache()).insert(pattern.to_string(), compiled.clone());
     Some(compiled)
 }
@@ -124,10 +88,13 @@ pub fn prepare_subscriptions(
     subscriptions: &[ModuleSubscription],
     module_id: &str,
 ) -> Result<Arc<[PreparedSubscription]>, String> {
+    let started = Instant::now();
     let prepared = subscriptions
         .iter()
         .map(|subscription| prepare_subscription(subscription, module_id))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>();
+    metrics::observe_wasm_router_prepare(elapsed_ms(started));
+    let prepared = prepared?;
     Ok(Arc::from(prepared))
 }
 
@@ -227,14 +194,17 @@ pub fn module_subscribes_to_event(
     event_kind: &str,
     event_value: &JsonValue,
 ) -> bool {
-    subscriptions.iter().any(|subscription| {
+    let started = Instant::now();
+    let matched = subscriptions.iter().any(|subscription| {
         subscription.resolved_stage() == ModuleSubscriptionStage::PostEvent
             && subscription
                 .event_kinds
                 .iter()
                 .any(|pattern| subscription_match(pattern, event_kind))
             && subscription_filters_match(&subscription.filters, FilterKind::Event, event_value)
-    })
+    });
+    metrics::observe_wasm_router_match(elapsed_ms(started), false, true);
+    matched
 }
 
 pub fn prepared_module_subscribes_to_event(
@@ -242,7 +212,8 @@ pub fn prepared_module_subscribes_to_event(
     event_kind: &str,
     event_value: &JsonValue,
 ) -> bool {
-    subscriptions.iter().any(|subscription| {
+    let started = Instant::now();
+    let matched = subscriptions.iter().any(|subscription| {
         subscription.resolved_stage == ModuleSubscriptionStage::PostEvent
             && subscription
                 .event_kinds
@@ -253,7 +224,9 @@ pub fn prepared_module_subscribes_to_event(
                 FilterKind::Event,
                 event_value,
             )
-    })
+    });
+    metrics::observe_wasm_router_match(elapsed_ms(started), true, false);
+    matched
 }
 
 pub fn module_subscribes_to_action(
@@ -262,14 +235,17 @@ pub fn module_subscribes_to_action(
     action_kind: &str,
     action_value: &JsonValue,
 ) -> bool {
-    subscriptions.iter().any(|subscription| {
+    let started = Instant::now();
+    let matched = subscriptions.iter().any(|subscription| {
         subscription.resolved_stage() == stage
             && subscription
                 .action_kinds
                 .iter()
                 .any(|pattern| subscription_match(pattern, action_kind))
             && subscription_filters_match(&subscription.filters, FilterKind::Action, action_value)
-    })
+    });
+    metrics::observe_wasm_router_match(elapsed_ms(started), false, true);
+    matched
 }
 
 pub fn prepared_module_subscribes_to_action(
@@ -278,7 +254,8 @@ pub fn prepared_module_subscribes_to_action(
     action_kind: &str,
     action_value: &JsonValue,
 ) -> bool {
-    subscriptions.iter().any(|subscription| {
+    let started = Instant::now();
+    let matched = subscriptions.iter().any(|subscription| {
         subscription.resolved_stage == stage
             && subscription
                 .action_kinds
@@ -289,7 +266,9 @@ pub fn prepared_module_subscribes_to_action(
                 FilterKind::Action,
                 action_value,
             )
-    })
+    });
+    metrics::observe_wasm_router_match(elapsed_ms(started), true, false);
+    matched
 }
 
 pub fn validate_subscription_stage(
@@ -577,6 +556,10 @@ where
     F: Fn(f64) -> bool,
 {
     value.as_f64().map(predicate).unwrap_or(false)
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 fn validate_ruleset(ruleset: &RuleSet, module_id: &str) -> Result<(), String> {
@@ -1150,6 +1133,66 @@ mod tests {
                 regex_parse_each_time_elapsed.as_secs_f64()
                     / regex_prepared_once_elapsed.as_secs_f64()
             },
+        );
+    }
+
+    #[test]
+    fn router_metrics_track_prepare_and_match_paths() {
+        let baseline = snapshot_global_wasm_router_metrics();
+        let subscription = event_subscription(
+            &["world.tick"],
+            Some(json!({
+                "event": [
+                    { "path": "/status", "eq": "ok" }
+                ]
+            })),
+        );
+        let payload = json!({ "status": "ok" });
+        let prepared =
+            prepare_subscriptions(&[subscription.clone()], "m.metrics").expect("prepare metrics");
+        assert!(module_subscribes_to_event(
+            &[subscription],
+            "world.tick",
+            &payload
+        ));
+        assert!(prepared_module_subscribes_to_event(
+            prepared.as_ref(),
+            "world.tick",
+            &payload
+        ));
+
+        let latest = snapshot_global_wasm_router_metrics();
+        assert!(latest.prepare_calls_total >= baseline.prepare_calls_total + 1);
+        assert!(latest.match_calls_total >= baseline.match_calls_total + 2);
+        assert!(latest.parse_fallbacks >= baseline.parse_fallbacks + 1);
+        assert!(latest.prepared_hits >= baseline.prepared_hits + 1);
+    }
+
+    #[test]
+    fn router_metrics_track_regex_compile_time() {
+        let baseline = snapshot_global_wasm_router_metrics();
+        let unique = format!(
+            "^metrics-{}$",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("unix epoch")
+                .as_nanos()
+        );
+        let subscription = event_subscription(
+            &["world.tick"],
+            Some(json!({
+                "event": [
+                    { "path": "/status", "re": unique }
+                ]
+            })),
+        );
+        let payload = json!({ "status": "metrics-ok" });
+        let _ = module_subscribes_to_event(&[subscription], "world.tick", &payload);
+
+        let latest = snapshot_global_wasm_router_metrics();
+        assert!(
+            latest.regex_compile_ms_total >= baseline.regex_compile_ms_total,
+            "regex compile counter should be monotonic"
         );
     }
 }

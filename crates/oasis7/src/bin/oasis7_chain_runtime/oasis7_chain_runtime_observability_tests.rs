@@ -10,6 +10,56 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
+    super::wasm_status::ChainWasmStatus {
+        metrics_available: true,
+        observed_since_unix_ms: Some(1_700_000_000_000),
+        degraded_reason: None,
+        build: super::wasm_status::ChainWasmBuildStatus {
+            metrics_available: true,
+            observed_since_unix_ms: Some(1_700_000_000_000),
+            degraded_reason: None,
+            total_build_wall_ms: Some(120),
+            cargo_build_ms: Some(80),
+            canonicalize_ms: Some(10),
+            hash_ms: Some(5),
+            receipt_write_ms: Some(3),
+            metadata_write_ms: Some(2),
+            wasm_size_bytes: Some(4096),
+        },
+        executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot {
+            observed_since_unix_ms: 1_700_000_000_000,
+            metrics_available: true,
+            degraded_reason: None,
+            calls_total: 4,
+            memory_cache_hits: 2,
+            disk_cache_hits: 1,
+            compile_misses: 1,
+            failure_by_code: BTreeMap::from([("trap".to_string(), 1)]),
+            compile_ms_total: 90,
+            deserialize_ms_total: 15,
+            instantiate_ms_total: 20,
+            entrypoint_call_ms_total: 45,
+            decode_ms_total: 10,
+            call_wall_ms_buckets: BTreeMap::from([("le_0010_ms".to_string(), 4)]),
+        },
+        router: oasis7_wasm_router::WasmRouterMetricsSnapshot {
+            observed_since_unix_ms: 1_700_000_000_000,
+            metrics_available: true,
+            degraded_reason: None,
+            prepare_calls_total: 2,
+            prepare_ms_total: 6,
+            match_calls_total: 8,
+            match_ms_total: 12,
+            parse_fallbacks: 3,
+            prepared_hits: 5,
+            regex_compile_ms_total: 1,
+            prepare_ms_buckets: BTreeMap::from([("le_0005_ms".to_string(), 2)]),
+            match_ms_buckets: BTreeMap::from([("le_0005_ms".to_string(), 8)]),
+        },
+    }
+}
+
 #[test]
 fn build_chain_status_payload_includes_storage_metrics() {
     let mut consensus = NodeConsensusSnapshot::default();
@@ -137,6 +187,7 @@ fn build_chain_status_payload_includes_storage_metrics() {
         ReleaseSecurityPolicy::default(),
         reward_runtime,
         storage.clone(),
+        sample_wasm_status(),
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
@@ -190,6 +241,10 @@ fn build_chain_status_payload_includes_storage_metrics() {
         payload.traffic.libp2p_replication.scope,
         "application_payload_only"
     );
+    assert!(payload.wasm.metrics_available);
+    assert_eq!(payload.wasm.build.total_build_wall_ms, Some(120));
+    assert_eq!(payload.wasm.executor.memory_cache_hits, 2);
+    assert_eq!(payload.wasm.router.prepared_hits, 5);
     assert!(payload.traffic.udp_gossip.is_none());
     assert_eq!(payload.observability.status, "warn");
     assert_eq!(payload.observability.connected_peer_count, 1);

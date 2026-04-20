@@ -64,6 +64,8 @@ mod traffic_profile;
 mod traffic_status;
 #[path = "oasis7_chain_runtime/transfer_submit_api.rs"]
 mod transfer_submit_api;
+#[path = "oasis7_chain_runtime/wasm_status.rs"]
+mod wasm_status;
 #[cfg(test)]
 use self::cli::{parse_validator_spec, DEFAULT_NODE_ID, DEFAULT_STATUS_BIND};
 use balances_api::build_chain_balances_payload;
@@ -96,6 +98,7 @@ use traffic_profile::{
 use traffic_status::build_chain_traffic_status;
 #[cfg(test)]
 use traffic_status::ChainTrafficStatus;
+use wasm_status::build_chain_wasm_status;
 #[cfg(test)]
 mod execution_bridge {
     use std::path::Path;
@@ -799,6 +802,7 @@ fn handle_chain_status_connection(
                 release_security_policy.clone(),
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
+                build_chain_wasm_status(),
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
                 replication_debug_status,
             );
