@@ -131,16 +131,18 @@ capture_network_interface() {
     local iface=""
     local rx_bytes=""
     local tx_bytes=""
-    iface=$(ip route get 1.1.1.1 2>/dev/null | awk '
-      /dev/ {
-        for (i = 1; i <= NF; i++) {
-          if ($i == "dev" && (i + 1) <= NF) {
-            print $(i + 1)
-            exit
+    if command -v ip >/dev/null 2>&1; then
+      iface=$(ip route get 1.1.1.1 2>/dev/null | awk '
+        /dev/ {
+          for (i = 1; i <= NF; i++) {
+            if ($i == "dev" && (i + 1) <= NF) {
+              print $(i + 1)
+              exit
+            }
           }
         }
-      }
-    ')
+      ')
+    fi
     if [[ -n "$iface" ]] \
       && [[ -r "/sys/class/net/$iface/statistics/rx_bytes" ]] \
       && [[ -r "/sys/class/net/$iface/statistics/tx_bytes" ]]; then
@@ -158,7 +160,7 @@ capture_network_interface() {
     return 0
   fi
 
-  if run_ssh "$target" "$password" "iface=\$(ip route get 1.1.1.1 2>/dev/null | awk '/dev/ {for (i = 1; i <= NF; i++) if (\$i == \"dev\" && (i + 1) <= NF) {print \$(i + 1); exit}}'); if [ -n \"\$iface\" ] && [ -r \"/sys/class/net/\$iface/statistics/rx_bytes\" ] && [ -r \"/sys/class/net/\$iface/statistics/tx_bytes\" ]; then rx=\$(cat \"/sys/class/net/\$iface/statistics/rx_bytes\"); tx=\$(cat \"/sys/class/net/\$iface/statistics/tx_bytes\"); printf '{\"available\":true,\"name\":\"%s\",\"rx_bytes\":%s,\"tx_bytes\":%s}\n' \"\$iface\" \"\$rx\" \"\$tx\"; else printf '{\"available\":false}\n'; fi" >"$network_file" 2>"$sample_dir/network.stderr.log"; then
+  if run_ssh "$target" "$password" "iface=''; if command -v ip >/dev/null 2>&1; then iface=\$(ip route get 1.1.1.1 2>/dev/null | awk '/dev/ {for (i = 1; i <= NF; i++) if (\$i == \"dev\" && (i + 1) <= NF) {print \$(i + 1); exit}}'); fi; if [ -n \"\$iface\" ] && [ -r \"/sys/class/net/\$iface/statistics/rx_bytes\" ] && [ -r \"/sys/class/net/\$iface/statistics/tx_bytes\" ]; then rx=\$(cat \"/sys/class/net/\$iface/statistics/rx_bytes\"); tx=\$(cat \"/sys/class/net/\$iface/statistics/tx_bytes\"); printf '{\"available\":true,\"name\":\"%s\",\"rx_bytes\":%s,\"tx_bytes\":%s}\n' \"\$iface\" \"\$rx\" \"\$tx\"; else printf '{\"available\":false}\n'; fi" >"$network_file" 2>"$sample_dir/network.stderr.log"; then
     return 0
   fi
   printf '{"available":false,"fetch_error":"ssh_failed"}\n' >"$network_file"
