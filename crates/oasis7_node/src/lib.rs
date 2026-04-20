@@ -65,11 +65,11 @@ mod replication_state_reconcile;
 mod runtime_util;
 mod types;
 
+pub use consensus_support::compute_consensus_action_root;
 use consensus_support::{
-    checked_consensus_successor, checked_replication_successor, compute_consensus_action_root,
-    dequeue_pending_consensus_actions, drain_ordered_consensus_actions,
-    merge_pending_consensus_actions, node_consensus_error, node_pos_error,
-    sign_attestation_message, sign_commit_message, sign_proposal_message,
+    checked_consensus_successor, checked_replication_successor, dequeue_pending_consensus_actions,
+    drain_ordered_consensus_actions, merge_pending_consensus_actions, node_consensus_error,
+    node_pos_error, sign_attestation_message, sign_commit_message, sign_proposal_message,
     validate_consensus_action_root, verify_attestation_message_signature,
     verify_commit_message_signature, verify_proposal_message_signature,
 };
