@@ -1,9 +1,9 @@
 use super::*;
+use ed25519_dalek::SigningKey;
 use oasis7_node::{
     NodeConfig, NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook, NodeRole,
     NodeRuntime,
 };
-use ed25519_dalek::SigningKey;
 use std::io::{BufRead, BufReader, BufWriter};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
