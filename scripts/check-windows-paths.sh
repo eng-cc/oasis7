@@ -26,6 +26,10 @@ def invalid_reason(path: str) -> str | None:
     for component in PurePosixPath(path).parts:
         if component in ("", "."):
             continue
+        control_chars = sorted({ord(ch) for ch in component if ord(ch) < 32})
+        if control_chars:
+            formatted = ", ".join(f"0x{code:02x}" for code in control_chars)
+            return f"contains Windows-invalid control characters [{formatted}] in path segment {component!r}"
         bad_chars = sorted({ch for ch in component if ch in INVALID_CHARS})
         if bad_chars:
             return f"contains Windows-invalid characters {''.join(bad_chars)!r} in path segment {component!r}"
@@ -75,7 +79,6 @@ def apply_name_status(paths: set[str], blob: bytes) -> None:
 paths = set(decode_paths(run_git("ls-files", "-z")))
 apply_name_status(paths, run_git("diff", "--cached", "--name-status", "-z"))
 apply_name_status(paths, run_git("diff", "--name-status", "-z"))
-paths.update(decode_paths(run_git("ls-files", "--others", "--exclude-standard", "-z")))
 
 violations = []
 for path in sorted(paths):
@@ -89,5 +92,5 @@ if violations:
         print(f"  - {path}: {reason}", file=sys.stderr)
     sys.exit(1)
 
-print(f"ok: checked {len(paths)} repo paths for Windows checkout compatibility")
+print(f"ok: checked {len(paths)} tracked paths for Windows checkout compatibility")
 PY
