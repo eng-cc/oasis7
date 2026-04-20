@@ -207,6 +207,21 @@
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m1 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m4 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.identity.json`
     - `./scripts/sync-m1-builtin-wasm-artifacts.sh --check --module-set m5 --artifact-sha crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256 --identity-json crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.identity.json`
+- [x] wasm-observability-timing-metrics (PRD-WORLD_RUNTIME-036) [test_tier_required]: 新增 `WASM 可观测性与耗时指标` 专题三件套，定义 `build -> executor -> router -> /v1/chain/status.wasm -> 外部窗口汇总` 的统一观测链路，并回写 `world-runtime` 根 PRD / project / README / prd.index。 Trace: .pm/tasks/task_f0830d708c3b4f7abeea8cecf73053e4.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/world-runtime/README.md`
+    - `doc/world-runtime/prd.index.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
+    - `.pm/tasks/task_f0830d708c3b4f7abeea8cecf73053e4.yaml`
+    - `.pm/tasks/task_f0830d708c3b4f7abeea8cecf73053e4.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-WORLD_RUNTIME-036|wasm-observability-timing-metrics|/v1/chain/status.wasm" doc/world-runtime/prd.md doc/world-runtime/project.md doc/world-runtime/README.md doc/world-runtime/prd.index.md doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-058 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 修复 `oasis7_chain_runtime` 默认 loopback replication network 劫持多机 PoS 共识广播的问题，保留 replication/feedback fallback，但让已配置 UDP gossip 的三节点部署继续通过 gossip 同步 peer heads；显式共享 replication network 的 network-consensus 路径保持不变。
   - 产物文件:
     - `doc/world-runtime/prd.md`
@@ -475,6 +490,7 @@
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
 - 最新完成: `node-observability-system`（已为 `/v1/chain/status` 增加 `observability` 摘要与结构化 alerts，把 peer 连接数、peer health 分布、network lag、storage/reward degraded 收口为单一真值；`oasis7_web_launcher` 和 `oasis7_client_launcher` 现直接透传并显示节点观测卡片，repo-owned `scripts/oasis7-node-observability-report.sh` 可把 live status 与最近 traffic window 合成 operator 报告。）
+- 最新完成: `wasm-observability-timing-metrics`（已新增 `doc/world-runtime/wasm/wasm-observability-timing-metrics.{prd,design,project}.md`，把 build suite、executor、router 与 `/v1/chain/status.wasm` 统一到同一条 bounded observability 链路，并明确 timing 指标只留在本地观测层、不进入 deterministic state；根 `world-runtime` PRD / project / README / prd.index 也已回写新的 `PRD-WORLD_RUNTIME-036` 入口。）
 - 最新完成: `fetch-commit-retry-backoff`（已将 `libp2p_replication_network` 对 `fetch-commit` 的短时 peer cooldown 从“仅缺失 handler / 不支持协议签名的 `ErrUnsupported`”扩展到 `ErrNotFound`、`Timeout` 与连接缺口类失败；定向回归证明立即重试会被抑制，窗口过后仍可恢复请求，且 `ping` 等其他协议与泛化业务态 `ErrUnsupported` 不被误隔离。）
 - 最新完成: `node-traffic-monitor-feature-toggle`（已补 repo-owned `scripts/p2p-triad-node-start.sh` 与 `scripts/oasis7-node-traffic-monitor.sh`，可通过 `node.env` 中的 `TRAFFIC_MONITOR_ENABLE` 等开关，让单节点在启动后自动对本地 `/v1/chain/status` 做周期采样，并把 monitor 生命周期绑定到 runtime/service 收口；节点与 triad monitor 现共用 `scripts/traffic-monitor-summary.py`，history 会按 retention 窗口自动裁剪。）
 - 最新完成: `peer-record-request-backoff`（已为 `libp2p_net` 的 `get_local_peer_record`、`get_cached_peer_record`、`get_cached_discovery_peers` 增加 peer-scoped 10 秒短时协议冷却，压制 DHT/routing/rendezvous/connection-established 连续触发造成的重复取件；定向回归证明窗口内重试被抑制、窗口过后可恢复请求，且 cached-peer-record 的多 proxy fallback 仍保留。）
