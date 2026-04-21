@@ -353,14 +353,25 @@ is_grandfathered_added_project_task_row() {
   return 1
 }
 
+normalize_project_task_row_for_policy() {
+  local row="$1"
+  if [[ "$row" =~ ^-[[:space:]]\[[[:space:]x]\][[:space:]](.*)$ ]]; then
+    row="${BASH_REMATCH[1]}"
+  fi
+  printf '%s\n' "$row"
+}
+
 check_added_project_task_row_policy() {
   local diff_blob="$1"
   local current_file=""
   local line=""
   local added_line=""
+  local removed_line=""
+  local normalized_row=""
   local task_row_regex='^-[[:space:]]\[[ x]\][[:space:]]'
   local deprecated_task_regex='^-[[:space:]]\[[ x]\][[:space:]]TASK-'
   local new_format_regex='^- \[[ x]\] [a-z0-9]+(-[a-z0-9]+)* \(PRD-[A-Z0-9_-]+(/[A-Z0-9_-]+)*\) \[test_tier_(required|full)\]( \+ \[test_tier_(required|full)\])?: .+ Trace: \.pm/tasks/task_[0-9a-f]{32}\.yaml$'
+  declare -A removed_task_rows=()
 
   while IFS= read -r line; do
     if [[ "$line" =~ ^diff[[:space:]]--git[[:space:]] ]]; then
@@ -372,9 +383,21 @@ check_added_project_task_row_policy() {
       continue
     fi
     [[ -n "$current_file" ]] || continue
+    if [[ "$line" =~ ^- ]] && [[ ! "$line" =~ ^---[[:space:]] ]]; then
+      removed_line="${line#-}"
+      [[ "$removed_line" =~ $task_row_regex ]] || continue
+      normalized_row="$(normalize_project_task_row_for_policy "$removed_line")"
+      removed_task_rows["${current_file}::${normalized_row}"]=1
+      continue
+    fi
     [[ "$line" =~ ^\+[^+] ]] || continue
     added_line="${line#+}"
     [[ "$added_line" =~ $task_row_regex ]] || continue
+    normalized_row="$(normalize_project_task_row_for_policy "$added_line")"
+
+    if [[ -n "${removed_task_rows["${current_file}::${normalized_row}"]:-}" ]]; then
+      continue
+    fi
 
     if [[ "$added_line" =~ $deprecated_task_regex ]]; then
       if is_grandfathered_added_project_task_row "$current_file" "$added_line"; then
