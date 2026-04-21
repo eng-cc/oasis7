@@ -833,7 +833,7 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
         let bytes = stream.read(&mut request).expect("read request");
         let request_text = String::from_utf8_lossy(&request[..bytes]);
         assert!(request_text.starts_with("GET /v1/chain/status HTTP/1.1"));
-        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_height_lag":2,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]}}"#;
+        let body = r#"{"ok":true,"p2p":{"requested_user_mode":"auto_join","recommended_user_mode":"public_entry","effective_user_mode":"private_safe","applied_effective_user_mode":"private_safe","requires_explicit_public_entry_confirmation":true,"detected_reachability":"public","hole_punch_viability":"viable","relay_available":false,"probe_stable":true,"deployment_mode":"private","node_role_claim":"validator_core","rationale":["observed_reachability=public","public entry confirmation pending"]},"observability":{"status":"warn","summary":"network committed height is ahead by 2","connected_peer_count":1,"active_peer_count":1,"candidate_peer_count":0,"suspect_peer_count":0,"blocked_peer_count":0,"peer_with_issues_count":0,"known_peer_heads":1,"network_height_lag":2,"recent_replication_error_count":0,"storage_degraded":false,"reward_runtime_degraded":false,"alerts":[{"severity":"warn","code":"consensus_network_lag","summary":"network committed height is ahead by 2"}]},"replication":{"local_peer_id":"peer-local","connected_peers":["peer-a"],"peer_healths":[{"peer_id":"peer-a","status":"active","issues":[],"discovery_sources":["bootstrap"],"active_path_kind":"direct"}]}}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             body.len(),
@@ -855,6 +855,11 @@ fn query_chain_status_endpoint_reads_p2p_payload() {
     assert!(p2p_status.requires_explicit_public_entry_confirmation);
     assert_eq!(status_snapshot.observability.status, "warn");
     assert_eq!(status_snapshot.observability.network_height_lag, 2);
+    assert_eq!(status_snapshot.replication.local_peer_id, "peer-local");
+    assert_eq!(
+        status_snapshot.replication.connected_peers,
+        vec!["peer-a".to_string()]
+    );
     server.join().expect("server thread should finish");
 }
 
@@ -901,6 +906,19 @@ fn snapshot_from_state_includes_chain_p2p_status() {
             summary: "network committed height is ahead by 2".to_string(),
         }],
     });
+    state.chain_replication_status = Some(super::ChainReplicationSnapshot {
+        local_peer_id: "peer-local".to_string(),
+        connected_peers: vec!["peer-a".to_string()],
+        peer_healths: vec![super::ChainReplicationPeerHealthSnapshot {
+            peer_id: "peer-a".to_string(),
+            status: "active".to_string(),
+            issues: Vec::new(),
+            discovery_sources: vec!["bootstrap".to_string()],
+            active_path_kind: Some("direct".to_string()),
+            source_operator: None,
+            source_asn: None,
+        }],
+    });
 
     let snapshot = snapshot_from_state(&state, Some("127.0.0.1"));
     let encoded = serde_json::to_value(&snapshot).expect("serialize snapshot");
@@ -919,6 +937,14 @@ fn snapshot_from_state_includes_chain_p2p_status() {
     assert_eq!(
         encoded["chain_observability_status"]["network_height_lag"],
         serde_json::json!(2)
+    );
+    assert_eq!(
+        encoded["chain_replication_status"]["local_peer_id"],
+        serde_json::json!("peer-local")
+    );
+    assert_eq!(
+        encoded["chain_replication_status"]["connected_peers"][0],
+        serde_json::json!("peer-a")
     );
 }
 

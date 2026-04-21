@@ -40,12 +40,13 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 控制面 API 契约 | `/api/state` `/api/start` `/api/stop` `/api/chain/start` `/api/chain/stop` | 游戏与区块链分别触发独立 API | `idle/running/stopped/...` + `disabled/not_started/starting/ready/...` | 轮询刷新状态；动作响应覆盖最新快照 | 受信网络部署 |
+| 控制面 API 契约 | `/api/state` `/api/start` `/api/stop` `/api/chain/start` `/api/chain/stop`；`/api/state` 附带 `chain_p2p_status/chain_observability_status/chain_replication_status` | 游戏与区块链分别触发独立 API，并向 native/web 提供同一份链状态与 peer 明细快照 | `idle/running/stopped/...` + `disabled/not_started/starting/ready/...` | 轮询刷新状态；动作响应覆盖最新快照 | 受信网络部署 |
 | native 客户端服务端分离 | 本地 `oasis7_web_launcher` 子进程 + 监听地址 | 启动器 UI 不再直接 spawn 游戏/链，改为 API 调用 | `service_booting -> service_ready -> control_ready` | native 端优先连接本地服务端 | 仅本机会话可管理本地子进程 |
 | 链状态门控对齐 | `chain_enabled` + `chain_status_bind` | 链未就绪时反馈入口禁用，链就绪后启用 | `not_started/starting/ready/unreachable/config_error` | 以服务端状态为唯一来源 | 客户端只读状态 |
 - Acceptance Criteria:
   - AC-1: `oasis7_web_launcher` 支持 `POST /api/chain/start`、`POST /api/chain/stop`，且与游戏启停互不耦合。
   - AC-2: `/api/state` 返回游戏与区块链独立状态字段，客户端不再用 `snapshot.running` 推断链状态。
+  - AC-2a: `/api/state` 在链就绪时同步返回 `chain_replication_status.local_peer_id/connected_peers/peer_healths`，供 native/web 启动器直接展示已连接 peer 明细，而不新增第二套客户端探针。
   - AC-3: `oasis7_client_launcher` native 不再直接拉起 `oasis7_game_launcher` / `oasis7_chain_runtime`，改为通过 `oasis7_web_launcher` API 控制。
   - AC-4: wasm/web 启动器的“启动区块链/停止区块链”按钮恢复可操作，并与 native 同状态语义。
   - AC-5: native 与 web 在“自动拉起链 + 游戏/链独立启停 + 状态展示”行为上保持一致。

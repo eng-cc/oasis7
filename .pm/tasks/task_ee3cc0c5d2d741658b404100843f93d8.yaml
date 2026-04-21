@@ -1,0 +1,18 @@
+task_uid: task_ee3cc0c5d2d741658b404100843f93d8
+title: "launcher p2p peer list ui"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-launcher-peer-list-ui
+execution_log_path: .pm/tasks/task_ee3cc0c5d2d741658b404100843f93d8.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - crates/oasis7_client_launcher/src/main_ui_helpers.rs
+doc_refs:
+  - doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-21T23:19:21+08:00
+last_started_at: 2026-04-21T22:54:52+08:00
+last_closed_at: 2026-04-21T23:19:21+08:00
