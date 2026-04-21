@@ -202,8 +202,8 @@ pub(super) fn print_help() {
 Run one parity benchmark sample for builtin or the loopback provider and emit\n\
 raw jsonl + single-sample summary json following the parity benchmark contract.\n\n\
 Options:\n\
-  --provider <builtin|provider_loopback_http>\n\
-                               supports provider_loopback_http and provider_local_bridge\n\
+  --provider <builtin|provider_loopback_http|provider_local_bridge>\n\
+                               provider_local_bridge is accepted as an alias of provider_loopback_http\n\
   --scenario <name>\n\
   --scenario-id <id>\n\
   --parity-tier <P0|P1|P2>\n\
