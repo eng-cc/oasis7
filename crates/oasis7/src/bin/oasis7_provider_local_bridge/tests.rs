@@ -5,6 +5,7 @@ use oasis7::simulator::{
     ProviderRecentEvent, ProviderSelfState, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
     DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
 };
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone)]
 struct FakeInvoker {
