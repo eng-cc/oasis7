@@ -66,10 +66,10 @@
 - [x] TASK-ENGINEERING-051 (PRD-ENGINEERING-R1200-001/002/005) [test_tier_required]: 建立 Rust 1200 行根治治理专题 `prd/design/project`，同步回写 engineering 模块索引、README、主项目和 devlog。
 - [x] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
 - [x] TASK-ENGINEERING-053 (PRD-ENGINEERING-R1200-002/003) [test_tier_required]: 落地 `touch-and-shrink` 与 `split_part/include!` 完成态阻断规则。
-- [ ] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理。
-- [ ] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理。
-- [ ] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批 UI / automation 超限文件治理。
-- [ ] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略与冻结尾债清单。
+- [x] TASK-ENGINEERING-054 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `chain_runtime` 首批目录模块化治理。
+- [x] TASK-ENGINEERING-055 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `viewer/runtime_live` 首批目录模块化治理。
+- [x] TASK-ENGINEERING-056 (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required] + [test_tier_full]: 完成 `oasis7_viewer` 首批 UI / automation 超限文件治理。
+- [x] TASK-ENGINEERING-057 (PRD-ENGINEERING-R1200-004/005) [test_tier_required]: 收口超限测试文件治理策略与冻结尾债清单。
 - [x] TASK-ENGINEERING-058 (PRD-ENGINEERING-015) [test_tier_required]: 将 ROUND-009 定义为“小分母文档消费入口/手册语义治理轮”，复用既有 round 台账模式并冻结 focused scope、问题池与执行清单。
 - [x] TASK-ENGINEERING-059 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 首批 manual 载体规范化，落地 `viewer-manual.manual.md` 与 `web-ui-agent-browser-closure-manual.manual.md`，并保留 legacy/PRD 兼容入口。
 - [x] TASK-ENGINEERING-060 (PRD-ENGINEERING-015) [test_tier_required]: 执行 ROUND-009 首批入口分流治理，为 repo / 工程总入口 / static docs hub 增加按目标进入的阅读路径。
@@ -144,6 +144,7 @@
 - [x] rust-size-gate-recovery-and-mid-burn-down (PRD-ENGINEERING-R1200-001/002/003/004/005) [test_tier_required]: 合并记录 Rust-size 治理中段收口，包括 oversized gate 真值修复，以及 `runtime/world/module_actions`、`oasis7_node/src/lib.rs`、`oasis7_net/src/libp2p_net.rs`、`oasis7_node/src/types.rs` 四个热点文件的语义化拆分/热点抽离。 Trace: .pm/tasks/task_19e73f36db1040ccbf5eb579ade2e310.yaml
 - [x] clear-rust-size-baselines (PRD-ENGINEERING-R1200-001/002/003/005) [test_tier_required]: 作为最终收口任务，完成最后 7 个 Rust 超限文件的语义化拆分，退役 `doc/.governance/rust-oversized-file-baseline.tsv` 与 `doc/.governance/rust-structural-slicing-baseline.tsv`，并将 `scripts/check-rust-file-size.sh` 收口为 oversized/structural 双零扫描门禁。 Trace: .pm/tasks/task_d2e428f00e5047e581061c8cb75963ef.yaml
 - [x] shrink-near-limit-rust-hotspots (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 对 5 个逼近 1200 行阈值的 Rust 热点文件执行预防性职责拆分，抽离 `llm_sidecar` runtime support、`oasis7_node` consensus/replica maintenance support、`self_guided` storage、`oasis7_provider_parity_bench` io support 与 `oasis7_wasm_router` filtering，避免零扫描门禁回弹。 Trace: .pm/tasks/task_fd49238273e0447d8189df40519a51b0.yaml
+- [x] engineering-project-truth-drift-sync (PRD-ENGINEERING-030/PRD-ENGINEERING-R1200-005) [test_tier_required]: 修正 engineering 根 `project.md` 对 `TASK-ENGINEERING-054~057` 与 Rust 1200 行治理专题 project 的完成态漂移，并把状态区“下一任务”从已完成的 `readme-governance-path-governance` 改回季度复核/库存复算的真实后续。 Trace: .pm/tasks/task_52d37909a424425096c7f2084383eb78.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -206,9 +207,9 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-20
+- 更新日期: 2026-04-21
 - 当前状态: active
-- 下一任务: `readme-governance-path-governance (PRD-ENGINEERING-030)` 已完成 `readme/governance` 热点子域入口收口；当前这一轮后续应正式转入季度复核，而不是在当前 PR 里继续横向扩到 `ci/longrun/templates`、`gap/production` 或回到只改根入口首屏。
+- 下一任务: 当前这一轮后续应正式转入季度复核；先运行 `scripts/doc-inventory-report.sh` 复算 `doc/devlog` backlog、热点路径与 near-limit 文件，再决定是否拆出新的路径级治理或近限文件 follow-up，而不是继续指向已完成的 `readme-governance-path-governance` 或在当前窗口横向扩到 `ci/longrun/templates`、`gap/production`。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -224,6 +225,7 @@
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
 - 当前流程补充: 已完成 `drop-local-review-script`，默认评审边界已完全切到 GitHub PR review；`workflow-report` close、required-tier smoke、`.pm/README` 与 `AGENTS.md` 不再要求本地 snapshot review 脚本。
 - 当前治理切片: 已完成 `shrink-near-limit-rust-hotspots`，对 `llm_sidecar.rs`、`oasis7_node/src/lib.rs`、`oasis7_provider_parity_bench.rs`、`oasis7_wasm_router/src/lib.rs`、`self_guided.rs` 做预防性职责拆分；当前 5 个热点文件已降到 `858 / 841 / 981 / 860 / 1131` 行，继续维持 Rust 体量零扫描。
+- 当前治理切片: 已完成 `engineering-project-truth-drift-sync`，将 `TASK-ENGINEERING-054~057` 与 `rust-1200-line-root-cause-governance-2026-03-29.project.md` 的完成态重新对齐，并把根项目页状态区“下一任务”改回季度复核/库存复算的真实后续。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。
