@@ -1,0 +1,88 @@
+{
+  "ok": true,
+  "observed_at_unix_ms": 1700000015000,
+  "node_id": "node-a",
+  "world_id": "world-a",
+  "role": "storage",
+  "running": true,
+  "wasm": {
+    "metrics_available": true,
+    "observed_since_unix_ms": 1700000014000,
+    "degraded_reason": null,
+    "build": {
+      "metrics_available": true,
+      "observed_since_unix_ms": 1700000014000,
+      "degraded_reason": null,
+      "total_build_wall_ms": 130,
+      "cargo_build_ms": 90,
+      "canonicalize_ms": 11,
+      "hash_ms": 6,
+      "receipt_write_ms": 4,
+      "metadata_write_ms": 3,
+      "wasm_size_bytes": 4096
+    },
+    "executor": {
+      "observed_since_unix_ms": 1700000014000,
+      "metrics_available": true,
+      "degraded_reason": null,
+      "calls_total": 2,
+      "memory_cache_hits": 1,
+      "disk_cache_hits": 0,
+      "compile_misses": 1,
+      "failure_by_code": {},
+      "compile_ms_total": 8,
+      "deserialize_ms_total": 0,
+      "instantiate_ms_total": 4,
+      "entrypoint_call_ms_total": 12,
+      "decode_ms_total": 1,
+      "call_wall_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 0,
+        "le_0010_ms": 1,
+        "le_0025_ms": 1,
+        "le_0050_ms": 2,
+        "le_0100_ms": 2,
+        "le_0250_ms": 2,
+        "le_0500_ms": 2,
+        "le_1000_ms": 2,
+        "gt_1000_ms": 0
+      }
+    },
+    "router": {
+      "observed_since_unix_ms": 1700000014000,
+      "metrics_available": true,
+      "degraded_reason": null,
+      "prepare_calls_total": 1,
+      "prepare_ms_total": 3,
+      "match_calls_total": 2,
+      "match_ms_total": 5,
+      "parse_fallbacks": 0,
+      "prepared_hits": 2,
+      "regex_compile_ms_total": 0,
+      "prepare_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 1,
+        "le_0010_ms": 1,
+        "le_0025_ms": 1,
+        "le_0050_ms": 1,
+        "le_0100_ms": 1,
+        "le_0250_ms": 1,
+        "le_0500_ms": 1,
+        "le_1000_ms": 1,
+        "gt_1000_ms": 0
+      },
+      "match_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 1,
+        "le_0010_ms": 2,
+        "le_0025_ms": 2,
+        "le_0050_ms": 2,
+        "le_0100_ms": 2,
+        "le_0250_ms": 2,
+        "le_0500_ms": 2,
+        "le_1000_ms": 2,
+        "gt_1000_ms": 0
+      }
+    }
+  }
+}
