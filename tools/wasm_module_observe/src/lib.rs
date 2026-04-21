@@ -86,12 +86,13 @@ pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, Stri
         .build_timing
         .clone()
         .ok_or_else(|| "build output missing build timing".to_string())?;
-    let wasm_bytes = fs::read(&build_output.packaged_wasm_path).map_err(|err| {
-        format!(
-            "read packaged wasm {} failed: {err}",
-            build_output.packaged_wasm_path.display()
-        )
-    })?;
+    let wasm_bytes =
+        Arc::<[u8]>::from(fs::read(&build_output.packaged_wasm_path).map_err(|err| {
+            format!(
+                "read packaged wasm {} failed: {err}",
+                build_output.packaged_wasm_path.display()
+            )
+        })?);
 
     let metrics = init_shared_wasm_executor_metrics();
     let cache_dir = out_dir.join("compiled-cache");
@@ -113,9 +114,8 @@ pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, Stri
                 &spec,
                 &mut executor,
                 &metrics,
-                &build_output.packaged_wasm_path,
                 wasm_hash_sha256.as_str(),
-                Arc::<[u8]>::from(wasm_bytes.clone()),
+                wasm_bytes.clone(),
                 case,
                 index,
             )
@@ -179,7 +179,6 @@ fn run_case(
     spec: &ResolvedModuleObserveSpec,
     executor: &mut WasmExecutor,
     metrics: &oasis7_wasm_executor::SharedWasmExecutorMetrics,
-    packaged_wasm_path: &Path,
     wasm_hash_sha256: &str,
     wasm_bytes: Arc<[u8]>,
     case: &ObserveCaseSpec,
@@ -194,7 +193,6 @@ fn run_case(
     for run_index in 0..case.repeat {
         let request = build_case_request(
             spec,
-            packaged_wasm_path,
             wasm_hash_sha256,
             wasm_bytes.clone(),
             case,
@@ -206,17 +204,30 @@ fn run_case(
         samples.push(elapsed_ms(started));
         match result {
             Ok(output) => {
+                validate_case(case, Some(&output), None).map_err(|err| {
+                    format!(
+                        "case {} run {} validation failed: {err}",
+                        case.name,
+                        run_index + 1
+                    )
+                })?;
                 last_failure = None;
                 last_output = Some(output);
             }
             Err(failure) => {
+                validate_case(case, None, Some(&failure)).map_err(|err| {
+                    format!(
+                        "case {} run {} validation failed: {err}",
+                        case.name,
+                        run_index + 1
+                    )
+                })?;
                 last_output = None;
                 last_failure = Some(failure);
             }
         }
     }
 
-    validate_case(case, &last_output, &last_failure)?;
     let executor_after = snapshot_wasm_executor_metrics(metrics);
     let router_after = snapshot_global_wasm_router_metrics();
     let perf = PerfStats::from_samples(&samples);
@@ -251,10 +262,10 @@ fn run_router_probe(
     };
     let router_before = snapshot_global_wasm_router_metrics();
     let mut samples = Vec::new();
-    let mut matched = false;
-    for _ in 0..probe.repeat {
+    let mut matched = probe.expect_match;
+    for run_index in 0..probe.repeat {
         let started = Instant::now();
-        matched = match &probe.probe {
+        let current_match = match &probe.probe {
             RouterProbeInputSpec::Event {
                 event_kind,
                 payload_json,
@@ -288,12 +299,15 @@ fn run_router_probe(
             }
         };
         samples.push(elapsed_ms(started));
-    }
-    if matched != probe.expect_match {
-        return Err(format!(
-            "router probe {} expected match={} got={matched}",
-            probe.name, probe.expect_match
-        ));
+        if current_match != probe.expect_match {
+            return Err(format!(
+                "router probe {} run {} expected match={} got={current_match}",
+                probe.name,
+                run_index + 1,
+                probe.expect_match
+            ));
+        }
+        matched = current_match;
     }
     let router_after = snapshot_global_wasm_router_metrics();
     Ok(RouterProbeResultSummary {
@@ -308,7 +322,6 @@ fn run_router_probe(
 
 fn build_case_request(
     spec: &ResolvedModuleObserveSpec,
-    _packaged_wasm_path: &Path,
     wasm_hash_sha256: &str,
     wasm_bytes: Arc<[u8]>,
     case: &ObserveCaseSpec,
@@ -374,8 +387,8 @@ fn build_case_request(
 
 fn validate_case(
     case: &ObserveCaseSpec,
-    output: &Option<ModuleOutput>,
-    failure: &Option<ModuleCallFailure>,
+    output: Option<&ModuleOutput>,
+    failure: Option<&ModuleCallFailure>,
 ) -> Result<(), String> {
     if case.expect.success {
         if let Some(failure) = failure {
@@ -387,7 +400,6 @@ fn validate_case(
             ));
         }
         let output = output
-            .as_ref()
             .ok_or_else(|| format!("case {} missing output after successful run", case.name))?;
         if let Some(expected) = case.expect.emit_count {
             if output.emits.len() != expected {
@@ -487,9 +499,8 @@ fn validate_case(
         return Ok(());
     }
 
-    let failure = failure
-        .as_ref()
-        .ok_or_else(|| format!("case {} expected failure but succeeded", case.name))?;
+    let failure =
+        failure.ok_or_else(|| format!("case {} expected failure but succeeded", case.name))?;
     if let Some(expected_code) = &case.expect.failure_code {
         let actual_code = module_call_failure_code_label(&failure.code);
         if actual_code != expected_code {
@@ -540,7 +551,6 @@ fn summarize_case_actual(
                 tick_lifecycle,
                 new_state_json,
                 emits,
-                last_output: Some(output),
             })
         }
         (None, Some(failure)) => Ok(report::CaseActualSummary {
@@ -552,7 +562,6 @@ fn summarize_case_actual(
             tick_lifecycle: None,
             new_state_json: None,
             emits: Vec::new(),
-            last_output: None,
         }),
         _ => Err("case execution ended without output or failure".to_string()),
     }

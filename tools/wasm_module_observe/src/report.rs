@@ -1,4 +1,3 @@
-use oasis7_wasm_abi::ModuleOutput;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
@@ -62,7 +61,6 @@ pub struct CaseActualSummary {
     pub tick_lifecycle: Option<JsonValue>,
     pub new_state_json: Option<JsonValue>,
     pub emits: Vec<ActualEmitSummary>,
-    pub last_output: Option<ModuleOutput>,
 }
 
 #[derive(Debug, Clone, Serialize)]

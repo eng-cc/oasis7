@@ -142,14 +142,14 @@
   - AC-21: repo 内必须提供可复用的 triad traffic monitor 脚本，默认面向本机 observer + 两台 ECS 节点，能抓取 `/v1/chain/status` 并写入持久化 history。
   - AC-22: triad traffic monitor 必须支持最近 N 分钟窗口汇总，至少输出每节点的 UDP gossip / libp2p replication totals delta、top `by_kind` / `by_topic` / `by_protocol` 贡献项，以及 committed/network heights 与 recent error counters 的窗口变化。
   - AC-23: repo 内必须提供标准化 wasm module observe 入口，至少覆盖 module-local spec、共享 runner、wrapper script、模板与一个真实模块样例；新模块接入默认不得要求 bespoke runner 代码改动。
-  - AC-23: triad traffic monitor 的窗口基线选择必须识别 `observed_since_unix_ms` 变化并在进程重启或 counter reset 时自动缩短覆盖窗口，而不是跨 reset 计算负值或伪增量。
-  - AC-24: triad traffic monitor 的持久化 history 不得无限增长；脚本必须只保留“最近窗口 + buffer”范围内的样本，并以 NDJSON 流式读取/裁剪 history，而不是整文件 `read_text` 后一次性解码。
-  - AC-25: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
-  - AC-26: 节点本地 traffic monitor 必须能通过 `node.env` 功能开关启停，默认对单节点本地 `/v1/chain/status` 进行周期采样，输出持久化 history 与最近 N 分钟 summary；节点与 triad monitor 的窗口汇总必须复用共享 helper，且本地 history 也要做 bounded retention。
-  - AC-27: 节点启动壳在开启 traffic monitor 时必须与 runtime 共享生命周期，runtime 退出或 service 停止时不能留下长期孤儿 monitor 进程；若开关开启但 monitor 脚本缺失，启动必须显式失败而不是静默跳过。
-  - AC-28: `libp2p_replication_network` 必须仅对 `fetch-commit` 请求中的 missing-handler/unsupported-protocol `ErrUnsupported` 签名、`ErrNotFound`、`request failed: Timeout` 与连接缺口类错误触发短时 peer cooldown，并通过定向回归证明立即重试会被抑制、窗口过后可恢复请求、非 `fetch-commit` 协议与通用业务错误（包括泛化业务态 `ErrUnsupported`）不受影响。
-  - AC-29: `libp2p_net` 必须仅对 peer-record/discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 触发 peer-scoped、protocol-scoped 短时冷却；定向回归需证明同一 peer 在窗口内不会被立刻重复请求、窗口过后可恢复请求、断连会清理对应 peer 冷却、且 cached-peer-record 在单次请求链中的 fallback proxy 仍可继续尝试。
-  - AC-30: storage challenge gate 对近期已验证成功的 `content_hash` 必须提供短窗口 success cache，只允许在缓存过期、命中新 hash、或本地 blob 缺失时重新发起 `fetch-blob` 网络探测；定向回归需证明连续两次 gate 调用不会对同一已验证 blob 重复发网请求，同时缓存过期后仍会恢复真实探测。
+  - AC-24: triad traffic monitor 的窗口基线选择必须识别 `observed_since_unix_ms` 变化并在进程重启或 counter reset 时自动缩短覆盖窗口，而不是跨 reset 计算负值或伪增量。
+  - AC-25: triad traffic monitor 的持久化 history 不得无限增长；脚本必须只保留“最近窗口 + buffer”范围内的样本，并以 NDJSON 流式读取/裁剪 history，而不是整文件 `read_text` 后一次性解码。
+  - AC-26: repo 内必须提供节点启动壳的正式源码来源，至少覆盖当前 `/opt/oasis7/p2p-triad{,-local}/bin/start-node.sh` 所使用的 `node.env -> runtime CLI` 装配逻辑，并允许新增 env-gated sidecar 能力而不再依赖 `/opt` 上手改。
+  - AC-27: 节点本地 traffic monitor 必须能通过 `node.env` 功能开关启停，默认对单节点本地 `/v1/chain/status` 进行周期采样，输出持久化 history 与最近 N 分钟 summary；节点与 triad monitor 的窗口汇总必须复用共享 helper，且本地 history 也要做 bounded retention。
+  - AC-28: 节点启动壳在开启 traffic monitor 时必须与 runtime 共享生命周期，runtime 退出或 service 停止时不能留下长期孤儿 monitor 进程；若开关开启但 monitor 脚本缺失，启动必须显式失败而不是静默跳过。
+  - AC-29: `libp2p_replication_network` 必须仅对 `fetch-commit` 请求中的 missing-handler/unsupported-protocol `ErrUnsupported` 签名、`ErrNotFound`、`request failed: Timeout` 与连接缺口类错误触发短时 peer cooldown，并通过定向回归证明立即重试会被抑制、窗口过后可恢复请求、非 `fetch-commit` 协议与通用业务错误（包括泛化业务态 `ErrUnsupported`）不受影响。
+  - AC-30: `libp2p_net` 必须仅对 peer-record/discovery 路径中的 `get_local_peer_record`、`get_cached_peer_record` 与 `get_cached_discovery_peers` 触发 peer-scoped、protocol-scoped 短时冷却；定向回归需证明同一 peer 在窗口内不会被立刻重复请求、窗口过后可恢复请求、断连会清理对应 peer 冷却、且 cached-peer-record 在单次请求链中的 fallback proxy 仍可继续尝试。
+  - AC-31: storage challenge gate 对近期已验证成功的 `content_hash` 必须提供短窗口 success cache，只允许在缓存过期、命中新 hash、或本地 blob 缺失时重新发起 `fetch-blob` 网络探测；定向回归需证明连续两次 gate 调用不会对同一已验证 blob 重复发网请求，同时缓存过期后仍会恢复真实探测。
   - AC-31: chain-linked `gameplay_action` 必须通过 `oasis7_chain_runtime` 的 `/v1/chain/gameplay/submit` 进入 consensus queue；提交路径必须复用 viewer auth proof、拒绝 nonce replay、返回 consensus `action_id` 作为提交回执，并证明 viewer 本地 world 在提交时不会立即变更，只会在 committed execution world sync 后观察到新工厂/配方结果。
   - AC-32: gap-sync `fetch-commit` 路径必须仅在高层校验接受 commit 后建立短时、本地、payload-scoped success cache；定向回归需证明相同 payload 的立即重复成功请求不会再次发网、窗口过后会恢复真实请求、且校验失败或 `found=false` 响应不会进入 success cache。
   - AC-33: `/v1/chain/status` 必须新增稳定的 `observability` 摘要契约，至少暴露 `status/summary`、`connected_peer_count`、`active/candidate/suspect/blocked` peer 计数、`known_peer_heads`、`network_height_lag`、`recent_replication_error_count`、`storage_degraded`、`reward_runtime_degraded` 与结构化 `alerts[{severity,code,summary}]`；repo-owned 报告脚本与 launcher/control-plane 必须直接消费该契约而不是各自重算，并能补充最近 traffic window 摘要。
