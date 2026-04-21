@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 mod artifact_actions;
 mod release_actions;
 mod release_normalization;
+mod release_request_support;
 mod release_support;
 
 const MODULE_DEPLOY_FEE_BYTES_PER_ELECTRICITY: i64 = 2_048;
