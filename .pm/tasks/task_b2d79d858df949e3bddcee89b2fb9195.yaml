@@ -18,6 +18,6 @@ acceptance:
   - "summary derives executor and router p50/p95 from bounded buckets without requiring raw traces"
   - "summary highlights hotspot deltas without introducing unbounded cardinality into runtime status"
 handoff_to: []
-updated_at: 2026-04-21T21:30:13+08:00
+updated_at: 2026-04-21T21:59:32+08:00
 last_started_at: 2026-04-21T21:15:54+08:00
-last_closed_at: 2026-04-21T21:30:13+08:00
+last_closed_at: 2026-04-21T21:59:32+08:00
