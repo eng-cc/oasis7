@@ -1,0 +1,20 @@
+task_uid: task_47e3c0d1242a46698060c2d6a0b14494
+title: "shrink membership recovery replay hotspot"
+owner_role: runtime_engineer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_47e3c0d1242a46698060c2d6a0b14494.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md
+  - crates/oasis7_consensus/src/membership_recovery/replay.rs
+doc_refs: []
+related_prd: []
+acceptance:
+  - "crates/oasis7_consensus/src/membership_recovery/replay.rs drops away from the 1200-line threshold by extracting replay governance or persistence support into semantic modules"
+  - "targeted oasis7_consensus validation and rust-size governance checks pass after the split"
+handoff_to: []
+updated_at: 2026-04-21T22:43:59+08:00
+last_closed_at: 2026-04-21T22:43:59+08:00
+last_started_at: 2026-04-21T22:43:59+08:00
