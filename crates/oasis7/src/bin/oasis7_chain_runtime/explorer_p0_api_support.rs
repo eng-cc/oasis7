@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use sha2::{Digest, Sha256};
 
-use super::{ExplorerStore, EXPLORER_STORE};
+use super::explorer_p0_store::{ExplorerStore, EXPLORER_STORE};
 
 pub(super) fn build_tx_hash(
     action_id: u64,
