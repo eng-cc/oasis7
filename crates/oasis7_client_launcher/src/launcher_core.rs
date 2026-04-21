@@ -29,9 +29,9 @@ mod http_support;
 pub(crate) use self::http_support::probe_chain_status_endpoint;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use self::http_support::{
-    check_provider_loopback_http_provider, host_for_url, normalize_host_for_connect,
-    normalize_host_for_url, parse_http_base_url,
+    check_provider_loopback_http_provider, normalize_host_for_connect,
 };
+pub(crate) use self::http_support::{host_for_url, normalize_host_for_url, parse_http_base_url};
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, Clone, Deserialize)]

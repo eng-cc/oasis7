@@ -245,6 +245,16 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+- [x] release-build-web-dist-launcher-wasm-regression (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` 再次卡在 `build-web-dist` 的 launcher wasm 回归，恢复 `launcher_core_http` 里跨目标 URL helper 在 wasm32 构建下的可见性，避免 `parse_http_base_url` / `normalize_host_for_url` / `host_for_url` 被 native-only `cfg` 意外屏蔽。 Trace: .pm/tasks/task_9a300593735d419ba7de7f95bd67bead.yaml
+  - 产物文件:
+    - `crates/oasis7_client_launcher/src/launcher_core.rs`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_9a300593735d419ba7de7f95bd67bead.yaml`
+    - `.pm/tasks/task_9a300593735d419ba7de7f95bd67bead.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
+    - `cd crates/oasis7_viewer && env -u NO_COLOR trunk build --release --dist ../../output/release/web-dist`
+    - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
 - [x] release-web-semantic-gate-drift (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 对 `software_safe` live-control 旧语义的误判，改为接受 `play/pause` 的 `queued` 契约，并以后续 `step -> completed_advanced` + 正向 world delta 作为 formal progress gate。 Trace: .pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.yaml
   - 产物文件:
     - `scripts/viewer-release-qa-loop.sh`
