@@ -111,7 +111,8 @@ pub use libp2p_net::{
     Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot, LiveAutoNatStatus,
     LiveHolePunchState, LivePublicPortReachability, LiveTransportKind, PeerManagerBlockArtifact,
     PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
-    TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot,
+    TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot, WireByteDirectionMetricsSnapshot,
+    WireByteLaneMetricsSnapshot,
 };
 
 #[cfg(test)]

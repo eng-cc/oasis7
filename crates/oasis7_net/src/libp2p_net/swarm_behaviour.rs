@@ -21,6 +21,8 @@ use libp2p::{Multiaddr, PeerId, StreamProtocol, Transport as _};
 use oasis7_proto::distributed::RR_PROTOCOL_PREFIX;
 use oasis7_proto::distributed_net::{NetworkRequest, NetworkResponse};
 
+use super::wire_bytes::{InstrumentedStreamMuxer, SharedLibp2pWireByteCounters};
+
 pub(super) const KAD_MAX_PROVIDED_KEYS: usize = 65_536;
 
 #[derive(NetworkBehaviour)]
@@ -103,6 +105,7 @@ pub(super) fn build_swarm(
     keypair: &Keypair,
     enable_rendezvous: bool,
     enable_autonat: bool,
+    wire_byte_counters: SharedLibp2pWireByteCounters,
 ) -> Swarm<Behaviour> {
     let swarm_config = libp2p::swarm::Config::with_async_std_executor()
         .with_idle_connection_timeout(std::time::Duration::from_secs(30));
@@ -163,7 +166,16 @@ pub(super) fn build_swarm(
         .multiplex(libp2p::yamux::Config::default())
         .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)));
     let transport = OrTransport::new(direct_transport, relay_transport)
-        .map(|either_output, _| either_output.into_inner())
+        .map(move |either_output, _| {
+            let (peer_id, muxer) = either_output.into_inner();
+            (
+                peer_id,
+                StreamMuxerBox::new(InstrumentedStreamMuxer::new(
+                    muxer,
+                    wire_byte_counters.clone(),
+                )),
+            )
+        })
         .boxed();
 
     Swarm::new(transport, behaviour, peer_id, swarm_config)
