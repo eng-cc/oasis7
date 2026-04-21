@@ -302,6 +302,12 @@ def sample_from_status(path: str, payload: dict) -> dict:
     }
 
 
+def sample_has_window_metrics(sample: dict) -> bool:
+    return bool(sample["wasm"]) and bool(sample["wasm"].get("metrics_available")) and bool(
+        sample["executor"].get("metrics_available")
+    ) and bool(sample["router"].get("metrics_available"))
+
+
 def counter_resets(prev: dict, curr: dict) -> list[str]:
     reasons = []
 
@@ -352,9 +358,19 @@ if status_sample_dir:
     if not sample_paths:
         raise SystemExit(f"error: no .json samples found in {status_sample_dir}")
     samples = [sample_from_status(path, load_json(path)) for path in sample_paths]
+    missing_observed_at_paths = [
+        sample["path"]
+        for sample in samples
+        if sample["observed_at_unix_ms"] is None
+    ]
+    if missing_observed_at_paths:
+        raise SystemExit(
+            "error: status sample dir contains sample(s) missing observed_at_unix_ms: "
+            + ", ".join(missing_observed_at_paths)
+        )
     samples.sort(
         key=lambda sample: (
-            sample["observed_at_unix_ms"] if sample["observed_at_unix_ms"] is not None else sys.maxsize,
+            sample["observed_at_unix_ms"],
             sample["path"],
         )
     )
@@ -387,7 +403,9 @@ for index in range(1, len(samples)):
         )
 
 window_samples = samples[window_start_index:]
-window_available = len(window_samples) >= 2 and bool(window_samples[0]["wasm"]) and bool(window_samples[-1]["wasm"])
+baseline_has_window_metrics = len(window_samples) >= 1 and sample_has_window_metrics(window_samples[0])
+latest_has_window_metrics = len(window_samples) >= 1 and sample_has_window_metrics(window_samples[-1])
+window_available = len(window_samples) >= 2 and baseline_has_window_metrics and latest_has_window_metrics
 window = {
     "available": window_available,
     "sample_count": len(samples),
@@ -410,7 +428,17 @@ if window["baseline_observed_at_unix_ms"] is not None and window["latest_observe
     )
 
 if not window_available:
-    window["notes"].append("at least two wasm status samples are required for window delta output")
+    if len(window_samples) < 2:
+        window["notes"].append("at least two wasm status samples are required for window delta output")
+    else:
+        if not baseline_has_window_metrics:
+            window["notes"].append(
+                "baseline sample does not expose available wasm executor/router metrics; window delta output is disabled"
+            )
+        if not latest_has_window_metrics:
+            window["notes"].append(
+                "latest sample does not expose available wasm executor/router metrics; window delta output is disabled"
+            )
 else:
     baseline = window_samples[0]
     latest = window_samples[-1]
