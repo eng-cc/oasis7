@@ -101,7 +101,7 @@ impl Libp2pNetwork {
     }
 
     pub fn traffic_metrics_snapshot(&self) -> Libp2pTrafficMetricsSnapshot {
-        snapshot_traffic_metrics(&self.traffic_metrics)
+        snapshot_traffic_metrics(&self.traffic_metrics, &self.wire_byte_counters)
     }
 
     pub(super) fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {

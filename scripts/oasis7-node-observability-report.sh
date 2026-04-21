@@ -138,6 +138,20 @@ def fmt_num(value):
     return f"{int(value):,}"
 
 
+def fmt_bytes(value):
+    if value is None:
+        return "n/a"
+    units = ["B", "KiB", "MiB", "GiB", "TiB"]
+    amount = float(value)
+    for unit in units:
+        if amount < 1024.0 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(amount)} {unit}"
+            return f"{amount:.2f} {unit}"
+        amount /= 1024.0
+    return f"{int(value)} B"
+
+
 status_path, summary_json_path, summary_md_path, node_label, status_url, traffic_summary_path, status_fetch_ok_raw, fetch_error, status_json_path = sys.argv[1:10]
 generated_at = datetime.now(timezone.utc).astimezone().isoformat()
 status_fetch_ok = status_fetch_ok_raw == "1"
@@ -305,9 +319,23 @@ else:
         inbound = totals.get("inbound") or {}
         outbound = totals.get("outbound") or {}
         counter_key = lane.get("counter_key") or ("datagrams" if lane_name == "udp_gossip" else "messages")
-        lines.append(
-            f"- {lane_name}: `in_{counter_key}={fmt_num(inbound.get(counter_key))} out_{counter_key}={fmt_num(outbound.get(counter_key))} in_payload={fmt_num(inbound.get('payload_bytes'))} out_payload={fmt_num(outbound.get('payload_bytes'))}`"
+        line = (
+            f"- {lane_name}: `in_{counter_key}={fmt_num(inbound.get(counter_key))} "
+            f"out_{counter_key}={fmt_num(outbound.get(counter_key))} "
+            f"in_payload={fmt_num(inbound.get('payload_bytes'))} "
+            f"out_payload={fmt_num(outbound.get('payload_bytes'))}`"
         )
+        if lane_name == "libp2p_replication":
+            wire_totals = lane.get("wire_totals") or {}
+            control_plane = lane.get("control_plane") or {}
+            line += (
+                f", substream_wire_total=`{fmt_bytes(((wire_totals.get('inbound') or {}).get('bytes', 0)) + ((wire_totals.get('outbound') or {}).get('bytes', 0)))}`"
+            )
+            if control_plane.get("available"):
+                line += (
+                    f", control_plane_wire_total=`{fmt_bytes(control_plane.get('total_wire_bytes'))}`"
+                )
+        lines.append(line)
 
 Path(summary_md_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY

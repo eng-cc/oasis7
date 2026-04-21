@@ -1,0 +1,24 @@
+task_uid: task_c79092f4b50d4d52a36b11fe0fe5eb5e
+title: "Add control-plane wire byte counters"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-control-plane-wire-byte-counters
+execution_log_path: .pm/tasks/task_c79092f4b50d4d52a36b11fe0fe5eb5e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+  - doc/world-runtime/prd.md
+doc_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+related_prd:
+  - PRD-WORLD_RUNTIME-038
+acceptance:
+  - "libp2p traffic metrics expose control-plane wire byte counters without relying on event-count heuristics"
+  - "status/reporting can distinguish payload bytes, control-plane wire bytes, and remaining transport overhead"
+  - "repo-owned traffic and observability summaries surface wire_totals and derived control-plane wire bytes with explicit scope wording"
+handoff_to: []
+updated_at: 2026-04-21T21:47:23+08:00
+last_started_at: 2026-04-21T21:15:36+08:00
+last_closed_at: 2026-04-21T21:47:23+08:00

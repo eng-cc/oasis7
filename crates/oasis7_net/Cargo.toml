@@ -24,3 +24,4 @@ hex = "0.4"
 futures = { version = "0.3", optional = true }
 async-std = { version = "1", optional = true }
 libp2p = { version = "0.53", optional = true, default-features = false, features = ["async-std", "autonat", "cbor", "dcutr", "dns", "gossipsub", "kad", "macros", "noise", "quic", "relay", "rendezvous", "request-response", "tcp", "yamux"] }
+pin-project = "1"

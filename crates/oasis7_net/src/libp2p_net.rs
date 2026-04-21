@@ -21,6 +21,7 @@ mod swarm_reachability_events;
 mod traffic_metrics;
 mod transport_paths;
 mod utils;
+mod wire_bytes;
 
 use futures::channel::mpsc;
 use futures::{FutureExt, StreamExt};
@@ -96,13 +97,15 @@ use traffic_metrics::{
 };
 pub use traffic_metrics::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pTrafficMetricsSnapshot,
-    TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot,
+    TrafficDirectionMetricsSnapshot, TrafficLaneMetricsSnapshot, WireByteDirectionMetricsSnapshot,
+    WireByteLaneMetricsSnapshot,
 };
 use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone, should_republish,
     try_send_command,
 };
+use wire_bytes::{init_shared_wire_byte_counters, SharedLibp2pWireByteCounters};
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
@@ -120,6 +123,7 @@ pub struct Libp2pNetwork {
     peer_block_artifacts: Arc<Mutex<HashMap<String, PeerManagerBlockArtifact>>>,
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
     traffic_metrics: SharedLibp2pTrafficMetrics,
+    wire_byte_counters: SharedLibp2pWireByteCounters,
 }
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
@@ -142,6 +146,7 @@ impl Libp2pNetwork {
         ));
         let reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
         let traffic_metrics = init_shared_traffic_metrics();
+        let wire_byte_counters = init_shared_wire_byte_counters();
         let command_buffer_capacity = config.command_buffer_capacity.max(1);
         let (command_tx, command_rx) = mpsc::channel(command_buffer_capacity);
         let max_published_messages = config.max_published_messages.max(1);
@@ -157,6 +162,7 @@ impl Libp2pNetwork {
         let event_peer_block_artifacts = Arc::clone(&peer_block_artifacts);
         let event_reachability = Arc::clone(&reachability);
         let event_traffic_metrics = Arc::clone(&traffic_metrics);
+        let event_wire_byte_counters = Arc::clone(&wire_byte_counters);
         let config_clone = config.clone();
         let keypair_clone = keypair.clone();
         let local_peer_id = peer_id;
@@ -177,6 +183,7 @@ impl Libp2pNetwork {
                 &keypair_clone,
                 enable_rendezvous,
                 config_clone.enable_autonat,
+                Arc::clone(&event_wire_byte_counters),
             );
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
@@ -1149,6 +1156,7 @@ impl Libp2pNetwork {
             peer_block_artifacts,
             reachability,
             traffic_metrics,
+            wire_byte_counters,
         }
     }
 }

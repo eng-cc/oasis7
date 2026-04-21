@@ -10,6 +10,9 @@ use libp2p::swarm::SwarmEvent;
 use serde::{Deserialize, Serialize};
 
 use super::swarm_behaviour::BehaviourEvent;
+use super::wire_bytes::{
+    snapshot_wire_byte_counters, Libp2pWireByteSnapshot, SharedLibp2pWireByteCounters,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TrafficDirectionMetricsSnapshot {
@@ -23,11 +26,25 @@ pub struct TrafficLaneMetricsSnapshot {
     pub outbound: TrafficDirectionMetricsSnapshot,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WireByteDirectionMetricsSnapshot {
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WireByteLaneMetricsSnapshot {
+    pub inbound: WireByteDirectionMetricsSnapshot,
+    pub outbound: WireByteDirectionMetricsSnapshot,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Libp2pControlPlaneMetricsSnapshot {
     pub units: String,
     pub total_events: u64,
     pub by_kind: BTreeMap<String, u64>,
+    pub wire_scope: String,
+    pub excludes_transport_overhead: bool,
+    pub wire_bytes: WireByteLaneMetricsSnapshot,
 }
 
 impl Default for Libp2pControlPlaneMetricsSnapshot {
@@ -36,6 +53,9 @@ impl Default for Libp2pControlPlaneMetricsSnapshot {
             units: "events".to_string(),
             total_events: 0,
             by_kind: BTreeMap::new(),
+            wire_scope: "substream_wire_bytes_minus_application_payload".to_string(),
+            excludes_transport_overhead: true,
+            wire_bytes: WireByteLaneMetricsSnapshot::default(),
         }
     }
 }
@@ -48,6 +68,7 @@ pub struct Libp2pTrafficMetricsSnapshot {
     pub excludes_kademlia_control_plane: bool,
     pub excludes_gossipsub_mesh_fanout: bool,
     pub totals: TrafficLaneMetricsSnapshot,
+    pub wire_totals: WireByteLaneMetricsSnapshot,
     pub gossip: TrafficLaneMetricsSnapshot,
     pub request: TrafficLaneMetricsSnapshot,
     pub response: TrafficLaneMetricsSnapshot,
@@ -60,11 +81,12 @@ impl Default for Libp2pTrafficMetricsSnapshot {
     fn default() -> Self {
         Self {
             observed_since_unix_ms: now_unix_ms(),
-            scope: "application_payload_only".to_string(),
+            scope: "application_payload_with_substream_wire_bytes".to_string(),
             excludes_transport_overhead: true,
             excludes_kademlia_control_plane: true,
             excludes_gossipsub_mesh_fanout: true,
             totals: TrafficLaneMetricsSnapshot::default(),
+            wire_totals: WireByteLaneMetricsSnapshot::default(),
             gossip: TrafficLaneMetricsSnapshot::default(),
             request: TrafficLaneMetricsSnapshot::default(),
             response: TrafficLaneMetricsSnapshot::default(),
@@ -83,14 +105,20 @@ pub(crate) fn init_shared_traffic_metrics() -> SharedLibp2pTrafficMetrics {
 
 pub(crate) fn snapshot_traffic_metrics(
     metrics: &SharedLibp2pTrafficMetrics,
+    wire_byte_counters: &SharedLibp2pWireByteCounters,
 ) -> Libp2pTrafficMetricsSnapshot {
-    metrics
+    let mut snapshot = metrics
         .lock()
         .map(|locked| locked.clone())
         .unwrap_or_else(|_| Libp2pTrafficMetricsSnapshot {
-            scope: "application_payload_only_degraded".to_string(),
+            scope: "application_payload_with_substream_wire_bytes_degraded".to_string(),
             ..Libp2pTrafficMetricsSnapshot::default()
-        })
+        });
+    let wire_snapshot = snapshot_wire_byte_counters(wire_byte_counters);
+    snapshot.wire_totals = wire_lane_from_snapshot(wire_snapshot);
+    snapshot.control_plane.wire_bytes =
+        subtract_payload_from_wire(&snapshot.wire_totals, &snapshot.totals);
+    snapshot
 }
 
 pub(crate) fn record_gossip_outbound(
@@ -328,13 +356,48 @@ fn now_unix_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn wire_lane_from_snapshot(snapshot: Libp2pWireByteSnapshot) -> WireByteLaneMetricsSnapshot {
+    WireByteLaneMetricsSnapshot {
+        inbound: WireByteDirectionMetricsSnapshot {
+            bytes: snapshot.inbound_bytes,
+        },
+        outbound: WireByteDirectionMetricsSnapshot {
+            bytes: snapshot.outbound_bytes,
+        },
+    }
+}
+
+fn subtract_payload_from_wire(
+    wire: &WireByteLaneMetricsSnapshot,
+    payload: &TrafficLaneMetricsSnapshot,
+) -> WireByteLaneMetricsSnapshot {
+    WireByteLaneMetricsSnapshot {
+        inbound: WireByteDirectionMetricsSnapshot {
+            bytes: wire
+                .inbound
+                .bytes
+                .saturating_sub(payload.inbound.payload_bytes),
+        },
+        outbound: WireByteDirectionMetricsSnapshot {
+            bytes: wire
+                .outbound
+                .bytes
+                .saturating_sub(payload.outbound.payload_bytes),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::libp2p_net::wire_bytes::{
+        init_shared_wire_byte_counters, record_inbound_wire_bytes, record_outbound_wire_bytes,
+    };
 
     #[test]
     fn recorders_accumulate_totals_and_breakdowns() {
         let metrics = init_shared_traffic_metrics();
+        let wire_byte_counters = init_shared_wire_byte_counters();
         record_gossip_outbound(&metrics, "aw.smoke", 5);
         record_gossip_inbound(&metrics, "aw.smoke", 7);
         record_request_outbound(&metrics, "/aw/rr/1.0.0/ping", 11);
@@ -342,9 +405,14 @@ mod tests {
         record_control_plane_event(&metrics, "transport.connection_established");
         record_control_plane_event(&metrics, "transport.connection_established");
         record_control_plane_event(&metrics, "kademlia.routing_updated");
+        record_outbound_wire_bytes(&wire_byte_counters, 27);
+        record_inbound_wire_bytes(&wire_byte_counters, 31);
 
-        let snapshot = snapshot_traffic_metrics(&metrics);
-        assert_eq!(snapshot.scope, "application_payload_only");
+        let snapshot = snapshot_traffic_metrics(&metrics, &wire_byte_counters);
+        assert_eq!(
+            snapshot.scope,
+            "application_payload_with_substream_wire_bytes"
+        );
         assert!(snapshot.excludes_transport_overhead);
         assert!(snapshot.excludes_kademlia_control_plane);
         assert!(snapshot.excludes_gossipsub_mesh_fanout);
@@ -352,6 +420,8 @@ mod tests {
         assert_eq!(snapshot.totals.outbound.payload_bytes, 16);
         assert_eq!(snapshot.totals.inbound.messages, 2);
         assert_eq!(snapshot.totals.inbound.payload_bytes, 20);
+        assert_eq!(snapshot.wire_totals.outbound.bytes, 27);
+        assert_eq!(snapshot.wire_totals.inbound.bytes, 31);
         assert_eq!(
             snapshot
                 .by_topic
@@ -368,6 +438,13 @@ mod tests {
         );
         assert_eq!(snapshot.control_plane.units, "events");
         assert_eq!(snapshot.control_plane.total_events, 3);
+        assert_eq!(
+            snapshot.control_plane.wire_scope,
+            "substream_wire_bytes_minus_application_payload"
+        );
+        assert!(snapshot.control_plane.excludes_transport_overhead);
+        assert_eq!(snapshot.control_plane.wire_bytes.outbound.bytes, 11);
+        assert_eq!(snapshot.control_plane.wire_bytes.inbound.bytes, 11);
         assert_eq!(
             snapshot
                 .control_plane
