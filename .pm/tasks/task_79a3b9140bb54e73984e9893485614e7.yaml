@@ -10,8 +10,17 @@ source_refs:
   - doc/readme/prd.md
   - doc/readme/project.md
 doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+  - doc/readme/prd.index.md
+  - doc/readme/governance/README.md
   - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
-related_prd: []
+  - doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md
+  - site/social/xiaohongshu-token-usage-cover.html
+  - site/social/xiaohongshu-token-usage-cover.png
+related_prd:
+  - PRD-README-047
+  - doc/readme/prd.md
 acceptance: []
 handoff_to: []
 updated_at: 2026-04-21T00:05:29+08:00
