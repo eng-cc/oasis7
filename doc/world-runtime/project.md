@@ -223,6 +223,25 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] wasm-observability-timing-metrics-mvp-implementation (PRD-WORLD_RUNTIME-036) [test_tier_required]: 在同一专题下落地首期 build timing、executor/router cumulative snapshot、`/v1/chain/status.wasm` 与最小 repo-owned summary 入口，避免 WASM 热点继续只靠 ignored perf probe 与临时日志归因。 Trace: .pm/tasks/task_90d0ee7aa1464f248f717ff600e22b21.yaml
+- [x] wasm-observability-window-summary (PRD-WORLD_RUNTIME-036) [test_tier_required]: 将 repo-owned wasm metrics summary 入口升级为 reset-aware window delta、bucket-derived p50/p95 与热点摘要，同时保持单快照输入兼容。 Trace: .pm/tasks/task_b2d79d858df949e3bddcee89b2fb9195.yaml
+  - 产物文件:
+    - `scripts/oasis7-node-wasm-metrics-monitor.sh`
+    - `scripts/oasis7-node-wasm-metrics-monitor.test.sh`
+    - `fixtures/wasm_metrics_monitor/no_reset/001.json`
+    - `fixtures/wasm_metrics_monitor/no_reset/002.json`
+    - `fixtures/wasm_metrics_monitor/reset/001.json`
+    - `fixtures/wasm_metrics_monitor/reset/002.json`
+    - `fixtures/wasm_metrics_monitor/reset/003.json`
+    - `.pm/tasks/task_b2d79d858df949e3bddcee89b2fb9195.yaml`
+    - `.pm/tasks/task_b2d79d858df949e3bddcee89b2fb9195.execution.md`
+    - `doc/world-runtime/project.md`
+    - `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/oasis7-node-wasm-metrics-monitor.sh`
+    - `bash -n scripts/oasis7-node-wasm-metrics-monitor.test.sh`
+    - `bash scripts/oasis7-node-wasm-metrics-monitor.test.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] wasm-module-observability-standardization (PRD-WORLD_RUNTIME-037) [test_tier_required]: 落地 module-local observe spec、通用 `wasm_module_observe` runner、repo-owned wrapper script、模板与 `m1_rule_move` 代表样例，让新 wasm 模块默认能产出统一的功能和性能证据。 Trace: .pm/tasks/task_20b6ee42182247ccbebe6a6a2c2db469.yaml
   - 产物文件:
     - `tools/wasm_module_observe/Cargo.toml`

@@ -1,0 +1,90 @@
+{
+  "ok": true,
+  "observed_at_unix_ms": 1700000010000,
+  "node_id": "node-a",
+  "world_id": "world-a",
+  "role": "storage",
+  "running": true,
+  "wasm": {
+    "metrics_available": true,
+    "observed_since_unix_ms": 1700000000000,
+    "degraded_reason": null,
+    "build": {
+      "metrics_available": true,
+      "observed_since_unix_ms": 1700000000000,
+      "degraded_reason": null,
+      "total_build_wall_ms": 120,
+      "cargo_build_ms": 80,
+      "canonicalize_ms": 10,
+      "hash_ms": 5,
+      "receipt_write_ms": 3,
+      "metadata_write_ms": 2,
+      "wasm_size_bytes": 4096
+    },
+    "executor": {
+      "observed_since_unix_ms": 1700000000000,
+      "metrics_available": true,
+      "degraded_reason": null,
+      "calls_total": 22,
+      "memory_cache_hits": 9,
+      "disk_cache_hits": 4,
+      "compile_misses": 5,
+      "failure_by_code": {
+        "timeout": 2
+      },
+      "compile_ms_total": 110,
+      "deserialize_ms_total": 12,
+      "instantiate_ms_total": 24,
+      "entrypoint_call_ms_total": 210,
+      "decode_ms_total": 14,
+      "call_wall_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 4,
+        "le_0010_ms": 10,
+        "le_0025_ms": 15,
+        "le_0050_ms": 22,
+        "le_0100_ms": 22,
+        "le_0250_ms": 22,
+        "le_0500_ms": 22,
+        "le_1000_ms": 22,
+        "gt_1000_ms": 0
+      }
+    },
+    "router": {
+      "observed_since_unix_ms": 1700000000000,
+      "metrics_available": true,
+      "degraded_reason": null,
+      "prepare_calls_total": 10,
+      "prepare_ms_total": 24,
+      "match_calls_total": 18,
+      "match_ms_total": 40,
+      "parse_fallbacks": 4,
+      "prepared_hits": 14,
+      "regex_compile_ms_total": 5,
+      "prepare_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 5,
+        "le_0010_ms": 10,
+        "le_0025_ms": 10,
+        "le_0050_ms": 10,
+        "le_0100_ms": 10,
+        "le_0250_ms": 10,
+        "le_0500_ms": 10,
+        "le_1000_ms": 10,
+        "gt_1000_ms": 0
+      },
+      "match_ms_buckets": {
+        "le_0001_ms": 0,
+        "le_0005_ms": 8,
+        "le_0010_ms": 14,
+        "le_0025_ms": 18,
+        "le_0050_ms": 18,
+        "le_0100_ms": 18,
+        "le_0250_ms": 18,
+        "le_0500_ms": 18,
+        "le_1000_ms": 18,
+        "gt_1000_ms": 0
+      }
+    }
+  }
+}
