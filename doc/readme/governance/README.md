@@ -7,7 +7,7 @@
 - 想确认 release communication、brief、announcement draft 或 template：先读 `readme-release-candidate-communication-brief-2026-03-11.prd.md`、`readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-draft-2026-03-11.prd.md`
 - 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
 - 想确认 limited preview、reward review、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-invite-pack-2026-03-22.md`、`readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
-- 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`readme-xiaohongshu-token-usage-post-pack-2026-04-20.md` 或 `readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
+- 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`、`readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md` 或 `readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 想确认资源模型分层、世界规则入口收口或公开定位相关口径：先读 `readme-resource-model-layering.prd.md` 或 `readme-world-rules-consolidation.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
@@ -17,7 +17,7 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 治理前快照（2026-04-18）:
+- 快照（2026-04-20）:
   - `doc/readme/governance/`: 98 份 Markdown
   - `doc/readme/`: 142 份 Markdown
 - 当前子域属于 `readme` 模块最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
@@ -69,6 +69,7 @@
 - 首读入口:
   - `readme-xiaohongshu-liveops-runbook-2026-03-23.md`
   - `readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`
+  - `readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`
   - `readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 适合问题:
   - 小红书持续运营、评论区节奏与信号回流该看哪里
