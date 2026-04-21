@@ -168,6 +168,14 @@ pub fn load_spec(path: &Path) -> Result<ResolvedModuleObserveSpec, String> {
         .map_err(|err| format!("read observe spec {} failed: {err}", path.display()))?;
     let spec: ModuleObserveSpec = serde_json::from_str(&raw)
         .map_err(|err| format!("parse observe spec {} failed: {err}", path.display()))?;
+    if spec.schema_version != DEFAULT_SCHEMA_VERSION {
+        return Err(format!(
+            "observe spec {} uses unsupported schema_version={} (expected {})",
+            path.display(),
+            spec.schema_version,
+            DEFAULT_SCHEMA_VERSION
+        ));
+    }
     let spec_dir = path
         .parent()
         .ok_or_else(|| format!("observe spec {} has no parent directory", path.display()))?;
@@ -347,5 +355,42 @@ mod tests {
         let err = load_spec(&spec_path).expect_err("spec should fail");
         assert!(err.contains("repeat must be >= 1"));
         let _ = std::fs::remove_file(spec_path);
+    }
+
+    #[test]
+    fn load_spec_rejects_unknown_schema_version() {
+        let temp_root = std::env::temp_dir().join("wasm-module-observe-schema-version-test");
+        let module_dir = temp_root.join("module");
+        let observe_dir = module_dir.join("observability");
+        std::fs::create_dir_all(&observe_dir).expect("create observe dir");
+        let manifest_path = module_dir.join("Cargo.toml");
+        std::fs::write(&manifest_path, "[package]\nname=\"m\"\nversion=\"0.1.0\"\n")
+            .expect("write manifest");
+        let spec_path = observe_dir.join("module_observe.json");
+        std::fs::write(
+            &spec_path,
+            r#"{
+  "schema_version": 2,
+  "module": {
+    "module_id": "m.test",
+    "manifest_path": "../Cargo.toml"
+  },
+  "cases": [
+    {
+      "name": "noop",
+      "request": {},
+      "expect": {}
+    }
+  ]
+}"#,
+        )
+        .expect("write spec");
+
+        let err = load_spec(&spec_path).expect_err("schema version should fail");
+        assert!(err.contains("unsupported schema_version=2"));
+
+        let _ = std::fs::remove_file(spec_path);
+        let _ = std::fs::remove_file(manifest_path);
+        let _ = std::fs::remove_dir_all(temp_root);
     }
 }

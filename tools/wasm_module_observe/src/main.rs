@@ -46,11 +46,11 @@ fn parse_observe_args(args: Vec<String>) -> Result<ObserveRunRequest, String> {
         match args[index].as_str() {
             "--spec" => {
                 index += 1;
-                spec_path = args.get(index).map(PathBuf::from);
+                spec_path = Some(required_arg_value(&args, index, "--spec")?);
             }
             "--out-dir" => {
                 index += 1;
-                out_dir = args.get(index).map(PathBuf::from);
+                out_dir = Some(required_arg_value(&args, index, "--out-dir")?);
             }
             "--help" | "-h" => {
                 print_usage();
@@ -72,4 +72,36 @@ fn print_usage() {
     println!("wasm_module_observe observe --spec <path> [options]");
     println!("options:");
     println!("  --out-dir <path>      default: .tmp/wasm_module_observe/<module_id>");
+}
+
+fn required_arg_value(args: &[String], index: usize, flag: &str) -> Result<PathBuf, String> {
+    let Some(value) = args.get(index) else {
+        return Err(format!("{flag} requires a value"));
+    };
+    if value.starts_with('-') {
+        return Err(format!("{flag} requires a value"));
+    }
+    Ok(PathBuf::from(value))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_observe_args_rejects_missing_spec_value() {
+        let err = parse_observe_args(vec!["--spec".to_string()]).expect_err("spec should fail");
+        assert_eq!(err, "--spec requires a value");
+    }
+
+    #[test]
+    fn parse_observe_args_rejects_missing_out_dir_value() {
+        let err = parse_observe_args(vec![
+            "--spec".to_string(),
+            "spec.json".to_string(),
+            "--out-dir".to_string(),
+        ])
+        .expect_err("out-dir should fail");
+        assert_eq!(err, "--out-dir requires a value");
+    }
 }
