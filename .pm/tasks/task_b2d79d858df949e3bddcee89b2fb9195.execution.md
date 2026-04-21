@@ -17,3 +17,9 @@ Example:
 - 完成内容: 新增 `scripts/oasis7-node-wasm-metrics-monitor.test.sh` 与 `fixtures/wasm_metrics_monitor/{no_reset,reset}` 回归样本，覆盖无 reset 窗口、带 reset 缩窗和单快照兼容三条路径；已通过脚本回归、`doc-governance-check` 与 `git diff --check`。
 - 完成内容: 回写 `doc/world-runtime/project.md` 与 `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`，将 `wasm-observability-window-summary` 收口为正式任务条目，并更新 WMTM-4 状态与后续阻塞。
 - 遗留事项: `status.wasm` 仍未暴露模块级 bounded top-N 明细；当前热点摘要只能回答 executor/router 哪一段最热，不能直接回答具体 `module_id`。
+
+## 2026-04-21 21:58:46 CST / wasm_platform_engineer
+- 完成内容: 处理 PR #136 review comments；`--status-sample-dir` 现在会对缺少 `observed_at_unix_ms` 的样本 fast-fail，避免无时间戳样本被错误选成 latest。
+- 完成内容: 将窗口可用性判断收紧到 `wasm/executor/router metrics_available=true`；当 baseline 或 latest 样本不可用时，脚本会禁用 window delta 输出并写明原因。
+- 完成内容: 扩展 `scripts/oasis7-node-wasm-metrics-monitor.test.sh`，新增“缺少时间戳样本失败”和“metrics unavailable 禁用窗口”两条回归。
+- 遗留事项: reviewer comment 已在本地修复并补回归，待 push 后 resolve review threads。
