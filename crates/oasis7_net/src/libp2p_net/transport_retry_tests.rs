@@ -116,6 +116,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
     let registered_rendezvous_nodes = HashSet::new();
     let rendezvous_cookies = HashMap::new();
     let mut peer_record_last_published_at_ms = None;
+    let mut peer_discovery_query_last_started_at_ms = None;
     let event_published = Arc::new(Mutex::new(Vec::new()));
     let event_errors = Arc::new(Mutex::new(Vec::new()));
     let event_listening_addrs = Arc::new(Mutex::new(Vec::new()));
@@ -150,6 +151,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             registered_rendezvous_nodes: &registered_rendezvous_nodes,
             rendezvous_cookies: &rendezvous_cookies,
             peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
+            peer_discovery_query_last_started_at_ms: &mut peer_discovery_query_last_started_at_ms,
         },
         &super::CommandContext {
             event_published: &event_published,
@@ -163,6 +165,7 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
             max_published_messages: 8,
             max_error_messages: 8,
             republish_interval_ms: 0,
+            discovery_query_cooldown_ms: 60_000,
             allow_loopback_external_addrs_for_testing: false,
         },
     );
@@ -176,4 +179,146 @@ fn request_with_providers_does_not_fallback_outside_provider_subset() {
         WorldError::NetworkProtocolUnavailable { protocol }
             if protocol.contains("no connected providers")
     ));
+}
+
+#[test]
+fn refresh_peer_discovery_respects_republish_and_query_budgets() {
+    let keypair = Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(keypair.public());
+    let template =
+        signed_discovery_peer_record(&keypair, vec![crate::dht::PeerDiscoverySource::Dht], 1)
+            .record;
+    let provider_key =
+        oasis7_proto::distributed::dht_peer_discovery_key(template.world_id.as_str());
+    let mut swarm = super::swarm_behaviour::build_swarm(&keypair, false, true);
+    let mut subscriptions = HashSet::new();
+    let mut topic_map = HashMap::new();
+    let mut topic_inbox_limits = HashMap::new();
+    let mut handlers = HashMap::new();
+    let mut pending = HashMap::new();
+    let mut pending_peer_record_requests = HashMap::new();
+    let mut pending_dht = HashMap::new();
+    let mut peers = Vec::new();
+    let mut provider_keys = HashMap::new();
+    let discovered_peer_records = HashMap::new();
+    let peer_healths_by_id = HashMap::new();
+    let mut pending_cached_discovery_peers = HashSet::new();
+    let mut cached_discovery_peer_cooldowns = HashMap::new();
+    let mut pending_rendezvous_registers = HashSet::new();
+    let mut pending_rendezvous_discovers = HashSet::new();
+    let registered_rendezvous_nodes = HashSet::new();
+    let rendezvous_cookies = HashMap::new();
+    let now = super::now_ms();
+    let mut peer_record_last_published_at_ms = Some(now);
+    let mut peer_discovery_query_last_started_at_ms = Some(now);
+    provider_keys.insert(provider_key.clone(), now);
+    let event_published = Arc::new(Mutex::new(Vec::new()));
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+    let event_listening_addrs = Arc::new(Mutex::new(Vec::new()));
+    let event_reachability = Arc::new(Mutex::new(Libp2pReachabilitySnapshot::default()));
+    let event_traffic_metrics = super::traffic_metrics::init_shared_traffic_metrics();
+
+    let outcome = super::runtime_loop::handle_command(
+        &mut swarm,
+        Some(Command::RefreshPeerDiscovery),
+        super::runtime_loop::CommandStateRefs {
+            subscriptions: &mut subscriptions,
+            topic_map: &mut topic_map,
+            topic_inbox_limits: &mut topic_inbox_limits,
+            handlers: &mut handlers,
+            pending: &mut pending,
+            pending_peer_record_requests: &mut pending_peer_record_requests,
+            pending_dht: &mut pending_dht,
+            peers: &mut peers,
+            provider_keys: &mut provider_keys,
+            discovered_peer_records: &discovered_peer_records,
+            peer_healths_by_id: &peer_healths_by_id,
+            pending_cached_discovery_peers: &mut pending_cached_discovery_peers,
+            cached_discovery_peer_cooldowns: &mut cached_discovery_peer_cooldowns,
+            pending_rendezvous_registers: &mut pending_rendezvous_registers,
+            pending_rendezvous_discovers: &mut pending_rendezvous_discovers,
+            registered_rendezvous_nodes: &registered_rendezvous_nodes,
+            rendezvous_cookies: &rendezvous_cookies,
+            peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
+            peer_discovery_query_last_started_at_ms: &mut peer_discovery_query_last_started_at_ms,
+        },
+        &super::CommandContext {
+            event_published: &event_published,
+            event_errors: &event_errors,
+            event_listening_addrs: &event_listening_addrs,
+            event_reachability: &event_reachability,
+            event_traffic_metrics: &event_traffic_metrics,
+            keypair: &keypair,
+            peer_record_template: Some(&template),
+            local_peer_id,
+            max_published_messages: 8,
+            max_error_messages: 8,
+            republish_interval_ms: 300_000,
+            discovery_query_cooldown_ms: 60_000,
+            allow_loopback_external_addrs_for_testing: false,
+        },
+    );
+    assert!(matches!(outcome, super::CommandOutcome::Continue));
+    assert!(pending_dht.is_empty());
+    assert_eq!(peer_record_last_published_at_ms, Some(now));
+    assert_eq!(peer_discovery_query_last_started_at_ms, Some(now));
+    assert_eq!(provider_keys.get(&provider_key), Some(&now));
+
+    peer_record_last_published_at_ms = Some(0);
+    peer_discovery_query_last_started_at_ms = Some(0);
+    provider_keys.insert(provider_key.clone(), 0);
+
+    let outcome = super::runtime_loop::handle_command(
+        &mut swarm,
+        Some(Command::RefreshPeerDiscovery),
+        super::runtime_loop::CommandStateRefs {
+            subscriptions: &mut subscriptions,
+            topic_map: &mut topic_map,
+            topic_inbox_limits: &mut topic_inbox_limits,
+            handlers: &mut handlers,
+            pending: &mut pending,
+            pending_peer_record_requests: &mut pending_peer_record_requests,
+            pending_dht: &mut pending_dht,
+            peers: &mut peers,
+            provider_keys: &mut provider_keys,
+            discovered_peer_records: &discovered_peer_records,
+            peer_healths_by_id: &peer_healths_by_id,
+            pending_cached_discovery_peers: &mut pending_cached_discovery_peers,
+            cached_discovery_peer_cooldowns: &mut cached_discovery_peer_cooldowns,
+            pending_rendezvous_registers: &mut pending_rendezvous_registers,
+            pending_rendezvous_discovers: &mut pending_rendezvous_discovers,
+            registered_rendezvous_nodes: &registered_rendezvous_nodes,
+            rendezvous_cookies: &rendezvous_cookies,
+            peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
+            peer_discovery_query_last_started_at_ms: &mut peer_discovery_query_last_started_at_ms,
+        },
+        &super::CommandContext {
+            event_published: &event_published,
+            event_errors: &event_errors,
+            event_listening_addrs: &event_listening_addrs,
+            event_reachability: &event_reachability,
+            event_traffic_metrics: &event_traffic_metrics,
+            keypair: &keypair,
+            peer_record_template: Some(&template),
+            local_peer_id,
+            max_published_messages: 8,
+            max_error_messages: 8,
+            republish_interval_ms: 300_000,
+            discovery_query_cooldown_ms: 60_000,
+            allow_loopback_external_addrs_for_testing: false,
+        },
+    );
+    assert!(matches!(outcome, super::CommandOutcome::Continue));
+    assert_eq!(pending_dht.len(), 2);
+    assert!(pending_dht
+        .values()
+        .any(|query| matches!(query, PendingDhtQuery::PutPeerRecord { .. })));
+    assert!(pending_dht
+        .values()
+        .any(|query| matches!(query, PendingDhtQuery::DiscoverPeers { .. })));
+    assert!(peer_record_last_published_at_ms.is_some_and(|last| last > 0));
+    assert!(peer_discovery_query_last_started_at_ms.is_some_and(|last| last > 0));
+    assert!(provider_keys
+        .get(&provider_key)
+        .is_some_and(|last| *last > 0));
 }

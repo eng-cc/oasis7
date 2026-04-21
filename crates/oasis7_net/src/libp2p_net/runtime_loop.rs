@@ -49,6 +49,7 @@ pub(super) struct CommandContext<'a> {
     pub max_published_messages: usize,
     pub max_error_messages: usize,
     pub republish_interval_ms: i64,
+    pub discovery_query_cooldown_ms: i64,
     pub allow_loopback_external_addrs_for_testing: bool,
 }
 
@@ -133,6 +134,7 @@ pub(super) struct CommandStateRefs<'a> {
     pub registered_rendezvous_nodes: &'a HashSet<PeerId>,
     pub rendezvous_cookies: &'a HashMap<PeerId, libp2p::rendezvous::Cookie>,
     pub peer_record_last_published_at_ms: &'a mut Option<i64>,
+    pub peer_discovery_query_last_started_at_ms: &'a mut Option<i64>,
 }
 
 pub(super) fn filter_request_peers_by_lane(
@@ -482,6 +484,7 @@ pub(super) fn handle_command(
         registered_rendezvous_nodes,
         rendezvous_cookies,
         peer_record_last_published_at_ms,
+        peer_discovery_query_last_started_at_ms,
     } = state;
 
     match command {
@@ -805,18 +808,49 @@ pub(super) fn handle_command(
         }
         Some(Command::RefreshPeerDiscovery) => {
             if let Some(template) = ctx.peer_record_template {
-                let _ = publish_configured_peer_record(
+                let now = now_ms();
+                let should_refresh_peer_record = peer_record_last_published_at_ms
+                    .map(|last_ms| {
+                        ctx.republish_interval_ms > 0
+                            && should_republish(last_ms, now, ctx.republish_interval_ms)
+                    })
+                    .unwrap_or(true);
+                if should_refresh_peer_record
+                    && publish_configured_peer_record(
+                        swarm,
+                        pending_dht,
+                        ctx.keypair,
+                        template,
+                        ctx.event_listening_addrs,
+                        ctx.event_reachability,
+                        ctx.allow_loopback_external_addrs_for_testing,
+                        None,
+                    )
+                    .is_ok()
+                {
+                    *peer_record_last_published_at_ms = Some(now);
+                }
+                let provider_key =
+                    oasis7_proto::distributed::dht_peer_discovery_key(template.world_id.as_str());
+                let should_refresh_discovery_provider = provider_keys
+                    .get(&provider_key)
+                    .copied()
+                    .map(|last_ms| {
+                        ctx.republish_interval_ms > 0
+                            && should_republish(last_ms, now, ctx.republish_interval_ms)
+                    })
+                    .unwrap_or(true);
+                if should_refresh_discovery_provider {
+                    publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
+                }
+                start_peer_discovery_query(
                     swarm,
                     pending_dht,
-                    ctx.keypair,
                     template,
-                    ctx.event_listening_addrs,
-                    ctx.event_reachability,
-                    ctx.allow_loopback_external_addrs_for_testing,
-                    None,
+                    peer_discovery_query_last_started_at_ms,
+                    now,
+                    ctx.discovery_query_cooldown_ms,
                 );
-                publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
-                start_peer_discovery_query(swarm, pending_dht, template);
                 let connected_peers = peers.clone();
                 for peer_id in connected_peers {
                     maybe_request_cached_discovery_peers(

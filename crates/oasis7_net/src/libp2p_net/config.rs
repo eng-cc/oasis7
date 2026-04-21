@@ -11,6 +11,7 @@ const DEFAULT_MAX_ERROR_MESSAGES: usize = 4096;
 const DEFAULT_MAX_LISTENING_ADDRS: usize = 128;
 const DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS: i64 = 1_000;
 const DEFAULT_DISCOVERY_QUERY_INTERVAL_MS: i64 = 15_000;
+const DEFAULT_DISCOVERY_QUERY_COOLDOWN_MS: i64 = 60_000;
 
 #[derive(Debug, Clone)]
 pub struct Libp2pNetworkConfig {
@@ -24,6 +25,7 @@ pub struct Libp2pNetworkConfig {
     pub bootstrap_redial_interval_ms: i64,
     pub republish_interval_ms: i64,
     pub discovery_query_interval_ms: i64,
+    pub discovery_query_cooldown_ms: i64,
     pub command_buffer_capacity: usize,
     pub max_published_messages: usize,
     pub max_error_messages: usize,
@@ -44,6 +46,7 @@ impl Default for Libp2pNetworkConfig {
             bootstrap_redial_interval_ms: DEFAULT_BOOTSTRAP_REDIAL_INTERVAL_MS,
             republish_interval_ms: 5 * 60 * 1000,
             discovery_query_interval_ms: DEFAULT_DISCOVERY_QUERY_INTERVAL_MS,
+            discovery_query_cooldown_ms: DEFAULT_DISCOVERY_QUERY_COOLDOWN_MS,
             command_buffer_capacity: DEFAULT_COMMAND_BUFFER_CAPACITY,
             max_published_messages: DEFAULT_MAX_PUBLISHED_MESSAGES,
             max_error_messages: DEFAULT_MAX_ERROR_MESSAGES,
