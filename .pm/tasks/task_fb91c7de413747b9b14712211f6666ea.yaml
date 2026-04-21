@@ -1,0 +1,24 @@
+task_uid: task_fb91c7de413747b9b14712211f6666ea
+title: "Reduce libp2p control-plane query churn"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-control-plane-query-budget
+execution_log_path: .pm/tasks/task_fb91c7de413747b9b14712211f6666ea.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-030
+acceptance:
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_net start_peer_discovery_query_respects_pending_query_and_cooldown -- --nocapture"
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_net refresh_peer_discovery_respects_republish_and_query_budgets -- --nocapture"
+  - "env -u RUSTC_WRAPPER cargo check --tests -p oasis7_net -p oasis7_node -p oasis7"
+  - ./scripts/doc-governance-check.sh
+  - "git diff --check"
+handoff_to: []
+updated_at: 2026-04-21T23:14:07+08:00
+last_started_at: 2026-04-21T22:46:12+08:00
+last_closed_at: 2026-04-21T23:13:55+08:00

@@ -282,6 +282,68 @@ fn maybe_request_cached_discovery_peers_respects_short_cooldown() {
 }
 
 #[test]
+fn start_peer_discovery_query_respects_pending_query_and_cooldown() {
+    let mut swarm =
+        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let template = super::signed_discovery_peer_record(
+        &Keypair::generate_ed25519(),
+        vec![crate::dht::PeerDiscoverySource::Dht],
+        1,
+    )
+    .record;
+    let mut pending_dht = HashMap::new();
+    let mut last_started_at_ms = None;
+
+    let first_started = super::super::discovery::start_peer_discovery_query(
+        &mut swarm,
+        &mut pending_dht,
+        &template,
+        &mut last_started_at_ms,
+        10_000,
+        60_000,
+    );
+    assert!(first_started);
+    assert_eq!(pending_dht.len(), 1);
+    assert_eq!(last_started_at_ms, Some(10_000));
+
+    let started_while_pending = super::super::discovery::start_peer_discovery_query(
+        &mut swarm,
+        &mut pending_dht,
+        &template,
+        &mut last_started_at_ms,
+        20_000,
+        60_000,
+    );
+    assert!(!started_while_pending);
+    assert_eq!(pending_dht.len(), 1);
+
+    pending_dht.clear();
+
+    let started_during_cooldown = super::super::discovery::start_peer_discovery_query(
+        &mut swarm,
+        &mut pending_dht,
+        &template,
+        &mut last_started_at_ms,
+        20_000,
+        60_000,
+    );
+    assert!(!started_during_cooldown);
+    assert!(pending_dht.is_empty());
+
+    let started_after_cooldown = super::super::discovery::start_peer_discovery_query(
+        &mut swarm,
+        &mut pending_dht,
+        &template,
+        &mut last_started_at_ms,
+        70_000,
+        60_000,
+    );
+    assert!(started_after_cooldown);
+    assert_eq!(pending_dht.len(), 1);
+    assert_eq!(last_started_at_ms, Some(70_000));
+}
+
+#[test]
 fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
     let mut swarm =
         super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);

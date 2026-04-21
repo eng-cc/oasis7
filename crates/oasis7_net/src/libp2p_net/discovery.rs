@@ -89,7 +89,22 @@ pub(super) fn start_peer_discovery_query(
     swarm: &mut Swarm<Behaviour>,
     pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
     template: &PeerRecord,
-) {
+    last_started_at_ms: &mut Option<i64>,
+    now_ms: i64,
+    cooldown_ms: i64,
+) -> bool {
+    if pending_dht
+        .values()
+        .any(|query| matches!(query, PendingDhtQuery::DiscoverPeers { .. }))
+    {
+        return false;
+    }
+    if last_started_at_ms
+        .map(|last_ms| cooldown_ms > 0 && !super::should_republish(last_ms, now_ms, cooldown_ms))
+        .unwrap_or(false)
+    {
+        return false;
+    }
     let key = dht_peer_discovery_key(template.world_id.as_str());
     let query_id = swarm
         .behaviour_mut()
@@ -102,6 +117,8 @@ pub(super) fn start_peer_discovery_query(
             error: None,
         },
     );
+    *last_started_at_ms = Some(now_ms);
+    true
 }
 
 pub(super) fn publish_discovery_provider(

@@ -220,9 +220,11 @@ impl Libp2pNetwork {
             let mut registered_rendezvous_nodes: HashSet<PeerId> = HashSet::new();
             let mut rendezvous_cookies: HashMap<PeerId, rendezvous::Cookie> = HashMap::new();
             let mut peer_record_last_published_at_ms = None;
+            let mut peer_discovery_query_last_started_at_ms = None;
             let bootstrap_redial_interval_ms = config_clone.bootstrap_redial_interval_ms;
             let republish_interval_ms = config_clone.republish_interval_ms;
             let discovery_query_interval_ms = config_clone.discovery_query_interval_ms;
+            let discovery_query_cooldown_ms = config_clone.discovery_query_cooldown_ms;
             for addr in config_clone.listen_addrs {
                 if let Err(err) = swarm.listen_on(addr) {
                     let msg = format!("libp2p listen failed: {err}");
@@ -254,6 +256,7 @@ impl Libp2pNetwork {
                     max_published_messages,
                     max_error_messages,
                     republish_interval_ms,
+                    discovery_query_cooldown_ms,
                     allow_loopback_external_addrs_for_testing: config_clone
                         .allow_loopback_external_addrs_for_testing,
                 };
@@ -300,6 +303,7 @@ impl Libp2pNetwork {
                                     registered_rendezvous_nodes: &registered_rendezvous_nodes,
                                     rendezvous_cookies: &rendezvous_cookies,
                                     peer_record_last_published_at_ms: &mut peer_record_last_published_at_ms,
+                                    peer_discovery_query_last_started_at_ms: &mut peer_discovery_query_last_started_at_ms,
                                 },
                                 &command_ctx,
                             ) {
@@ -942,6 +946,9 @@ impl Libp2pNetwork {
                                             &mut swarm,
                                             &mut pending_dht,
                                             template,
+                                            &mut peer_discovery_query_last_started_at_ms,
+                                            now_ms(),
+                                            discovery_query_cooldown_ms,
                                         );
                                     }
                                     (

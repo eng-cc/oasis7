@@ -483,6 +483,25 @@
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_net --tests`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] control-plane-discovery-query-budget (PRD-WORLD_RUNTIME-030) [test_tier_required]: 在现有 peer-record request cooldown 之外，为 `RefreshPeerDiscovery` 增加本地 peer record/provider republish budget 与 `get_providers` query cooldown/in-flight gate，避免短周期 discovery tick 持续重发 Kademlia control-plane 查询。 Trace: .pm/tasks/task_fb91c7de413747b9b14712211f6666ea.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_fb91c7de413747b9b14712211f6666ea.yaml`
+    - `.pm/tasks/task_fb91c7de413747b9b14712211f6666ea.execution.md`
+    - `crates/oasis7_net/src/libp2p_net/config.rs`
+    - `crates/oasis7_net/src/libp2p_net/discovery.rs`
+    - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests/discovery_peer_record_tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/transport_retry_tests.rs`
+    - `crates/oasis7_node/src/libp2p_replication_network.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net start_peer_discovery_query_respects_pending_query_and_cooldown -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net refresh_peer_discovery_respects_republish_and_query_budgets -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check --tests -p oasis7_net -p oasis7_node -p oasis7`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] fetch-blob-traffic-backoff (PRD-WORLD_RUNTIME-032) [test_tier_required]: 为 sequencer 的 storage challenge gate 增加短窗口 `fetch-blob` success cache，避免对刚验证可读的同一 `content_hash` 在连续 commit 窗口里重复发网请求，同时保留缓存过期后的真实再探测。 Trace: .pm/tasks/task_53b1918a361445f5bf678bcf525abc5c.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`

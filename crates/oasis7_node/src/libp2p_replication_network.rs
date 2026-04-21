@@ -60,6 +60,7 @@ pub struct Libp2pReplicationNetworkConfig {
     pub bootstrap_redial_interval_ms: i64,
     pub republish_interval_ms: i64,
     pub discovery_query_interval_ms: i64,
+    pub discovery_query_cooldown_ms: i64,
     pub enable_autonat: bool,
     pub allow_local_handler_fallback_when_no_peers: bool,
     pub protocol_retry_cooldown_after: Duration,
@@ -76,6 +77,7 @@ impl Default for Libp2pReplicationNetworkConfig {
             bootstrap_redial_interval_ms: inner_defaults.bootstrap_redial_interval_ms,
             republish_interval_ms: inner_defaults.republish_interval_ms,
             discovery_query_interval_ms: inner_defaults.discovery_query_interval_ms,
+            discovery_query_cooldown_ms: inner_defaults.discovery_query_cooldown_ms,
             enable_autonat: inner_defaults.enable_autonat,
             allow_local_handler_fallback_when_no_peers: false,
             protocol_retry_cooldown_after: Duration::from_millis(PROTOCOL_RETRY_COOLDOWN_AFTER_MS),
@@ -103,6 +105,7 @@ impl Libp2pReplicationNetwork {
             bootstrap_redial_interval_ms: config.bootstrap_redial_interval_ms,
             republish_interval_ms: config.republish_interval_ms,
             discovery_query_interval_ms: config.discovery_query_interval_ms,
+            discovery_query_cooldown_ms: config.discovery_query_cooldown_ms,
             enable_autonat: config.enable_autonat,
             ..Libp2pNetworkConfig::default()
         });
