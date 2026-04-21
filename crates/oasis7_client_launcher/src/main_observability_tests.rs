@@ -45,6 +45,19 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
                 summary: "network committed height is ahead by 2".to_string(),
             }],
         }),
+        chain_replication_status: Some(super::WebChainReplicationStatus {
+            local_peer_id: "peer-local".to_string(),
+            connected_peers: vec!["peer-a".to_string()],
+            peer_healths: vec![super::WebChainReplicationPeerHealth {
+                peer_id: "peer-a".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: None,
+                source_asn: None,
+            }],
+        }),
         chain_recovery: None,
         game_url: "http://127.0.0.1:4173/".to_string(),
         config: app.config.clone(),
@@ -65,4 +78,10 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
     assert_eq!(observability.status, "warn");
     assert_eq!(observability.connected_peer_count, 1);
     assert_eq!(observability.network_height_lag, 2);
+    let replication = app
+        .chain_replication_status
+        .clone()
+        .expect("replication status should exist");
+    assert_eq!(replication.local_peer_id, "peer-local");
+    assert_eq!(replication.connected_peers, vec!["peer-a".to_string()]);
 }

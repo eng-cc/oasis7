@@ -65,6 +65,31 @@ impl ClientLauncherApp {
         }
     }
 
+    fn peer_health_status_text(&self, status: &str) -> &'static str {
+        match (status, self.ui_language) {
+            ("active", UiLanguage::ZhCn) => "活跃",
+            ("active", UiLanguage::EnUs) => "Active",
+            ("candidate", UiLanguage::ZhCn) => "候选",
+            ("candidate", UiLanguage::EnUs) => "Candidate",
+            ("suspect", UiLanguage::ZhCn) => "可疑",
+            ("suspect", UiLanguage::EnUs) => "Suspect",
+            ("blocked", UiLanguage::ZhCn) => "阻断",
+            ("blocked", UiLanguage::EnUs) => "Blocked",
+            (_, UiLanguage::ZhCn) => "未知",
+            (_, UiLanguage::EnUs) => "Unknown",
+        }
+    }
+
+    fn peer_health_status_color(&self, status: &str) -> egui::Color32 {
+        match status {
+            "active" => egui::Color32::from_rgb(54, 132, 74),
+            "candidate" => egui::Color32::from_rgb(96, 122, 168),
+            "suspect" => egui::Color32::from_rgb(184, 122, 36),
+            "blocked" => egui::Color32::from_rgb(188, 60, 60),
+            _ => egui::Color32::from_rgb(110, 110, 110),
+        }
+    }
+
     pub(super) fn render_chain_p2p_summary(&mut self, ui: &mut egui::Ui) {
         if !self.config.chain_enabled {
             return;
@@ -209,6 +234,7 @@ impl ClientLauncherApp {
         }
 
         let status = self.chain_observability_status.clone();
+        let replication = self.chain_replication_status.clone();
         ui.group(|ui| {
             ui.label(self.tr("节点观测", "Node Observability"));
 
@@ -290,6 +316,72 @@ impl ClientLauncherApp {
                         self.tr("活动告警", "Active Alerts"),
                         alert_lines
                     ));
+                }
+
+                if let Some(replication) = replication {
+                    let connected_healths = replication
+                        .connected_peers
+                        .iter()
+                        .map(|peer_id| {
+                            let health = replication
+                                .peer_healths
+                                .iter()
+                                .find(|health| health.peer_id == *peer_id);
+                            (peer_id, health)
+                        })
+                        .collect::<Vec<_>>();
+
+                    ui.separator();
+                    if !replication.local_peer_id.is_empty() {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.small(format!("{}:", self.tr("本地 Peer", "Local Peer")));
+                            ui.label(
+                                egui::RichText::new(replication.local_peer_id.as_str()).monospace(),
+                            );
+                        });
+                    }
+
+                    ui.small(self.tr("已连接 Peer 明细", "Connected Peer Details"));
+                    if connected_healths.is_empty() {
+                        ui.small(self.tr(
+                            "当前没有已连接 peer；如已发现候选 peer，可继续看上面的 Peer 健康统计和告警。",
+                            "No peers are currently connected. Use the peer health counts and alerts above to inspect discovered candidates.",
+                        ));
+                    } else {
+                        for (peer_id, health) in connected_healths {
+                            ui.group(|ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(egui::RichText::new(peer_id.as_str()).monospace());
+                                    if let Some(health) = health {
+                                        ui.colored_label(
+                                            self.peer_health_status_color(health.status.as_str()),
+                                            self.peer_health_status_text(health.status.as_str()),
+                                        );
+                                        if let Some(path_kind) = health.active_path_kind.as_deref()
+                                        {
+                                            ui.small(format!(
+                                                "{}: {}",
+                                                self.tr("路径", "Path"),
+                                                path_kind
+                                            ));
+                                        }
+                                        if !health.issues.is_empty() {
+                                            ui.small(format!(
+                                                "{}: {}",
+                                                self.tr("问题", "Issues"),
+                                                health.issues.join(", ")
+                                            ));
+                                        }
+                                    } else {
+                                        ui.small(self.tr(
+                                            "未附带 health 快照",
+                                            "No health snapshot attached",
+                                        ));
+                                    }
+                                });
+                            });
+                        }
+                    }
                 }
             } else {
                 ui.small(self.tr(

@@ -56,6 +56,7 @@ mod llm_settings;
 #[path = "llm_settings_web.rs"]
 mod llm_settings;
 mod main_app_shell;
+mod main_chain_status;
 mod main_ui_helpers;
 mod platform_ops;
 mod provider_check_status;
@@ -72,6 +73,7 @@ mod web_api_support;
 
 use config_ui::StartupGuideState;
 use launcher_core::*;
+use main_chain_status::*;
 pub(crate) use provider_check_status::{
     ProviderCheckStatus, ProviderCompatibilityStatus, ProviderSnapshot,
 };
@@ -493,7 +495,6 @@ struct RunningProcess {
     child: Child,
     log_rx: Receiver<String>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LauncherStatus {
     Idle,
@@ -893,6 +894,7 @@ struct ClientLauncherApp {
     chain_runtime_status: ChainRuntimeStatus,
     chain_p2p_status: Option<WebChainP2pStatus>,
     chain_observability_status: Option<WebChainNodeObservabilityStatus>,
+    chain_replication_status: Option<WebChainReplicationStatus>,
     chain_recovery: Option<WebChainRecoverySnapshot>,
     #[cfg(not(target_arch = "wasm32"))]
     running: Option<RunningProcess>,
@@ -954,6 +956,7 @@ impl Default for ClientLauncherApp {
             chain_runtime_status,
             chain_p2p_status: None,
             chain_observability_status: None,
+            chain_replication_status: None,
             chain_recovery: None,
             #[cfg(not(target_arch = "wasm32"))]
             running: None,

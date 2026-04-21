@@ -5,13 +5,14 @@ use serde::Deserialize;
 
 use super::{
     host_for_url, parse_host_port, runtime_paths, ChainNodeObservabilitySnapshot,
-    ChainP2pStatusSnapshot, CHAIN_STATUS_PROBE_TIMEOUT_MS,
+    ChainP2pStatusSnapshot, ChainReplicationSnapshot, CHAIN_STATUS_PROBE_TIMEOUT_MS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChainStatusProbeSnapshot {
     pub(crate) p2p: ChainP2pStatusSnapshot,
     pub(crate) observability: ChainNodeObservabilitySnapshot,
+    pub(crate) replication: ChainReplicationSnapshot,
 }
 
 pub(crate) fn query_chain_status_endpoint(bind: &str) -> Result<ChainStatusProbeSnapshot, String> {
@@ -80,6 +81,7 @@ fn parse_chain_status_probe_response(
     struct ChainStatusProbeResponse {
         p2p: ChainP2pStatusSnapshot,
         observability: ChainNodeObservabilitySnapshot,
+        replication: ChainReplicationSnapshot,
     }
 
     let payload: ChainStatusProbeResponse = serde_json::from_slice(body)
@@ -87,5 +89,6 @@ fn parse_chain_status_probe_response(
     Ok(ChainStatusProbeSnapshot {
         p2p: payload.p2p,
         observability: payload.observability,
+        replication: payload.replication,
     })
 }
