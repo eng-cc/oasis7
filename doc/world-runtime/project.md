@@ -434,6 +434,32 @@
     - `./scripts/oasis7-node-observability-report.sh --status-json-path <sample_status_json> --traffic-summary-json <optional_sample_traffic_summary_json> --out-dir .tmp/oasis7_node_observability_test`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] control-plane-wire-byte-counters (PRD-WORLD_RUNTIME-038) [test_tier_required]: 为 `libp2p_replication` 增加 substream wire-byte 计数，把 `/v1/chain/status` 从“只看 payload + control-plane event counts”提升为“payload bytes + wire_totals + derived control_plane.wire_bytes”三层口径；repo-owned traffic/observability 脚本也必须同步展示该边界，并明确 transport handshake/framing 仍未计入。 Trace: .pm/tasks/task_c79092f4b50d4d52a36b11fe0fe5eb5e.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_c79092f4b50d4d52a36b11fe0fe5eb5e.yaml`
+    - `.pm/tasks/task_c79092f4b50d4d52a36b11fe0fe5eb5e.execution.md`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs`
+    - `crates/oasis7_net/Cargo.toml`
+    - `crates/oasis7_net/src/lib.rs`
+    - `crates/oasis7_net/src/libp2p_net.rs`
+    - `crates/oasis7_net/src/libp2p_net/api.rs`
+    - `crates/oasis7_net/src/libp2p_net/swarm_behaviour.rs`
+    - `crates/oasis7_net/src/libp2p_net/traffic_metrics.rs`
+    - `crates/oasis7_net/src/libp2p_net/wire_bytes.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/tests/discovery_peer_record_tests.rs`
+    - `crates/oasis7_net/src/libp2p_net/transport_retry_tests.rs`
+    - `scripts/traffic-monitor-summary.py`
+    - `scripts/oasis7-node-observability-report.sh`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_net libp2p_traffic_metrics_track_requests_and_gossip_payloads -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime build_chain_status_payload_includes_storage_metrics -- --nocapture`
+    - `bash -n scripts/oasis7-node-observability-report.sh`
+    - `python3 scripts/traffic-monitor-summary.py --help`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] fetch-commit-retry-backoff (PRD-WORLD_RUNTIME-029) [test_tier_required]: 为 `libp2p_replication_network` 增加 `fetch-commit` 单协议短时 peer cooldown，把最近刚返回缺失 handler/不支持协议签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的目标暂时排除出下一轮候选，减少真实 triad 的 gap-sync 重试流量浪费。 Trace: .pm/tasks/task_df0a42e3efea4806bb3f41245c1ef4d5.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`

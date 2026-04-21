@@ -41,7 +41,12 @@ fn signed_discovery_peer_record(
 
 #[test]
 fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery() {
-    let mut swarm = super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let mut swarm = super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        super::wire_bytes::init_shared_wire_byte_counters(),
+    );
     let peer_key = Keypair::generate_ed25519();
     let record = signed_discovery_peer_record(
         &peer_key,
@@ -73,8 +78,12 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
     assert!(last_dialed_transport_paths.contains_key(&peer_id));
 
     last_dialed_transport_paths.remove(&peer_id);
-    let mut retry_swarm =
-        super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let mut retry_swarm = super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        super::wire_bytes::init_shared_wire_byte_counters(),
+    );
 
     super::discovery::process_discovered_peer_record(
         &mut retry_swarm,
@@ -96,7 +105,12 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
 fn request_with_providers_does_not_fallback_outside_provider_subset() {
     let keypair = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(keypair.public());
-    let mut swarm = super::swarm_behaviour::build_swarm(&keypair, false, true);
+    let mut swarm = super::swarm_behaviour::build_swarm(
+        &keypair,
+        false,
+        true,
+        super::wire_bytes::init_shared_wire_byte_counters(),
+    );
     let (sender, receiver) = oneshot::channel();
     let mut subscriptions = HashSet::new();
     let mut topic_map = HashMap::new();

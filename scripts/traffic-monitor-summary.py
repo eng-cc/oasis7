@@ -110,6 +110,23 @@ def delta_lane_entry(current, baseline, counter_key):
     }
 
 
+def delta_wire_direction(current, baseline):
+    current = current or {}
+    baseline = baseline or {}
+    return {
+        "bytes": clamp_delta(current.get("bytes"), baseline.get("bytes")),
+    }
+
+
+def delta_wire_lane_entry(current, baseline):
+    current = current or {}
+    baseline = baseline or {}
+    return {
+        "inbound": delta_wire_direction(current.get("inbound"), baseline.get("inbound")),
+        "outbound": delta_wire_direction(current.get("outbound"), baseline.get("outbound")),
+    }
+
+
 def delta_named_map(current_map, baseline_map, counter_key):
     current_map = current_map or {}
     baseline_map = baseline_map or {}
@@ -200,6 +217,23 @@ def top_counter_entries(counter_map, top_n):
     return items[:top_n]
 
 
+def sum_wire_direction(current, added):
+    current = current or {}
+    added = added or {}
+    return {
+        "bytes": int(current.get("bytes", 0)) + int(added.get("bytes", 0)),
+    }
+
+
+def sum_wire_lane_entry(current, added):
+    current = current or {}
+    added = added or {}
+    return {
+        "inbound": sum_wire_direction(current.get("inbound"), added.get("inbound")),
+        "outbound": sum_wire_direction(current.get("outbound"), added.get("outbound")),
+    }
+
+
 def sum_direction(current, added, counter_key):
     current = current or {}
     added = added or {}
@@ -242,6 +276,13 @@ def payload_totals_for_lane(lane):
     inbound = totals.get("inbound") or {}
     outbound = totals.get("outbound") or {}
     return int(inbound.get("payload_bytes", 0)) + int(outbound.get("payload_bytes", 0))
+
+
+def total_wire_bytes(wire_lane):
+    wire_lane = wire_lane or {}
+    inbound = (wire_lane.get("inbound") or {}).get("bytes", 0)
+    outbound = (wire_lane.get("outbound") or {}).get("bytes", 0)
+    return int(inbound) + int(outbound)
 
 
 def share_percent(numerator, denominator):
@@ -351,6 +392,11 @@ def summarize_lane(lane_name, current_lane, baseline_lane, top_n):
         result["response"] = delta_lane_entry(
             current_lane.get("response"), (baseline_lane or {}).get("response"), counter_key
         )
+        result["wire_totals"] = delta_wire_lane_entry(
+            current_lane.get("wire_totals"),
+            (baseline_lane or {}).get("wire_totals"),
+        )
+        result["total_wire_bytes"] = total_wire_bytes(result.get("wire_totals"))
         by_topic = nonzero_named_map(
             delta_named_map(
                 current_lane.get("by_topic"), (baseline_lane or {}).get("by_topic"), counter_key
@@ -382,10 +428,21 @@ def summarize_lane(lane_name, current_lane, baseline_lane, top_n):
                 control_plane_current.get("total_events"),
                 control_plane_baseline.get("total_events"),
             ),
+            "wire_scope": control_plane_current.get("wire_scope"),
+            "excludes_transport_overhead": control_plane_current.get(
+                "excludes_transport_overhead"
+            ),
+            "wire_bytes": delta_wire_lane_entry(
+                control_plane_current.get("wire_bytes"),
+                control_plane_baseline.get("wire_bytes"),
+            ),
             "by_kind": control_plane_by_kind,
             "detail_entry_counts": {"by_kind": len(control_plane_by_kind)},
             "top_kinds": top_counter_entries(control_plane_by_kind, top_n),
         }
+        result["control_plane"]["total_wire_bytes"] = total_wire_bytes(
+            result["control_plane"].get("wire_bytes")
+        )
         result["detail_entry_counts"] = {
             "by_topic": len(by_topic),
             "by_protocol": len(by_protocol),
@@ -429,10 +486,14 @@ def aggregate_lane_summaries(lane_name, lanes, top_n):
         aggregate["gossip"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
         aggregate["request"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
         aggregate["response"] = {"inbound": {counter_key: 0, "payload_bytes": 0}, "outbound": {counter_key: 0, "payload_bytes": 0}}
+        aggregate["wire_totals"] = {"inbound": {"bytes": 0}, "outbound": {"bytes": 0}}
         for lane in available:
             aggregate["gossip"] = sum_lane_entry(aggregate["gossip"], lane.get("gossip"), counter_key)
             aggregate["request"] = sum_lane_entry(aggregate["request"], lane.get("request"), counter_key)
             aggregate["response"] = sum_lane_entry(aggregate["response"], lane.get("response"), counter_key)
+            aggregate["wire_totals"] = sum_wire_lane_entry(
+                aggregate["wire_totals"], lane.get("wire_totals")
+            )
 
         by_topic = sum_named_maps([lane.get("by_topic") for lane in available], counter_key)
         by_protocol = sum_named_maps(
@@ -463,10 +524,32 @@ def aggregate_lane_summaries(lane_name, lanes, top_n):
                 int((lane.get("control_plane") or {}).get("total_events", 0))
                 for lane in available
             ),
+            "wire_scope": sorted(
+                {
+                    (lane.get("control_plane") or {}).get("wire_scope")
+                    for lane in available
+                    if (lane.get("control_plane") or {}).get("wire_scope") not in (None, "")
+                }
+            ),
+            "excludes_transport_overhead": all(
+                (lane.get("control_plane") or {}).get("excludes_transport_overhead") is True
+                for lane in available
+                if (lane.get("control_plane") or {}).get("available") is True
+            ),
+            "wire_bytes": {"inbound": {"bytes": 0}, "outbound": {"bytes": 0}},
             "by_kind": control_plane_by_kind,
             "detail_entry_counts": {"by_kind": len(control_plane_by_kind)},
             "top_kinds": top_counter_entries(control_plane_by_kind, top_n),
         }
+        for lane in available:
+            aggregate["control_plane"]["wire_bytes"] = sum_wire_lane_entry(
+                aggregate["control_plane"]["wire_bytes"],
+                (lane.get("control_plane") or {}).get("wire_bytes"),
+            )
+        aggregate["total_wire_bytes"] = total_wire_bytes(aggregate.get("wire_totals"))
+        aggregate["control_plane"]["total_wire_bytes"] = total_wire_bytes(
+            aggregate["control_plane"].get("wire_bytes")
+        )
         aggregate["detail_entry_counts"] = {
             "by_topic": len(by_topic),
             "by_protocol": len(by_protocol),
@@ -803,11 +886,18 @@ def render_traffic_totals(name, lane):
     totals = lane["totals"]
     inbound = totals["inbound"]
     outbound = totals["outbound"]
-    return (
+    line = (
         f"- {name}: inbound +{fmt_num(inbound[counter_key])} {counter_key}, "
         f"+{fmt_bytes(inbound['payload_bytes'])}; outbound +{fmt_num(outbound[counter_key])} "
         f"{counter_key}, +{fmt_bytes(outbound['payload_bytes'])}"
     )
+    wire_totals = lane.get("wire_totals") or {}
+    if wire_totals:
+        line += (
+            f"; substream wire inbound +{fmt_bytes((wire_totals.get('inbound') or {}).get('bytes'))}, "
+            f"outbound +{fmt_bytes((wire_totals.get('outbound') or {}).get('bytes'))}"
+        )
+    return line
 
 
 def render_payload_distribution_block(title, entries):
@@ -897,6 +987,10 @@ def render_single_node_markdown(summary, history_path, generated_at):
 
     lines.append(render_traffic_totals("Libp2p replication", libp2p))
     if libp2p.get("available"):
+        if libp2p.get("wire_totals"):
+            lines.append(
+                f"- Libp2p total substream wire bytes: `{fmt_bytes(libp2p.get('total_wire_bytes'))}`"
+            )
         lines.append(
             "- Libp2p lanes: "
             + f"gossip +{fmt_bytes(libp2p['gossip']['inbound']['payload_bytes'] + libp2p['gossip']['outbound']['payload_bytes'])}, "
@@ -910,6 +1004,9 @@ def render_single_node_markdown(summary, history_path, generated_at):
         if control_plane.get("available"):
             lines.append(
                 f"- Libp2p control-plane counters: `+{fmt_num(control_plane['total_events'])}` {control_plane.get('units', 'events')} over `{control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+            )
+            lines.append(
+                f"- Libp2p control-plane wire bytes: total `+{fmt_bytes(control_plane.get('total_wire_bytes'))}`, inbound `+{fmt_bytes((control_plane.get('wire_bytes') or {}).get('inbound', {}).get('bytes'))}`, outbound `+{fmt_bytes((control_plane.get('wire_bytes') or {}).get('outbound', {}).get('bytes'))}`; scope=`{control_plane.get('wire_scope')}` excludes_transport_overhead=`{control_plane.get('excludes_transport_overhead')}`"
             )
             lines.extend(
                 render_top_counter_block(
@@ -948,11 +1045,22 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
     aggregate_libp2p = (aggregate.get("traffic") or {}).get("libp2p_replication") or {}
     aggregate_network = aggregate.get("network_interface") or {}
     if aggregate:
+        aggregate_libp2p_wire_total = (
+            fmt_bytes(aggregate_libp2p.get("total_wire_bytes"))
+            if aggregate_libp2p.get("available")
+            else "n/a"
+        )
+        aggregate_control_plane_wire_total = (
+            fmt_bytes((aggregate_libp2p.get("control_plane") or {}).get("total_wire_bytes"))
+            if aggregate_libp2p.get("available")
+            else "n/a"
+        )
         lines.extend(
             [
                 "## aggregate",
                 f"- Nodes with successful data: `{aggregate.get('node_count', 0)}`",
                 f"- Total payload across all nodes: `{fmt_bytes(aggregate.get('total_payload_bytes'))}`",
+                f"- Total libp2p substream wire bytes across all nodes: `{aggregate_libp2p_wire_total}`, derived control-plane wire bytes `{aggregate_control_plane_wire_total}`",
                 f"- Lane distribution: udp `{fmt_bytes(aggregate['lane_distribution']['udp_gossip']['payload_bytes'])}` ({aggregate['lane_distribution']['udp_gossip']['share_percent']:.2f}%), libp2p `{fmt_bytes(aggregate['lane_distribution']['libp2p_replication']['payload_bytes'])}` ({aggregate['lane_distribution']['libp2p_replication']['share_percent']:.2f}%)",
             ]
         )
@@ -988,6 +1096,9 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             if aggregate_control_plane.get("available"):
                 lines.append(
                     f"- Aggregate libp2p control-plane counters: `+{fmt_num(aggregate_control_plane['total_events'])}` {aggregate_control_plane.get('units', 'events')} over `{aggregate_control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+                )
+                lines.append(
+                    f"- Aggregate libp2p control-plane wire bytes: total `+{fmt_bytes(aggregate_control_plane.get('total_wire_bytes'))}`, inbound `+{fmt_bytes((aggregate_control_plane.get('wire_bytes') or {}).get('inbound', {}).get('bytes'))}`, outbound `+{fmt_bytes((aggregate_control_plane.get('wire_bytes') or {}).get('outbound', {}).get('bytes'))}`; scope=`{', '.join(aggregate_control_plane.get('wire_scope') or [])}` excludes_transport_overhead=`{aggregate_control_plane.get('excludes_transport_overhead')}`"
                 )
                 lines.extend(
                     render_top_counter_block(
@@ -1059,6 +1170,10 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
 
         libp2p = node["traffic"]["libp2p_replication"]
         if libp2p.get("available"):
+            if libp2p.get("wire_totals"):
+                lines.append(
+                    f"- Libp2p total substream wire bytes: `{fmt_bytes(libp2p.get('total_wire_bytes'))}`"
+                )
             lines.append(
                 "- Libp2p lanes: "
                 + f"gossip +{fmt_bytes(libp2p['gossip']['inbound']['payload_bytes'] + libp2p['gossip']['outbound']['payload_bytes'])}, "
@@ -1072,6 +1187,9 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             if control_plane.get("available"):
                 lines.append(
                     f"- Libp2p control-plane counters: `+{fmt_num(control_plane['total_events'])}` {control_plane.get('units', 'events')} over `{control_plane['detail_entry_counts']['by_kind']}` by_kind rows in JSON"
+                )
+                lines.append(
+                    f"- Libp2p control-plane wire bytes: total `+{fmt_bytes(control_plane.get('total_wire_bytes'))}`, inbound `+{fmt_bytes((control_plane.get('wire_bytes') or {}).get('inbound', {}).get('bytes'))}`, outbound `+{fmt_bytes((control_plane.get('wire_bytes') or {}).get('outbound', {}).get('bytes'))}`; scope=`{control_plane.get('wire_scope')}` excludes_transport_overhead=`{control_plane.get('excludes_transport_overhead')}`"
                 )
                 lines.extend(
                     render_top_counter_block(

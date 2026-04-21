@@ -239,7 +239,28 @@ fn build_chain_status_payload_includes_storage_metrics() {
     );
     assert_eq!(
         payload.traffic.libp2p_replication.scope,
-        "application_payload_only"
+        "application_payload_with_substream_wire_bytes"
+    );
+    assert!(
+        payload
+            .traffic
+            .libp2p_replication
+            .excludes_transport_overhead
+    );
+    assert_eq!(
+        payload.traffic.libp2p_replication.wire_totals.inbound.bytes,
+        0
+    );
+    assert_eq!(
+        payload.traffic.libp2p_replication.control_plane.wire_scope,
+        "substream_wire_bytes_minus_application_payload"
+    );
+    assert!(
+        payload
+            .traffic
+            .libp2p_replication
+            .control_plane
+            .excludes_transport_overhead
     );
     assert!(payload.wasm.metrics_available);
     assert_eq!(payload.wasm.build.total_build_wall_ms, Some(120));
