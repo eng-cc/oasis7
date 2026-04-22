@@ -1,3 +1,5 @@
+#[path = "tests_network_gap_sync_provider_routing.rs"]
+mod network_gap_sync_provider_routing_tests;
 #[path = "tests_network_gap_sync.rs"]
 mod network_gap_sync_tests;
 #[path = "tests_storage_challenge_blob_cache.rs"]
