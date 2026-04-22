@@ -39,9 +39,9 @@ pub(crate) fn snapshot_wire_byte_counters(
 }
 
 pub(crate) fn record_inbound_wire_bytes(counters: &SharedLibp2pWireByteCounters, num_bytes: usize) {
-    counters.inbound.fetch_add(
+    saturating_atomic_add(
+        &counters.inbound,
         u64::try_from(num_bytes).unwrap_or(u64::MAX),
-        Ordering::Relaxed,
     );
 }
 
@@ -49,10 +49,21 @@ pub(crate) fn record_outbound_wire_bytes(
     counters: &SharedLibp2pWireByteCounters,
     num_bytes: usize,
 ) {
-    counters.outbound.fetch_add(
+    saturating_atomic_add(
+        &counters.outbound,
         u64::try_from(num_bytes).unwrap_or(u64::MAX),
-        Ordering::Relaxed,
     );
+}
+
+fn saturating_atomic_add(counter: &AtomicU64, delta: u64) {
+    let mut observed = counter.load(Ordering::Relaxed);
+    loop {
+        let next = observed.saturating_add(delta);
+        match counter.compare_exchange_weak(observed, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            Err(current) => observed = current,
+        }
+    }
 }
 
 #[derive(Clone)]
