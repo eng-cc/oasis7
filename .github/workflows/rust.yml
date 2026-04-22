@@ -57,6 +57,7 @@ jobs:
           echo "run_consensus_tests=${{ steps.scope.outputs.run_consensus_tests }}"
           echo "run_distfs_tests=${{ steps.scope.outputs.run_distfs_tests }}"
           echo "run_viewer_tests=${{ steps.scope.outputs.run_viewer_tests }}"
+          echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
           echo "run_viewer_visual_baseline=${{ steps.scope.outputs.run_viewer_visual_baseline }}"
       - name: Install pinned Rust toolchains
         run: |
@@ -66,9 +67,12 @@ jobs:
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           fi
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' }}
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
         with:
           shared-key: ci-required-gate-v1
+      - name: Install trunk
+        if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
+        run: env -u RUSTC_WRAPPER cargo install trunk --locked
       - name: Install system deps
         if: ${{ steps.scope.outputs.needs_system_deps == 'true' }}
         run: |
@@ -93,6 +97,7 @@ jobs:
           OASIS7_CI_RUN_VIEWER_TESTS: ${{ steps.scope.outputs.run_viewer_tests }}
           OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ steps.scope.outputs.run_viewer_contract_tests }}
           OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
+          OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
       - name: Run viewer visual baseline gate
         if: ${{ steps.scope.outputs.run_viewer_visual_baseline == 'true' }}
