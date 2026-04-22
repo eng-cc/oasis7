@@ -85,3 +85,54 @@ fn apply_web_snapshot_tracks_chain_p2p_status_payload() {
     assert_eq!(replication.local_peer_id, "peer-local");
     assert_eq!(replication.connected_peers, vec!["peer-a".to_string()]);
 }
+
+#[test]
+fn connected_peer_detail_rows_follow_connected_peer_order() {
+    let app = ClientLauncherApp::default();
+    let replication = super::WebChainReplicationStatus {
+        local_peer_id: "peer-local".to_string(),
+        connected_peers: vec!["peer-b".to_string(), "peer-a".to_string()],
+        peer_healths: vec![
+            super::WebChainReplicationPeerHealth {
+                peer_id: "peer-a".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: Some("operator-a".to_string()),
+                source_asn: None,
+            },
+            super::WebChainReplicationPeerHealth {
+                peer_id: "peer-b".to_string(),
+                status: "candidate".to_string(),
+                issues: vec!["lagging".to_string()],
+                discovery_sources: vec!["peer_record".to_string()],
+                active_path_kind: Some("relay".to_string()),
+                source_operator: None,
+                source_asn: Some("asn-b".to_string()),
+            },
+        ],
+    };
+
+    let rows = app.connected_peer_detail_rows(&replication);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].0, "peer-b");
+    assert_eq!(
+        rows[0]
+            .1
+            .as_ref()
+            .expect("peer-b health should exist")
+            .status,
+        "candidate"
+    );
+    assert_eq!(rows[1].0, "peer-a");
+    assert_eq!(
+        rows[1]
+            .1
+            .as_ref()
+            .expect("peer-a health should exist")
+            .active_path_kind
+            .as_deref(),
+        Some("direct")
+    );
+}

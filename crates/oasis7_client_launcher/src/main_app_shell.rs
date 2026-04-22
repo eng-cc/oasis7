@@ -307,6 +307,15 @@ impl eframe::App for ClientLauncherApp {
                     {
                         self.explorer_window_open = true;
                     }
+                    if ui
+                        .add_enabled(
+                            self.config.chain_enabled,
+                            egui::Button::new(self.tr("Peer 窗口", "Peer Window")),
+                        )
+                        .clicked()
+                    {
+                        self.peer_details_window_open = true;
+                    }
                 }
                 #[cfg(target_arch = "wasm32")]
                 {
@@ -339,6 +348,15 @@ impl eframe::App for ClientLauncherApp {
                         .clicked()
                     {
                         self.explorer_window_open = true;
+                    }
+                    if ui
+                        .add_enabled(
+                            self.config.chain_enabled,
+                            egui::Button::new(self.tr("Peer 窗口", "Peer Window")),
+                        )
+                        .clicked()
+                    {
+                        self.peer_details_window_open = true;
                     }
                 }
                 if ui.button(self.tr("清空日志", "Clear Logs")).clicked() {
@@ -382,6 +400,7 @@ impl eframe::App for ClientLauncherApp {
             .show(ctx, self.ui_language, &mut self.config);
         self.show_feedback_window(ctx);
         self.show_transfer_window(ctx);
+        self.show_peer_details_window(ctx);
         self.show_explorer_window(ctx);
         ctx.request_repaint_after(Duration::from_millis(120));
     }
