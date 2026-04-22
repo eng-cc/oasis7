@@ -1,18 +1,28 @@
 task_uid: task_96b5335d61a74a708723578e0f986ddd
-title: "shrink node clock and replication hotspot"
+title: "consolidated node rust hotspot shrink batch"
 owner_role: runtime_engineer
-worktree_hint: null
+worktree_hint: /home/scc/worktrees/oasis7-engineering-module-release-support-hotspot-shrink
 execution_log_path: .pm/tasks/task_96b5335d61a74a708723578e0f986ddd.execution.md
 status: done
 priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md
-doc_refs: []
+  - crates/oasis7_node/src/tests_clock_and_replication.rs
+  - crates/oasis7_node/src/node_engine_core.rs
+  - crates/oasis7_node/src/tests_consensus_signatures.rs
+  - crates/oasis7_node/src/tests_network_gap_sync.rs
+doc_refs:
+  - doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md
 related_prd:
   - PRD-ENGINEERING-R1200-002
-acceptance: []
+  - PRD-ENGINEERING-R1200-004
+  - PRD-ENGINEERING-R1200-005
+acceptance:
+  - "The node hotspot rows in the rust-1200-line governance project remain traceable under one canonical PM task instead of per-slice duplicate task files."
+  - "The linked node engine and node test hotspots are reduced away from the 1200-line threshold through semantic extraction rather than formatting-only compaction."
+  - "Targeted node validation and rust-size governance checks remain green across the consolidated node hotspot batch."
 handoff_to: []
-updated_at: 2026-04-22T12:17:05+08:00
+updated_at: 2026-04-22T15:22:00+08:00
 last_started_at: 2026-04-22T12:10:08+08:00
-last_closed_at: 2026-04-22T12:17:05+08:00
+last_closed_at: 2026-04-22T15:22:00+08:00
