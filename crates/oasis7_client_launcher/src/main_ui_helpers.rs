@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashMap;
 
 impl ClientLauncherApp {
     pub(super) fn tr<'a>(&self, zh: &'a str, en: &'a str) -> &'a str {
@@ -90,20 +91,24 @@ impl ClientLauncherApp {
         }
     }
 
-    pub(super) fn connected_peer_detail_rows(
+    pub(super) fn connected_peer_detail_rows<'a>(
         &self,
-        replication: &WebChainReplicationStatus,
-    ) -> Vec<(String, Option<WebChainReplicationPeerHealth>)> {
+        replication: &'a WebChainReplicationStatus,
+    ) -> Vec<(&'a str, Option<&'a WebChainReplicationPeerHealth>)> {
+        let peer_health_index: HashMap<&str, &WebChainReplicationPeerHealth> = replication
+            .peer_healths
+            .iter()
+            .map(|health| (health.peer_id.as_str(), health))
+            .collect();
+
         replication
             .connected_peers
             .iter()
             .map(|peer_id| {
-                let health = replication
-                    .peer_healths
-                    .iter()
-                    .find(|health| health.peer_id == *peer_id)
-                    .cloned();
-                (peer_id.clone(), health)
+                (
+                    peer_id.as_str(),
+                    peer_health_index.get(peer_id.as_str()).copied(),
+                )
             })
             .collect()
     }
@@ -111,7 +116,7 @@ impl ClientLauncherApp {
     fn render_connected_peer_detail_rows(
         &self,
         ui: &mut egui::Ui,
-        rows: &[(String, Option<WebChainReplicationPeerHealth>)],
+        rows: &[(&str, Option<&WebChainReplicationPeerHealth>)],
     ) {
         if rows.is_empty() {
             ui.small(self.tr(
@@ -124,7 +129,7 @@ impl ClientLauncherApp {
         for (peer_id, health) in rows {
             ui.group(|ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(egui::RichText::new(peer_id.as_str()).monospace());
+                    ui.label(egui::RichText::new(*peer_id).monospace());
                     if let Some(health) = health {
                         ui.colored_label(
                             self.peer_health_status_color(health.status.as_str()),
@@ -166,9 +171,6 @@ impl ClientLauncherApp {
         ui: &mut egui::Ui,
         include_title: bool,
     ) {
-        let status = self.chain_observability_status.clone();
-        let replication = self.chain_replication_status.clone();
-
         if include_title {
             ui.heading(self.tr("P2P Peer 明细", "P2P Peer Details"));
             ui.small(self.tr(
@@ -186,7 +188,7 @@ impl ClientLauncherApp {
             return;
         }
 
-        if let Some(status) = status {
+        if let Some(status) = self.chain_observability_status.as_ref() {
             ui.horizontal_wrapped(|ui| {
                 ui.small(format!("{}:", self.tr("状态", "Status")));
                 ui.colored_label(
@@ -267,7 +269,7 @@ impl ClientLauncherApp {
         }
 
         ui.separator();
-        if let Some(replication) = replication {
+        if let Some(replication) = self.chain_replication_status.as_ref() {
             if !replication.local_peer_id.is_empty() {
                 ui.horizontal_wrapped(|ui| {
                     ui.small(format!("{}:", self.tr("本地 Peer", "Local Peer")));
