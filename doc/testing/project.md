@@ -245,6 +245,24 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+- [x] required-gate-ondemand-launcher-web-build (PRD-TESTING-002/003) [test_tier_required]: 为 PR `required-gate` 补 launcher Web `trunk build` 的 changed-path 按需覆盖，在保持 stable check context 的前提下，仅对 launcher/shared runtime 相关路径安装 `trunk` 并执行 `oasis7_client_launcher` Web dist 构建，避免 release `build-web-dist` 才暴露编译错误。 Trace: .pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml
+  - 产物文件:
+    - `scripts/plan-rust-required-scope.sh`
+    - `scripts/ci-tests.sh`
+    - `.github/workflows/rust.yml`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `doc/testing/ci/ci-tiered-execution.prd.md`
+    - `doc/testing/ci/ci-tiered-execution.project.md`
+    - `.pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml`
+    - `.pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/plan-rust-required-scope.sh scripts/ci-tests.sh`
+    - `python -c "import pathlib, yaml; yaml.safe_load(pathlib.Path('.github/workflows/rust.yml').read_text())"`
+    - `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7_client_launcher/src/app_process_web.rs`
+    - `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path crates/oasis7/src/lib.rs`
+    - `./scripts/plan-rust-required-scope.sh --event-name pull_request --changed-path .pm/tasks/example.yaml`
+    - `OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false OASIS7_CI_RUN_CONSENSUS_TESTS=false OASIS7_CI_RUN_DISTFS_TESTS=false OASIS7_CI_RUN_VIEWER_TESTS=false OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=false OASIS7_CI_RUN_VIEWER_WASM_CHECK=false OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true ./scripts/ci-tests.sh required`
 - [x] release-build-web-dist-launcher-wasm-regression (PRD-TESTING-002/003) [test_tier_required]: 修复 `Release Packages` 再次卡在 `build-web-dist` 的 launcher wasm 回归，恢复 `launcher_core_http` 里跨目标 URL helper 在 wasm32 构建下的可见性，避免 `parse_http_base_url` / `normalize_host_for_url` / `host_for_url` 被 native-only `cfg` 意外屏蔽。 Trace: .pm/tasks/task_9a300593735d419ba7de7f95bd67bead.yaml
   - 产物文件:
     - `crates/oasis7_client_launcher/src/launcher_core.rs`
@@ -280,9 +298,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-16
+- 更新日期: 2026-04-22
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `required-gate-ondemand-launcher-web-build`（已为 PR `required-gate` 补 launcher Web `trunk build` 的 changed-path 按需覆盖；仅在命中 `oasis7_client_launcher` / launcher shared runtime 路径时安装 `trunk` 并执行 Web dist 构建，无关 PR 继续保留 stable `required-gate` 上下文但只跑 governance/fmt。）
 - 最新完成: `rust-required-gate-ondemand-scope`（已为 `.github/workflows/rust.yml` 的 `required-gate` 补 `scripts/plan-rust-required-scope.sh`，先按 changed paths 规划 `minimal / targeted / full`；无关 PR 保持 stable `required-gate` 上下文，但只执行 governance/fmt，viewer/runtime/support 重型组件按命中路径执行。）
 - 最新完成: `wasm-determinism-gate-ondemand-scope`（已为 `.github/workflows/wasm-determinism-gate.yml` 补 `scripts/plan-wasm-determinism-scope.sh`，先按 changed paths 规划 `m1/m4/m5` scope；无关 PR 保持 `verify-wasm-determinism (m1|m4|m5)` required contexts 稳定，但在 job 内 no-op，不再实际执行 builtin wasm summary collect。）
 - 最新完成: `TASK-TESTING-065`（已将 launcher 展示层使用的 `ProviderCompatibilityStatus` 收口为 `oasis7_client_launcher` 本地跨目标类型，并在 native loopback provider 检查结果中显式映射，恢复 `build-web-dist` 的 wasm compile + `trunk build` 闭环。）

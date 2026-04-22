@@ -31,7 +31,7 @@
 - Proposed Solution: 以 testing PRD 统一定义分层测试体系、触发条件、证据标准与发布门禁，并对齐 `testing-manual.md`。
 - Success Criteria:
   - SC-1: 关键改动路径均可映射到明确测试层级（S0~S10）。
-  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件。
+  - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`。
   - SC-3: Web UI 闭环与分布式长跑在发布流程中有可追溯证据，且明确区分 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 两条驱动链路。
     - SC-3A: `release-gate-web` 在 `renderMode=software_safe` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent。
   - SC-4: 测试任务 100% 映射 PRD-TESTING-ID。
@@ -70,7 +70,7 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件 | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only | 开发者可执行，发布者可放行 |
+| 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面默认走 `agent-browser`；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样 | QA/发布与产品 owner 共同遵循 |
 | software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人 | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引 | 测试维护者负责最终校验 |
@@ -97,6 +97,7 @@
   - AC-11: runtime shard 划分必须按关键路径持续重平衡；`oasis7 --lib --bins` 等中重量级套件不应长期挤占最重 shard。
   - AC-12: `doc/testing/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` / `oasis7 Runtime` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
   - AC-13: `token-genesis-allocation-audit-checklist-2026-03-22` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
+  - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -127,6 +128,7 @@
   - 权限不足：CI 环境权限不足时标记阻塞并输出最小修复建议。
   - 超时：长跑套件超时需产出中间状态，防止误判为无结果。
   - 并发冲突：同一产物路径并发写入时强制分目录隔离。
+  - launcher Web 漏检：若 shared runtime 改动未触发 launcher Web build，错误会延后到 release `build-web-dist` 暴露；required-gate planner 必须在相关路径命中时提升到 targeted 并安装 `trunk`。
   - 数据异常：日志格式破损时保留原始文件并标记解析失败。
   - Windows 非法路径：若 tracked path 含 Windows 非法字符、保留名或尾随空格/点，必须在 Linux required gate 先阻断，不允许等到 Windows runner checkout 才暴露。
   - 迁移断链：文档改名后若引用未同步，需在同批次修复并复测。
@@ -161,8 +163,8 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-001 | TASK-TESTING-001/002/005/006 | `test_tier_required` | S0~S10 触发矩阵核验、手册一致性检查 | 分层测试入口与执行标准 |
-| PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证、required-gate changed-path planner 回归，以及 Windows checkout 兼容路径扫描 | 发布链路可信性与可复现性 |
-| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察与 Windows checkout 失败签名回归 | 长期质量治理与发布风险控制 |
+| PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证、required-gate changed-path planner 回归、launcher Web build 命中/未命中验证，以及 Windows checkout 兼容路径扫描 | 发布链路可信性与可复现性 |
+| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察、launcher Web build 逃逸缺陷回归与 Windows checkout 失败签名回归 | 长期质量治理与发布风险控制 |
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |

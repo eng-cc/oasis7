@@ -13,6 +13,7 @@
 - [x] T4 (PRD-TESTING-CI-TIERED-002/003): 文档回写、任务日志更新、验证并提交。
 - [x] T5 (PRD-TESTING-004): 专题文档人工迁移到 strict schema，并切换命名为 `.prd.md/.project.md`。
 - [x] rust-required-gate-ondemand-scope (PRD-TESTING-CI-TIERED-002/003) [test_tier_required]: 为 `.github/workflows/rust.yml` 的 `required-gate` 补 changed-path scope planner，保持 `required-gate` check context 稳定，同时把 docs-only / `.pm` / 无关元数据 PR 收口为 governance/fmt-only。 Trace: .pm/tasks/task_67ace00b259d423a8569f52a2f58c1fd.yaml
+- [x] required-gate-ondemand-launcher-web-build (PRD-TESTING-CI-TIERED-002/003) [test_tier_required]: 为 `required-gate` 补 launcher Web build 的按需 planner 输出、workflow `trunk` 安装与 `ci-tests.sh required` 接线，仅在 launcher/shared runtime 路径命中时执行 `oasis7_client_launcher` Web dist 构建。 Trace: .pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml
 
 ## 依赖
 - doc/testing/ci/ci-tiered-execution.prd.md
@@ -24,10 +25,11 @@
   - `doc/testing/project.md`
 
 ## 状态
-- 更新日期：2026-04-16
+- 更新日期：2026-04-22
 - 当前阶段：已完成
 - 阻塞项：无
 - 下一步：无（当前专题已收口）
 - 审计备注（2026-03-05 ROUND-002）：本文件仅保留执行任务记录；规则定义以 `ci-tiered-execution.prd.md` 为准。
 - 补充备注（2026-04-10）：默认本地提交路径已从 `required` 收紧为 `commit` baseline；其后又进一步移出 `oasis7_viewer` 全量单测与 wasm32 编译检查，只保留治理/format/support crate 与 software-safe contract。`required` 继续保留为显式本地重门禁与 PR/CI required gate。
 - 补充备注（2026-04-16）：`required-gate` 现已新增 `scripts/plan-rust-required-scope.sh`；push/PR 上先规划 `minimal / targeted / full`，无关改动保留 stable `required-gate` 上下文但只执行 governance/fmt，重型 viewer/runtime/support 组件按命中路径执行。
+- 补充备注（2026-04-22）：`required-gate` 现已在 launcher/shared runtime 路径命中时额外输出 `run_launcher_web_build` / `needs_trunk`，workflow 仅在该分支安装 `trunk` 并向 `scripts/ci-tests.sh required` 透传 `OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true`；本地显式 `required` 默认语义不变。

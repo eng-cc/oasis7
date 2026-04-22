@@ -12,11 +12,12 @@
 
 ## 1. Executive Summary
 - Problem Statement: 本地 `pre-commit` 与 PR 门禁若共用同一套较重测试，会显著拉长提交反馈周期并影响开发迭代效率。
-- Proposed Solution: 建立 `commit` / `required` / `full` 分级执行模型，让默认提交路径只跑轻量 commit baseline，PR/CI required gate 保持单一稳定 check context，但可在 job 内按 changed paths 剪裁 viewer/runtime/support 重型分量，每日定时跑 full，保持“快反馈 + 全覆盖”平衡。
+- Proposed Solution: 建立 `commit` / `required` / `full` 分级执行模型，让默认提交路径只跑轻量 commit baseline，PR/CI required gate 保持单一稳定 check context，但可在 job 内按 changed paths 剪裁 viewer/runtime/support 重型分量，并在命中 launcher/shared runtime 路径时按需补 launcher Web `trunk build`，每日定时跑 full，保持“快反馈 + 全覆盖”平衡。
 - Success Criteria:
   - SC-1: `scripts/ci-tests.sh` 支持 `commit` / `required` / `full` 分级参数并统一入口。
   - SC-2: `pre-commit` 默认执行 `commit` baseline，开发反馈时间下降。
   - SC-3: GitHub Actions 实现 push/PR 跑 stable-context `required-gate`，并在 job 内先规划 changed-path scope；schedule 继续跑 full。
+  - SC-3A: `required-gate` 在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 变更时，必须按需安装 `trunk` 并执行 launcher Web build。
   - SC-4: 分级策略在脚本、workflow、文档三端口径一致。
   - SC-5: docs-only / `.pm` / 纯元数据 PR 不再实际执行 viewer/runtime/support 重型测试，但仍保留 `required-gate` check context。
 
@@ -44,13 +45,14 @@
 | 分级入口脚本 | `commit` / `required` / `full` 参数 | 调用 `scripts/ci-tests.sh` | `idle -> running -> passed/failed` | commit 优先速度，required 负责较重核心门禁，full 负责低频高覆盖 | CI/开发者可触发 |
 | pre-commit 接线 | 默认等级、执行命令 | `pre-commit.sh` 默认跑 `commit` | `hooked -> executed -> reported` | 以提交速度优先 | 本地开发默认执行 |
 | workflow 分流 | 触发器类型、执行等级 | push/PR 跑 required，schedule 跑 full | `triggered -> running -> archived` | 时间敏感路径优先 required | 维护者可调整触发策略 |
-| required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件 | `planned -> pruned -> executed` | docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须回退 full | workflow 自动执行；本地显式 `required` 不受影响 |
+| required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件，必要时安装 `trunk` 并补 launcher Web build | `planned -> pruned -> executed` | docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须回退 full；launcher/shared runtime 路径命中时追加 launcher Web build | workflow 自动执行；本地显式 `required` 不受影响 |
 - Acceptance Criteria:
   - AC-1: `scripts/ci-tests.sh` 分级参数行为明确并可复现。
   - AC-2: `scripts/pre-commit.sh` 默认执行 `commit`，且不再触发 `cargo test -p oasis7 --tests --features test_tier_required`。
   - AC-3: `.github/workflows/rust.yml` 按触发器分流 required/full。
   - AC-4: 文档与任务日志回写完整。
   - AC-5: `.github/workflows/rust.yml` 的 `required-gate` 在 push/PR 上先执行 changed-path planner；docs-only / `.pm` / 无关元数据改动只跑 governance/fmt，且 `required-gate` check context 名称保持不变。
+  - AC-6: `required-gate` 对 launcher/shared runtime 命中路径必须输出 `run_launcher_web_build=true` / `needs_trunk=true`，并仅在该分支向 `scripts/ci-tests.sh required` 透传 `OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true`。
 - Non-Goals:
   - 不做 case-level / flaky-aware 的动态测试选择，也不把本地显式 `./scripts/ci-tests.sh required` 改成 changed-path 按需运行。
   - 不做缓存、并行矩阵、runner 基础设施优化。
@@ -73,6 +75,7 @@
   - commit 误挂重型 viewer Rust 校验：会重新拉长默认提交耗时，需把 `oasis7_viewer` 全量单测与 wasm32 编译检查限制在显式 `required` / CI required gate。
   - required 覆盖过窄：可能延后发现问题，需结合每日 full 和缺陷复盘补齐。
   - required planner 漏判：若 diff base 不可解析、命中共享 CI / gate 脚本输入、或落入未分类代码路径，必须回退 full，不能静默少跑。
+  - launcher Web 漏判：若 `oasis7_client_launcher` 或 launcher shared runtime 变更未命中 planner，编译错误会推迟到 release `build-web-dist` 才暴露；因此 launcher 相关路径必须显式映射到 `run_launcher_web_build`。
   - docs-only / `.pm` 元数据 PR：允许 `required-gate` 退化为 governance/fmt-only，但 check context 仍必须存在，避免分支保护漂移。
   - full 仅定时执行：发现延迟增加，需保留手动触发路径。
   - 旧命令调用习惯：不带参数调用时需定义默认行为避免误解。
@@ -98,8 +101,8 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-CI-TIERED-001 | T1/T2 | `test_tier_required` | pre-commit `commit` 路径验证 | 本地提交反馈效率 |
-| PRD-TESTING-CI-TIERED-002 | T2/T3/rust-required-gate-ondemand-scope | `test_tier_required` | 脚本参数、changed-path planner 与 workflow 分流检查 | CI 门禁一致性 |
-| PRD-TESTING-CI-TIERED-003 | T3/T4/rust-required-gate-ondemand-scope | `test_tier_required` + `test_tier_full` | required-gate scope 剪裁验证 + schedule full 回归与结果审查 | 发布前深度回归覆盖 |
+| PRD-TESTING-CI-TIERED-002 | T2/T3/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` | 脚本参数、changed-path planner、launcher Web build planner 输出与 workflow 分流检查 | CI 门禁一致性 |
+| PRD-TESTING-CI-TIERED-003 | T3/T4/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | required-gate scope 剪裁验证、launcher Web build 命中/未命中回归，以及 schedule full 回归与结果审查 | 发布前深度回归覆盖 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -107,6 +110,7 @@
 | DEC-TIERED-002 | pre-commit 默认 `commit` | pre-commit 跑 `required` / `full` | 较重门禁会显著阻塞开发节奏。 |
 | DEC-TIERED-003 | schedule 承担 full 回归 | 取消 full | 无法保证主干深度质量。 |
 | DEC-TIERED-004 | `required-gate` 保持单一 check context，但在 CI job 内按 changed paths 剪裁重型组件 | 把 docs-only / 元数据 PR 继续送进全量 required，或把 `required-gate` 拆成新 check 名称 | 前者无法改善平均时长，后者会引入分支保护漂移与 required context 迁移成本。 |
+| DEC-TIERED-005 | launcher Web build 继续保持 CI planner 按需触发，不把本地显式 `required` 改成默认 `trunk build` | 无条件把 launcher `trunk build` 加进所有 `required` 执行 | 用户要求“按需跑”，且本地显式 `required` 仍需保持固定重门禁语义，不把 release-only Web 成本扩散到所有场景。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标（降低提交耗时 + 保留主干覆盖 + 统一入口）” -> 第 1 章与第 2 章 AC。

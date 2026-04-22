@@ -1,0 +1,28 @@
+task_uid: task_3778b0e747b249bc85b92b942a32b3fd
+title: "add on-demand launcher web build check to required gate"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-required-gate-launcher-web-build
+execution_log_path: .pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/prd.md
+  - doc/testing/project.md
+  - doc/testing/ci/ci-tiered-execution.prd.md
+  - doc/testing/ci/ci-tiered-execution.project.md
+doc_refs:
+  - doc/testing/prd.md
+  - doc/testing/project.md
+  - doc/testing/ci/ci-tiered-execution.prd.md
+  - doc/testing/ci/ci-tiered-execution.project.md
+related_prd:
+  - PRD-TESTING-002
+  - PRD-TESTING-003
+acceptance:
+  - "required-gate can run launcher web build coverage on demand when relevant paths change"
+  - "unrelated PRs keep stable required-gate context without always paying launcher trunk build cost"
+handoff_to: []
+updated_at: 2026-04-22T22:57:51+08:00
+last_started_at: 2026-04-22T22:43:43+08:00
+last_closed_at: 2026-04-22T22:57:51+08:00

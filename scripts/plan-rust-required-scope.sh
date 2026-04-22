@@ -20,6 +20,7 @@ run_viewer_tests=0
 run_viewer_contract_tests=0
 run_viewer_wasm_check=0
 run_viewer_visual_baseline=0
+run_launcher_web_build=0
 
 usage() {
   cat <<'USAGE'
@@ -84,6 +85,11 @@ mark_viewer() {
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
   run_viewer_visual_baseline=1
+  append_reason "$1"
+}
+
+mark_launcher_web_build() {
+  run_launcher_web_build=1
   append_reason "$1"
 }
 
@@ -159,6 +165,19 @@ classify_changed_path() {
       ;;
     crates/oasis7|crates/oasis7/*|crates/oasis7/**/*)
       mark_runtime "runtime:${path}"
+      mark_launcher_web_build "launcher_shared_runtime:${path}"
+      ;;
+    crates/oasis7_client_launcher|crates/oasis7_client_launcher/*|crates/oasis7_client_launcher/**/*)
+      mark_launcher_web_build "launcher_web:${path}"
+      ;;
+    crates/oasis7_launcher_ui|crates/oasis7_launcher_ui/*|crates/oasis7_launcher_ui/**/*)
+      mark_launcher_web_build "launcher_ui:${path}"
+      ;;
+    crates/oasis7_proto|crates/oasis7_proto/*|crates/oasis7_proto/**/*)
+      mark_launcher_web_build "launcher_proto:${path}"
+      ;;
+    crates/oasis7_wasm_abi|crates/oasis7_wasm_abi/*|crates/oasis7_wasm_abi/**/*)
+      mark_launcher_web_build "launcher_wasm_abi:${path}"
       ;;
     crates/oasis7_consensus|crates/oasis7_consensus/*|crates/oasis7_consensus/**/*)
       mark_consensus "consensus:${path}"
@@ -242,6 +261,7 @@ elif [[ \
   "$run_viewer_tests" -eq 1 || \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_wasm_check" -eq 1 || \
+  "$run_launcher_web_build" -eq 1 || \
   "$run_viewer_visual_baseline" -eq 1 \
   ]]; then
   scope="targeted"
@@ -257,7 +277,8 @@ needs_system_deps="$([[ \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_visual_baseline" -eq 1 \
   ]] && echo true || echo false)"
-needs_wasm_target="$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
+needs_wasm_target="$([[ "$run_viewer_wasm_check" -eq 1 || "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
+needs_trunk="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
 
 emit_output() {
   local dest="$1"
@@ -269,9 +290,11 @@ emit_output() {
     echo "run_viewer_tests=$([[ "$run_viewer_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
+    echo "run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_visual_baseline=$([[ "$run_viewer_visual_baseline" -eq 1 ]] && echo true || echo false)"
     echo "needs_system_deps=$needs_system_deps"
     echo "needs_wasm_target=$needs_wasm_target"
+    echo "needs_trunk=$needs_trunk"
     echo "reason_summary=$reason_summary"
     echo "changed_path_count=${#changed_paths[@]}"
     echo "changed_paths=$changed_paths_summary"
@@ -289,9 +312,11 @@ run_distfs_tests=$([[ "$run_distfs_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_tests=$([[ "$run_viewer_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)
+run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)
 run_viewer_visual_baseline=$([[ "$run_viewer_visual_baseline" -eq 1 ]] && echo true || echo false)
 needs_system_deps=$needs_system_deps
 needs_wasm_target=$needs_wasm_target
+needs_trunk=$needs_trunk
 reason_summary=$reason_summary
 changed_path_count=${#changed_paths[@]}
 changed_paths=$changed_paths_summary
