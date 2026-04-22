@@ -203,15 +203,25 @@
 - [x] 本地执行 `bash -n scripts/build-game-launcher-bundle.sh`，并复核 `ensure_rust_target_installed` 仍位于 `trunk build` 之前。
 - [x] 已推送修复并以 `v0.0.23` 触发远端验证；`Release Packages` run `23086016214` 已确认 bundle 脚本自愈后，三平台 `package-native` 与 `publish-release` 全部通过。
 
+### T3Z build-web-dist Web snapshot schema 漂移热修（2026-04-22）
+- 完成内容：复盘 `Release Packages` run `24769333021`，确认前置 `release-gate-*` 与 aggregate `release-gate` 全部通过，唯一阻断收敛到 `build-web-dist`；失败签名为 `crates/oasis7_client_launcher/src/app_process_web.rs:506` 读取 `snapshot.chain_replication_status`，但 `web_api_support::WebStateSnapshot` 未声明该字段，导致 `trunk build` 编译 `wasm32-unknown-unknown` 版 `oasis7_client_launcher` 失败。
+- 完成内容：调整 `crates/oasis7_client_launcher/src/web_api_support.rs`，将 `chain_replication_status` 补回 `WebStateSnapshot`，并直接复用 `main_chain_status::WebChainReplicationStatus` 作为反序列化字段类型，让 wasm launcher 与 `/api/state` 当前真值重新对齐。
+- 本地回归：
+  - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher apply_web_snapshot_tracks_chain_p2p_status_payload -- --nocapture`
+  - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher connected_peer_detail_rows_follow_connected_peer_order -- --nocapture`
+  - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+  - `cd crates/oasis7_viewer && env -u NO_COLOR trunk build --release --dist ../../output/release/web-dist`
+- 遗留事项：仍需推送修复并重触发 `Release Packages`，确认 `build-web-dist` 不再因 launcher Web snapshot schema 漂移失败。
+
 ## 依赖
 - 打包基础脚本：`scripts/build-game-launcher-bundle.sh`
 - 站点发布流程：`.github/workflows/pages.yml`
 - 站点入口文件：`site/index.html`、`site/en/index.html`
 
 ## 状态
-- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X/T3Y 已完成；公开下载主资产已收口为 `AppImage` / `.dmg` / `.exe`，Linux `.deb` 转为次级高级入口，升级口径也已收口为手动覆盖/替换）
-- 最近更新：2026-04-15 已进一步把 Linux 公共主资产切到 `oasis7-linux-x86_64.AppImage`，将 Windows `package-native` 从自解压 SFX `.exe` 切到 NSIS 标准安装器，并把官网首页与 bundle README 的升级说明统一为“手动覆盖安装/替换 + 用户自备份相对路径状态”，不再把更完整的 config/world 自动迁移写成当前能力。
-- 下一步：触发新一轮 GitHub `Release Packages` 远端发布，确认 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 与最新站点下载面全部可用；随后继续推进 Windows 签名与 macOS notarization。
+- 当前阶段：进行中（T0A/T0/T1/T2/T3/T3A/T3B/T3C/T3D/T3E/T3F/T3G/T3H/T3I/T3J/T3K/T3L/T3M/T3N/T3O/T3P/T3Q/T3R/T3S/T3T/T3U/T3V/T3W/T3X/T3Y 已完成；T3Z 已完成本地回归，待推送并重触发远端发布验证；公开下载主资产已收口为 `AppImage` / `.dmg` / `.exe`，Linux `.deb` 转为次级高级入口，升级口径也已收口为手动覆盖/替换）
+- 最近更新：2026-04-22 已完成 `T3Z` 本地修复与回归：`WebStateSnapshot` 补回 `chain_replication_status` 后，launcher 观察性测试通过，`build-web-dist` 两段 `trunk build` 均成功收口到 `INFO applying new distribution`，本地已无法复现 run `24769333021` 的 schema 漂移失败。
+- 下一步：推送 `T3Z` 修复并重触发 GitHub `Release Packages`，确认 `build-web-dist` 恢复；随后继续验证 Windows NSIS 安装器、Linux `AppImage` + 次级 `.deb`、macOS `.dmg` 与最新站点下载面全部可用，并继续推进 Windows 签名与 macOS notarization。
 
 ## 迁移记录（2026-03-03）
 - 已按 `TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006)` 从 legacy 命名迁移为 `.prd.md/.project.md`。
