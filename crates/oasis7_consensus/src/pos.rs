@@ -914,6 +914,7 @@ fn progress_proposal_from_record(record: &PosHeadRecord) -> PosProgressProposal 
         height: record.head.height,
         slot: record.slot,
         epoch: record.epoch,
+        opened_at_ms: record.proposed_at_ms,
         proposer_id: record.proposer_id.clone(),
         block_hash: record.head.block_hash.clone(),
         action_root: record.head.state_root.clone(),

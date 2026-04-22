@@ -934,6 +934,24 @@ fn production_release_policy_status_payload_reports_effective_policy() {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
         },
+        super::transfer_submit_api::ChainTransferMetricsStatus {
+            tracked_records: 0,
+            accepted_count: 0,
+            pending_count: 0,
+            confirmed_count: 0,
+            failed_count: 0,
+            timeout_count: 0,
+            inflight_count: 0,
+            oldest_inflight_age_ms: None,
+            recent_confirmation_latency:
+                super::transfer_submit_api::ChainTransferLatencySummaryStatus {
+                    sample_count: 0,
+                    avg_latency_ms: None,
+                    max_latency_ms: None,
+                    p50_latency_ms: None,
+                    p95_latency_ms: None,
+                },
+        },
         super::ChainReplicationDebugStatus::default(),
     );
 
@@ -1041,6 +1059,24 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
+        super::transfer_submit_api::ChainTransferMetricsStatus {
+            tracked_records: 0,
+            accepted_count: 0,
+            pending_count: 0,
+            confirmed_count: 0,
+            failed_count: 0,
+            timeout_count: 0,
+            inflight_count: 0,
+            oldest_inflight_age_ms: None,
+            recent_confirmation_latency:
+                super::transfer_submit_api::ChainTransferLatencySummaryStatus {
+                    sample_count: 0,
+                    avg_latency_ms: None,
+                    max_latency_ms: None,
+                    p50_latency_ms: None,
+                    p95_latency_ms: None,
+                },
         },
         super::ChainReplicationDebugStatus::default(),
     );

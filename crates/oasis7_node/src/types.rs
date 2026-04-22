@@ -980,19 +980,40 @@ pub struct NodePendingProposalSnapshot {
     pub slot: u64,
     pub epoch: u64,
     pub proposer_id: String,
+    pub opened_at_ms: i64,
     pub action_count: usize,
+    pub action_payload_bytes: usize,
     pub attestation_count: usize,
     pub approved_stake: u64,
     pub rejected_stake: u64,
+    pub required_stake: u64,
+    pub total_stake: u64,
+    pub approval_progress_bps: u16,
+    pub rejection_progress_bps: u16,
+    pub remaining_approval_stake: u64,
     pub status: PosConsensusStatus,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NodePendingConsensusActionsSnapshot {
     pub queued_action_count: usize,
+    pub queued_payload_bytes: usize,
     pub reserved_requeue_action_count: usize,
+    pub reserved_requeue_payload_bytes: usize,
     pub available_capacity: usize,
     pub max_capacity: usize,
+    pub submit_buffer_action_count: usize,
+    pub submit_buffer_payload_bytes: usize,
+    pub submit_buffer_max_capacity: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NodeFinalityLatencySnapshot {
+    pub sample_count: usize,
+    pub avg_latency_ms: Option<i64>,
+    pub max_latency_ms: Option<i64>,
+    pub p50_latency_ms: Option<i64>,
+    pub p95_latency_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1022,6 +1043,7 @@ pub struct NodeConsensusSnapshot {
     pub last_inbound_timing_reject_reason: Option<String>,
     pub pending_proposal: Option<NodePendingProposalSnapshot>,
     pub pending_consensus_actions: NodePendingConsensusActionsSnapshot,
+    pub recent_finality_latency: NodeFinalityLatencySnapshot,
     pub last_status: Option<PosConsensusStatus>,
     pub last_block_hash: Option<String>,
     pub last_execution_height: u64,
@@ -1066,12 +1088,8 @@ impl Default for NodeConsensusSnapshot {
             inbound_rejected_attestation_epoch_mismatch: 0,
             last_inbound_timing_reject_reason: None,
             pending_proposal: None,
-            pending_consensus_actions: NodePendingConsensusActionsSnapshot {
-                queued_action_count: 0,
-                reserved_requeue_action_count: 0,
-                available_capacity: 0,
-                max_capacity: 0,
-            },
+            pending_consensus_actions: NodePendingConsensusActionsSnapshot::default(),
+            recent_finality_latency: NodeFinalityLatencySnapshot::default(),
             last_status: None,
             last_block_hash: None,
             last_execution_height: 0,

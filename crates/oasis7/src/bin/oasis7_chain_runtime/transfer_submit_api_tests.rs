@@ -470,6 +470,130 @@ fn transfer_accounts_endpoint_exposes_restricted_balance_separately() {
 }
 
 #[test]
+fn transfer_tracker_metrics_status_summarizes_lifecycle_and_latency() {
+    let _guard = lock_transfer_test_state();
+    super::with_transfer_tracker(|tracker| {
+        tracker.by_action_id.insert(
+            11,
+            super::TrackedTransfer {
+                action_id: 11,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:b".to_string(),
+                amount: 10,
+                nonce: 1,
+                status: TransferLifecycleStatus::Accepted,
+                submitted_at_unix_ms: 1_500,
+                updated_at_unix_ms: 1_500,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.by_action_id.insert(
+            12,
+            super::TrackedTransfer {
+                action_id: 12,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:c".to_string(),
+                amount: 20,
+                nonce: 2,
+                status: TransferLifecycleStatus::Pending,
+                submitted_at_unix_ms: 800,
+                updated_at_unix_ms: 1_200,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.by_action_id.insert(
+            13,
+            super::TrackedTransfer {
+                action_id: 13,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:d".to_string(),
+                amount: 30,
+                nonce: 3,
+                status: TransferLifecycleStatus::Confirmed,
+                submitted_at_unix_ms: 100,
+                updated_at_unix_ms: 200,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.by_action_id.insert(
+            14,
+            super::TrackedTransfer {
+                action_id: 14,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:e".to_string(),
+                amount: 40,
+                nonce: 4,
+                status: TransferLifecycleStatus::Confirmed,
+                submitted_at_unix_ms: 100,
+                updated_at_unix_ms: 500,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.by_action_id.insert(
+            15,
+            super::TrackedTransfer {
+                action_id: 15,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:f".to_string(),
+                amount: 50,
+                nonce: 5,
+                status: TransferLifecycleStatus::Confirmed,
+                submitted_at_unix_ms: 100,
+                updated_at_unix_ms: 1_000,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.by_action_id.insert(
+            16,
+            super::TrackedTransfer {
+                action_id: 16,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:g".to_string(),
+                amount: 60,
+                nonce: 6,
+                status: TransferLifecycleStatus::Timeout,
+                submitted_at_unix_ms: 50,
+                updated_at_unix_ms: 1_500,
+                error_code: Some("timeout".to_string()),
+                error: Some("expired".to_string()),
+            },
+        );
+        tracker.action_order.extend([11, 12, 13, 14, 15, 16]);
+        let metrics = tracker.metrics_status(2_000);
+        assert_eq!(metrics.tracked_records, 6);
+        assert_eq!(metrics.accepted_count, 1);
+        assert_eq!(metrics.pending_count, 1);
+        assert_eq!(metrics.confirmed_count, 3);
+        assert_eq!(metrics.failed_count, 0);
+        assert_eq!(metrics.timeout_count, 1);
+        assert_eq!(metrics.inflight_count, 2);
+        assert_eq!(metrics.oldest_inflight_age_ms, Some(1_200));
+        assert_eq!(metrics.recent_confirmation_latency.sample_count, 3);
+        assert_eq!(
+            metrics.recent_confirmation_latency.avg_latency_ms,
+            Some(466)
+        );
+        assert_eq!(
+            metrics.recent_confirmation_latency.max_latency_ms,
+            Some(900)
+        );
+        assert_eq!(
+            metrics.recent_confirmation_latency.p50_latency_ms,
+            Some(400)
+        );
+        assert_eq!(
+            metrics.recent_confirmation_latency.p95_latency_ms,
+            Some(400)
+        );
+    });
+}
+
+#[test]
 fn transfer_submit_handler_rejects_missing_signature() {
     let _guard = lock_transfer_test_state();
     let runtime = Arc::new(Mutex::new(NodeRuntime::new(

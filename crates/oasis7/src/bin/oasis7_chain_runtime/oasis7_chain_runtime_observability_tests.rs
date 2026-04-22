@@ -2,7 +2,7 @@ use super::*;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LivePublicPortReachability, NodeAutoNatStatus,
-    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
+    NodeConsensusSnapshot, NodeFinalityLatencySnapshot, NodeHolePunchViability, NodeNetworkPolicy,
     NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot, NodePublicPortReachability,
     NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosConsensusStatus,
 };
@@ -61,6 +61,27 @@ fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
     }
 }
 
+fn sample_transfer_metrics() -> super::transfer_submit_api::ChainTransferMetricsStatus {
+    super::transfer_submit_api::ChainTransferMetricsStatus {
+        tracked_records: 6,
+        accepted_count: 1,
+        pending_count: 1,
+        confirmed_count: 3,
+        failed_count: 0,
+        timeout_count: 1,
+        inflight_count: 2,
+        oldest_inflight_age_ms: Some(900),
+        recent_confirmation_latency:
+            super::transfer_submit_api::ChainTransferLatencySummaryStatus {
+                sample_count: 3,
+                avg_latency_ms: Some(640),
+                max_latency_ms: Some(1_100),
+                p50_latency_ms: Some(500),
+                p95_latency_ms: Some(1_100),
+            },
+    }
+}
+
 fn assert_chain_status_payload_consensus_health_metrics() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 5;
@@ -79,17 +100,36 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         slot: 9,
         epoch: 1,
         proposer_id: "node-b".to_string(),
+        opened_at_ms: 1_699_999_999_500,
         action_count: 2,
+        action_payload_bytes: 384,
         attestation_count: 1,
         approved_stake: 34,
         rejected_stake: 0,
+        required_stake: 67,
+        total_stake: 100,
+        approval_progress_bps: 5_074,
+        rejection_progress_bps: 0,
+        remaining_approval_stake: 33,
         status: PosConsensusStatus::Pending,
     });
     consensus.pending_consensus_actions = NodePendingConsensusActionsSnapshot {
         queued_action_count: 7,
+        queued_payload_bytes: 1_024,
         reserved_requeue_action_count: 2,
+        reserved_requeue_payload_bytes: 300,
         available_capacity: 11,
         max_capacity: 20,
+        submit_buffer_action_count: 3,
+        submit_buffer_payload_bytes: 480,
+        submit_buffer_max_capacity: 64,
+    };
+    consensus.recent_finality_latency = NodeFinalityLatencySnapshot {
+        sample_count: 4,
+        avg_latency_ms: Some(780),
+        max_latency_ms: Some(1_500),
+        p50_latency_ms: Some(700),
+        p95_latency_ms: Some(1_500),
     };
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
@@ -217,6 +257,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
         },
+        sample_transfer_metrics(),
         replication,
     );
 
@@ -321,15 +362,43 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         .expect("pending proposal");
     assert_eq!(pending_proposal.height, 6);
     assert_eq!(pending_proposal.proposer_id, "node-b");
+    assert_eq!(pending_proposal.opened_at_ms, 1_699_999_999_500);
+    assert_eq!(
+        pending_proposal.age_ms,
+        payload
+            .observed_at_unix_ms
+            .saturating_sub(1_699_999_999_500)
+    );
     assert_eq!(pending_proposal.action_count, 2);
+    assert_eq!(pending_proposal.action_payload_bytes, 384);
     assert_eq!(pending_proposal.attestation_count, 1);
+    assert_eq!(pending_proposal.required_stake, 67);
+    assert_eq!(pending_proposal.total_stake, 100);
+    assert_eq!(pending_proposal.approval_progress_bps, 5_074);
+    assert_eq!(pending_proposal.remaining_approval_stake, 33);
     assert_eq!(pending_proposal.status, "pending");
+    assert_eq!(payload.consensus.recent_finality_latency.sample_count, 4);
+    assert_eq!(
+        payload.consensus.recent_finality_latency.avg_latency_ms,
+        Some(780)
+    );
+    assert_eq!(
+        payload.consensus.recent_finality_latency.p95_latency_ms,
+        Some(1_500)
+    );
     assert_eq!(
         payload
             .consensus
             .pending_consensus_actions
             .queued_action_count,
         7
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .queued_payload_bytes,
+        1_024
     );
     assert_eq!(
         payload
@@ -342,10 +411,55 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         payload
             .consensus
             .pending_consensus_actions
+            .reserved_requeue_payload_bytes,
+        300
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
             .available_capacity,
         11
     );
     assert_eq!(payload.consensus.pending_consensus_actions.max_capacity, 20);
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_action_count,
+        3
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_payload_bytes,
+        480
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_max_capacity,
+        64
+    );
+    assert_eq!(payload.transactions.tracked_records, 6);
+    assert_eq!(payload.transactions.inflight_count, 2);
+    assert_eq!(payload.transactions.oldest_inflight_age_ms, Some(900));
+    assert_eq!(
+        payload
+            .transactions
+            .recent_confirmation_latency
+            .sample_count,
+        3
+    );
+    assert_eq!(
+        payload
+            .transactions
+            .recent_confirmation_latency
+            .p95_latency_ms,
+        Some(1_100)
+    );
     assert_eq!(
         payload
             .consensus

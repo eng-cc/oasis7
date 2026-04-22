@@ -134,6 +134,7 @@ impl PosNodeEngine {
             last_execution_height: 0,
             last_execution_block_hash: None,
             last_execution_state_root: None,
+            recent_finality_latency_ms: VecDeque::new(),
             execution_bindings: BTreeMap::new(),
             pending_consensus_actions: BTreeMap::new(),
             max_pending_consensus_actions: config.max_engine_pending_consensus_actions,
@@ -229,6 +230,16 @@ impl PosNodeEngine {
 
         let prev_committed_height = self.committed_height;
         self.apply_committed_execution(node_id, world_id, now_ms, &decision, execution_hook)?;
+        if matches!(decision.status, PosConsensusStatus::Committed)
+            && decision.height > prev_committed_height
+        {
+            if let Some(latency_ms) = self.pending.as_ref().and_then(|proposal| {
+                (proposal.height == decision.height)
+                    .then(|| now_ms.saturating_sub(proposal.opened_at_ms))
+            }) {
+                self.record_finality_latency(latency_ms);
+            }
+        }
         self.apply_decision(&decision)?;
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
@@ -546,6 +557,13 @@ impl PosNodeEngine {
             .saturating_sub(occupied_with_reserve)
     }
 
+    fn record_finality_latency(&mut self, latency_ms: i64) {
+        if self.recent_finality_latency_ms.len() >= FINALITY_LATENCY_HISTORY_LIMIT {
+            self.recent_finality_latency_ms.pop_front();
+        }
+        self.recent_finality_latency_ms.push_back(latency_ms.max(0));
+    }
+
     fn apply_committed_execution(
         &mut self,
         node_id: &str,
@@ -613,25 +631,42 @@ impl PosNodeEngine {
     }
 
     pub(super) fn snapshot_from_decision(&self, decision: &PosDecision) -> NodeConsensusSnapshot {
-        let pending_proposal = self
-            .pending
-            .as_ref()
-            .map(|proposal| NodePendingProposalSnapshot {
+        let pending_proposal = self.pending.as_ref().map(|proposal| {
+            let action_payload_bytes =
+                total_action_payload_bytes(proposal.committed_actions.iter());
+            NodePendingProposalSnapshot {
                 height: proposal.height,
                 slot: proposal.slot,
                 epoch: proposal.epoch,
                 proposer_id: proposal.proposer_id.clone(),
+                opened_at_ms: proposal.opened_at_ms,
                 action_count: proposal.committed_actions.len(),
+                action_payload_bytes,
                 attestation_count: proposal.attestations.len(),
                 approved_stake: proposal.approved_stake,
                 rejected_stake: proposal.rejected_stake,
+                required_stake: self.required_stake,
+                total_stake: self.total_stake,
+                approval_progress_bps: progress_bps(proposal.approved_stake, self.required_stake),
+                rejection_progress_bps: progress_bps(proposal.rejected_stake, self.required_stake),
+                remaining_approval_stake: self
+                    .required_stake
+                    .saturating_sub(proposal.approved_stake),
                 status: proposal.status,
-            });
+            }
+        });
         let reserved_requeue_action_count = self
             .pending
             .as_ref()
             .map(|proposal| proposal.committed_actions.len())
             .unwrap_or(0);
+        let reserved_requeue_payload_bytes = self
+            .pending
+            .as_ref()
+            .map(|proposal| total_action_payload_bytes(proposal.committed_actions.iter()))
+            .unwrap_or(0);
+        let queued_payload_bytes =
+            total_action_payload_bytes(self.pending_consensus_actions.values());
         let peer_heads = self
             .peer_heads
             .iter()
@@ -672,10 +707,18 @@ impl PosNodeEngine {
             pending_proposal,
             pending_consensus_actions: NodePendingConsensusActionsSnapshot {
                 queued_action_count: self.pending_consensus_actions.len(),
+                queued_payload_bytes,
                 reserved_requeue_action_count,
+                reserved_requeue_payload_bytes,
                 available_capacity: self.pending_consensus_action_capacity(),
                 max_capacity: self.max_pending_consensus_actions,
+                submit_buffer_action_count: 0,
+                submit_buffer_payload_bytes: 0,
+                submit_buffer_max_capacity: 0,
             },
+            recent_finality_latency: summarize_finality_latency(
+                self.recent_finality_latency_ms.iter().copied(),
+            ),
             last_status: Some(decision.status),
             last_block_hash: self
                 .last_committed_block_hash
@@ -812,5 +855,42 @@ impl PosNodeEngine {
             });
         }
         Ok(())
+    }
+}
+
+fn total_action_payload_bytes<'a>(actions: impl Iterator<Item = &'a NodeConsensusAction>) -> usize {
+    actions.map(|action| action.payload_cbor.len()).sum()
+}
+
+fn progress_bps(numerator: u64, denominator: u64) -> u16 {
+    if denominator == 0 {
+        return 0;
+    }
+    let ratio = numerator.saturating_mul(10_000).saturating_div(denominator);
+    ratio.min(10_000) as u16
+}
+
+fn summarize_finality_latency(latencies: impl Iterator<Item = i64>) -> NodeFinalityLatencySnapshot {
+    let mut samples = latencies
+        .filter(|latency| *latency >= 0)
+        .collect::<Vec<_>>();
+    if samples.is_empty() {
+        return NodeFinalityLatencySnapshot::default();
+    }
+    samples.sort_unstable();
+    let sample_count = samples.len();
+    let total = samples
+        .iter()
+        .fold(0_i128, |acc, value| acc.saturating_add(*value as i128));
+    let percentile = |pct: usize| -> Option<i64> {
+        let idx = (sample_count.saturating_sub(1)).saturating_mul(pct) / 100;
+        samples.get(idx).copied()
+    };
+    NodeFinalityLatencySnapshot {
+        sample_count,
+        avg_latency_ms: Some((total / sample_count as i128) as i64),
+        max_latency_ms: samples.last().copied(),
+        p50_latency_ms: percentile(50),
+        p95_latency_ms: percentile(95),
     }
 }

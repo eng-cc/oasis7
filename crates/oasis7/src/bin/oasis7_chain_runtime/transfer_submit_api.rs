@@ -277,6 +277,28 @@ pub(super) struct ChainExplorerOverviewResponse {
     pub(super) error: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(super) struct ChainTransferLatencySummaryStatus {
+    pub(super) sample_count: usize,
+    pub(super) avg_latency_ms: Option<i64>,
+    pub(super) max_latency_ms: Option<i64>,
+    pub(super) p50_latency_ms: Option<i64>,
+    pub(super) p95_latency_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(super) struct ChainTransferMetricsStatus {
+    pub(super) tracked_records: usize,
+    pub(super) accepted_count: usize,
+    pub(super) pending_count: usize,
+    pub(super) confirmed_count: usize,
+    pub(super) failed_count: usize,
+    pub(super) timeout_count: usize,
+    pub(super) inflight_count: usize,
+    pub(super) oldest_inflight_age_ms: Option<i64>,
+    pub(super) recent_confirmation_latency: ChainTransferLatencySummaryStatus,
+}
+
 impl ChainExplorerOverviewResponse {
     fn success(
         node_id: &str,
@@ -505,6 +527,48 @@ impl TransferTracker {
             }
         }
         counters
+    }
+
+    fn metrics_status(&self, now_ms: i64) -> ChainTransferMetricsStatus {
+        let counters = self.lifecycle_counters();
+        let oldest_inflight_age_ms = self
+            .by_action_id
+            .values()
+            .filter(|item| {
+                matches!(
+                    item.status,
+                    TransferLifecycleStatus::Accepted | TransferLifecycleStatus::Pending
+                )
+            })
+            .map(|item| now_ms.saturating_sub(item.submitted_at_unix_ms))
+            .max();
+        let mut confirmed_latencies = self
+            .by_action_id
+            .values()
+            .filter(|item| {
+                item.status == TransferLifecycleStatus::Confirmed
+                    && item.updated_at_unix_ms > item.submitted_at_unix_ms
+            })
+            .map(|item| {
+                item.updated_at_unix_ms
+                    .saturating_sub(item.submitted_at_unix_ms)
+            })
+            .collect::<Vec<_>>();
+        confirmed_latencies.sort_unstable();
+        let inflight_count = counters.accepted.saturating_add(counters.pending);
+        ChainTransferMetricsStatus {
+            tracked_records: counters.total,
+            accepted_count: counters.accepted,
+            pending_count: counters.pending,
+            confirmed_count: counters.confirmed,
+            failed_count: counters.failed,
+            timeout_count: counters.timeout,
+            inflight_count,
+            oldest_inflight_age_ms,
+            recent_confirmation_latency: summarize_transfer_latency_samples(
+                confirmed_latencies.as_slice(),
+            ),
+        }
     }
 
     fn prune(&mut self) {
@@ -1023,6 +1087,42 @@ fn sync_tracker_from_runtime(
     }
 
     Ok(())
+}
+
+pub(super) fn build_chain_transfer_metrics_status(
+    runtime: &Arc<Mutex<NodeRuntime>>,
+) -> Result<ChainTransferMetricsStatus, String> {
+    let mut tracker = lock_transfer_tracker();
+    sync_tracker_from_runtime(runtime, &mut tracker)?;
+    let now_ms = super::now_unix_ms();
+    tracker.refresh_lifecycle_by_time(now_ms);
+    Ok(tracker.metrics_status(now_ms))
+}
+
+fn summarize_transfer_latency_samples(samples: &[i64]) -> ChainTransferLatencySummaryStatus {
+    if samples.is_empty() {
+        return ChainTransferLatencySummaryStatus {
+            sample_count: 0,
+            avg_latency_ms: None,
+            max_latency_ms: None,
+            p50_latency_ms: None,
+            p95_latency_ms: None,
+        };
+    }
+    let total = samples
+        .iter()
+        .fold(0_i128, |acc, value| acc.saturating_add(*value as i128));
+    let percentile = |pct: usize| -> Option<i64> {
+        let idx = (samples.len().saturating_sub(1)).saturating_mul(pct) / 100;
+        samples.get(idx).copied()
+    };
+    ChainTransferLatencySummaryStatus {
+        sample_count: samples.len(),
+        avg_latency_ms: Some((total / samples.len() as i128) as i64),
+        max_latency_ms: samples.last().copied(),
+        p50_latency_ms: percentile(50),
+        p95_latency_ms: percentile(95),
+    }
 }
 
 pub(super) fn parse_transfer_submit_request(

@@ -313,6 +313,7 @@ fn handle_chain_status_connection(
                 applied_runtime_user_mode_label(options).map(str::to_string);
             let replication_debug_status =
                 build_chain_replication_debug_status(replication_network.as_ref());
+            let transactions = transfer_submit_api::build_chain_transfer_metrics_status(&runtime)?;
             let payload = build_chain_status_payload(
                 snapshot,
                 execution_world_dir,
@@ -326,6 +327,7 @@ fn handle_chain_status_connection(
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
                 build_chain_wasm_status(),
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
+                transactions,
                 replication_debug_status,
             );
             let body = serde_json::to_vec_pretty(&payload)

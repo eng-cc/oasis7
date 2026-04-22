@@ -239,6 +239,7 @@ impl PosNodeEngine {
             height: message.height,
             slot: message.slot,
             epoch: message.epoch,
+            opened_at_ms: now_unix_ms(),
             proposer_id: message.proposer_id.clone(),
             block_hash: message.block_hash.clone(),
             action_root: message.action_root.clone(),
