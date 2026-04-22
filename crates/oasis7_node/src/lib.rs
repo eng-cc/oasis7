@@ -104,9 +104,10 @@ pub use types::{
     NodeAutoNatStatus, NodeCommittedActionBatch, NodeConfig, NodeConsensusMode,
     NodeConsensusSnapshot, NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
     NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy,
-    NodePeerCommittedHead, NodePosConfig, NodePublicPortReachability,
-    NodeReachabilityAutoDetection, NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot,
-    NodeUserMode, NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
+    NodePeerCommittedHead, NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot,
+    NodePosConfig, NodePublicPortReachability, NodeReachabilityAutoDetection,
+    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation,
+    PosConsensusStatus, PosValidator,
 };
 
 use feedback_runtime::{

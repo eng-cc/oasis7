@@ -2,8 +2,9 @@ use super::*;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LivePublicPortReachability, NodeAutoNatStatus,
-    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy, NodePublicPortReachability,
-    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
+    NodeConsensusSnapshot, NodeHolePunchViability, NodeNetworkPolicy,
+    NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot, NodePublicPortReachability,
+    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode, PosConsensusStatus,
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerReachabilityClass};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -60,12 +61,36 @@ fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
     }
 }
 
-#[test]
-fn build_chain_status_payload_includes_storage_metrics() {
+fn assert_chain_status_payload_consensus_health_metrics() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 5;
     consensus.network_committed_height = 7;
     consensus.known_peer_heads = 1;
+    consensus.last_committed_at_ms = Some(1_700_000_000_000);
+    consensus.inbound_rejected_proposal_future_slot = 3;
+    consensus.inbound_rejected_proposal_stale_slot = 1;
+    consensus.inbound_rejected_attestation_future_slot = 2;
+    consensus.inbound_rejected_attestation_stale_slot = 4;
+    consensus.inbound_rejected_attestation_epoch_mismatch = 5;
+    consensus.last_inbound_timing_reject_reason =
+        Some("attestation target_epoch mismatch".to_string());
+    consensus.pending_proposal = Some(NodePendingProposalSnapshot {
+        height: 6,
+        slot: 9,
+        epoch: 1,
+        proposer_id: "node-b".to_string(),
+        action_count: 2,
+        attestation_count: 1,
+        approved_stake: 34,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Pending,
+    });
+    consensus.pending_consensus_actions = NodePendingConsensusActionsSnapshot {
+        queued_action_count: 7,
+        reserved_requeue_action_count: 2,
+        available_capacity: 11,
+        max_capacity: 20,
+    };
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
         player_id: "player-a".to_string(),
@@ -277,6 +302,72 @@ fn build_chain_status_payload_includes_storage_metrics() {
     assert_eq!(payload.observability.recent_replication_error_count, 1);
     assert!(payload.observability.storage_degraded);
     assert!(!payload.observability.reward_runtime_degraded);
+    assert_eq!(
+        payload.consensus.last_committed_at_ms,
+        Some(1_700_000_000_000)
+    );
+    assert_eq!(
+        payload.consensus.last_commit_age_ms,
+        Some(
+            payload
+                .observed_at_unix_ms
+                .saturating_sub(1_700_000_000_000)
+        )
+    );
+    let pending_proposal = payload
+        .consensus
+        .pending_proposal
+        .as_ref()
+        .expect("pending proposal");
+    assert_eq!(pending_proposal.height, 6);
+    assert_eq!(pending_proposal.proposer_id, "node-b");
+    assert_eq!(pending_proposal.action_count, 2);
+    assert_eq!(pending_proposal.attestation_count, 1);
+    assert_eq!(pending_proposal.status, "pending");
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .queued_action_count,
+        7
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .reserved_requeue_action_count,
+        2
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .pending_consensus_actions
+            .available_capacity,
+        11
+    );
+    assert_eq!(payload.consensus.pending_consensus_actions.max_capacity, 20);
+    assert_eq!(
+        payload
+            .consensus
+            .inbound_timing_rejections
+            .proposal_future_slot,
+        3
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .inbound_timing_rejections
+            .attestation_epoch_mismatch,
+        5
+    );
+    assert_eq!(
+        payload
+            .consensus
+            .inbound_timing_rejections
+            .last_reason
+            .as_deref(),
+        Some("attestation target_epoch mismatch")
+    );
     assert!(payload
         .observability
         .alerts
@@ -297,4 +388,14 @@ fn build_chain_status_payload_includes_storage_metrics() {
         .alerts
         .iter()
         .any(|alert| alert.code == "storage_degraded"));
+}
+
+#[test]
+fn build_chain_status_payload_includes_storage_metrics() {
+    assert_chain_status_payload_consensus_health_metrics();
+}
+
+#[test]
+fn build_chain_status_payload_surfaces_consensus_health_metrics() {
+    assert_chain_status_payload_consensus_health_metrics();
 }
