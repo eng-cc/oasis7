@@ -307,8 +307,12 @@ fn maybe_request_cached_discovery_peers_respects_short_cooldown() {
 
 #[test]
 fn start_peer_discovery_query_respects_pending_query_and_cooldown() {
-    let mut swarm =
-        super::super::swarm_behaviour::build_swarm(&Keypair::generate_ed25519(), false, true);
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
     let template = super::signed_discovery_peer_record(
         &Keypair::generate_ed25519(),
         vec![crate::dht::PeerDiscoverySource::Dht],

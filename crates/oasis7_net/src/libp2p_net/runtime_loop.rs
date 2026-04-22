@@ -137,6 +137,31 @@ pub(super) struct CommandStateRefs<'a> {
     pub peer_discovery_query_last_started_at_ms: &'a mut Option<i64>,
 }
 
+pub(super) fn should_backfill_peer_discovery(
+    peers: &[PeerId],
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
+    local_peer_id: PeerId,
+) -> bool {
+    if peers.is_empty() {
+        return true;
+    }
+    let has_remote_discovered_peer = discovered_peer_records
+        .keys()
+        .any(|peer_id| *peer_id != local_peer_id);
+    let missing_connected_peer_record = peers
+        .iter()
+        .copied()
+        .any(|peer_id| peer_id != local_peer_id && !discovered_peer_records.contains_key(&peer_id));
+    !has_remote_discovered_peer || missing_connected_peer_record
+}
+
+pub(super) fn dial_target_is_already_connected(peers: &[PeerId], addr: &Multiaddr) -> bool {
+    super::swarm_behaviour::split_peer_id(addr.clone())
+        .0
+        .map(|peer_id| peers.contains(&peer_id))
+        .unwrap_or(false)
+}
+
 pub(super) fn filter_request_peers_by_lane(
     peers: Vec<PeerId>,
     protocol: &str,
@@ -527,6 +552,9 @@ pub(super) fn handle_command(
             CommandOutcome::Continue
         }
         Some(Command::Dial(addr)) => {
+            if dial_target_is_already_connected(peers.as_slice(), &addr) {
+                return CommandOutcome::Continue;
+            }
             if let Err(err) = super::dial_addr_with_optional_peer_id(swarm, addr) {
                 push_bounded_clone(
                     ctx.event_errors,
@@ -843,25 +871,34 @@ pub(super) fn handle_command(
                 if should_refresh_discovery_provider {
                     publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
                 }
-                start_peer_discovery_query(
-                    swarm,
-                    pending_dht,
-                    template,
-                    peer_discovery_query_last_started_at_ms,
-                    now,
-                    ctx.discovery_query_cooldown_ms,
-                );
                 let connected_peers = peers.clone();
-                for peer_id in connected_peers {
-                    maybe_request_cached_discovery_peers(
+                let should_backfill_discovery = should_backfill_peer_discovery(
+                    connected_peers.as_slice(),
+                    discovered_peer_records,
+                    ctx.local_peer_id,
+                );
+                if should_backfill_discovery {
+                    start_peer_discovery_query(
                         swarm,
-                        pending_peer_record_requests,
-                        pending_cached_discovery_peers,
-                        cached_discovery_peer_cooldowns,
-                        ctx.event_traffic_metrics,
-                        peer_id,
-                        ctx.local_peer_id,
+                        pending_dht,
+                        template,
+                        peer_discovery_query_last_started_at_ms,
+                        now,
+                        ctx.discovery_query_cooldown_ms,
                     );
+                }
+                for peer_id in connected_peers {
+                    if should_backfill_discovery {
+                        maybe_request_cached_discovery_peers(
+                            swarm,
+                            pending_peer_record_requests,
+                            pending_cached_discovery_peers,
+                            cached_discovery_peer_cooldowns,
+                            ctx.event_traffic_metrics,
+                            peer_id,
+                            ctx.local_peer_id,
+                        );
+                    }
                     if let Err(err) = maybe_register_rendezvous_namespace(
                         swarm,
                         pending_rendezvous_registers,

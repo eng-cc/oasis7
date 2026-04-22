@@ -3,6 +3,8 @@ use super::node_engine_storage_challenge::{
 };
 use super::*;
 
+const GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS: i64 = 5_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum InboundSlotWindow {
     Accept,
@@ -103,6 +105,7 @@ impl PosNodeEngine {
             local_validator_id: config.node_id.clone(),
             node_player_id: config.player_id.clone(),
             gossip_reverse_path_seeding_enabled: matches!(config.role, NodeRole::Observer),
+            last_gossip_reverse_path_seed_at_ms: None,
             allow_local_proposals: config.allow_local_proposals,
             require_execution_on_commit: config.require_execution_on_commit,
             next_height: 1,
@@ -662,7 +665,7 @@ impl PosNodeEngine {
     }
 
     fn seed_reverse_gossip_path(
-        &self,
+        &mut self,
         endpoint: &GossipEndpoint,
         node_id: &str,
         world_id: &str,
@@ -671,12 +674,21 @@ impl PosNodeEngine {
         if !self.gossip_reverse_path_seeding_enabled {
             return Ok(());
         }
+        if self
+            .last_gossip_reverse_path_seed_at_ms
+            .map(|last_ms| now_ms.saturating_sub(last_ms) < GOSSIP_REVERSE_PATH_SEED_INTERVAL_MS)
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
         endpoint.broadcast_hello(&crate::gossip_udp::GossipHelloMessage {
             version: 1,
             world_id: world_id.to_string(),
             node_id: node_id.to_string(),
             sent_at_ms: now_ms,
-        })
+        })?;
+        self.last_gossip_reverse_path_seed_at_ms = Some(now_ms);
+        Ok(())
     }
 
     pub(super) fn commit_execution_binding_for_height(
