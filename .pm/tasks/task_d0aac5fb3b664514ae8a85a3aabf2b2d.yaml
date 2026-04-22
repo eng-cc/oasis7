@@ -1,0 +1,23 @@
+task_uid: task_d0aac5fb3b664514ae8a85a3aabf2b2d
+title: "fix release build-web-dist failure"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-site-release-build-web-dist-fix
+execution_log_path: .pm/tasks/task_d0aac5fb3b664514ae8a85a3aabf2b2d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md
+  - doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md
+doc_refs:
+  - doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md
+  - doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-043
+acceptance:
+  - "release-packages build-web-dist passes in CI-equivalent local verification"
+  - "github release workflow can be retriggered without build-web-dist failure"
+handoff_to: []
+updated_at: 2026-04-22T21:47:26+08:00
+last_started_at: 2026-04-22T17:44:22+08:00
+last_closed_at: 2026-04-22T21:47:26+08:00

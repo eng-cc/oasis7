@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{explorer_window, transfer_window, LaunchConfig};
+use super::{
+    explorer_window, main_chain_status::WebChainReplicationStatus, transfer_window, LaunchConfig,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum WebApiEvent {
@@ -122,6 +124,7 @@ pub(crate) struct WebStateSnapshot {
     pub(crate) chain_detail: Option<String>,
     pub(crate) chain_p2p_status: Option<WebChainP2pStatus>,
     pub(crate) chain_observability_status: Option<WebChainNodeObservabilityStatus>,
+    pub(crate) chain_replication_status: Option<WebChainReplicationStatus>,
     pub(crate) chain_recovery: Option<WebChainRecoverySnapshot>,
     pub(crate) game_url: String,
     pub(crate) config: LaunchConfig,
