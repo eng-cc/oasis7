@@ -613,6 +613,25 @@ impl PosNodeEngine {
     }
 
     pub(super) fn snapshot_from_decision(&self, decision: &PosDecision) -> NodeConsensusSnapshot {
+        let pending_proposal = self
+            .pending
+            .as_ref()
+            .map(|proposal| NodePendingProposalSnapshot {
+                height: proposal.height,
+                slot: proposal.slot,
+                epoch: proposal.epoch,
+                proposer_id: proposal.proposer_id.clone(),
+                action_count: proposal.committed_actions.len(),
+                attestation_count: proposal.attestations.len(),
+                approved_stake: proposal.approved_stake,
+                rejected_stake: proposal.rejected_stake,
+                status: proposal.status,
+            });
+        let reserved_requeue_action_count = self
+            .pending
+            .as_ref()
+            .map(|proposal| proposal.committed_actions.len())
+            .unwrap_or(0);
         let peer_heads = self
             .peer_heads
             .iter()
@@ -650,6 +669,13 @@ impl PosNodeEngine {
             inbound_rejected_attestation_epoch_mismatch: self
                 .inbound_rejected_attestation_epoch_mismatch,
             last_inbound_timing_reject_reason: self.last_inbound_timing_reject_reason.clone(),
+            pending_proposal,
+            pending_consensus_actions: NodePendingConsensusActionsSnapshot {
+                queued_action_count: self.pending_consensus_actions.len(),
+                reserved_requeue_action_count,
+                available_capacity: self.pending_consensus_action_capacity(),
+                max_capacity: self.max_pending_consensus_actions,
+            },
             last_status: Some(decision.status),
             last_block_hash: self
                 .last_committed_block_hash

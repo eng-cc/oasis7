@@ -1,0 +1,21 @@
+task_uid: task_f15a1d9ea3194c39aa35158bf93d8ff1
+title: "补齐区块链监控缺口首批 runtime 指标"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-chain-monitoring-gap-first-batch
+execution_log_path: .pm/tasks/task_f15a1d9ea3194c39aa35158bf93d8ff1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-039
+acceptance:
+  - "补齐首批链监控指标并暴露统一 machine-readable 契约"
+  - "至少覆盖提交新鲜度、pending proposal 进度、队列压力与入站时序拒绝四类共识健康信号"
+handoff_to: []
+updated_at: 2026-04-22T22:02:03+08:00
+last_started_at: 2026-04-22T21:31:07+08:00
+last_closed_at: 2026-04-22T22:02:03+08:00

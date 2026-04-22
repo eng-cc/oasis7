@@ -975,6 +975,27 @@ pub struct NodeCommittedActionBatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodePendingProposalSnapshot {
+    pub height: u64,
+    pub slot: u64,
+    pub epoch: u64,
+    pub proposer_id: String,
+    pub action_count: usize,
+    pub attestation_count: usize,
+    pub approved_stake: u64,
+    pub rejected_stake: u64,
+    pub status: PosConsensusStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NodePendingConsensusActionsSnapshot {
+    pub queued_action_count: usize,
+    pub reserved_requeue_action_count: usize,
+    pub available_capacity: usize,
+    pub max_capacity: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeConsensusSnapshot {
     pub mode: NodeConsensusMode,
     pub slot: u64,
@@ -999,6 +1020,8 @@ pub struct NodeConsensusSnapshot {
     pub inbound_rejected_attestation_stale_slot: u64,
     pub inbound_rejected_attestation_epoch_mismatch: u64,
     pub last_inbound_timing_reject_reason: Option<String>,
+    pub pending_proposal: Option<NodePendingProposalSnapshot>,
+    pub pending_consensus_actions: NodePendingConsensusActionsSnapshot,
     pub last_status: Option<PosConsensusStatus>,
     pub last_block_hash: Option<String>,
     pub last_execution_height: u64,
@@ -1042,6 +1065,13 @@ impl Default for NodeConsensusSnapshot {
             inbound_rejected_attestation_stale_slot: 0,
             inbound_rejected_attestation_epoch_mismatch: 0,
             last_inbound_timing_reject_reason: None,
+            pending_proposal: None,
+            pending_consensus_actions: NodePendingConsensusActionsSnapshot {
+                queued_action_count: 0,
+                reserved_requeue_action_count: 0,
+                available_capacity: 0,
+                max_capacity: 0,
+            },
             last_status: None,
             last_block_hash: None,
             last_execution_height: 0,

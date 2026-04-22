@@ -84,25 +84,61 @@ pub(super) struct ChainNodeObservabilityAlert {
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainConsensusStatus {
-    slot: u64,
-    epoch: u64,
-    ticks_per_slot: u64,
-    tick_phase: u64,
-    proposal_tick_phase: u64,
-    last_observed_slot: u64,
-    missed_slot_count: u64,
-    last_observed_tick: u64,
-    missed_tick_count: u64,
-    adaptive_tick_scheduler_enabled: bool,
-    latest_height: u64,
-    committed_height: u64,
-    network_committed_height: u64,
-    last_status: Option<String>,
-    last_block_hash: Option<String>,
-    last_execution_height: u64,
-    last_execution_block_hash: Option<String>,
-    last_execution_state_root: Option<String>,
-    known_peer_heads: usize,
+    pub(super) slot: u64,
+    pub(super) epoch: u64,
+    pub(super) ticks_per_slot: u64,
+    pub(super) tick_phase: u64,
+    pub(super) proposal_tick_phase: u64,
+    pub(super) last_observed_slot: u64,
+    pub(super) missed_slot_count: u64,
+    pub(super) last_observed_tick: u64,
+    pub(super) missed_tick_count: u64,
+    pub(super) adaptive_tick_scheduler_enabled: bool,
+    pub(super) latest_height: u64,
+    pub(super) committed_height: u64,
+    pub(super) last_committed_at_ms: Option<i64>,
+    pub(super) last_commit_age_ms: Option<i64>,
+    pub(super) network_committed_height: u64,
+    pub(super) pending_proposal: Option<ChainPendingProposalStatus>,
+    pub(super) pending_consensus_actions: ChainPendingConsensusActionsStatus,
+    pub(super) inbound_timing_rejections: ChainInboundTimingRejectionsStatus,
+    pub(super) last_status: Option<String>,
+    pub(super) last_block_hash: Option<String>,
+    pub(super) last_execution_height: u64,
+    pub(super) last_execution_block_hash: Option<String>,
+    pub(super) last_execution_state_root: Option<String>,
+    pub(super) known_peer_heads: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainPendingProposalStatus {
+    pub(super) height: u64,
+    pub(super) slot: u64,
+    pub(super) epoch: u64,
+    pub(super) proposer_id: String,
+    pub(super) action_count: usize,
+    pub(super) attestation_count: usize,
+    pub(super) approved_stake: u64,
+    pub(super) rejected_stake: u64,
+    pub(super) status: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainPendingConsensusActionsStatus {
+    pub(super) queued_action_count: usize,
+    pub(super) reserved_requeue_action_count: usize,
+    pub(super) available_capacity: usize,
+    pub(super) max_capacity: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainInboundTimingRejectionsStatus {
+    pub(super) proposal_future_slot: u64,
+    pub(super) proposal_stale_slot: u64,
+    pub(super) attestation_future_slot: u64,
+    pub(super) attestation_stale_slot: u64,
+    pub(super) attestation_epoch_mismatch: u64,
+    pub(super) last_reason: Option<String>,
 }
 
 pub(super) fn build_chain_p2p_status(
@@ -329,6 +365,7 @@ pub(super) fn build_chain_status_payload(
     traffic: ChainTrafficStatus,
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
+    let observed_at_unix_ms = now_unix_ms();
     let last_status = snapshot
         .consensus
         .last_status
@@ -339,10 +376,29 @@ pub(super) fn build_chain_status_payload(
         &reward_runtime_metrics,
         &replication,
     );
+    let last_commit_age_ms = snapshot
+        .consensus
+        .last_committed_at_ms
+        .map(|committed_at_ms| observed_at_unix_ms.saturating_sub(committed_at_ms));
+    let pending_proposal = snapshot
+        .consensus
+        .pending_proposal
+        .as_ref()
+        .map(|proposal| ChainPendingProposalStatus {
+            height: proposal.height,
+            slot: proposal.slot,
+            epoch: proposal.epoch,
+            proposer_id: proposal.proposer_id.clone(),
+            action_count: proposal.action_count,
+            attestation_count: proposal.attestation_count,
+            approved_stake: proposal.approved_stake,
+            rejected_stake: proposal.rejected_stake,
+            status: consensus_status_to_string(proposal.status),
+        });
 
     ChainStatusResponse {
         ok: true,
-        observed_at_unix_ms: now_unix_ms(),
+        observed_at_unix_ms,
         node_id: snapshot.node_id,
         world_id: snapshot.world_id,
         role: snapshot.role.as_str().to_string(),
@@ -363,7 +419,37 @@ pub(super) fn build_chain_status_payload(
             adaptive_tick_scheduler_enabled: snapshot.consensus.adaptive_tick_scheduler_enabled,
             latest_height: snapshot.consensus.latest_height,
             committed_height: snapshot.consensus.committed_height,
+            last_committed_at_ms: snapshot.consensus.last_committed_at_ms,
+            last_commit_age_ms,
             network_committed_height: snapshot.consensus.network_committed_height,
+            pending_proposal,
+            pending_consensus_actions: ChainPendingConsensusActionsStatus {
+                queued_action_count: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .queued_action_count,
+                reserved_requeue_action_count: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .reserved_requeue_action_count,
+                available_capacity: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .available_capacity,
+                max_capacity: snapshot.consensus.pending_consensus_actions.max_capacity,
+            },
+            inbound_timing_rejections: ChainInboundTimingRejectionsStatus {
+                proposal_future_slot: snapshot.consensus.inbound_rejected_proposal_future_slot,
+                proposal_stale_slot: snapshot.consensus.inbound_rejected_proposal_stale_slot,
+                attestation_future_slot: snapshot
+                    .consensus
+                    .inbound_rejected_attestation_future_slot,
+                attestation_stale_slot: snapshot.consensus.inbound_rejected_attestation_stale_slot,
+                attestation_epoch_mismatch: snapshot
+                    .consensus
+                    .inbound_rejected_attestation_epoch_mismatch,
+                last_reason: snapshot.consensus.last_inbound_timing_reject_reason.clone(),
+            },
             last_status,
             last_block_hash: snapshot.consensus.last_block_hash,
             last_execution_height: snapshot.consensus.last_execution_height,

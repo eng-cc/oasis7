@@ -479,6 +479,23 @@
     - `python3 scripts/traffic-monitor-summary.py --help`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] chain-status-consensus-health-metrics (PRD-WORLD_RUNTIME-039) [test_tier_required]: 为 `/v1/chain/status.consensus` 补齐最近提交时间/停滞时长、pending proposal 摘要、pending consensus action 队列占用与入站 proposal/attestation 时序拒绝计数，让节点运营者能直接区分“无提交、提案未收敛、队列积压、异常输入”四类常见链健康问题。 Trace: .pm/tasks/task_f15a1d9ea3194c39aa35158bf93d8ff1.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `crates/oasis7_node/src/types.rs`
+    - `crates/oasis7_node/src/node_engine_core.rs`
+    - `crates/oasis7_node/src/tests/replication_state_sync.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/status_payload.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs`
+    - `.pm/tasks/task_f15a1d9ea3194c39aa35158bf93d8ff1.yaml`
+    - `.pm/tasks/task_f15a1d9ea3194c39aa35158bf93d8ff1.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node pos_engine_snapshot_surfaces_pending_and_queue_metrics -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime build_chain_status_payload_surfaces_consensus_health_metrics -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] fetch-commit-retry-backoff (PRD-WORLD_RUNTIME-029) [test_tier_required]: 为 `libp2p_replication_network` 增加 `fetch-commit` 单协议短时 peer cooldown，把最近刚返回缺失 handler/不支持协议签名的 `ErrUnsupported`、`ErrNotFound`、`Timeout` 或连接缺口的目标暂时排除出下一轮候选，减少真实 triad 的 gap-sync 重试流量浪费。 Trace: .pm/tasks/task_df0a42e3efea4806bb3f41245c1ef4d5.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
@@ -585,6 +602,7 @@
 - 最新完成: `peer-record-request-backoff`（已为 `libp2p_net` 的 `get_local_peer_record`、`get_cached_peer_record`、`get_cached_discovery_peers` 增加 peer-scoped 10 秒短时协议冷却，压制 DHT/routing/rendezvous/connection-established 连续触发造成的重复取件；定向回归证明窗口内重试被抑制、窗口过后可恢复请求，且 cached-peer-record 的多 proxy fallback 仍保留。）
 - 最新完成: `triad-traffic-window-monitor`（已新增 `scripts/p2p-real-env-traffic-monitor.sh`，可将本机 observer + ECS sequencer/storage 的 `/v1/chain/status.traffic` 累计计数采样到持久化 history，并输出最近 N 分钟的 reset-aware delta 汇总，覆盖 UDP gossip / libp2p replication totals、top kind/topic/protocol、height 进度与 recent error counters。）
 - 最新完成: `chain-status-traffic-metrics`（已为 `/v1/chain/status` 增加 `traffic.udp_gossip` 与 `traffic.libp2p_replication` 两组节点流量快照；UDP gossip 现按消息种类累计 datagram/payload bytes，libp2p replication 现按 gossip/request/response 与 topic/protocol 统计逻辑 payload，并在 payload 中显式标记排除 transport headers、Kademlia control-plane 与 gossipsub mesh fanout 的范围说明。）
+- 最新完成: `chain-status-consensus-health-metrics`（已为 `/v1/chain/status.consensus` 增加 `last_committed_at_ms` / `last_commit_age_ms`、pending proposal 摘要、pending consensus action 队列占用与入站时序拒绝计数；节点运营者现在可以直接从 status 判断是提交停滞、提案未收敛、动作积压还是收到异常 slot/epoch 的 proposal/attestation，而不必先翻日志。）
 - 最新完成: `chain-linked-passive-world-progress`（`oasis7_game_launcher --chain-enable` 现会把 `--chain-status-bind` 透传给 `oasis7_viewer_live`；viewer runtime live 在链路开启后默认轮询 `/v1/chain/status`，仅在观察到新的 `committed_height` 且 execution world 确实产生新 event / logical time 时才推送 snapshot/events，不再要求显式 `Play` 才消费 committed chain action。）
 - 最新完成: `TASK-WORLD_RUNTIME-060`（已将 wasm executor 超时 watchdog 改为 executor 级复用线程，把 `ModuleArtifact` / `ModuleCallRequest` 的 wasm bytes 切到共享 `Arc<[u8]>`，并为 subscription filters 增加 parsed-filter / regex cache；随后把 runtime 事件/动作路由切到 prepared subscription cache，移除了 `filters_value.to_string()` 热路径固定成本。release perf probe 复验显示 `watchdog_share_of_call` 从 `60.89%` 降到 `1.24%`，`4 MiB` artifact cache get 从 `277.548us` 降到 `0.050us`，router `parse_each_time -> prepared_once` 在 no-regex / regex 场景都约为 `5.1x~5.5x`。）
 - 最新完成: `TASK-WORLD_RUNTIME-059`（已保持 runtime 语义不放宽，并为 S10 五节点脚本补齐显式 replication listen/peer 拓扑；对 `s10-sequencer` 上精确匹配的 bootstrap `fetch-commit` protocol-unavailable 仅允许 `<=2` warning，canonical `300s --no-prewarm` 本地样本已恢复 `metric_gate=pass / last_error_samples=0`。）
