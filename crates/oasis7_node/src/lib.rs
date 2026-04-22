@@ -52,6 +52,7 @@ mod libp2p_replication_network_wasm;
 mod network_bridge;
 mod node_engine_core;
 mod node_engine_network;
+mod node_engine_replication;
 mod node_engine_storage_challenge;
 mod node_runtime_core;
 mod pos_engine_gossip;
