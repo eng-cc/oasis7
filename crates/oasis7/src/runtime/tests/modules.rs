@@ -49,6 +49,7 @@ impl oasis7_wasm_abi::ModuleSandbox for CaptureContextSandbox {
 include!("modules_registry.rs");
 include!("modules_registry_shadow_validation.rs");
 include!("modules_permissions.rs");
+include!("modules_permissions_policy_hooks.rs");
 
 #[test]
 #[ignore = "perf harness"]
