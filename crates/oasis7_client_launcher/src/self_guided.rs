@@ -7,7 +7,7 @@ mod storage;
 
 use self::storage::current_unix_ms;
 pub(super) use self::storage::load_launcher_ux_state;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 pub(super) use self::storage::UX_STATE_PATH;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

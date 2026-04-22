@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    explorer_window, main_chain_status::WebChainReplicationStatus, transfer_window, LaunchConfig,
-};
+use super::main_chain_status::WebChainReplicationStatus;
+use super::{explorer_window, transfer_window, LaunchConfig};
 
 #[derive(Debug, Clone)]
 pub(crate) enum WebApiEvent {

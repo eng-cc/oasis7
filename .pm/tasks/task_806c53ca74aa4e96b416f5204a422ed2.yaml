@@ -1,0 +1,28 @@
+task_uid: task_806c53ca74aa4e96b416f5204a422ed2
+title: "recover client launcher workspace compile health"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-client-launcher-workspace-compile-recovery
+execution_log_path: .pm/tasks/task_806c53ca74aa4e96b416f5204a422ed2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - crates/oasis7_client_launcher/src/web_api_support.rs
+  - crates/oasis7_client_launcher/src/app_process.rs
+  - crates/oasis7_client_launcher/src/app_process_web.rs
+  - crates/oasis7_client_launcher/src/main_tests.rs
+  - crates/oasis7_client_launcher/src/main_observability_tests.rs
+  - crates/oasis7_client_launcher/src/self_guided.rs
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING-001
+acceptance:
+  - "./scripts/cargo-dev.sh check --workspace --all-targets passes again without the current oasis7_client_launcher compile blocker."
+  - "WebStateSnapshot and launcher snapshot consumers/tests agree on the chain replication field contract across native and web paths."
+  - "Low-risk launcher warning drift introduced in the same area is either fixed or explicitly kept out of scope and documented in the execution log."
+handoff_to: []
+updated_at: 2026-04-22T22:22:26+08:00
+last_started_at: 2026-04-22T17:30:42+08:00
+last_closed_at: 2026-04-22T22:22:26+08:00
