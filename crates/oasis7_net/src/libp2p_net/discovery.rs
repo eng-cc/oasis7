@@ -57,7 +57,7 @@ impl PendingPeerRecordRequest {
     }
 }
 
-const PEER_RECORD_REQUEST_COOLDOWN_MS: i64 = 10_000;
+const PEER_RECORD_REQUEST_COOLDOWN_MS: i64 = 60_000;
 
 fn peer_record_request_in_cooldown(
     cooldowns: &mut HashMap<PeerId, i64>,

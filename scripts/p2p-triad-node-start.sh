@@ -93,6 +93,11 @@ for writer in "${replication_remote_writers[@]}"; do
   [[ -n "$writer" ]] && cmd+=(--replication-remote-writer-public-key "$writer")
 done
 
+traffic_profile="${TRAFFIC_PROFILE:-}"
+if [[ -n "$traffic_profile" ]]; then
+  cmd+=(--traffic-profile "$traffic_profile")
+fi
+
 traffic_monitor_enable="${TRAFFIC_MONITOR_ENABLE:-0}"
 traffic_monitor_interval_secs="${TRAFFIC_MONITOR_INTERVAL_SECS:-60}"
 traffic_monitor_window_minutes="${TRAFFIC_MONITOR_WINDOW_MINUTES:-10}"
