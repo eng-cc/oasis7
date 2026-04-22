@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
@@ -102,12 +102,13 @@ pub use oasis7_net::{
 pub use replication::NodeReplicationConfig;
 pub use types::{
     NodeAutoNatStatus, NodeCommittedActionBatch, NodeConfig, NodeConsensusMode,
-    NodeConsensusSnapshot, NodeFeedbackP2pConfig, NodeGossipConfig, NodeHolePunchViability,
-    NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy,
-    NodePeerCommittedHead, NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot,
-    NodePosConfig, NodePublicPortReachability, NodeReachabilityAutoDetection,
-    NodeReplicaMaintenanceConfig, NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation,
-    PosConsensusStatus, PosValidator,
+    NodeConsensusSnapshot, NodeFeedbackP2pConfig, NodeFinalityLatencySnapshot, NodeGossipConfig,
+    NodeHolePunchViability, NodeMainTokenControllerBindingConfig,
+    NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy, NodePeerCommittedHead,
+    NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot, NodePosConfig,
+    NodePublicPortReachability, NodeReachabilityAutoDetection, NodeReplicaMaintenanceConfig,
+    NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation, PosConsensusStatus,
+    PosValidator,
 };
 
 use feedback_runtime::{
@@ -141,6 +142,7 @@ const STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS: u64 = 2;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
 const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
+const FINALITY_LATENCY_HISTORY_LIMIT: usize = 128;
 
 fn required_network_blob_matches(sample_count: usize) -> usize {
     sample_count
@@ -607,7 +609,7 @@ impl NodeRuntime {
 
     pub fn snapshot(&self) -> NodeSnapshot {
         let state = lock_state(&self.state);
-        NodeSnapshot {
+        let mut snapshot = NodeSnapshot {
             node_id: self.config.node_id.clone(),
             player_id: self.config.player_id.clone(),
             world_id: self.config.world_id.clone(),
@@ -617,7 +619,27 @@ impl NodeRuntime {
             last_tick_unix_ms: state.last_tick_unix_ms,
             consensus: state.consensus.clone(),
             last_error: state.last_error.clone(),
-        }
+        };
+        let pending_submit_buffer = self
+            .pending_consensus_actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        snapshot
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_action_count = pending_submit_buffer.len();
+        snapshot
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_payload_bytes = pending_submit_buffer
+            .iter()
+            .map(|action| action.payload_cbor.len())
+            .sum();
+        snapshot
+            .consensus
+            .pending_consensus_actions
+            .submit_buffer_max_capacity = self.config.max_pending_consensus_actions;
+        snapshot
     }
 
     pub fn gossip_traffic_snapshot(&self) -> Option<GossipTrafficMetricsSnapshot> {
@@ -817,6 +839,7 @@ struct PosNodeEngine {
     last_execution_height: u64,
     last_execution_block_hash: Option<String>,
     last_execution_state_root: Option<String>,
+    recent_finality_latency_ms: VecDeque<i64>,
     execution_bindings: BTreeMap<u64, (String, String)>,
     pending_consensus_actions: BTreeMap<u64, NodeConsensusAction>,
     max_pending_consensus_actions: usize,

@@ -54,7 +54,7 @@
   - SC-21: 节点运营者与 launcher 用户必须能从同一份 `/v1/chain/status.observability` 真值回答“当前连了多少 peer、是否落后、是否有存储/复制/奖励子系统告警”，并可由 repo-owned 脚本与 launcher UI 直接消费，无需各自重复推导。
 - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
 - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
-- SC-24: `/v1/chain/status.consensus` 必须显式暴露最近提交时间、提交停滞时长、pending proposal 摘要、pending consensus action 队列占用与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、还是卡在异常输入/队列积压”。
+- SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -97,7 +97,7 @@
   - PRD-WORLD_RUNTIME-036: As a `wasm_platform_engineer` / `runtime_engineer` / `qa_engineer`, I want the WASM build, executor, and router paths to emit bounded cumulative timing metrics and status snapshots, so that hotspot attribution no longer depends on ad hoc logs or ignored local perf probes.
   - PRD-WORLD_RUNTIME-037: As a `wasm_platform_engineer` / `qa_engineer`, I want each wasm module to expose a standard local observe spec consumable by a shared runner, so that every new module can inherit consistent contract and perf evidence without bespoke glue code.
   - PRD-WORLD_RUNTIME-038: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status.traffic.libp2p_replication` to expose real substream wire-byte totals plus derived control-plane wire bytes, so that control-plane overhead can be estimated from runtime truth instead of only host NIC totals or event-count heuristics.
-  - PRD-WORLD_RUNTIME-039: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status.consensus` to expose commit freshness, pending proposal progress, pending consensus action queue pressure, and inbound timing reject counters, so that common chain stalls can be classified directly from status truth instead of ad hoc log grep.
+  - PRD-WORLD_RUNTIME-039: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status` to expose commit freshness, pending proposal progress, pending consensus action queue pressure, recent finality latency, transfer lifecycle and confirmation latency summaries, plus inbound timing reject counters, so that common chain stalls can be classified directly from status truth instead of ad hoc log grep.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -220,7 +220,7 @@
   - NFR-WR-20: WASM timing 指标的本地采集不得改变 deterministic execution 输出；所有 wall-clock 数据只允许存在于本地观测层。
   - NFR-WR-21: 默认配置下，WASM metrics instrumentation 对现有 release perf probe 的额外 wall-clock 开销目标不高于 `10%`。
   - NFR-WR-22: 默认 `/v1/chain/status.wasm` payload 预算建议 `<=64 KiB`，开启 bounded top-N 明细后的预算建议 `<=128 KiB`。
-  - NFR-WR-23: `/v1/chain/status.consensus` 新增的链健康字段必须保持 bounded cardinality 与常数级开销；默认路径只允许输出聚合计数与单个 pending proposal 摘要，不得把未提交 action 明细或高基数 peer 级失败列表直接塞进 status payload。
+  - NFR-WR-23: `/v1/chain/status` 新增的链健康字段必须保持 bounded cardinality 与常数级开销；默认路径只允许输出聚合计数、单个 pending proposal 摘要、payload byte totals 与 bounded latency summary，不得把未提交 action 明细、逐笔 transfer 历史或高基数 peer 级失败列表直接塞进 status payload。
   - NFR-WR-22: 标准化 wasm module observe runner 不得因模块特例膨胀成分支集合；默认新增模块只允许通过 module-local spec/fixture 接入，不得要求 runner 增加模块专属逻辑。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
@@ -268,6 +268,7 @@
 | PRD-WORLD_RUNTIME-037 | task_20b6ee42182247ccbebe6a6a2c2db469 | `test_tier_required` | `cargo test --manifest-path tools/wasm_module_observe/Cargo.toml --offline`、`cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`、`bash -n scripts/oasis7-wasm-module-observe.sh`、`doc-governance-check`、`git diff --check` | 模块级 contract/perf 证据标准化、未来 wasm 模块接入路径 |
 | PRD-WORLD_RUNTIME-038 | task_c79092f4b50d4d52a36b11fe0fe5eb5e | `test_tier_required` | `libp2p` substream wire-byte 计数定向回归、chain status schema 回归、repo-owned traffic summary/observability 脚本口径更新、`doc-governance-check`、`git diff --check` | control-plane byte counters 真值补齐、payload 与非 payload 的可解释边界 |
 | PRD-WORLD_RUNTIME-039 | task_f15a1d9ea3194c39aa35158bf93d8ff1 | `test_tier_required` | `/v1/chain/status.consensus` commit freshness / pending proposal / queue pressure / inbound timing reject 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | 节点共识堵塞分类、提交停滞与队列压力真值补齐 |
+| PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

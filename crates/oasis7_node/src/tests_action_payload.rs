@@ -572,6 +572,7 @@ fn pos_engine_pending_capacity_reserves_rejected_proposal_actions() {
         height: 1,
         slot: 0,
         epoch: 0,
+        opened_at_ms: 1,
         proposer_id: config.node_id.clone(),
         block_hash: "pending-block".to_string(),
         action_root,

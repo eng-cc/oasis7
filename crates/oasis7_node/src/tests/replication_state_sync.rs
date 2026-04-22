@@ -11,6 +11,7 @@ fn pos_engine_record_synced_replication_height_rejects_overflow_without_partial_
         height: 10,
         slot: 1,
         epoch: 0,
+        opened_at_ms: 7_700,
         proposer_id: "node-a".to_string(),
         block_hash: "pending-sync".to_string(),
         action_root: empty_action_root(),
@@ -49,6 +50,7 @@ fn pos_engine_record_synced_replication_height_resets_stale_next_height() {
         height: 9,
         slot: 3,
         epoch: 0,
+        opened_at_ms: 7_750,
         proposer_id: "node-a".to_string(),
         block_hash: "stale-pending".to_string(),
         action_root: empty_action_root(),
@@ -104,6 +106,8 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
     let config =
         NodeConfig::new("node-a", "world-pending-metrics", NodeRole::Observer).expect("config");
     let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.total_stake = 100;
+    engine.required_stake = 67;
     engine.committed_height = 2;
     engine.next_height = 4;
     engine.last_committed_at_ms = Some(8_100);
@@ -126,6 +130,7 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
         height: 3,
         slot: 8,
         epoch: 1,
+        opened_at_ms: 8_125,
         proposer_id: "node-b".to_string(),
         block_hash: "pending-h3".to_string(),
         action_root: empty_action_root(),
@@ -150,6 +155,7 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
         rejected_stake: 0,
         status: PosConsensusStatus::Pending,
     });
+    engine.recent_finality_latency_ms = std::collections::VecDeque::from(vec![150, 300, 450]);
 
     let snapshot = engine.snapshot_from_decision(&PosDecision {
         height: 3,
@@ -167,6 +173,7 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
 
     assert_eq!(snapshot.last_committed_at_ms, Some(8_100));
     assert_eq!(snapshot.pending_consensus_actions.queued_action_count, 2);
+    assert_eq!(snapshot.pending_consensus_actions.queued_payload_bytes, 2);
     assert_eq!(
         snapshot
             .pending_consensus_actions
@@ -174,18 +181,36 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
         2
     );
     assert_eq!(
+        snapshot
+            .pending_consensus_actions
+            .reserved_requeue_payload_bytes,
+        2
+    );
+    assert_eq!(
         snapshot.pending_consensus_actions.available_capacity,
         engine.pending_consensus_action_capacity()
     );
+    assert_eq!(snapshot.recent_finality_latency.sample_count, 3);
+    assert_eq!(snapshot.recent_finality_latency.avg_latency_ms, Some(300));
+    assert_eq!(snapshot.recent_finality_latency.max_latency_ms, Some(450));
+    assert_eq!(snapshot.recent_finality_latency.p50_latency_ms, Some(300));
+    assert_eq!(snapshot.recent_finality_latency.p95_latency_ms, Some(300));
     let pending = snapshot
         .pending_proposal
         .as_ref()
         .expect("pending proposal");
     assert_eq!(pending.height, 3);
     assert_eq!(pending.proposer_id, "node-b");
+    assert_eq!(pending.opened_at_ms, 8_125);
     assert_eq!(pending.action_count, 2);
+    assert_eq!(pending.action_payload_bytes, 2);
     assert_eq!(pending.attestation_count, 1);
     assert_eq!(pending.approved_stake, 34);
+    assert_eq!(pending.required_stake, 67);
+    assert_eq!(pending.total_stake, 100);
+    assert_eq!(pending.approval_progress_bps, 5_074);
+    assert_eq!(pending.rejection_progress_bps, 0);
+    assert_eq!(pending.remaining_approval_stake, 33);
     assert_eq!(snapshot.inbound_rejected_proposal_future_slot, 2);
     assert_eq!(snapshot.inbound_rejected_proposal_stale_slot, 1);
     assert_eq!(snapshot.inbound_rejected_attestation_future_slot, 3);

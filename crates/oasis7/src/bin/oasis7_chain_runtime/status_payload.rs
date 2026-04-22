@@ -54,6 +54,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) storage: storage_metrics::StorageMetricsSnapshot,
     pub(super) wasm: ChainWasmStatus,
     pub(super) traffic: ChainTrafficStatus,
+    pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
 }
 
@@ -99,6 +100,7 @@ pub(super) struct ChainConsensusStatus {
     pub(super) last_committed_at_ms: Option<i64>,
     pub(super) last_commit_age_ms: Option<i64>,
     pub(super) network_committed_height: u64,
+    pub(super) recent_finality_latency: ChainFinalityLatencyStatus,
     pub(super) pending_proposal: Option<ChainPendingProposalStatus>,
     pub(super) pending_consensus_actions: ChainPendingConsensusActionsStatus,
     pub(super) inbound_timing_rejections: ChainInboundTimingRejectionsStatus,
@@ -116,19 +118,32 @@ pub(super) struct ChainPendingProposalStatus {
     pub(super) slot: u64,
     pub(super) epoch: u64,
     pub(super) proposer_id: String,
+    pub(super) opened_at_ms: i64,
+    pub(super) age_ms: i64,
     pub(super) action_count: usize,
+    pub(super) action_payload_bytes: usize,
     pub(super) attestation_count: usize,
     pub(super) approved_stake: u64,
     pub(super) rejected_stake: u64,
+    pub(super) required_stake: u64,
+    pub(super) total_stake: u64,
+    pub(super) approval_progress_bps: u16,
+    pub(super) rejection_progress_bps: u16,
+    pub(super) remaining_approval_stake: u64,
     pub(super) status: String,
 }
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainPendingConsensusActionsStatus {
     pub(super) queued_action_count: usize,
+    pub(super) queued_payload_bytes: usize,
     pub(super) reserved_requeue_action_count: usize,
+    pub(super) reserved_requeue_payload_bytes: usize,
     pub(super) available_capacity: usize,
     pub(super) max_capacity: usize,
+    pub(super) submit_buffer_action_count: usize,
+    pub(super) submit_buffer_payload_bytes: usize,
+    pub(super) submit_buffer_max_capacity: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,6 +154,15 @@ pub(super) struct ChainInboundTimingRejectionsStatus {
     pub(super) attestation_stale_slot: u64,
     pub(super) attestation_epoch_mismatch: u64,
     pub(super) last_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainFinalityLatencyStatus {
+    pub(super) sample_count: usize,
+    pub(super) avg_latency_ms: Option<i64>,
+    pub(super) max_latency_ms: Option<i64>,
+    pub(super) p50_latency_ms: Option<i64>,
+    pub(super) p95_latency_ms: Option<i64>,
 }
 
 pub(super) fn build_chain_p2p_status(
@@ -363,6 +387,7 @@ pub(super) fn build_chain_status_payload(
     storage_metrics: storage_metrics::StorageMetricsSnapshot,
     wasm: ChainWasmStatus,
     traffic: ChainTrafficStatus,
+    transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
     let observed_at_unix_ms = now_unix_ms();
@@ -389,10 +414,18 @@ pub(super) fn build_chain_status_payload(
             slot: proposal.slot,
             epoch: proposal.epoch,
             proposer_id: proposal.proposer_id.clone(),
+            opened_at_ms: proposal.opened_at_ms,
+            age_ms: observed_at_unix_ms.saturating_sub(proposal.opened_at_ms),
             action_count: proposal.action_count,
+            action_payload_bytes: proposal.action_payload_bytes,
             attestation_count: proposal.attestation_count,
             approved_stake: proposal.approved_stake,
             rejected_stake: proposal.rejected_stake,
+            required_stake: proposal.required_stake,
+            total_stake: proposal.total_stake,
+            approval_progress_bps: proposal.approval_progress_bps,
+            rejection_progress_bps: proposal.rejection_progress_bps,
+            remaining_approval_stake: proposal.remaining_approval_stake,
             status: consensus_status_to_string(proposal.status),
         });
 
@@ -422,21 +455,48 @@ pub(super) fn build_chain_status_payload(
             last_committed_at_ms: snapshot.consensus.last_committed_at_ms,
             last_commit_age_ms,
             network_committed_height: snapshot.consensus.network_committed_height,
+            recent_finality_latency: ChainFinalityLatencyStatus {
+                sample_count: snapshot.consensus.recent_finality_latency.sample_count,
+                avg_latency_ms: snapshot.consensus.recent_finality_latency.avg_latency_ms,
+                max_latency_ms: snapshot.consensus.recent_finality_latency.max_latency_ms,
+                p50_latency_ms: snapshot.consensus.recent_finality_latency.p50_latency_ms,
+                p95_latency_ms: snapshot.consensus.recent_finality_latency.p95_latency_ms,
+            },
             pending_proposal,
             pending_consensus_actions: ChainPendingConsensusActionsStatus {
                 queued_action_count: snapshot
                     .consensus
                     .pending_consensus_actions
                     .queued_action_count,
+                queued_payload_bytes: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .queued_payload_bytes,
                 reserved_requeue_action_count: snapshot
                     .consensus
                     .pending_consensus_actions
                     .reserved_requeue_action_count,
+                reserved_requeue_payload_bytes: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .reserved_requeue_payload_bytes,
                 available_capacity: snapshot
                     .consensus
                     .pending_consensus_actions
                     .available_capacity,
                 max_capacity: snapshot.consensus.pending_consensus_actions.max_capacity,
+                submit_buffer_action_count: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .submit_buffer_action_count,
+                submit_buffer_payload_bytes: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .submit_buffer_payload_bytes,
+                submit_buffer_max_capacity: snapshot
+                    .consensus
+                    .pending_consensus_actions
+                    .submit_buffer_max_capacity,
             },
             inbound_timing_rejections: ChainInboundTimingRejectionsStatus {
                 proposal_future_slot: snapshot.consensus.inbound_rejected_proposal_future_slot,
@@ -472,6 +532,7 @@ pub(super) fn build_chain_status_payload(
         storage: storage_metrics,
         wasm,
         traffic,
+        transactions,
         replication,
     }
 }
