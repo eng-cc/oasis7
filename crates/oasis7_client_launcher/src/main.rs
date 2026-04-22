@@ -68,6 +68,7 @@ mod transfer_auth;
 #[cfg(not(target_arch = "wasm32"))]
 mod transfer_entry;
 mod transfer_window;
+mod web_api_support;
 
 use config_ui::StartupGuideState;
 use launcher_core::*;
@@ -75,6 +76,15 @@ pub(crate) use provider_check_status::{
     ProviderCheckStatus, ProviderCompatibilityStatus, ProviderSnapshot,
 };
 use self_guided::{DemoModePhase, LauncherUxState, OnboardingState};
+#[cfg(test)]
+pub(crate) use web_api_support::{encode_query_value, WebChainNodeObservabilityAlert};
+pub(crate) use web_api_support::{
+    encoded_query_pair, WebApiEvent, WebApiResponse, WebChainNodeObservabilityStatus,
+    WebChainP2pStatus, WebChainRecoverySnapshot, WebRequestDomain, WebRequestInflight,
+    WebStateSnapshot, WebTransferSubmitRequest, WebTransferSubmitResponse,
+};
+#[cfg(target_arch = "wasm32")]
+pub(crate) use web_api_support::{WebFeedbackSubmitRequest, WebFeedbackSubmitResponse};
 
 const DEFAULT_SCENARIO: &str = "llm_bootstrap";
 const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
@@ -484,178 +494,6 @@ struct RunningProcess {
     log_rx: Receiver<String>,
 }
 
-#[derive(Debug, Clone)]
-enum WebApiEvent {
-    State(Result<WebStateSnapshot, String>),
-    Action(Result<WebApiResponse, String>),
-    #[cfg(target_arch = "wasm32")]
-    Feedback(Result<WebFeedbackSubmitResponse, String>),
-    Transfer(Result<WebTransferSubmitResponse, String>),
-    TransferQuery(Result<transfer_window::TransferQueryResponse, String>),
-    ExplorerQuery(Result<explorer_window::ExplorerQueryResponse, String>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WebRequestDomain {
-    StatePoll,
-    ControlAction,
-    #[cfg(target_arch = "wasm32")]
-    FeedbackSubmit,
-    TransferSubmit,
-    TransferQuery,
-    ExplorerQuery,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct WebRequestInflight {
-    state_poll: bool,
-    control_action: bool,
-    #[cfg(target_arch = "wasm32")]
-    feedback_submit: bool,
-    transfer_submit: bool,
-    transfer_query: bool,
-    explorer_query: bool,
-}
-
-impl WebRequestInflight {
-    #[cfg(all(test, not(target_arch = "wasm32")))]
-    fn any(self) -> bool {
-        self.state_poll
-            || self.control_action
-            || self.transfer_submit
-            || self.transfer_query
-            || self.explorer_query
-    }
-
-    #[cfg(all(test, target_arch = "wasm32"))]
-    fn any(self) -> bool {
-        self.state_poll
-            || self.control_action
-            || self.feedback_submit
-            || self.transfer_submit
-            || self.transfer_query
-            || self.explorer_query
-    }
-
-    fn transfer_any(self) -> bool {
-        self.transfer_submit || self.transfer_query
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-struct WebChainRecoverySnapshot {
-    error_code: String,
-    reason: String,
-    node_id: String,
-    execution_world_dir: String,
-    recovery_mode: String,
-    reset_required: bool,
-    fresh_node_id: String,
-    fresh_chain_status_bind: String,
-    suggested_config: LaunchConfig,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-struct WebChainP2pStatus {
-    requested_user_mode: String,
-    recommended_user_mode: String,
-    effective_user_mode: String,
-    applied_effective_user_mode: Option<String>,
-    requires_explicit_public_entry_confirmation: bool,
-    detected_reachability: Option<String>,
-    hole_punch_viability: String,
-    relay_available: bool,
-    probe_stable: bool,
-    deployment_mode: String,
-    node_role_claim: String,
-    rationale: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-struct WebChainNodeObservabilityAlert {
-    severity: String,
-    code: String,
-    summary: String,
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-struct WebChainNodeObservabilityStatus {
-    status: String,
-    summary: String,
-    connected_peer_count: usize,
-    active_peer_count: usize,
-    candidate_peer_count: usize,
-    suspect_peer_count: usize,
-    blocked_peer_count: usize,
-    peer_with_issues_count: usize,
-    known_peer_heads: usize,
-    network_height_lag: u64,
-    recent_replication_error_count: usize,
-    storage_degraded: bool,
-    reward_runtime_degraded: bool,
-    alerts: Vec<WebChainNodeObservabilityAlert>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct WebStateSnapshot {
-    status: String,
-    detail: Option<String>,
-    chain_status: String,
-    chain_detail: Option<String>,
-    chain_p2p_status: Option<WebChainP2pStatus>,
-    chain_observability_status: Option<WebChainNodeObservabilityStatus>,
-    chain_recovery: Option<WebChainRecoverySnapshot>,
-    game_url: String,
-    config: LaunchConfig,
-    logs: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct WebApiResponse {
-    ok: bool,
-    error: Option<String>,
-    state: WebStateSnapshot,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Debug, Clone, Serialize)]
-struct WebFeedbackSubmitRequest {
-    category: String,
-    title: String,
-    description: String,
-    platform: String,
-    game_version: String,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Debug, Clone, Deserialize)]
-struct WebFeedbackSubmitResponse {
-    ok: bool,
-    feedback_id: Option<String>,
-    event_id: Option<String>,
-    error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct WebTransferSubmitRequest {
-    from_account_id: String,
-    to_account_id: String,
-    amount: u64,
-    nonce: u64,
-    public_key: String,
-    signature: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct WebTransferSubmitResponse {
-    ok: bool,
-    action_id: Option<u64>,
-    submitted_at_unix_ms: Option<i64>,
-    lifecycle_status: Option<transfer_window::WebTransferLifecycleStatus>,
-    error_code: Option<String>,
-    error: Option<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LauncherStatus {
     Idle,
@@ -767,32 +605,6 @@ fn chain_runtime_status_from_web(status: &str, detail: Option<&str>) -> ChainRun
         "unreachable" => ChainRuntimeStatus::Unreachable(detail.unwrap_or("unknown").to_string()),
         "config_error" => ChainRuntimeStatus::ConfigError(detail.unwrap_or("unknown").to_string()),
         _ => ChainRuntimeStatus::Unreachable(format!("unknown chain status: {status}")),
-    }
-}
-
-fn encode_query_value(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(byte as char);
-        } else {
-            encoded.push('%');
-            encoded.push(hex_upper(byte >> 4));
-            encoded.push(hex_upper(byte & 0x0f));
-        }
-    }
-    encoded
-}
-
-fn encoded_query_pair(key: &str, value: &str) -> String {
-    format!("{key}={}", encode_query_value(value))
-}
-
-fn hex_upper(nibble: u8) -> char {
-    match nibble {
-        0..=9 => (b'0' + nibble) as char,
-        10..=15 => (b'A' + (nibble - 10)) as char,
-        _ => unreachable!("nibble must be in 0..=15"),
     }
 }
 
