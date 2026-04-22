@@ -90,6 +90,202 @@ impl ClientLauncherApp {
         }
     }
 
+    pub(super) fn connected_peer_detail_rows(
+        &self,
+        replication: &WebChainReplicationStatus,
+    ) -> Vec<(String, Option<WebChainReplicationPeerHealth>)> {
+        replication
+            .connected_peers
+            .iter()
+            .map(|peer_id| {
+                let health = replication
+                    .peer_healths
+                    .iter()
+                    .find(|health| health.peer_id == *peer_id)
+                    .cloned();
+                (peer_id.clone(), health)
+            })
+            .collect()
+    }
+
+    fn render_connected_peer_detail_rows(
+        &self,
+        ui: &mut egui::Ui,
+        rows: &[(String, Option<WebChainReplicationPeerHealth>)],
+    ) {
+        if rows.is_empty() {
+            ui.small(self.tr(
+                "当前没有已连接 peer；如已发现候选 peer，可继续看上面的 Peer 健康统计和告警。",
+                "No peers are currently connected. Use the peer health counts and alerts above to inspect discovered candidates.",
+            ));
+            return;
+        }
+
+        for (peer_id, health) in rows {
+            ui.group(|ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new(peer_id.as_str()).monospace());
+                    if let Some(health) = health {
+                        ui.colored_label(
+                            self.peer_health_status_color(health.status.as_str()),
+                            self.peer_health_status_text(health.status.as_str()),
+                        );
+                        if let Some(path_kind) = health.active_path_kind.as_deref() {
+                            ui.small(format!("{}: {}", self.tr("路径", "Path"), path_kind));
+                        }
+                        if !health.discovery_sources.is_empty() {
+                            ui.small(format!(
+                                "{}: {}",
+                                self.tr("来源", "Sources"),
+                                health.discovery_sources.join(", ")
+                            ));
+                        }
+                        if let Some(operator) = health.source_operator.as_deref() {
+                            ui.small(format!("{}: {}", self.tr("Operator", "Operator"), operator));
+                        }
+                        if let Some(asn) = health.source_asn.as_deref() {
+                            ui.small(format!("ASN: {asn}"));
+                        }
+                        if !health.issues.is_empty() {
+                            ui.small(format!(
+                                "{}: {}",
+                                self.tr("问题", "Issues"),
+                                health.issues.join(", ")
+                            ));
+                        }
+                    } else {
+                        ui.small(self.tr("未附带 health 快照", "No health snapshot attached"));
+                    }
+                });
+            });
+        }
+    }
+
+    pub(crate) fn render_chain_peer_details_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+        include_title: bool,
+    ) {
+        let status = self.chain_observability_status.clone();
+        let replication = self.chain_replication_status.clone();
+
+        if include_title {
+            ui.heading(self.tr("P2P Peer 明细", "P2P Peer Details"));
+            ui.small(self.tr(
+                "单独窗口查看本地 peer、已连接 peer、路径和来源细节。",
+                "Inspect local peer, connected peers, path kind, and discovery details in a dedicated window.",
+            ));
+            ui.add_space(6.0);
+        }
+
+        if !self.config.chain_enabled {
+            ui.small(self.tr(
+                "当前配置已禁用区块链，因此没有可展示的 peer 明细。",
+                "Blockchain is disabled in the current configuration, so no peer details are available.",
+            ));
+            return;
+        }
+
+        if let Some(status) = status {
+            ui.horizontal_wrapped(|ui| {
+                ui.small(format!("{}:", self.tr("状态", "Status")));
+                ui.colored_label(
+                    self.observability_status_color(status.status.as_str()),
+                    self.observability_status_text(status.status.as_str()),
+                );
+                ui.separator();
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("已连接 Peer", "Connected Peers"),
+                    status.connected_peer_count
+                ));
+                ui.separator();
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("Peer Heads", "Peer Heads"),
+                    status.known_peer_heads
+                ));
+                ui.separator();
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("网络落后高度", "Network Lag"),
+                    status.network_height_lag
+                ));
+            });
+            ui.horizontal_wrapped(|ui| {
+                ui.small(format!(
+                    "{}: active={} candidate={} suspect={} blocked={}",
+                    self.tr("Peer 健康", "Peer Health"),
+                    status.active_peer_count,
+                    status.candidate_peer_count,
+                    status.suspect_peer_count,
+                    status.blocked_peer_count
+                ));
+                ui.separator();
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("带问题 Peer", "Peers With Issues"),
+                    status.peer_with_issues_count
+                ));
+                ui.separator();
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("复制近期错误", "Recent Replication Errors"),
+                    status.recent_replication_error_count
+                ));
+            });
+            ui.small(format!(
+                "{}: {}",
+                self.tr("摘要", "Summary"),
+                status.summary
+            ));
+
+            if !status.alerts.is_empty() {
+                let alert_lines = status
+                    .alerts
+                    .iter()
+                    .map(|alert| {
+                        format!(
+                            "[{}] {}",
+                            self.observability_status_text(alert.severity.as_str()),
+                            alert.summary
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("活动告警", "Active Alerts"),
+                    alert_lines
+                ));
+            }
+        } else {
+            ui.small(self.tr(
+                "启动区块链后，这里会显示节点健康、Peer 数、网络滞后和当前告警。",
+                "After blockchain starts, this view will show node health, peer counts, network lag, and active alerts.",
+            ));
+        }
+
+        ui.separator();
+        if let Some(replication) = replication {
+            if !replication.local_peer_id.is_empty() {
+                ui.horizontal_wrapped(|ui| {
+                    ui.small(format!("{}:", self.tr("本地 Peer", "Local Peer")));
+                    ui.label(egui::RichText::new(replication.local_peer_id.as_str()).monospace());
+                });
+            }
+
+            ui.label(self.tr("已连接 Peer 明细", "Connected Peer Details"));
+            let rows = self.connected_peer_detail_rows(&replication);
+            self.render_connected_peer_detail_rows(ui, rows.as_slice());
+        } else {
+            ui.small(self.tr(
+                "控制面还没有返回 replication 快照；等链状态 ready 后再打开此窗口。",
+                "The control plane has not returned a replication snapshot yet; open this window again after chain status becomes ready.",
+            ));
+        }
+    }
+
     pub(super) fn render_chain_p2p_summary(&mut self, ui: &mut egui::Ui) {
         if !self.config.chain_enabled {
             return;
@@ -234,9 +430,16 @@ impl ClientLauncherApp {
         }
 
         let status = self.chain_observability_status.clone();
-        let replication = self.chain_replication_status.clone();
         ui.group(|ui| {
-            ui.label(self.tr("节点观测", "Node Observability"));
+            ui.horizontal_wrapped(|ui| {
+                ui.label(self.tr("节点观测", "Node Observability"));
+                if ui
+                    .button(self.tr("打开 Peer 窗口", "Open Peer Window"))
+                    .clicked()
+                {
+                    self.peer_details_window_open = true;
+                }
+            });
 
             if let Some(status) = status {
                 ui.horizontal_wrapped(|ui| {
@@ -317,76 +520,19 @@ impl ClientLauncherApp {
                         alert_lines
                     ));
                 }
-
-                if let Some(replication) = replication {
-                    let connected_healths = replication
-                        .connected_peers
-                        .iter()
-                        .map(|peer_id| {
-                            let health = replication
-                                .peer_healths
-                                .iter()
-                                .find(|health| health.peer_id == *peer_id);
-                            (peer_id, health)
-                        })
-                        .collect::<Vec<_>>();
-
-                    ui.separator();
-                    if !replication.local_peer_id.is_empty() {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.small(format!("{}:", self.tr("本地 Peer", "Local Peer")));
-                            ui.label(
-                                egui::RichText::new(replication.local_peer_id.as_str()).monospace(),
-                            );
-                        });
-                    }
-
-                    ui.small(self.tr("已连接 Peer 明细", "Connected Peer Details"));
-                    if connected_healths.is_empty() {
-                        ui.small(self.tr(
-                            "当前没有已连接 peer；如已发现候选 peer，可继续看上面的 Peer 健康统计和告警。",
-                            "No peers are currently connected. Use the peer health counts and alerts above to inspect discovered candidates.",
-                        ));
-                    } else {
-                        for (peer_id, health) in connected_healths {
-                            ui.group(|ui| {
-                                ui.horizontal_wrapped(|ui| {
-                                    ui.label(egui::RichText::new(peer_id.as_str()).monospace());
-                                    if let Some(health) = health {
-                                        ui.colored_label(
-                                            self.peer_health_status_color(health.status.as_str()),
-                                            self.peer_health_status_text(health.status.as_str()),
-                                        );
-                                        if let Some(path_kind) = health.active_path_kind.as_deref()
-                                        {
-                                            ui.small(format!(
-                                                "{}: {}",
-                                                self.tr("路径", "Path"),
-                                                path_kind
-                                            ));
-                                        }
-                                        if !health.issues.is_empty() {
-                                            ui.small(format!(
-                                                "{}: {}",
-                                                self.tr("问题", "Issues"),
-                                                health.issues.join(", ")
-                                            ));
-                                        }
-                                    } else {
-                                        ui.small(self.tr(
-                                            "未附带 health 快照",
-                                            "No health snapshot attached",
-                                        ));
-                                    }
-                                });
-                            });
-                        }
-                    }
-                }
+                ui.separator();
+                ui.small(self.tr(
+                    "Peer 明细已移到独立窗口，便于在不中断主面板的情况下长期观测节点连接。",
+                    "Peer details now live in a dedicated window so you can monitor connections without crowding the main panel.",
+                ));
             } else {
                 ui.small(self.tr(
                     "启动区块链后，这里会显示节点健康、Peer 数、网络滞后和当前告警。",
                     "After blockchain starts, this card will show node health, peer counts, network lag, and active alerts.",
+                ));
+                ui.small(self.tr(
+                    "需要单独查看 peer 明细时，可点击上面的窗口按钮。",
+                    "Use the window button above when you want peer details in a separate view.",
                 ));
             }
         });

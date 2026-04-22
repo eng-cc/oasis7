@@ -58,6 +58,7 @@ mod llm_settings;
 mod main_app_shell;
 mod main_chain_status;
 mod main_ui_helpers;
+mod peer_details_window;
 mod platform_ops;
 mod provider_check_status;
 mod self_guided;
@@ -913,6 +914,7 @@ struct ClientLauncherApp {
     transfer_submit_state: TransferSubmitState,
     transfer_window_open: bool,
     transfer_panel_state: transfer_window::TransferPanelState,
+    peer_details_window_open: bool,
     explorer_window_open: bool,
     explorer_panel_state: explorer_window::ExplorerPanelState,
     web_api_tx: Sender<WebApiEvent>,
@@ -975,6 +977,7 @@ impl Default for ClientLauncherApp {
             transfer_submit_state: TransferSubmitState::None,
             transfer_window_open: false,
             transfer_panel_state: transfer_window::TransferPanelState::default(),
+            peer_details_window_open: false,
             explorer_window_open: false,
             explorer_panel_state: explorer_window::ExplorerPanelState::default(),
             web_api_tx,
