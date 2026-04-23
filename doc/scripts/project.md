@@ -326,6 +326,25 @@
     - `python3 -c 'import json,sys; payload=json.load(sys.stdin); local=payload[\"local_required_validation\"]; assert local[\"reason_summary\"] is None or isinstance(local[\"reason_summary\"], str); assert isinstance(local[\"reason_items\"], list)' < <(./scripts/prepare-task-pr.sh --json)`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] pm-rebase-conflict-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突，并把唯一允许的安全自动修复边界收口为 `.pm/inbox/signals.jsonl` signal-id 碰撞；git-ignored 本地视图仅提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。 Trace: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.yaml
+  - 产物文件:
+    - `scripts/pm/rebase-conflict-helper.sh`
+    - `scripts/pm/rebase-conflict-helper.test.sh`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/README.md`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - `doc/engineering/prd.md`
+    - `doc/engineering/project.md`
+    - `.pm/README.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/pm/rebase-conflict-helper.sh scripts/pm/rebase-conflict-helper.test.sh`
+    - `./scripts/pm/rebase-conflict-helper.sh --help`
+    - `./scripts/pm/rebase-conflict-helper.sh --json`
+    - `./scripts/pm/rebase-conflict-helper.test.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -340,6 +359,7 @@
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
 - 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）
+- 最新完成: `pm-rebase-conflict-helper`（已新增 `scripts/pm/rebase-conflict-helper.sh`，用于统一分类 `.pm/**` rebase 冲突，并只在 active rebase 中安全自动修复 `signals.jsonl` 的 signal-id 碰撞。）
 - 最新完成: `prepare-task-pr-local-required-recommendation`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段直接输出 changed-path 对齐的本地 required 验证建议，但不自动执行推荐命令。）
 - 最新完成: `prepare-task-pr-planner-reason-summary`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段同时输出 changed-path planner 的 `reason_summary` 与拆分后的 `reason_items[]`。）
 - 最新完成: `task-closeout-helper`（已新增 `scripts/pm/task-closeout.sh`，把 `workflow-report close`、`move-task done|deferred` 与 `.pm` lint 收成一个单命令 close-phase helper。）

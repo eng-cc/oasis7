@@ -1,0 +1,26 @@
+task_uid: task_6e23e1a96ee34d059aa62e4280a367b7
+title: "add pm rebase conflict helper"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.execution.md
+  - doc/engineering/project.md
+  - doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md
+  - .pm/README.md
+  - scripts/pm/rebase-conflict-helper.sh
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-SCRIPTS-007
+acceptance:
+  - "repo-owned helper reports conflicted .pm rebase paths and classifies safe vs manual resolution boundaries"
+  - "signals.jsonl conflicts can be auto-resolved during active rebase by preserving upstream ids and renumbering branch-local collisions only"
+  - "formal docs record that generated views should preserve main deletion then rerun ./scripts/pm/sync-views.sh"
+handoff_to: []
+updated_at: 2026-04-23T20:37:08+08:00
+last_started_at: 2026-04-23T20:24:24+08:00
+last_closed_at: 2026-04-23T20:37:08+08:00
