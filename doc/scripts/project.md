@@ -259,6 +259,20 @@
     - `./scripts/worktree-gc-report.sh --json`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] task-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，把 `workflow-report --phase close`、`move-task --to-status done|deferred` 与 `.pm` 结构校验收成一个单命令 close-phase helper，减少 commit 前手工串联收口步骤。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
+  - 产物文件:
+    - `scripts/pm/task-closeout.sh`
+    - `scripts/pm/required-tier-smoke.sh`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/README.md`
+    - `.pm/README.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh`
+    - `./scripts/pm/task-closeout.sh --help`
+    - `./scripts/pm/required-tier-smoke.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -269,9 +283,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-22
+- 更新日期: 2026-04-23
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `task-closeout-helper`（已新增 `scripts/pm/task-closeout.sh`，把 `workflow-report close`、`move-task done|deferred` 与 `.pm` lint 收成一个单命令 close-phase helper。）
 - 最新完成: `worktree-lifecycle-report`（已新增只读 `worktree-gc-report.sh`，用于统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。）
 - 最新完成: `TASK-SCRIPTS-024`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题统一降级为 compatibility / fallback。）
 - 最新完成: `TASK-SCRIPTS-023`（builtin wasm-heavy runtime 闭环已从 required/pre-commit 路径下放到 `test_tier_full`，required 重新只承载轻量核心基线。）

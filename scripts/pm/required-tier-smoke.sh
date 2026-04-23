@@ -12,7 +12,7 @@ usage() {
 Usage: ./scripts/pm/required-tier-smoke.sh [--json] [--keep-temp]
 
 Run an isolated required-tier validation chain for the file-based PM runtime:
-  seed evidence -> task execution log -> signal -> task/memory -> blocked task -> workflow/role/stage report
+  seed evidence -> task execution log -> signal -> task/memory -> blocked task -> workflow/role/stage report -> task closeout helper
 
 Options:
   --json       Print machine-readable JSON summary
@@ -490,7 +490,33 @@ WORKFLOW_CLOSE_WITH_WM_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workf
 WORKFLOW_REVIEW_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role producer_system_designer --phase review --json)"
 STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh" --json)"
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" <<'PY'
+CLOSEOUT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+  --owner-role qa_engineer \
+  --title "closeout helper smoke task" \
+  --priority P2 \
+  --source-ref .pm/evidence/bootstrap.md \
+  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
+  --acceptance "task closeout helper can close the task in one command" \
+  --json)"
+CLOSEOUT_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$CLOSEOUT_TASK_JSON")"
+CLOSEOUT_TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$CLOSEOUT_TASK_JSON")"
+cat > "$TMPDIR/$CLOSEOUT_TASK_LOG_PATH" <<EOF
+# $CLOSEOUT_TASK_UID Execution Log
+
+- task_uid: $CLOSEOUT_TASK_UID
+- title: closeout helper smoke task
+- owner_role: qa_engineer
+- worktree_hint: null
+
+## 2026-03-30 22:50:00 CST / qa_engineer
+- 完成内容: prepared a started task for one-command closeout validation.
+- 遗留事项: helper should close the task and keep PM lint green.
+EOF
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$CLOSEOUT_TASK_UID" --to-status committed >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json >/dev/null
+TASK_CLOSEOUT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" --role qa_engineer --task-uid "$CLOSEOUT_TASK_UID" --json)"
+
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" <<'PY'
 from __future__ import annotations
 
 import json
@@ -512,6 +538,8 @@ workflow_close = json.loads(sys.argv[14])
 workflow_close_with_wm = json.loads(sys.argv[15])
 workflow_review = json.loads(sys.argv[16])
 stage_report = json.loads(sys.argv[17])
+task_closeout = json.loads(sys.argv[18])
+closeout_task_uid = sys.argv[19]
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -560,6 +588,22 @@ if not any(item.get("id") == "autoflow-working-memory" for item in workflow_clos
     raise SystemExit("workflow close with seeded working_memory should suggest autoflow for task-scoped working_memory")
 if regen_role_report["roles"]["qa_engineer"]["backlog_counts"]["blocked"] != 1:
     raise SystemExit("regenerated role report should keep qa blocked count")
+if task_closeout["task_uid"] != closeout_task_uid:
+    raise SystemExit("task closeout helper should report the closed task uid")
+if task_closeout["previous_status"] != "committed":
+    raise SystemExit("task closeout helper should preserve the pre-close status in its summary")
+if task_closeout["final_status"] != "done":
+    raise SystemExit("task closeout helper should move the task to done by default")
+if not task_closeout["last_closed_at"]:
+    raise SystemExit("task closeout helper should record last_closed_at")
+if task_closeout["pm_lint"]["status"] != "ok":
+    raise SystemExit("task closeout helper should run pm lint by default")
+if task_closeout["recommended_next_command"] != "./scripts/prepare-task-pr.sh":
+    raise SystemExit("task closeout helper should point to prepare-task-pr as the next step")
+if task_closeout["workflow_close"]["task_context"]["task_uid"] != closeout_task_uid:
+    raise SystemExit("task closeout helper should return workflow close evidence for the same task")
+if task_closeout["move_task"]["to_status"] != "done":
+    raise SystemExit("task closeout helper should report the final move-task status")
 
 print(
     json.dumps(
@@ -581,6 +625,7 @@ print(
             "workflow_close_with_wm": workflow_close_with_wm,
             "workflow_review": workflow_review,
             "stage_report": stage_report,
+            "task_closeout": task_closeout,
         },
         ensure_ascii=False,
     )
@@ -619,6 +664,7 @@ print(f"- superseded_memory: {payload['memory_report']['counts']['superseded']}"
 print(f"- qa_blocked_tasks: {payload['role_report']['roles']['qa_engineer']['backlog_counts']['blocked']}")
 print(f"- qa_pending_signals: {payload['workflow_start']['signal_summary']['pending_count']}")
 print(f"- qa_close_actions: {len(payload['workflow_close']['checklist'])}")
+print(f"- closeout_helper_final_status: {payload['task_closeout']['final_status']}")
 print(f"- producer_pending_signals: {payload['workflow_review']['signal_summary']['pending_count']}")
 print(f"- producer_review_actions: {len(payload['workflow_review']['checklist'])}")
 print(f"- rejected_memory_signal: {payload['rejected_memory']['signal_id']}")

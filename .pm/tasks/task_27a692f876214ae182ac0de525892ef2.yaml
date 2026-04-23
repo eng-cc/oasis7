@@ -1,0 +1,24 @@
+task_uid: task_27a692f876214ae182ac0de525892ef2
+title: "add one-command task closeout helper"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/scripts/prd.md
+  - .pm/README.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-SCRIPTS-007
+acceptance:
+  - "repo provides one-command task closeout helper for workflow-report close plus move-task plus pm lint"
+  - "engineering and scripts formal docs record the helper and validation evidence"
+handoff_to: []
+updated_at: 2026-04-23T10:50:48+08:00
+last_started_at: 2026-04-23T10:23:07+08:00
+last_closed_at: 2026-04-23T10:50:48+08:00

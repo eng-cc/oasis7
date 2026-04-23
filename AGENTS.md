@@ -61,7 +61,7 @@
    4. 多角色并行或接力时，必须显式标注角色；推荐格式：`## YYYY-MM-DD HH:MM:SS CST / role_name`
    5. `qa_engineer` 和 `liveops_community` 的关键结论也应回写 task execution log 或正式文档
    6. execution log、handoff 与角色相关文档中的角色名，只能使用 `.agents/roles/*.md` 中已存在的标准角色名，禁止自造别名
-   7. 收口前执行 `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>`，把 `last_closed_at` 写入当前任务，再按 checklist 回写 signal / memory / backlog，不允许只写 execution log 不同步 `.pm/`
+   7. 收口前优先执行 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`，统一完成 `workflow-report --phase close -> move-task --to-status done|deferred -> pm lint`；若手工拆步，也必须先写入 `last_closed_at`，再同步 backlog 与 `.pm` 校验，不允许只写 execution log 不同步 `.pm/`
    8. `qa_engineer` / `liveops_community` 新增高价值结论时，优先通过 `./scripts/pm/promote-signal.sh` 进入 signal inbox；形成稳定结论后再提升为 memory 或 task
    9. `producer_system_designer` 若调整阶段判断、gate lane 或 claim envelope，必须优先通过 `./scripts/pm/set-stage.sh` 同步更新 `.pm/stage/*.yaml`，并用 `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer` 复核；该 review 视图默认聚合全部角色 pending signals
 
@@ -77,7 +77,7 @@
    5. 若 PR preflight / create 失败，先在任务 `worktree` 解决分支落后、push 或验证问题，再重试
 
 13. 当前 `project.md` 还有后续任务时，不要中断
-   1. 当前 task 完成后，先完成 `workflow-report --phase close`、`./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
+   1. 当前 task 完成后，先完成 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID>`（或等价的 `workflow-report --phase close` + `move-task --to-status done|deferred` 手工链）、commit、PR/merge、本地 `main` 同步与 source `worktree` 清理，再判断是否进入下一个 task
    2. 若 `project.md` 仍有后续任务，默认为下一个 task 重新创建独立 `worktree` 与 `.pm` task；只有用户明确授权复用当前 `worktree` 时，才允许不切新环境
 
 ## 工程架构
