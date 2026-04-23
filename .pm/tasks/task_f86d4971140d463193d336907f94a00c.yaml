@@ -1,0 +1,25 @@
+task_uid: task_f86d4971140d463193d336907f94a00c
+title: "add local changed-path required validation recommendation"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_f86d4971140d463193d336907f94a00c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/scripts/prd.md
+  - doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md
+  - testing-manual.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-SCRIPTS-007
+acceptance:
+  - "prepare-task-pr reports a local required-gate validation recommendation derived from changed paths before PR creation"
+  - "formal docs record the changed-path recommendation boundary without changing ci-tests required/full semantics"
+handoff_to: []
+updated_at: 2026-04-23T17:08:14+08:00
+last_started_at: 2026-04-23T16:52:38+08:00
+last_closed_at: 2026-04-23T17:08:14+08:00
