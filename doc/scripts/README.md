@@ -8,6 +8,7 @@
 - 想按专题文件名精确查 precommit / wasm / viewer-tools / governance 文档：`doc/scripts/prd.index.md`
 - 想直接为新需求开独立 worktree：`scripts/new-task-worktree.sh` + `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
 - 想把 task 的 `.pm` close-phase 一步收口：`scripts/pm/task-closeout.sh` + `.pm/README.md`
+- 想处理当前 PR 的 review comments / thread resolve：`scripts/pr-review-thread-closeout.sh`
 - 想把已完成任务标准化通过 GitHub PR 合入 `main`：`scripts/prepare-task-pr.sh` + `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 - 想盘点哪些 task worktree 已可回收：`scripts/worktree-gc-report.sh`
 - 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
@@ -24,7 +25,7 @@
 - `prd.md` 是脚本模块的权威规格入口，适合先理解主入口分层、参数契约、稳定性趋势与隔离约束。
 - `project.md` 是执行台账，适合确认当前 worktree、landing、harness 等治理任务的完成状态。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 scripts 模块时的首读入口。
-- 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`scripts/pm/task-closeout.sh` 负责 `.pm` close-phase 收口，`prepare-task-pr.sh` 负责默认 GitHub PR 收口，`worktree-gc-report.sh` 负责 worktree 生命周期盘点，`land-task-worktree.sh` 只保留给 local-only / fallback，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
+- 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`scripts/pm/task-closeout.sh` 负责 `.pm` close-phase 收口，`scripts/pr-review-thread-closeout.sh` 负责 same-PR review thread 盘点与 resolve，`prepare-task-pr.sh` 负责默认 GitHub PR 收口，`worktree-gc-report.sh` 负责 worktree 生命周期盘点，`land-task-worktree.sh` 只保留给 local-only / fallback，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
 
 ## 模块职责
 - 维护仓内高频脚本的主入口、参数契约与 fallback 围栏口径。
@@ -55,6 +56,7 @@
 - 新增专题后，需同步回写 `doc/scripts/prd.index.md` 与本目录索引。
 - `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project / 当日 devlog，`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up --no-llm`。
 - `scripts/pm/task-closeout.sh` 为默认 close-phase helper；负责在 task 已 start 且 execution log 已回写后，统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，但不替代 commit 或 `prepare-task-pr.sh`。
+- `scripts/pr-review-thread-closeout.sh` 为当前 PR 的 review-thread closeout helper；默认只读盘点 review threads，显式传 `--resolve-thread` 或 `--resolve-all-unresolved` 时才会调用 GitHub resolve mutation，且每次都会重新回报 `reviewDecision` / `mergeStateStatus`。
 - `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并输出 PR 合入后的本地同步与回收命令。
 - `scripts/worktree-gc-report.sh` 为 worktree 生命周期盘点入口；默认只读汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，不自动删除任何 worktree/branch。
 - `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
