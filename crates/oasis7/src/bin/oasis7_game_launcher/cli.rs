@@ -1,4 +1,5 @@
 use super::*;
+use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peer;
 
 pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
     let mut options = CliOptions::default();
@@ -358,17 +359,9 @@ fn validate_chain_node_validator(raw: &str) -> Result<(), String> {
 }
 
 fn validate_chain_replication_network_peer(raw: &str) -> Result<(), String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("--chain-replication-network-peer requires a non-empty value".to_string());
-    }
-    if !trimmed.starts_with('/') {
-        return Err(
-            "--chain-replication-network-peer must use libp2p multiaddr format like /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>"
-                .to_string(),
-        );
-    }
-    Ok(())
+    parse_chain_replication_bootstrap_peer(raw)
+        .map(|_| ())
+        .map_err(|err| format!("--chain-replication-network-peer invalid: {err}"))
 }
 
 pub(super) fn print_help() {

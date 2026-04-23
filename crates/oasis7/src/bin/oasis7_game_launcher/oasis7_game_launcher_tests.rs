@@ -144,9 +144,9 @@ fn parse_options_accepts_overrides() {
             "public_entry",
             "--chain-p2p-accept-public-entry",
             "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "/ip4/127.0.0.1/tcp/4100",
             "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+            "/dns4/bootstrap.example/tcp/4101",
             "--chain-node-tick-ms",
             "350",
             "--chain-pos-slot-duration-ms",
@@ -204,8 +204,8 @@ fn parse_options_accepts_overrides() {
     assert_eq!(
         options.chain_replication_bootstrap_peers,
         vec![
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+            "/ip4/127.0.0.1/tcp/4100".to_string(),
+            "/dns4/bootstrap.example/tcp/4101".to_string(),
         ]
     );
     assert_eq!(options.chain_node_tick_ms, 350);
@@ -258,9 +258,9 @@ fn parse_options_collects_repeat_replication_bootstrap_peers() {
     let options = parse_options(
         [
             "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "/ip4/127.0.0.1/tcp/4100",
             "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+            "/dns4/bootstrap.example/tcp/4101",
         ]
         .into_iter(),
     )
@@ -269,8 +269,8 @@ fn parse_options_collects_repeat_replication_bootstrap_peers() {
     assert_eq!(
         options.chain_replication_bootstrap_peers,
         vec![
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+            "/ip4/127.0.0.1/tcp/4100".to_string(),
+            "/dns4/bootstrap.example/tcp/4101".to_string(),
         ]
     );
 }
@@ -674,8 +674,8 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
         chain_replication_bootstrap_peers: vec![
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+            "/ip4/127.0.0.1/tcp/4100".to_string(),
+            "/dns4/bootstrap.example/tcp/4101".to_string(),
         ],
         ..CliOptions::default()
     };
@@ -694,8 +694,8 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
             .count(),
         2
     );
-    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string()));
-    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string()));
+    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100".to_string()));
+    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101".to_string()));
     assert!(
         args.contains(&"output/chain-runtime/chain-a/reward-runtime-execution-world".to_string())
     );
