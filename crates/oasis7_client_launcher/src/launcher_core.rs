@@ -1,4 +1,5 @@
 use super::*;
+use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 #[cfg(not(target_arch = "wasm32"))]
 use oasis7::simulator::{evaluate_provider_compatibility, ProviderHealth, ProviderInfo};
 #[cfg(not(target_arch = "wasm32"))]
@@ -902,24 +903,6 @@ pub(super) fn parse_chain_validators(raw: &str) -> Result<Vec<String>, String> {
         validators.push(format!("{}:{}", validator_id.trim(), stake));
     }
     Ok(validators)
-}
-
-pub(super) fn parse_chain_replication_bootstrap_peers(raw: &str) -> Result<Vec<String>, String> {
-    let mut peers = Vec::new();
-    for token in raw.split([',', ';', ' ', '\n', '\r', '\t']) {
-        let token = token.trim();
-        if token.is_empty() {
-            continue;
-        }
-        if !token.starts_with('/') {
-            return Err(
-                "chain replication bootstrap peers must use multiaddr values like /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>"
-                    .to_string(),
-            );
-        }
-        peers.push(token.to_string());
-    }
-    Ok(peers)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

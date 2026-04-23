@@ -97,9 +97,9 @@ fn parse_options_accepts_overrides() {
             "public_entry",
             "--chain-p2p-accept-public-entry",
             "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "/ip4/127.0.0.1/tcp/4100",
             "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+            "/dns4/bootstrap.example/tcp/4101",
             "--chain-pos-slot-duration-ms",
             "12000",
             "--chain-pos-ticks-per-slot",
@@ -145,7 +145,7 @@ fn parse_options_accepts_overrides() {
     assert!(options.initial_config.chain_p2p_accept_public_entry);
     assert_eq!(
         options.initial_config.chain_replication_bootstrap_peers,
-        "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+        "/ip4/127.0.0.1/tcp/4100,/dns4/bootstrap.example/tcp/4101"
     );
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
@@ -189,9 +189,9 @@ fn parse_options_collects_repeat_replication_bootstrap_peers() {
     let options = parse_options(
         [
             "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "/ip4/127.0.0.1/tcp/4100",
             "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+            "/dns4/bootstrap.example/tcp/4101",
         ]
         .into_iter(),
     )
@@ -199,7 +199,7 @@ fn parse_options_collects_repeat_replication_bootstrap_peers() {
 
     assert_eq!(
         options.initial_config.chain_replication_bootstrap_peers,
-        "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+        "/ip4/127.0.0.1/tcp/4100,/dns4/bootstrap.example/tcp/4101"
     );
 }
 
@@ -292,8 +292,7 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
         chain_replication_bootstrap_peers:
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA /dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
-                .to_string(),
+            "/ip4/127.0.0.1/tcp/4100 /dns4/bootstrap.example/tcp/4101".to_string(),
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -322,8 +321,7 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
         chain_replication_bootstrap_peers:
-            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA /dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
-                .to_string(),
+            "/ip4/127.0.0.1/tcp/4100 /dns4/bootstrap.example/tcp/4101".to_string(),
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -350,8 +348,8 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
             .count(),
         2
     );
-    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string()));
-    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string()));
+    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100".to_string()));
+    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101".to_string()));
     assert!(args.contains(&"--node-validator".to_string()));
     assert!(args.contains(&"chain-a:55".to_string()));
     assert!(args.contains(&"chain-b:45".to_string()));
