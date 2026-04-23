@@ -15,4 +15,9 @@ Example:
 - 完成内容: 已在 `scripts/prepare-task-pr.sh` 的 `local_required_validation` 中增加 `reason_summary` 与 `reason_items[]`，并把文本摘要扩成直接显示 planner reason summary 与逐条 reason item。当前 owner 在 PR preflight 阶段既能看到推荐的 `./scripts/ci-tests.sh required` 命令，也能看到为什么被 planner 归到当前 scope。
 - 完成内容: 已同步回写 `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.{prd,project}.md`、`doc/scripts/{prd,project,README}.md`、`doc/engineering/{prd,project}.md` 与 `.pm/README.md`，把“planner reason summary 已接入 `prepare-task-pr`”纳入正式追踪，并显式保留边界：本轮不扩到 wasm gate 解释层，也不引入任何自动执行。
 - 完成内容: 已完成 `bash -n scripts/prepare-task-pr.sh`、`./scripts/prepare-task-pr.sh --help`、`./scripts/doc-governance-check.sh`、`git diff --check` 验证；由于 source worktree 尚未提交，`./scripts/prepare-task-pr.sh --json` 的真实字段断言需在 commit 后的干净 worktree 上补跑，避免被既有的 dirty-worktree preflight 阻断。
-- 遗留事项: 提交后补跑 `./scripts/prepare-task-pr.sh --json` 与 reason summary 字段断言，再执行 task closeout、commit/push，并复核同一 PR 的最新状态。
+- 遗留事项: 无；clean-worktree 的最终 JSON 验证已在后续条目补齐。
+
+## 2026-04-23 17:41:22 CST / producer_system_designer
+- 完成内容: 已在 commit 后的干净 source worktree 上补跑 `./scripts/prepare-task-pr.sh --json` 与 reason summary 字段断言，确认新增 `local_required_validation.reason_summary` 与 `reason_items[]` 输出稳定。当前 branch 命中 `scope=full`，`reason_summary` 正确回报多个 `unclassified_code_or_ci:*` 命中项，`reason_items[]` 与原始摘要一致拆分。
+- 完成内容: 已再次确认 `./scripts/pm/lint.sh` 与 `git diff --check` 通过；本轮脚本、文档与 `.pm` 证据已经在同一 PR 分支闭环。
+- 遗留事项: 无。
