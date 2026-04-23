@@ -46,6 +46,10 @@ fn pos_engine_applies_gossiped_proposal_and_attestation() {
     engine
         .ingest_proposal_message(&config.world_id, &proposal, 0)
         .expect("ingest proposal");
+    assert_eq!(
+        engine.pending.as_ref().map(|pending| pending.opened_at_ms),
+        Some(1_000)
+    );
 
     let attestation = GossipAttestationMessage {
         version: 1,

@@ -40,6 +40,20 @@ const TRANSFER_ERROR_ACCOUNT_AUTH_MISMATCH: &str = "account_auth_mismatch";
 static NEXT_TRANSFER_ACTION_ID: AtomicU64 = AtomicU64::new(1);
 static TRANSFER_TRACKER: OnceLock<Mutex<TransferTracker>> = OnceLock::new();
 
+fn rounded_percentile_index(sample_count: usize, pct: usize) -> usize {
+    sample_count
+        .saturating_sub(1)
+        .saturating_mul(pct)
+        .saturating_add(50)
+        / 100
+}
+
+fn nonnegative_elapsed_ms(later_ms: i64, earlier_ms: i64) -> Option<i64> {
+    later_ms
+        .checked_sub(earlier_ms)
+        .filter(|age_ms| *age_ms >= 0)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum TransferLifecycleStatus {
@@ -540,7 +554,7 @@ impl TransferTracker {
                     TransferLifecycleStatus::Accepted | TransferLifecycleStatus::Pending
                 )
             })
-            .map(|item| now_ms.saturating_sub(item.submitted_at_unix_ms))
+            .filter_map(|item| nonnegative_elapsed_ms(now_ms, item.submitted_at_unix_ms))
             .max();
         let mut confirmed_latencies = self
             .by_action_id
@@ -1100,7 +1114,12 @@ pub(super) fn build_chain_transfer_metrics_status(
 }
 
 fn summarize_transfer_latency_samples(samples: &[i64]) -> ChainTransferLatencySummaryStatus {
-    if samples.is_empty() {
+    let mut sorted = samples
+        .iter()
+        .copied()
+        .filter(|value| *value >= 0)
+        .collect::<Vec<_>>();
+    if sorted.is_empty() {
         return ChainTransferLatencySummaryStatus {
             sample_count: 0,
             avg_latency_ms: None,
@@ -1109,17 +1128,18 @@ fn summarize_transfer_latency_samples(samples: &[i64]) -> ChainTransferLatencySu
             p95_latency_ms: None,
         };
     }
-    let total = samples
+    sorted.sort_unstable();
+    let total = sorted
         .iter()
         .fold(0_i128, |acc, value| acc.saturating_add(*value as i128));
     let percentile = |pct: usize| -> Option<i64> {
-        let idx = (samples.len().saturating_sub(1)).saturating_mul(pct) / 100;
-        samples.get(idx).copied()
+        let idx = rounded_percentile_index(sorted.len(), pct);
+        sorted.get(idx).copied()
     };
     ChainTransferLatencySummaryStatus {
-        sample_count: samples.len(),
-        avg_latency_ms: Some((total / samples.len() as i128) as i64),
-        max_latency_ms: samples.last().copied(),
+        sample_count: sorted.len(),
+        avg_latency_ms: Some((total / sorted.len() as i128) as i64),
+        max_latency_ms: sorted.last().copied(),
         p50_latency_ms: percentile(50),
         p95_latency_ms: percentile(95),
     }

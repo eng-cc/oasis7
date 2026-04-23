@@ -221,7 +221,7 @@
   - NFR-WR-21: 默认配置下，WASM metrics instrumentation 对现有 release perf probe 的额外 wall-clock 开销目标不高于 `10%`。
   - NFR-WR-22: 默认 `/v1/chain/status.wasm` payload 预算建议 `<=64 KiB`，开启 bounded top-N 明细后的预算建议 `<=128 KiB`。
   - NFR-WR-23: `/v1/chain/status` 新增的链健康字段必须保持 bounded cardinality 与常数级开销；默认路径只允许输出聚合计数、单个 pending proposal 摘要、payload byte totals 与 bounded latency summary，不得把未提交 action 明细、逐笔 transfer 历史或高基数 peer 级失败列表直接塞进 status payload。
-  - NFR-WR-22: 标准化 wasm module observe runner 不得因模块特例膨胀成分支集合；默认新增模块只允许通过 module-local spec/fixture 接入，不得要求 runner 增加模块专属逻辑。
+  - NFR-WR-24: 标准化 wasm module observe runner 不得因模块特例膨胀成分支集合；默认新增模块只允许通过 module-local spec/fixture 接入，不得要求 runner 增加模块专属逻辑。
 - Security & Privacy: 强制最小权限、签名校验、审计留痕；禁止未授权模块绕过规则层直接修改世界状态。
 
 ## 5. Risks & Roadmap

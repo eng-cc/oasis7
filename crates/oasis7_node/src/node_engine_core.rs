@@ -870,6 +870,14 @@ fn progress_bps(numerator: u64, denominator: u64) -> u16 {
     ratio.min(10_000) as u16
 }
 
+fn rounded_percentile_index(sample_count: usize, pct: usize) -> usize {
+    sample_count
+        .saturating_sub(1)
+        .saturating_mul(pct)
+        .saturating_add(50)
+        / 100
+}
+
 fn summarize_finality_latency(latencies: impl Iterator<Item = i64>) -> NodeFinalityLatencySnapshot {
     let mut samples = latencies
         .filter(|latency| *latency >= 0)
@@ -883,7 +891,7 @@ fn summarize_finality_latency(latencies: impl Iterator<Item = i64>) -> NodeFinal
         .iter()
         .fold(0_i128, |acc, value| acc.saturating_add(*value as i128));
     let percentile = |pct: usize| -> Option<i64> {
-        let idx = (sample_count.saturating_sub(1)).saturating_mul(pct) / 100;
+        let idx = rounded_percentile_index(sample_count, pct);
         samples.get(idx).copied()
     };
     NodeFinalityLatencySnapshot {
