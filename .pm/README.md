@@ -69,7 +69,7 @@
 - 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
-- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时优先使用 `task-closeout.sh` 完成 close-phase，再在 commit 后立即进入 `prepare-task-pr.sh`，由 GitHub PR 的 required checks + review/approval 承担默认评审边界。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议，但该建议只负责推荐，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
+- 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时优先使用 `task-closeout.sh` 完成 close-phase，再在 commit 后立即进入 `prepare-task-pr.sh`，由 GitHub PR 的 required checks + review/approval 承担默认评审边界。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
 - 若 owner / title / source refs 已明确，优先直接用 `./scripts/new-task-worktree.sh <module> <task> --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性进入目标 worktree 并留下 `last_started_at`；只有在需要手工拆步时，才分开执行 `new-task.sh` / `workflow-report.sh` / `move-task.sh`，或显式跳过 `task-closeout.sh`。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。

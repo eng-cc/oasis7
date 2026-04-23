@@ -308,6 +308,24 @@
     - `python3 -c 'import json,sys; payload=json.load(sys.stdin); local=payload[\"local_required_validation\"]; assert local[\"scope\"] in {\"minimal\",\"targeted\",\"full\",\"unavailable\"}; assert \"recommended_required_command\" in local' < <(./scripts/prepare-task-pr.sh --json)`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] prepare-task-pr-planner-reason-summary (PRD-SCRIPTS-007) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path planner `reason_summary` 与 `reason_items[]` 输出，让 owner 在 PR preflight 阶段直接看到当前 scope 的命中原因，但不扩到 wasm 解释层或自动执行。 Trace: .pm/tasks/task_db7d4beaf8354e1eb7f50afd0ee0a8d6.yaml
+  - 产物文件:
+    - `scripts/prepare-task-pr.sh`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
+    - `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/README.md`
+    - `doc/engineering/prd.md`
+    - `doc/engineering/project.md`
+    - `.pm/README.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/prepare-task-pr.sh`
+    - `./scripts/prepare-task-pr.sh --help`
+    - `./scripts/prepare-task-pr.sh --json`
+    - `python3 -c 'import json,sys; payload=json.load(sys.stdin); local=payload[\"local_required_validation\"]; assert local[\"reason_summary\"] is None or isinstance(local[\"reason_summary\"], str); assert isinstance(local[\"reason_items\"], list)' < <(./scripts/prepare-task-pr.sh --json)`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -323,6 +341,7 @@
 - 下一任务: 无（当前模块主项目无未完成任务）
 - 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）
 - 最新完成: `prepare-task-pr-local-required-recommendation`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段直接输出 changed-path 对齐的本地 required 验证建议，但不自动执行推荐命令。）
+- 最新完成: `prepare-task-pr-planner-reason-summary`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段同时输出 changed-path planner 的 `reason_summary` 与拆分后的 `reason_items[]`。）
 - 最新完成: `task-closeout-helper`（已新增 `scripts/pm/task-closeout.sh`，把 `workflow-report close`、`move-task done|deferred` 与 `.pm` lint 收成一个单命令 close-phase helper。）
 - 最新完成: `worktree-lifecycle-report`（已新增只读 `worktree-gc-report.sh`，用于统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。）
 - 最新完成: `TASK-SCRIPTS-024`（已将默认最终合流从本地 `landing` 切到 GitHub PR，新增 `prepare-task-pr.sh` 标准入口，并把 `land-task-worktree.sh` 与旧 landing 专题统一降级为 compatibility / fallback。）

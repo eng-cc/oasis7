@@ -149,6 +149,7 @@
 - [x] task-closeout-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，将 `.pm` close-phase 的 `workflow-report close -> move-task done|deferred -> pm lint` 收成单命令 helper，并将 scripts / PM / workflow 文档口径统一到“helper 优先、手工链等价”。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
 - [x] pr-review-thread-closeout-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pr-review-thread-closeout.sh`，统一 same-PR review thread 的盘点、显式 resolve 与 PR state 复核，并将 workflow 文档口径对齐到“thread 已关”和“PR 可合并”分离报告。 Trace: .pm/tasks/task_dffc87cc3a724052829c0364e0e11bbb.yaml
 - [x] prepare-task-pr-local-required-recommendation (PRD-ENGINEERING-021) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path 本地 required 验证推荐摘要，让 owner 在 PR preflight 阶段直接看到建议的 `./scripts/ci-tests.sh required` 命令与额外命令，同时保持推荐只读、不改现有 `required/full` 语义。 Trace: .pm/tasks/task_f86d4971140d463193d336907f94a00c.yaml
+- [x] prepare-task-pr-planner-reason-summary (PRD-ENGINEERING-021) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path planner `reason_summary` 与 `reason_items[]` 输出，让 owner 在 PR preflight 阶段直接看到当前 scope 的命中原因，同时保持范围不扩到 wasm 解释层或自动执行。 Trace: .pm/tasks/task_db7d4beaf8354e1eb7f50afd0ee0a8d6.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`

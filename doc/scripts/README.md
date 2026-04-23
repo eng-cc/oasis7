@@ -9,7 +9,7 @@
 - 想直接为新需求开独立 worktree：`scripts/new-task-worktree.sh` + `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
 - 想把 task 的 `.pm` close-phase 一步收口：`scripts/pm/task-closeout.sh` + `.pm/README.md`
 - 想处理当前 PR 的 review comments / thread resolve：`scripts/pr-review-thread-closeout.sh`
-- 想把已完成任务标准化通过 GitHub PR 合入 `main`，并先看 changed-path 对齐的本地 required 建议：`scripts/prepare-task-pr.sh` + `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
+- 想把已完成任务标准化通过 GitHub PR 合入 `main`，并先看 changed-path 对齐的本地 required 建议与 planner 原因摘要：`scripts/prepare-task-pr.sh` + `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 - 想盘点哪些 task worktree 已可回收：`scripts/worktree-gc-report.sh`
 - 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - 想让多个 worktree 复用 Rust 开发态编译缓存：`scripts/cargo-dev.sh`
@@ -57,7 +57,7 @@
 - `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project / 当日 devlog，`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up --no-llm`。
 - `scripts/pm/task-closeout.sh` 为默认 close-phase helper；负责在 task 已 start 且 execution log 已回写后，统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，但不替代 commit 或 `prepare-task-pr.sh`。
 - `scripts/pr-review-thread-closeout.sh` 为当前 PR 的 review-thread closeout helper；默认只读盘点 review threads，显式传 `--resolve-thread` 或 `--resolve-all-unresolved` 时才会调用 GitHub resolve mutation，且每次都会重新回报 `reviewDecision` / `mergeStateStatus`。
-- `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并基于 changed-path planner 输出本地 required 验证建议，以及 PR 合入后的本地同步与回收命令。
+- `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并基于 changed-path planner 输出本地 required 验证建议、planner 原因摘要，以及 PR 合入后的本地同步与回收命令。
 - `scripts/worktree-gc-report.sh` 为 worktree 生命周期盘点入口；默认只读汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，不自动删除任何 worktree/branch。
 - `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
 - `scripts/cargo-dev.sh` 只用于本地开发态 `cargo check/test/run/build` 的 shared target 复用；要求 deterministic wasm / release 的脚本继续走原始 cargo 入口，保持 `CARGO_TARGET_DIR` 为空。

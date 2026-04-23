@@ -11,8 +11,8 @@ Usage: ./scripts/prepare-task-pr.sh [source-branch] [options]
 
 Validate one task branch for GitHub PR closure, print the exact PR command, and
 optionally push the branch plus open the PR through `gh`. The preflight summary
-also reports a local required-gate validation recommendation derived from the
-current changed-path scope.
+also reports a local required-gate validation recommendation plus planner
+reason summary derived from the current changed-path scope.
 
 Default conventions:
 - source branch: current branch
@@ -270,6 +270,7 @@ fi
 LOCAL_REQUIRED_SCOPE="unavailable"
 LOCAL_REQUIRED_CHANGED_PATH_COUNT=0
 LOCAL_REQUIRED_CHANGED_PATHS=""
+LOCAL_REQUIRED_REASON_SUMMARY=""
 LOCAL_REQUIRED_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
@@ -279,6 +280,7 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
     LOCAL_REQUIRED_SCOPE="${RUST_SCOPE_PLAN[scope]:-unavailable}"
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="${RUST_SCOPE_PLAN[changed_path_count]:-0}"
     LOCAL_REQUIRED_CHANGED_PATHS="${RUST_SCOPE_PLAN[changed_paths]:-}"
+    LOCAL_REQUIRED_REASON_SUMMARY="${RUST_SCOPE_PLAN[reason_summary]:-}"
     if [[ "$LOCAL_REQUIRED_SCOPE" == "full" ]]; then
       LOCAL_REQUIRED_COMMAND="./scripts/ci-tests.sh required"
     else
@@ -345,14 +347,15 @@ if [[ "$CREATE_PR" == "1" ]]; then
 fi
 
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
 changed_paths = [path for path in sys.argv[21].split(";") if path]
-extra_commands = [cmd for cmd in sys.argv[23].split(";") if cmd]
+reason_items = [reason for reason in sys.argv[22].split(";") if reason]
+extra_commands = [cmd for cmd in sys.argv[24].split(";") if cmd]
 
 payload = {
     "source_branch": sys.argv[1],
@@ -376,7 +379,9 @@ payload = {
         "scope": sys.argv[19],
         "changed_path_count": int(sys.argv[20]),
         "changed_paths": changed_paths,
-        "recommended_required_command": sys.argv[22] or None,
+        "reason_summary": sys.argv[22] or None,
+        "reason_items": reason_items,
+        "recommended_required_command": sys.argv[23] or None,
         "recommended_extra_commands": extra_commands,
     },
 }
@@ -415,6 +420,13 @@ echo
 echo "Local Required Validation:"
 echo "- scope: $LOCAL_REQUIRED_SCOPE"
 echo "- changed paths: $LOCAL_REQUIRED_CHANGED_PATH_COUNT"
+if [[ -n "$LOCAL_REQUIRED_REASON_SUMMARY" ]]; then
+  echo "- planner reason summary: $LOCAL_REQUIRED_REASON_SUMMARY"
+  while IFS= read -r reason_item; do
+    [[ -n "$reason_item" ]] || continue
+    echo "  - planner reason: $reason_item"
+  done < <(printf '%s\n' "$LOCAL_REQUIRED_REASON_SUMMARY" | tr ';' '\n')
+fi
 if [[ -n "$LOCAL_REQUIRED_COMMAND" ]]; then
   echo "- recommended required command: $LOCAL_REQUIRED_COMMAND"
 fi

@@ -1,0 +1,26 @@
+task_uid: task_db7d4beaf8354e1eb7f50afd0ee0a8d6
+title: "add prepare-task-pr planner reason summary"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_db7d4beaf8354e1eb7f50afd0ee0a8d6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/scripts/prd.md
+  - doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md
+  - scripts/prepare-task-pr.sh
+  - scripts/plan-rust-required-scope.sh
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-SCRIPTS-007
+acceptance:
+  - "prepare-task-pr exposes changed-path planner reason_summary in human and JSON output for local required validation"
+  - "formal docs record the planner reason summary boundary without expanding into wasm explanation or auto execution"
+handoff_to: []
+updated_at: 2026-04-23T17:39:15+08:00
+last_started_at: 2026-04-23T17:31:44+08:00
+last_closed_at: 2026-04-23T17:39:15+08:00
