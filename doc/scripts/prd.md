@@ -44,6 +44,7 @@
   - SC-12: 仓库必须提供标准化 task worktree GitHub PR 收口入口，让已完成需求能够在干净状态下统一执行 PR preflight / create，并把 required checks + review/approval 作为 `main` 的默认保护边界。
   - SC-12A: `scripts/land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不再作为默认最终合流入口；其帮助文案与专题文档必须明确这一边界。
   - SC-13: 每个 task `worktree` 在 PR 合入后都必须回收，不允许长期保留“已完成但未清理”的 task worktree/branch。
+  - SC-13A: 仓库必须提供只读 worktree 生命周期盘点入口，能够统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，避免回收状态只能靠人工 `git worktree list` + `git status` 拼接判断。
   - SC-14: worktree 治理口径必须明确“文档改动、脚本改动、测试改动、仅改话术”都算新需求；只有用户显式授权复用当前 worktree 时才允许例外，且发现切错 worktree 后必须立即切走。
 
 ## 2. User Experience & Functionality
@@ -65,6 +66,7 @@
   - PRD-SCRIPTS-006: As a `qa_engineer`, I want the task-worktree bootstrap command to optionally inspect module docs and prewarm the worktree harness, so that a new task can move from creation to “read docs + boot isolated stack” in one hop.
   - PRD-SCRIPTS-007: As a `producer_system_designer`, I want a standard task-worktree GitHub PR closure command, so that completed work enters protected `main` with one consistent, auditable path instead of ad hoc local landing.
   - PRD-SCRIPTS-008: As a `producer_system_designer`, I want every completed task worktree deleted after PR merge or explicit local-only fallback completion, so that the local workspace and branch namespace do not fill with stale finished slices.
+  - PRD-SCRIPTS-008A: As a `producer_system_designer`, I want a read-only worktree cleanup report, so that I can identify stale finished slices before they accumulate into branch/worktree drift.
   - PRD-SCRIPTS-009: As a 开发者, I want a repo-family shared cargo development wrapper, so that multiple git worktrees can reuse Rust build artifacts without weakening deterministic wasm/release gates.
 - Critical User Flows:
   1. Flow-SCR-001: `调用主入口脚本 -> 执行检查/测试 -> 输出结构化结果`
@@ -75,6 +77,7 @@
   6. Flow-SCR-006: `prepare-task-pr.sh [task/<module>-<task>] -> 检查 source task worktree 干净状态与 base 分支对齐情况 -> 输出或执行 GitHub PR create 命令 -> 通过 required checks + review/approval 合入 `main` -> 同步本地 `main` 并删除已完成 task worktree/branch`
   7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
   8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family 的 shared target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
+  9. Flow-SCR-009: `worktree-gc-report.sh -> 扫描 git worktree + `.pm/tasks/*.yaml` -> 标注 prunable / closed clean worktree cleanup 候选 -> 输出只读汇总与建议命令`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -86,6 +89,7 @@
 | task worktree bootstrap | `module_slug`、`task_slug`、`branch_name`、`worktree_path`、`base_ref` | 通过统一入口创建或附着任务 worktree，并输出下一步命令 / JSON 摘要 | `draft -> validated -> created/attached -> ready` | 默认派生 `task/<module>-<task>` 分支与 `../worktrees/<repo>-<module>-<task>` 路径 | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | task bootstrap followups | `doc_checks`、`today_devlog_path`、`harness_mode`、`harness_state_file`、`viewer_url` | 通过 `--init-docs` / `--with-harness` 补齐文档检查与 harness 预热 | `ready -> doc_checked -> harness_booted` | `--init-docs` 只读检查模块文档；`--with-harness` 默认调用 `worktree-harness.sh up --no-llm` | `qa_engineer` 与 scripts owner 协同维护 |
 | task worktree PR closure | `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands` | 通过统一入口校验任务分支、输出或执行 GitHub PR create 命令，并给出 PR 合入后的本地同步/cleanup 命令 | `ready_to_pr -> preflighted -> pr_opened -> merged -> cleaned_up` | 默认源分支取当前 branch，base 默认 `main`、remote 默认 `origin`；PR 合入后必须执行 cleanup | `producer_system_designer` 定流程，scripts owner 维护入口 |
+| worktree lifecycle report | `worktree_path`、`branch`、`prunable_reason`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate`、`cleanup_commands[]` | 通过统一入口只读盘点当前 repo 的 worktree 生命周期状态，并给出建议 cleanup 命令 | `discovered -> classified -> cleanup_candidate/retained` | 默认同时看 `git worktree list --porcelain` 与 `.pm/tasks/*.yaml`；prunable 和 closed clean worktree 优先暴露 | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为开发态 `cargo` 命令注入稳定共享 `CARGO_TARGET_DIR` | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 派生 repo-family namespace，并按 host/toolchain 拆分目录；deterministic wasm/release 流程继续要求 `CARGO_TARGET_DIR` 为空 | 开发者可执行，scripts owner 维护入口 |
 - Acceptance Criteria:
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
@@ -109,6 +113,7 @@
   - AC-19: 当 source worktree 脏、source 分支未被任何 worktree 检出、base ref 不存在、或 `--create` 时 source 分支落后于 comparison ref，脚本必须阻断并给出修复建议。
   - AC-20: PR 合入后，正式流程文档与脚本输出必须明确该 task `worktree` / branch 需要被删除；cleanup 命令不得再被表述为“可选建议”。
   - AC-20A: `scripts/land-task-worktree.sh` 的帮助文案与正式专题文档必须明确它只是 local-only / fallback 兼容工具，不再是默认最终合流入口。
+  - AC-20B: 新增 `scripts/worktree-gc-report.sh`，默认只读输出当前 repo 的 worktree 生命周期报告，并在 `--json` 模式下至少包含 `repo_root`、`current_worktree`、`summary.total_worktrees`、`summary.cleanup_candidates`、以及每个 worktree 的 `path`、`branch`、`prunable`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate` 与 `cleanup_commands`。
   - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
   - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
   - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 repo-family 共享缓存入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
@@ -136,6 +141,7 @@
   - `scripts/cargo-dev.sh`
   - `scripts/new-task-worktree.sh`
   - `scripts/prepare-task-pr.sh`
+  - `scripts/worktree-gc-report.sh`
   - `scripts/land-task-worktree.sh`
   - `scripts/build-wasm-module.sh`
   - `testing-manual.md`
@@ -155,6 +161,7 @@
   - task PR closure：若 base branch 缺少本地/远端 ref、source 分支落后于 comparison ref、`gh` 不可用，或 `--create` 时 push/PR create 失败，脚本只中断并保留现场，不擅自修改 `main` 或删除 branch/worktree。
   - local-only landing compatibility：`land-task-worktree.sh` 仍可用于用户显式要求的本地合流或离线应急，但帮助文案和正式文档必须明确它不是默认最终合流入口。
   - task cleanup：已完成任务的 task `worktree` 若长期不删，会让后续搜索、branch 占用检查与本地磁盘占用持续失真；因此 cleanup 必须成为 PR 合入后的必做步骤。
+  - worktree lifecycle report：缺失路径、prunable 记录、dirty worktree 与未绑定 `.pm` task 的 worktree 都必须 truthfully 报告，不允许脚本为了“看起来整洁”而隐式删除或跳过。
   - shared cargo dev cache：同一 repo family 的多个 worktree 必须映射到同一 shared target namespace，但 deterministic wasm / release 脚本若要求 `CARGO_TARGET_DIR` 为空，必须继续走原始 cargo 入口而不是 `cargo-dev.sh`。
 - Non-Functional Requirements:
   - NFR-SCR-1: 核心脚本具备可读帮助信息与失败语义说明。
@@ -169,6 +176,7 @@
   - NFR-SCR-10: task worktree GitHub PR 收口入口必须默认使用非交互、可审计的 preflight / create 策略；JSON 模式下 stdout 只能输出单个结构化对象。
   - NFR-SCR-11: 已完成 task 的 cleanup 语义必须清晰一致，不允许不同文档同时出现“建议删除”和“必须删除”两套口径；PR 合入后的本地同步/cleanup 与 local-only fallback cleanup 不得混成两套默认流程。
   - NFR-SCR-12: worktree 例外授权与错误 worktree 处置口径在 `AGENTS.md`、模块 PRD 与专题文档之间必须保持一致，不允许根规则更严、模块专题更松。
+  - NFR-SCR-12A: worktree 生命周期报告的 JSON 字段必须稳定、只读且不混入人类说明文本，便于 agent 直接消费 cleanup 候选。
   - NFR-SCR-13: 开发态 shared cargo target 目录必须稳定且默认落在工作区外部缓存位置，避免污染仓库源码树或让不同 repo family 相互踩缓存。
 - Security & Privacy: 脚本不得在默认输出中泄漏密钥；涉及网络调用时需要显式参数与最小权限。
 
@@ -197,7 +205,7 @@
 | PRD-SCRIPTS-005 | TASK-SCRIPTS-015/020 | `test_tier_required` | `bash -n` + `--help` + 真实 create/remove smoke + worktree 例外授权文案一致性检查 + 文档治理检查 | 多任务并行的 worktree/branch 命名一致性与启动成本 |
 | PRD-SCRIPTS-006 | TASK-SCRIPTS-016/020 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + 错误 worktree 处置文案一致性检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
 | PRD-SCRIPTS-007 | TASK-SCRIPTS-017/024 | `test_tier_required` | `bash -n` + `--help` + 当前 task worktree PR preflight JSON 检查 + `land-task-worktree` compatibility 文案检查 + 文档治理检查 | 多 task worktree 向受保护 `main` 回流的一致性与可审计性 |
-| PRD-SCRIPTS-008 | TASK-SCRIPTS-018 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
+| PRD-SCRIPTS-008 | TASK-SCRIPTS-018/025 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查、`worktree-gc-report.sh --json` 结构化字段检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
 | PRD-SCRIPTS-009 | TASK-SCRIPTS-021/022 | `test_tier_required` | `bash -n` + `--help` + `--print-target-dir` 跨 worktree 一致性检查 + `AGENTS.md`/scripts/testing 文档口径一致性检查 + 文档治理检查 | 多 worktree Rust 开发回归速度与 deterministic wasm/release 口径隔离 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
