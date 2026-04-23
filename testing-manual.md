@@ -569,6 +569,18 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   --interval-secs 5 \
   --out-dir .tmp/p2p_real_env_triad
 ```
+- 建议命令（real env triad complete observability）：
+```bash
+P2PARCH6_SEQ_SSH_PASSWORD='***' \
+P2PARCH6_STORAGE_SSH_PASSWORD='***' \
+./scripts/p2p-real-env-observability-monitor.sh \
+  --samples 4 \
+  --interval-secs 5 \
+  --traffic-samples 3 \
+  --traffic-interval-secs 20 \
+  --window-minutes 10 \
+  --out-dir .tmp/p2p_real_env_observability
+```
 - 脚本 smoke：
 ```bash
 ./scripts/p2p-mixed-topology-matrix-smoke.sh
@@ -601,6 +613,11 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `.tmp/p2p_real_env_triad/<timestamp>/summary.json`
   - `.tmp/p2p_real_env_triad/<timestamp>/summary.md`
   - `.tmp/p2p_real_env_triad/<timestamp>/nodes/<label>/`
+  - `.tmp/p2p_real_env_observability/<timestamp>/host/<timestamp>/summary.json`
+  - `.tmp/p2p_real_env_observability/<timestamp>/traffic/latest_summary.json`
+  - `.tmp/p2p_real_env_observability/<timestamp>/wasm/<label>/latest_summary.json`
+  - `.tmp/p2p_real_env_observability/<timestamp>/report/latest_summary.json`
+  - `.tmp/p2p_real_env_observability/latest_summary.json`
 - summary 关键字段：
   - `external_evidence.shared_window_evidence_refs`
   - `external_evidence.dedicated_lab_evidence_refs`
@@ -618,10 +635,21 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `analysis.cloud_pair_progress_signal_present`
   - `analysis.observer_peer_visibility_ok`
   - `analysis.observer_network_commit_visible`
+- complete observability summary 关键字段：
+  - `overall.status`
+  - `overall.alerts`
+  - `nodes.<label>.host.runtime_cpu_percent`
+  - `nodes.<label>.host.runtime_cpu_core_ratio`
+  - `nodes.<label>.host.mem_available_percent`
+  - `nodes.<label>.host.storage_used_percent`
+  - `nodes.<label>.traffic.payload_total_bytes`
+  - `nodes.<label>.traffic.control_plane_total_events`
+  - `nodes.<label>.wasm.top_hotspot`
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
   - 2026-04-08 latest real-env triad reconfirm 已证明 same-window 三节点样本可重复采集，而且本机 observer 已不再是主 blocker；当前真实 residual 已收敛到 ECS sequencer 的 `execution driver received stale height`。在把带该修复的 runtime 二进制重新部署到远端前，这条 lane 仍不能升级为 `pass`。
+  - complete observability monitor 只解决当前 triad 的 repo-owned 资源/状态/流量/WASM 统一监控，不等价于已经补齐 Prometheus/OTel/长期告警平台。
 
 ### S9C：P2P 用户模式自动选择验证（P2PARCH-8/P2PARCH-9）
 - 当前状态（2026-04-07）：

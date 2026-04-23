@@ -538,6 +538,34 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] triad-observability-stack (PRD-P2P-025) [test_tier_required]: 为本机 observer + 2 ECS triad 新增完整监控体系，统一 host/process、chain status、traffic window、wasm window 与 merged summary 的 canonical 入口。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
+  - 产物文件:
+    - `scripts/p2p-real-env-node-host-sample.sh`
+    - `scripts/p2p-real-env-host-summary.py`
+    - `scripts/p2p-real-env-host-monitor.sh`
+    - `scripts/p2p-real-env-observability-summary.py`
+    - `scripts/p2p-real-env-observability-monitor.sh`
+    - `scripts/p2p-real-env-host-monitor.test.sh`
+    - `scripts/p2p-real-env-observability-monitor.test.sh`
+    - `fixtures/p2p_real_env_host_monitor/history.ndjson`
+    - `fixtures/p2p_real_env_observability/*`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md`
+    - `doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md`
+    - `doc/p2p/node/README.md`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/prd.index.md`
+    - `doc/p2p/project.md`
+    - `testing-manual.md`
+    - `.pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/p2p-real-env-node-host-sample.sh scripts/p2p-real-env-host-monitor.sh scripts/p2p-real-env-observability-monitor.sh scripts/p2p-real-env-host-monitor.test.sh scripts/p2p-real-env-observability-monitor.test.sh`
+    - `python3 -m py_compile scripts/p2p-real-env-host-summary.py scripts/p2p-real-env-observability-summary.py`
+    - `bash scripts/p2p-real-env-host-monitor.test.sh`
+    - `bash scripts/p2p-real-env-observability-monitor.test.sh`
+    - `bash scripts/p2p-real-env-observability-monitor.sh --samples 2 --interval-secs 2 --traffic-samples 2 --traffic-interval-secs 2 --window-minutes 1 --out-dir .tmp/p2p_real_env_observability_smoke`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [ ] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，并把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定。 Trace: .pm/tasks/task_f5beda0b81da4b538d168d675aed2e08.yaml
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:

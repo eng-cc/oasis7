@@ -1,0 +1,14 @@
+{
+  "latest": {
+    "metrics_available": true,
+    "degraded_reason": null
+  },
+  "window": {
+    "available": true,
+    "window_reset_detected": false,
+    "top_hotspot": "executor.entrypoint_call_ms_total",
+    "executor": {
+      "calls_total_delta": 8
+    }
+  }
+}

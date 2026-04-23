@@ -8,6 +8,7 @@
 - 想确认 PoS 时间、slot clock 与控制面对齐：先读 `node-pos-slot-clock-real-time-2026-03-07.prd.md`、`node-pos-subslot-tick-pacing-2026-03-07.prd.md` 或 `node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
 - 想确认节点身份引导、keypair bootstrap 与初始化入口：先读 `node-keypair-config-bootstrap.prd.md`
 - 想确认 `wasm32/libp2p` 编译约束或 builtin wasm fallback：先读 `node-wasm32-libp2p-compile-guard.prd.md` 或 `node-builtin-wasm-fetch-fallback-compile.prd.md`
+- 想确认本机 + 2 ECS 三节点的完整监控入口、resource + chain + traffic + wasm 统一证据：先读 `node-triad-observability-stack-2026-04-23.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -68,6 +69,14 @@
 - 适合问题:
   - `wasm32/libp2p` 的编译守卫和限制是什么
   - builtin wasm fetch fallback 的编译闭环要看哪里
+
+### 6. 三节点监控与运行证据
+- 首读入口:
+  - `node-triad-observability-stack-2026-04-23.prd.md`
+- 适合问题:
+  - 现在三节点哪个 CPU 高、内存紧不紧、磁盘吃了多少
+  - chain status、traffic、wasm 和宿主机资源怎样统一采样
+  - real-env triad evidence 现在的 canonical 监控命令是什么
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
