@@ -284,6 +284,15 @@
     - `bash -n scripts/viewer-release-qa-loop.sh`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`
+- [x] shared-network-ecs-triad-chain-status-metrics-rollout (PRD-TESTING-002/003) [test_tier_required]: 归档三节点链状态指标部署与采样证据，冻结 `8e605366` release/sha256、same-window triad snapshot、最近 `10` 分钟 traffic window，以及新增 `/v1/chain/status` `transactions` / `consensus.recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` contract 的 live 三节点证据。 Trace: .pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.yaml
+  - 产物文件:
+    - `doc/testing/evidence/shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`
+    - `doc/testing/evidence/README.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 - 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 
@@ -298,9 +307,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-22
+- 更新日期: 2026-04-23
 - 当前状态: active
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
+- 最新完成: `shared-network-ecs-triad-chain-status-metrics-rollout`（已把 `8e605366` 版 `oasis7_chain_runtime` 部署到本机 observer + 两台阿里云 ECS，并冻结 same-window triad snapshot、最近 `10` 分钟 traffic window 与 `/v1/chain/status` 新增 `transactions` / `recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` live contract 证据；observer 在 formal snapshot 中已恢复 `known_peer_heads=1` 与 `network_committed_height` 同步推进。）
 - 最新完成: `required-gate-ondemand-launcher-web-build`（已为 PR `required-gate` 补 launcher Web `trunk build` 的 changed-path 按需覆盖；仅在命中 `oasis7_client_launcher` / launcher shared runtime 路径时安装 `trunk` 并执行 Web dist 构建，无关 PR 继续保留 stable `required-gate` 上下文但只跑 governance/fmt。）
 - 最新完成: `rust-required-gate-ondemand-scope`（已为 `.github/workflows/rust.yml` 的 `required-gate` 补 `scripts/plan-rust-required-scope.sh`，先按 changed paths 规划 `minimal / targeted / full`；无关 PR 保持 stable `required-gate` 上下文，但只执行 governance/fmt，viewer/runtime/support 重型组件按命中路径执行。）
 - 最新完成: `wasm-determinism-gate-ondemand-scope`（已为 `.github/workflows/wasm-determinism-gate.yml` 补 `scripts/plan-wasm-determinism-scope.sh`，先按 changed paths 规划 `m1/m4/m5` scope；无关 PR 保持 `verify-wasm-determinism (m1|m4|m5)` required contexts 稳定，但在 job 内 no-op，不再实际执行 builtin wasm summary collect。）

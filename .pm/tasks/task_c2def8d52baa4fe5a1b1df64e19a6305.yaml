@@ -1,0 +1,24 @@
+task_uid: task_c2def8d52baa4fe5a1b1df64e19a6305
+title: "归档三节点链状态指标部署与采样证据"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-triad-metrics-rollout-evidence
+execution_log_path: .pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/prd.md
+  - doc/testing/project.md
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-TESTING-001
+acceptance:
+  - "新增正式 evidence 文档，归档 2026-04-23 三节点部署版本、status 指标与 traffic summary"
+  - "文档明确 observer/sequencer/storage 的高度、known_peer_heads、recent replication errors 与 traffic 窗口结论"
+  - "执行日志与 workflow start 已在新 worktree 内闭环"
+handoff_to: []
+updated_at: 2026-04-23T10:36:53+08:00
+last_started_at: 2026-04-23T10:25:58+08:00
+last_closed_at: 2026-04-23T10:36:27+08:00
