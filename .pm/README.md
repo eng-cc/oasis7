@@ -57,6 +57,7 @@
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
 - `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
 - `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
+- `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径，并把 `.pm/inbox/signals.jsonl` 的安全自动修复边界收口为“保留 upstream signal id、仅重编号 branch-local 冲突项”；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
 - `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
@@ -73,6 +74,7 @@
 - 若 owner / title / source refs 已明确，优先直接用 `./scripts/new-task-worktree.sh <module> <task> --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性进入目标 worktree 并留下 `last_started_at`；只有在需要手工拆步时，才分开执行 `new-task.sh` / `workflow-report.sh` / `move-task.sh`，或显式跳过 `task-closeout.sh`。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
+- 若 rebase 命中 `.pm/**` 冲突，先运行 `./scripts/pm/rebase-conflict-helper.sh` 盘点类别；只有 `.pm/inbox/signals.jsonl` 允许在 active rebase 中通过 `--resolve-signals` 自动修复，其余 canonical task/memory/stage 冲突仍需人工判断。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
