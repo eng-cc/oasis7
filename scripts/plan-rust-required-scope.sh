@@ -62,6 +62,7 @@ mark_full() {
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
   run_viewer_visual_baseline=1
+  run_launcher_web_build=1
   append_reason "$1"
 }
 
