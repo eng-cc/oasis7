@@ -464,7 +464,6 @@ fn validate_game_config_reports_missing_required_fields() {
         chain_pos_proposal_tick_phase: "x".to_string(),
         chain_pos_slot_clock_genesis_unix_ms: "oops".to_string(),
         chain_pos_max_past_slot_lag: "-1".to_string(),
-        chain_replication_bootstrap_peers: "127.0.0.1:4100".to_string(),
         chain_node_validators: "node-a".to_string(),
         ..LauncherConfig::default()
     };
@@ -476,7 +475,6 @@ fn validate_game_config_reports_missing_required_fields() {
     assert!(issues
         .iter()
         .any(|item| item.contains("viewer static directory")));
-    assert!(issues.iter().any(|item| item.contains("bootstrap peers")));
 }
 
 #[test]
@@ -583,6 +581,7 @@ fn validate_chain_config_reports_missing_required_fields() {
         chain_pos_proposal_tick_phase: "4".to_string(),
         chain_pos_slot_clock_genesis_unix_ms: "oops".to_string(),
         chain_pos_max_past_slot_lag: "-1".to_string(),
+        chain_replication_bootstrap_peers: "127.0.0.1:4100".to_string(),
         chain_node_validators: "node-a".to_string(),
         ..LauncherConfig::default()
     };
@@ -596,6 +595,7 @@ fn validate_chain_config_reports_missing_required_fields() {
     assert!(issues
         .iter()
         .any(|item| item.contains("chain P2P user mode")));
+    assert!(issues.iter().any(|item| item.contains("bootstrap peers")));
     assert!(issues.iter().any(|item| item.contains("chain pos")));
 }
 
