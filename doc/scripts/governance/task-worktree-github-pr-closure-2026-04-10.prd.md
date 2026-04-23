@@ -22,6 +22,7 @@
   - SC-4: 正式文档统一说明“GitHub PR + required checks + review/approval”是默认最终保护边界。
   - SC-5: PR 合入后的 task worktree / branch cleanup 仍是必做项，而不是“可选建议”。
   - SC-6: `prepare-task-pr.sh` 必须在 preflight 阶段输出与当前 changed paths 对齐的本地 required-gate 建议命令，但只负责推荐，不自动执行，也不改变 `./scripts/ci-tests.sh required/full` 的既有语义。
+  - SC-7: `prepare-task-pr.sh` 必须同时暴露 changed-path planner 的 `reason_summary`，让 owner 在 PR preflight 阶段直接看到“为什么被规划成当前 scope”，而不必手工重跑 planner。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -42,21 +43,22 @@
 | --- | --- | --- | --- | --- | --- |
 | source 解析 | `source_branch`、`source_worktree`、`source_head` | 默认取当前 branch；也允许显式传入 source branch | `input -> source_resolved` | source branch 必须被某个 worktree 检出 | 执行者可用 |
 | base 比较 | `base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`rebase_required` | 优先比较 `origin/<base>`，缺失时退回本地 `<base>` | `source_resolved -> compared` | `origin/<base>` 优先于本地 `<base>` | 执行者可用 |
-| 本地 required 推荐 | `local_required_validation.scope`、`local_required_validation.changed_path_count`、`local_required_validation.recommended_required_command`、`local_required_validation.recommended_extra_commands[]` | 在 preflight 摘要里输出 changed-path 对齐的本地 required 校验建议 | `compared -> locally_recommended` | 复用现有 changed-path planner 推导 scope；只推荐，不自动执行 | 执行者可用 |
+| 本地 required 推荐 | `local_required_validation.scope`、`local_required_validation.changed_path_count`、`local_required_validation.reason_summary`、`local_required_validation.reason_items[]`、`local_required_validation.recommended_required_command`、`local_required_validation.recommended_extra_commands[]` | 在 preflight 摘要里输出 changed-path 对齐的本地 required 校验建议与 planner 原因摘要 | `compared -> locally_recommended` | 复用现有 changed-path planner 推导 scope 与 `reason_summary`；只推荐，不自动执行 | 执行者可用 |
 | PR create | `remote_name`、`create_command`、`pr_url` | `--create` 时先 push，再执行 `gh pr create` | `compared -> pr_ready -> pr_opened` | 默认 remote=`origin`，title 缺省时走 `--fill` | `producer_system_designer` 定流程 |
 | post-merge cleanup | `cleanup_commands[]` | 输出本地 `main` 同步与 source worktree/branch 删除命令 | `pr_opened -> merged -> cleaned_up` | cleanup 是合流后的必做项 | 人类 / agent 皆可读 |
 - Acceptance Criteria:
   - AC-1: `scripts/prepare-task-pr.sh --help` 明确列出 `--base`、`--remote`、`--create`、`--draft`、`--title`、`--body-file`、`--json`。
   - AC-2: 默认 source 为当前 branch，默认 base 为 `main`，默认 remote 为 `origin`。
   - AC-3: source worktree 脏、source 分支未被任何 worktree 检出、comparison ref 不存在时，脚本必须阻断。
-  - AC-4: `--json` 至少输出 `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands` 与 `local_required_validation.scope` / `local_required_validation.recommended_required_command`。
+  - AC-4: `--json` 至少输出 `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands` 与 `local_required_validation.scope` / `local_required_validation.reason_summary` / `local_required_validation.recommended_required_command`。
   - AC-5: `--create` 时若 source 分支落后于 comparison ref，脚本必须阻断并要求先 rebase。
   - AC-6: 正式流程文档必须明确：PR 合入后仍要同步本地 `main` 并回收 task worktree/branch。
   - AC-7: changed-path local required 推荐必须沿用现有 `scripts/plan-rust-required-scope.sh` 与 `./scripts/ci-tests.sh required` 的边界；脚本不得在 preflight 阶段自动执行推荐命令，也不得改写 `required/full` 的既有测试语义。
+  - AC-8: 文本摘要必须直接显示 planner `reason_summary`；`--json` 还需额外输出拆分后的 `reason_items[]`，便于 agent 或 reviewer 直接消费。
 - Non-Goals:
   - 不自动 merge PR。
   - 不自动等待 GitHub required checks 完成。
-  - 不在本轮把 planner `reason_summary`、wasm gate 解释层或自动执行逻辑并入 `prepare-task-pr.sh`。
+  - 不在本轮把 wasm gate 解释层或自动执行逻辑并入 `prepare-task-pr.sh`。
   - 不删除旧 `land-task-worktree.sh`；它保留给 local-only / fallback 场景。
 
 ## 3. AI System Requirements (If Applicable)
@@ -102,7 +104,7 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-SCRIPTS-GHPR-001/002/003/004 | GPR-1/GPR-2 | `test_tier_required` | `bash -n` + `--help` + 当前 task worktree `--json` + JSON 字段断言 + compatibility 文案检查 + 文档治理检查 | task worktree 经由 GitHub PR 收口的一致性、可审计性与本地最小验证推荐 |
+| PRD-SCRIPTS-GHPR-001/002/003/004 | GPR-1/GPR-2/prepare-task-pr-planner-reason-summary | `test_tier_required` | `bash -n` + `--help` + 当前 task worktree `--json` + JSON 字段断言 + reason summary 断言 + compatibility 文案检查 + 文档治理检查 | task worktree 经由 GitHub PR 收口的一致性、可审计性与本地最小验证推荐 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
