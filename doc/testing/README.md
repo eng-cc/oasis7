@@ -20,6 +20,7 @@
 - `README.md` 只承担 landing page 职责：告诉读者先去哪个权威入口，不重复长表索引内容。
 - `prd.md` 是模块权威规格入口，适合先理解 required/full 分层、证据包与跨模块测试边界。
 - `project.md` 是执行台账，适合确认当前 QA 阻断、活跃测试治理任务与最新完成项。
+  当前窗口只保留 blocker、next step 与少量高价值收口摘要；更细的近期完成历史应回到对应 topic `*.project.md` 与 `.pm/tasks/*.yaml` / execution log 追溯。
 - `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted-world / p2p-shared-network / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
 - `testing-manual.md` 与 `manual/*.manual.md` 是 operator 手册层，用于决定跑哪套测试、按什么步骤执行。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。
@@ -52,3 +53,4 @@
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - 测试门禁、required/full 分层口径或证据模板变化时，优先更新 `doc/testing/prd.md` 与 `doc/testing/project.md`；高频入口变化时，再同步回写 `doc/testing/prd.index.md` 与相关热点子域入口（例如 `doc/testing/evidence/README.md`）。
+- `doc/testing/project.md` 的状态区默认只保留当前执行窗口，不再手工维护按时间追加的“最新完成”长列表；近期收口优先回写对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml`。

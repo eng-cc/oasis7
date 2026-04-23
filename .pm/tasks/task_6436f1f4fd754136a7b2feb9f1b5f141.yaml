@@ -1,0 +1,27 @@
+task_uid: task_6436f1f4fd754136a7b2feb9f1b5f141
+title: "compress engineering-testing root project reading surface"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_6436f1f4fd754136a7b2feb9f1b5f141.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.execution.md
+  - doc/engineering/project.md
+  - doc/testing/project.md
+  - doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md
+  - doc/testing/README.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-ENGINEERING-024
+  - PRD-TESTING-001
+acceptance:
+  - "testing root project status collapses to current-window summary instead of a long latest-completed list"
+  - "testing root project removes stale phase-handoff content from the default reading surface and points detailed history back to topic project docs and .pm tasks"
+  - "engineering workflow-friction tracking records this slice in the same PR branch"
+handoff_to: []
+updated_at: 2026-04-23T21:40:49+08:00
+last_started_at: 2026-04-23T21:34:20+08:00
+last_closed_at: 2026-04-23T21:40:48+08:00
