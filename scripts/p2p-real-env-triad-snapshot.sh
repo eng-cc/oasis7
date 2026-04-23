@@ -105,8 +105,12 @@ record_env_copy() {
   local password=${4:-}
   local node_dir="$nodes_root/$label"
   if [[ "$mode" == "local" ]]; then
-    if [[ -f "$source" ]]; then
-      cp "$source" "$node_dir/node.env"
+    if [[ -r "$source" ]]; then
+      if ! cp "$source" "$node_dir/node.env"; then
+        printf 'failed to read local env file: %s\n' "$source" > "$node_dir/node.env.error.txt"
+      fi
+    elif [[ -f "$source" ]]; then
+      printf 'local env file exists but is not readable: %s\n' "$source" > "$node_dir/node.env.error.txt"
     else
       printf 'missing local env file: %s\n' "$source" > "$node_dir/node.env.error.txt"
     fi

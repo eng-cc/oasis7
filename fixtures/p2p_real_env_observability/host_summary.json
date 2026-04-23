@@ -1,0 +1,107 @@
+{
+  "aggregate": {
+    "node_count": 3,
+    "alerted_node_count": 1,
+    "alerted_nodes": ["sequencer_ecs"],
+    "highest_runtime_cpu_node": "sequencer_ecs",
+    "highest_runtime_cpu_percent": 157.0
+  },
+  "nodes": {
+    "observer_local": {
+      "available": true,
+      "alerts": [],
+      "status": {
+        "runtime_cpu": "normal",
+        "host_load": "normal",
+        "memory": "normal",
+        "storage": "normal"
+      },
+      "latest": {
+        "hostname": "scc-ThinkBook-14-G5-IRH",
+        "cpu_cores": 20,
+        "loadavg_1m": 4.92,
+        "load_per_core_ratio_1m": 0.246,
+        "mem_available_percent": 60.0,
+        "storage": {
+          "path": "/opt/oasis7/p2p-triad-local/data/storage",
+          "used_percent": 32.0
+        },
+        "service": {
+          "active_state": "active",
+          "sub_state": "running",
+          "main_pid": 2154712
+        },
+        "runtime": {
+          "pid": 2154724,
+          "nlwp": 31
+        },
+        "runtime_cpu_percent": 47.3,
+        "runtime_cpu_core_ratio": 0.0237
+      }
+    },
+    "sequencer_ecs": {
+      "available": true,
+      "alerts": ["runtime_cpu_hot"],
+      "status": {
+        "runtime_cpu": "hot",
+        "host_load": "hot",
+        "memory": "normal",
+        "storage": "normal"
+      },
+      "latest": {
+        "hostname": "iZhp3a7zk3e3ur69iv1wvgZ",
+        "cpu_cores": 2,
+        "loadavg_1m": 2.43,
+        "load_per_core_ratio_1m": 1.215,
+        "mem_available_percent": 50.0,
+        "storage": {
+          "path": "/opt/oasis7/p2p-triad/data/storage",
+          "used_percent": 32.0
+        },
+        "service": {
+          "active_state": "active",
+          "sub_state": "running",
+          "main_pid": 804
+        },
+        "runtime": {
+          "pid": 834,
+          "nlwp": 14
+        },
+        "runtime_cpu_percent": 157.0,
+        "runtime_cpu_core_ratio": 0.785
+      }
+    },
+    "storage_ecs": {
+      "available": true,
+      "alerts": [],
+      "status": {
+        "runtime_cpu": "normal",
+        "host_load": "normal",
+        "memory": "normal",
+        "storage": "normal"
+      },
+      "latest": {
+        "hostname": "iZhp34imf4xt7nxrf5v5h6Z",
+        "cpu_cores": 2,
+        "loadavg_1m": 1.22,
+        "load_per_core_ratio_1m": 0.61,
+        "mem_available_percent": 55.0,
+        "storage": {
+          "path": "/opt/oasis7/p2p-triad/data/storage",
+          "used_percent": 38.0
+        },
+        "service": {
+          "active_state": "active",
+          "sub_state": "running",
+          "main_pid": 835
+        },
+        "runtime": {
+          "pid": 859,
+          "nlwp": 13
+        },
+        "runtime_cpu_percent": 76.7,
+        "runtime_cpu_core_ratio": 0.3835
+      }
+    }
+  }
+}

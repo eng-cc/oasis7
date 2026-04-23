@@ -1,0 +1,87 @@
+{
+  "aggregate": {
+    "node_count": 3,
+    "total_payload_bytes": 780646,
+    "lane_distribution": {
+      "udp_gossip": {
+        "payload_bytes": 11200,
+        "share_percent": 1.43
+      },
+      "libp2p_replication": {
+        "payload_bytes": 769446,
+        "share_percent": 98.57
+      }
+    }
+  },
+  "nodes": {
+    "observer_local": {
+      "available": true,
+      "latest": {
+        "role": "observer",
+        "last_error": null
+      },
+      "window": {
+        "covered_minutes": 10.0
+      },
+      "traffic": {
+        "udp_gossip": {
+          "total_payload_bytes": 2100
+        },
+        "libp2p_replication": {
+          "total_payload_bytes": 349834,
+          "total_wire_bytes": 610000,
+          "control_plane": {
+            "total_events": 63,
+            "total_wire_bytes": 211000
+          }
+        }
+      }
+    },
+    "sequencer_ecs": {
+      "available": true,
+      "latest": {
+        "role": "sequencer",
+        "last_error": null
+      },
+      "window": {
+        "covered_minutes": 10.0
+      },
+      "traffic": {
+        "udp_gossip": {
+          "total_payload_bytes": 4300
+        },
+        "libp2p_replication": {
+          "total_payload_bytes": 182400,
+          "total_wire_bytes": 500000,
+          "control_plane": {
+            "total_events": 178,
+            "total_wire_bytes": 431000
+          }
+        }
+      }
+    },
+    "storage_ecs": {
+      "available": true,
+      "latest": {
+        "role": "storage",
+        "last_error": null
+      },
+      "window": {
+        "covered_minutes": 10.0
+      },
+      "traffic": {
+        "udp_gossip": {
+          "total_payload_bytes": 4800
+        },
+        "libp2p_replication": {
+          "total_payload_bytes": 237212,
+          "total_wire_bytes": 450000,
+          "control_plane": {
+            "total_events": 54,
+            "total_wire_bytes": 200060
+          }
+        }
+      }
+    }
+  }
+}

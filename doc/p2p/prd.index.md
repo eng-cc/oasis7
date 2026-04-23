@@ -132,6 +132,7 @@
 | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.prd.md` | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.design.md` | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.project.md` |
 | `doc/p2p/node/node-reward-settlement-native-transaction.prd.md` | `doc/p2p/node/node-reward-settlement-native-transaction.design.md` | `doc/p2p/node/node-reward-settlement-native-transaction.project.md` |
 | `doc/p2p/node/node-storage-system-reward-pool.prd.md` | `doc/p2p/node/node-storage-system-reward-pool.design.md` | `doc/p2p/node/node-storage-system-reward-pool.project.md` |
+| `doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md` | `doc/p2p/node/node-triad-observability-stack-2026-04-23.design.md` | `doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md` |
 | `doc/p2p/node/node-uptime-base-reward.prd.md` | `doc/p2p/node/node-uptime-base-reward.design.md` | `doc/p2p/node/node-uptime-base-reward.project.md` |
 | `doc/p2p/node/node-wasm32-libp2p-compile-guard.prd.md` | `doc/p2p/node/node-wasm32-libp2p-compile-guard.design.md` | `doc/p2p/node/node-wasm32-libp2p-compile-guard.project.md` |
 | `doc/p2p/node/node-net-stack-unification-readme.prd.md` | `doc/p2p/node/node-net-stack-unification-readme.design.md` | `doc/p2p/node/node-net-stack-unification-readme.project.md` |

@@ -1,0 +1,55 @@
+{
+  "claim_status": "pass_candidate",
+  "failure_signatures": [],
+  "analysis": {
+    "cloud_pair_service_healthy": true,
+    "observer_service_healthy": true
+  },
+  "nodes": {
+    "observer_local": {
+      "sample_count": 4,
+      "healthz_all_ok": true,
+      "status_fetch_all_ok": true,
+      "node_ids": ["triad-observer-local"],
+      "roles": ["observer"],
+      "last_errors": [null],
+      "heights": {
+        "first_committed_height": 56011,
+        "last_committed_height": 56013
+      },
+      "peers": {
+        "max_known_peer_heads": 1
+      }
+    },
+    "sequencer_ecs": {
+      "sample_count": 4,
+      "healthz_all_ok": true,
+      "status_fetch_all_ok": true,
+      "node_ids": ["triad-sequencer-a"],
+      "roles": ["sequencer"],
+      "last_errors": [null],
+      "heights": {
+        "first_committed_height": 56011,
+        "last_committed_height": 56013
+      },
+      "peers": {
+        "max_known_peer_heads": 0
+      }
+    },
+    "storage_ecs": {
+      "sample_count": 4,
+      "healthz_all_ok": true,
+      "status_fetch_all_ok": true,
+      "node_ids": ["triad-storage-b"],
+      "roles": ["storage"],
+      "last_errors": [null],
+      "heights": {
+        "first_committed_height": 56012,
+        "last_committed_height": 56013
+      },
+      "peers": {
+        "max_known_peer_heads": 1
+      }
+    }
+  }
+}

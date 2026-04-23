@@ -92,6 +92,7 @@
   - PRD-P2P-022: As a producer_system_designer, I want one explicit shared network / release train minimum model, so that oasis7 can turn `L5` from a known gap into an executable workstream without overclaiming it is already in place.
   - PRD-P2P-023: As a producer_system_designer, I want one explicit hosted-world player access and session-auth model, so that one player部署服务给另一个玩家通过网页进入时，不会再把 host control-plane、shared `gui-agent` control surface 与 node signer 暴露给浏览器。
   - PRD-P2P-024: As a producer_system_designer, I want one public-chain-grade private-reachability P2P architecture, so that oasis7 不再把“所有正式节点都要有公网 IP”当成默认前提，并能在 mixed-topology 现实下继续对标公共主链。
+  - PRD-P2P-025: As a producer_system_designer, I want one canonical triad observability stack, so that local observer + 2 ECS 的真实运行状态可以在同一轮监控里同时回答资源、链状态、流量和 WASM 健康。
 - Critical User Flows:
   1. Flow-P2P-001: `网络拓扑变更 -> 共识联调 -> DistFS 同步 -> 节点状态一致性验证`
   2. Flow-P2P-002: `执行 S9/S10 长跑 -> 采集故障与恢复数据 -> 输出收敛报告`
@@ -108,6 +109,7 @@
   13. Flow-P2P-013: `制作人冻结创世分配表 -> runtime 映射创世桶与 vesting 参数 -> liveops/QA 审核早期贡献奖励边界 -> 创世配置与低流通门禁共同放行`
   14. Flow-P2P-014: `盘点签名/地址/交易授权/keystore/治理 signer/创世控制真值 -> 形成 red/yellow/green 矩阵 -> producer 输出总 verdict 与 P0 blocker`
   15. Flow-P2P-015: `客户端为 transfer submit 构造 canonical payload 并签名 -> runtime 验签并比对 oc:pk 账户绑定 -> 通过后才进入余额/nonce 预检与 consensus submit`
+  16. Flow-P2P-016: `operator 运行 triad 完整监控 -> snapshot/host/traffic/wasm 产物全部落盘 -> merged summary 输出 overall status + node-level alerts -> evidence doc 引用 canonical 输出路径`
   16. Flow-P2P-016: `STRAUTH-3 收口后复盘剩余安全缺口 -> 冻结 MAINNET-1~4 readiness gate -> signer custody/governance signer/genesis ceremony 逐项过门禁 -> producer 再决定是否重评阶段`
   17. Flow-P2P-017: `盘点 node/viewer/governance signer 来源 -> 冻结 preview-only bootstrap 与 production target backend 边界 -> rotation/revocation/audit policy 入门禁`
   18. Flow-P2P-018: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> failover/rotation/revocation 进入治理门禁`
@@ -172,6 +174,7 @@
   - AC-31: `TASK-P2P-045` 必须把当前链上代币的正式产品名冻结为“绿洲币 / Oasis Coin”，作为后续 runtime 符号与账户派生迁移的前置口径。
   - AC-32: `TASK-P2P-046` 必须把当前链上代币的 runtime `main_token.symbol`、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 当作现行真值。
   - AC-33: `TASK-P2P-047` 必须把当前链上代币的创世 `initial_supply` 冻结为 `10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 同步回写到 token 专题与模块执行台账。
+  - AC-34: `triad-observability-stack` 必须把 real-env triad 的 host/process、chain status、traffic window、wasm window 收敛到统一 repo-owned 监控入口，并在 `testing-manual.md` 冻结 canonical 命令与产物路径。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -304,6 +307,7 @@
 | PRD-P2P-022 | TASK-P2P-040 | `test_tier_required` | shared network / release train minimum 专题 PRD/project/design/runbook 建档、three-track model、candidate bundle、claims gate 与 `testing-manual` 入口冻结 | shared-network 执行模型、release train 口径与后续 rehearsal 排序 |
 | PRD-P2P-023 | TASK-P2P-041 | `test_tier_required` | hosted-world player access / session-auth 专题 PRD/project/design 建档、plane split、session ladder、`gui-agent` split、admission control、sensitive-action capability 与 claims boundary 冻结 | hosted web multiplayer 边界、浏览器 signer 暴露风险与后续实现排序 |
 | PRD-P2P-024 | TASK-P2P-043 | `test_tier_required` | 非全公网覆盖网络专题 PRD/project/design 建档、deployment mode / role model / peer record / reachability / traffic lanes 与 claims gate 冻结 | mixed-topology 网络边界、私网节点参与能力与后续框架拆解排序 |
+| PRD-P2P-025 | triad-observability-stack | `test_tier_required` | triad host/process monitor、merged observability summary、testing manual 入口、fixture 回归与 real-env smoke | local observer + 2 ECS triad 的 canonical 运维监控入口 |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
 | 字段 | 说明 | 来源 |
 | --- | --- | --- |
