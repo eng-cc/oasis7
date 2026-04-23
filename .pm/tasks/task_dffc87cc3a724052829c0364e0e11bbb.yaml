@@ -1,0 +1,24 @@
+task_uid: task_dffc87cc3a724052829c0364e0e11bbb
+title: "add pr comment closeout helper"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_dffc87cc3a724052829c0364e0e11bbb.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - doc/scripts/prd.md
+  - .pm/README.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-021
+  - PRD-SCRIPTS-007
+acceptance:
+  - "repo provides helper to inspect and resolve GitHub PR review threads in the same PR maintenance loop"
+  - "formal docs record the review-thread closeout helper and validation evidence"
+handoff_to: []
+updated_at: 2026-04-23T14:39:04+08:00
+last_started_at: 2026-04-23T14:28:48+08:00
+last_closed_at: 2026-04-23T14:39:04+08:00

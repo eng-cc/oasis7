@@ -56,6 +56,7 @@
   - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认通过 `./scripts/pm/task-closeout.sh` 执行 `workflow-report close -> move-task -> pm lint`，随后 `commit -> prepare-task-pr -> GitHub PR review/approval`；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。
   - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
   - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；`./scripts/land-task-worktree.sh` 只保留给用户明确要求的 local-only / fallback 场景。
+  - SC-24D: 同一 PR 内的 review comment follow-up 必须存在 repo-owned helper，用于统一盘点 unresolved review threads、执行显式 resolve，并在每轮操作后分别报告 `reviewDecision`、`mergeStateStatus` 与 unresolved thread 数，避免把“thread 已关”误报成“PR 可合并”。
   - SC-25: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
   - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
@@ -117,7 +118,7 @@
   11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
-  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh`（或等价的 `workflow-report close -> move-task --to-status done|deferred -> pm lint` 手工链）-> commit -> prepare-task-pr -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> `task-closeout.sh`（或等价的 `workflow-report close -> move-task --to-status done|deferred -> pm lint` 手工链）-> commit -> prepare-task-pr -> 若 PR 收到 review comments，则用 `pr-review-thread-closeout.sh` 盘点/resolve thread 并重新检查 PR state -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
