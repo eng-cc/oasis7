@@ -588,9 +588,45 @@ fn transfer_tracker_metrics_status_summarizes_lifecycle_and_latency() {
         );
         assert_eq!(
             metrics.recent_confirmation_latency.p95_latency_ms,
-            Some(400)
+            Some(900)
         );
     });
+}
+
+#[test]
+fn transfer_metrics_status_ignores_future_inflight_timestamps() {
+    let _guard = lock_transfer_test_state();
+    super::with_transfer_tracker(|tracker| {
+        tracker.by_action_id.insert(
+            21,
+            super::TrackedTransfer {
+                action_id: 21,
+                from_account_id: "player:a".to_string(),
+                to_account_id: "player:b".to_string(),
+                amount: 10,
+                nonce: 1,
+                status: TransferLifecycleStatus::Accepted,
+                submitted_at_unix_ms: 2_500,
+                updated_at_unix_ms: 2_500,
+                error_code: None,
+                error: None,
+            },
+        );
+        tracker.action_order.push_back(21);
+        let metrics = tracker.metrics_status(2_000);
+        assert_eq!(metrics.inflight_count, 1);
+        assert_eq!(metrics.oldest_inflight_age_ms, None);
+    });
+}
+
+#[test]
+fn summarize_transfer_latency_samples_sorts_and_rounds_percentiles() {
+    let summary = super::summarize_transfer_latency_samples(&[900, 100, 400]);
+    assert_eq!(summary.sample_count, 3);
+    assert_eq!(summary.avg_latency_ms, Some(466));
+    assert_eq!(summary.max_latency_ms, Some(900));
+    assert_eq!(summary.p50_latency_ms, Some(400));
+    assert_eq!(summary.p95_latency_ms, Some(900));
 }
 
 #[test]

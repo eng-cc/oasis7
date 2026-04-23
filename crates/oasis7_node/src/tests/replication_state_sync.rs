@@ -194,7 +194,7 @@ fn pos_engine_snapshot_surfaces_pending_and_queue_metrics() {
     assert_eq!(snapshot.recent_finality_latency.avg_latency_ms, Some(300));
     assert_eq!(snapshot.recent_finality_latency.max_latency_ms, Some(450));
     assert_eq!(snapshot.recent_finality_latency.p50_latency_ms, Some(300));
-    assert_eq!(snapshot.recent_finality_latency.p95_latency_ms, Some(300));
+    assert_eq!(snapshot.recent_finality_latency.p95_latency_ms, Some(450));
     let pending = snapshot
         .pending_proposal
         .as_ref()

@@ -391,6 +391,11 @@ pub(super) fn build_chain_status_payload(
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
     let observed_at_unix_ms = now_unix_ms();
+    let clamped_elapsed_ms = |prior_ms: i64| -> Option<i64> {
+        observed_at_unix_ms
+            .checked_sub(prior_ms)
+            .map(|age_ms| age_ms.max(0))
+    };
     let last_status = snapshot
         .consensus
         .last_status
@@ -404,7 +409,7 @@ pub(super) fn build_chain_status_payload(
     let last_commit_age_ms = snapshot
         .consensus
         .last_committed_at_ms
-        .map(|committed_at_ms| observed_at_unix_ms.saturating_sub(committed_at_ms));
+        .and_then(clamped_elapsed_ms);
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -415,7 +420,7 @@ pub(super) fn build_chain_status_payload(
             epoch: proposal.epoch,
             proposer_id: proposal.proposer_id.clone(),
             opened_at_ms: proposal.opened_at_ms,
-            age_ms: observed_at_unix_ms.saturating_sub(proposal.opened_at_ms),
+            age_ms: clamped_elapsed_ms(proposal.opened_at_ms).unwrap_or(0),
             action_count: proposal.action_count,
             action_payload_bytes: proposal.action_payload_bytes,
             attestation_count: proposal.attestation_count,
