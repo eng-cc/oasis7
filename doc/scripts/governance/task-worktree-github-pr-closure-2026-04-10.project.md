@@ -3,10 +3,11 @@
 - 对应设计文档: `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.design.md`
 - 对应需求文档: `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] GPR-1 (PRD-SCRIPTS-GHPR-001/002/003) [test_tier_required]: 新增 `scripts/prepare-task-pr.sh`，并同步 `AGENTS.md`、`.pm/README`、scripts 模块文档与旧 landing compatibility 边界。
+- [x] prepare-task-pr-local-required-recommendation (PRD-SCRIPTS-GHPR-004) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path 本地 required 验证推荐摘要，输出推荐 `./scripts/ci-tests.sh required` 命令与必要的额外命令，但不自动执行。 Trace: .pm/tasks/task_f86d4971140d463193d336907f94a00c.yaml
 
 ## 关键契约
 
@@ -33,6 +34,9 @@
 | `post_merge_commands` | PR 合入后必须执行的本地同步与回收命令全集 |
 | `cleanup_commands` | `post_merge_commands` 的兼容别名，保持 agent 侧旧消费方可继续读取 |
 | `pr_url` | `--create` 成功后返回的 PR URL |
+| `local_required_validation.scope` | 当前 diff 命中的本地 required 推荐范围（`minimal`/`targeted`/`full`） |
+| `local_required_validation.recommended_required_command` | 与 changed-path planner 对齐的本地 required 建议命令 |
+| `local_required_validation.recommended_extra_commands` | 附加建议命令（如 viewer visual baseline） |
 
 ## 依赖
 - `AGENTS.md`
@@ -42,7 +46,7 @@
 - `doc/scripts/project.md`
 
 ## 状态
-- 更新日期：2026-04-10
+- 更新日期：2026-04-23
 - 当前阶段：已完成
 - 阻塞项：无
-- 下一步：若后续要补 PR 模板、自动等待 required checks 或 merge queue 辅助，应新开下一轮交付专题；本轮只冻结“默认最终合流经由 GitHub PR，旧 landing 仅保留 compatibility / fallback”的契约。
+- 下一步：若后续要补 planner `reason_summary`、wasm gate 解释层、自动等待 required checks 或 merge queue 辅助，应新开下一轮交付专题；本轮只冻结“默认最终合流经由 GitHub PR + preflight 给出本地最小 required 推荐”的契约。
