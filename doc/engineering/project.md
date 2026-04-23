@@ -146,6 +146,7 @@
 - [x] shrink-near-limit-rust-hotspots (PRD-ENGINEERING-R1200-002/004/005) [test_tier_required]: 对 5 个逼近 1200 行阈值的 Rust 热点文件执行预防性职责拆分，抽离 `llm_sidecar` runtime support、`oasis7_node` consensus/replica maintenance support、`self_guided` storage、`oasis7_provider_parity_bench` io support 与 `oasis7_wasm_router` filtering，避免零扫描门禁回弹。 Trace: .pm/tasks/task_fd49238273e0447d8189df40519a51b0.yaml
 - [x] engineering-project-truth-drift-sync (PRD-ENGINEERING-030/PRD-ENGINEERING-R1200-005) [test_tier_required]: 修正 engineering 根 `project.md` 对 `TASK-ENGINEERING-054~057` 与 Rust 1200 行治理专题 project 的完成态漂移，并把状态区“下一任务”从已完成的 `readme-governance-path-governance` 改回季度复核/库存复算的真实后续。 Trace: .pm/tasks/task_52d37909a424425096c7f2084383eb78.yaml
 - [x] workflow-friction-priority-burn-down (PRD-ENGINEERING-021) [test_tier_required]: 冻结 9 项当前开发流程优化项的优先级，并启动第 1 优先级的 worktree 生命周期治理，新增 repo-owned `scripts/worktree-gc-report.sh` 入口用于盘点 prunable/closed task worktree cleanup 候选。 Trace: .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.yaml
+- [x] task-closeout-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，将 `.pm` close-phase 的 `workflow-report close -> move-task done|deferred -> pm lint` 收成单命令 helper，并将 scripts / PM / workflow 文档口径统一到“helper 优先、手工链等价”。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
