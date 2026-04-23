@@ -126,6 +126,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--chain-p2p-reject-public-entry" => {
                 options.chain_p2p_accept_public_entry = false;
             }
+            "--chain-replication-network-peer" => {
+                let value = parse_required_value(&mut iter, "--chain-replication-network-peer")?;
+                validate_chain_replication_network_peer(value.as_str())?;
+                options.chain_replication_bootstrap_peers.push(value);
+            }
             "--chain-node-tick-ms" => {
                 let raw = parse_required_value(&mut iter, "--chain-node-tick-ms")?;
                 options.chain_node_tick_ms = raw.parse::<u64>().map_err(|_| {
@@ -248,6 +253,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         for validator in &options.chain_node_validators {
             validate_chain_node_validator(validator.as_str())?;
         }
+        for peer in &options.chain_replication_bootstrap_peers {
+            validate_chain_replication_network_peer(peer.as_str())?;
+        }
     }
 
     Ok(options)
@@ -349,6 +357,20 @@ fn validate_chain_node_validator(raw: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_chain_replication_network_peer(raw: &str) -> Result<(), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("--chain-replication-network-peer requires a non-empty value".to_string());
+    }
+    if !trimmed.starts_with('/') {
+        return Err(
+            "--chain-replication-network-peer must use libp2p multiaddr format like /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 pub(super) fn print_help() {
     println!(
         "Usage: oasis7_game_launcher [options]\n\n\
@@ -377,6 +399,8 @@ Options:\n\
                                accept auto-detected public-entry recommendation\n\
   --chain-p2p-reject-public-entry\n\
                                keep conservative fallback when auto mode suggests public entry (default)\n\
+  --chain-replication-network-peer <multiaddr>\n\
+                               oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable)\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\
   --chain-pos-slot-duration-ms <n>\n\
                                oasis7_chain_runtime PoS slot duration ms (default: {DEFAULT_CHAIN_POS_SLOT_DURATION_MS})\n\

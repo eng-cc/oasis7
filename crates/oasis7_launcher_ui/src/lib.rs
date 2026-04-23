@@ -254,6 +254,15 @@ const LAUNCHER_UI_FIELDS: &[LauncherUiField] = &[
         native_visible: true,
     },
     LauncherUiField {
+        id: "chain_replication_bootstrap_peers",
+        section: "chain_runtime",
+        kind: LauncherUiFieldKind::Text,
+        label_zh: "链复制 Bootstrap Peers",
+        label_en: "Chain Replication Bootstrap Peers",
+        web_visible: true,
+        native_visible: true,
+    },
+    LauncherUiField {
         id: "chain_node_tick_ms",
         section: "chain_runtime",
         kind: LauncherUiFieldKind::Text,
@@ -388,6 +397,7 @@ mod tests {
         assert!(!ids.contains("chain_runtime_bin"));
         assert!(ids.contains("scenario"));
         assert!(ids.contains("chain_storage_profile"));
+        assert!(ids.contains("chain_replication_bootstrap_peers"));
         assert!(ids.contains("viewer_static_dir"));
     }
 }

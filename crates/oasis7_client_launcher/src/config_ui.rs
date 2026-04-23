@@ -62,6 +62,9 @@ pub(super) fn issue_field_ids(issue: ConfigIssue) -> &'static [&'static str] {
         ConfigIssue::ChainPublicEntryConfirmationRequired => {
             &["chain_p2p_user_mode", "chain_p2p_accept_public_entry"]
         }
+        ConfigIssue::ChainReplicationBootstrapPeersInvalid => {
+            &["chain_replication_bootstrap_peers"]
+        }
         ConfigIssue::ChainTickMsInvalid => &["chain_node_tick_ms"],
         ConfigIssue::ChainPosSlotDurationMsInvalid => &["chain_pos_slot_duration_ms"],
         ConfigIssue::ChainPosTicksPerSlotInvalid => &["chain_pos_ticks_per_slot"],
@@ -134,6 +137,12 @@ impl ClientLauncherApp {
                                 self.config_dirty = true;
                             }
                         });
+                    }
+                    if field.id == "chain_replication_bootstrap_peers" {
+                        ui.small(self.tr(
+                            "多个 bootstrap peer 可用逗号、分号或空白分隔，例如 /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
+                            "Separate multiple bootstrap peers with commas, semicolons, or whitespace, for example /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
+                        ));
                     }
                 }
             }

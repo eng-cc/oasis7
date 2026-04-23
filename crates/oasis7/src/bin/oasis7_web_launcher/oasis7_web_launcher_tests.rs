@@ -9,13 +9,14 @@ use super::runtime_paths::viewer_dev_dist_candidates;
 use super::{
     build_chain_runtime_args, build_game_url, build_launcher_args,
     build_launcher_args_with_launcher_bin, chain_error_code_for_state, execute_gui_agent_action,
-    finalize_chain_start_outcome, gui_agent_capabilities_response, parse_chain_validators,
-    parse_host_port, parse_options, parse_port, query_chain_status_endpoint,
-    remap_transfer_runtime_target, snapshot_from_state, stop_chain_process, stop_process,
-    validate_chain_config, validate_game_config, validate_game_config_with_launcher_bin,
-    ChainP2pStatusSnapshot, ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions, LauncherConfig,
-    ProcessState, ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND,
-    DEFAULT_LISTEN_BIND, DEFAULT_SCENARIO,
+    finalize_chain_start_outcome, gui_agent_capabilities_response,
+    parse_chain_replication_bootstrap_peers, parse_chain_validators, parse_host_port,
+    parse_options, parse_port, query_chain_status_endpoint, remap_transfer_runtime_target,
+    snapshot_from_state, stop_chain_process, stop_process, validate_chain_config,
+    validate_game_config, validate_game_config_with_launcher_bin, ChainP2pStatusSnapshot,
+    ChainRecoverySnapshot, ChainRuntimeStatus, CliOptions, LauncherConfig, ProcessState,
+    ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_LISTEN_BIND,
+    DEFAULT_SCENARIO,
 };
 use oasis7_proto::storage_profile::StorageProfile;
 
@@ -35,6 +36,10 @@ fn parse_options_defaults() {
     );
     assert_eq!(options.initial_config.chain_p2p_user_mode, "auto_join");
     assert!(!options.initial_config.chain_p2p_accept_public_entry);
+    assert!(options
+        .initial_config
+        .chain_replication_bootstrap_peers
+        .is_empty());
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
@@ -91,6 +96,10 @@ fn parse_options_accepts_overrides() {
             "--chain-p2p-user-mode",
             "public_entry",
             "--chain-p2p-accept-public-entry",
+            "--chain-replication-network-peer",
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "--chain-replication-network-peer",
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
             "--chain-pos-slot-duration-ms",
             "12000",
             "--chain-pos-ticks-per-slot",
@@ -134,6 +143,10 @@ fn parse_options_accepts_overrides() {
     );
     assert_eq!(options.initial_config.chain_p2p_user_mode, "public_entry");
     assert!(options.initial_config.chain_p2p_accept_public_entry);
+    assert_eq!(
+        options.initial_config.chain_replication_bootstrap_peers,
+        "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+    );
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
@@ -168,6 +181,25 @@ fn parse_options_collects_repeat_validators() {
     assert_eq!(
         options.initial_config.chain_node_validators,
         "node-a:40,node-b:60"
+    );
+}
+
+#[test]
+fn parse_options_collects_repeat_replication_bootstrap_peers() {
+    let options = parse_options(
+        [
+            "--chain-replication-network-peer",
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "--chain-replication-network-peer",
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+        ]
+        .into_iter(),
+    )
+    .expect("parse bootstrap peers");
+
+    assert_eq!(
+        options.initial_config.chain_replication_bootstrap_peers,
+        "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
     );
 }
 
@@ -225,6 +257,13 @@ fn parse_chain_validators_rejects_invalid_format() {
 }
 
 #[test]
+fn parse_chain_replication_bootstrap_peers_rejects_non_multiaddr_text() {
+    let err = parse_chain_replication_bootstrap_peers("127.0.0.1:4100")
+        .expect_err("plain host:port should fail");
+    assert!(err.contains("multiaddr"));
+}
+
+#[test]
 fn build_launcher_args_includes_chain_disable_when_off() {
     let config = LauncherConfig {
         deployment_mode: "hosted_public_join".to_string(),
@@ -252,6 +291,9 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
         chain_node_role: "storage".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
+        chain_replication_bootstrap_peers:
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA /dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+                .to_string(),
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -279,6 +321,9 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
         chain_node_role: "storage".to_string(),
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
+        chain_replication_bootstrap_peers:
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA /dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+                .to_string(),
         chain_node_tick_ms: "300".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -299,6 +344,14 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
     assert!(args.contains(&"--p2p-user-mode".to_string()));
     assert!(args.contains(&"public_entry".to_string()));
     assert!(args.contains(&"--p2p-accept-public-entry".to_string()));
+    assert_eq!(
+        args.iter()
+            .filter(|value| value.as_str() == "--replication-network-peer")
+            .count(),
+        2
+    );
+    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string()));
+    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string()));
     assert!(args.contains(&"--node-validator".to_string()));
     assert!(args.contains(&"chain-a:55".to_string()));
     assert!(args.contains(&"chain-b:45".to_string()));
@@ -413,6 +466,7 @@ fn validate_game_config_reports_missing_required_fields() {
         chain_pos_proposal_tick_phase: "x".to_string(),
         chain_pos_slot_clock_genesis_unix_ms: "oops".to_string(),
         chain_pos_max_past_slot_lag: "-1".to_string(),
+        chain_replication_bootstrap_peers: "127.0.0.1:4100".to_string(),
         chain_node_validators: "node-a".to_string(),
         ..LauncherConfig::default()
     };
@@ -424,6 +478,7 @@ fn validate_game_config_reports_missing_required_fields() {
     assert!(issues
         .iter()
         .any(|item| item.contains("viewer static directory")));
+    assert!(issues.iter().any(|item| item.contains("bootstrap peers")));
 }
 
 #[test]

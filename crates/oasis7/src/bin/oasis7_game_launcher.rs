@@ -151,6 +151,7 @@ struct CliOptions {
     chain_node_role: String,
     chain_p2p_user_mode: String,
     chain_p2p_accept_public_entry: bool,
+    chain_replication_bootstrap_peers: Vec<String>,
     chain_node_tick_ms: u64,
     chain_pos_slot_duration_ms: u64,
     chain_pos_ticks_per_slot: u64,
@@ -190,6 +191,7 @@ impl Default for CliOptions {
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
+            chain_replication_bootstrap_peers: Vec::new(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS,
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT,
@@ -425,6 +427,10 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
     for validator in &options.chain_node_validators {
         args.push("--node-validator".to_string());
         args.push(validator.clone());
+    }
+    for peer in &options.chain_replication_bootstrap_peers {
+        args.push("--replication-network-peer".to_string());
+        args.push(peer.clone());
     }
     args
 }

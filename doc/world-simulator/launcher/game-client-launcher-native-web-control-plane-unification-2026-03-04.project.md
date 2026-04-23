@@ -11,6 +11,7 @@
 - [x] T2 (PRD-WORLD_SIMULATOR-015) [test_tier_required]: `oasis7_client_launcher` native 改为客户端-服务端分离并复用同一 API 控制链路，恢复 web 端链启停按钮与状态对齐。
 - [x] T3 (PRD-WORLD_SIMULATOR-015) [test_tier_required]: 执行 `cargo test/check` + `agent-browser --headed` 闭环（含链/游戏独立启停），归档证据并收口文档。
 - [x] launcher-p2p-peer-list-ui (PRD-WORLD_SIMULATOR-015) [test_tier_required]: 透传 `/api/state` 的 `chain_replication_status`，并在启动器 `节点观测` 摘要卡展示 peer 健康概览，同时提供可单独打开的 peer 明细窗口展示本地 peer id 与已连接 peer 明细。 Trace: .pm/tasks/task_ee3cc0c5d2d741658b404100843f93d8.yaml
+- [x] launcher-bootstrap-peers-config-entry (PRD-WORLD_SIMULATOR-015) [test_tier_required]: 为 launcher 增加链复制 bootstrap peers 配置入口，支持配置文件与界面持久化，并在 web/native 控制面与 `oasis7_game_launcher` 启动链时统一透传 `--replication-network-peer`。 Trace: .pm/tasks/task_9ce8515c10764278ac214b8b69efb2de.yaml
 
 ## 依赖
 - `doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.design.md`
@@ -24,7 +25,7 @@
 - `output/playwright/`
 
 ## 状态
-- 最近更新：2026-04-21（launcher peer list UI）
+- 最近更新：2026-04-23（launcher bootstrap peers config entry）
 - 当前阶段: completed
 - 当前任务: none
-- 备注: 已完成 native/web 同控制面收口，agent-browser 证据归档于 `output/playwright/launcher-control-plane-unification-20260304/artifacts-final/`。
+- 备注: 已完成 native/web 同控制面收口，并补齐链复制 bootstrap peers 配置入口；agent-browser 证据归档于 `output/playwright/launcher-control-plane-unification-20260304/artifacts-final/`。

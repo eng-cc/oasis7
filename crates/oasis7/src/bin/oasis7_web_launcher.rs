@@ -35,8 +35,8 @@ use gui_agent_api::{execute_gui_agent_action, gui_agent_capabilities_response};
 use hosted_access::{hosted_player_access_contract, DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use http_codec::{read_http_request, write_http_response, write_json_response};
 use parse_utils::{
-    next_value, parse_chain_role, parse_chain_validators, parse_host_port, parse_non_negative_u64,
-    parse_optional_i64, parse_port, parse_positive_u64,
+    next_value, parse_chain_replication_bootstrap_peers, parse_chain_role, parse_chain_validators,
+    parse_host_port, parse_non_negative_u64, parse_optional_i64, parse_port, parse_positive_u64,
 };
 use runtime_paths::{
     normalize_bind_host_for_local_access, now_unix_ms, resolve_console_static_dir_path,
@@ -104,6 +104,7 @@ struct LauncherConfig {
     chain_node_role: String,
     chain_p2p_user_mode: String,
     chain_p2p_accept_public_entry: bool,
+    chain_replication_bootstrap_peers: String,
     chain_node_tick_ms: String,
     chain_pos_slot_duration_ms: String,
     chain_pos_ticks_per_slot: String,
@@ -138,6 +139,7 @@ impl Default for LauncherConfig {
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
+            chain_replication_bootstrap_peers: String::new(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
@@ -568,6 +570,7 @@ Options:\n\
   --chain-node-role <role>        sequencer|storage|observer\n\
   --chain-p2p-user-mode <mode>    auto_join|private_safe|public_entry\n\
   --chain-p2p-accept-public-entry / --chain-p2p-reject-public-entry\n\
+  --chain-replication-network-peer <multiaddr> (repeatable)\n\
   --chain-node-tick-ms <ms>       worker poll/fallback interval ms\n\
   --chain-pos-slot-duration-ms <n>\n\
   --chain-pos-ticks-per-slot <n>\n\
@@ -604,6 +607,7 @@ where
 {
     let mut options = CliOptions::default();
     let mut validators: Vec<String> = Vec::new();
+    let mut replication_bootstrap_peers: Vec<String> = Vec::new();
     let mut iter = args.into_iter().peekable();
 
     while let Some(arg) = iter.next() {
@@ -684,6 +688,10 @@ where
             "--chain-p2p-reject-public-entry" => {
                 options.initial_config.chain_p2p_accept_public_entry = false;
             }
+            "--chain-replication-network-peer" => {
+                replication_bootstrap_peers
+                    .push(next_value(&mut iter, "--chain-replication-network-peer")?);
+            }
             "--chain-node-tick-ms" => {
                 options.initial_config.chain_node_tick_ms =
                     next_value(&mut iter, "--chain-node-tick-ms")?;
@@ -735,6 +743,10 @@ where
 
     if !validators.is_empty() {
         options.initial_config.chain_node_validators = validators.join(",");
+    }
+    if !replication_bootstrap_peers.is_empty() {
+        options.initial_config.chain_replication_bootstrap_peers =
+            replication_bootstrap_peers.join(",");
     }
     options.initial_config.launcher_bin = options.launcher_bin.trim().to_string();
     options.initial_config.chain_runtime_bin = options.chain_runtime_bin.trim().to_string();
@@ -793,6 +805,12 @@ where
         parse_non_negative_u64(
             options.initial_config.chain_pos_max_past_slot_lag.as_str(),
             "--chain-pos-max-past-slot-lag",
+        )?;
+        parse_chain_replication_bootstrap_peers(
+            options
+                .initial_config
+                .chain_replication_bootstrap_peers
+                .as_str(),
         )?;
         parse_chain_validators(options.initial_config.chain_node_validators.as_str())?;
     }

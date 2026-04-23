@@ -848,6 +848,13 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if parse_chain_validators(config.chain_node_validators.as_str()).is_err() {
         issues.push("chain validators must be in <validator_id:stake> format".to_string());
     }
+    if parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())
+        .is_err()
+    {
+        issues.push(
+            "chain replication bootstrap peers must use multiaddr values like /ip4/.../tcp/.../p2p/...".to_string(),
+        );
+    }
 
     issues
 }
@@ -958,6 +965,8 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     )?;
     let storage_profile = config.chain_storage_profile.parse::<StorageProfile>()?;
     let validators = parse_chain_validators(config.chain_node_validators.as_str())?;
+    let replication_bootstrap_peers =
+        parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())?;
     let execution_world_dir = chain_execution_world_dir(chain_node_id);
 
     let mut args = vec![
@@ -1003,6 +1012,10 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     for validator in validators {
         args.push("--node-validator".to_string());
         args.push(validator);
+    }
+    for peer in replication_bootstrap_peers {
+        args.push("--replication-network-peer".to_string());
+        args.push(peer);
     }
     Ok(args)
 }
