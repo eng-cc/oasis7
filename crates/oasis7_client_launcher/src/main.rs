@@ -404,6 +404,7 @@ struct LaunchConfig {
     chain_node_role: String,
     chain_p2p_user_mode: String,
     chain_p2p_accept_public_entry: bool,
+    chain_replication_bootstrap_peers: String,
     chain_node_tick_ms: String,
     chain_pos_slot_duration_ms: String,
     chain_pos_ticks_per_slot: String,
@@ -458,6 +459,7 @@ impl Default for LaunchConfig {
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
+            chain_replication_bootstrap_peers: String::new(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
@@ -636,6 +638,7 @@ enum ConfigIssue {
     ChainRoleInvalid,
     ChainP2pUserModeInvalid,
     ChainPublicEntryConfirmationRequired,
+    ChainReplicationBootstrapPeersInvalid,
     ChainTickMsInvalid,
     ChainPosSlotDurationMsInvalid,
     ChainPosTicksPerSlotInvalid,
@@ -760,6 +763,12 @@ impl ConfigIssue {
             }
             (Self::ChainPublicEntryConfirmationRequired, UiLanguage::EnUs) => {
                 "Public entry requires explicit confirmation of public-entry responsibility"
+            }
+            (Self::ChainReplicationBootstrapPeersInvalid, UiLanguage::ZhCn) => {
+                "链复制 bootstrap peers 必须是 /ip4/.../tcp/.../p2p/... 这类 multiaddr，多个地址可用逗号、分号或空白分隔"
+            }
+            (Self::ChainReplicationBootstrapPeersInvalid, UiLanguage::EnUs) => {
+                "Chain replication bootstrap peers must use multiaddr values like /ip4/.../tcp/.../p2p/...; separate multiple entries with commas, semicolons, or whitespace"
             }
             (Self::ChainTickMsInvalid, UiLanguage::ZhCn) => {
                 "链节点轮询间隔毫秒（chain node poll interval ms）必须是正整数"

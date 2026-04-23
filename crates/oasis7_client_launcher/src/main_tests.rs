@@ -9,9 +9,9 @@ use super::{
         resolve_explorer_my_account_candidate, ExplorerQuickShortcut, ExplorerStatusFilter,
         ExplorerTab, WebExplorerOverviewResponse,
     },
-    install_cjk_font, normalize_host_for_url, parse_chain_role, parse_chain_validators,
-    parse_host_port, parse_port, probe_chain_status_endpoint, read_named_env_value_with,
-    resolve_control_plane_env_with,
+    install_cjk_font, normalize_host_for_url, parse_chain_replication_bootstrap_peers,
+    parse_chain_role, parse_chain_validators, parse_host_port, parse_port,
+    probe_chain_status_endpoint, read_named_env_value_with, resolve_control_plane_env_with,
     self_guided::{
         resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
         ConfigGuideTargetHint, DemoModePhase, DisabledActionCta, NextTaskHint, OnboardingStep,
@@ -194,6 +194,7 @@ fn launch_config_defaults_enable_llm() {
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
     assert_eq!(config.chain_p2p_user_mode, "auto_join");
     assert!(!config.chain_p2p_accept_public_entry);
+    assert!(config.chain_replication_bootstrap_peers.is_empty());
 }
 
 #[test]
@@ -245,6 +246,9 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
         chain_node_id: "chain-node-a".to_string(),
         chain_world_id: "live-chain-a".to_string(),
         chain_node_role: "storage".to_string(),
+        chain_replication_bootstrap_peers:
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB"
+                .to_string(),
         chain_node_tick_ms: "350".to_string(),
         chain_pos_slot_duration_ms: "12000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
@@ -284,6 +288,14 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
     assert!(args.contains(&"--node-validator".to_string()));
     assert!(args.contains(&"node-a:55".to_string()));
     assert!(args.contains(&"node-b:45".to_string()));
+    assert_eq!(
+        args.iter()
+            .filter(|value| value.as_str() == "--replication-network-peer")
+            .count(),
+        2
+    );
+    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string()));
+    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string()));
 }
 #[test]
 fn parse_chain_role_rejects_invalid_value() {
@@ -294,6 +306,28 @@ fn parse_chain_role_rejects_invalid_value() {
 fn parse_chain_validators_rejects_invalid_format() {
     let err = parse_chain_validators("node-a").expect_err("should fail");
     assert!(err.contains("<validator_id:stake>"));
+}
+
+#[test]
+fn parse_chain_replication_bootstrap_peers_accepts_common_delimiters() {
+    let peers = parse_chain_replication_bootstrap_peers(
+        "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA,\n/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+    )
+    .expect("should parse peers");
+    assert_eq!(
+        peers,
+        vec![
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn parse_chain_replication_bootstrap_peers_rejects_non_multiaddr_text() {
+    let err = parse_chain_replication_bootstrap_peers("127.0.0.1:4100")
+        .expect_err("plain host:port should fail");
+    assert!(err.contains("multiaddr"));
 }
 #[test]
 fn install_cjk_font_registers_font_and_priority() {

@@ -47,6 +47,7 @@
   - AC-1: `oasis7_web_launcher` 支持 `POST /api/chain/start`、`POST /api/chain/stop`，且与游戏启停互不耦合。
   - AC-2: `/api/state` 返回游戏与区块链独立状态字段，客户端不再用 `snapshot.running` 推断链状态。
   - AC-2a: `/api/state` 在链就绪时同步返回 `chain_replication_status.local_peer_id/connected_peers/peer_healths`，供 native/web 启动器在 `节点观测` 摘要卡与可单独打开的 peer 明细窗口里直接展示已连接 peer 信息，而不新增第二套客户端探针。
+  - AC-2b: 启动器配置增加 `chain_replication_bootstrap_peers` 入口，支持通过持久化配置文件与 launcher 界面填写 bootstrap peer multiaddr，并在 native/web 控制面启动链时统一透传为 `oasis7_chain_runtime --replication-network-peer <multiaddr>`。
   - AC-3: `oasis7_client_launcher` native 不再直接拉起 `oasis7_game_launcher` / `oasis7_chain_runtime`，改为通过 `oasis7_web_launcher` API 控制。
   - AC-4: wasm/web 启动器的“启动区块链/停止区块链”按钮恢复可操作，并与 native 同状态语义。
   - AC-5: native 与 web 在“自动拉起链 + 游戏/链独立启停 + 状态展示”行为上保持一致。

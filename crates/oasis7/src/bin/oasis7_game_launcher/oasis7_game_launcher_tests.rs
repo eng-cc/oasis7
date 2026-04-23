@@ -103,6 +103,7 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_node_role, "sequencer");
     assert_eq!(options.chain_p2p_user_mode, "auto_join");
     assert!(!options.chain_p2p_accept_public_entry);
+    assert!(options.chain_replication_bootstrap_peers.is_empty());
     assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
     assert_eq!(options.chain_pos_proposal_tick_phase, 9);
@@ -142,6 +143,10 @@ fn parse_options_accepts_overrides() {
             "--chain-p2p-user-mode",
             "public_entry",
             "--chain-p2p-accept-public-entry",
+            "--chain-replication-network-peer",
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "--chain-replication-network-peer",
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
             "--chain-node-tick-ms",
             "350",
             "--chain-pos-slot-duration-ms",
@@ -196,6 +201,13 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.chain_node_role, "storage");
     assert_eq!(options.chain_p2p_user_mode, "public_entry");
     assert!(options.chain_p2p_accept_public_entry);
+    assert_eq!(
+        options.chain_replication_bootstrap_peers,
+        vec![
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+        ]
+    );
     assert_eq!(options.chain_node_tick_ms, 350);
     assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
@@ -239,6 +251,28 @@ fn parse_options_accepts_overrides() {
 fn parse_options_accepts_chain_disable() {
     let options = parse_options(["--chain-disable"].into_iter()).expect("parse should succeed");
     assert!(!options.chain_enabled);
+}
+
+#[test]
+fn parse_options_collects_repeat_replication_bootstrap_peers() {
+    let options = parse_options(
+        [
+            "--chain-replication-network-peer",
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA",
+            "--chain-replication-network-peer",
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB",
+        ]
+        .into_iter(),
+    )
+    .expect("parse should succeed");
+
+    assert_eq!(
+        options.chain_replication_bootstrap_peers,
+        vec![
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+        ]
+    );
 }
 
 #[test]
@@ -419,6 +453,13 @@ fn parse_options_rejects_invalid_chain_p2p_user_mode() {
     let err =
         parse_options(["--chain-p2p-user-mode", "wild"].into_iter()).expect_err("should fail");
     assert!(err.contains("auto_join, private_safe, public_entry"));
+}
+
+#[test]
+fn parse_options_rejects_invalid_chain_replication_network_peer() {
+    let err = parse_options(["--chain-replication-network-peer", "127.0.0.1:4100"].into_iter())
+        .expect_err("should fail");
+    assert!(err.contains("multiaddr"));
 }
 
 #[test]
@@ -632,6 +673,10 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
         chain_storage_profile: StorageProfile::ReleaseDefault,
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
+        chain_replication_bootstrap_peers: vec![
+            "/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string(),
+            "/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string(),
+        ],
         ..CliOptions::default()
     };
     let args = build_oasis7_chain_runtime_args(&options);
@@ -643,6 +688,14 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
     assert!(args.contains(&"--p2p-user-mode".to_string()));
     assert!(args.contains(&"public_entry".to_string()));
     assert!(args.contains(&"--p2p-accept-public-entry".to_string()));
+    assert_eq!(
+        args.iter()
+            .filter(|value| value.as_str() == "--replication-network-peer")
+            .count(),
+        2
+    );
+    assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100/p2p/12D3KooWbootstrapA".to_string()));
+    assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101/p2p/12D3KooWbootstrapB".to_string()));
     assert!(
         args.contains(&"output/chain-runtime/chain-a/reward-runtime-execution-world".to_string())
     );

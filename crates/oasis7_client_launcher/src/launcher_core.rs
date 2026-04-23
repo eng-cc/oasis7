@@ -295,6 +295,7 @@ pub(super) fn launcher_text_field_mut<'a>(
         "chain_world_id" => Some(&mut config.chain_world_id),
         "chain_node_role" => Some(&mut config.chain_node_role),
         "chain_p2p_user_mode" => Some(&mut config.chain_p2p_user_mode),
+        "chain_replication_bootstrap_peers" => Some(&mut config.chain_replication_bootstrap_peers),
         "chain_node_tick_ms" => Some(&mut config.chain_node_tick_ms),
         "chain_pos_slot_duration_ms" => Some(&mut config.chain_pos_slot_duration_ms),
         "chain_pos_ticks_per_slot" => Some(&mut config.chain_pos_ticks_per_slot),
@@ -441,6 +442,11 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
         && !config.chain_p2p_accept_public_entry
     {
         issues.push(ConfigIssue::ChainPublicEntryConfirmationRequired);
+    }
+    if parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())
+        .is_err()
+    {
+        issues.push(ConfigIssue::ChainReplicationBootstrapPeersInvalid);
     }
     if parse_positive_u64(
         config.chain_node_tick_ms.as_str(),
@@ -638,6 +644,8 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         "chain pos max past slot lag",
     )?;
     let validators = parse_chain_validators(config.chain_node_validators.as_str())?;
+    let replication_bootstrap_peers =
+        parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())?;
     let scenario = config.scenario.trim();
     let default_world_id = if scenario.is_empty() {
         format!("live-{DEFAULT_SCENARIO}")
@@ -689,6 +697,10 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
     for validator in validators {
         args.push("--node-validator".to_string());
         args.push(validator);
+    }
+    for peer in replication_bootstrap_peers {
+        args.push("--replication-network-peer".to_string());
+        args.push(peer);
     }
     Ok(args)
 }
@@ -890,6 +902,24 @@ pub(super) fn parse_chain_validators(raw: &str) -> Result<Vec<String>, String> {
         validators.push(format!("{}:{}", validator_id.trim(), stake));
     }
     Ok(validators)
+}
+
+pub(super) fn parse_chain_replication_bootstrap_peers(raw: &str) -> Result<Vec<String>, String> {
+    let mut peers = Vec::new();
+    for token in raw.split([',', ';', ' ', '\n', '\r', '\t']) {
+        let token = token.trim();
+        if token.is_empty() {
+            continue;
+        }
+        if !token.starts_with('/') {
+            return Err(
+                "chain replication bootstrap peers must use multiaddr values like /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>"
+                    .to_string(),
+            );
+        }
+        peers.push(token.to_string());
+    }
+    Ok(peers)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
