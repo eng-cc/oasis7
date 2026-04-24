@@ -728,7 +728,8 @@ pub(super) fn build_game_url(config: &LauncherConfig, request_host: Option<&str>
     ))
     .unwrap_or_else(|_| "{}".to_string());
     format!(
-        "http://{viewer_host}:{viewer_port}/?{}&{}",
+        "http://{viewer_host}:{viewer_port}/?{}&{}&{}",
+        encoded_query_pair("render_mode", "software_safe"),
         encoded_query_pair("ws", ws_url.as_str()),
         encoded_query_pair("hosted_access", hosted_access_hint.as_str()),
     )
