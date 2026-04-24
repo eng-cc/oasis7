@@ -152,6 +152,7 @@
 - [x] prepare-task-pr-planner-reason-summary (PRD-ENGINEERING-021) [test_tier_required]: 为 `scripts/prepare-task-pr.sh` 增加 changed-path planner `reason_summary` 与 `reason_items[]` 输出，让 owner 在 PR preflight 阶段直接看到当前 scope 的命中原因，同时保持范围不扩到 wasm 解释层或自动执行。 Trace: .pm/tasks/task_db7d4beaf8354e1eb7f50afd0ee0a8d6.yaml
 - [x] pm-rebase-conflict-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突，并把唯一允许的自动修复边界收口为 `.pm/inbox/signals.jsonl` signal-id 碰撞；generated-view 冲突只提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。 Trace: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.yaml
 - [x] engineering-testing-root-project-reading-surface (PRD-ENGINEERING-021/024) [test_tier_required]: 压缩 `engineering/testing` 根项目页的当前阅读面，移除 `testing/project.md` 中按时间手工堆叠的“最新完成”长列表与过期阶段交接块，统一改为“当前窗口摘要 + topic project / .pm task 追溯”口径。 Trace: .pm/tasks/task_6436f1f4fd754136a7b2feb9f1b5f141.yaml
+- [x] lightweight-web-ui-automation-smoke (PRD-ENGINEERING-021) [test_tier_required]: 为当前 workflow friction burn-down 补一条 repo-owned 轻量 Web/UI automation smoke，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下先验证 S6 tooling 与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`

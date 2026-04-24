@@ -345,6 +345,23 @@
     - `./scripts/pm/rebase-conflict-helper.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] web-ui-automation-light-smoke (PRD-SCRIPTS-002) [test_tier_required]: 新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下验证最小 Web/UI automation 链路与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
+  - 产物文件:
+    - `scripts/viewer-software-safe-step-regression-smoke.sh`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `doc/scripts/README.md`
+    - `testing-manual.md`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `doc/engineering/project.md`
+    - `.pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml`
+    - `.pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-software-safe-step-regression-smoke.sh scripts/viewer-software-safe-step-regression.sh`
+    - `./scripts/viewer-software-safe-step-regression-smoke.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/scripts/design.md`
@@ -358,6 +375,7 @@
 - 更新日期: 2026-04-23
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `web-ui-automation-light-smoke`（已新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用 fixture 页面复用真 `agent-browser` 回归 `viewer-software-safe-step-regression.sh` 的最小 Web/UI automation 契约，无需起完整 runtime 栈。）
 - 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）
 - 最新完成: `pm-rebase-conflict-helper`（已新增 `scripts/pm/rebase-conflict-helper.sh`，用于统一分类 `.pm/**` rebase 冲突，并只在 active rebase 中安全自动修复 `signals.jsonl` 的 signal-id 碰撞。）
 - 最新完成: `prepare-task-pr-local-required-recommendation`（已让 `scripts/prepare-task-pr.sh` 在 PR preflight 阶段直接输出 changed-path 对齐的本地 required 验证建议，但不自动执行推荐命令。）

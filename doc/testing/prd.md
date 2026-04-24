@@ -98,6 +98,7 @@
   - AC-12: `doc/testing/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` / `oasis7 Runtime` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
   - AC-13: `token-genesis-allocation-audit-checklist-2026-03-22` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
+  - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -118,6 +119,7 @@
   - `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md`
   - `scripts/check-windows-paths.sh`
   - `scripts/ci-tests.sh`
+  - `scripts/viewer-software-safe-step-regression-smoke.sh`
   - `scripts/sync-m1-builtin-wasm-artifacts.sh`
   - `scripts/ci-m1-wasm-summary.sh`
   - `scripts/ci-verify-m1-wasm-summaries.py`
