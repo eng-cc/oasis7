@@ -145,7 +145,7 @@ fn build_game_url_rewrites_zero_host() {
         ..LaunchConfig::default()
     };
     let url = build_game_url(&config);
-    assert!(url.starts_with("http://127.0.0.1:4173/?ws=ws%3A%2F%2F127.0.0.1%3A5011&hosted_access="));
+    assert!(url.starts_with("http://127.0.0.1:4173/?render_mode=software_safe&ws=ws%3A%2F%2F127.0.0.1%3A5011&hosted_access="));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
 }
 #[test]
@@ -157,7 +157,7 @@ fn build_game_url_brackets_ipv6_hosts() {
         ..LaunchConfig::default()
     };
     let url = build_game_url(&config);
-    assert!(url.starts_with("http://[::1]:4173/?ws=ws%3A%2F%2F%5B%3A%3A1%5D%3A5011&hosted_access="));
+    assert!(url.starts_with("http://[::1]:4173/?render_mode=software_safe&ws=ws%3A%2F%2F%5B%3A%3A1%5D%3A5011&hosted_access="));
     assert!(url.contains("%22deployment_mode%22%3A%22trusted_local_only%22"));
 }
 
