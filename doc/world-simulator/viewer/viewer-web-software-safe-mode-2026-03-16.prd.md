@@ -219,6 +219,23 @@
     - rollback 反馈明确区分当前生效版本、恢复来源版本与下一次 rollback target；
     - prompt/chat/control 默认展示可扫描的 summary/detail，raw payload 仍保留在可展开 diagnostics；
 
+## 增量需求（2026-04-24）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - `software_safe` 当前右侧 `Details` 面板在“选中对象明细 + 交互面”之后仍默认铺一整块 `Snapshot Summary` 原始 JSON；这块信息与中间 `世界摘要` 面板已有状态高度重复，却长期占据首屏右栏空间，削弱了选中对象与当前动作面的可读性。
+- Proposed Solution:
+  - 保持 `Details` 面板继续优先承载“当前选中对象 + 当前交互面”；
+  - 把默认展开的 `Snapshot Summary` 大块 JSON 收口为紧凑世界规模信息（例如 agents/locations/promptProfiles/debugContexts）；
+  - 原始快照 / hosted access / metrics 仍保留为按需展开的 diagnostics，而不是默认常驻主栏。
+- Functional Constraints:
+  - 不移除 `software_safe` 对 raw snapshot diagnostics 的可访问性。
+  - 不把中间 `世界摘要` 的正式玩法 / lane / recent events 语义搬到右栏重复展示。
+  - 不新增新的协议字段；仅调整现有前端信息层级与默认展开方式。
+- Acceptance Criteria:
+  - AC-24: `software_safe` 右侧 `Details` 面板默认不再展示大块 `Snapshot Summary` JSON。
+  - AC-25: 当前快照规模仍需以紧凑形式可见，且不遮挡选中对象与交互面主体。
+  - AC-26: 原始 snapshot/metrics/hosted access 仍可通过折叠 diagnostics 查看，供排障与 QA 采证使用。
+
 ## 增量需求（2026-04-16）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
 - Problem Statement:
