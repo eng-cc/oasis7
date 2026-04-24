@@ -5,26 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="oasis7 is a multi-agent civilization simulation game preview (in development, not playable yet). This page focuses on design goals, reproducible evidence, and roadmap."
+      content="oasis7 is a civilization simulation game powered by persistent AI agents. You set goals and constraints, then agents push war, economy, and governance forward. Current public build is still a technical preview."
     />
-    <meta property="og:title" content="oasis7 | Technical Preview (In Development)" />
+    <meta property="og:title" content="oasis7 | AI-Agent Civilization Sim Preview" />
     <meta
       property="og:description"
-      content="Current build is a technical preview: game design goals and validation flow are available, but playable experience is not open yet."
+      content="A civilization simulation game where you guide autonomous AI agents instead of micromanaging units. Current public build is still a technical preview."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://eng-cc.github.io/oasis7/en/" />
     <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="oasis7 | Technical Preview (In Development)" />
+    <meta name="twitter:title" content="oasis7 | AI-Agent Civilization Sim Preview" />
     <meta
       name="twitter:description"
-      content="Current build is a technical preview: game design goals and validation flow are available, but playable experience is not open yet."
+      content="You set goals and constraints, autonomous agents execute, and the world keeps changing under resource and governance pressure. Current build is still a technical preview."
     />
     <meta name="twitter:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
     <meta name="theme-color" content="#060b11" />
-    <title>oasis7 | Technical Preview (In Development)</title>
+    <title>oasis7 | AI-Agent Civilization Sim Preview</title>
     <link rel="canonical" href="https://eng-cc.github.io/oasis7/en/" />
     <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/" />
     <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/en/" />
@@ -40,15 +40,15 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#matrix">Core Loop</a>
-        <a href="#scenarios">Scenarios</a>
-        <a href="#demo">3-Step Setup</a>
-        <a href="#download">Download</a>
+        <a href="#what">What It Is</a>
+        <a href="#role">How You Play</a>
+        <a href="#today">What You Can Do Now</a>
+        <a href="#download">Preview Build</a>
         <a href="#proof">Proof Chain</a>
         <a href="#roadmap">Roadmap</a>
-        <a href="#architecture">Engine Layer</a>
+        <a href="#architecture">Foundation</a>
         <a href="../doc/en/index.html">Docs Hub</a>
-        <a href="#contribute">Contribute</a>
+        <a href="#contribute">Follow Along</a>
       </nav>
       <button class="menu-button" type="button" aria-label="Toggle menu" data-menu-toggle>
         ☰
@@ -78,38 +78,28 @@
         <div class="hero-grid">
           <div>
             <p class="eyebrow">Technical Preview</p>
-            <h1>oasis7 is still in development, and not playable yet.</h1>
+            <h1>A civilization sim where AI agents trade, ally, and fight on their own</h1>
             <p class="subtitle">
-              This site documents design goals, validation flow, and development roadmap for a multi-agent civilization simulation game.
-              You can run local builds for technical verification, but this is not a public playable release and no season is live yet.
-              First local run requires an initial Rust build (commonly 5-15 minutes, machine-dependent).
+              You are not meant to click every unit yourself. You set goals, change constraints, and watch what happens next.
+              The agents in this world can produce, trade, ally, fight, and govern on their own, and the world keeps going after you log off.
+              What is public today is still a technical preview. It is here to show the direction, not to pretend the game is already open.
             </p>
             <div class="cta-row">
-              <a class="button primary" href="#demo">See Preview Verification Path</a>
-              <a class="button secondary" href="../doc/en/index.html">Open Full Manuals</a>
+              <a class="button primary" href="#what">See The Game In 30 Seconds</a>
+              <a class="button secondary" href="#today">See What You Can Do Now</a>
             </div>
             <div class="proof-strip">
-              <span class="proof-chip is-highlight">Recommended order: verify the preview path first, then decide on a full local build</span>
-              <span class="proof-chip">Preview entry: 3-step technical verification</span>
-              <span class="proof-chip">Build path: still requires an initial Rust compile</span>
+              <span class="proof-chip is-highlight">Genre: civilization sim</span>
+              <span class="proof-chip">Status: technical preview, not playable yet</span>
             </div>
-            <ul class="hero-signals">
-              <li>Current status: technical preview (Not playable yet)</li>
-              <li>Focus: preview verification first, deeper build/docs second</li>
-              <li>Goal: converge toward a playable release</li>
-            </ul>
             <div class="hero-stats">
               <article class="metric-box">
                 <strong data-counter-target="3">0</strong>
-                <span>Target loop layers (micro / mid / long)</span>
+                <span>Three main pressures: war / economy / governance</span>
               </article>
               <article class="metric-box">
-                <strong data-counter-target="0">0</strong>
-                <span>Playable status (0=not open)</span>
-              </article>
-              <article class="metric-box">
-                <strong data-counter-target="4">0</strong>
-                <span>Development phases (D1~D4)</span>
+                <strong data-counter-target="1">0</strong>
+                <span>The world keeps moving after you leave</span>
               </article>
             </div>
           </div>
@@ -117,158 +107,159 @@
           <aside class="hero-visual">
             <figure class="hero-figure">
               <img src="../assets/images/world-constellation.svg" alt="oasis7 civilization conflict constellation" />
-              <figcaption>This is an engineering validation view, not a public playable battlefield.</figcaption>
+              <figcaption>This is the current validation view. It shows how the world runs, but it is not the public player version.</figcaption>
             </figure>
             <div class="pulse-panel">
-              <p class="panel-title">Dev Pulse</p>
+              <p class="panel-title">What You Actually Do Here</p>
               <ul>
-                <li><span>D1</span><strong>core runtime closure</strong></li>
-                <li><span>D2</span><strong>observability & replay</strong></li>
-                <li><span>D3</span><strong>rules & governance hardening</strong></li>
-                <li><span>D4</span><strong>playable release convergence</strong></li>
+                <li><span>First</span><strong>set goals</strong></li>
+                <li><span>Then</span><strong>change rules and limits</strong></li>
+                <li><span>Then keep adjusting</span><strong>trade, war, and alliances react</strong></li>
               </ul>
             </div>
-            <div class="command-panel">
-              <p class="panel-title">Current Focus</p>
-              <ul>
-                <li><span>Runtime flow</span><strong>reproducible and auditable</strong></li>
-                <li><span>Engineering scope</span><strong>WASM modularity + governance</strong></li>
-                <li><span>Delivery strategy</span><strong>trust first, playability next</strong></li>
-              </ul>
-            </div>
-            <ul class="hero-proof-points">
-              <li>Top-half sections clearly declare current non-playable status</li>
-              <li>Lower sections expose architecture and verification evidence</li>
-            </ul>
           </aside>
         </div>
       </section>
 
-      <section id="matrix" class="section" data-reveal>
-        <h2>Four Target Design Pillars</h2>
-        <p class="section-intro">Recommended order: verify the current technical preview path on your machine first; only then move into the full build/docs path if you need deeper inspection.These are target capabilities under development, not currently live player features.</p>
-        <div class="game-lattice">
-          <article class="lattice-feature is-primary">
-            <h3>Three Loops, One Strategic Arc</h3>
-            <p>Target design: short loops for immediate response, mid loops for phase outcomes, long loops for long-horizon strategic cost.</p>
-            <span>Target value: sustained retention pressure</span>
+      <section id="what" class="section" data-reveal>
+        <h2>oasis7 In 30 Seconds</h2>
+        <p class="section-intro">
+          If you remember one thing, make it this: this is not a game about manually controlling every unit.
+          It is a game about setting direction from outside the world and watching a group of agents carry it forward.
+        </p>
+        <div class="grid cards-2">
+          <article class="card card-spotlight">
+            <h3>What It Is</h3>
+            <p>It puts war, economy, and governance inside one world that keeps running instead of resetting after a short demo.</p>
           </article>
-          <article class="lattice-feature">
-            <h3>War x Governance Interlock</h3>
-            <p>Target rules include blockades, policy votes, and regional treaties running in parallel.</p>
-            <span>Target value: strategic depth beyond combat</span>
+          <article class="card">
+            <h3>Who You Are</h3>
+            <p>You are closer to an outside commander than a unit-by-unit pilot.</p>
           </article>
-          <article class="lattice-feature">
-            <h3>Indirect Player Control</h3>
-            <p>Target interaction is intent-and-constraint control with agent execution under uncertainty.</p>
-            <span>Target value: command-level agency without click fatigue</span>
+          <article class="card">
+            <h3>Why The World Changes</h3>
+            <p>Agents act under resource, time, and institutional limits, so trade, alliances, war, and law all leave real effects behind.</p>
           </article>
-          <article class="lattice-feature is-alert">
-            <h3>High Reward, Real Blowback</h3>
-            <p>Target balancing enforces trade-offs so upside always carries systemic counter-pressure.</p>
-            <span>Target value: every win has visible cost</span>
+          <article class="card">
+            <h3>What Is Unusual About It</h3>
+            <p>It is trying to build a world that keeps moving on its own and still leaves enough evidence behind for you to inspect later.</p>
           </article>
         </div>
       </section>
 
-      <section id="scenarios" class="section" data-reveal>
-        <h2>Target Experience Samples (Design Stage)</h2>
-        <p class="section-intro">Recommended order: verify the current technical preview path on your machine first; only then move into the full build/docs path if you need deeper inspection.These samples illustrate intended pacing only; they are not currently playable user flow.</p>
+      <section id="role" class="section" data-reveal>
+        <h2>You give orders, but you do not take over every unit</h2>
+        <p class="section-intro">
+          The interesting part is not APM. It is seeing what your goals and constraints turn into once a group of agents starts acting on them.
+        </p>
+        <div class="story-path">
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">01</span>
+            <h3>Set Direction</h3>
+            <p>Decide what you want first: expansion, survival, industrial output, influence, or governance power.</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">02</span>
+            <h3>Set Constraints</h3>
+            <p>Use prompts, modular logic, and rules to shape behavior instead of clicking each action yourself.</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">03</span>
+            <h3>Read The Consequences</h3>
+            <p>Markets, alliances, logistics, wars, and policy proposals become the visible result of those choices.</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">04</span>
+            <h3>Adapt Without Reset</h3>
+            <p>You do not pause the world and erase mistakes. You react to the consequences and keep going.</p>
+          </article>
+        </div>
         <div class="grid cards-3">
           <article class="card">
-            <h3>Short-loop Target (5-15 min)</h3>
-            <p>Design target: quick strategic confirmations with immediate observable feedback.</p>
+            <h3>What You Can Do</h3>
+            <p>Set high-level goals, change prompts, guide modular expansion, and shape how agents coordinate.</p>
           </article>
           <article class="card">
-            <h3>Mid-loop Target (1-3 days)</h3>
-            <p>Design target: measurable differences from alliances, trade, and conflict decisions.</p>
+            <h3>What You Cannot Do</h3>
+            <p>You do not directly puppeteer agents, bypass world rules, or freeze time to optimize every move.</p>
           </article>
           <article class="card">
-            <h3>Long-loop Target (weeks)</h3>
-            <p>Design target: governance changes evolving into persistent world-level rules.</p>
+            <h3>What You Should Expect</h3>
+            <p>First you see action-level feedback, then day-scale changes in trade and alliances, then longer shifts in institutions and power.</p>
           </article>
-        </div>
-        <div class="screens-grid">
-          <figure class="screen-card">
-            <img
-              src="../assets/images/screenshots/minimal.webp"
-              alt="viewer screenshot: minimal scenario"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>minimal: development validation screenshot (not playable)</figcaption>
-          </figure>
-          <figure class="screen-card">
-            <img
-              src="../assets/images/screenshots/twin_region_bootstrap.webp"
-              alt="viewer screenshot: twin_region_bootstrap scenario"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>twin_region: development validation screenshot (not playable)</figcaption>
-          </figure>
-          <figure class="screen-card">
-            <img
-              src="../assets/images/screenshots/triad_region_bootstrap.webp"
-              alt="viewer screenshot: triad_region_bootstrap scenario"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>triad_region: development validation screenshot (not playable)</figcaption>
-          </figure>
         </div>
       </section>
 
-      <section id="demo" class="section" data-reveal>
-        <h2>Preview First: Local 3-Step Technical Verification</h2>
-        <div class="grid cards-2">
+      <section id="today" class="section" data-reveal>
+        <h2>What You Can Do Right Now</h2>
+        <p class="section-intro">
+          You cannot jump into a public playable build yet, but you can already understand the direction, run the local preview, and inspect the proof chain.
+        </p>
+        <div class="grid cards-3">
           <article class="card">
-            <h3>Offline Verification (Recommended)</h3>
-            <p>Run replay first to verify data output, server startup, and viewer connectivity.</p>
-            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
+            <h3>Understand The Vision</h3>
+            <p>Use the docs hub, world rules, and gameplay docs to decide whether this direction is worth following.</p>
+            <div class="cta-row">
+              <a class="button secondary" href="../doc/en/index.html">Open Docs Hub</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Run The Technical Preview</h3>
+            <p>If you are comfortable building locally, you can already verify replay, live runtime, and viewer connectivity.</p>
+            <div class="cta-row">
+              <a class="button secondary" href="#proof">See Proof Chain</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Track The Build Toward Playability</h3>
+            <p>Downloads, release notes, and roadmap are public, but they still describe preview status rather than a live launch.</p>
+            <div class="cta-row">
+              <a class="button secondary" href="#roadmap">See Roadmap</a>
+            </div>
+          </article>
+        </div>
+        <article class="quickstart card">
+          <h3>If you want to run it yourself, you are still on a developer path</h3>
+          <ol class="steps">
+            <li>Clone the repository and enter the workspace.</li>
+            <li>Run `env -u RUSTC_WRAPPER cargo check` to confirm the environment.</li>
+            <li>Replay first, then switch to live mode and confirm event flow plus viewer connectivity.</li>
+          </ol>
+          <div class="grid cards-2 quickstart-grid">
+            <article class="card quickstart-card">
+              <h3>Offline Verification (Recommended)</h3>
+              <p>Confirm data output, server startup, and viewer connectivity before anything else.</p>
+              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_server -- .data/world_viewer_data 127.0.0.1:5010
 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
-          </article>
-	          <article class="card">
-	            <h3>Online Verification (`standard_3d` / `software_safe`)</h3>
-	            <p>Run continuously to verify real-time events, panel updates, and control flow; use `standard_3d` on the normal hardware path and fall back to `software_safe` on weak-graphics environments.</p>
-		            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+            </article>
+            <article class="card quickstart-card">
+              <h3>Live Verification (`standard_3d` / `software_safe`)</h3>
+              <p>Verify real-time events, panel updates, and control flow in the continuous runtime path.</p>
+              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 # Diagnostics only: --no-llm is observer/debug-only and not formal verification evidence
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
-	          </article>
-        </div>
-        <article class="quickstart card">
-          <h3>Three Steps for Local Technical Verification (First build: ~5-15 min)</h3>
-          <ol class="steps">
-            <li>Clone the repository and enter the workspace.</li>
-            <li>Run `env -u RUSTC_WRAPPER cargo check` to validate setup.</li>
-            <li>Replay to verify closure, then switch to live mode for runtime checks.</li>
-          </ol>
-	          <p class="doc-entry-note">
-	            Full parameters, troubleshooting, and test matrix live in the
-	            <a href="../doc/en/index.html">documentation hub (EN)</a>.
-	          </p>
-	          <p class="doc-entry-note">The current technical preview exposes three public access surfaces: `standard_3d`, `software_safe`, and `pure_api`. LLM/script decisions and Local Provider lanes describe execution style, not extra public modes.</p>
-	          <p class="doc-entry-note">After the first build, repeated local runs are usually ready in minutes.</p>
-	        </article>
+            </article>
+          </div>
+          <p class="doc-entry-note">
+            Full parameters, troubleshooting, and test matrix live in the
+            <a href="../doc/en/index.html">documentation hub (EN)</a>.
+          </p>
+          <p class="doc-entry-note">The current preview exposes three public access surfaces: `standard_3d`, `software_safe`, and `pure_api`. LLM/script decisions and Local Provider lanes describe execution style, not extra public modes.</p>
+          <p class="doc-entry-note">The first build usually takes longer. After that it gets much faster, but it is still a validation path, not the public game.</p>
+        </article>
       </section>
 
       <section id="download" class="section" data-reveal>
-        <h2>Preview Build Downloads (Single Primary CTA per Platform)</h2>
-        <p class="section-intro">The public download surface now defaults to one primary package for the platform you are most likely using. These packages still target technical-preview validation, not a player-ready public release.</p>
+        <h2>If you want to try it yourself, what is public today is still just preview builds</h2>
+        <p class="section-intro">The public downloads are still for preview validation, not for a normal player launch. Each platform gets one main package so you do not have to make a packaging decision first.</p>
         <p class="release-meta">
           Current version: <strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="Published">publish time pending</span>
           <a data-release-notes-link href="https://github.com/eng-cc/oasis7/releases/latest">Release notes</a>
         </p>
-        <p class="doc-entry-note">Public note: the formal announcement is still pending. Current release notes describe preview build artifacts and verification info, not a player/community launch notice.</p>
+        <p class="doc-entry-note">Formal announcement is still pending. The current release notes are mainly build notes and verification info, not a player launch notice.</p>
         <div class="download-surface" data-download-surface>
           <div class="download-surface-main">
             <p class="eyebrow" data-download-primary-badge>Recommended for this device</p>
@@ -299,7 +290,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
               </button>
             </div>
             <h3 data-download-primary-title>Windows x64 Primary Installer</h3>
-            <p class="download-primary-copy" data-download-primary-copy>Download `oasis7-windows-x64.exe`. The public default surface now points to one installer instead of asking ordinary users to unpack a bundle and discover scripts.</p>
+            <p class="download-primary-copy" data-download-primary-copy>Download `oasis7-windows-x64.exe`. The page points to one installer by default, so you do not have to unpack a bundle and go looking for scripts.</p>
             <div class="download-actions">
               <a
                 class="button primary"
@@ -315,26 +306,26 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
                 View checksums
               </a>
             </div>
-            <p class="download-primary-footnote" data-download-primary-footnote>If platform detection is not what you want, switch manually above. The default surface no longer presents multiple technical asset shapes as peer choices.</p>
+            <p class="download-primary-footnote" data-download-primary-footnote>If the auto-detected platform is wrong, switch it above. The page no longer treats several package types as equal first choices.</p>
           </div>
           <aside class="download-support-card">
             <h3>Check Before Download</h3>
             <dl class="download-support-list">
               <div>
                 <dt>System / architecture</dt>
-                <dd data-download-primary-requirements>64-bit Windows desktop environment. The public asset surface currently targets x64 only; no ARM or portable zip is offered as the default path.</dd>
+                <dd data-download-primary-requirements>64-bit Windows desktop environment. Public assets currently target x64 only. There is no ARM build or portable zip as the default path.</dd>
               </div>
               <div>
                 <dt>Install path</dt>
-                <dd data-download-primary-install>Double-click the installer to enter setup. After install, `oasis7 Client Launcher` is discoverable from the Start menu, with optional desktop shortcut creation.</dd>
+                <dd data-download-primary-install>Double-click the installer to start setup. After install, `oasis7 Client Launcher` shows up in the Start menu, with an optional desktop shortcut.</dd>
               </div>
               <div>
                 <dt>Trust-chain status</dt>
-                <dd data-download-primary-trust>These are still preview packages: Windows is not code-signed yet, macOS is not notarized yet, and checksums remain auxiliary verification rather than a platform trust substitute.</dd>
+                <dd data-download-primary-trust>These are still preview packages: Windows is not code-signed yet, macOS is not notarized yet, and checksums are only an extra check.</dd>
               </div>
               <div>
                 <dt>Support boundary</dt>
-                <dd data-download-primary-support>This page serves technical-preview validation, not a player-ready launch promise. If your device policy blocks unknown publishers, check the release notes before downloading.</dd>
+                <dd data-download-primary-support>This page is for preview validation, not a player-ready launch. If your device blocks unknown publishers, check the release notes before downloading.</dd>
               </div>
             </dl>
           </aside>
@@ -345,13 +336,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>Windows x64 Primary Installer</h4>
               <p data-download-source-badge>Recommended for this device</p>
-              <p data-download-source-copy>Download `oasis7-windows-x64.exe`. The public default surface now points to one installer instead of asking ordinary users to unpack a bundle and discover scripts.</p>
+              <p data-download-source-copy>Download `oasis7-windows-x64.exe`. The page points to one installer by default, instead of making you unpack a bundle and look for scripts.</p>
               <p data-download-source-link-label>Download Windows Primary Package</p>
-              <p data-download-source-requirements>64-bit Windows desktop environment. The current public asset surface targets x64 only; no ARM or portable zip is offered as the default path.</p>
-              <p data-download-source-install>Double-click the installer to enter setup. After install, `oasis7 Client Launcher` is discoverable from the Start menu, with optional desktop shortcut creation.</p>
-              <p data-download-source-trust>Windows remains an unsigned preview installer today, so SmartScreen warnings may still appear until the code-signing task lands.</p>
-              <p data-download-source-support>This remains a technical-preview path, not a claim of warning-free ordinary-user install. Enterprise or locked-down devices should check release notes and support boundaries first.</p>
-              <p data-download-source-footnote>The page auto-selected Windows x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+              <p data-download-source-requirements>64-bit Windows desktop environment. Public assets currently target x64 only. There is no ARM build or portable zip as the default path.</p>
+              <p data-download-source-install>Double-click the installer to start setup. After install, `oasis7 Client Launcher` shows up in the Start menu, with an optional desktop shortcut.</p>
+              <p data-download-source-trust>Windows is still using an unsigned preview installer, so SmartScreen warnings may still show up until code signing is in place.</p>
+              <p data-download-source-support>This is still a preview path, not a claim of warning-free install for ordinary users. On locked-down or enterprise devices, read the release notes first.</p>
+              <p data-download-source-footnote>The page auto-selected Windows x64 for this device. Switch platforms above if you are downloading for another machine.</p>
             </article>
             <article
               data-download-platform-source="macos"
@@ -359,13 +350,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>macOS x64 Primary Disk Image</h4>
               <p data-download-source-badge>Recommended for this device</p>
-              <p data-download-source-copy>Download `oasis7-macos-x64.dmg`, mount it, and drag `oasis7 Client Launcher.app` into `/Applications`. The default surface no longer exposes internal bundle scripts as the primary decision path.</p>
+              <p data-download-source-copy>Download `oasis7-macos-x64.dmg`, mount it, and drag `oasis7 Client Launcher.app` into `/Applications`. The page no longer exposes bundle internals as the main path.</p>
               <p data-download-source-link-label>Download macOS Primary Package</p>
-              <p data-download-source-requirements>Intel x64 macOS desktop environment. A separate Apple Silicon package is not shipped yet, so Apple Silicon validation still depends on compatibility assumptions.</p>
-              <p data-download-source-install>Open the `.dmg` and drag the app into `/Applications`. For upgrades, replace the existing app in place; do not describe “delete first, then reinstall” as an equivalent state-preserving path.</p>
-              <p data-download-source-trust>macOS preview packaging has not completed codesign + notarization yet. Gatekeeper prompts may still appear until the notarization task is closed.</p>
-              <p data-download-source-support>This is a technical-preview installation path, not a promise of first-launch zero-warning ordinary-user polish. If you keep local `config.toml` or chain execution-world state, back it up yourself before replacing the package.</p>
-              <p data-download-source-footnote>The page auto-selected macOS x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+              <p data-download-source-requirements>Intel x64 macOS desktop environment. There is no separate Apple Silicon package yet, so Apple Silicon testing still depends on compatibility mode.</p>
+              <p data-download-source-install>Open the `.dmg` and drag the app into `/Applications`. For upgrades, replace the existing app in place. Do not assume “delete first, then reinstall” preserves local state.</p>
+              <p data-download-source-trust>macOS preview packaging still has not finished codesign and notarization. Gatekeeper prompts may still appear until that work lands.</p>
+              <p data-download-source-support>This is still a preview install path, not a promise of smooth first-launch behavior. If you keep local `config.toml` or chain execution-world state, back it up before replacing the package.</p>
+              <p data-download-source-footnote>The page auto-selected macOS x64 for this device. Switch platforms above if you are downloading for another machine.</p>
             </article>
             <article
               data-download-platform-source="linux"
@@ -373,13 +364,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>Linux x64 Primary Runnable Package</h4>
               <p data-download-source-badge>Recommended for this device</p>
-              <p data-download-source-copy>Download `oasis7-linux-x86_64.AppImage`, grant execute permission, and launch directly. The `.deb` asset is now secondary distro-specific material rather than a competing default choice.</p>
+              <p data-download-source-copy>Download `oasis7-linux-x86_64.AppImage`, give it execute permission, and run it directly. The `.deb` build is still there, but it is no longer treated as a first-choice download.</p>
               <p data-download-source-link-label>Download Linux Primary Package</p>
-              <p data-download-source-requirements>x86_64 Linux desktop environment. The default path assumes AppImage-capable distros; no ARM/Linux alt-arch package is presented as a primary public option.</p>
-              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it via terminal or desktop. For upgrades, replace the existing AppImage file directly rather than assuming cross-directory moves will migrate local state for you.</p>
-              <p data-download-source-trust>Linux preview distribution currently relies on the public `SHA256` manifest for auxiliary verification. The `.deb` asset remains in release attachments as an advanced path only.</p>
-              <p data-download-source-support>If your desktop environment blocks AppImage or lacks integration, check release notes for minimum run guidance first. Distro-specific behavior is not the default support lane.</p>
-              <p data-download-source-footnote>The page auto-selected Linux x64 for the current device. Switch platforms above if you are downloading for a different machine.</p>
+              <p data-download-source-requirements>x86_64 Linux desktop environment. The default path assumes a distro that can run AppImage. There is no ARM or other Linux architecture package as a primary public option.</p>
+              <p data-download-source-install>Run `chmod +x oasis7-linux-x86_64.AppImage`, then launch it from the terminal or desktop. For upgrades, replace the existing AppImage file directly instead of assuming a folder move will carry local state with it.</p>
+              <p data-download-source-trust>Linux preview distribution currently relies on the public `SHA256` manifest as an extra check. The `.deb` build stays in release attachments as a more advanced path.</p>
+              <p data-download-source-support>If your desktop environment blocks AppImage or lacks integration, read the release notes for minimum run guidance first. Distro-specific behavior is outside the default support lane.</p>
+              <p data-download-source-footnote>The page auto-selected Linux x64 for this device. Switch platforms above if you are downloading for another machine.</p>
             </article>
           </div>
         </div>
@@ -392,17 +383,17 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
                 oasis7-checksums.txt
               </a>
             </li>
-            <li>Linux `.deb` remains a distro-specific secondary asset in release attachments and notes, not a peer default CTA.</li>
-            <li>The current upgrade contract is fixed as “re-download the latest primary package and manually replace/overwrite the current install.” There is no in-app auto-update yet.</li>
-            <li>Before upgrading, back up `config.toml`, `.oasis7_launcher_ux_state.json`, and `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/` from the directory you actually launch from. Those state paths are still resolved relative to the active working directory today.</li>
-            <li>On Windows in particular, do not treat “uninstall then reinstall” as a state-preserving equivalent. The current uninstaller removes the install directory.</li>
+            <li>Linux `.deb` is still there as a distro-specific secondary asset, but it is no longer part of the default download choice.</li>
+            <li>Upgrades are still manual: download the newest primary package and replace the current install yourself. There is no in-app auto-update yet.</li>
+            <li>Before upgrading, back up `config.toml`, `.oasis7_launcher_ux_state.json`, and `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/` from the directory you actually launch from. Those paths are still resolved relative to the active working directory.</li>
+            <li>On Windows especially, do not treat “uninstall then reinstall” as state-preserving. The current uninstaller removes the install directory.</li>
           </ul>
         </div>
       </section>
 
       <section id="proof" class="section" data-reveal>
-        <h2>Technical Proof Chain: Reproducible and Auditable</h2>
-        <p class="section-intro">Recommended order: verify the current technical preview path on your machine first; only then move into the full build/docs path if you need deeper inspection.This section proves engineering closure and event traceability, not public gameplay readiness.</p>
+        <h2>What can already be checked today</h2>
+        <p class="section-intro">This section is not a claim that the game is playable. It is a simple status report: the current preview already produces commands, events, screenshots, and replay artifacts that other people can reproduce.</p>
         <div class="proof-switcher" data-proof-switcher>
           <p class="proof-switcher-label">Switch Evidence Scenario</p>
           <div class="proof-switcher-controls" role="group" aria-label="Switch evidence scenario" data-proof-controls>
@@ -416,13 +407,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
         <div class="proof-grid">
           <article class="proof-card proof-card-key">
-            <h3>Technical Evidence Loop</h3>
+            <h3>What already runs end to end</h3>
             <ol class="proof-list">
               <li>Run `oasis7_viewer_demo` or `oasis7_viewer_live` to produce in-world events</li>
-              <li>Expose replay/live endpoints via server runtime</li>
-              <li>Connect viewer and validate event flow against rule feedback</li>
+              <li>Expose replay or live endpoints through the server runtime</li>
+              <li>Connect the viewer and check whether events and rule feedback line up</li>
             </ol>
-            <a class="button secondary" href="#demo">Reproduce This Flow</a>
+            <a class="button secondary" href="#today">Reproduce This Flow</a>
           </article>
 
           <article class="proof-card">
@@ -441,71 +432,71 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
 	        <div class="proof-strip">
 	          <span class="proof-chip">Coverage: replay + live runtime + audit trace</span>
-	          <span class="proof-chip">Access Surfaces: standard_3d / software_safe / pure_api</span>
-	          <span class="proof-chip">Artifacts: commands + events + screenshots</span>
-	          <span class="proof-chip is-highlight">Current status: technical preview (not playable yet)</span>
+	          <span class="proof-chip">Access surfaces: standard_3d / software_safe / pure_api</span>
+	          <span class="proof-chip">Visible outputs: commands + events + screenshots</span>
+	          <span class="proof-chip is-highlight">Status: testable, not playable</span>
 	        </div>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
             <span>Tick 128</span>
-            <p>minimal: harvest event confirms command-to-event pipeline works.</p>
+            <p>minimal: harvest event shows the command-to-event pipeline is working.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
             <span>Tick 136</span>
-            <p>minimal: market spike event confirms observable warning output.</p>
+            <p>minimal: market spike event shows warning output is coming through.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
             <span>Tick 91</span>
-            <p>twin_region: bilateral trade event confirms multi-agent interaction trace.</p>
+            <p>twin_region: trade event shows multi-agent interaction is traceable.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
             <span>Tick 97</span>
-            <p>twin_region: alliance-friction event confirms conflict transition visibility.</p>
+            <p>twin_region: alliance-friction event shows conflict transitions are visible.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
             <span>Tick 149</span>
-            <p>triad_region: pact event confirms governance-signaling path.</p>
+            <p>triad_region: pact event shows the governance-signaling path is working.</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
             <span>Tick 155</span>
-            <p>triad_region: vote-close event confirms regime transition trace.</p>
+            <p>triad_region: vote-close event shows regime transitions can be traced.</p>
           </article>
         </div>
       </section>
 
       <section id="roadmap" class="section" data-reveal>
-        <h2>Development Roadmap (Not Season Status)</h2>
+        <h2>Why it is still not playable</h2>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">Done</span>
             <h3>D1 · Runtime Closure Baseline</h3>
-            <p>Core world runtime, viewer connectivity, and event ingestion are closed.</p>
+            <p>The core world runtime runs, the viewer connects, and the base event flow is closed.</p>
           </article>
           <article class="timeline-item done">
             <span class="status-tag done">Done</span>
             <h3>D2 · Observability and Replay</h3>
-            <p>Replay, live subscriptions, and evidence artifacts are available.</p>
+            <p>Replay, live subscriptions, and evidence artifacts are already there.</p>
           </article>
           <article class="timeline-item active">
             <span class="status-tag active">Active</span>
             <h3>D3 · Rules and Governance Hardening</h3>
-            <p>Rule constraints, governance boundaries, and consistency checks are being reinforced.</p>
+            <p>Rule constraints, governance boundaries, and consistency checks are still being tightened.</p>
           </article>
           <article class="timeline-item next">
             <span class="status-tag next">Next</span>
             <h3>D4 · Playable Release Convergence</h3>
-            <p>After technical stability, iterate toward a public playable experience.</p>
+            <p>Only after that gets steadier does it make sense to move toward a public playable build.</p>
           </article>
         </div>
       </section>
 
       <section id="architecture" class="section" data-reveal>
-        <h2>Engine Layer (For Engineering Readers)</h2>
-        <p class="section-intro">Recommended order: verify the current technical preview path on your machine first; only then move into the full build/docs path if you need deeper inspection.If extensibility and governance boundaries matter to you, this is the foundation stack.</p>
+        <h2>Why the world can keep running</h2>
+        <p class="section-intro">If your question is “why is this more than a pile of agent demos,” the short answer is here: gameplay modules, runtime constraints, viewer surfaces, and governance all sit behind explicit boundaries.</p>
         <figure class="architecture-figure">
           <img src="../assets/images/architecture-flow.svg" alt="oasis7 engine architecture flow" loading="lazy" />
-          <figcaption>Gameplay Layer -> Runtime Kernel -> Viewer/Tooling -> Governance, balancing extension power with hard constraints.</figcaption>
+          <figcaption>Gameplay Layer -> Runtime Kernel -> Viewer/Tooling -> Governance. Extensions stay possible, but not unconstrained.</figcaption>
         </figure>
         <div class="architecture-flow">
           <article class="arch-node">
@@ -514,24 +505,24 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>
           <article class="arch-node">
             <h3>Runtime Kernel</h3>
-            <p>Enforces resource conservation, one-way time, and action legality boundaries.</p>
+            <p>It enforces resource conservation, one-way time, and action legality.</p>
           </article>
           <article class="arch-node">
             <h3>Viewer &amp; Tooling</h3>
-            <p>Replay, live subscriptions, and debug panels share one evidence pipeline.</p>
+            <p>Replay, live subscriptions, and debug panels all use the same evidence pipeline.</p>
           </article>
           <article class="arch-node">
             <h3>Consensus &amp; Governance</h3>
-            <p>Module replacement and protocol upgrades pass through explicit proposal flow.</p>
+            <p>Module replacement and protocol upgrades go through an explicit proposal flow.</p>
           </article>
         </div>
       </section>
 
       <section id="contribute" class="section" data-reveal>
-        <h2>Next Actions</h2>
+        <h2>If you want to keep following it</h2>
         <div class="grid cards-2">
           <article class="card">
-            <h3>Dive Deeper</h3>
+            <h3>Read Deeper</h3>
             <ul class="doc-links">
               <li>
                 <a
@@ -559,7 +550,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>
           <article class="card">
             <h3>Contribute</h3>
-            <p>Current priority is engine/tooling/governance hardening and playability-validation methodology.</p>
+            <p>The most useful help right now is not broad hype. It is work that makes the world easier to trust, easier to read, and closer to a real playable release.</p>
             <div class="cta-row">
               <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
                 >Open Issue</a
@@ -574,7 +565,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
     </main>
 
     <footer class="footer">
-      <p>© <span data-year></span> oasis7. This is a technical preview, converging toward a playable release.</p>
+      <p>© <span data-year></span> oasis7. This is still a technical preview, not the public game.</p>
     </footer>
   </body>
 </html>

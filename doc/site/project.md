@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] homepage-game-explainer (PRD-SITE-001/004/009) [test_tier_required]: 重构公开首页的首屏与前两屏信息架构，优先讲清楚 `oasis7` 是什么游戏、玩家如何参与、当前开放到哪一步，再把技术验证、下载与证据链下沉到后续版块。 Trace: .pm/tasks/task_b4555727572646f8a3c2bc6a6ecfc6b3.yaml
 - [x] TASK-SITE-001 (PRD-SITE-001) [test_tier_required]: 完成 site PRD 改写，建立站点设计主入口。
 - [x] TASK-SITE-002 (PRD-SITE-001/002) [test_tier_required]: 固化站点信息架构与内容同步校验清单。
 - [x] TASK-SITE-003 (PRD-SITE-002/003) [test_tier_required]: 补齐发布下载链路与SEO质量门禁说明。
@@ -83,9 +84,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-14
-- 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务）
+- 更新日期: 2026-04-24
+- 当前状态: active
+- 下一任务: 待补充
+- 最新完成: `homepage-game-explainer`（公开首页已改成游戏说明优先的首屏；中英页同步收紧首屏信息密度，先回答“这是什么 / 你在这里做什么 / 现在是否可玩”，技术验证与下载细节下沉到后续版块。）
 - 最新完成: `TASK-SITE-022`（GitHub Release 公开下载产物已切到 `.deb` / `.dmg` / `.exe` 原生安装器；中英首页与下载校验脚本已同步，不再将 `.tar.gz` / `.zip` 暴露为公开下载主入口。）
 - 最新完成: `TASK-SITE-021`（中英首页在线验证示例已把 `--no-llm` 明确收紧为 observer/debug-only 诊断路径，不再暗示可作为正式在线验证证据。）
 - 最新完成: `TASK-SITE-020`（`site/doc/cn|en/viewer-manual.html` 已追平 current LLM gating 口径，docs hub 已移除陈旧同步日期，Pages workflow 与 `site-manual-sync-check` 已改为监听 canonical `viewer-manual.manual.md`。）
