@@ -7,7 +7,6 @@ use libp2p::identity::Keypair;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_net::{
     Libp2pNetwork, Libp2pNetworkConfig, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
-    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth,
 };
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
@@ -22,6 +21,9 @@ use oasis7_proto::world_error::WorldError;
 
 use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 use crate::NodeError;
+
+#[cfg(test)]
+use oasis7_net::{PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth};
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 
@@ -730,12 +732,14 @@ fn rotated_peers(peers: &[PeerId], cursor: usize) -> Vec<PeerId> {
         .collect()
 }
 
+#[cfg(test)]
 fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
     peers.sort_by_key(|peer| peer.to_string());
     peers.dedup();
     peers
 }
 
+#[cfg(test)]
 fn blocked_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> HashSet<PeerId> {
     healths
         .iter()
@@ -744,6 +748,7 @@ fn blocked_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> HashSet<Peer
         .collect()
 }
 
+#[cfg(test)]
 fn soft_deprioritized_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> HashSet<PeerId> {
     healths
         .iter()
@@ -752,6 +757,7 @@ fn soft_deprioritized_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> H
         .collect()
 }
 
+#[cfg(test)]
 fn peer_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
@@ -761,6 +767,7 @@ fn peer_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
             .all(|issue| issue_is_soft_bootstrap_constraint(issue))
 }
 
+#[cfg(test)]
 fn peer_is_soft_deprioritized_for_requests(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
@@ -774,6 +781,7 @@ fn peer_is_soft_deprioritized_for_requests(health: &PeerManagerPeerHealth) -> bo
             .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord))
 }
 
+#[cfg(test)]
 fn issue_is_soft_bootstrap_constraint(issue: &PeerManagerHealthIssue) -> bool {
     matches!(
         issue,
@@ -783,6 +791,7 @@ fn issue_is_soft_bootstrap_constraint(issue: &PeerManagerHealthIssue) -> bool {
     )
 }
 
+#[cfg(test)]
 fn request_candidate_peers(peers: Vec<PeerId>, healths: &[PeerManagerPeerHealth]) -> Vec<PeerId> {
     let blocked_peers = blocked_peers_from_healths(healths);
     let soft_deprioritized_peers = soft_deprioritized_peers_from_healths(healths);
@@ -802,6 +811,7 @@ fn request_candidate_peers(peers: Vec<PeerId>, healths: &[PeerManagerPeerHealth]
         .collect()
 }
 
+#[cfg(test)]
 fn active_transport_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> Vec<PeerId> {
     let peers = healths
         .iter()
@@ -812,6 +822,7 @@ fn active_transport_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> Vec
     request_candidate_peers(peers, healths)
 }
 
+#[cfg(test)]
 fn connected_or_active_transport_peers(
     connected_peers: Vec<PeerId>,
     healths: &[PeerManagerPeerHealth],
