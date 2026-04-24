@@ -1,0 +1,142 @@
+{
+  "node_id": "triad-storage-b",
+  "role": "storage",
+  "consensus": {
+    "committed_height": 56013,
+    "network_committed_height": 56013,
+    "known_peer_heads": 1,
+    "last_commit_age_ms": 4100,
+    "recent_finality_latency": {
+      "sample_count": 28,
+      "avg_latency_ms": 180,
+      "max_latency_ms": 420,
+      "p95_latency_ms": 260
+    },
+    "pending_consensus_actions": {
+      "queued_action_count": 0,
+      "queued_payload_bytes": 0,
+      "submit_buffer_action_count": 0,
+      "submit_buffer_payload_bytes": 0
+    },
+    "inbound_timing_rejections": {
+      "proposal_future_slot": 0,
+      "proposal_stale_slot": 0,
+      "attestation_future_slot": 0,
+      "attestation_stale_slot": 0,
+      "attestation_epoch_mismatch": 0,
+      "last_reason": null
+    },
+    "pending_proposal": null
+  },
+  "observability": {
+    "status": "ok",
+    "summary": "no active node alerts",
+    "connected_peer_count": 3,
+    "active_peer_count": 3,
+    "candidate_peer_count": 0,
+    "suspect_peer_count": 0,
+    "blocked_peer_count": 0,
+    "peer_with_issues_count": 0,
+    "known_peer_heads": 1,
+    "network_height_lag": 0,
+    "recent_replication_error_count": 0,
+    "alerts": []
+  },
+  "replication": {
+    "connected_peers": [
+      "12D3KooStoragePeerA",
+      "12D3KooStoragePeerB",
+      "12D3KooStoragePeerC"
+    ],
+    "peer_healths": [
+      {
+        "peer_id": "12D3KooStoragePeerA",
+        "status": "active"
+      },
+      {
+        "peer_id": "12D3KooStoragePeerB",
+        "status": "active"
+      },
+      {
+        "peer_id": "12D3KooStoragePeerC",
+        "status": "active"
+      }
+    ],
+    "registered_protocols": [
+      "/aw/node/replication/fetch-blob/1.0.0",
+      "/aw/node/replication/fetch-commit/1.0.0"
+    ],
+    "protocol_retry_cooldown_peers": {},
+    "recent_errors": []
+  },
+  "storage": {
+    "bytes_by_dir": {
+      "execution_store_root": 4194304,
+      "replication_root": 786432
+    },
+    "ref_count": 3072,
+    "pin_count": 64,
+    "checkpoint_count": 8,
+    "replay_summary": {
+      "retained_height_count": 1536,
+      "earliest_retained_height": 54478,
+      "latest_retained_height": 56013,
+      "mode": "checkpoint_plus_log"
+    },
+    "orphan_blob_count": 0,
+    "last_gc_result": "success",
+    "last_gc_error": null,
+    "degraded_reason": null
+  },
+  "reward_runtime": {
+    "enabled": true,
+    "metrics_available": true,
+    "report_count": 64,
+    "latest_epoch_index": 12012,
+    "distfs_failure_ratio": 0.0,
+    "settlement_apply_failure_ratio": 0.0,
+    "invariant_ok": true,
+    "last_error": null
+  },
+  "transactions": {
+    "accepted_count": 8,
+    "pending_count": 0,
+    "confirmed_count": 8,
+    "failed_count": 0,
+    "timeout_count": 0,
+    "inflight_count": 0,
+    "oldest_inflight_age_ms": null,
+    "recent_confirmation_latency": {
+      "sample_count": 8,
+      "p95_latency_ms": 180,
+      "max_latency_ms": 240
+    }
+  },
+  "wasm": {
+    "metrics_available": true,
+    "degraded_reason": null,
+    "build": {
+      "metrics_available": true
+    },
+    "executor": {
+      "compile_misses": 0,
+      "entrypoint_call_ms_total": 180
+    },
+    "router": {
+      "parse_fallbacks": 0,
+      "regex_compile_ms_total": 0
+    }
+  },
+  "p2p": {
+    "requested_user_mode": "auto_join",
+    "recommended_user_mode": "private_safe",
+    "effective_user_mode": "private_safe",
+    "deployment_mode": "private",
+    "node_role_claim": "storage_replica",
+    "autonat_status": "unknown",
+    "public_port_reachability": "unknown",
+    "relay_available": false,
+    "probe_stable": true,
+    "confirmed_external_direct_addrs": []
+  }
+}

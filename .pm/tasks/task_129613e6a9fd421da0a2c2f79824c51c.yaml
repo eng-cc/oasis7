@@ -1,0 +1,22 @@
+task_uid: task_129613e6a9fd421da0a2c2f79824c51c
+title: "triad module observability breakdown"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-triad-module-observability-breakdown
+execution_log_path: .pm/tasks/task_129613e6a9fd421da0a2c2f79824c51c.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+  - doc/testing/evidence/shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md
+doc_refs:
+  - doc/p2p/prd.md
+related_prd:
+  - PRD-P2P-025
+acceptance:
+  - "triad observability summary breaks health down by runtime submodules instead of only node-level buckets"
+  - "monitoring surfaces concrete optimization candidates from module-level metrics"
+  - "docs and tests cover the new module breakdown contract"
+handoff_to: []
+updated_at: 2026-04-24T09:48:34+08:00
+last_started_at: 2026-04-24T09:48:34+08:00

@@ -637,6 +637,8 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
 - complete observability summary 关键字段：
   - `overall.status`
   - `overall.alerts`
+  - `overall.optimization_candidate_count`
+  - `optimization_candidates[*].node_label/module/key/severity`
   - `nodes.<label>.host.runtime_cpu_percent`
   - `nodes.<label>.host.runtime_cpu_core_ratio`
   - `nodes.<label>.host.mem_available_percent`
@@ -644,6 +646,11 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `nodes.<label>.traffic.payload_total_bytes`
   - `nodes.<label>.traffic.control_plane_total_events`
   - `nodes.<label>.wasm.top_hotspot`
+  - `nodes.<label>.modules.consensus.height_lag`
+  - `nodes.<label>.modules.replication.recent_error_count`
+  - `nodes.<label>.modules.transactions.pending_count`
+  - `nodes.<label>.modules.traffic_control_plane.control_plane_wire_ratio`
+  - `nodes.<label>.optimization_candidates[*].key`
 - 边界说明：
   - 当前仓库还没有 dedicated sentry role live harness，也没有物理 NAT/CGNAT 实验编排；因此 `proxy` 只代表“现在可执行的近似恢复 drill”，不能拿来冒充完整 mixed-topology 实证。
   - 2026-04-07 latest full run 已证明 matrix 能真实执行到 proxy soak，但当前 proxy drill 仍会因为 `consensus_hash_divergence / committed_height_not_monotonic / known_peer_heads_zero_samples / http_failure_samples` 失败；在这些签名被修平前，`P2PARCH-6` 仍不能宣称 `full_proxy_ready=true`。
