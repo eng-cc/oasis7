@@ -153,6 +153,7 @@
 - [x] pm-rebase-conflict-helper (PRD-ENGINEERING-021) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突，并把唯一允许的自动修复边界收口为 `.pm/inbox/signals.jsonl` signal-id 碰撞；generated-view 冲突只提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。 Trace: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.yaml
 - [x] engineering-testing-root-project-reading-surface (PRD-ENGINEERING-021/024) [test_tier_required]: 压缩 `engineering/testing` 根项目页的当前阅读面，移除 `testing/project.md` 中按时间手工堆叠的“最新完成”长列表与过期阶段交接块，统一改为“当前窗口摘要 + topic project / .pm task 追溯”口径。 Trace: .pm/tasks/task_6436f1f4fd754136a7b2feb9f1b5f141.yaml
 - [x] lightweight-web-ui-automation-smoke (PRD-ENGINEERING-021) [test_tier_required]: 为当前 workflow friction burn-down 补一条 repo-owned 轻量 Web/UI automation smoke，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下先验证 S6 tooling 与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
+- [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-021/025) [test_tier_required]: 执行 `scripts/doc-inventory-report.sh` 季度复核，固定当前 `doc/` 体量快照，并把工程治理“下一任务”从泛化的季度复核 placeholder 改判为 near-limit active project docs 拆分优先，避免继续悬空停留在 review-only 状态。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -215,9 +216,9 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-04-21
+- 更新日期: 2026-04-24
 - 当前状态: active
-- 下一任务: 当前这一轮后续应正式转入季度复核；先运行 `scripts/doc-inventory-report.sh` 复算 `doc/devlog` backlog、热点路径与 near-limit 文件，再决定是否拆出新的路径级治理或近限文件 follow-up，而不是继续指向已完成的 `readme-governance-path-governance` 或在当前窗口横向扩到 `ci/longrun/templates`、`gap/production`。
+- 下一任务: 当前这一轮的季度复核已完成；根据 `2026-04-24` 的 `bash ./scripts/doc-inventory-report.sh` 快照，下一条 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md`（1000 行）与 `doc/readme/project.md`（978 行），而不是继续横向扩新的路径级治理或停留在 review placeholder。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前整改批次: R2（引用路径可达门禁）已完成（019）；R3（全量 PRD 审读机制）已完成（020-024，清单覆盖 708/708）。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-025/026/027`，冻结“目录按对象、文件按职责”的文档建模方案、稳定专题命名，并补齐测试相关文档分工规则。
@@ -228,12 +229,14 @@
 - 当前规范补充: 已完成 `p2p-node-path-governance (PRD-ENGINEERING-028)`，为 `doc/p2p/node/` 增加 canonical 子域入口 `doc/p2p/node/README.md`，将进入 `p2p` 最高密度热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
 - 当前规范补充: 已完成 `testing-evidence-path-governance (PRD-ENGINEERING-029)`，为 `doc/testing/evidence/` 增加 canonical 子域入口 `doc/testing/evidence/README.md`，将进入 `testing` 最高密度热点路径后的默认阅读方式从“文件系统平铺浏览”收口为“按问题分流 + 定向检索”。
 - 当前规范补充: 已完成 `readme-governance-path-governance (PRD-ENGINEERING-030)`，为 `doc/readme/governance/` 增加 canonical 子域入口 `doc/readme/governance/README.md`，将进入 `readme` 最高密度热点路径后的默认阅读方式从“若干具体 runbook/material 直链”收口为“按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流 + 定向检索”。
+- 当前季度复核快照: `bash ./scripts/doc-inventory-report.sh` 于 `2026-04-24` 复算得到 `doc/` 总量 `1764`、`doc/devlog` `57`、`world-simulator=553`、`p2p=270`、`testing=180`；热点子目录仍以 `doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86` 为主，但当前更急的是 near-limit active docs：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-115`，确认 `scripts / playability_test_result / headless-runtime` 现有入口已能稳定承担低密度模块首读分流，本轮只压掉重复入口与 `engineering/scripts` 的长名单噪音，不继续追加模块级迁移。
 - 当前规范补充: 已完成 `TASK-ENGINEERING-116`，将 `doc-structure-standard`、`doc-surface-area-governance`、早期文档治理收口专题与 Rust 体量治理专题从 `engineering` 根目录下沉到 `doc-governance/` 与 `rust-governance/`，并移除相应 root allowlist 残留。
 - 当前治理切片: `TASK-ENGINEERING-PMVIEW-001` 已完成，`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为 git-ignored 本地生成视图，engineering 根项目页也已从手工 `最新完成` 热点改成“当前任务 + topic project / `.pm/tasks` 追溯”模式。
 - 当前流程补充: 已完成 `drop-local-review-script`，默认评审边界已完全切到 GitHub PR review；`workflow-report` close、required-tier smoke、`.pm/README` 与 `AGENTS.md` 不再要求本地 snapshot review 脚本。
 - 当前治理切片: 已完成 `shrink-near-limit-rust-hotspots`，对 `llm_sidecar.rs`、`oasis7_node/src/lib.rs`、`oasis7_provider_parity_bench.rs`、`oasis7_wasm_router/src/lib.rs`、`self_guided.rs` 做预防性职责拆分；当前 5 个热点文件已降到 `858 / 841 / 981 / 860 / 1131` 行，继续维持 Rust 体量零扫描。
 - 当前治理切片: 已完成 `engineering-project-truth-drift-sync`，将 `TASK-ENGINEERING-054~057` 与 `rust-1200-line-root-cause-governance-2026-03-29.project.md` 的完成态重新对齐，并把根项目页状态区“下一任务”改回季度复核/库存复算的真实后续。
+- 当前治理切片: 已完成 `quarterly-doc-inventory-review-followup`，当前 root decision 已从“待季度复核”推进到“near-limit active project docs 拆分优先”；后续如要继续扩 `core/reviews`、`world-simulator/launcher` 或新的路径级治理，需另开独立 follow-up task。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。
