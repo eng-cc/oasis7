@@ -129,6 +129,59 @@ function PanelSection(props) {
   );
 }
 
+function ViewerEntryMenu() {
+  const locale = () => uiLocale();
+  const viewerEntryUrls = () => buildViewerEntryUrls(locale());
+
+  return (
+    <details class="entry-menu">
+      <summary class="entry-menu__toggle">{tr(locale(), "入口", "Entry")}</summary>
+      <div class="entry-menu__panel stack">
+        <div>
+          <div class="panel__title" style="margin-bottom:10px;">
+            {tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry")}
+          </div>
+          <div class="feedback-detail">
+            {tr(
+              locale(),
+              "主玩法继续留在当前页面；这里只保留语言切换和标准 Viewer 跳转。",
+              "Primary gameplay stays on this page. This menu only keeps locale switching and the standard Viewer jump.",
+            )}
+          </div>
+        </div>
+        <div class="toolbar">
+          <button
+            data-locale="zh"
+            disabled={locale() === "zh"}
+            onClick={() => core.setSoftwareSafeLocale("zh")}
+          >
+            中文
+          </button>
+          <button
+            data-locale="en"
+            disabled={locale() === "en"}
+            onClick={() => core.setSoftwareSafeLocale("en")}
+          >
+            English
+          </button>
+        </div>
+        <div class="toolbar">
+          <button
+            data-entry="standard-viewer-current-locale"
+            onClick={() => openViewerUrl(viewerEntryUrls().standardUrl)}
+          >
+            {tr(locale(), "打开标准 Viewer", "Open standard Viewer")}
+          </button>
+        </div>
+        <div class="badge-row">
+          <Badge>{`locale=${localeCode(locale())}`}</Badge>
+        </div>
+        <div class="feedback-detail">{viewerEntryUrls().standardUrl}</div>
+      </div>
+    </details>
+  );
+}
+
 function gameplayStatusBadgeClass(status) {
   return status === "blocked"
     ? "badge badge--warn"
@@ -227,7 +280,6 @@ function WorldSummaryPanel() {
   const hostedActionMatrixView = () => core.buildHostedActionMatrixView();
   const hostedRecoveryHint = () => core.buildHostedRecoveryHint(locale());
   const selectedDebug = () => core.selectedAgentExecutionDebugContext();
-  const viewerEntryUrls = () => buildViewerEntryUrls(locale());
   const tierBadgeClass = (status) =>
     status === "active" || status === "active_legacy_preview"
       ? "badge badge--good"
@@ -252,50 +304,6 @@ function WorldSummaryPanel() {
         <Badge>{`rendererClass=${state.rendererClass}`}</Badge>
         <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
       </div>
-      <PanelSection title={tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry")}>
-        <div class="toolbar">
-          <button
-            data-locale="zh"
-            disabled={locale() === "zh"}
-            onClick={() => core.setSoftwareSafeLocale("zh")}
-          >
-            中文
-          </button>
-          <button
-            data-locale="en"
-            disabled={locale() === "en"}
-            onClick={() => core.setSoftwareSafeLocale("en")}
-          >
-            English
-          </button>
-        </div>
-        <EmptyState>
-          {tr(
-            locale(),
-            "当前 software_safe 页面支持中英文切换；如果你要进入显式 bilingual Viewer，可以直接打开下面这条标准 Viewer 入口。",
-            "This software_safe page supports Chinese and English. If you want the explicit bilingual Viewer surface, open the standard Viewer entry below.",
-          )}
-        </EmptyState>
-        <div class="toolbar">
-          <button
-            data-entry="software-safe-current-locale"
-            onClick={() => openViewerUrl(viewerEntryUrls().softwareSafeUrl)}
-          >
-            {tr(locale(), "当前语言重新打开 software_safe", "Re-open software_safe in current language")}
-          </button>
-          <button
-            data-entry="standard-viewer-current-locale"
-            onClick={() => openViewerUrl(viewerEntryUrls().standardUrl)}
-          >
-            {tr(locale(), "打开标准 Viewer", "Open standard Viewer")}
-          </button>
-        </div>
-        <div class="badge-row">
-          <Badge>{`locale=${localeCode(locale())}`}</Badge>
-          <Badge>{`software_safe=${viewerEntryUrls().softwareSafeUrl}`}</Badge>
-        </div>
-        <div class="feedback-detail">{viewerEntryUrls().standardUrl}</div>
-      </PanelSection>
       <PanelSection title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}>
         <Show
           when={gameplaySummary()}
@@ -1109,6 +1117,7 @@ function AppShell() {
       <section class="panel">
         <div class="panel__header">
           <div class="panel__title">{tr(locale(), "世界摘要", "World Summary")}</div>
+          <ViewerEntryMenu />
         </div>
         <div class="panel__body">
           <WorldSummaryPanel />
