@@ -110,13 +110,13 @@
   14. Flow-P2P-014: `盘点签名/地址/交易授权/keystore/治理 signer/创世控制真值 -> 形成 red/yellow/green 矩阵 -> producer 输出总 verdict 与 P0 blocker`
   15. Flow-P2P-015: `客户端为 transfer submit 构造 canonical payload 并签名 -> runtime 验签并比对 oc:pk 账户绑定 -> 通过后才进入余额/nonce 预检与 consensus submit`
   16. Flow-P2P-016: `operator 运行 triad 完整监控 -> snapshot/host/traffic/wasm 产物全部落盘 -> merged summary 输出 overall status + node-level alerts -> evidence doc 引用 canonical 输出路径`
-  16. Flow-P2P-016: `STRAUTH-3 收口后复盘剩余安全缺口 -> 冻结 MAINNET-1~4 readiness gate -> signer custody/governance signer/genesis ceremony 逐项过门禁 -> producer 再决定是否重评阶段`
-  17. Flow-P2P-017: `盘点 node/viewer/governance signer 来源 -> 冻结 preview-only bootstrap 与 production target backend 边界 -> rotation/revocation/audit policy 入门禁`
-  18. Flow-P2P-018: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> failover/rotation/revocation 进入治理门禁`
-  19. Flow-P2P-019: `读取 genesis freeze sheet -> 绑定 slot/bucket 真值 -> 执行 ceremony checklist -> QA 审核 evidence bundle -> 决定是否允许 mint-ready 口径`
-  20. Flow-P2P-020: `读取 MAINNET-1~3 当前状态 -> 判断哪些仅为 spec gate、哪些已 execution complete -> 冻结 claim allowlist/denylist 与未来升级条件`
-  21. Flow-P2P-021: `读取 testing-manual 与安全/readiness 专题 -> 映射 oasis7 当前测试层 -> 对照主流公链 testing benchmark -> 冻结 gap matrix 与下一步验证优先级`
-  22. Flow-P2P-022: `host 启动 hosted world -> public join 先过 admission control -> 远程访客建 guest/player session -> runtime 按 capability 绑定实体与动作 -> `gui-agent` 仅走 player-safe split surface -> 资产/治理类动作再升级 strong auth`
+  17. Flow-P2P-017: `STRAUTH-3 收口后复盘剩余安全缺口 -> 冻结 MAINNET-1~4 readiness gate -> signer custody/governance signer/genesis ceremony 逐项过门禁 -> producer 再决定是否重评阶段`
+  18. Flow-P2P-018: `盘点 node/viewer/governance signer 来源 -> 冻结 preview-only bootstrap 与 production target backend 边界 -> rotation/revocation/audit policy 入门禁`
+  19. Flow-P2P-019: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> failover/rotation/revocation 进入治理门禁`
+  20. Flow-P2P-020: `读取 genesis freeze sheet -> 绑定 slot/bucket 真值 -> 执行 ceremony checklist -> QA 审核 evidence bundle -> 决定是否允许 mint-ready 口径`
+  21. Flow-P2P-021: `读取 MAINNET-1~3 当前状态 -> 判断哪些仅为 spec gate、哪些已 execution complete -> 冻结 claim allowlist/denylist 与未来升级条件`
+  22. Flow-P2P-022: `读取 testing-manual 与安全/readiness 专题 -> 映射 oasis7 当前测试层 -> 对照主流公链 testing benchmark -> 冻结 gap matrix 与下一步验证优先级`
+  23. Flow-P2P-023: `host 启动 hosted world -> public join 先过 admission control -> 远程访客建 guest/player session -> runtime 按 capability 绑定实体与动作 -> `gui-agent` 仅走 player-safe split surface -> 资产/治理类动作再升级 strong auth`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
