@@ -209,6 +209,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         ],
         registered_protocols: vec!["/oasis7/fetch-commit/1".to_string()],
         protocol_retry_cooldown_peers: BTreeMap::new(),
+        transport_retry_cooldown_peers: Vec::new(),
         recent_errors: vec!["request failed: Timeout".to_string()],
     };
 

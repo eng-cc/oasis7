@@ -16,9 +16,10 @@ related_prd:
 acceptance:
   - "libp2p replication request peer selection no longer depends on debug_peer_healths/debug_snapshot-style full health snapshots on each retry."
   - "Connected peer fallback and provider-restricted requests preserve existing admissible-peer semantics for blocked, suspect, and missing-record peers."
-  - "Retryable connection-gap failures enter a short protocol retry cooldown across replication protocols, while `ErrNotFound` cooldown remains scoped to `fetch_commit`."
+  - "Retryable connection-gap failures enter a peer-level transport retry cooldown across replication protocols, while unsupported-protocol and `fetch_commit` `ErrNotFound` cooldowns remain protocol-scoped."
+  - "Chain status / observability surfaces both protocol-level and transport-level replication retry cooldown state."
   - "Required targeted tests for oasis7_net and oasis7_node pass in the task worktree."
 handoff_to: []
-updated_at: 2026-04-24T21:31:34+08:00
-last_started_at: 2026-04-24T21:14:00+08:00
-last_closed_at: 2026-04-24T21:31:34+08:00
+updated_at: 2026-04-24T23:41:22+08:00
+last_started_at: 2026-04-24T21:56:05+08:00
+last_closed_at: 2026-04-24T23:41:21+08:00

@@ -250,7 +250,12 @@ def summarize_replication(raw_status: dict) -> dict:
     recent_errors = replication.get("recent_errors") or []
     error_groups = Counter(classify_replication_error(error) for error in recent_errors)
     retry_cooldown = replication.get("protocol_retry_cooldown_peers") or {}
-    retry_cooldown_peer_count = sum(len(peers or []) for peers in retry_cooldown.values())
+    transport_retry_cooldown_peers = replication.get("transport_retry_cooldown_peers") or []
+    protocol_retry_cooldown_peer_count = sum(len(peers or []) for peers in retry_cooldown.values())
+    transport_retry_cooldown_peer_count = len(transport_retry_cooldown_peers)
+    retry_cooldown_peer_count = (
+        protocol_retry_cooldown_peer_count + transport_retry_cooldown_peer_count
+    )
     alerts = []
     if peer_healths and not (replication.get("connected_peers") or []):
         alerts.append("connected_peers_zero")
@@ -276,7 +281,8 @@ def summarize_replication(raw_status: dict) -> dict:
         "registered_protocol_count": len(replication.get("registered_protocols") or []),
         "recent_error_count": len(recent_errors),
         "recent_error_groups": dict(sorted(error_groups.items())),
-        "protocol_retry_cooldown_peer_count": retry_cooldown_peer_count,
+        "protocol_retry_cooldown_peer_count": protocol_retry_cooldown_peer_count,
+        "transport_retry_cooldown_peer_count": transport_retry_cooldown_peer_count,
     }
 
 

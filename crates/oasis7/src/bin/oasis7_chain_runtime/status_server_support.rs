@@ -14,6 +14,7 @@ pub(super) struct ChainReplicationDebugStatus {
     pub(super) peer_healths: Vec<ChainPeerHealthStatus>,
     pub(super) registered_protocols: Vec<String>,
     pub(super) protocol_retry_cooldown_peers: BTreeMap<String, Vec<String>>,
+    pub(super) transport_retry_cooldown_peers: Vec<String>,
     pub(super) recent_errors: Vec<String>,
 }
 
@@ -377,6 +378,9 @@ pub(super) fn build_chain_replication_debug_status(
         peer_ids.sort();
         peer_ids.dedup();
     }
+    let mut transport_retry_cooldown_peers = debug_snapshot.transport_retry_cooldown_peers;
+    transport_retry_cooldown_peers.sort();
+    transport_retry_cooldown_peers.dedup();
 
     ChainReplicationDebugStatus {
         local_peer_id: debug_snapshot.local_peer_id,
@@ -384,6 +388,7 @@ pub(super) fn build_chain_replication_debug_status(
         peer_healths,
         registered_protocols: debug_snapshot.registered_protocols,
         protocol_retry_cooldown_peers,
+        transport_retry_cooldown_peers,
         recent_errors: debug_snapshot.recent_errors,
     }
 }
