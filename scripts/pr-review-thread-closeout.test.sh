@@ -165,14 +165,30 @@ exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
 
-REPORT_JSON="$(PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only)"
-python3 - "$REPORT_JSON" <<'PY'
+python3 - "$TMPDIR/state.json" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+state_path = Path(sys.argv[1])
+payload = json.loads(state_path.read_text(encoding="utf-8"))
+payload["threads"][0]["comments"]["nodes"][0]["body"] = "A" * 1_500_000
+payload["threads"][1]["comments"]["nodes"][0]["body"] = "B" * 1_500_000
+state_path.write_text(json.dumps(payload), encoding="utf-8")
+PY
+
+REPORT_FILE="$TMPDIR/report.json"
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$REPORT_FILE"
+python3 - "$REPORT_FILE" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 if payload["summary"]["total_threads"] != 3:
     raise SystemExit("expected total_threads=3")
 if payload["summary"]["reported_threads"] != 2:
@@ -183,14 +199,16 @@ if any(thread["is_resolved"] for thread in payload["threads"]):
     raise SystemExit("unresolved-only report should not contain resolved threads")
 PY
 
-RESOLVE_JSON="$(PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --resolve-all-unresolved)"
-python3 - "$RESOLVE_JSON" <<'PY'
+RESOLVE_FILE="$TMPDIR/resolve.json"
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --resolve-all-unresolved > "$RESOLVE_FILE"
+python3 - "$RESOLVE_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 if payload["resolved_now"]["count"] != 2:
     raise SystemExit("expected resolve-all to resolve 2 threads")
 if payload["summary"]["unresolved_threads"] != 0:

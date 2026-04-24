@@ -251,12 +251,14 @@
 - [x] worktree-lifecycle-report (PRD-SCRIPTS-008) [test_tier_required]: 新增只读 `worktree` 生命周期盘点入口 `scripts/worktree-gc-report.sh`，统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。 Trace: .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.yaml
   - 产物文件:
     - `scripts/worktree-gc-report.sh`
+    - `scripts/worktree-gc-report.test.sh`
     - `doc/scripts/prd.md`
     - `doc/scripts/project.md`
     - `doc/scripts/README.md`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/worktree-gc-report.sh`
+    - `bash -n scripts/worktree-gc-report.sh scripts/worktree-gc-report.test.sh`
     - `./scripts/worktree-gc-report.sh --json`
+    - `./scripts/worktree-gc-report.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] task-closeout-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/task-closeout.sh`，把 `workflow-report --phase close`、`move-task --to-status done|deferred` 与 `.pm` 结构校验收成一个单命令 close-phase helper，减少 commit 前手工串联收口步骤。 Trace: .pm/tasks/task_27a692f876214ae182ac0de525892ef2.yaml
@@ -343,6 +345,23 @@
     - `./scripts/pm/rebase-conflict-helper.sh --help`
     - `./scripts/pm/rebase-conflict-helper.sh --json`
     - `./scripts/pm/rebase-conflict-helper.test.sh`
+- [x] workflow-helper-review-followup (PRD-SCRIPTS-007/008) [test_tier_required]: 收口 PR `#145` review comments，为 `worktree-gc-report` 补 shell-quoted cleanup commands 与合同测试，为 `pr-review-thread-closeout` 改成文件传递 PR/thread JSON 以避免 argv 长度溢出，并为 `pm/rebase-conflict-helper` 去掉函数级全局 `RETURN` trap 泄漏。 Trace: .pm/tasks/task_c8c2d3e2eb75489abdc764c9ac9f5979.yaml
+  - 产物文件:
+    - `scripts/worktree-gc-report.sh`
+    - `scripts/worktree-gc-report.test.sh`
+    - `scripts/pr-review-thread-closeout.sh`
+    - `scripts/pr-review-thread-closeout.test.sh`
+    - `scripts/pm/rebase-conflict-helper.sh`
+    - `doc/scripts/project.md`
+    - `doc/engineering/project.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/worktree-gc-report.sh scripts/worktree-gc-report.test.sh scripts/pr-review-thread-closeout.sh scripts/pr-review-thread-closeout.test.sh scripts/pm/rebase-conflict-helper.sh scripts/pm/rebase-conflict-helper.test.sh`
+    - `./scripts/worktree-gc-report.test.sh`
+    - `./scripts/pr-review-thread-closeout.test.sh`
+    - `./scripts/pm/rebase-conflict-helper.test.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `./scripts/pm/lint.sh`
+    - `git diff --check`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] web-ui-automation-light-smoke (PRD-SCRIPTS-002) [test_tier_required]: 新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下验证最小 Web/UI automation 链路与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
@@ -372,9 +391,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-23
+ - 更新日期: 2026-04-24
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `workflow-helper-review-followup`（已收口 PR `#145` review comments：`worktree-gc-report` 的 cleanup 命令改为 shell-quoted 并补合同测试，`pr-review-thread-closeout` 改为通过临时文件传递 PR/thread JSON，`pm/rebase-conflict-helper` 不再泄漏全局 `RETURN` trap。）
 - 最新完成: `web-ui-automation-light-smoke`（已新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，用 fixture 页面复用真 `agent-browser` 回归 `viewer-software-safe-step-regression.sh` 的最小 Web/UI automation 契约，无需起完整 runtime 栈。）
 - 最新完成: `pr-review-thread-closeout-helper`（已新增 `scripts/pr-review-thread-closeout.sh`，统一盘点/resolve 当前 PR review threads，并在每次操作后重新回报 `reviewDecision` / `mergeStateStatus`。）
 - 最新完成: `pm-rebase-conflict-helper`（已新增 `scripts/pm/rebase-conflict-helper.sh`，用于统一分类 `.pm/**` rebase 冲突，并只在 active rebase 中安全自动修复 `signals.jsonl` 的 signal-id 碰撞。）
