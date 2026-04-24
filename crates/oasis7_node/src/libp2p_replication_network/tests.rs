@@ -558,7 +558,7 @@ fn libp2p_replication_network_does_not_quarantine_not_found_response_as_unsuppor
 }
 
 #[test]
-fn fetch_commit_retry_cooldown_detection_is_protocol_scoped() {
+fn fetch_commit_not_found_retry_cooldown_is_protocol_scoped_but_connection_gaps_are_not() {
     let not_found = WorldError::NetworkRequestFailed {
         code: DistributedErrorCode::ErrNotFound,
         message: "missing content".to_string(),
@@ -580,7 +580,7 @@ fn fetch_commit_retry_cooldown_detection_is_protocol_scoped() {
         crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
         &timeout,
     ));
-    assert!(!peer_error_indicates_protocol_retry_cooldown(
+    assert!(peer_error_indicates_protocol_retry_cooldown(
         "/aw/node/replication/ping",
         &timeout,
     ));
@@ -678,6 +678,88 @@ fn libp2p_replication_network_fetch_commit_not_found_enters_short_cooldown() {
         })
     ));
     assert_eq!(request_count.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn libp2p_replication_network_connection_gap_on_ping_enters_short_cooldown() {
+    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+        peer_record: Some(test_peer_record("listener-ping-timeout")),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let listen_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("listener bind", listen_deadline, || {
+        !listener.listening_addrs().is_empty()
+    });
+
+    let request_count = Arc::new(AtomicUsize::new(0));
+    listener
+        .register_handler(
+            "/aw/node/replication/ping",
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                move |_payload| {
+                    request_count.fetch_add(1, Ordering::SeqCst);
+                    Err(WorldError::NetworkProtocolUnavailable {
+                        protocol:
+                            "libp2p-replication outbound request failed: request failed: Timeout"
+                                .to_string(),
+                    })
+                }
+            }),
+        )
+        .expect("register listener handler");
+
+    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+        protocol_retry_cooldown_after: Duration::from_millis(250),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let connect_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("dialer connection", connect_deadline, || {
+        !dialer.connected_peers().is_empty()
+    });
+
+    let first = dialer.request("/aw/node/replication/ping", b"node");
+    assert!(matches!(
+        first,
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            ..
+        })
+    ));
+    let request_count_after_first = request_count.load(Ordering::SeqCst);
+    assert!(
+        request_count_after_first > 0,
+        "first ping request should reach the remote handler at least once"
+    );
+
+    let second = dialer.request("/aw/node/replication/ping", b"node");
+    assert!(matches!(
+        second,
+        Err(WorldError::NetworkProtocolUnavailable { .. })
+    ));
+    assert_eq!(
+        request_count.load(Ordering::SeqCst),
+        request_count_after_first,
+        "cooldown should suppress an immediate second ping request after a connection gap"
+    );
+
+    std::thread::sleep(Duration::from_millis(300));
+
+    let third = dialer.request("/aw/node/replication/ping", b"node");
+    assert!(matches!(
+        third,
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            ..
+        })
+    ));
+    assert!(
+        request_count.load(Ordering::SeqCst) > request_count_after_first,
+        "request count should grow again after the short cooldown expires"
+    );
 }
 
 #[test]

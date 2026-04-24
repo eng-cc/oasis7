@@ -672,10 +672,14 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
 
 fn peer_error_indicates_protocol_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
     peer_error_indicates_unsupported_protocol(err)
-        || peer_error_indicates_fetch_commit_retry_cooldown(protocol, err)
+        || peer_error_indicates_retryable_connection_gap(err)
+        || peer_error_indicates_fetch_commit_not_found_retry_cooldown(protocol, err)
 }
 
-fn peer_error_indicates_fetch_commit_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
+fn peer_error_indicates_fetch_commit_not_found_retry_cooldown(
+    protocol: &str,
+    err: &WorldError,
+) -> bool {
     if protocol != REPLICATION_FETCH_COMMIT_PROTOCOL {
         return false;
     }
@@ -683,10 +687,6 @@ fn peer_error_indicates_fetch_commit_retry_cooldown(protocol: &str, err: &WorldE
     match err {
         WorldError::NetworkRequestFailed { code, .. } => {
             matches!(code, DistributedErrorCode::ErrNotFound)
-                || peer_error_indicates_retryable_connection_gap(err)
-        }
-        WorldError::NetworkProtocolUnavailable { .. } => {
-            peer_error_indicates_retryable_connection_gap(err)
         }
         _ => false,
     }
