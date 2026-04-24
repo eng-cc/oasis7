@@ -55,6 +55,7 @@ impl ClientLauncherApp {
     fn apply_chain_recovery_config(&mut self) -> Option<WebChainRecoverySnapshot> {
         let recovery = self.chain_recovery.clone()?;
         self.config = recovery.suggested_config.clone();
+        self.config.normalize();
         self.config_dirty = false;
         self.append_log(self.tr(
             "已应用 stale execution world 恢复建议，准备使用 fresh node id 重试。",
@@ -228,7 +229,12 @@ impl ClientLauncherApp {
                 self.config.chain_pos_ticks_per_slot = defaults.chain_pos_ticks_per_slot;
                 self.config.chain_pos_proposal_tick_phase = defaults.chain_pos_proposal_tick_phase;
                 self.config.chain_pos_max_past_slot_lag = defaults.chain_pos_max_past_slot_lag;
-                self.chain_runtime_status = ChainRuntimeStatus::NotStarted;
+                self.config.normalize();
+                self.chain_runtime_status = if chain_runtime_effectively_enabled(&self.config) {
+                    ChainRuntimeStatus::NotStarted
+                } else {
+                    ChainRuntimeStatus::Disabled
+                };
                 self.chain_recovery = None;
                 self.append_log(self.tr(
                     "已为区块链启动链路自动补全安全默认值。",

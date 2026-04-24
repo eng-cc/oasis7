@@ -110,6 +110,7 @@ impl ClientLauncherApp {
         match field.kind {
             LauncherUiFieldKind::Text => {
                 if let Some(value) = launcher_text_field_mut(&mut self.config, field.id) {
+                    let mut changed = false;
                     if stack_text_fields {
                         ui.vertical(|ui| {
                             ui.label(label);
@@ -122,7 +123,7 @@ impl ClientLauncherApp {
                                 },
                             );
                             if response.changed() {
-                                self.config_dirty = true;
+                                changed = true;
                             }
                         });
                     } else {
@@ -134,9 +135,16 @@ impl ClientLauncherApp {
                                 ui.text_edit_singleline(value)
                             };
                             if response.changed() {
-                                self.config_dirty = true;
+                                changed = true;
                             }
                         });
+                    }
+                    if changed {
+                        self.config.normalize();
+                        if !chain_runtime_effectively_enabled(&self.config) {
+                            self.chain_runtime_status = ChainRuntimeStatus::Disabled;
+                        }
+                        self.config_dirty = true;
                     }
                     if field.id == "chain_replication_bootstrap_peers" {
                         ui.small(self.tr(
@@ -149,6 +157,10 @@ impl ClientLauncherApp {
             LauncherUiFieldKind::Checkbox => {
                 if let Some(value) = launcher_checkbox_field_mut(&mut self.config, field.id) {
                     if ui.checkbox(value, label).changed() {
+                        self.config.normalize();
+                        if !chain_runtime_effectively_enabled(&self.config) {
+                            self.chain_runtime_status = ChainRuntimeStatus::Disabled;
+                        }
                         self.config_dirty = true;
                     }
                 }

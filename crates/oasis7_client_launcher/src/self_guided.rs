@@ -327,7 +327,8 @@ impl ClientLauncherApp {
             return;
         };
         self.config = saved_config;
-        self.chain_runtime_status = if self.config.chain_enabled {
+        self.config.normalize();
+        self.chain_runtime_status = if chain_runtime_effectively_enabled(&self.config) {
             ChainRuntimeStatus::NotStarted
         } else {
             ChainRuntimeStatus::Disabled
@@ -386,6 +387,7 @@ impl ClientLauncherApp {
         self.config.chain_pos_proposal_tick_phase =
             DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE.to_string();
         self.config.auto_open_browser = false;
+        self.config.normalize();
     }
 
     pub(super) fn start_demo_mode_one_click(&mut self) {

@@ -474,11 +474,18 @@ fn serve_console_static_request(
     request_path: &str,
     shared_state: &Arc<Mutex<ServiceState>>,
 ) -> Result<(), String> {
-    let console_static_dir = {
+    let (console_static_dir, deployment_mode) = {
         let state = lock_state(shared_state);
-        state.console_static_dir.clone()
+        (
+            state.console_static_dir.clone(),
+            deployment_mode_from_config(&state.config),
+        )
     };
-    let viewer_auth_bootstrap = resolve_optional_viewer_auth_bootstrap();
+    let viewer_auth_bootstrap = if deployment_mode.disables_browser_signer_bootstrap() {
+        None
+    } else {
+        resolve_optional_viewer_auth_bootstrap()
+    };
 
     match load_console_static_asset(console_static_dir.as_path(), request_path) {
         StaticAsset::Ok { content_type, body } => {

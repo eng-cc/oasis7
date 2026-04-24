@@ -495,6 +495,8 @@ impl ClientLauncherApp {
     }
 
     pub(super) fn apply_web_snapshot(&mut self, snapshot: WebStateSnapshot) {
+        let mut snapshot_config = snapshot.config;
+        snapshot_config.normalize();
         self.status =
             launcher_status_from_web(snapshot.status.as_str(), snapshot.detail.as_deref());
         self.chain_runtime_status = chain_runtime_status_from_web(
@@ -508,11 +510,14 @@ impl ClientLauncherApp {
         self.control_plane_snapshot_received = true;
         self.web_game_url = Some(snapshot.game_url);
         if self.config_dirty {
-            if self.config == snapshot.config {
+            if self.config == snapshot_config {
                 self.config_dirty = false;
             }
         } else {
-            self.config = snapshot.config;
+            self.config = snapshot_config;
+        }
+        if !chain_runtime_effectively_enabled(&self.config) {
+            self.chain_runtime_status = ChainRuntimeStatus::Disabled;
         }
         self.logs = snapshot.logs.into_iter().collect();
         while self.logs.len() > MAX_LOG_LINES {

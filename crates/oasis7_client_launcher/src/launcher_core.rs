@@ -514,6 +514,13 @@ pub(super) fn chain_runtime_effectively_enabled(config: &LaunchConfig) -> bool {
     config.chain_enabled && !hosted_public_join_blocks_local_chain_runtime(config)
 }
 
+pub(super) fn normalize_launch_config(config: &mut LaunchConfig) {
+    if hosted_public_join_blocks_local_chain_runtime(config) {
+        config.chain_enabled = false;
+    }
+}
+
+#[cfg(test)]
 fn hosted_public_join_local_chain_runtime_error() -> String {
     "deployment_mode=hosted_public_join keeps the local chain runtime disabled; public join stays on the guest/player session lane and node onboarding remains operator-managed".to_string()
 }
@@ -730,20 +737,21 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
     let web_host = normalize_host_for_url(web_host.as_str());
     let web_host = host_for_url(web_host.as_str());
     let ws_url = format!("ws://{web_host}:{web_port}");
+    let is_hosted_public_join = hosted_public_join_blocks_local_chain_runtime(config);
     let hosted_access_hint = serde_json::json!({
         "deployment_mode": config.deployment_mode.trim(),
         "verdict": "specified_not_implemented",
-        "browser_signer_bootstrap": if config.deployment_mode.trim() == "hosted_public_join" {
+        "browser_signer_bootstrap": if is_hosted_public_join {
             "disabled_for_public_player_plane"
         } else {
             "trusted_local_bootstrap_allowed"
         },
-        "local_chain_runtime": if config.deployment_mode.trim() == "hosted_public_join" {
+        "local_chain_runtime": if is_hosted_public_join {
             "blocked_for_public_player_plane"
         } else {
             "launcher_managed_local_runtime_allowed"
         },
-        "node_admission": if config.deployment_mode.trim() == "hosted_public_join" {
+        "node_admission": if is_hosted_public_join {
             "operator_managed_node_onboarding_only"
         } else {
             "trusted_local_preview_only"
@@ -765,12 +773,12 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "prompt_control_preview",
                 "required_auth": "strong_auth",
-                "availability": if config.deployment_mode.trim() == "hosted_public_join" {
+                "availability": if is_hosted_public_join {
                     "blocked_until_strong_auth"
                 } else {
                     "trusted_local_preview_only"
                 },
-                "reason": if config.deployment_mode.trim() == "hosted_public_join" {
+                "reason": if is_hosted_public_join {
                     "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
                 } else {
                     "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
@@ -779,12 +787,12 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "prompt_control_apply",
                 "required_auth": "strong_auth",
-                "availability": if config.deployment_mode.trim() == "hosted_public_join" {
+                "availability": if is_hosted_public_join {
                     "blocked_until_strong_auth"
                 } else {
                     "trusted_local_preview_only"
                 },
-                "reason": if config.deployment_mode.trim() == "hosted_public_join" {
+                "reason": if is_hosted_public_join {
                     "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
                 } else {
                     "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
@@ -793,12 +801,12 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "prompt_control_rollback",
                 "required_auth": "strong_auth",
-                "availability": if config.deployment_mode.trim() == "hosted_public_join" {
+                "availability": if is_hosted_public_join {
                     "blocked_until_strong_auth"
                 } else {
                     "trusted_local_preview_only"
                 },
-                "reason": if config.deployment_mode.trim() == "hosted_public_join" {
+                "reason": if is_hosted_public_join {
                     "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
                 } else {
                     "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"
@@ -807,12 +815,12 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "main_token_transfer",
                 "required_auth": "strong_auth",
-                "availability": if config.deployment_mode.trim() == "hosted_public_join" {
+                "availability": if is_hosted_public_join {
                     "blocked_until_strong_auth"
                 } else {
                     "trusted_local_preview_only"
                 },
-                "reason": if config.deployment_mode.trim() == "hosted_public_join" {
+                "reason": if is_hosted_public_join {
                     "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
                 } else {
                     "trusted local preview may still use preview bootstrap; hosted/public strong-auth lane remains pending"

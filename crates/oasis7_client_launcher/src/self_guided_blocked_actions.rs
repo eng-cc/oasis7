@@ -110,7 +110,12 @@ impl ClientLauncherApp {
         match cta {
             DisabledActionCta::EnableChain => {
                 self.config.chain_enabled = true;
-                self.chain_runtime_status = ChainRuntimeStatus::NotStarted;
+                self.config.normalize();
+                self.chain_runtime_status = if chain_runtime_effectively_enabled(&self.config) {
+                    ChainRuntimeStatus::NotStarted
+                } else {
+                    ChainRuntimeStatus::Disabled
+                };
                 self.append_log(self.tr(
                     "已启用区块链功能，请继续启动区块链。",
                     "Blockchain enabled. Continue with Start Blockchain.",
