@@ -147,6 +147,8 @@ fn build_game_url_rewrites_zero_host() {
     let url = build_game_url(&config);
     assert!(url.starts_with("http://127.0.0.1:4173/?ws=ws%3A%2F%2F127.0.0.1%3A5011&hosted_access="));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
+    assert!(url.contains("%22local_chain_runtime%22%3A%22blocked_for_public_player_plane%22"));
+    assert!(url.contains("%22node_admission%22%3A%22operator_managed_node_onboarding_only%22"));
 }
 #[test]
 fn build_game_url_brackets_ipv6_hosts() {
@@ -296,6 +298,18 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
     );
     assert!(args.contains(&"/ip4/127.0.0.1/tcp/4100".to_string()));
     assert!(args.contains(&"/dns4/bootstrap.example/tcp/4101".to_string()));
+}
+
+#[test]
+fn build_chain_runtime_args_rejects_hosted_public_join() {
+    let err = build_chain_runtime_args(&LaunchConfig {
+        deployment_mode: "hosted_public_join".to_string(),
+        chain_enabled: true,
+        chain_runtime_bin: "/tmp/oasis7_chain_runtime".to_string(),
+        ..LaunchConfig::default()
+    })
+    .expect_err("hosted public join should block local chain runtime");
+    assert!(err.contains("guest/player session lane"));
 }
 #[test]
 fn parse_chain_role_rejects_invalid_value() {

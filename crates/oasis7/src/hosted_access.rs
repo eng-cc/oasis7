@@ -51,6 +51,27 @@ impl DeploymentMode {
     }
 
     #[allow(dead_code)]
+    pub(super) fn allows_local_chain_runtime(self) -> bool {
+        matches!(self, Self::TrustedLocalOnly)
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn local_chain_runtime_mode(self) -> &'static str {
+        match self {
+            Self::TrustedLocalOnly => "launcher_managed_local_runtime_allowed",
+            Self::HostedPublicJoin => "blocked_for_public_player_plane",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn node_admission_mode(self) -> &'static str {
+        match self {
+            Self::TrustedLocalOnly => "trusted_local_preview_only",
+            Self::HostedPublicJoin => "operator_managed_node_onboarding_only",
+        }
+    }
+
+    #[allow(dead_code)]
     pub(super) fn gui_agent_action_surface(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "legacy_shared_local_preview",
@@ -85,6 +106,8 @@ pub(super) struct HostedPlayerAccessContract {
     pub(super) deployment_mode: String,
     pub(super) verdict: String,
     pub(super) browser_signer_bootstrap: String,
+    pub(super) local_chain_runtime: String,
+    pub(super) node_admission: String,
     pub(super) gui_agent_action_surface: String,
     pub(super) public_state_route: String,
     pub(super) public_endpoints: Vec<String>,
@@ -109,6 +132,8 @@ pub(super) struct HostedViewerAccessHint {
     pub(super) deployment_mode: String,
     pub(super) verdict: String,
     pub(super) browser_signer_bootstrap: String,
+    pub(super) local_chain_runtime: String,
+    pub(super) node_admission: String,
     pub(super) session_ladder: Vec<String>,
     pub(super) action_matrix: Vec<HostedActionAccessPolicy>,
 }
@@ -119,6 +144,8 @@ pub(super) fn hosted_player_access_contract(mode: DeploymentMode) -> HostedPlaye
         deployment_mode: mode.as_str().to_string(),
         verdict: HOSTED_PLAYER_ACCESS_VERDICT.to_string(),
         browser_signer_bootstrap: mode.browser_signer_bootstrap_mode().to_string(),
+        local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
+        node_admission: mode.node_admission_mode().to_string(),
         gui_agent_action_surface: mode.gui_agent_action_surface().to_string(),
         public_state_route: "/api/public/state".to_string(),
         public_endpoints: web_launcher_public_endpoints()
@@ -151,6 +178,8 @@ pub(super) fn hosted_viewer_access_hint(mode: DeploymentMode) -> HostedViewerAcc
         deployment_mode: mode.as_str().to_string(),
         verdict: HOSTED_PLAYER_ACCESS_VERDICT.to_string(),
         browser_signer_bootstrap: mode.browser_signer_bootstrap_mode().to_string(),
+        local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
+        node_admission: mode.node_admission_mode().to_string(),
         session_ladder: vec![
             "guest_session".to_string(),
             "player_session".to_string(),

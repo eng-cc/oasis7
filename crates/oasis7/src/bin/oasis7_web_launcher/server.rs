@@ -735,6 +735,14 @@ mod tests {
         let snapshot = public_snapshot_from_state(&state, Some("127.0.0.1"));
         assert_eq!(snapshot.hosted_access.deployment_mode, "hosted_public_join");
         assert_eq!(snapshot.hosted_access.verdict, "specified_not_implemented");
+        assert_eq!(
+            snapshot.hosted_access.local_chain_runtime,
+            "blocked_for_public_player_plane"
+        );
+        assert_eq!(
+            snapshot.hosted_access.node_admission,
+            "operator_managed_node_onboarding_only"
+        );
         assert!(snapshot.hosted_access.action_matrix.iter().any(|policy| {
             policy.action_id == "main_token_transfer"
                 && policy.required_auth == "strong_auth"

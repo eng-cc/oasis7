@@ -58,6 +58,18 @@ pub(super) fn parse_chain_feedback_request(
         .map_err(|err| format!("parse chain feedback request JSON failed: {err}"))
 }
 
+fn local_chain_runtime_blocked_error(config: &LauncherConfig) -> Option<String> {
+    let deployment_mode = deployment_mode_from_config(config);
+    if deployment_mode.allows_local_chain_runtime() {
+        None
+    } else {
+        Some(format!(
+            "deployment_mode={} keeps the local chain runtime disabled; public join stays on the guest/player session lane and node onboarding remains operator-managed",
+            deployment_mode.as_str()
+        ))
+    }
+}
+
 pub(super) fn submit_chain_transfer(
     state: &mut ServiceState,
     request: &ChainTransferSubmitRequest,
@@ -245,7 +257,7 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
 }
 
 pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
-    if !state.config.chain_enabled {
+    if !state.config.chain_enabled || local_chain_runtime_blocked_error(&state.config).is_some() {
         state.chain_runtime_status = ChainRuntimeStatus::Disabled;
         state.chain_p2p_status = None;
         state.chain_observability_status = None;
@@ -485,6 +497,19 @@ pub(super) fn start_chain_process(
     state: &mut ServiceState,
     config: LauncherConfig,
 ) -> Result<(), String> {
+    if let Some(err) = local_chain_runtime_blocked_error(&config) {
+        state.config = config;
+        state.chain_runtime_status = ChainRuntimeStatus::Disabled;
+        state.chain_p2p_status = None;
+        state.chain_observability_status = None;
+        state.chain_recovery = None;
+        state.chain_running = None;
+        state.chain_started_at = None;
+        state.last_chain_probe_at = None;
+        state.append_log(format!("chain runtime start rejected: {err}"));
+        state.mark_updated();
+        return Err(err);
+    }
     if !config.chain_enabled {
         state.config = config;
         state.chain_runtime_status = ChainRuntimeStatus::Disabled;
@@ -921,6 +946,9 @@ pub(super) fn build_launcher_args_with_launcher_bin(
 }
 
 pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<String>, String> {
+    if let Some(err) = local_chain_runtime_blocked_error(config) {
+        return Err(err);
+    }
     parse_host_port(config.chain_status_bind.as_str(), "chain status bind")?;
     let chain_node_id = config.chain_node_id.trim();
     if chain_node_id.is_empty() {

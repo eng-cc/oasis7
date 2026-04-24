@@ -166,6 +166,15 @@ fn parse_options_accepts_overrides() {
 }
 
 #[test]
+fn parse_options_forces_chain_disable_for_hosted_public_join() {
+    let options =
+        parse_options(["--deployment-mode", "hosted_public_join", "--chain-enable"].into_iter())
+            .expect("parse hosted mode");
+    assert_eq!(options.initial_config.deployment_mode, "hosted_public_join");
+    assert!(!options.initial_config.chain_enabled);
+}
+
+#[test]
 fn parse_options_collects_repeat_validators() {
     let options = parse_options(
         [
@@ -371,6 +380,17 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
 }
 
 #[test]
+fn build_chain_runtime_args_rejects_hosted_public_join() {
+    let err = build_chain_runtime_args(&LauncherConfig {
+        deployment_mode: "hosted_public_join".to_string(),
+        chain_enabled: true,
+        ..LauncherConfig::default()
+    })
+    .expect_err("hosted public join should block local chain runtime");
+    assert!(err.contains("guest/player session lane"));
+}
+
+#[test]
 fn viewer_dev_dist_candidates_only_return_oasis7_path() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
     let candidates = viewer_dev_dist_candidates();
@@ -440,6 +460,8 @@ fn build_game_url_uses_request_host_for_wildcard_bindings() {
     let url = build_game_url(&config, Some("10.10.1.8"));
     assert!(url.starts_with("http://10.10.1.8:4173/?ws=ws%3A%2F%2F10.10.1.8%3A5011&hosted_access="));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
+    assert!(url.contains("%22local_chain_runtime%22%3A%22blocked_for_public_player_plane%22"));
+    assert!(url.contains("%22node_admission%22%3A%22operator_managed_node_onboarding_only%22"));
     assert!(url.contains("%22action_matrix%22"));
 }
 

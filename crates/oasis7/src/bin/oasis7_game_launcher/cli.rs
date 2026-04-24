@@ -202,7 +202,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
-    DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?;
+    let deployment_mode =
+        DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?;
+    if !deployment_mode.allows_local_chain_runtime() {
+        options.chain_enabled = false;
+    }
     validate_agent_decision_source(options.agent_decision_source.as_str())?;
     options.agent_decision_source =
         canonical_agent_decision_source(options.agent_decision_source.as_str()).to_string();

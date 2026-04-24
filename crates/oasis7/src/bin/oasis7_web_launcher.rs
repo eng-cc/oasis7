@@ -752,10 +752,13 @@ where
     options.initial_config.chain_runtime_bin = options.chain_runtime_bin.trim().to_string();
 
     parse_host_port(options.listen_bind.as_str(), "--listen-bind")?;
-    DeploymentMode::parse(
+    let deployment_mode = DeploymentMode::parse(
         options.initial_config.deployment_mode.as_str(),
         "--deployment-mode",
     )?;
+    if !deployment_mode.allows_local_chain_runtime() {
+        options.initial_config.chain_enabled = false;
+    }
     parse_port(options.initial_config.viewer_port.as_str(), "--viewer-port")?;
     parse_host_port(options.initial_config.live_bind.as_str(), "--live-bind")?;
     parse_host_port(options.initial_config.web_bind.as_str(), "--web-bind")?;
