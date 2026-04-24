@@ -35,5 +35,5 @@
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
 - `engineering` 根目录默认只保留模块入口文件；治理专题按对象下沉到 `doc-governance/`、`rust-governance/`、`governance/`、`doc-migration/`、`prd-review/` 与 `self-evolution/`。
-- 工程治理规则、目录标准或角色协作口径变化时，优先更新 `doc/engineering/prd.md`；新增专题时，再同步回写 `doc/engineering/prd.index.md` 与本目录索引。若问题已从“首读面噪音”转向“文档存量维护成本”，优先进入 `doc-corpus-maintenance-governance` 与 `scripts/doc-inventory-report.sh`，并沿 `doc/devlog -> world-simulator/viewer -> p2p/node -> testing/evidence -> readme/governance -> 季度复核` 的顺序继续切路径级治理，而不是继续只改 README 首屏。
+- 工程治理规则、目录标准或角色协作口径变化时，优先更新 `doc/engineering/prd.md`；新增专题时，再同步回写 `doc/engineering/prd.index.md` 与本目录索引。若问题已从“首读面噪音”转向“文档存量维护成本”，优先进入 `doc-corpus-maintenance-governance` 与 `scripts/doc-inventory-report.sh`；当前链路的首批路径级治理已完成到 `readme/governance`，2026-04-24 季度复核后的下一条 follow-up 已改判为 near-limit active project docs 拆分优先（先看 `doc/world-simulator/project.md` 与 `doc/readme/project.md`），而不是继续补新的 README/子域 landing page。
 - 最近完成的细粒度治理任务默认回写对应 topic `*.project.md` 与 `.pm/tasks/*.yaml`；根 `doc/engineering/project.md` 不再手工维护按时间排序的 `最新完成` 长列表。

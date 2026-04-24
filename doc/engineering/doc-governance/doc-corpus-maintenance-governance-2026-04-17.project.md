@@ -12,9 +12,23 @@
 - [x] p2p-node-path-followup (PRD-ENGINEERING-025/028) [test_tier_required]: 作为第三条 follow-up，建立 `p2p-node-path-governance` 专题并新增 `doc/p2p/node/README.md`，把 `p2p/node` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_533ac29c20a84ee8a5e6914839ad0761.yaml
 - [x] testing-evidence-path-followup (PRD-ENGINEERING-025/029) [test_tier_required]: 作为第四条 follow-up，建立 `testing-evidence-path-governance` 专题并新增 `doc/testing/evidence/README.md`，把 `testing/evidence` 从“热点路径内无首读入口”收口到按问题分流的 canonical 子域入口。 Trace: .pm/tasks/task_38707b4060b54e5e8b8ebcdb8d18a602.yaml
 - [x] readme-governance-path-followup (PRD-ENGINEERING-025/030) [test_tier_required]: 作为第五条 follow-up，建立 `readme-governance-path-governance` 专题并新增 `doc/readme/governance/README.md`，把 `readme/governance` 从“热点路径内无首读入口”收口到按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流的 canonical 子域入口。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
+- [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-025) [test_tier_required]: 执行 2026-04-24 季度复核，重新运行 `bash ./scripts/doc-inventory-report.sh` 固定当前 `doc/` 体量快照，并把下一条 follow-up 从“待季度复核”改判为“near-limit active project docs 拆分优先”，避免继续停留在泛化的 review placeholder。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
+
+## 2026-04-24 季度复核快照
+- `bash ./scripts/doc-inventory-report.sh` 当前快照：
+  - `doc/` Markdown 总量 `1764`
+  - `doc/devlog` 文件数 `57`
+  - 最大 Markdown / devlog 文件仍为 `doc/devlog/2026-02-16.md`，`3288` 行
+  - 模块体量前三：`world-simulator=553`、`p2p=270`、`testing=180`
+  - 热点子目录前三：`doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86`
+  - near-limit active docs：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`
+- 复核结论：
+  - 首批路径级治理入口已全部落地，但热点体量仍在增长；当前更急的风险已从“缺 landing page”转成“活跃 project/review 文档逼近或触达长度门禁”。
+  - 因此本轮不再把下一步写成泛化的“季度复核后再看”，也不继续在当前 PR 横向扩 `ci/longrun/templates`、`gap` 或 `production` 新路径治理。
+  - 下一条正式 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`，再视结果判断是否需要把 `core/reviews` 或 `world-simulator/launcher` 升级为下一轮专题。
 
 说明:
-`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。后续若要做季度复核或继续扩 `ci/longrun`、`gap`、`production` 等路径治理，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
+`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
 
 ## 依赖
 - `doc/engineering/prd.md`
@@ -27,7 +41,7 @@
 
 ## 状态
 - 当前阶段: M2 已完成
-- 阶段说明: formalize + report + first four follow-ups closed
+- 阶段说明: formalize + report + five path follow-ups + quarterly review closed
 - 阻塞项: 无
-- 最近更新: 2026-04-18
-- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 在默认阅读面层面已完成收口，`doc/devlog`、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 也已完成首批 follow-up。当前这一轮后续应转入季度复核，不再回到“只改 README/首屏”的处理方式。
+- 最近更新: 2026-04-24
+- 后续动作: 入口减重专题 `PRD-ENGINEERING-024` 与首批五条路径级 follow-up 已完成，当前季度复核也已完成。下一条 follow-up 不再是泛化的 review placeholder，而是 near-limit active project docs 拆分优先：先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`，随后再评估 `core/reviews` 与 `world-simulator/launcher` 是否需要独立专题。
