@@ -1,0 +1,23 @@
+task_uid: task_7ba3b436c9e046dd8016a09cfc3fe619
+title: "declutter software-safe details snapshot summary"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-launcher-snapshot-summary-declutter
+execution_log_path: .pm/tasks/task_7ba3b436c9e046dd8016a09cfc3fe619.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-039
+acceptance:
+  - "software_safe details panel no longer dedicates a large right-rail snapshot summary when it adds little value"
+  - "raw snapshot diagnostics remain available through a compact secondary affordance"
+handoff_to: []
+updated_at: 2026-04-24T22:31:42+08:00
+last_started_at: 2026-04-24T21:47:24+08:00
+last_closed_at: 2026-04-24T22:31:42+08:00

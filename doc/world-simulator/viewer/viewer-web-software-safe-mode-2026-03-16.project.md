@@ -32,6 +32,7 @@
 - [x] software-safe-realtime-auto-progress (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` 将 `software_safe` 最小浏览器回归改为纯实时契约：不再手动调用 `step`，改为等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 gameplay blocker 卡住，则要求页面显式暴露 blocker，并继续禁止回放控件回归。 Trace: .pm/tasks/task_8cfd276ef87c4d729fcfd6ccbafa78df.yaml
 - [x] software-safe-realtime-only (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `software_safe` 页面收口为纯实时模式，移除页面内回放/步进/tick jump 控件，并过滤 canonical gameplay summary 里的 `live_control.play|step` 动作，只保留正式实时观察与语义交互入口。 Trace: .pm/tasks/task_3b03fd02dbca4de7aae0503749fd7832.yaml
 - [x] software-safe-prompt-settings-hidden-by-default (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `Prompt Overrides` 收为显式高级设置，默认不展示，但保留 `prompt_control` / `__AW_TEST__` 契约与 chat regression 可脚本化展开路径。 Trace: .pm/tasks/task_704dcd11742241688028e4518f774752.yaml
+- [x] software-safe-details-snapshot-summary-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将右侧 `Details` 面板中的大块 `Snapshot Summary` JSON 收口为紧凑世界规模信息，并把原始快照降为按需展开 diagnostics，避免主玩法右栏长期被低价值摘要占位。 Trace: .pm/tasks/task_7ba3b436c9e046dd8016a09cfc3fe619.yaml
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
@@ -56,6 +57,7 @@
 - 最近更新：2026-04-16（新增 QA realtime auto-progress follow-up：`viewer-software-safe-step-regression.sh` 不再手动 `step`，改为等待自然实时推进或显式 blocker。）
 - 最近更新：2026-04-16（新增 realtime-only 收口：software-safe 页面已移除回放/步进/tick jump 控件，canonical gameplay summary 不再暴露 `live_control.play|step`。）
 - 最近更新：2026-04-19（新增 prompt settings follow-up：`Prompt Overrides` 改为本地持久化的显式高级设置，默认收起；`__AW_TEST__.setPromptOverridesVisible(true)` 与 `viewer-software-safe-chat-regression.sh` 保持可脚本化展开与回归。）
+- 最近更新：2026-04-24（按最新试玩反馈收口右侧 `Details` 面板：移除默认展开的大块 `Snapshot Summary` JSON，改为紧凑世界规模 badge + 折叠式原始诊断，避免低价值快照占据主玩法右栏。）
 - 阻塞项：本专题主入口 contract 与 formal gameplay PASS 证据均已完成；当前剩余事项已转为 README / current-entry / release claim 口径同步，以及 `PRD-WORLD_SIMULATOR-037/038` parity/latency experimental follow-up，不能再把本专题记成“缺 provider 配置导致 blocked”。
 
 ## 备注

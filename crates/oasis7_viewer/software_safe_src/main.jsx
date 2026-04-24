@@ -1042,6 +1042,9 @@ function DetailsPanel() {
     metrics: core.state.metrics,
     hostedAccess: core.clone(core.state.hostedAccess),
   });
+  const snapshotCounts = () => snapshotSummary().counts;
+  const hasSnapshotDiagnostics = () =>
+    !!core.state.snapshot || !!core.state.metrics || !!core.state.hostedAccess;
 
   return (
     <div class="stack">
@@ -1054,8 +1057,32 @@ function DetailsPanel() {
         <JsonBlock value={core.clone(core.state.selectedObject)} />
       </Show>
       <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "快照摘要", "Snapshot Summary")}</div>
-        <JsonBlock value={snapshotSummary()} />
+        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "世界规模", "World Scale")}</div>
+        <div class="badge-row">
+          <Badge>{`agents=${snapshotCounts().agents}`}</Badge>
+          <Badge>{`locations=${snapshotCounts().locations}`}</Badge>
+          <Badge>{`promptProfiles=${snapshotCounts().promptProfiles}`}</Badge>
+          <Badge>{`debugContexts=${snapshotCounts().executionDebugContexts}`}</Badge>
+        </div>
+        <EmptyState style="margin-top:10px;">
+          {tr(
+            locale(),
+            "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。",
+            "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.",
+          )}
+        </EmptyState>
+        <Show when={hasSnapshotDiagnostics()}>
+          <DiagnosticDetails
+            locale={locale()}
+            label={tr(locale(), "展开原始快照诊断", "Expand Raw Snapshot Diagnostics")}
+            note={tr(
+              locale(),
+              "只在需要排查快照结构或 hosted access 原始字段时展开。",
+              "Expand only when you need to inspect the raw snapshot shape or hosted access fields.",
+            )}
+            value={snapshotSummary()}
+          />
+        </Show>
       </div>
       <Show when={core.state.lastError}>
         <div>

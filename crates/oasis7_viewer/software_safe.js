@@ -3555,7 +3555,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$11 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English`), _tmpl$14 = /* @__PURE__ */ template(`<div class=toolbar><button data-entry=software-safe-current-locale></button><button data-entry=standard-viewer-current-locale>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$18 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$11 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English`), _tmpl$14 = /* @__PURE__ */ template(`<div class=toolbar><button data-entry=software-safe-current-locale></button><button data-entry=standard-viewer-current-locale>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$18 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
 function uiLocale() {
   return state.uiLocale;
 }
@@ -5295,8 +5295,10 @@ function DetailsPanel() {
     metrics: state.metrics,
     hostedAccess: clone(state.hostedAccess)
   });
+  const snapshotCounts = () => snapshotSummary().counts;
+  const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$134 = _tmpl$35(), _el$135 = _el$134.firstChild, _el$136 = _el$135.nextSibling, _el$137 = _el$136.firstChild;
+    var _el$134 = _tmpl$35(), _el$135 = _el$134.firstChild, _el$136 = _el$135.nextSibling, _el$137 = _el$136.firstChild, _el$138 = _el$137.nextSibling;
     insert(_el$135, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
@@ -5328,10 +5330,52 @@ function DetailsPanel() {
         });
       }
     }), _el$136);
-    insert(_el$137, () => tr(locale(), "快照摘要", "Snapshot Summary"));
-    insert(_el$136, createComponent(JsonBlock, {
-      get value() {
-        return snapshotSummary();
+    insert(_el$137, () => tr(locale(), "世界规模", "World Scale"));
+    insert(_el$138, createComponent(Badge, {
+      get children() {
+        return `agents=${snapshotCounts().agents}`;
+      }
+    }), null);
+    insert(_el$138, createComponent(Badge, {
+      get children() {
+        return `locations=${snapshotCounts().locations}`;
+      }
+    }), null);
+    insert(_el$138, createComponent(Badge, {
+      get children() {
+        return `promptProfiles=${snapshotCounts().promptProfiles}`;
+      }
+    }), null);
+    insert(_el$138, createComponent(Badge, {
+      get children() {
+        return `debugContexts=${snapshotCounts().executionDebugContexts}`;
+      }
+    }), null);
+    insert(_el$136, createComponent(EmptyState, {
+      style: "margin-top:10px;",
+      get children() {
+        return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。", "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.");
+      }
+    }), null);
+    insert(_el$136, createComponent(Show, {
+      get when() {
+        return hasSnapshotDiagnostics();
+      },
+      get children() {
+        return createComponent(DiagnosticDetails, {
+          get locale() {
+            return locale();
+          },
+          get label() {
+            return tr(locale(), "展开原始快照诊断", "Expand Raw Snapshot Diagnostics");
+          },
+          get note() {
+            return tr(locale(), "只在需要排查快照结构或 hosted access 原始字段时展开。", "Expand only when you need to inspect the raw snapshot shape or hosted access fields.");
+          },
+          get value() {
+            return snapshotSummary();
+          }
+        });
       }
     }), null);
     insert(_el$134, createComponent(Show, {
@@ -5339,10 +5383,10 @@ function DetailsPanel() {
         return state.lastError;
       },
       get children() {
-        var _el$138 = _tmpl$34(), _el$139 = _el$138.firstChild, _el$140 = _el$139.nextSibling;
-        insert(_el$139, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$140, () => state.lastError);
-        return _el$138;
+        var _el$139 = _tmpl$34(), _el$140 = _el$139.firstChild, _el$141 = _el$140.nextSibling;
+        insert(_el$140, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$141, () => state.lastError);
+        return _el$139;
       }
     }), null);
     return _el$134;
@@ -5351,20 +5395,20 @@ function DetailsPanel() {
 function AppShell() {
   const locale = () => uiLocale();
   return [(() => {
-    var _el$141 = _tmpl$36(), _el$142 = _el$141.firstChild, _el$143 = _el$142.firstChild, _el$144 = _el$142.nextSibling;
-    insert(_el$143, () => tr(locale(), "目标", "Targets"));
-    insert(_el$144, createComponent(TargetsPanel, {}));
-    return _el$141;
+    var _el$142 = _tmpl$36(), _el$143 = _el$142.firstChild, _el$144 = _el$143.firstChild, _el$145 = _el$143.nextSibling;
+    insert(_el$144, () => tr(locale(), "目标", "Targets"));
+    insert(_el$145, createComponent(TargetsPanel, {}));
+    return _el$142;
   })(), (() => {
-    var _el$145 = _tmpl$36(), _el$146 = _el$145.firstChild, _el$147 = _el$146.firstChild, _el$148 = _el$146.nextSibling;
-    insert(_el$147, () => tr(locale(), "世界摘要", "World Summary"));
-    insert(_el$148, createComponent(WorldSummaryPanel, {}));
-    return _el$145;
+    var _el$146 = _tmpl$36(), _el$147 = _el$146.firstChild, _el$148 = _el$147.firstChild, _el$149 = _el$147.nextSibling;
+    insert(_el$148, () => tr(locale(), "世界摘要", "World Summary"));
+    insert(_el$149, createComponent(WorldSummaryPanel, {}));
+    return _el$146;
   })(), (() => {
-    var _el$149 = _tmpl$36(), _el$150 = _el$149.firstChild, _el$151 = _el$150.firstChild, _el$152 = _el$150.nextSibling;
-    insert(_el$151, () => tr(locale(), "明细", "Details"));
-    insert(_el$152, createComponent(DetailsPanel, {}));
-    return _el$149;
+    var _el$150 = _tmpl$36(), _el$151 = _el$150.firstChild, _el$152 = _el$151.firstChild, _el$153 = _el$151.nextSibling;
+    insert(_el$152, () => tr(locale(), "明细", "Details"));
+    insert(_el$153, createComponent(DetailsPanel, {}));
+    return _el$150;
   })()];
 }
 const app = document.getElementById("app");
