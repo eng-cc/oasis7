@@ -5,26 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="oasis7：多主体文明模拟游戏技术预览（开发中，尚不可玩）。当前聚焦设计目标、验证链路与可追溯开发路线。"
+      content="oasis7：一款由 AI Agent 持续运行的文明模拟游戏。你提供目标与约束，Agent 在战争、经济与治理中推进世界。当前仍是技术预览，尚不可玩。"
     />
-    <meta property="og:title" content="oasis7 | 技术预览（开发中）" />
+    <meta property="og:title" content="oasis7 | AI Agent 文明模拟游戏技术预览" />
     <meta
       property="og:description"
-      content="当前版本为技术预览：展示游戏设计目标、验证链路与开发路线，不承诺可玩体验。"
+      content="一款由 AI Agent 持续运行的文明模拟游戏：你给目标，Agent 去执行，世界在资源与治理约束下持续演化。当前仍是技术预览。"
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://eng-cc.github.io/oasis7/" />
     <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="oasis7 | 技术预览（开发中）" />
+    <meta name="twitter:title" content="oasis7 | AI Agent 文明模拟游戏技术预览" />
     <meta
       name="twitter:description"
-      content="当前版本为技术预览：展示游戏设计目标、验证链路与开发路线，不承诺可玩体验。"
+      content="你提供目标与约束，Agent 在持续世界里推进战争、经济与治理。当前仍是技术预览，尚不可玩。"
     />
     <meta name="twitter:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
     <meta name="theme-color" content="#060b11" />
-    <title>oasis7 | 技术预览（开发中）</title>
+    <title>oasis7 | AI Agent 文明模拟游戏技术预览</title>
     <link rel="canonical" href="https://eng-cc.github.io/oasis7/" />
     <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/" />
     <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/en/" />
@@ -40,15 +40,15 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#matrix">玩法核心</a>
-        <a href="#scenarios">策略场景</a>
-        <a href="#demo">本地 3 步</a>
-        <a href="#download">下载安装</a>
+        <a href="#what">这是什么</a>
+        <a href="#role">你怎么玩</a>
+        <a href="#today">现在能做什么</a>
+        <a href="#download">开发预览</a>
         <a href="#proof">证据链</a>
-        <a href="#roadmap">赛季路线</a>
-        <a href="#architecture">引擎底座</a>
+        <a href="#roadmap">路线</a>
+        <a href="#architecture">底座</a>
         <a href="doc/cn/index.html">文档中心</a>
-        <a href="#contribute">共建</a>
+        <a href="#contribute">跟进</a>
       </nav>
       <button class="menu-button" type="button" aria-label="切换菜单" data-menu-toggle>
         ☰
@@ -78,37 +78,27 @@
         <div class="hero-grid">
           <div>
             <p class="eyebrow">开发中技术预览</p>
-            <h1>oasis7 仍在开发中，当前版本尚不可玩</h1>
+            <h1>一个 AI Agent 会自己交易、结盟、打仗的文明模拟游戏</h1>
             <p class="subtitle">
-              当前站点用于展示多主体文明模拟游戏的设计目标、验证链路与开发路线。你可以运行本地构建做技术验证，
-              但这不是对外可玩版本，也不代表赛季已上线。首次本地运行需先完成 Rust 构建（常见 5~15 分钟，视机器而定）。
+              你不直接操作每个单位。你定目标，改限制，然后看这群 Agent 会把世界推到哪里。它们会自己生产、交易、
+              结盟、打仗；你下线了，世界也会继续跑。现在公开的还是技术预览，用来说明方向，不是正式可玩版。
             </p>
             <div class="cta-row">
-              <a class="button primary" href="#demo">先看技术预览路径</a>
-              <a class="button secondary" href="doc/cn/index.html">查看完整手册</a>
+              <a class="button primary" href="#what">先看这游戏怎么回事</a>
+              <a class="button secondary" href="#today">看现在能做什么</a>
             </div>
             <div class="proof-strip">
-              <span class="proof-chip is-highlight">推荐顺序：先预览验证，再决定是否本地构建</span>
-              <span class="proof-chip">预览入口：3 步技术验证</span>
-              <span class="proof-chip">构建路径：仍需 Rust 初次编译</span>
+              <span class="proof-chip is-highlight">类型：文明模拟游戏</span>
+              <span class="proof-chip">状态：技术预览（还不能玩）</span>
             </div>
-            <ul class="hero-signals">
-              <li>当前状态：技术预览（Not playable yet）</li>
-              <li>重点：先看预览验证路径，再深入构建与手册</li>
-              <li>目标：逐步收敛到可玩发布版本</li>
-            </ul>
             <div class="hero-stats">
               <article class="metric-box">
                 <strong data-counter-target="3">0</strong>
-                <span>目标循环层级（微 / 中 / 长）</span>
+                <span>三条主线：战争 / 经济 / 治理</span>
               </article>
               <article class="metric-box">
-                <strong data-counter-target="0">0</strong>
-                <span>当前可玩状态（0=未开放）</span>
-              </article>
-              <article class="metric-box">
-                <strong data-counter-target="4">0</strong>
-                <span>开发阶段（D1~D4）</span>
+                <strong data-counter-target="1">0</strong>
+                <span>你下线以后，世界也不会停</span>
               </article>
             </div>
           </div>
@@ -116,158 +106,158 @@
           <aside class="hero-visual">
             <figure class="hero-figure">
               <img src="assets/images/world-constellation.svg" alt="oasis7 文明冲突星图" />
-              <figcaption>当前展示的是研发验证视图，用于说明系统行为，不代表对外可玩体验。</figcaption>
+              <figcaption>这是当前的研发验证视图。能看出世界怎么跑，但还不是对外开放的玩家版本。</figcaption>
             </figure>
             <div class="pulse-panel">
-              <p class="panel-title">开发脉冲</p>
+              <p class="panel-title">你在这里做什么</p>
               <ul>
-                <li><span>D1</span><strong>基础链路闭环</strong></li>
-                <li><span>D2</span><strong>可观测与回放</strong></li>
-                <li><span>D3</span><strong>规则与治理强化</strong></li>
-                <li><span>D4</span><strong>可玩版本收敛</strong></li>
+                <li><span>先定目标</span><strong>扩张、守成、囤资源</strong></li>
+                <li><span>再定限制</span><strong>提示词、模块、制度</strong></li>
+                <li><span>看结果再继续改</span><strong>交易、冲突、联盟都会变</strong></li>
               </ul>
             </div>
-            <div class="command-panel">
-              <p class="panel-title">当前重点</p>
-              <ul>
-                <li><span>运行链路</span><strong>可复现、可审计</strong></li>
-                <li><span>工程能力</span><strong>WASM 模块化与治理</strong></li>
-                <li><span>交付目标</span><strong>先可信，再可玩</strong></li>
-              </ul>
-            </div>
-            <ul class="hero-proof-points">
-              <li>页面上半屏明确披露“尚不可玩”的真实状态</li>
-              <li>下半屏提供技术证据与开发路线，便于外部评估</li>
-            </ul>
           </aside>
         </div>
       </section>
 
-      <section id="matrix" class="section" data-reveal>
-        <h2>目标玩法设计的四条系统支柱</h2>
-        <p class="section-intro">建议先走预览验证路径确认当前技术预览能否在你的机器上跑通；若需要深入调试，再进入完整构建与文档。以下为目标能力设计，不代表当前已向玩家开放。</p>
-        <div class="game-lattice">
-          <article class="lattice-feature is-primary">
-            <h3>三层循环统一驱动</h3>
-            <p>设计目标是让短循环提供即时反馈，中循环提供阶段胜负，长循环沉淀长期策略成本。</p>
-            <span>目标价值：形成长期留存动机</span>
+      <section id="what" class="section" data-reveal>
+        <h2>30 秒看懂 oasis7</h2>
+        <p class="section-intro">
+          如果只记一句，那就是：这不是让你手动控每个单位的游戏，而是让你在世界外面定策略，看一群 Agent 自己把事做下去。
+        </p>
+        <div class="grid cards-2">
+          <article class="card card-spotlight">
+            <h3>它是什么</h3>
+            <p>它把战争、经济和治理放进同一个持续运行的世界里，不是看完就结束的一次性演示。</p>
           </article>
-          <article class="lattice-feature">
-            <h3>战争 x 治理双线博弈</h3>
-            <p>目标规则包含资源封锁、制度投票、区域条约等并行系统，提升策略层级。</p>
-            <span>目标价值：战斗之外仍有决策空间</span>
+          <article class="card">
+            <h3>你扮演谁</h3>
+            <p>你更像外部指挥者，负责定目标、改提示、选模块，而不是蹲在地图上挨个点单位。</p>
           </article>
-          <article class="lattice-feature">
-            <h3>玩家间接控制</h3>
-            <p>目标交互是“定义目标与约束，由 Agent 执行”，减少机械操作并强调策略表达。</p>
-            <span>目标价值：提升指挥层决策感</span>
+          <article class="card">
+            <h3>世界为什么会变化</h3>
+            <p>Agent 会受资源、时间和制度限制，所以交易、联盟、战争和治理提案都会真的把世界往前推。</p>
           </article>
-          <article class="lattice-feature is-alert">
-            <h3>高收益伴随高反噬</h3>
-            <p>目标平衡是“高收益伴随高代价”，避免单一路径滚雪球并强化反制。</p>
-            <span>目标价值：胜利与代价同时成立</span>
+          <article class="card">
+            <h3>最特别的地方</h3>
+            <p>它想做的不是“更聪明一点的 NPC”，而是一个自己会往前走、事后还能查账的世界。</p>
           </article>
         </div>
       </section>
 
-      <section id="scenarios" class="section" data-reveal>
-        <h2>目标体验样例（设计中）</h2>
-        <p class="section-intro">建议先走预览验证路径确认当前技术预览能否在你的机器上跑通；若需要深入调试，再进入完整构建与文档。这些样例用于说明目标节奏与设计方向，不代表当前可玩流程。</p>
+      <section id="role" class="section" data-reveal>
+        <h2>你下命令，但不接管每个单位</h2>
+        <p class="section-intro">
+          这里的乐趣不在手速，而在于你给出的目标和限制，会怎么被一群有记忆的 Agent 一步步执行下去。
+        </p>
+        <div class="story-path">
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">01</span>
+            <h3>先给方向</h3>
+            <p>先想清楚你要什么。是扩张、守成、囤资源，还是去争治理权。</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">02</span>
+            <h3>再给约束</h3>
+            <p>再通过提示词、WASM 模块和制度安排，约束 Agent 愿意做什么，不愿意做什么。</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">03</span>
+            <h3>观察世界反应</h3>
+            <p>然后看市场价格、联盟关系、物流网络和治理提案怎么变，这些都是策略留下的后果。</p>
+          </article>
+          <article class="story-step" data-story-step>
+            <span class="story-step-index">04</span>
+            <h3>继续修正策略</h3>
+            <p>世界不会停下来等你重开。你只能看着后果继续修正目标、换模块、改制度。</p>
+          </article>
+        </div>
         <div class="grid cards-3">
           <article class="card">
-            <h3>短循环目标（5~15 分钟）</h3>
-            <p>目标是在短时间内给出清晰反馈，让玩家能快速完成一次策略确认。</p>
+            <h3>你能做</h3>
+            <p>你可以定高层目标、调整 Agent 提示、安排模块扩展，影响文明怎么生产、合作和开战。</p>
           </article>
           <article class="card">
-            <h3>中循环目标（1~3 天）</h3>
-            <p>目标是让联盟、交易、冲突在阶段内形成可验证的策略差异。</p>
+            <h3>你不能做</h3>
+            <p>你不能直接接管 Agent，也不能绕过世界规则，更不能暂停时间把每一步都抠到最优。</p>
           </article>
           <article class="card">
-            <h3>长循环目标（数周）</h3>
-            <p>目标是把治理提案与制度变化沉淀为长期世界规则。</p>
+            <h3>你会看到</h3>
+            <p>你会先看到单次行动的反馈，再看到几天尺度的联盟和交易，最后看到更长线的制度变化和权力变化。</p>
           </article>
-        </div>
-        <div class="screens-grid">
-          <figure class="screen-card">
-            <img
-              src="assets/images/screenshots/minimal.webp"
-              alt="viewer 截图：minimal 场景"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>minimal：研发验证截图（非可玩版本）</figcaption>
-          </figure>
-          <figure class="screen-card">
-            <img
-              src="assets/images/screenshots/twin_region_bootstrap.webp"
-              alt="viewer 截图：twin_region_bootstrap 场景"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>twin_region：研发验证截图（非可玩版本）</figcaption>
-          </figure>
-          <figure class="screen-card">
-            <img
-              src="assets/images/screenshots/triad_region_bootstrap.webp"
-              alt="viewer 截图：triad_region_bootstrap 场景"
-              loading="lazy"
-              decoding="async"
-              width="2400"
-              height="1600"
-            />
-            <figcaption>triad_region：研发验证截图（非可玩版本）</figcaption>
-          </figure>
         </div>
       </section>
 
-      <section id="demo" class="section" data-reveal>
-        <h2>本地技术验证 3 步（开发者）</h2>
-        <div class="grid cards-2">
+      <section id="today" class="section" data-reveal>
+        <h2>现在你能做什么</h2>
+        <p class="section-intro">
+          现在还不能像普通玩家那样直接开一局，但已经能看清楚方向，也能把本地技术预览跑起来看看。
+        </p>
+        <div class="grid cards-3">
           <article class="card">
-            <h3>离线验证（推荐）</h3>
-            <p>先运行回放链路，确认数据产出、服务启动与 viewer 连接正常。</p>
-            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_server -- .data/world_viewer_data 127.0.0.1:5010
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
+            <h3>先理解玩法</h3>
+            <p>如果你想先判断这条路值不值得继续看，先看玩法总纲、世界规则和玩家边界。</p>
+            <div class="cta-row">
+              <a class="button secondary" href="doc/cn/index.html">看文档入口</a>
+            </div>
           </article>
           <article class="card">
-            <h3>在线验证（standard_3d / software_safe）</h3>
-            <p>进入持续运行模式，验证实时事件流、观测面板与控制链路；硬件路径正常时走 `standard_3d`，弱图形环境下可降到 `software_safe`。</p>
-            <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-# 仅诊断：--no-llm 只用于 observer/debug，不计入正式验证证据
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
+            <h3>亲手跑技术预览</h3>
+            <p>如果你愿意本地构建，可以跑离线回放或在线验证，确认事件流和观测链路已经接上了。</p>
+            <div class="cta-row">
+              <a class="button secondary" href="#proof">看证据链</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>跟进版本演化</h3>
+            <p>如果你只想看进度，当前公开的下载、路线和发布说明都还是预览口径，不是正式发售。</p>
+            <div class="cta-row">
+              <a class="button secondary" href="#roadmap">看开发路线</a>
+            </div>
           </article>
         </div>
         <article class="quickstart card">
-          <h3>三步完成本地技术验证（首次编译约 5~15 分钟）</h3>
+          <h3>如果你想自己跑，现在走的还是开发者路径</h3>
           <ol class="steps">
             <li>克隆仓库并进入目录。</li>
-            <li>执行 `env -u RUSTC_WRAPPER cargo check` 验证环境。</li>
-            <li>先跑回放确认链路，再切到在线模式验证持续运行。</li>
+            <li>执行 `env -u RUSTC_WRAPPER cargo check` 确认环境可用。</li>
+            <li>先跑回放，再切到在线模式，确认事件与 viewer 连接链路能复现。</li>
           </ol>
+          <div class="grid cards-2 quickstart-grid">
+            <article class="card quickstart-card">
+              <h3>离线验证（推荐）</h3>
+              <p>先确认数据产出、服务启动和 viewer 连接正常。</p>
+              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_server -- .data/world_viewer_data 127.0.0.1:5010
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
+            </article>
+            <article class="card quickstart-card">
+              <h3>在线验证（standard_3d / software_safe）</h3>
+              <p>进入持续运行模式，看实时事件、观测面板和控制链路是否正常。</p>
+              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+# 仅诊断：--no-llm 只用于 observer/debug，不计入正式验证证据
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
+env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
+            </article>
+          </div>
           <p class="doc-entry-note">
             参数说明、排障路径与测试矩阵请前往
             <a href="doc/cn/index.html">文档中心（中文）</a>。
           </p>
-          <p class="doc-entry-note">当前技术预览公开的三种访问面为 `standard_3d`、`software_safe`、`pure_api`；其中 LLM / script 决策与 Local Provider lane 只描述执行方式，不构成额外公开模式。</p>
-          <p class="doc-entry-note">首次构建完成后，后续重复启动通常可收敛到分钟级。</p>
+          <p class="doc-entry-note">当前公开的三种访问面是 `standard_3d`、`software_safe`、`pure_api`。其中 LLM / script 决策和 Local Provider lane 说的是执行方式，不是新的公开模式。</p>
+          <p class="doc-entry-note">第一次构建通常会慢一些。后面会快很多，但这条路本质上还是技术验证，不是正式开玩。</p>
         </article>
       </section>
 
       <section id="download" class="section" data-reveal>
-        <h2>开发预览构建包下载（按平台单主入口）</h2>
-        <p class="section-intro">当前公开下载面默认只给普通用户一个平台主包入口，并尽量按你正在使用的系统优先展示；这些包仍服务于技术预览验证，不代表已开放玩家正式版。</p>
+        <h2>如果你想亲手试，现在只有开发预览构建</h2>
+        <p class="section-intro">现在公开下载的还是开发预览构建，不是普通玩家直接开玩的版本。页面尽量每个平台只给一个主包，省得你先在安装包之间做判断。</p>
         <p class="release-meta">
           当前版本：<strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="发布时间">发布时间待同步</span>
           <a data-release-notes-link href="https://github.com/eng-cc/oasis7/releases/latest">查看发布说明</a>
         </p>
-        <p class="doc-entry-note">公开说明：正式公告仍在准备中；当前下载页的“发布说明”用于构建说明与校验信息，不等同于面向玩家/社区的正式发布公告。</p>
+        <p class="doc-entry-note">先说明一下：正式公告还没发。这里的“发布说明”主要写构建说明和校验信息，不是面向玩家的正式公告。</p>
         <div class="download-surface" data-download-surface>
           <div class="download-surface-main">
             <p class="eyebrow" data-download-primary-badge>当前设备推荐</p>
@@ -344,13 +334,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>Windows x64 主安装器</h4>
               <p data-download-source-badge>当前设备推荐</p>
-              <p data-download-source-copy>下载 `oasis7-windows-x64.exe`，当前默认提供单主入口，不再要求普通用户先解压 bundle 再找启动脚本。</p>
+              <p data-download-source-copy>下载 `oasis7-windows-x64.exe` 就行。默认只给这一条主路径，不用先解压 bundle 再翻脚本。</p>
               <p data-download-source-link-label>下载 Windows 主包</p>
-              <p data-download-source-requirements>64 位 Windows 桌面环境；当前公开资产只覆盖 x64，不提供 ARM 或便携压缩包作为默认入口。</p>
-              <p data-download-source-install>双击安装器即可进入向导；安装完成后可在开始菜单找到 `oasis7 Client Launcher`，并按向导选择桌面快捷方式。</p>
-              <p data-download-source-trust>当前仍是未签名技术预览安装器，首次运行可能看到 SmartScreen 安全提示；在代码签名任务完成前，不宣称“无安全警告安装”。</p>
-              <p data-download-source-support>面向技术预览验证，不等同玩家正式发布；若公司设备策略禁止未知发行者安装，请先查看发布说明和支持边界。</p>
-              <p data-download-source-footnote>已按当前设备优先选中 Windows x64；如果你要给其他机器下载，可切换上方平台按钮。</p>
+              <p data-download-source-requirements>64 位 Windows 桌面环境。当前公开资产只做 x64，没有 ARM，也没有便携压缩包默认入口。</p>
+              <p data-download-source-install>双击安装器进入向导。装完以后，可以在开始菜单里找到 `oasis7 Client Launcher`，也能顺手勾桌面快捷方式。</p>
+              <p data-download-source-trust>现在还是未签名的预览安装器，第一次运行大概率会碰到 SmartScreen 提示。代码签名没补完之前，这点不会假装不存在。</p>
+              <p data-download-source-support>这条路是给技术预览验证用的，不是正式玩家发布。如果公司设备不让装未知发行者，先看发布说明里的支持边界。</p>
+              <p data-download-source-footnote>当前设备默认会先选 Windows x64；如果你是在替别的机器下载，可以自己切上面的按钮。</p>
             </article>
             <article
               data-download-platform-source="macos"
@@ -358,13 +348,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>macOS x64 主镜像</h4>
               <p data-download-source-badge>当前设备推荐</p>
-              <p data-download-source-copy>下载 `oasis7-macos-x64.dmg`，挂载后将 `oasis7 Client Launcher.app` 拖入 `/Applications` 即可；默认不再把 bundle 内部脚本暴露给普通用户。</p>
+              <p data-download-source-copy>下载 `oasis7-macos-x64.dmg`，挂载后把 `oasis7 Client Launcher.app` 拖进 `/Applications` 就行。默认不会再把 bundle 里的脚本扔给普通用户自己找。</p>
               <p data-download-source-link-label>下载 macOS 主包</p>
-              <p data-download-source-requirements>Intel x64 macOS 桌面环境；当前未提供独立 Apple Silicon 包，若在 Apple Silicon 设备上验证，需要接受兼容层前提。</p>
-              <p data-download-source-install>打开 `.dmg` 后拖入 `/Applications`；升级时优先用新 `.app` 替换现有安装，不要把“先删除旧包”表述为会自动保留本地状态的等价路径。</p>
-              <p data-download-source-trust>当前 DMG 仍处于技术预览阶段，尚未完成 codesign + notarization；Gatekeeper 相关警告在 notarization 收口前仍可能出现。</p>
-              <p data-download-source-support>当前仅承诺技术预览验证链路，不承诺“首次打开零系统警告”；若你有本地 `config.toml` 或链执行 world，请在替换前先自行备份，正式普通用户体验以后续 notarization 任务为准。</p>
-              <p data-download-source-footnote>已按当前设备优先选中 macOS x64；如果你要给其他机器下载，可切换上方平台按钮。</p>
+              <p data-download-source-requirements>Intel x64 macOS 桌面环境。现在还没有单独的 Apple Silicon 包，所以在 Apple Silicon 设备上验证，默认要接受兼容层这个前提。</p>
+              <p data-download-source-install>打开 `.dmg`，拖进 `/Applications`。升级时直接用新的 `.app` 替换旧的，不要把“先删再装”当成会自动保留状态的等价做法。</p>
+              <p data-download-source-trust>这个 DMG 还在技术预览阶段，codesign 和 notarization 都还没收完；Gatekeeper 的警告在这件事做完之前都算正常。</p>
+              <p data-download-source-support>这里承诺的是技术预览验证，不承诺“第一次打开完全没系统警告”。如果你本地已经有 `config.toml` 或链执行 world，替换前自己先备份。</p>
+              <p data-download-source-footnote>当前设备默认会先选 macOS x64；如果你是在替别的机器下载，可以自己切上面的按钮。</p>
             </article>
             <article
               data-download-platform-source="linux"
@@ -372,13 +362,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             >
               <h4 data-download-source-title>Linux x64 主运行包</h4>
               <p data-download-source-badge>当前设备推荐</p>
-              <p data-download-source-copy>下载 `oasis7-linux-x86_64.AppImage`，赋予执行权限后即可直接运行；`.deb` 已降级为发行版特化次级入口，不再和主包并列展示。</p>
+              <p data-download-source-copy>下载 `oasis7-linux-x86_64.AppImage`，给执行权限后直接跑就行。`.deb` 还在，但已经降成发行版特化的次级入口，不再和主包并排摆着。</p>
               <p data-download-source-link-label>下载 Linux 主包</p>
-              <p data-download-source-requirements>x86_64 Linux 桌面环境；默认主包面向可运行 AppImage 的发行版，当前不提供 ARM/Linux 其他架构主包。</p>
-              <p data-download-source-install>下载后执行 `chmod +x oasis7-linux-x86_64.AppImage`，再双击或命令行运行；升级时直接替换现有 AppImage 文件，不要默认假设跨目录移动会自动迁移本地状态。</p>
-              <p data-download-source-trust>Linux 主包当前依赖公开 `SHA256` 校验文件辅助验证，不提供额外平台签名外壳；`.deb` 仅保留在 Release 附件中作为高级入口。</p>
-              <p data-download-source-support>若桌面环境缺少 AppImage 集成或被安全策略拦截，请先看发布说明中的最小执行说明；发行版特化问题不进入默认支持路径。</p>
-              <p data-download-source-footnote>已按当前设备优先选中 Linux x64；如果你要给其他机器下载，可切换上方平台按钮。</p>
+              <p data-download-source-requirements>x86_64 Linux 桌面环境。默认主包面向能跑 AppImage 的发行版，当前没有 ARM 或其他 Linux 架构的主包。</p>
+              <p data-download-source-install>下载后执行 `chmod +x oasis7-linux-x86_64.AppImage`，然后双击或命令行运行。升级时直接替换 AppImage 文件，不要默认以为换目录会帮你迁移本地状态。</p>
+              <p data-download-source-trust>Linux 主包现在主要靠公开的 `SHA256` 校验文件辅助验证，没有额外的平台签名壳。`.deb` 只保留在 Release 附件里给进阶用户。</p>
+              <p data-download-source-support>如果桌面环境本身不认 AppImage，或者被安全策略拦住，先看发布说明里的最低执行要求；发行版特化问题不算默认支持范围。</p>
+              <p data-download-source-footnote>当前设备默认会先选 Linux x64；如果你是在替别的机器下载，可以自己切上面的按钮。</p>
             </article>
           </div>
         </div>
@@ -391,17 +381,17 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
                 oasis7-checksums.txt
               </a>
             </li>
-            <li>Linux `.deb` 作为发行版特化次级入口，仅保留在 Release 附件与说明中，不再进入默认下载决策面。</li>
-            <li>当前升级口径已固定为“重新下载最新主包并手动覆盖安装/替换”，还没有应用内自动更新。</li>
-            <li>升级前请自行备份当前启动目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/`；这些状态当前仍按实际启动工作目录解析。</li>
-            <li>Windows 尤其要避免把“先卸载再重装”当作等价升级路径：当前卸载器会删除安装目录。</li>
+            <li>Linux `.deb` 现在只是发行版特化的次级入口，默认下载面已经不再主推它。</li>
+            <li>升级方式目前很朴素：重新下载最新主包，然后手动覆盖安装或替换；还没有应用内自动更新。</li>
+            <li>升级前先备份当前启动目录下的 `config.toml`、`.oasis7_launcher_ux_state.json` 和 `output/chain-runtime/&lt;node_id&gt;/reward-runtime-execution-world/`；这些状态现在还是跟着实际启动目录走。</li>
+            <li>Windows 尤其别把“先卸载再重装”当成等价升级路径。当前卸载器会把安装目录一起删掉。</li>
           </ul>
         </div>
       </section>
 
       <section id="proof" class="section" data-reveal>
-        <h2>技术证据链：可复现、可审计</h2>
-        <p class="section-intro">建议先走预览验证路径确认当前技术预览能否在你的机器上跑通；若需要深入调试，再进入完整构建与文档。以下内容证明当前开发链路可复跑、可回放、可审计；不等同于已开放玩家体验。</p>
+        <h2>现在已经能验证到哪一步</h2>
+        <p class="section-intro">这部分不是说“已经能玩了”，只是把现状摆出来：现在已经能产出命令、事件、截图和回放证据，而且别人可以照着同一条链路自己跑一遍。</p>
         <div class="proof-switcher" data-proof-switcher>
           <p class="proof-switcher-label">切换证据场景</p>
           <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
@@ -415,13 +405,13 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
         <div class="proof-grid">
           <article class="proof-card proof-card-key">
-            <h3>技术闭环</h3>
+            <h3>现在已经能跑通的链路</h3>
             <ol class="proof-list">
-              <li>执行 `oasis7_viewer_demo` 或 `oasis7_viewer_live` 产出局内事件</li>
-              <li>通过 server 暴露回放/在线观测接口</li>
-              <li>连接 viewer 验证事件链路与规则反馈</li>
+              <li>执行 `oasis7_viewer_demo` 或 `oasis7_viewer_live`，先把事件产出来</li>
+              <li>通过 server 暴露回放或在线观测接口</li>
+              <li>连上 viewer，看事件链路和规则反馈是不是对的</li>
             </ol>
-            <a class="button secondary" href="#demo">按命令复现验证</a>
+            <a class="button secondary" href="#today">按命令复现验证</a>
           </article>
 
           <article class="proof-card">
@@ -441,67 +431,67 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
         <div class="proof-strip">
           <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
           <span class="proof-chip">访问面：standard_3d / software_safe / pure_api</span>
-          <span class="proof-chip">产物：命令 + 事件 + 截图</span>
-          <span class="proof-chip is-highlight">当前状态：技术预览（尚不可玩）</span>
+          <span class="proof-chip">能看到：命令、事件、截图</span>
+          <span class="proof-chip is-highlight">现状：能验证，还不能玩</span>
         </div>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
             <span>Tick 128</span>
-            <p>minimal：采集动作通过，验证事件采集链路正常。</p>
+            <p>minimal：采集动作通过，说明事件采集链路是通的。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
             <span>Tick 136</span>
-            <p>minimal：价格波动事件可见，验证观测与告警链路正常。</p>
+            <p>minimal：价格波动事件能看到，说明观测和告警链路是通的。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
             <span>Tick 91</span>
-            <p>twin_region：交易事件完成，验证协同生产事件可追踪。</p>
+            <p>twin_region：交易事件完成，能追到协同生产的结果。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
             <span>Tick 97</span>
-            <p>twin_region：冲突事件出现，验证事件流连续性。</p>
+            <p>twin_region：冲突事件出现，说明事件流还在连续往下走。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
             <span>Tick 149</span>
-            <p>triad_region：多方协定事件落盘，验证治理事件输出。</p>
+            <p>triad_region：多方协定事件落盘，治理事件已经能输出。</p>
           </article>
           <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
             <span>Tick 155</span>
-            <p>triad_region：治理投票结束，验证执行态切换事件。</p>
+            <p>triad_region：治理投票结束，执行态切换也已经能看到。</p>
           </article>
         </div>
       </section>
 
       <section id="roadmap" class="section" data-reveal>
-        <h2>开发路线图（非赛季）</h2>
+        <h2>为什么现在还不是可玩版</h2>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">已完成</span>
             <h3>D1 · 基础运行链路</h3>
-            <p>完成 world 运行、viewer 连接与基础事件流闭环。</p>
+            <p>world 能跑，viewer 能连，基础事件流也闭起来了。</p>
           </article>
           <article class="timeline-item done">
             <span class="status-tag done">已完成</span>
             <h3>D2 · 观测与回放能力</h3>
-            <p>完成回放、在线观测与证据归档链路。</p>
+            <p>回放、在线观测和证据归档这条线已经补上了。</p>
           </article>
           <article class="timeline-item active">
             <span class="status-tag active">进行中</span>
             <h3>D3 · 规则与治理强化</h3>
-            <p>持续完善规则约束、治理机制与一致性保障。</p>
+            <p>还在补规则约束、治理机制和一致性检查。</p>
           </article>
           <article class="timeline-item next">
             <span class="status-tag next">下一阶段</span>
             <h3>D4 · 可玩版本收敛</h3>
-            <p>在验证链路稳定后，逐步推进面向玩家的可玩发布版本。</p>
+            <p>等验证链路更稳一些，才会往真正的可玩版本收。</p>
           </article>
         </div>
       </section>
 
       <section id="architecture" class="section" data-reveal>
-        <h2>引擎底座（给工程读者）</h2>
-        <p class="section-intro">建议先走预览验证路径确认当前技术预览能否在你的机器上跑通；若需要深入调试，再进入完整构建与文档。如果你关注可扩展性与治理边界，这里是底层：玩法模块如何在 Runtime 约束下安全演进。</p>
+        <h2>为什么这个世界能持续运行</h2>
+        <p class="section-intro">如果你更关心底层怎么搭，这里是关键：玩法模块、运行时、viewer 和治理层是分开约束的。世界变化要按统一规则落地，也得留下证据。</p>
         <figure class="architecture-figure">
           <img src="assets/images/architecture-flow.svg" alt="oasis7 引擎架构流示意图" loading="lazy" />
           <figcaption>Gameplay Layer -> Runtime Kernel -> Viewer/Tooling -> Governance，确保扩展可控且结果可审计。</figcaption>
@@ -509,28 +499,28 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
         <div class="architecture-flow">
           <article class="arch-node">
             <h3>Gameplay Layer</h3>
-            <p>战争、治理、经济等规则以 WASM 模块化加载与替换。</p>
+            <p>战争、治理、经济这些规则都能用 WASM 模块来加载和替换。</p>
           </article>
           <article class="arch-node">
             <h3>Runtime Kernel</h3>
-            <p>统一约束资源守恒、时间单向、动作合法性，保证世界一致性。</p>
+            <p>资源守恒、时间单向、动作合法性这些硬约束都在这里卡住。</p>
           </article>
           <article class="arch-node">
             <h3>Viewer &amp; Tooling</h3>
-            <p>离线回放、在线订阅、调试面板共享同一事件证据链。</p>
+            <p>离线回放、在线订阅和调试面板共用同一条事件证据链。</p>
           </article>
           <article class="arch-node">
             <h3>Consensus &amp; Governance</h3>
-            <p>以提案机制定义模块升级与规则替换的边界与权限。</p>
+            <p>模块怎么升级、规则怎么改，要走提案和治理流程，不是谁想改就改。</p>
           </article>
         </div>
       </section>
 
       <section id="contribute" class="section" data-reveal>
-        <h2>下一步</h2>
+        <h2>如果你想继续跟进</h2>
         <div class="grid cards-2">
           <article class="card">
-            <h3>继续深入</h3>
+            <h3>继续读</h3>
             <ul class="doc-links">
               <li>
                 <a
@@ -558,7 +548,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>
           <article class="card">
             <h3>参与共建</h3>
-            <p>当前阶段优先欢迎引擎扩展、观测工具链、治理机制与可玩性验证方法的改进提案。</p>
+            <p>现在更需要的是把世界做扎实的改进提案，比如可观测性、规则表达、治理机制和可玩性验证。</p>
             <div class="cta-row">
               <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
                 >提交 Issue</a
@@ -573,7 +563,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
     </main>
 
     <footer class="footer">
-      <p>© <span data-year></span> oasis7. 当前为技术预览，目标逐步走向可玩版本。</p>
+      <p>© <span data-year></span> oasis7。现在还是技术预览，离正式可玩版还有一段路。</p>
     </footer>
   </body>
 </html>
