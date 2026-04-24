@@ -273,6 +273,26 @@ fn filtered_request_peers_excludes_protocol_retry_cooldown_peers_without_fallbac
 }
 
 #[test]
+fn filtered_request_peers_excludes_transport_retry_cooldown_peers_across_protocols() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig::default());
+    let observer_peer = PeerId::random();
+    let sequencer_peer = PeerId::random();
+    network.mark_peer_for_transport_retry_cooldown(observer_peer);
+
+    let filtered = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![observer_peer, sequencer_peer],
+    );
+    assert_eq!(filtered, vec![sequencer_peer]);
+
+    let cross_protocol_filtered = network.filtered_request_peers(
+        "/aw/node/replication/ping",
+        vec![observer_peer, sequencer_peer],
+    );
+    assert_eq!(cross_protocol_filtered, vec![sequencer_peer]);
+}
+
+#[test]
 fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_window() {
     let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
         protocol_retry_cooldown_after: Duration::from_millis(5),
@@ -296,6 +316,28 @@ fn filtered_request_peers_retries_protocol_retry_cooldown_peer_after_retry_windo
         "/aw/node/replication/fetch-commit/1.0.0",
         vec![sequencer_peer],
     );
+    assert_eq!(filtered_after_retry_window, vec![sequencer_peer]);
+}
+
+#[test]
+fn filtered_request_peers_retries_transport_retry_cooldown_peer_after_retry_window() {
+    let network = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        protocol_retry_cooldown_after: Duration::from_millis(5),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let sequencer_peer = PeerId::random();
+    network.mark_peer_for_transport_retry_cooldown(sequencer_peer);
+
+    let filtered_initial = network.filtered_request_peers(
+        "/aw/node/replication/fetch-commit/1.0.0",
+        vec![sequencer_peer],
+    );
+    assert!(filtered_initial.is_empty());
+
+    std::thread::sleep(Duration::from_millis(15));
+
+    let filtered_after_retry_window =
+        network.filtered_request_peers("/aw/node/replication/ping", vec![sequencer_peer]);
     assert_eq!(filtered_after_retry_window, vec![sequencer_peer]);
 }
 
@@ -576,14 +618,15 @@ fn fetch_commit_not_found_retry_cooldown_is_protocol_scoped_but_connection_gaps_
     let timeout = WorldError::NetworkProtocolUnavailable {
         protocol: "libp2p-replication outbound request failed: request failed: Timeout".to_string(),
     };
-    assert!(peer_error_indicates_protocol_retry_cooldown(
+    assert!(!peer_error_indicates_protocol_retry_cooldown(
         crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
         &timeout,
     ));
-    assert!(peer_error_indicates_protocol_retry_cooldown(
+    assert!(!peer_error_indicates_protocol_retry_cooldown(
         "/aw/node/replication/ping",
         &timeout,
     ));
+    assert!(peer_error_indicates_transport_retry_cooldown(&timeout));
 
     let business_unsupported = WorldError::NetworkRequestFailed {
         code: DistributedErrorCode::ErrUnsupported,
@@ -594,6 +637,97 @@ fn fetch_commit_not_found_retry_cooldown_is_protocol_scoped_but_connection_gaps_
         crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
         &business_unsupported,
     ));
+}
+
+#[test]
+fn libp2p_replication_network_connection_gap_cools_peer_across_protocols() {
+    let listener = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listener addr")],
+        peer_record: Some(test_peer_record("listener-cross-protocol-timeout")),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let listen_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("listener bind", listen_deadline, || {
+        !listener.listening_addrs().is_empty()
+    });
+
+    let ping_request_count = Arc::new(AtomicUsize::new(0));
+    listener
+        .register_handler(
+            "/aw/node/replication/ping",
+            Box::new({
+                let ping_request_count = Arc::clone(&ping_request_count);
+                move |_payload| {
+                    ping_request_count.fetch_add(1, Ordering::SeqCst);
+                    Err(WorldError::NetworkProtocolUnavailable {
+                        protocol:
+                            "libp2p-replication outbound request failed: request failed: Timeout"
+                                .to_string(),
+                    })
+                }
+            }),
+        )
+        .expect("register ping listener handler");
+
+    let fetch_commit_request_count = Arc::new(AtomicUsize::new(0));
+    listener
+        .register_handler(
+            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let fetch_commit_request_count = Arc::clone(&fetch_commit_request_count);
+                move |_payload| {
+                    fetch_commit_request_count.fetch_add(1, Ordering::SeqCst);
+                    Ok(b"commit-ok".to_vec())
+                }
+            }),
+        )
+        .expect("register fetch-commit listener handler");
+
+    let dialer = Libp2pReplicationNetwork::new(Libp2pReplicationNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("dialer addr")],
+        bootstrap_peers: vec![listening_addr_with_peer_id(&listener)],
+        protocol_retry_cooldown_after: Duration::from_millis(250),
+        ..Libp2pReplicationNetworkConfig::default()
+    });
+    let connect_deadline = Instant::now() + Duration::from_secs(10);
+    wait_until("dialer connection", connect_deadline, || {
+        !dialer.connected_peers().is_empty()
+    });
+
+    let first = dialer.request("/aw/node/replication/ping", b"node");
+    assert!(matches!(
+        first,
+        Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            ..
+        })
+    ));
+    assert!(ping_request_count.load(Ordering::SeqCst) > 0);
+
+    let second = dialer.request(
+        crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+        b"node",
+    );
+    assert!(matches!(
+        second,
+        Err(WorldError::NetworkProtocolUnavailable { .. })
+    ));
+    assert_eq!(
+        fetch_commit_request_count.load(Ordering::SeqCst),
+        0,
+        "transport cooldown should suppress immediate cross-protocol reuse of the same peer"
+    );
+
+    std::thread::sleep(Duration::from_millis(300));
+
+    let third = dialer
+        .request(
+            crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            b"node",
+        )
+        .expect("fetch commit should recover after transport cooldown");
+    assert_eq!(third, b"commit-ok".to_vec());
+    assert_eq!(fetch_commit_request_count.load(Ordering::SeqCst), 1);
 }
 
 #[test]

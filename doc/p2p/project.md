@@ -610,7 +610,7 @@
     - `bash scripts/p2p-real-env-observability-monitor.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定，并让 replication connection-gap 失败在所有协议上统一进入短冷却、仅保留 `fetch_commit` 的 `ErrNotFound` 专属冷却。 Trace: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.yaml
+- [x] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定，并将 replication 的 connection-gap 失败从 protocol 级短冷却继续推进到 peer-level transport cooldown；`unsupported` 与 `fetch_commit` 的 `ErrNotFound` 保持 protocol-scoped，同时把 protocol/transport cooldown 状态透出到 chain status 与 triad observability。 Trace: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.yaml
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`

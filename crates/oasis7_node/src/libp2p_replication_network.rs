@@ -45,6 +45,7 @@ pub struct ReplicationNetworkDebugSnapshot {
     pub peer_healths: Vec<ReplicationPeerHealthDebug>,
     pub registered_protocols: Vec<String>,
     pub protocol_retry_cooldown_peers: HashMap<String, Vec<String>>,
+    pub transport_retry_cooldown_peers: Vec<String>,
     pub recent_errors: Vec<String>,
 }
 
@@ -95,6 +96,7 @@ pub struct Libp2pReplicationNetwork {
     request_peer_cursor: Arc<AtomicUsize>,
     protocol_retry_cooldown_after: Duration,
     protocol_retry_cooldown_peers: Arc<Mutex<HashMap<String, HashMap<PeerId, Instant>>>>,
+    transport_retry_cooldown_peers: Arc<Mutex<HashMap<PeerId, Instant>>>,
 }
 
 impl Libp2pReplicationNetwork {
@@ -120,6 +122,7 @@ impl Libp2pReplicationNetwork {
             request_peer_cursor: Arc::new(AtomicUsize::new(0)),
             protocol_retry_cooldown_after: config.protocol_retry_cooldown_after,
             protocol_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
+            transport_retry_cooldown_peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -197,6 +200,16 @@ impl Libp2pReplicationNetwork {
             peer_ids.dedup();
         }
 
+        let mut transport_retry_cooldown_peers: Vec<String> = self
+            .transport_retry_cooldown_peers
+            .lock()
+            .expect("lock transport retry cooldown peers")
+            .keys()
+            .map(PeerId::to_string)
+            .collect();
+        transport_retry_cooldown_peers.sort();
+        transport_retry_cooldown_peers.dedup();
+
         let mut recent_errors = self.inner.debug_errors();
         recent_errors.sort();
         recent_errors.dedup();
@@ -217,6 +230,7 @@ impl Libp2pReplicationNetwork {
             peer_healths,
             registered_protocols,
             protocol_retry_cooldown_peers,
+            transport_retry_cooldown_peers,
             recent_errors,
         }
     }
@@ -263,19 +277,28 @@ impl Libp2pReplicationNetwork {
 
     fn filtered_request_peers(&self, protocol: &str, ordered_peers: Vec<PeerId>) -> Vec<PeerId> {
         let now = Instant::now();
+        let mut transport_retry_cooldown_peers = self
+            .transport_retry_cooldown_peers
+            .lock()
+            .expect("lock transport retry cooldown peers");
+        transport_retry_cooldown_peers.retain(|_, cooldown_until| *cooldown_until > now);
         let mut protocol_retry_cooldown_peers = self
             .protocol_retry_cooldown_peers
             .lock()
             .expect("lock protocol retry cooldown peers");
         let Some(peers) = protocol_retry_cooldown_peers.get_mut(protocol) else {
-            return ordered_peers;
+            return ordered_peers
+                .into_iter()
+                .filter(|peer| !transport_retry_cooldown_peers.contains_key(peer))
+                .collect();
         };
         peers.retain(|_, cooldown_until| *cooldown_until > now);
         let keep_protocol_entry = !peers.is_empty();
         let filtered: Vec<PeerId> = ordered_peers
-            .iter()
-            .copied()
-            .filter(|peer| !peers.contains_key(peer))
+            .into_iter()
+            .filter(|peer| {
+                !peers.contains_key(peer) && !transport_retry_cooldown_peers.contains_key(peer)
+            })
             .collect();
         if !keep_protocol_entry {
             protocol_retry_cooldown_peers.remove(protocol);
@@ -290,6 +313,14 @@ impl Libp2pReplicationNetwork {
             .expect("lock protocol retry cooldown peers")
             .entry(protocol.to_string())
             .or_default()
+            .insert(peer, cooldown_until);
+    }
+
+    fn mark_peer_for_transport_retry_cooldown(&self, peer: PeerId) {
+        let cooldown_until = Instant::now() + self.protocol_retry_cooldown_after;
+        self.transport_retry_cooldown_peers
+            .lock()
+            .expect("lock transport retry cooldown peers")
             .insert(peer, cooldown_until);
     }
 
@@ -395,6 +426,9 @@ impl Libp2pReplicationNetwork {
                 match self.request_via_peer(protocol, payload, peer) {
                     Ok(reply) => return Ok(reply),
                     Err(err) => {
+                        if peer_error_indicates_transport_retry_cooldown(&err) {
+                            self.mark_peer_for_transport_retry_cooldown(peer);
+                        }
                         if peer_error_indicates_protocol_retry_cooldown(protocol, &err) {
                             self.mark_peer_for_protocol_retry_cooldown(protocol, peer);
                         }
@@ -672,8 +706,11 @@ fn peer_error_indicates_unsupported_protocol(err: &WorldError) -> bool {
 
 fn peer_error_indicates_protocol_retry_cooldown(protocol: &str, err: &WorldError) -> bool {
     peer_error_indicates_unsupported_protocol(err)
-        || peer_error_indicates_retryable_connection_gap(err)
         || peer_error_indicates_fetch_commit_not_found_retry_cooldown(protocol, err)
+}
+
+fn peer_error_indicates_transport_retry_cooldown(err: &WorldError) -> bool {
+    peer_error_indicates_retryable_connection_gap(err)
 }
 
 fn peer_error_indicates_fetch_commit_not_found_retry_cooldown(
