@@ -236,6 +236,23 @@
   - AC-25: 当前快照规模仍需以紧凑形式可见，且不遮挡选中对象与交互面主体。
   - AC-26: 原始 snapshot/metrics/hosted access 仍可通过折叠 diagnostics 查看，供排障与 QA 采证使用。
 
+## 增量需求（2026-04-24, 设置入口收口）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - `software_safe` 当前把 `Language and Viewer Entry` 作为一整块主内容卡片放在首屏中间栏顶部，但它本质上只是设置/跳转入口，不属于当前正式玩法信息本体；继续占据主屏区域会压缩 `Formal Gameplay Summary` 的可视空间。
+- Proposed Solution:
+  - 将 `Language and Viewer Entry` 从主内容卡片收口为 `World Summary` 面板右上角的紧凑菜单；
+  - 菜单内仅保留语言切换与 `Open standard Viewer` 跳转，不再为当前页重复提供“重新打开当前 software_safe”这类冗余主动作；
+  - 保持 bilingual Viewer 入口的可发现性，但不再让它抢占 formal gameplay 首屏。
+- Functional Constraints:
+  - 不移除语言切换与标准 Viewer 跳转能力。
+  - 不把这组设置项重新挪到新的首屏大卡片或长段说明里。
+  - 不影响当前 `software_safe` 作为正式 Web 主入口的玩法与回归 contract。
+- Acceptance Criteria:
+  - AC-27: `software_safe` 主屏不再存在独立 `Language and Viewer Entry` 内容卡片。
+  - AC-28: 语言切换与标准 Viewer 跳转必须在顶部右侧的紧凑入口中保持可达。
+  - AC-29: `Formal Gameplay Summary` 成为首屏主要内容，不再被设置型入口顶在正文最前面。
+
 ## 增量需求（2026-04-16）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
 - Problem Statement:

@@ -1,0 +1,23 @@
+task_uid: task_470ff8b20dce418c936995cc34743043
+title: "collapse software-safe language and viewer entry into top-right menu"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-language-entry-collapse
+execution_log_path: .pm/tasks/task_470ff8b20dce418c936995cc34743043.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-039
+acceptance:
+  - "language and viewer entry controls no longer occupy a primary content block in software_safe"
+  - "the controls remain reachable via a compact top-right affordance"
+handoff_to: []
+updated_at: 2026-04-24T23:19:45+08:00
+last_started_at: 2026-04-24T23:08:46+08:00
+last_closed_at: 2026-04-24T23:19:45+08:00

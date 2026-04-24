@@ -213,6 +213,40 @@
         font-size: 12px;
         user-select: none;
       }
+      .entry-menu {
+        position: relative;
+      }
+      .entry-menu[open] {
+        z-index: 10;
+      }
+      .entry-menu__toggle {
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(99, 179, 255, 0.3);
+        background: linear-gradient(180deg, rgba(99, 179, 255, 0.18), rgba(99, 179, 255, 0.08));
+        color: var(--text);
+        cursor: pointer;
+        user-select: none;
+        font-size: 13px;
+      }
+      .entry-menu__toggle::-webkit-details-marker {
+        display: none;
+      }
+      .entry-menu__panel {
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        width: min(320px, calc(100vw - 48px));
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: rgba(9, 17, 26, 0.98);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      }
       .empty {
         color: var(--muted);
         border: 1px dashed var(--border);
