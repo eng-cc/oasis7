@@ -293,6 +293,19 @@
   - 验收命令 (`test_tier_required`):
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] lightweight-web-ui-automation-smoke (PRD-TESTING-002/003) [test_tier_required]: 新增 `scripts/viewer-software-safe-step-regression-smoke.sh`，通过临时 fixture 页面复用真 `agent-browser` 回归 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约，作为正式 S6 前的快预检。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
+  - 产物文件:
+    - `scripts/viewer-software-safe-step-regression-smoke.sh`
+    - `testing-manual.md`
+    - `doc/testing/prd.md`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml`
+    - `.pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/viewer-software-safe-step-regression-smoke.sh scripts/viewer-software-safe-step-regression.sh`
+    - `./scripts/viewer-software-safe-step-regression-smoke.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 - 当前阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
 

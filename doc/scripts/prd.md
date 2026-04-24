@@ -129,6 +129,7 @@
   - AC-18F: `scripts/prepare-task-pr.sh` 必须同时输出 rust required planner 的 `reason_summary`；文本模式直接显示摘要，`--json` 还需提供拆分后的 `reason_items[]` 以便 agent 侧直接消费。
   - AC-18G: 新增 `scripts/pm/rebase-conflict-helper.sh`；默认只读扫描 `git ls-files -u -- .pm`，`--json` 至少输出 `rebase_in_progress`、`summary.total_conflicted_paths`、`summary.signals_conflicts`、`summary.generated_view_conflicts`、`summary.manual_conflicts`、`conflicts[].path/category/stages/recommended_action`、`resolved_now.renumbered_signals[]` 与 `recommended_commands[]`。
   - AC-18H: `scripts/pm/rebase-conflict-helper.sh --resolve-signals` 只允许在 active rebase 中执行，且只能自动处理 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml`，脚本只能建议“保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`”，不得自动恢复这些 git-ignored 本地视图，也不得自动覆盖 canonical task/memory/stage 文件。
+  - AC-18I: 仓库必须提供轻量 Web/UI automation smoke `scripts/viewer-software-safe-step-regression-smoke.sh`；该脚本需在不启动完整 runtime 栈的前提下，通过临时 fixture 页面复用真 `agent-browser` 与 `scripts/viewer-software-safe-step-regression.sh`，并验证 `software-safe-step-summary.json` 与关键 state artifact 的最小契约。
   - AC-19: 当 source worktree 脏、source 分支未被任何 worktree 检出、base ref 不存在、或 `--create` 时 source 分支落后于 comparison ref，脚本必须阻断并给出修复建议。
   - AC-20: PR 合入后，正式流程文档与脚本输出必须明确该 task `worktree` / branch 需要被删除；cleanup 命令不得再被表述为“可选建议”。
   - AC-20A: `scripts/land-task-worktree.sh` 的帮助文案与正式专题文档必须明确它只是 local-only / fallback 兼容工具，不再是默认最终合流入口。
@@ -162,6 +163,7 @@
   - `scripts/prepare-task-pr.sh`
   - `scripts/pm/task-closeout.sh`
   - `scripts/pm/rebase-conflict-helper.sh`
+  - `scripts/viewer-software-safe-step-regression-smoke.sh`
   - `scripts/pr-review-thread-closeout.sh`
   - `scripts/worktree-gc-report.sh`
   - `scripts/land-task-worktree.sh`
@@ -224,7 +226,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-SCRIPTS-001 | TASK-SCRIPTS-001/002/005/009/011 | `test_tier_required` | 脚本分层与入口清单核验 | 日常开发链路稳定性 |
-| PRD-SCRIPTS-002 | TASK-SCRIPTS-002/003/005 | `test_tier_required` + `test_tier_full` | 参数契约与失败语义回归 | CI 稳定性与故障定位效率 |
+| PRD-SCRIPTS-002 | TASK-SCRIPTS-002/003/005/viewer-software-safe-step-regression-smoke | `test_tier_required` + `test_tier_full` | 参数契约与失败语义回归、`viewer-software-safe-step-regression-smoke.sh` fixture-driven browser smoke | CI 稳定性与故障定位效率 |
 | PRD-SCRIPTS-003 | TASK-SCRIPTS-003/004/005/010 | `test_tier_required` | fallback 使用条件抽样检查 | 排障闭环和风险控制 |
 | PRD-SCRIPTS-004 | TASK-SCRIPTS-014 | `test_tier_required` | `bash -n` + `--help` + 双实例并行 smoke + `state.json` / ready payload 检查 + 文档治理检查 | 多 worktree 并行执行稳定性与 agent 可驱动性 |
 | PRD-SCRIPTS-005 | TASK-SCRIPTS-015/020 | `test_tier_required` | `bash -n` + `--help` + 真实 create/remove smoke + worktree 例外授权文案一致性检查 + 文档治理检查 | 多任务并行的 worktree/branch 命名一致性与启动成本 |

@@ -1,0 +1,27 @@
+task_uid: task_08478a657e554c5f9b0031f0b86bed2f
+title: "add lightweight web ui automation smoke"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down
+execution_log_path: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.execution.md
+  - scripts/viewer-software-safe-step-regression.sh
+  - testing-manual.md
+  - doc/scripts/prd.md
+  - doc/testing/prd.md
+doc_refs: []
+related_prd:
+  - PRD-SCRIPTS-002
+  - PRD-TESTING-002
+  - PRD-TESTING-003
+acceptance:
+  - "repo provides a lightweight fixture-driven smoke for web ui automation without booting the full runtime stack"
+  - "the smoke reuses viewer-software-safe-step-regression.sh with real agent-browser automation and asserts summary artifacts"
+  - "scripts and testing docs point owners to the smoke as a fast preflight before heavier S6 runs"
+handoff_to: []
+updated_at: 2026-04-24T09:25:30+08:00
+last_started_at: 2026-04-23T22:04:23+08:00
+last_closed_at: 2026-04-24T09:25:30+08:00

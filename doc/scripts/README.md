@@ -12,6 +12,7 @@
 - 想把已完成任务标准化通过 GitHub PR 合入 `main`，并先看 changed-path 对齐的本地 required 建议与 planner 原因摘要：`scripts/prepare-task-pr.sh` + `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`
 - 想在 rebase 时先看 `.pm/**` 冲突哪些能自动修、哪些必须手工处理：`scripts/pm/rebase-conflict-helper.sh` + `.pm/README.md`
 - 想盘点哪些 task worktree 已可回收：`scripts/worktree-gc-report.sh`
+- 想在不启动完整 runtime 栈的前提下先快查 Web/UI automation 链路：`scripts/viewer-software-safe-step-regression-smoke.sh`
 - 想预热隔离 harness 或理解 worktree 栈约束：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - 想让多个 worktree 复用 Rust 开发态编译缓存：`scripts/cargo-dev.sh`
 
@@ -61,6 +62,7 @@
 - `scripts/prepare-task-pr.sh` 为任务完成后的默认 GitHub PR 收口入口；负责在干净 task worktree 上执行 PR preflight / create，并基于 changed-path planner 输出本地 required 验证建议、planner 原因摘要，以及 PR 合入后的本地同步与回收命令。
 - `scripts/pm/rebase-conflict-helper.sh` 为 `.pm` rebase 冲突辅助入口；默认只读分类 `.pm/**` 未合并路径，只允许在 active rebase 中用 `--resolve-signals` 自动修 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞。若冲突命中 `.pm/registry/tasks.yaml` 或 role backlog 这类 git-ignored 本地视图，应保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`。
 - `scripts/worktree-gc-report.sh` 为 worktree 生命周期盘点入口；默认只读汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，不自动删除任何 worktree/branch。
+- `scripts/viewer-software-safe-step-regression-smoke.sh` 为轻量 Web/UI automation smoke；通过临时 fixture 页面复用真 `agent-browser` 和 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime/build 的前提下先验证浏览器自动化链路与 summary/state 产物契约。
 - `scripts/land-task-worktree.sh` 仅保留给用户显式要求的 local-only / fallback 场景，不再是默认最终合流入口。
 - `scripts/cargo-dev.sh` 只用于本地开发态 `cargo check/test/run/build` 的 shared target 复用；要求 deterministic wasm / release 的脚本继续走原始 cargo 入口，保持 `CARGO_TARGET_DIR` 为空。
 - 若默认高频脚本入口变化，需同步回写本目录“从这里开始”，避免 README 退化回纯专题目录页。
