@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use futures::channel::oneshot;
@@ -18,7 +19,8 @@ use oasis7_proto::distributed_net::{NetworkMessage, NetworkSubscription};
 
 use super::{
     snapshot_clone, snapshot_traffic_metrics, Command, Libp2pNetwork, Libp2pReachabilitySnapshot,
-    Libp2pTrafficMetricsSnapshot, PeerManagerBlockArtifact, PeerManagerPeerHealth,
+    Libp2pTrafficMetricsSnapshot, PeerManagerBlockArtifact, PeerManagerHealthIssue,
+    PeerManagerHealthStatus, PeerManagerPeerHealth,
 };
 
 impl Libp2pNetwork {
@@ -52,6 +54,18 @@ impl Libp2pNetwork {
             .iter()
             .cloned()
             .collect()
+    }
+
+    pub fn admissible_request_peers(&self) -> Vec<PeerId> {
+        let connected_peers: Vec<PeerId> = self
+            .connected_peers
+            .lock()
+            .expect("lock connected peers")
+            .iter()
+            .copied()
+            .collect();
+        let peer_healths = self.peer_healths.lock().expect("lock peer healths");
+        connected_or_active_transport_peers_from_healths(connected_peers, &peer_healths)
     }
 
     pub fn debug_errors(&self) -> Vec<String> {
@@ -107,6 +121,118 @@ impl Libp2pNetwork {
     pub(super) fn enqueue_command(&self, command: Command) -> Result<(), WorldError> {
         super::try_send_command(&self.command_tx, command)
     }
+}
+
+fn peer_health_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
+    matches!(health.status, PeerManagerHealthStatus::Blocked)
+        && !health.issues.is_empty()
+        && !health
+            .issues
+            .iter()
+            .all(|issue| peer_health_issue_is_record_exchange_pending(issue))
+}
+
+fn peer_health_is_soft_deprioritized(health: &PeerManagerPeerHealth) -> bool {
+    matches!(health.status, PeerManagerHealthStatus::Blocked)
+        && !health.issues.is_empty()
+        && health
+            .issues
+            .iter()
+            .all(|issue| peer_health_issue_is_record_exchange_pending(issue))
+        && health
+            .issues
+            .iter()
+            .any(|issue| matches!(issue, PeerManagerHealthIssue::MissingPeerRecord))
+}
+
+fn peer_health_issue_is_record_exchange_pending(issue: &PeerManagerHealthIssue) -> bool {
+    matches!(
+        issue,
+        PeerManagerHealthIssue::MissingPeerRecord
+            | PeerManagerHealthIssue::InsufficientActiveDiscoverySources { .. }
+            | PeerManagerHealthIssue::SingleSourceDiscovery { .. }
+    )
+}
+
+fn blocked_and_soft_deprioritized_peers(
+    peer_healths: &HashMap<String, PeerManagerPeerHealth>,
+) -> (HashSet<PeerId>, HashSet<PeerId>) {
+    let mut blocked_peers = HashSet::new();
+    let mut soft_deprioritized_peers = HashSet::new();
+    for health in peer_healths.values() {
+        let Ok(peer_id) = health.peer_id.parse::<PeerId>() else {
+            continue;
+        };
+        if peer_health_is_request_blocked(health) {
+            blocked_peers.insert(peer_id);
+        }
+        if peer_health_is_soft_deprioritized(health) {
+            soft_deprioritized_peers.insert(peer_id);
+        }
+    }
+    (blocked_peers, soft_deprioritized_peers)
+}
+
+fn request_candidate_peers_from_healths(
+    peers: Vec<PeerId>,
+    blocked_peers: &HashSet<PeerId>,
+    soft_deprioritized_peers: &HashSet<PeerId>,
+) -> Vec<PeerId> {
+    let preferred = peers
+        .iter()
+        .copied()
+        .filter(|peer_id| {
+            !blocked_peers.contains(peer_id) && !soft_deprioritized_peers.contains(peer_id)
+        })
+        .collect::<Vec<_>>();
+    if !preferred.is_empty() {
+        return preferred;
+    }
+    peers
+        .into_iter()
+        .filter(|peer_id| !blocked_peers.contains(peer_id))
+        .collect()
+}
+
+fn active_transport_peers_from_healths(
+    peer_healths: &HashMap<String, PeerManagerPeerHealth>,
+    blocked_peers: &HashSet<PeerId>,
+    soft_deprioritized_peers: &HashSet<PeerId>,
+) -> Vec<PeerId> {
+    let peers = peer_healths
+        .values()
+        .filter(|health| health.active_path_kind.is_some())
+        .filter_map(|health| health.peer_id.parse::<PeerId>().ok())
+        .collect();
+    let peers = dedup_sorted_peers(peers);
+    request_candidate_peers_from_healths(peers, blocked_peers, soft_deprioritized_peers)
+}
+
+fn connected_or_active_transport_peers_from_healths(
+    connected_peers: Vec<PeerId>,
+    peer_healths: &HashMap<String, PeerManagerPeerHealth>,
+) -> Vec<PeerId> {
+    let connected_peers = dedup_sorted_peers(connected_peers);
+    let (blocked_peers, soft_deprioritized_peers) =
+        blocked_and_soft_deprioritized_peers(peer_healths);
+    let admissible_connected_peers = request_candidate_peers_from_healths(
+        connected_peers.clone(),
+        &blocked_peers,
+        &soft_deprioritized_peers,
+    );
+    if !admissible_connected_peers.is_empty() {
+        return admissible_connected_peers;
+    }
+    if !connected_peers.is_empty() {
+        return Vec::new();
+    }
+    active_transport_peers_from_healths(peer_healths, &blocked_peers, &soft_deprioritized_peers)
+}
+
+fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
+    peers.sort_unstable_by_key(|peer| peer.to_string());
+    peers.dedup();
+    peers
 }
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {

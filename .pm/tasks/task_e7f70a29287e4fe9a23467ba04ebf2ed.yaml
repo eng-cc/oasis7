@@ -1,0 +1,23 @@
+task_uid: task_e7f70a29287e4fe9a23467ba04ebf2ed
+title: "libp2p control plane cpu optimization"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-libp2p-control-plane-cpu-optimization
+execution_log_path: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+doc_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+related_prd:
+  - PRD-P2P-002
+acceptance:
+  - "libp2p replication request peer selection no longer depends on debug_peer_healths/debug_snapshot-style full health snapshots on each retry."
+  - "Connected peer fallback and provider-restricted requests preserve existing admissible-peer semantics for blocked, suspect, and missing-record peers."
+  - "Required targeted tests for oasis7_net and oasis7_node pass in the task worktree."
+handoff_to: []
+updated_at: 2026-04-24T13:24:03+08:00
+last_started_at: 2026-04-24T13:02:11+08:00
+last_closed_at: 2026-04-24T13:24:03+08:00
