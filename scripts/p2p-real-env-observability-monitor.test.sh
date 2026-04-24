@@ -14,6 +14,9 @@ python3 ./scripts/p2p-real-env-observability-summary.py \
   --observer-wasm-summary fixtures/p2p_real_env_observability/observer_wasm_summary.json \
   --sequencer-wasm-summary fixtures/p2p_real_env_observability/sequencer_wasm_summary.json \
   --storage-wasm-summary fixtures/p2p_real_env_observability/storage_wasm_summary.json \
+  --observer-status-json fixtures/p2p_real_env_observability/observer_status.json \
+  --sequencer-status-json fixtures/p2p_real_env_observability/sequencer_status.json \
+  --storage-status-json fixtures/p2p_real_env_observability/storage_status.json \
   --summary-json "$tmp_root/summary.json" \
   --summary-md "$tmp_root/summary.md" \
   --run-id test-run \
@@ -32,10 +35,26 @@ observer = summary["nodes"]["observer_local"]
 assert observer["role"] == "observer"
 assert observer["host"]["runtime_cpu_percent"] == 47.3
 assert observer["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
+assert observer["modules"]["consensus"]["status"] == "ok"
+assert observer["optimization_candidates"] == []
 sequencer = summary["nodes"]["sequencer_ecs"]
 assert "runtime_cpu_hot" in sequencer["alerts"]
 assert sequencer["traffic"]["control_plane_total_events"] == 178
+assert sequencer["modules"]["consensus"]["height_lag"] == 2
+assert "control_plane_wire_share_high" in sequencer["modules"]["traffic_control_plane"]["alerts"]
+assert "recent_replication_errors_high" in sequencer["modules"]["replication"]["alerts"]
+assert "transaction_timeouts_present" in sequencer["modules"]["transactions"]["alerts"]
+assert any(
+    candidate["key"] == "libp2p_control_plane_churn"
+    for candidate in sequencer["optimization_candidates"]
+)
+assert any(
+    candidate["key"] == "replication_error_retry_churn"
+    for candidate in summary["optimization_candidates"]
+)
 storage = summary["nodes"]["storage_ecs"]
 assert storage["wasm"]["window_available"] is True
+assert storage["modules"]["storage"]["status"] == "ok"
 assert summary["traffic"]["aggregate"]["total_payload_bytes"] == 780646
+assert summary["overall"]["optimization_candidate_count"] >= 3
 PY

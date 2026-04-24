@@ -1,0 +1,180 @@
+{
+  "node_id": "triad-sequencer-a",
+  "role": "sequencer",
+  "consensus": {
+    "committed_height": 56013,
+    "network_committed_height": 56015,
+    "known_peer_heads": 0,
+    "last_commit_age_ms": 23000,
+    "recent_finality_latency": {
+      "sample_count": 48,
+      "avg_latency_ms": 820,
+      "max_latency_ms": 3100,
+      "p95_latency_ms": 2400
+    },
+    "pending_consensus_actions": {
+      "queued_action_count": 19,
+      "queued_payload_bytes": 65536,
+      "submit_buffer_action_count": 12,
+      "submit_buffer_payload_bytes": 49152
+    },
+    "inbound_timing_rejections": {
+      "proposal_future_slot": 0,
+      "proposal_stale_slot": 0,
+      "attestation_future_slot": 3,
+      "attestation_stale_slot": 1,
+      "attestation_epoch_mismatch": 0,
+      "last_reason": "attestation_future_slot"
+    },
+    "pending_proposal": null
+  },
+  "observability": {
+    "status": "warn",
+    "summary": "peer health degraded: suspect=1, blocked=1, peers_with_issues=2; +1 more alerts",
+    "connected_peer_count": 3,
+    "active_peer_count": 1,
+    "candidate_peer_count": 0,
+    "suspect_peer_count": 1,
+    "blocked_peer_count": 1,
+    "peer_with_issues_count": 2,
+    "known_peer_heads": 0,
+    "network_height_lag": 2,
+    "recent_replication_error_count": 465,
+    "alerts": [
+      {
+        "code": "replication_peer_health_degraded"
+      },
+      {
+        "code": "replication_recent_errors"
+      }
+    ]
+  },
+  "replication": {
+    "connected_peers": [
+      "12D3KooSeqPeerA",
+      "12D3KooSeqPeerB",
+      "12D3KooSeqPeerC"
+    ],
+    "peer_healths": [
+      {
+        "peer_id": "12D3KooSeqPeerA",
+        "status": "active"
+      },
+      {
+        "peer_id": "12D3KooSeqPeerB",
+        "status": "suspect"
+      },
+      {
+        "peer_id": "12D3KooSeqPeerC",
+        "status": "blocked"
+      }
+    ],
+    "registered_protocols": [
+      "/aw/node/replication/fetch-blob/1.0.0",
+      "/aw/node/replication/fetch-commit/1.0.0"
+    ],
+    "protocol_retry_cooldown_peers": {
+      "/aw/node/replication/fetch-commit/1.0.0": [
+        "12D3KooSeqPeerB"
+      ]
+    },
+    "recent_errors": [
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p peer manager quarantine disconnect peer=12D3KooSeqPeerC",
+      "libp2p peer manager quarantine suppresses failover peer=12D3KooSeqPeerC",
+      "libp2p peer record request failed: ConnectionClosed",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerB",
+      "libp2p connection closed peer=12D3KooSeqPeerC",
+      "libp2p connection closed peer=12D3KooSeqPeerA",
+      "libp2p connection closed peer=12D3KooSeqPeerB"
+    ]
+  },
+  "storage": {
+    "bytes_by_dir": {
+      "execution_store_root": 3145728,
+      "replication_root": 524288
+    },
+    "ref_count": 2048,
+    "pin_count": 46,
+    "checkpoint_count": 8,
+    "replay_summary": {
+      "retained_height_count": 1024,
+      "earliest_retained_height": 54990,
+      "latest_retained_height": 56013,
+      "mode": "checkpoint_plus_log"
+    },
+    "orphan_blob_count": 0,
+    "last_gc_result": "success",
+    "last_gc_error": null,
+    "degraded_reason": null
+  },
+  "reward_runtime": {
+    "enabled": true,
+    "metrics_available": true,
+    "report_count": 98,
+    "latest_epoch_index": 13686,
+    "distfs_failure_ratio": 0.0,
+    "settlement_apply_failure_ratio": 0.0,
+    "invariant_ok": true,
+    "last_error": null
+  },
+  "transactions": {
+    "accepted_count": 42,
+    "pending_count": 18,
+    "confirmed_count": 24,
+    "failed_count": 2,
+    "timeout_count": 2,
+    "inflight_count": 5,
+    "oldest_inflight_age_ms": 8200,
+    "recent_confirmation_latency": {
+      "sample_count": 24,
+      "p95_latency_ms": 3100,
+      "max_latency_ms": 4200
+    }
+  },
+  "wasm": {
+    "metrics_available": true,
+    "degraded_reason": null,
+    "build": {
+      "metrics_available": false
+    },
+    "executor": {
+      "compile_misses": 6,
+      "entrypoint_call_ms_total": 2100
+    },
+    "router": {
+      "parse_fallbacks": 14,
+      "regex_compile_ms_total": 920
+    }
+  },
+  "p2p": {
+    "requested_user_mode": "auto_join",
+    "recommended_user_mode": "private_safe",
+    "effective_user_mode": "private_safe",
+    "deployment_mode": "private",
+    "node_role_claim": "validator_core",
+    "autonat_status": "unknown",
+    "public_port_reachability": "unknown",
+    "relay_available": false,
+    "probe_stable": true,
+    "confirmed_external_direct_addrs": []
+  }
+}

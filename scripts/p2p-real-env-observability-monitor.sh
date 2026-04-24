@@ -110,6 +110,9 @@ snapshot_run_dir="$(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d | sort
   exit 1
 }
 snapshot_summary="$snapshot_run_dir/summary.json"
+observer_status_json="$snapshot_run_dir/nodes/observer_local/status.json"
+sequencer_status_json="$snapshot_run_dir/nodes/sequencer_ecs/status.json"
+storage_status_json="$snapshot_run_dir/nodes/storage_ecs/status.json"
 
 ./scripts/p2p-real-env-host-monitor.sh \
   --samples "$samples" \
@@ -159,6 +162,9 @@ python3 ./scripts/p2p-real-env-observability-summary.py \
   --observer-wasm-summary "$wasm_root/observer_local/latest_summary.json" \
   --sequencer-wasm-summary "$wasm_root/sequencer_ecs/latest_summary.json" \
   --storage-wasm-summary "$wasm_root/storage_ecs/latest_summary.json" \
+  --observer-status-json "$observer_status_json" \
+  --sequencer-status-json "$sequencer_status_json" \
+  --storage-status-json "$storage_status_json" \
   --summary-json "$report_root/latest_summary.json" \
   --summary-md "$report_root/latest_summary.md" \
   --run-id "$run_id" \
