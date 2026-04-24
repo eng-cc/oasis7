@@ -488,6 +488,28 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required dev_local_storage_profile_clears_pristine_frozen_supply_from_existing_execution_world -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] hosted-public-join-player-session-gate (PRD-P2P-023/024) [test_tier_required]: 将 `hosted_public_join` 正式收口为 public player plane 入口，禁止 `oasis7_client_launcher`、`oasis7_web_launcher` 与 `oasis7_game_launcher` 在该 deployment mode 下拉起本地 `oasis7_chain_runtime` 或 shared-devnet replication requester，并把网页提示改成 guest/player session lane + operator-managed node admission。 Trace: .pm/tasks/task_21dfffe808a24221a70fa5fe3fa895aa.yaml
+  - 产物文件:
+    - `crates/oasis7/src/hosted_access.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/cli.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/server.rs`
+    - `crates/oasis7_client_launcher/src/launcher_core.rs`
+    - `crates/oasis7_client_launcher/src/main.rs`
+    - `crates/oasis7_client_launcher/src/main_tests.rs`
+    - `doc/p2p/project.md`
+    - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.project.md`
+    - `.pm/tasks/task_21dfffe808a24221a70fa5fe3fa895aa.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher -- --nocapture`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-P2P-050 (PRD-P2P-024) [test_tier_required]: 修复 2026-04-14 peer record direct surface 与 reachability republish 真值分叉，确保 `peer record direct_addrs` 不再泄漏 loopback/private/unspecified 监听地址，且 `ExternalAddrConfirmed/Expired` 会驱动本地 peer record 重发到最新外部直连地址集合。
   - 产物文件:
     - `crates/oasis7_net/src/libp2p_net.rs`
@@ -647,6 +669,7 @@
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
 - 最新完成: `TASK-P2P-050`（已收紧 local peer record 地址物化逻辑：默认不再把 loopback/private/unspecified 监听地址写进 `direct_addrs`，而是优先使用已确认的 `confirmed_external_direct_addrs`；同时 `ExternalAddrConfirmed/Expired`、relay reservation 与 listen-surface 变化都会重发 peer record，避免状态真值和 discovery 真值继续分叉。）
 - 最新完成: `TASK-P2P-048`（已修复 p2p provider 子集请求越界 fallback、discovery 单次拨号后不再重试、request-response 丢失远端错误码，以及 replication peer 选择对 blocked peer 缺少优先避让的回归，并补齐 `oasis7_net/oasis7_node` 定向回归。）
+- 最新完成: `hosted-public-join-player-session-gate`（已把 `hosted_public_join` 的 launcher 真值收口为 public player plane：`oasis7_client_launcher` / `oasis7_web_launcher` / `oasis7_game_launcher` 都不再在该 deployment mode 下拉起本地 `oasis7_chain_runtime` 或 shared-devnet replication requester，页面 contract 也改为 guest/player session lane + operator-managed node admission。）
 - 最新完成: `TASK-P2P-047`（已冻结当前链上代币的创世 `initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 收成统一真值；当前仍未进入 mint-ready，真实地址绑定与 QA final pass 继续由 `TIGR-6` 阻断。）
 - 最新完成: `TASK-P2P-046`（已将当前链上代币的 runtime symbol、公钥派生账户前缀与签名鉴权前缀统一迁移到 `OC` / `oc:pk:`，并同步 API、viewer/client、liveops、脚本、测试与模块入口文档，不再把 `AWT` / `awt:pk:` 作为现行真值。）
 - 最新完成: `TASK-P2P-045`（已冻结当前链上代币的正式产品名为“绿洲币 / Oasis Coin”，作为后续 runtime/account 真值迁移的前置口径。）

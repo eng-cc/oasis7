@@ -1,0 +1,25 @@
+task_uid: task_21dfffe808a24221a70fa5fe3fa895aa
+title: "gate hosted_public_join to player-session lane and block local chain runtime"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-hosted-public-join-player-session-gate
+execution_log_path: .pm/tasks/task_21dfffe808a24221a70fa5fe3fa895aa.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+  - doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md
+  - doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-023
+  - PRD-P2P-024
+acceptance:
+  - "hosted_public_join no longer starts a local chain runtime or shared-devnet replication requester"
+  - "launcher public join path stays on public player plane and surfaces session-lane guidance instead of node bootstrap guidance"
+  - "targeted launcher tests and doc governance checks pass"
+handoff_to: []
+updated_at: 2026-04-24T13:40:04+08:00
+last_started_at: 2026-04-24T13:05:22+08:00
+last_closed_at: 2026-04-24T13:40:04+08:00

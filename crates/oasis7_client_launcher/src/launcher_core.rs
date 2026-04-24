@@ -413,7 +413,7 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
 
 pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec<ConfigIssue> {
     let mut issues = Vec::new();
-    if !config.chain_enabled {
+    if !chain_runtime_effectively_enabled(config) {
         return issues;
     }
 
@@ -506,6 +506,18 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
     issues
 }
 
+pub(super) fn hosted_public_join_blocks_local_chain_runtime(config: &LaunchConfig) -> bool {
+    config.deployment_mode.trim() == "hosted_public_join"
+}
+
+pub(super) fn chain_runtime_effectively_enabled(config: &LaunchConfig) -> bool {
+    config.chain_enabled && !hosted_public_join_blocks_local_chain_runtime(config)
+}
+
+fn hosted_public_join_local_chain_runtime_error() -> String {
+    "deployment_mode=hosted_public_join keeps the local chain runtime disabled; public join stays on the guest/player session lane and node onboarding remains operator-managed".to_string()
+}
+
 #[cfg(test)]
 pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, String> {
     if config.scenario.trim().is_empty() {
@@ -596,6 +608,9 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
 
 #[cfg(test)]
 pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<String>, String> {
+    if hosted_public_join_blocks_local_chain_runtime(config) {
+        return Err(hosted_public_join_local_chain_runtime_error());
+    }
     let chain_runtime_bin = config.chain_runtime_bin.trim();
     if chain_runtime_bin.is_empty() {
         return Err("chain runtime bin cannot be empty".to_string());
@@ -722,6 +737,16 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             "disabled_for_public_player_plane"
         } else {
             "trusted_local_bootstrap_allowed"
+        },
+        "local_chain_runtime": if config.deployment_mode.trim() == "hosted_public_join" {
+            "blocked_for_public_player_plane"
+        } else {
+            "launcher_managed_local_runtime_allowed"
+        },
+        "node_admission": if config.deployment_mode.trim() == "hosted_public_join" {
+            "operator_managed_node_onboarding_only"
+        } else {
+            "trusted_local_preview_only"
         },
         "session_ladder": ["guest_session", "player_session", "strong_auth"],
         "action_matrix": [

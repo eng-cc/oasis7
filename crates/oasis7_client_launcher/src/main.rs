@@ -952,7 +952,7 @@ impl Default for ClientLauncherApp {
         #[cfg(not(target_arch = "wasm32"))]
         let (_, control_listen_bind, control_api_base, control_manage_service) =
             resolve_control_plane_env();
-        let chain_runtime_status = if config.chain_enabled {
+        let chain_runtime_status = if chain_runtime_effectively_enabled(&config) {
             ChainRuntimeStatus::NotStarted
         } else {
             ChainRuntimeStatus::Disabled

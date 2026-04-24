@@ -1,7 +1,7 @@
 use super::{
-    parse_chain_feedback_request, parse_chain_transfer_request, submit_chain_feedback_remote,
-    submit_chain_transfer, submit_chain_transfer_remote, ChainFeedbackSubmitRequest,
-    ChainTransferSubmitRequest, LauncherConfig, ServiceState,
+    parse_chain_feedback_request, parse_chain_transfer_request, start_chain_process,
+    submit_chain_feedback_remote, submit_chain_transfer, submit_chain_transfer_remote,
+    ChainFeedbackSubmitRequest, ChainTransferSubmitRequest, LauncherConfig, ServiceState,
 };
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -185,6 +185,30 @@ fn submit_chain_transfer_requires_strong_auth_for_hosted_public_join() {
         .logs
         .iter()
         .any(|line| line.contains("strong_auth/private plane")));
+}
+
+#[test]
+fn start_chain_process_rejects_hosted_public_join_local_runtime() {
+    let mut state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        Path::new(".").to_path_buf(),
+        LauncherConfig::default(),
+    );
+    let err = start_chain_process(
+        &mut state,
+        LauncherConfig {
+            deployment_mode: "hosted_public_join".to_string(),
+            chain_enabled: true,
+            ..LauncherConfig::default()
+        },
+    )
+    .expect_err("hosted public join should block local chain runtime");
+
+    assert!(err.contains("guest/player session lane"));
+    assert!(state.logs.iter().any(|line| {
+        line.contains("chain runtime start rejected") && line.contains("operator-managed")
+    }));
 }
 
 #[test]

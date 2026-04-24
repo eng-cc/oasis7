@@ -244,6 +244,7 @@ fn parse_options_accepts_overrides() {
         options.agent_execution_lane,
         ProviderExecutionMode::PlayerParity
     );
+    assert!(!options.chain_enabled);
     assert!(!options.open_browser);
 }
 
@@ -649,6 +650,8 @@ fn build_game_url_rewrites_zero_bind_host_to_loopback() {
     let url = build_game_url(&options);
     assert!(url.starts_with("http://127.0.0.1:4173/?render_mode=software_safe&ws=ws%3A%2F%2F127.0.0.1%3A5011&hosted_access="));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
+    assert!(url.contains("%22local_chain_runtime%22%3A%22blocked_for_public_player_plane%22"));
+    assert!(url.contains("%22node_admission%22%3A%22operator_managed_node_onboarding_only%22"));
 }
 
 #[test]
