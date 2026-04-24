@@ -17,6 +17,6 @@ acceptance:
   - "Launcher Open Game Page uses the same software_safe entry contract as oasis7_game_launcher auto-open."
   - "Targeted launcher URL tests pass for client launcher and web launcher."
 handoff_to: []
-updated_at: 2026-04-24T14:15:14+08:00
+updated_at: 2026-04-24T14:46:42+08:00
 last_started_at: 2026-04-24T14:03:28+08:00
-last_closed_at: 2026-04-24T14:14:58+08:00
+last_closed_at: 2026-04-24T14:46:42+08:00
