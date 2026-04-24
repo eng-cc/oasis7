@@ -258,7 +258,7 @@ def render_markdown(summary: dict, history_path: str) -> list[str]:
                 f"- Runtime CPU: latest `{fmt_percent(latest.get('runtime_cpu_percent'))}` core-ratio `{fmt_percent((latest.get('runtime_cpu_core_ratio') or 0) * 100) if latest.get('runtime_cpu_core_ratio') is not None else 'n/a'}`; peak `{fmt_percent(peaks.get('max_runtime_cpu_percent'))}`",
                 f"- Loadavg 1m: latest `{fmt_num(latest.get('loadavg_1m'))}` ratio/core `{fmt_num(latest.get('load_per_core_ratio_1m'))}`; peak `{fmt_num(peaks.get('max_loadavg_1m'))}`",
                 f"- Memory available: `{fmt_bytes(latest.get('mem_available_bytes'))}` / `{fmt_bytes(latest.get('mem_total_bytes'))}` ({fmt_percent(latest.get('mem_available_percent'))}); floor `{fmt_percent(peaks.get('min_mem_available_percent'))}`",
-                f"- Storage `{storage.get('path') or 'n/a'}`: used `{fmt_percent(storage.get('used_percent'))}` ({fmt_bytes(storage.get('used_bytes'))}` / `{fmt_bytes(storage.get('total_bytes'))}`)",
+                f"- Storage `{storage.get('path') or 'n/a'}`: used `{fmt_percent(storage.get('used_percent'))}` (`{fmt_bytes(storage.get('used_bytes'))}` / `{fmt_bytes(storage.get('total_bytes'))}`)",
                 f"- Service: active=`{(latest.get('service') or {}).get('active_state')}` sub=`{(latest.get('service') or {}).get('sub_state')}` main_pid=`{(latest.get('service') or {}).get('main_pid')}` runtime_pid=`{(latest.get('runtime') or {}).get('pid')}`",
                 f"- Health status: runtime_cpu=`{status.get('runtime_cpu')}` load=`{status.get('host_load')}` memory=`{status.get('memory')}` storage=`{status.get('storage')}`",
                 f"- Alerts: `{', '.join(node.get('alerts') or ['(none)'])}`",
