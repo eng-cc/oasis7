@@ -315,8 +315,7 @@ impl Libp2pReplicationNetwork {
     }
 
     fn connected_peers_sorted(&self) -> Vec<PeerId> {
-        let peer_healths = self.inner.debug_peer_healths();
-        connected_or_active_transport_peers(self.inner.connected_peers(), peer_healths.as_slice())
+        self.inner.admissible_request_peers()
     }
 
     fn collect_connected_provider_peers(&self, providers: &[String]) -> Vec<PeerId> {
