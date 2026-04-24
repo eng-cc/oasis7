@@ -212,6 +212,31 @@ fn start_chain_process_rejects_hosted_public_join_local_runtime() {
 }
 
 #[test]
+fn start_chain_process_rejects_invalid_deployment_mode_as_most_restrictive() {
+    let mut state = ServiceState::new(
+        "launcher".to_string(),
+        "chain".to_string(),
+        Path::new(".").to_path_buf(),
+        LauncherConfig::default(),
+    );
+    let err = start_chain_process(
+        &mut state,
+        LauncherConfig {
+            deployment_mode: "hosted-public-join-typo".to_string(),
+            chain_enabled: true,
+            ..LauncherConfig::default()
+        },
+    )
+    .expect_err("invalid deployment mode should still block local chain runtime");
+
+    assert!(err.contains("deployment_mode=hosted-public-join-typo is invalid"));
+    assert!(state
+        .logs
+        .iter()
+        .any(|line| { line.contains("chain runtime start rejected") && line.contains("invalid") }));
+}
+
+#[test]
 fn submit_chain_feedback_remote_posts_expected_payload_and_reads_success() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let bind = listener.local_addr().expect("local addr");

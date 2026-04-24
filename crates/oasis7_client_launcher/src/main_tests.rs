@@ -1,6 +1,7 @@
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
-    build_chain_runtime_args, build_game_url, build_launcher_args, chain_runtime_status_from_web,
+    build_chain_runtime_args, build_game_url, build_launcher_args,
+    chain_runtime_effectively_enabled, chain_runtime_status_from_web,
     check_provider_loopback_http_provider, collect_chain_required_config_issues,
     collect_required_config_issues,
     config_ui::{issue_field_ids, StartupGuideTarget},
@@ -9,9 +10,9 @@ use super::{
         resolve_explorer_my_account_candidate, ExplorerQuickShortcut, ExplorerStatusFilter,
         ExplorerTab, WebExplorerOverviewResponse,
     },
-    install_cjk_font, normalize_host_for_url, parse_chain_role, parse_chain_validators,
-    parse_host_port, parse_port, probe_chain_status_endpoint, read_named_env_value_with,
-    resolve_control_plane_env_with,
+    install_cjk_font, normalize_host_for_url, normalize_launch_config, parse_chain_role,
+    parse_chain_validators, parse_host_port, parse_port, probe_chain_status_endpoint,
+    read_named_env_value_with, resolve_control_plane_env_with,
     self_guided::{
         resolve_config_guide_target, resolve_next_task_hint, resolve_primary_disabled_cta,
         ConfigGuideTargetHint, DemoModePhase, DisabledActionCta, NextTaskHint, OnboardingStep,
@@ -310,6 +311,20 @@ fn build_chain_runtime_args_rejects_hosted_public_join() {
     })
     .expect_err("hosted public join should block local chain runtime");
     assert!(err.contains("guest/player session lane"));
+}
+
+#[test]
+fn normalize_launch_config_disables_chain_for_hosted_public_join() {
+    let mut config = LaunchConfig {
+        deployment_mode: "hosted_public_join".to_string(),
+        chain_enabled: true,
+        ..LaunchConfig::default()
+    };
+
+    normalize_launch_config(&mut config);
+
+    assert!(!config.chain_enabled);
+    assert!(!chain_runtime_effectively_enabled(&config));
 }
 #[test]
 fn parse_chain_role_rejects_invalid_value() {
@@ -703,6 +718,33 @@ fn apply_web_snapshot_tracks_chain_recovery_payload() {
             .map(|value| value.fresh_node_id.as_str()),
         Some("viewer-live-node-fresh-1")
     );
+}
+
+#[test]
+fn apply_web_snapshot_normalizes_hosted_public_join_chain_disable() {
+    let mut app = ClientLauncherApp::default();
+    let snapshot = WebStateSnapshot {
+        status: "idle".to_string(),
+        detail: None,
+        chain_status: "not_started".to_string(),
+        chain_detail: None,
+        chain_p2p_status: None,
+        chain_observability_status: None,
+        chain_replication_status: None,
+        chain_recovery: None,
+        game_url: "http://127.0.0.1:4173/".to_string(),
+        config: LaunchConfig {
+            deployment_mode: "hosted_public_join".to_string(),
+            chain_enabled: true,
+            ..LaunchConfig::default()
+        },
+        logs: vec![],
+    };
+
+    app.apply_web_snapshot(snapshot);
+
+    assert!(!app.config.chain_enabled);
+    assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::Disabled);
 }
 
 #[test]

@@ -34,7 +34,6 @@ impl DeploymentMode {
         }
     }
 
-    #[allow(dead_code)]
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "trusted_local_only",
@@ -42,7 +41,6 @@ impl DeploymentMode {
         }
     }
 
-    #[allow(dead_code)]
     pub(super) fn browser_signer_bootstrap_mode(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "trusted_local_bootstrap_allowed",
@@ -50,12 +48,10 @@ impl DeploymentMode {
         }
     }
 
-    #[allow(dead_code)]
     pub(super) fn allows_local_chain_runtime(self) -> bool {
         matches!(self, Self::TrustedLocalOnly)
     }
 
-    #[allow(dead_code)]
     pub(super) fn local_chain_runtime_mode(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "launcher_managed_local_runtime_allowed",
@@ -63,7 +59,6 @@ impl DeploymentMode {
         }
     }
 
-    #[allow(dead_code)]
     pub(super) fn node_admission_mode(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "trusted_local_preview_only",
@@ -71,7 +66,6 @@ impl DeploymentMode {
         }
     }
 
-    #[allow(dead_code)]
     pub(super) fn gui_agent_action_surface(self) -> &'static str {
         match self {
             Self::TrustedLocalOnly => "legacy_shared_local_preview",

@@ -81,6 +81,18 @@ fn apply_safe_defaults_for_chain_target_recovers_required_fields() {
 }
 
 #[test]
+fn apply_safe_defaults_for_chain_target_keeps_hosted_public_join_chain_disabled() {
+    let mut app = ClientLauncherApp::default();
+    app.config.deployment_mode = "hosted_public_join".to_string();
+    app.config.chain_enabled = false;
+
+    app.apply_safe_defaults_for_startup_target(StartupGuideTarget::Chain);
+
+    assert!(!app.config.chain_enabled);
+    assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::Disabled);
+}
+
+#[test]
 fn onboarding_auto_open_targets_fix_config_step_when_required_fields_missing() {
     let mut app = ClientLauncherApp::default();
     app.onboarding_state.auto_open_checked = false;
@@ -285,6 +297,20 @@ fn restore_last_successful_config_profile_replaces_runtime_config() {
     app.restore_last_successful_config_profile();
 
     assert_eq!(app.config.scenario, "restored-scenario");
+    assert!(!app.config.chain_enabled);
+    assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::Disabled);
+}
+
+#[test]
+fn restore_last_successful_config_profile_normalizes_hosted_public_join() {
+    let mut app = ClientLauncherApp::default();
+    let mut saved = app.config.clone();
+    saved.deployment_mode = "hosted_public_join".to_string();
+    saved.chain_enabled = true;
+    app.ux_state.last_successful_config = Some(saved);
+
+    app.restore_last_successful_config_profile();
+
     assert!(!app.config.chain_enabled);
     assert_eq!(app.chain_runtime_status, ChainRuntimeStatus::Disabled);
 }

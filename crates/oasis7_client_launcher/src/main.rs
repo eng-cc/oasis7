@@ -476,6 +476,12 @@ impl Default for LaunchConfig {
     }
 }
 
+impl LaunchConfig {
+    fn normalize(&mut self) {
+        normalize_launch_config(self);
+    }
+}
+
 fn default_agent_provider_backend() -> String {
     DEFAULT_AGENT_PROVIDER_BACKEND.to_string()
 }

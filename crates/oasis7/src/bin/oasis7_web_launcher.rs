@@ -843,7 +843,7 @@ fn parse_chain_p2p_user_mode(raw: &str) -> Result<String, String> {
 
 fn deployment_mode_from_config(config: &LauncherConfig) -> DeploymentMode {
     DeploymentMode::parse(config.deployment_mode.as_str(), "deployment_mode")
-        .unwrap_or(DeploymentMode::TrustedLocalOnly)
+        .unwrap_or(DeploymentMode::HostedPublicJoin)
 }
 
 fn public_snapshot_from_state(
