@@ -154,6 +154,7 @@
 - [x] engineering-testing-root-project-reading-surface (PRD-ENGINEERING-021/024) [test_tier_required]: 压缩 `engineering/testing` 根项目页的当前阅读面，移除 `testing/project.md` 中按时间手工堆叠的“最新完成”长列表与过期阶段交接块，统一改为“当前窗口摘要 + topic project / .pm task 追溯”口径。 Trace: .pm/tasks/task_6436f1f4fd754136a7b2feb9f1b5f141.yaml
 - [x] lightweight-web-ui-automation-smoke (PRD-ENGINEERING-021) [test_tier_required]: 为当前 workflow friction burn-down 补一条 repo-owned 轻量 Web/UI automation smoke，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下先验证 S6 tooling 与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-021/025) [test_tier_required]: 执行 `scripts/doc-inventory-report.sh` 季度复核，固定当前 `doc/` 体量快照，并把工程治理“下一任务”从泛化的季度复核 placeholder 改判为 near-limit active project docs 拆分优先，避免继续悬空停留在 review-only 状态。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
+- [x] workflow-helper-review-followup (PRD-ENGINEERING-021) [test_tier_required]: 收口当前 workflow friction burn-down PR `#145` 的 review comments，补齐 workflow helpers 的 shell quoting、回归测试、临时文件传递与 rebase helper trap 作用域修复，并把当前 PR 的 review-thread closeout 从“列评论”推进到“可验证的代码修复 + resolve 预备态”。 Trace: .pm/tasks/task_c8c2d3e2eb75489abdc764c9ac9f5979.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
@@ -237,6 +238,7 @@
 - 当前治理切片: 已完成 `shrink-near-limit-rust-hotspots`，对 `llm_sidecar.rs`、`oasis7_node/src/lib.rs`、`oasis7_provider_parity_bench.rs`、`oasis7_wasm_router/src/lib.rs`、`self_guided.rs` 做预防性职责拆分；当前 5 个热点文件已降到 `858 / 841 / 981 / 860 / 1131` 行，继续维持 Rust 体量零扫描。
 - 当前治理切片: 已完成 `engineering-project-truth-drift-sync`，将 `TASK-ENGINEERING-054~057` 与 `rust-1200-line-root-cause-governance-2026-03-29.project.md` 的完成态重新对齐，并把根项目页状态区“下一任务”改回季度复核/库存复算的真实后续。
 - 当前治理切片: 已完成 `quarterly-doc-inventory-review-followup`，当前 root decision 已从“待季度复核”推进到“near-limit active project docs 拆分优先”；后续如要继续扩 `core/reviews`、`world-simulator/launcher` 或新的路径级治理，需另开独立 follow-up task。
+- 当前治理切片: 已完成 `workflow-helper-review-followup`，当前 PR `#145` 的 review comments 已收口到明确代码修复边界：`worktree-gc-report` 输出的 cleanup commands 改为 shell-quoted，`pr-review-thread-closeout` 不再把完整评论 JSON 通过 argv 传给 Python，`pm/rebase-conflict-helper` 也不再留下函数级全局 `RETURN` trap。
 - 近期完成项不再在本页按时间顺序手工追加；为避免多 worktree 热点冲突，最近收口统一以对应 topic `*.project.md` 与 `.pm/tasks/task_<32hex>.yaml` 为准。
 - 近期完成: `TASK-ENGINEERING-104/103/102/101/100/096` 已分别完成 Rust 超限基线回写、working_memory 显式 session、commit 前快照 review、repo-local Codex 配置、`doc/devlog` 退出 `.pm` 运行态真值，以及 task execution log canonical 路径收口。
 - 说明: 本文档只保留当前执行窗口与近期完成项。更早的完成历史继续以本页勾选任务清单、专题 project 文档与 `.pm/tasks/task_<32hex>.execution.md` 为准。

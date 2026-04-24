@@ -79,16 +79,21 @@ resolve_signals_conflict() {
   git ls-files -u -- "$path" | grep -q . || die "no conflicted $path entry found"
 
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' RETURN
   ours_file="$tmp_dir/ours.jsonl"
   theirs_file="$tmp_dir/theirs.jsonl"
   resolved_file="$tmp_dir/resolved.jsonl"
   renumberings_file="$tmp_dir/renumberings.json"
 
-  git show ":2:$path" > "$ours_file" || die "failed to read upstream stage for $path"
-  git show ":3:$path" > "$theirs_file" || die "failed to read branch stage for $path"
+  if ! git show ":2:$path" > "$ours_file"; then
+    rm -rf "$tmp_dir"
+    die "failed to read upstream stage for $path"
+  fi
+  if ! git show ":3:$path" > "$theirs_file"; then
+    rm -rf "$tmp_dir"
+    die "failed to read branch stage for $path"
+  fi
 
-  python3 - "$ours_file" "$theirs_file" "$resolved_file" "$renumberings_file" <<'PY'
+  if ! python3 - "$ours_file" "$theirs_file" "$resolved_file" "$renumberings_file" <<'PY'
 from __future__ import annotations
 
 import json
@@ -188,10 +193,24 @@ renumberings_path.write_text(
     encoding="utf-8",
 )
 PY
+  then
+    rm -rf "$tmp_dir"
+    die "failed to merge signal records for $path"
+  fi
 
-  mv "$resolved_file" "$path"
-  git add "$path"
-  SIGNAL_RENUMBERINGS_JSON="$(cat "$renumberings_file")"
+  if ! mv "$resolved_file" "$path"; then
+    rm -rf "$tmp_dir"
+    die "failed to write resolved $path"
+  fi
+  if ! git add "$path"; then
+    rm -rf "$tmp_dir"
+    die "failed to stage resolved $path"
+  fi
+  if ! SIGNAL_RENUMBERINGS_JSON="$(cat "$renumberings_file")"; then
+    rm -rf "$tmp_dir"
+    die "failed to read renumberings for $path"
+  fi
+  rm -rf "$tmp_dir"
 }
 
 if [[ "$RESOLVE_SIGNALS" == "1" ]]; then

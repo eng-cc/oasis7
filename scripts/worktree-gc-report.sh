@@ -59,6 +59,7 @@ python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$PRUNABL
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +74,10 @@ output_json = sys.argv[5] == "1"
 
 def run(*args: str) -> str:
     return subprocess.check_output(args, text=True)
+
+
+def shell_command(*parts: str) -> str:
+    return " ".join(shlex.quote(part) for part in parts)
 
 
 def parse_porcelain() -> list[dict[str, object]]:
@@ -201,10 +206,22 @@ for record in records:
 
     cleanup_candidate = bool(cleanup_reasons)
     if cleanup_candidate:
-        cleanup_commands.append(f"git -C {repo_root} worktree remove -f {resolved_path}")
+        cleanup_commands.append(
+            shell_command(
+                "git",
+                "-C",
+                str(repo_root),
+                "worktree",
+                "remove",
+                "-f",
+                str(resolved_path),
+            )
+        )
         if branch and branch_attached_counts.get(branch, 0) == 1 and not is_current:
             branch_delete_candidate = True
-            cleanup_commands.append(f"git -C {repo_root} branch -d {branch}")
+            cleanup_commands.append(
+                shell_command("git", "-C", str(repo_root), "branch", "-d", branch)
+            )
 
     entry = {
         "path": str(resolved_path),

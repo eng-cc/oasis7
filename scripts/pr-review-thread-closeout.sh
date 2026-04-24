@@ -99,8 +99,16 @@ fetch_pr_view_json() {
   gh "${PR_VIEW_ARGS[@]}"
 }
 
-PR_VIEW_JSON="$(fetch_pr_view_json)"
-REPO_JSON="$(gh repo view --json owner,name)"
+TMP_DIR="$(mktemp -d)"
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+PR_VIEW_FILE="$TMP_DIR/pr-view.json"
+REPO_FILE="$TMP_DIR/repo.json"
+THREADS_FILE="$TMP_DIR/threads.json"
+REPORT_FILE="$TMP_DIR/report.json"
 
 THREAD_QUERY="$(cat <<'EOF'
 query($owner:String!, $repo:String!, $number:Int!) {
@@ -147,15 +155,16 @@ mutation($threadId:ID!) {
 EOF
 )"
 
-thread_report_json() {
-  python3 - "$1" "$2" "$3" <<'PY'
+render_report_file() {
+  python3 - "$1" "$2" "$3" > "$REPORT_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-pr_view = json.loads(sys.argv[1])
-threads_payload = json.loads(sys.argv[2])
+pr_view = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+threads_payload = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 unresolved_only = sys.argv[3] == "1"
 
 threads = (
@@ -222,67 +231,83 @@ print(json.dumps(payload, ensure_ascii=True, indent=2))
 PY
 }
 
-OWNER_LOGIN="$(python3 - "$REPO_JSON" <<'PY'
-from __future__ import annotations
+refresh_pr_view_file() {
+  fetch_pr_view_json > "$PR_VIEW_FILE"
+}
 
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-print(payload["owner"]["login"])
-PY
-)"
-REPO_NAME="$(python3 - "$REPO_JSON" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-print(payload["name"])
-PY
-)"
-PR_NUMBER="$(python3 - "$PR_VIEW_JSON" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-print(payload["number"])
-PY
-)"
-
-fetch_threads_json() {
+refresh_threads_file() {
   gh api graphql \
     -f query="$THREAD_QUERY" \
     -F owner="$OWNER_LOGIN" \
     -F repo="$REPO_NAME" \
-    -F number="$PR_NUMBER"
+    -F number="$PR_NUMBER" > "$THREADS_FILE"
 }
 
-THREADS_JSON="$(fetch_threads_json)"
-REPORT_JSON="$(thread_report_json "$PR_VIEW_JSON" "$THREADS_JSON" "$UNRESOLVED_ONLY")"
-
-mapfile -t AVAILABLE_THREAD_IDS < <(python3 - "$REPORT_JSON" <<'PY'
+annotate_resolved_now() {
+  python3 - "$REPORT_FILE" "${THREAD_IDS_TO_RESOLVE[@]}" > "$REPORT_FILE.next" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
-for thread in payload["threads"]:
-    print(thread["id"])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+thread_ids = sys.argv[2:]
+payload["resolved_now"]["count"] = len(thread_ids)
+payload["resolved_now"]["thread_ids"] = thread_ids
+print(json.dumps(payload, ensure_ascii=True, indent=2))
 PY
-)
+  mv "$REPORT_FILE.next" "$REPORT_FILE"
+}
 
-mapfile -t ALL_UNRESOLVED_IDS < <(python3 - "$THREADS_JSON" <<'PY'
+refresh_pr_view_file
+gh repo view --json owner,name > "$REPO_FILE"
+
+OWNER_LOGIN="$(python3 - "$REPO_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["owner"]["login"])
+PY
+)"
+REPO_NAME="$(python3 - "$REPO_FILE" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["name"])
+PY
+)"
+PR_NUMBER="$(python3 - "$PR_VIEW_FILE" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(payload["number"])
+PY
+)"
+
+refresh_threads_file
+render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
+
+mapfile -t ALL_UNRESOLVED_IDS < <(python3 - "$THREADS_FILE" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 threads = (
     payload.get("data", {})
     .get("repository", {})
@@ -310,36 +335,25 @@ if [[ "${#THREAD_IDS_TO_RESOLVE[@]}" -gt 0 ]]; then
     fi
     gh api graphql -f query="$RESOLVE_QUERY" -F threadId="$thread_id" >/dev/null
   done
-  PR_VIEW_JSON="$(fetch_pr_view_json)"
-  THREADS_JSON="$(fetch_threads_json)"
-  REPORT_JSON="$(thread_report_json "$PR_VIEW_JSON" "$THREADS_JSON" "$UNRESOLVED_ONLY")"
-  REPORT_JSON="$(python3 - "$REPORT_JSON" "${THREAD_IDS_TO_RESOLVE[@]}" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-thread_ids = sys.argv[2:]
-payload["resolved_now"]["count"] = len(thread_ids)
-payload["resolved_now"]["thread_ids"] = thread_ids
-print(json.dumps(payload, ensure_ascii=True, indent=2))
-PY
-)"
+  refresh_pr_view_file
+  refresh_threads_file
+  render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
+  annotate_resolved_now
 fi
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then
-  printf '%s\n' "$REPORT_JSON"
+  cat "$REPORT_FILE"
   exit 0
 fi
 
-python3 - "$REPORT_JSON" <<'PY'
+python3 - "$REPORT_FILE" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
-payload = json.loads(sys.argv[1])
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 
 print("pr review thread closeout")
 print(f"- pr: #{payload['pr']['number']} {payload['pr']['url']}")
