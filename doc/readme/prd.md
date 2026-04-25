@@ -97,6 +97,7 @@
 - PRD-README-045: As a `liveops_community`, I want a reusable Xiaohongshu ownership-and-beneficiary post pack framed around a利益共同体, so that we can use “谁该拥有游戏的所有权、谁该成为受益者” to explain why developers, players, and high-quality creators should be treated as long-term participants in the game's value distribution without drifting into already-live voting-right claims, governance-token overclaim, or generic community-slogan copy.
 - PRD-README-046: As a 仓库访客 / 外部评审者, I want README、世界规则入口与站点首页统一把 `oasis7` 定位为“文明模拟游戏”, so that public entry docs no longer split between system, engine, and game framing.
 - PRD-README-047: As a `liveops_community`, I want a reusable Xiaohongshu token-usage post pack grounded in the real long-running project账单, so that we can use cumulative request/token/cost data to explain why AI in a real project more像研发流程参与成本而不是一次性生成炫技, without drifting into burn-money showoff, fundraising signaling, or exaggerated automation claims.
+- PRD-README-048: As a 仓库访客 / 外部评审者, I want one explanation-style overview that reads like a whitepaper without pretending to be a new source of truth, so that I can understand what `oasis7` is, why it exists, how the world/game/system fit together, and what the current preview boundary really is before I dive into module PRDs.
 - Critical User Flows:
   1. Flow-RM-001: `阅读 README -> 跳转模块入口 -> 快速定位目标能力`
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
@@ -176,6 +177,7 @@
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
 - AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `技术预览（尚不可玩）` 边界不变。
 - AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
+- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前三模式访问面与“技术预览、尚不可玩”的现状，同时显式声明该文档不替代 `README.md`、`world-rule.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
 - Non-Goals:
@@ -286,6 +288,7 @@
 | PRD-README-045 | TASK-README-080 | `test_tier_required` | 将第十三篇推荐版从所有权讨论继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，同时保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
 | PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留技术预览与尚不可玩边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
 | PRD-README-047 | xiaohongshu-token-usage-post-pack | `test_tier_required` | 小红书第十四篇素材包明确“项目累计 token 用量”的推荐标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG、事实基线与禁滑坡边界，并把这组真实账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断 | 小红书内容链路从关系和参与讨论继续推进到真实项目成本结构，让读者看到 AI 成本主要消耗在长期迭代而不是单次生成炫技 |
+| PRD-README-048 | whitepaper-style-overview | `test_tier_required` | 新增一份白皮书式项目总览，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前访问面与技术预览边界，并把它接入根 README 与 readme/governance 导航 | 第一次接触仓库的读者可以先用一份解释型总览建立全貌，再按正式真值源继续下钻 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -320,6 +323,7 @@
 | DEC-RM-045 | 第十三篇采用“谁该拥有游戏的所有权 / 谁该成为受益者”切口，把开发者、玩家和高质量创作者写成应逐步进入价值分配讨论的人，而不是直接宣称“所有相关人员已经拥有链上投票权” | 直接把帖子写成当前治理权公告；或只写“大家都是一家人”的泛共同体口号 | 这个主题真正有张力的地方是“谁不该被排除在所有权和受益之外”，不是“现在已经发放了什么权利”。把它收口到长期参与、真实贡献和共同体关系，既能延续账号的制度判断主线，也能避开当前 preview 阶段尚未完成的治理实现和过度承诺风险。 |
 | DEC-RM-046 | 对外首读入口统一把 `oasis7` 表述为“文明模拟游戏”，内部实现文档仍可在对应上下文使用系统/引擎/runtime 术语 | 全仓机械替换所有“系统/引擎”措辞 | 公开定位需要单一主语，但实现层术语仍服务不同技术边界；只收口入口层可以消除对外分叉，又不误伤内部设计语义。 |
 | DEC-RM-047 | 第十四篇采用“真实累计账单 + 流程成本解释”切口，而不是只晒一张高消耗截图或顺手做模型战力榜 | 直接把帖子写成“我们烧了很多钱”的炫账单内容；或把焦点放到哪个模型更强更贵 | 这条内容真正有价值的不是数字本身，而是它能把“AI 成本到底烧在哪”讲清楚。把重点收口到需求反复、文档、验证、返工和上下文切换，才更像真实项目经验，也更符合账号一贯的项目判断视角。 |
+| DEC-RM-048 | 新增一份“白皮书式说明”作为 Explanation 类型项目总览，并显式把它降级为导览层而非真值层 | 继续把这类解释全部挤在根 README；或新建一份自称权威规格的白皮书与 PRD 并行维护 | 仓库已经有 README、core PRD、world-rule、gameplay PRD 等多层真值源，缺的是第一次接触时的一份单页解释，而不是另一份竞争真值。把文档定位成 explanation，可以补齐 overview gap，又不破坏现有文档治理结构。 |
 | DEC-RM-023 | 小红书持续运营细节独立沉淀为 runbook，而不是继续只留在素材包和角色卡 | 只补几条角色卡示例或继续靠帖子素材包驱动 | 小红书已经进入持续发帖和看反馈阶段，需要和 Moltbook 一样有稳定 SOP，才能复盘互动和误解模式。 |
 | DEC-RM-024 | 第三篇采用“轻量游戏介绍 + 猜类型互动”而非完整设定说明书 | 直接把世界规则、技术架构与完整玩法一次讲清 | 用户到了第三篇需要先建立“这是什么游戏”的可想象轮廓，而不是被文档级信息密度劝退；同时仍要保持技术预览边界。 |
 | DEC-RM-025 | 第四篇采用“玩家控制边界解释 + 站队式互动”而非继续泛讲世界设定 | 跳过玩家位置直接讲更多系统细节，或把第四篇写成输入操作说明 | 第三篇之后最自然的追问是“玩家到底怎么介入这个世界”；先把控制边界讲清，才能避免用户把项目误解成直接操控单角色的传统玩法。 |

@@ -1,8 +1,9 @@
 # `readme/governance` 热点子域入口
 
-更新时间: 2026-04-20
+更新时间: 2026-04-25
 
 ## 从这里开始
+- 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
 - 想确认 README 口径控制、链接检查、季度复核或根 README 状态同步：先读 `readme-consistency-audit-checklist-2026-03-11.prd.md`、`readme-link-check-automation-2026-03-11.prd.md`、`readme-quarterly-review-cycle-2026-03-11.prd.md` 或 `readme-root-status-alignment-2026-03-11.prd.md`
 - 想确认 release communication、brief、announcement draft 或 template：先读 `readme-release-candidate-communication-brief-2026-03-11.prd.md`、`readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-draft-2026-03-11.prd.md`
 - 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
@@ -17,12 +18,21 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-04-20）:
-  - `doc/readme/governance/`: 98 份 Markdown
-  - `doc/readme/`: 142 份 Markdown
+- 快照（2026-04-25）:
+  - `doc/readme/governance/`: 99 份 Markdown
+  - `doc/readme/`: 143 份 Markdown
 - 当前子域属于 `readme` 模块最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
 
 ## 首读主题簇
+
+### 0. 白皮书式项目总览
+- 首读入口:
+  - `readme-project-overview-whitepaper-2026-04-25.md`
+- 适合问题:
+  - `oasis7` 到底是什么项目
+  - 为什么它既像游戏、又有 runtime / WASM / consensus 这些重系统结构
+  - 当前公开边界和“尚不可玩”的真实含义是什么
+  - 第一次接触仓库时，先读哪一层再下钻
 
 ### 1. 治理控制与季度复核
 - 首读入口:
