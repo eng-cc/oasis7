@@ -3611,8 +3611,11 @@ function JsonBlock(props) {
 }
 function DiagnosticDetails(props) {
   const locale = () => props.locale ?? uiLocale();
+  const [isOpen, setIsOpen] = createSignal(false);
+  const resolvedValue = () => typeof props.value === "function" ? props.value() : props.value;
   return (() => {
     var _el$4 = _tmpl$5(), _el$5 = _el$4.firstChild, _el$6 = _el$5.nextSibling;
+    _el$4.addEventListener("toggle", (event) => setIsOpen(event.currentTarget.open));
     insert(_el$5, () => props.label ?? tr(locale(), "原始诊断", "Raw diagnostics"));
     insert(_el$6, createComponent(Show, {
       get when() {
@@ -3624,9 +3627,16 @@ function DiagnosticDetails(props) {
         return _el$7;
       }
     }), null);
-    insert(_el$6, createComponent(JsonBlock, {
-      get value() {
-        return props.value;
+    insert(_el$6, createComponent(Show, {
+      get when() {
+        return isOpen();
+      },
+      get children() {
+        return createComponent(JsonBlock, {
+          get value() {
+            return resolvedValue();
+          }
+        });
       }
     }), null);
     return _el$4;
@@ -5274,7 +5284,12 @@ function DetailsPanel() {
     metrics: state.metrics,
     hostedAccess: clone(state.hostedAccess)
   });
-  const snapshotCounts = () => snapshotSummary().counts;
+  const snapshotCounts = () => ({
+    agents: Object.keys(state.snapshot?.model?.agents || {}).length,
+    locations: Object.keys(state.snapshot?.model?.locations || {}).length,
+    promptProfiles: Object.keys(state.snapshot?.model?.agent_prompt_profiles || {}).length,
+    executionDebugContexts: Object.keys(state.snapshot?.model?.agent_execution_debug_contexts || {}).length
+  });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
     var _el$139 = _tmpl$34(), _el$140 = _el$139.firstChild, _el$141 = _el$140.nextSibling, _el$142 = _el$141.firstChild, _el$143 = _el$142.nextSibling;
@@ -5351,9 +5366,7 @@ function DetailsPanel() {
           get note() {
             return tr(locale(), "只在需要排查快照结构或 hosted access 原始字段时展开。", "Expand only when you need to inspect the raw snapshot shape or hosted access fields.");
           },
-          get value() {
-            return snapshotSummary();
-          }
+          value: snapshotSummary
         });
       }
     }), null);

@@ -18,6 +18,6 @@ acceptance:
   - "language and viewer entry controls no longer occupy a primary content block in software_safe"
   - "the controls remain reachable via a compact top-right affordance"
 handoff_to: []
-updated_at: 2026-04-24T23:19:45+08:00
+updated_at: 2026-04-25T13:47:30+08:00
 last_started_at: 2026-04-24T23:08:46+08:00
-last_closed_at: 2026-04-24T23:19:45+08:00
+last_closed_at: 2026-04-25T13:47:30+08:00

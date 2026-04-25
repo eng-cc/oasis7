@@ -18,6 +18,6 @@ acceptance:
   - "software_safe details panel no longer dedicates a large right-rail snapshot summary when it adds little value"
   - "raw snapshot diagnostics remain available through a compact secondary affordance"
 handoff_to: []
-updated_at: 2026-04-24T22:31:42+08:00
+updated_at: 2026-04-25T13:47:16+08:00
 last_started_at: 2026-04-24T21:47:24+08:00
-last_closed_at: 2026-04-24T22:31:42+08:00
+last_closed_at: 2026-04-25T13:47:16+08:00

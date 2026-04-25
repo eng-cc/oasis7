@@ -232,9 +232,9 @@
   - 不把中间 `世界摘要` 的正式玩法 / lane / recent events 语义搬到右栏重复展示。
   - 不新增新的协议字段；仅调整现有前端信息层级与默认展开方式。
 - Acceptance Criteria:
-  - AC-24: `software_safe` 右侧 `Details` 面板默认不再展示大块 `Snapshot Summary` JSON。
-  - AC-25: 当前快照规模仍需以紧凑形式可见，且不遮挡选中对象与交互面主体。
-  - AC-26: 原始 snapshot/metrics/hosted access 仍可通过折叠 diagnostics 查看，供排障与 QA 采证使用。
+  - AC-27: `software_safe` 右侧 `Details` 面板默认不再展示大块 `Snapshot Summary` JSON。
+  - AC-28: 当前快照规模仍需以紧凑形式可见，且不遮挡选中对象与交互面主体。
+  - AC-29: 原始 snapshot/metrics/hosted access 仍可通过折叠 diagnostics 查看，供排障与 QA 采证使用。
 
 ## 增量需求（2026-04-24, 设置入口收口）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
@@ -249,9 +249,9 @@
   - 不把这组设置项重新挪到新的首屏大卡片或长段说明里。
   - 不影响当前 `software_safe` 作为正式 Web 主入口的玩法与回归 contract。
 - Acceptance Criteria:
-  - AC-27: `software_safe` 主屏不再存在独立 `Language and Viewer Entry` 内容卡片。
-  - AC-28: 语言切换与标准 Viewer 跳转必须在顶部右侧的紧凑入口中保持可达。
-  - AC-29: `Formal Gameplay Summary` 成为首屏主要内容，不再被设置型入口顶在正文最前面。
+  - AC-30: `software_safe` 主屏不再存在独立 `Language and Viewer Entry` 内容卡片。
+  - AC-31: 语言切换与标准 Viewer 跳转必须在顶部右侧的紧凑入口中保持可达。
+  - AC-32: `Formal Gameplay Summary` 成为首屏主要内容，不再被设置型入口顶在正文最前面。
 
 ## 增量需求（2026-04-16）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
