@@ -37,7 +37,8 @@ use libp2p::{Multiaddr, PeerId};
 use crate::{error::WorldError, util::to_canonical_cbor};
 pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
-    clear_disconnected_peer_state, failover_after_disconnect, record_established_connection,
+    clear_disconnected_peer_state, failover_after_disconnect, log_active_transport_path,
+    prune_redundant_peer_connections, record_established_connection,
     refresh_active_path_after_connection_close, refresh_peer_manager_views,
 };
 use constructor_support::{
@@ -882,27 +883,26 @@ impl Libp2pNetwork {
                                             .kademlia
                                             .add_address(&peer_id, address);
                                     }
-                                    if let Some(active_path) = refreshed_active_path {
-                                        push_bounded_string_with_keyed_cooldown(
-                                            &event_errors,
-                                            &mut lifecycle_event_errors_at_ms,
-                                            format!(
-                                                "transport-active:{peer_id}:{}:{}",
-                                                active_path.kind_label(),
-                                                active_path.flavor_label(),
-                                            ),
-                                            format!(
-                                                "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
-                                                active_path.kind_label(),
-                                                active_path.flavor_label(),
-                                                active_path.addr,
-                                            ),
-                                            max_error_messages,
-                                            "lock errors",
-                                            now_ms(),
-                                            LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
-                                        );
-                                    }
+                                    log_active_transport_path(
+                                        &event_errors,
+                                        &mut lifecycle_event_errors_at_ms,
+                                        peer_id,
+                                        refreshed_active_path.as_ref(),
+                                        max_error_messages,
+                                        now_ms(),
+                                        LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
+                                    );
+                                    prune_redundant_peer_connections(
+                                        &mut swarm,
+                                        &established_transport_paths_by_connection,
+                                        &established_connections_by_peer,
+                                        peer_id,
+                                        &event_errors,
+                                        &mut lifecycle_event_errors_at_ms,
+                                        max_error_messages,
+                                        now_ms(),
+                                        LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
+                                    );
                                     maybe_queue_discovery_peer_record(
                                         &mut swarm,
                                         &mut pending_dht,
