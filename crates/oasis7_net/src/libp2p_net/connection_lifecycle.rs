@@ -14,7 +14,7 @@ use super::transport_paths::{
     failover_transport_path, note_established_transport_path,
     recompute_active_transport_path_for_peer, TransportPath,
 };
-use super::utils::push_bounded_clone;
+use super::utils::{push_bounded_clone, push_bounded_string_with_keyed_cooldown};
 use super::{
     Libp2pReachabilitySnapshot, PeerManagerBlockArtifact, PeerManagerPeerHealth, PeerManagerPolicy,
 };
@@ -68,6 +68,114 @@ pub(super) fn record_established_connection(
         ),
         dialed_addr,
     )
+}
+
+pub(super) fn redundant_connection_ids_for_peer(
+    established_transport_paths_by_connection: &HashMap<ConnectionId, TransportPath>,
+    established_connections_by_peer: &HashMap<PeerId, HashSet<ConnectionId>>,
+    peer_id: PeerId,
+) -> Vec<ConnectionId> {
+    let Some(connection_ids) = established_connections_by_peer.get(&peer_id) else {
+        return Vec::new();
+    };
+    if connection_ids.len() <= 1 {
+        return Vec::new();
+    }
+
+    let Some(keep_connection_id) = connection_ids
+        .iter()
+        .copied()
+        .filter_map(|connection_id| {
+            established_transport_paths_by_connection
+                .get(&connection_id)
+                .map(|path| (path.preference_rank(), connection_id))
+        })
+        .min_by_key(|(rank, connection_id)| (*rank, *connection_id))
+        .map(|(_, connection_id)| connection_id)
+    else {
+        return Vec::new();
+    };
+
+    let mut redundant: Vec<ConnectionId> = connection_ids
+        .iter()
+        .copied()
+        .filter(|connection_id| *connection_id != keep_connection_id)
+        .collect();
+    redundant.sort_unstable();
+    redundant
+}
+
+pub(super) fn prune_redundant_peer_connections(
+    swarm: &mut libp2p::Swarm<Behaviour>,
+    established_transport_paths_by_connection: &HashMap<ConnectionId, TransportPath>,
+    established_connections_by_peer: &HashMap<PeerId, HashSet<ConnectionId>>,
+    peer_id: PeerId,
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    max_error_messages: usize,
+    now_ms: i64,
+    cooldown_ms: i64,
+) {
+    let redundant_connection_ids = redundant_connection_ids_for_peer(
+        established_transport_paths_by_connection,
+        established_connections_by_peer,
+        peer_id,
+    );
+    if redundant_connection_ids.is_empty() {
+        return;
+    }
+    let closed_any = redundant_connection_ids
+        .iter()
+        .copied()
+        .any(|redundant_connection_id| swarm.close_connection(redundant_connection_id));
+    if closed_any {
+        push_bounded_string_with_keyed_cooldown(
+            event_errors,
+            lifecycle_event_errors_at_ms,
+            format!("connection-pruned:{peer_id}"),
+            format!(
+                "libp2p redundant connections pruned peer={peer_id} count={}",
+                redundant_connection_ids.len()
+            ),
+            max_error_messages,
+            "lock errors",
+            now_ms,
+            cooldown_ms,
+        );
+    }
+}
+
+pub(super) fn log_active_transport_path(
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    peer_id: PeerId,
+    active_path: Option<&TransportPath>,
+    max_error_messages: usize,
+    now_ms: i64,
+    cooldown_ms: i64,
+) {
+    let Some(active_path) = active_path else {
+        return;
+    };
+    push_bounded_string_with_keyed_cooldown(
+        event_errors,
+        lifecycle_event_errors_at_ms,
+        format!(
+            "transport-active:{peer_id}:{}:{}",
+            active_path.kind_label(),
+            active_path.flavor_label(),
+        ),
+        format!(
+            "libp2p transport active peer={peer_id} kind={} flavor={} addr={}",
+            active_path.kind_label(),
+            active_path.flavor_label(),
+            active_path.addr,
+        ),
+        max_error_messages,
+        "lock errors",
+        now_ms,
+        cooldown_ms,
+    );
 }
 
 pub(super) fn refresh_active_path_after_connection_close(
@@ -213,5 +321,106 @@ pub(super) fn failover_after_disconnect(
             );
         }
         Ok(None) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::libp2p_net::transport_paths::{
+        TransportMuxer, TransportPathKind, TransportSecurity, TransportSessionFlavor,
+    };
+
+    fn path(
+        peer_id: PeerId,
+        addr: &str,
+        kind: TransportPathKind,
+        flavor: TransportSessionFlavor,
+    ) -> TransportPath {
+        TransportPath {
+            peer_id,
+            addr: addr.parse().expect("multiaddr"),
+            kind,
+            flavor,
+            security: match flavor {
+                TransportSessionFlavor::Quic => TransportSecurity::QuicTls,
+                TransportSessionFlavor::TcpNoiseYamux | TransportSessionFlavor::RelayTunnel => {
+                    TransportSecurity::Noise
+                }
+            },
+            muxer: match flavor {
+                TransportSessionFlavor::Quic => TransportMuxer::Quic,
+                TransportSessionFlavor::TcpNoiseYamux | TransportSessionFlavor::RelayTunnel => {
+                    TransportMuxer::Yamux
+                }
+            },
+        }
+    }
+
+    #[test]
+    fn redundant_connection_ids_for_peer_keeps_best_ranked_connection() {
+        let peer_id = PeerId::random();
+        let direct = ConnectionId::new_unchecked(1);
+        let relay = ConnectionId::new_unchecked(2);
+        let mut established_transport_paths_by_connection = HashMap::new();
+        established_transport_paths_by_connection.insert(
+            direct,
+            path(
+                peer_id,
+                &format!("/ip4/127.0.0.1/tcp/4101/p2p/{peer_id}"),
+                TransportPathKind::Direct,
+                TransportSessionFlavor::TcpNoiseYamux,
+            ),
+        );
+        established_transport_paths_by_connection.insert(
+            relay,
+            path(
+                peer_id,
+                &format!("/ip4/127.0.0.1/tcp/4201/p2p-circuit/p2p/{peer_id}"),
+                TransportPathKind::RelayReserved,
+                TransportSessionFlavor::RelayTunnel,
+            ),
+        );
+        let mut established_connections_by_peer = HashMap::new();
+        established_connections_by_peer.insert(peer_id, HashSet::from([direct, relay]));
+
+        assert_eq!(
+            redundant_connection_ids_for_peer(
+                &established_transport_paths_by_connection,
+                &established_connections_by_peer,
+                peer_id,
+            ),
+            vec![relay]
+        );
+    }
+
+    #[test]
+    fn redundant_connection_ids_for_peer_keeps_lowest_connection_id_for_equal_rank() {
+        let peer_id = PeerId::random();
+        let first = ConnectionId::new_unchecked(3);
+        let second = ConnectionId::new_unchecked(9);
+        let mut established_transport_paths_by_connection = HashMap::new();
+        for connection_id in [first, second] {
+            established_transport_paths_by_connection.insert(
+                connection_id,
+                path(
+                    peer_id,
+                    &format!("/ip4/127.0.0.1/tcp/4101/p2p/{peer_id}"),
+                    TransportPathKind::Direct,
+                    TransportSessionFlavor::TcpNoiseYamux,
+                ),
+            );
+        }
+        let mut established_connections_by_peer = HashMap::new();
+        established_connections_by_peer.insert(peer_id, HashSet::from([first, second]));
+
+        assert_eq!(
+            redundant_connection_ids_for_peer(
+                &established_transport_paths_by_connection,
+                &established_connections_by_peer,
+                peer_id,
+            ),
+            vec![second]
+        );
     }
 }
