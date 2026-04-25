@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="oasis7 project overview: a whitepaper-style explanation of the project goal, world model, player boundary, two-phase path, and current technical-preview boundary."
+    />
+    <meta property="og:title" content="oasis7 Project Overview | Whitepaper-style Explanation" />
+    <meta
+      property="og:description"
+      content="A long-form introduction for first-time readers: what oasis7 is, why it exists, how play works, how the world is structured, and what the current public boundary really is."
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:image" content="../../assets/images/og-cover.png" />
+    <meta property="og:locale" content="en_US" />
+    <title>oasis7 Project Overview | Whitepaper-style Explanation</title>
+    <link rel="canonical" href="https://eng-cc.github.io/oasis7/doc/en/project-overview.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/doc/cn/project-overview.html" />
+    <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/doc/en/project-overview.html" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg" />
+    <link rel="stylesheet" href="../../assets/styles.css" />
+    <script defer src="../../assets/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html">
+        <span class="brand-mark"></span>
+        <span>oasis7 docs</span>
+      </a>
+      <nav class="nav" data-menu data-section-nav>
+        <a href="#summary">Summary</a>
+        <a href="#why">Why</a>
+        <a href="#vision">Vision</a>
+        <a href="#play">Player Role</a>
+        <a href="#status">Status</a>
+      </nav>
+      <button class="menu-button" type="button" aria-label="Toggle menu" data-menu-toggle>☰</button>
+      <div class="lang-switch" aria-label="Language switch">
+        <button
+          class="lang-icon-button"
+          type="button"
+          aria-label="Switch language"
+          aria-expanded="false"
+          aria-haspopup="true"
+          aria-controls="lang-popover-menu"
+          data-lang-toggle
+        >
+          <img src="../../assets/images/globe.svg" alt="" aria-hidden="true" />
+        </button>
+        <div class="lang-popover" id="lang-popover-menu" data-lang-popover>
+          <a href="../cn/project-overview.html" data-lang-choice="zh" data-lang-item>中文</a>
+          <a class="active" href="project-overview.html" aria-current="page" data-lang-choice="en" data-lang-item>English</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top" class="docs-main">
+      <section class="section docs-hero" data-reveal>
+        <p class="eyebrow">Project Overview</p>
+        <h1>oasis7 Project Overview</h1>
+        <p class="subtitle">
+          This is a whitepaper-style explanation for first-time readers. It answers the basic questions:
+          what oasis7 is, why it is worth building, what role the player has, how the world works, and where the current public boundary really sits.
+        </p>
+        <div class="cta-row">
+          <a class="button primary" href="#summary">Start with the Summary</a>
+          <a class="button secondary" href="../../en/index.html">Back to Main Site</a>
+          <a class="button ghost" href="index.html">Back to Docs Hub</a>
+        </div>
+        <div class="proof-strip">
+          <span class="proof-chip is-highlight">Document type: Explanation / Overview</span>
+          <span class="proof-chip">Public posture: technical preview, not playable yet</span>
+          <span class="proof-chip">This is not a new source of truth</span>
+        </div>
+      </section>
+
+      <section id="summary" class="section" data-reveal>
+        <h2>One-page summary</h2>
+        <p class="section-intro">
+          `oasis7` is a civilization simulation game. LLM-driven agents gather, produce, trade, ally, and fight inside a continuously running asteroid-belt world.
+          Resources, institutions, and decentralized consensus are not decoration; they are constraints that actually shape what can happen.
+        </p>
+        <div class="grid cards-2">
+          <article class="card card-spotlight">
+            <h3>What it is</h3>
+            <p>A persistent world, not a one-off demo. War, economy, and governance live inside the same system and leave connected consequences behind.</p>
+          </article>
+          <article class="card">
+            <h3>Who the player is</h3>
+            <p>The player is closer to an external strategist than a unit-by-unit operator. You set goals, change constraints, and push governance.</p>
+          </article>
+          <article class="card">
+            <h3>What it is not</h3>
+            <p>It is not just a chatbot skin for NPCs, and not a sandbox pushed forward by static scripts. The project is testing whether a world can grow its own institutions and conflicts.</p>
+          </article>
+          <article class="card">
+            <h3>What this page does not replace</h3>
+            <p>This page explains the project, but it does not replace `README.md`, `world-rule.md`, `doc/core/prd.md`, `doc/game/**`, or module-level PRD / project truth.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="why" class="section" data-reveal>
+        <h2>Why build this</h2>
+        <p class="section-intro">
+          A lot of AI game or agent demos do not fail because the model is weak. More often, the world around it is too soft: agents can talk, but they do not bear consequences; the rules look scripted; the player feels like a puppeteer.
+        </p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>The common gap</h3>
+            <p>There is often no resource conservation, no persistent time, no auditable state, and no durable strategic pressure. The highlight works, but the system underneath does not hold.</p>
+          </article>
+          <article class="card">
+            <h3>The oasis7 approach</h3>
+            <p>Start with hard questions first: does time keep moving, do computation and energy have real cost, where does player influence stop, can rules evolve, and can key state changes be recorded and replayed.</p>
+          </article>
+        </div>
+        <article class="card">
+          <h3>What the project is really testing</h3>
+          <p>
+            If agents have long memory, live under world rules, and can be extended through WASM modules, can a world grow its own organizations, markets, protocols, and conflicts.
+            Without answering that first, later claims about civilization, governance, war, or economy tend to collapse back into presentation.
+          </p>
+        </article>
+      </section>
+
+      <section id="vision" class="section" data-reveal>
+        <h2>Vision and the two-phase path</h2>
+        <p class="section-intro">
+          The point is not just “more content” or “better tech.” The point is a world that remembers actions, accumulates history, and changes because of what people do inside it.
+        </p>
+        <div class="grid cards-3">
+          <article class="card">
+            <h3>Participation and achievement</h3>
+            <p>The goal is not a system you only watch. It is a world where people build, test, ally, clash, and leave traces that matter later.</p>
+          </article>
+          <article class="card">
+            <h3>The creator role</h3>
+            <p>Creators should not stay in the role of consumers only. If the base becomes stable enough, creators should be able to publish their own `mod / modules` and organize different rule sets and play styles.</p>
+          </article>
+          <article class="card">
+            <h3>Target-state boundary</h3>
+            <p>The longer-term direction is for the game and its key data to move toward something shaped, governed, and benefited from by participants. That is a target-state vision, not a current legal or on-chain fact.</p>
+          </article>
+        </div>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>Phase One: open-world sandbox game</h3>
+            <p>First make participation, exploration, and consequence feel strong enough that people want to stay in the same world and keep returning to it.</p>
+          </article>
+          <article class="card">
+            <h3>Phase Two: open-world game platform</h3>
+            <p>Then expand it into an open-world game platform where different rule sets, different mod ecosystems, and different participant roles can grow on the same base layer.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="play" class="section" data-reveal>
+        <h2>The player, the world, and the game loop</h2>
+        <p class="section-intro">
+          The player is not a world entity. The player is closer to a world-external strategic actor: set high-level goals, adjust prompts and preferences, deploy modules, and push alliances or governance decisions.
+        </p>
+        <div class="grid cards-3">
+          <article class="card">
+            <h3>What you can do</h3>
+            <p>Set direction, change constraints, and influence how organizations and systems evolve. The interesting part is the consequence of your judgment, not raw execution speed.</p>
+          </article>
+          <article class="card">
+            <h3>What you cannot do</h3>
+            <p>You cannot directly puppet agents, bypass world rules, or freeze time to optimize every move.</p>
+          </article>
+          <article class="card">
+            <h3>What you should expect</h3>
+            <p>Action-level feedback first, then day-scale shifts in trade and alliances, then longer changes in institutions and power.</p>
+          </article>
+        </div>
+        <article class="card">
+          <h3>Three qualities of this world</h3>
+          <p>It is alive because time keeps moving. It is hard because movement, computation, and conflict have cost. It is plastic because many social structures are meant to grow from in-world behavior, not from fixed story rails.</p>
+        </article>
+      </section>
+
+      <section class="section" data-reveal>
+        <h2>Why the technical base looks like this</h2>
+        <p class="section-intro">
+          The current high-level shape is `LLM Agents -> WASM Modules -> World Runtime -> Consensus Layer -> Distributed Storage & Networking`.
+        </p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>Design intent</h3>
+            <p>LLMs handle decision and interpretation space, WASM carries deployable and auditable higher-level logic, runtime validates rules, and consensus keeps state multi-node verifiable.</p>
+          </article>
+          <article class="card">
+            <h3>Cost and tradeoff</h3>
+            <p>This increases system complexity and slows product closure, but the project would rather move slower than break world consistency for a smoother short-term demo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="status" class="section" data-reveal>
+        <h2>Where the project actually is today</h2>
+        <p class="section-intro">
+          It helps to separate three layers: what can be studied, what can be verified, and what can be publicly played. Today you can already understand the direction, inspect the docs and architecture, and run preview validation paths. You should not read that as a public playable release.
+        </p>
+        <div class="timeline">
+          <article class="timeline-item done">
+            <span class="status-tag done">Established</span>
+            <h3>Project framing and rule boundaries</h3>
+            <p>The core framing, world rules, player boundaries, and gameplay skeleton already have formal document entry points.</p>
+          </article>
+          <article class="timeline-item done">
+            <span class="status-tag done">Verified</span>
+            <h3>Technical-preview chain</h3>
+            <p>Runtime, viewer, testing, and docs already support build, manual, and validation flows for a technical preview.</p>
+          </article>
+          <article class="timeline-item active">
+            <span class="status-tag active">Current boundary</span>
+            <h3>Still not a public playable build</h3>
+            <p>Browser verification and downloadable builds do not mean public-scale playability. The current public posture is still technical preview, not playable yet.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>© <span data-year></span> oasis7 docs · This page explains the project, but it is not a source-of-truth spec.</p>
+    </footer>
+  </body>
+</html>
