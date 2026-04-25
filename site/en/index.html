@@ -82,11 +82,17 @@
             <p class="subtitle">
               You are not meant to click every unit yourself. You set goals, change constraints, and watch what happens next.
               The agents in this world can produce, trade, ally, fight, and govern on their own, and the world keeps going after you log off.
-              What is public today is still a technical preview. It is here to show the direction, not to pretend the game is already open.
+              The current path is to ship it first as an open-world sandbox game, then evolve it into an open-world game platform. What is public today is still a technical preview. It is here to show the direction, not to pretend the game is already open.
             </p>
             <div class="cta-row">
               <a class="button primary" href="#what">See The Game In 30 Seconds</a>
-              <a class="button secondary" href="#today">See What You Can Do Now</a>
+              <a
+                class="button secondary"
+                href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                target="_blank"
+                rel="noreferrer"
+                >Open Project Overview</a
+              >
             </div>
             <div class="proof-strip">
               <span class="proof-chip is-highlight">Genre: civilization sim</span>
@@ -215,6 +221,19 @@
             <p>Downloads, release notes, and roadmap are public, but they still describe preview status rather than a live launch.</p>
             <div class="cta-row">
               <a class="button secondary" href="#roadmap">See Roadmap</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>Start with the long overview</h3>
+            <p>If you do not want to bounce between README, gameplay docs, and architecture docs first, the whitepaper-style project overview is the fastest way to get the whole picture.</p>
+            <div class="cta-row">
+              <a
+                class="button secondary"
+                href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                target="_blank"
+                rel="noreferrer"
+                >Open Overview</a
+              >
             </div>
           </article>
         </div>
@@ -467,6 +486,17 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
       <section id="roadmap" class="section" data-reveal>
         <h2>Why it is still not playable</h2>
+        <p class="section-intro">The product path is clearer now: phase one is an open-world sandbox game built around participation, exploration, and consequence; later it should expand into an open-world game platform where creators can organize different play styles through `mod / modules`.</p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>Phase One: open-world sandbox game</h3>
+            <p>First stabilize the persistent world, player role, agent consequence chain, and the core loops that make people want to stay in the same world.</p>
+          </article>
+          <article class="card">
+            <h3>Phase Two: open-world game platform</h3>
+            <p>Once that base is steadier, open it up further so different rule sets and creator-driven `mod / modules` can grow on top of the same world layer.</p>
+          </article>
+        </div>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">Done</span>
@@ -524,6 +554,14 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           <article class="card">
             <h3>Read Deeper</h3>
             <ul class="doc-links">
+              <li>
+                <a
+                  href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                  target="_blank"
+                  rel="noreferrer"
+                  >Project Overview Whitepaper</a
+                >
+              </li>
               <li>
                 <a
                   href="https://github.com/eng-cc/oasis7/blob/main/doc/game/gameplay/gameplay-top-level-design.prd.md"
