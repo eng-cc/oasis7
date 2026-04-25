@@ -214,6 +214,7 @@ fn gameplay_action_auth_sign_and_verify_roundtrip() {
     let request = GameplayActionRequest {
         action_id: "build_factory_smelter_mk1".to_string(),
         target_agent_id: "agent-0".to_string(),
+        actor_agent_id: None,
         player_id: "player-a".to_string(),
         public_key: Some(public_key.clone()),
         auth: None,
@@ -233,6 +234,7 @@ fn gameplay_action_auth_verify_rejects_tampered_action_id() {
     let request = GameplayActionRequest {
         action_id: "build_factory_smelter_mk1".to_string(),
         target_agent_id: "agent-0".to_string(),
+        actor_agent_id: None,
         player_id: "player-a".to_string(),
         public_key: Some(public_key.clone()),
         auth: None,

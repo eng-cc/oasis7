@@ -117,6 +117,8 @@ pub(crate) struct PlayerOnboardingState {
     first_session_start_event_count: usize,
     first_session_summary_visible: bool,
     first_session_summary_shown: bool,
+    pub(super) claim_confirm_target_id: Option<String>,
+    pub(super) claim_status_message: String,
 }
 
 #[derive(Default)]
@@ -1081,6 +1083,7 @@ pub(super) fn render_player_experience_layers(
         control_profile,
         layout_state,
         module_visibility,
+        onboarding,
         onboarding_visible,
         guide_step,
         guide_progress,

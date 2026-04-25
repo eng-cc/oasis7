@@ -45,6 +45,7 @@ fn build_first_smelter_via_gameplay_action(
         crate::viewer::GameplayActionRequest {
             action_id: "build_factory_smelter_mk1".to_string(),
             target_agent_id: agent_id.to_string(),
+            actor_agent_id: None,
             player_id: "player-a".to_string(),
             public_key: None,
             auth: None,
@@ -110,6 +111,7 @@ fn build_first_assembler_via_gameplay_action(
         crate::viewer::GameplayActionRequest {
             action_id: "build_factory_assembler_mk1".to_string(),
             target_agent_id: agent_id.to_string(),
+            actor_agent_id: None,
             player_id: "player-a".to_string(),
             public_key: None,
             auth: None,
@@ -139,6 +141,7 @@ fn block_secondary_assembler_via_missing_inputs(
         crate::viewer::GameplayActionRequest {
             action_id: "schedule_recipe_assembler_control_chip".to_string(),
             target_agent_id: agent_id.to_string(),
+            actor_agent_id: None,
             player_id: "player-a".to_string(),
             public_key: None,
             auth: None,
@@ -195,6 +198,7 @@ fn complete_smelter_iron_ingot_jobs(
             crate::viewer::GameplayActionRequest {
                 action_id: "schedule_recipe_smelter_iron_ingot".to_string(),
                 target_agent_id: agent_id.to_string(),
+                actor_agent_id: None,
                 player_id: "player-a".to_string(),
                 public_key: None,
                 auth: None,
@@ -618,6 +622,7 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         crate::viewer::GameplayActionRequest {
             action_id: "build_factory_smelter_mk1".to_string(),
             target_agent_id: agent_id.clone(),
+            actor_agent_id: None,
             player_id: "player-a".to_string(),
             public_key: None,
             auth: None,

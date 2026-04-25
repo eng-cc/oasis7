@@ -64,6 +64,7 @@ fn build_signed_gameplay_action_request_attaches_auth() {
     let request = build_signed_gameplay_action_request(
         "build_factory_smelter_mk1",
         "runtime-agent-0",
+        None,
         "player-1",
         private_key_hex.as_str(),
         None,

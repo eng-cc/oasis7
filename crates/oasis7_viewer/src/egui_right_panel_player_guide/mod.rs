@@ -537,7 +537,23 @@ pub(super) struct PlayerPostOnboardingSnapshot {
     pub(super) blocker_detail: Option<String>,
     pub(super) next_step: String,
     pub(super) branch_hint: Option<String>,
+    pub(super) claim_onboarding: Option<PlayerClaimOnboardingSnapshot>,
     pub(super) action_label: &'static str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PlayerClaimOnboardingSnapshot {
+    pub(super) title: &'static str,
+    pub(super) summary: String,
+    pub(super) target_agent_id: Option<String>,
+    pub(super) guidance: String,
+    pub(super) blocker_detail: Option<String>,
+    pub(super) select_action_label: &'static str,
+    pub(super) prepare_action_label: &'static str,
+    pub(super) confirm_action_label: &'static str,
+    pub(super) cancel_action_label: &'static str,
+    pub(super) ready_to_prepare: bool,
+    pub(super) ready_to_submit: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

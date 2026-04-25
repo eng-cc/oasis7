@@ -8,6 +8,8 @@ use oasis7_wasm_abi::{FactoryModuleSpec, MaterialStack};
 
 pub const ACTION_BUILD_SMELTER_MK1: &str = "build_factory_smelter_mk1";
 pub const ACTION_BUILD_ASSEMBLER_MK1: &str = "build_factory_assembler_mk1";
+pub const ACTION_CLAIM_AGENT: &str = "claim_agent";
+pub const ACTION_RELEASE_AGENT_CLAIM: &str = "release_agent_claim";
 pub const ACTION_SCHEDULE_SMELTER_IRON_INGOT: &str = "schedule_recipe_smelter_iron_ingot";
 pub const ACTION_SCHEDULE_SMELTER_COPPER_WIRE: &str = "schedule_recipe_smelter_copper_wire";
 pub const ACTION_SCHEDULE_SMELTER_POLYMER_RESIN: &str = "schedule_recipe_smelter_polymer_resin";
@@ -61,6 +63,14 @@ pub fn build_runtime_action_from_gameplay_request(
     }
 
     let action = match request.action_id.as_str() {
+        ACTION_CLAIM_AGENT => RuntimeAction::ClaimAgent {
+            claimer_agent_id: required_actor_agent_id(request)?,
+            target_agent_id: target_agent_id.to_string(),
+        },
+        ACTION_RELEASE_AGENT_CLAIM => RuntimeAction::ReleaseAgentClaim {
+            claimer_agent_id: required_actor_agent_id(request)?,
+            target_agent_id: target_agent_id.to_string(),
+        },
         ACTION_BUILD_SMELTER_MK1 => RuntimeAction::BuildFactory {
             builder_agent_id: target_agent_id.to_string(),
             site_id: "site-smelter".to_string(),
@@ -150,6 +160,29 @@ pub fn build_runtime_action_from_gameplay_request(
         }
     };
     Ok(action)
+}
+
+pub fn gameplay_action_requires_actor_agent(action_id: &str) -> bool {
+    matches!(action_id, ACTION_CLAIM_AGENT | ACTION_RELEASE_AGENT_CLAIM)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn required_actor_agent_id(request: &GameplayActionRequest) -> Result<String, GameplayActionError> {
+    let actor_agent_id = request
+        .actor_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| GameplayActionError {
+            code: "actor_agent_required".to_string(),
+            message: format!(
+                "gameplay_action `{}` requires non-empty actor_agent_id",
+                request.action_id
+            ),
+            action_id: Some(request.action_id.clone()),
+            target_agent_id: Some(request.target_agent_id.clone()),
+        })?;
+    Ok(actor_agent_id.to_string())
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -13,8 +13,9 @@ use super::egui_right_panel_player_micro_loop::{
 };
 use crate::web_test_api::WebTestApiControlFeedbackSnapshot;
 use oasis7::simulator::{
-    PlayerGameplayGoalKind, PlayerGameplaySnapshot, PlayerGameplayStageId,
-    PlayerGameplayStageStatus, WorldEvent, WorldEventKind,
+    PlayerAgentClaimQuoteSnapshot, PlayerAgentClaimSnapshot, PlayerGameplayGoalKind,
+    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus, WorldEvent,
+    WorldEventKind,
 };
 
 fn sample_post_onboarding_viewer_state(gameplay: PlayerGameplaySnapshot) -> crate::ViewerState {
@@ -35,6 +36,21 @@ fn sample_post_onboarding_viewer_state(gameplay: PlayerGameplaySnapshot) -> crat
     };
     state.snapshot = Some(snapshot);
     state
+}
+
+fn no_selection() -> crate::ViewerSelection {
+    crate::ViewerSelection { current: None }
+}
+
+fn selected_agent(agent_id: &str) -> crate::ViewerSelection {
+    crate::ViewerSelection {
+        current: Some(crate::SelectionInfo {
+            entity: bevy::prelude::Entity::from_bits(7),
+            kind: crate::SelectionKind::Agent,
+            id: agent_id.to_string(),
+            name: Some(agent_id.to_string()),
+        }),
+    }
 }
 
 #[test]
@@ -305,7 +321,12 @@ fn player_micro_loop_snapshot_exposes_due_timer_lines() {
 #[test]
 fn build_player_post_onboarding_snapshot_defaults_to_first_capability_goal() {
     let state = super::sample_viewer_state(crate::ConnectionStatus::Connected, Vec::new());
-    let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::Active);
     assert_eq!(
@@ -330,7 +351,12 @@ fn build_player_post_onboarding_snapshot_surfaces_factory_blockers() {
             "factory=factory.alpha recipe=recipe.motor requester=agent.alpha reason=material_shortage detail=material_shortage:iron_ingot",
         )],
     );
-    let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::Blocked);
     assert!(snapshot
@@ -353,8 +379,12 @@ fn build_player_post_onboarding_snapshot_uses_feedback_blocker_when_no_runtime_b
         delta_event_seq: 0,
         delta_trace_count: 0,
     };
-    let snapshot =
-        build_player_post_onboarding_snapshot(&state, Some(&feedback), crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        Some(&feedback),
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::Blocked);
     assert!(snapshot
@@ -375,7 +405,12 @@ fn build_player_post_onboarding_snapshot_unlocks_branches_after_first_output() {
             "factory=factory.alpha recipe=recipe.motor requester=agent.alpha batches=1 outputs=motor_mk1x2",
         )],
     );
-    let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::BranchReady);
     assert_eq!(
@@ -408,7 +443,12 @@ fn build_player_post_onboarding_snapshot_prefers_canonical_player_gameplay_snaps
         recent_feedback: None,
         agent_claim: None,
     });
-    let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::BranchReady);
     assert_eq!(
@@ -422,6 +462,131 @@ fn build_player_post_onboarding_snapshot_prefers_canonical_player_gameplay_snaps
         snapshot.branch_hint.as_deref(),
         Some("Tradeoffs unlocked: throughput expansion / input resilience / logistics reach")
     );
+}
+
+#[test]
+fn build_player_post_onboarding_snapshot_surfaces_first_claim_onboarding() {
+    let state = sample_post_onboarding_viewer_state(PlayerGameplaySnapshot {
+        stage_id: PlayerGameplayStageId::PostOnboarding,
+        stage_status: PlayerGameplayStageStatus::Active,
+        goal_id: "post_onboarding.recover_capability".to_string(),
+        goal_kind: PlayerGameplayGoalKind::RecoverCapability,
+        goal_title: "Recover sustainable capability".to_string(),
+        objective: "canonical objective".to_string(),
+        progress_detail: "canonical progress".to_string(),
+        progress_percent: 32,
+        blocker_kind: None,
+        blocker_detail: None,
+        next_step_hint: "canonical next step".to_string(),
+        branch_hint: None,
+        available_actions: Vec::new(),
+        recent_feedback: None,
+        agent_claim: Some(PlayerAgentClaimSnapshot {
+            claimer_agent_id: "player-agent".to_string(),
+            current_epoch: 7,
+            reputation_tier: 0,
+            claim_cap: 1,
+            owned_claim_count: 0,
+            liquid_main_token_balance: 0,
+            restricted_starter_claim_balance: 650,
+            slot_1_eligible_claim_balance: 650,
+            next_claim_quote: Some(PlayerAgentClaimQuoteSnapshot {
+                slot_index: 1,
+                reputation_tier: 0,
+                claim_cap: 1,
+                owned_claim_count: 0,
+                activation_fee_amount: 100,
+                claim_bond_amount: 200,
+                upkeep_per_epoch: 25,
+                total_upfront_amount: 325,
+                transferable_liquid_balance: 0,
+                restricted_starter_claim_balance: 650,
+                eligible_claim_balance: 650,
+                release_cooldown_epochs: 2,
+                grace_epochs: 2,
+                idle_warning_epochs: 7,
+                forced_idle_reclaim_epochs: 10,
+                forced_reclaim_penalty_bps: 2000,
+                blocked_reason: None,
+            }),
+            owned_claims: Vec::new(),
+        }),
+    });
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &selected_agent("agent-slot-1"),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
+
+    let claim = snapshot.claim_onboarding.expect("claim onboarding");
+    assert_eq!(claim.target_agent_id.as_deref(), Some("agent-slot-1"));
+    assert!(claim.ready_to_prepare);
+    assert!(claim.ready_to_submit);
+    assert!(claim.summary.contains("Slot 1 quote"));
+    assert!(claim.guidance.contains("agent-slot-1"));
+}
+
+#[test]
+fn build_player_post_onboarding_snapshot_requests_target_before_first_claim() {
+    let state = sample_post_onboarding_viewer_state(PlayerGameplaySnapshot {
+        stage_id: PlayerGameplayStageId::PostOnboarding,
+        stage_status: PlayerGameplayStageStatus::Active,
+        goal_id: "post_onboarding.recover_capability".to_string(),
+        goal_kind: PlayerGameplayGoalKind::RecoverCapability,
+        goal_title: "Recover sustainable capability".to_string(),
+        objective: "canonical objective".to_string(),
+        progress_detail: "canonical progress".to_string(),
+        progress_percent: 32,
+        blocker_kind: None,
+        blocker_detail: None,
+        next_step_hint: "canonical next step".to_string(),
+        branch_hint: None,
+        available_actions: Vec::new(),
+        recent_feedback: None,
+        agent_claim: Some(PlayerAgentClaimSnapshot {
+            claimer_agent_id: "player-agent".to_string(),
+            current_epoch: 7,
+            reputation_tier: 0,
+            claim_cap: 1,
+            owned_claim_count: 0,
+            liquid_main_token_balance: 0,
+            restricted_starter_claim_balance: 650,
+            slot_1_eligible_claim_balance: 650,
+            next_claim_quote: Some(PlayerAgentClaimQuoteSnapshot {
+                slot_index: 1,
+                reputation_tier: 0,
+                claim_cap: 1,
+                owned_claim_count: 0,
+                activation_fee_amount: 100,
+                claim_bond_amount: 200,
+                upkeep_per_epoch: 25,
+                total_upfront_amount: 325,
+                transferable_liquid_balance: 0,
+                restricted_starter_claim_balance: 650,
+                eligible_claim_balance: 650,
+                release_cooldown_epochs: 2,
+                grace_epochs: 2,
+                idle_warning_epochs: 7,
+                forced_idle_reclaim_epochs: 10,
+                forced_reclaim_penalty_bps: 2000,
+                blocked_reason: None,
+            }),
+            owned_claims: Vec::new(),
+        }),
+    });
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
+
+    let claim = snapshot.claim_onboarding.expect("claim onboarding");
+    assert!(!claim.ready_to_prepare);
+    assert!(!claim.ready_to_submit);
+    assert!(claim.target_agent_id.is_none());
+    assert!(claim.guidance.contains("Select an unclaimed agent"));
 }
 
 #[test]
@@ -443,7 +608,12 @@ fn build_player_post_onboarding_snapshot_uses_canonical_blocker_fields() {
         recent_feedback: None,
         agent_claim: None,
     });
-    let snapshot = build_player_post_onboarding_snapshot(&state, None, crate::i18n::UiLocale::EnUs);
+    let snapshot = build_player_post_onboarding_snapshot(
+        &state,
+        &no_selection(),
+        None,
+        crate::i18n::UiLocale::EnUs,
+    );
 
     assert_eq!(snapshot.status, PlayerPostOnboardingStatus::Blocked);
     assert!(snapshot

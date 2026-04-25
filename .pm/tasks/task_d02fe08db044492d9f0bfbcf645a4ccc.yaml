@@ -1,0 +1,23 @@
+task_uid: task_d02fe08db044492d9f0bfbcf645a4ccc
+title: "first slot-1 claim onboarding flow"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-first-slot-claim-onboarding-flow
+execution_log_path: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md
+  - doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md
+doc_refs: []
+related_prd:
+  - PRD-GAME-011
+acceptance:
+  - "New accounts with no owned agent claims see a dedicated slot-1 claim onboarding CTA instead of relying on raw detail text."
+  - "The onboarding CTA uses canonical claim quote data, keeps explicit confirmation before claim, and surfaces blocked reasons when starter balance is unavailable."
+  - "Viewer regression tests cover the new onboarding state and existing claim detail behavior remains intact."
+handoff_to: []
+updated_at: 2026-04-25T17:57:01+08:00
+last_started_at: 2026-04-25T17:57:01+08:00

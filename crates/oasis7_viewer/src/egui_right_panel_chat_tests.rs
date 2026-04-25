@@ -489,9 +489,9 @@ fn sync_viewer_auth_nonce_from_state_tracks_persisted_nonce() {
     let mut state = ViewerState::default();
     state.snapshot = Some(kernel.snapshot());
 
-    let baseline = VIEWER_AUTH_NONCE_COUNTER.load(Ordering::SeqCst);
+    let baseline = viewer_auth_nonce_for_tests();
     sync_viewer_auth_nonce_from_state(&state);
-    let current = VIEWER_AUTH_NONCE_COUNTER.load(Ordering::SeqCst);
+    let current = viewer_auth_nonce_for_tests();
     assert!(current >= baseline.max(1_000_001));
 }
 

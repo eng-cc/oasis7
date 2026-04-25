@@ -2,14 +2,14 @@ use super::*;
 
 use super::super::auth::{verify_gameplay_action_auth_proof, VerifiedPlayerAuth};
 use super::super::gameplay_actions::{
-    build_runtime_action_from_gameplay_request, ACTION_BUILD_ASSEMBLER_MK1,
-    ACTION_BUILD_SMELTER_MK1, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
-    ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE, ACTION_SCHEDULE_ASSEMBLER_GEAR,
-    ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE, ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK,
-    ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1, ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK,
-    ACTION_SCHEDULE_SMELTER_ALLOY_PLATE, ACTION_SCHEDULE_SMELTER_COPPER_WIRE,
-    ACTION_SCHEDULE_SMELTER_IRON_INGOT, ACTION_SCHEDULE_SMELTER_POLYMER_RESIN,
-    FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1,
+    build_runtime_action_from_gameplay_request, gameplay_action_requires_actor_agent,
+    ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_RELEASE_AGENT_CLAIM,
+    ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP, ACTION_SCHEDULE_ASSEMBLER_FACTORY_CORE,
+    ACTION_SCHEDULE_ASSEMBLER_GEAR, ACTION_SCHEDULE_ASSEMBLER_LOGISTICS_DRONE,
+    ACTION_SCHEDULE_ASSEMBLER_MODULE_RACK, ACTION_SCHEDULE_ASSEMBLER_MOTOR_MK1,
+    ACTION_SCHEDULE_ASSEMBLER_SENSOR_PACK, ACTION_SCHEDULE_SMELTER_ALLOY_PLATE,
+    ACTION_SCHEDULE_SMELTER_COPPER_WIRE, ACTION_SCHEDULE_SMELTER_IRON_INGOT,
+    ACTION_SCHEDULE_SMELTER_POLYMER_RESIN, FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1,
 };
 use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
 use super::control_plane::{
@@ -206,35 +206,88 @@ impl ViewerRuntimeLiveServer {
             })?;
 
         let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        ensure_agent_player_access_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            request.target_agent_id.as_str(),
-            verified.player_id.as_str(),
-            public_key.as_deref(),
-        )
-        .map_err(|err| GameplayActionError {
-            code: err.code,
-            message: err.message,
-            action_id: Some(request.action_id.clone()),
-            target_agent_id: err.agent_id,
-        })?;
-        let events = self
-            .llm_sidecar
-            .bind_agent_player(
+        if gameplay_action_requires_actor_agent(request.action_id.as_str()) {
+            let bound_agent_id = self
+                .llm_sidecar
+                .bound_agent_for_player(verified.player_id.as_str())
+                .ok_or_else(|| GameplayActionError {
+                    code: "player_agent_binding_required".to_string(),
+                    message: format!(
+                        "gameplay_action `{}` requires a bound player agent session",
+                        request.action_id
+                    ),
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                })?;
+            ensure_agent_player_access_runtime(
+                &self.world,
+                &self.llm_sidecar,
+                bound_agent_id,
+                verified.player_id.as_str(),
+                public_key.as_deref(),
+            )
+            .map_err(|err| GameplayActionError {
+                code: err.code,
+                message: err.message,
+                action_id: Some(request.action_id.clone()),
+                target_agent_id: err.agent_id,
+            })?;
+            let actor_agent_id = request
+                .actor_agent_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| GameplayActionError {
+                    code: "actor_agent_required".to_string(),
+                    message: format!(
+                        "gameplay_action `{}` requires non-empty actor_agent_id",
+                        request.action_id
+                    ),
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                })?;
+            if actor_agent_id != bound_agent_id {
+                return Err(GameplayActionError {
+                    code: "actor_agent_mismatch".to_string(),
+                    message: format!(
+                        "gameplay_action `{}` actor_agent_id {} does not match bound player agent {}",
+                        request.action_id, actor_agent_id, bound_agent_id
+                    ),
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                });
+            }
+        } else {
+            ensure_agent_player_access_runtime(
+                &self.world,
+                &self.llm_sidecar,
                 request.target_agent_id.as_str(),
                 verified.player_id.as_str(),
                 public_key.as_deref(),
-                false,
             )
-            .map_err(|message| GameplayActionError {
-                code: "player_bind_failed".to_string(),
-                message,
+            .map_err(|err| GameplayActionError {
+                code: err.code,
+                message: err.message,
                 action_id: Some(request.action_id.clone()),
-                target_agent_id: Some(request.target_agent_id.clone()),
+                target_agent_id: err.agent_id,
             })?;
-        for event in events {
-            self.enqueue_virtual_event(event);
+            let events = self
+                .llm_sidecar
+                .bind_agent_player(
+                    request.target_agent_id.as_str(),
+                    verified.player_id.as_str(),
+                    public_key.as_deref(),
+                    false,
+                )
+                .map_err(|message| GameplayActionError {
+                    code: "player_bind_failed".to_string(),
+                    message,
+                    action_id: Some(request.action_id.clone()),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                })?;
+            for event in events {
+                self.enqueue_virtual_event(event);
+            }
         }
 
         let accepted_at_tick = self.world.state().time;
@@ -255,12 +308,12 @@ impl ViewerRuntimeLiveServer {
                 action: format!("gameplay_action:{}", request.action_id),
                 stage: "submitted".to_string(),
                 effect: format!(
-                    "submitted industrial action {} for {} to chain runtime as consensus action {}",
+                    "submitted gameplay action {} for {} to chain runtime as consensus action {}",
                     request.action_id, request.target_agent_id, submitted_action_id
                 ),
                 reason: None,
                 hint: Some(
-                    "wait for committed world sync to observe the industrial action outcome"
+                    "wait for committed world sync to observe the gameplay action outcome"
                         .to_string(),
                 ),
                 delta_logical_time: 0,
@@ -274,7 +327,7 @@ impl ViewerRuntimeLiveServer {
                 runtime_action_id: submitted_action_id,
                 accepted_at_tick,
                 message: Some(
-                    "submitted to chain runtime; wait for committed world sync to observe the industrial action"
+                    "submitted to chain runtime; wait for committed world sync to observe the gameplay action"
                         .to_string(),
                 ),
             });
@@ -286,11 +339,16 @@ impl ViewerRuntimeLiveServer {
             action: format!("gameplay_action:{}", request.action_id),
             stage: "accepted".to_string(),
             effect: format!(
-                "queued industrial action {} for {} as runtime action {}",
+                "queued gameplay action {} for {} as runtime action {}",
                 request.action_id, request.target_agent_id, runtime_action_id
             ),
             reason: None,
-            hint: Some("advance 1-2 steps to apply the queued industrial action".to_string()),
+            hint: Some(match request.action_id.as_str() {
+                ACTION_RELEASE_AGENT_CLAIM => {
+                    "advance 1-2 steps to queue the release cooldown for this claim".to_string()
+                }
+                _ => "advance 1-2 steps to apply the queued gameplay action".to_string(),
+            }),
             delta_logical_time: 0,
             delta_event_seq: 0,
         });
@@ -301,7 +359,7 @@ impl ViewerRuntimeLiveServer {
             player_id: verified.player_id,
             runtime_action_id,
             accepted_at_tick,
-            message: Some("advance 1-2 steps to apply the queued industrial action".to_string()),
+            message: Some("advance 1-2 steps to apply the queued gameplay action".to_string()),
         })
     }
 

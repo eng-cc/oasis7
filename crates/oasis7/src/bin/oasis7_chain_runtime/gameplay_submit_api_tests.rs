@@ -75,6 +75,7 @@ fn signed_gameplay_submit_request(player_id: &str, nonce: u64) -> GameplayAction
     let mut request = GameplayActionRequest {
         action_id: "build_factory_smelter_mk1".to_string(),
         target_agent_id: "agent-1".to_string(),
+        actor_agent_id: None,
         player_id: player_id.to_string(),
         public_key: Some(public_key.clone()),
         auth: None,
