@@ -230,9 +230,13 @@ fn connected_or_active_transport_peers_from_healths(
 }
 
 fn dedup_sorted_peers(mut peers: Vec<PeerId>) -> Vec<PeerId> {
-    peers.sort_unstable_by_key(|peer| peer.to_string());
-    peers.dedup();
-    peers
+    let mut peers = peers
+        .drain(..)
+        .map(|peer| (peer.to_bytes(), peer))
+        .collect::<Vec<_>>();
+    peers.sort_unstable_by(|(left_key, _), (right_key, _)| left_key.cmp(right_key));
+    peers.dedup_by(|(left_key, _), (right_key, _)| left_key == right_key);
+    peers.into_iter().map(|(_, peer)| peer).collect()
 }
 
 impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
