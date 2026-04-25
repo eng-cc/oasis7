@@ -49,6 +49,8 @@ use crate::{
 mod egui_observe_section_card;
 #[path = "egui_right_panel_chat.rs"]
 mod egui_right_panel_chat;
+#[path = "egui_right_panel_chat_auth.rs"]
+mod egui_right_panel_chat_auth;
 #[path = "egui_right_panel_controls.rs"]
 mod egui_right_panel_controls;
 #[path = "egui_right_panel_env.rs"]

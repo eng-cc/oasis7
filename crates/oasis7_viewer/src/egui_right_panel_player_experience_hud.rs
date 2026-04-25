@@ -83,9 +83,14 @@ fn player_objective_text(
     locale: crate::i18n::UiLocale,
 ) -> String {
     if post_onboarding_ready {
-        return build_player_post_onboarding_snapshot(state, None, locale)
-            .title
-            .to_string();
+        return build_player_post_onboarding_snapshot(
+            state,
+            &crate::ViewerSelection { current: None },
+            None,
+            locale,
+        )
+        .title
+        .to_string();
     }
 
     player_goal_title(step, locale).to_string()

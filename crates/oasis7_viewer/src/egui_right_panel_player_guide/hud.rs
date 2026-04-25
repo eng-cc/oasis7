@@ -1,3 +1,8 @@
+use super::super::egui_right_panel_chat_auth::{
+    build_session_register_request, build_signed_gameplay_action_request,
+    sync_viewer_auth_nonce_from_state,
+};
+use super::super::egui_right_panel_player_experience::PlayerOnboardingState;
 use super::super::egui_right_panel_player_micro_loop::{
     build_player_micro_loop_snapshot, format_due_timer_line, PlayerMicroLoopSnapshot,
     PlayerMicroLoopTone, PlayerNoProgressDiagnosis,
@@ -399,6 +404,7 @@ pub(crate) fn render_player_mission_hud(
     control_profile: Option<&crate::ViewerControlProfileState>,
     layout_state: &mut RightPanelLayoutState,
     module_visibility: &mut crate::right_panel_module_visibility::RightPanelModuleVisibilityState,
+    onboarding: &mut PlayerOnboardingState,
     onboarding_visible: bool,
     step: PlayerGuideStep,
     progress: PlayerGuideProgressSnapshot,
@@ -412,7 +418,15 @@ pub(crate) fn render_player_mission_hud(
     let reward = build_player_reward_feedback_snapshot(progress, locale);
     let post_onboarding = progress
         .explore_ready
-        .then(|| build_player_post_onboarding_snapshot(state, control_feedback, locale));
+        .then(|| build_player_post_onboarding_snapshot(state, selection, control_feedback, locale));
+    if post_onboarding
+        .as_ref()
+        .and_then(|snapshot| snapshot.claim_onboarding.as_ref())
+        .and_then(|claim| claim.target_agent_id.as_deref())
+        != onboarding.claim_confirm_target_id.as_deref()
+    {
+        onboarding.claim_confirm_target_id = None;
+    }
     let tone = post_onboarding
         .as_ref()
         .map(|snapshot| player_post_onboarding_status_color(snapshot.status))
@@ -434,6 +448,8 @@ pub(crate) fn render_player_mission_hud(
     let mut action_clicked = false;
     let mut command_clicked = false;
     let (mut recover_play_clicked, mut recover_step_clicked) = (false, false);
+    let (mut claim_select_clicked, mut claim_prepare_clicked) = (false, false);
+    let (mut claim_confirm_clicked, mut claim_cancel_clicked) = (false, false);
     let micro_loop_snapshot = build_player_micro_loop_snapshot(state, locale);
     let control_feedback_needs_recovery = control_feedback.as_ref().is_some_and(|feedback| {
         player_control_stage_shows_recovery_actions(feedback.stage.as_str())
@@ -561,6 +577,75 @@ pub(crate) fn render_player_mission_hud(
                                         "Next Branches"
                                     });
                                     ui.strong(branch_hint.as_str());
+                                });
+                        }
+                        if let Some(claim_onboarding) = post_onboarding.claim_onboarding.as_ref() {
+                            let confirmation_open = onboarding.claim_confirm_target_id.as_deref()
+                                == claim_onboarding.target_agent_id.as_deref();
+                            egui::Frame::group(ui.style())
+                                .fill(egui::Color32::from_rgba_unmultiplied(28, 40, 58, 176))
+                                .stroke(egui::Stroke::new(
+                                    1.0,
+                                    egui::Color32::from_rgb(196, 164, 88),
+                                ))
+                                .corner_radius(egui::CornerRadius::same(8))
+                                .inner_margin(egui::Margin::same(8))
+                                .show(ui, |ui| {
+                                    ui.small(if locale.is_zh() {
+                                        "slot-1 引导"
+                                    } else {
+                                        "Slot-1 Onboarding"
+                                    });
+                                    ui.strong(claim_onboarding.title);
+                                    ui.small(claim_onboarding.summary.as_str());
+                                    ui.small(
+                                        egui::RichText::new(claim_onboarding.guidance.as_str())
+                                            .color(egui::Color32::from_rgb(214, 228, 246)),
+                                    );
+                                    if let Some(blocker_detail) =
+                                        claim_onboarding.blocker_detail.as_ref()
+                                    {
+                                        ui.small(
+                                            egui::RichText::new(blocker_detail.as_str())
+                                                .color(egui::Color32::from_rgb(242, 182, 142)),
+                                        );
+                                    }
+                                    if !onboarding.claim_status_message.is_empty() {
+                                        ui.small(
+                                            egui::RichText::new(
+                                                onboarding.claim_status_message.as_str(),
+                                            )
+                                            .color(egui::Color32::from_rgb(176, 208, 236)),
+                                        );
+                                    }
+                                    ui.horizontal_wrapped(|ui| {
+                                        if !claim_onboarding.ready_to_prepare {
+                                            claim_select_clicked = ui
+                                                .button(claim_onboarding.select_action_label)
+                                                .clicked();
+                                        } else if confirmation_open {
+                                            claim_confirm_clicked = ui
+                                                .add_enabled(
+                                                    claim_onboarding.ready_to_submit,
+                                                    egui::Button::new(
+                                                        claim_onboarding.confirm_action_label,
+                                                    ),
+                                                )
+                                                .clicked();
+                                            claim_cancel_clicked = ui
+                                                .button(claim_onboarding.cancel_action_label)
+                                                .clicked();
+                                        } else {
+                                            claim_prepare_clicked = ui
+                                                .add_enabled(
+                                                    claim_onboarding.ready_to_prepare,
+                                                    egui::Button::new(
+                                                        claim_onboarding.prepare_action_label,
+                                                    ),
+                                                )
+                                                .clicked();
+                                        }
+                                    });
                                 });
                         }
                     } else {
@@ -800,6 +885,91 @@ pub(crate) fn render_player_mission_hud(
     }
     if command_clicked {
         apply_player_layout_preset(layout_state, module_visibility, PlayerLayoutPreset::Command);
+    }
+    if claim_select_clicked {
+        layout_state.panel_hidden = false;
+        apply_player_layout_preset(layout_state, module_visibility, PlayerLayoutPreset::Intel);
+    }
+    if claim_prepare_clicked {
+        onboarding.claim_confirm_target_id = post_onboarding
+            .as_ref()
+            .and_then(|snapshot| snapshot.claim_onboarding.as_ref())
+            .and_then(|claim| claim.target_agent_id.clone());
+        onboarding.claim_status_message.clear();
+        layout_state.panel_hidden = false;
+        apply_player_layout_preset(layout_state, module_visibility, PlayerLayoutPreset::Intel);
+    }
+    if claim_cancel_clicked {
+        onboarding.claim_confirm_target_id = None;
+    }
+    if claim_confirm_clicked {
+        let send_result: Result<(), String> = (|| {
+            let gameplay = state
+                .snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.player_gameplay.as_ref())
+                .ok_or_else(|| "player gameplay snapshot unavailable".to_string())?;
+            let claim = gameplay
+                .agent_claim
+                .as_ref()
+                .ok_or_else(|| "player claim snapshot unavailable".to_string())?;
+            let target_agent_id = onboarding
+                .claim_confirm_target_id
+                .as_deref()
+                .ok_or_else(|| "claim target is no longer selected".to_string())?;
+            let client = client.ok_or_else(|| {
+                if locale.is_zh() {
+                    "当前未连接 viewer client".to_string()
+                } else {
+                    "Viewer client unavailable".to_string()
+                }
+            })?;
+            sync_viewer_auth_nonce_from_state(state);
+            let session_register =
+                build_session_register_request(Some(claim.claimer_agent_id.clone()))?;
+            let request = build_signed_gameplay_action_request(
+                oasis7::viewer::ACTION_CLAIM_AGENT,
+                target_agent_id,
+                Some(claim.claimer_agent_id.as_str()),
+            )?;
+            client
+                .tx
+                .send(oasis7::viewer::ViewerRequest::AuthoritativeRecovery {
+                    command: oasis7::viewer::AuthoritativeRecoveryCommand::RegisterSession {
+                        request: session_register,
+                    },
+                })
+                .map_err(|err| err.to_string())?;
+            client
+                .tx
+                .send(oasis7::viewer::ViewerRequest::GameplayAction { request })
+                .map_err(|err| err.to_string())?;
+            Ok(())
+        })();
+        match send_result {
+            Ok(()) => {
+                onboarding.claim_status_message = if locale.is_zh() {
+                    "slot-1 认领请求已提交，推进 1~2 步等待世界应用。".to_string()
+                } else {
+                    "Slot-1 claim request submitted. Advance 1-2 steps and wait for the world to apply it."
+                        .to_string()
+                };
+                onboarding.claim_confirm_target_id = None;
+                layout_state.panel_hidden = false;
+                apply_player_layout_preset(
+                    layout_state,
+                    module_visibility,
+                    PlayerLayoutPreset::Command,
+                );
+            }
+            Err(err) => {
+                onboarding.claim_status_message = if locale.is_zh() {
+                    format!("slot-1 认领提交失败: {err}")
+                } else {
+                    format!("Slot-1 claim submit failed: {err}")
+                };
+            }
+        }
     }
     if let Some(client) = client {
         if recover_play_clicked {

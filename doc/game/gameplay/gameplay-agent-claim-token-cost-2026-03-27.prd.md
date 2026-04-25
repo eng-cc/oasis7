@@ -45,13 +45,15 @@
   - PRD-GAME-011B: As a `qa_engineer`, I want forced reclaim and refund/slash outcomes to be deterministic, so that we can test abuse resistance instead of relying on manual moderation.
   - PRD-GAME-011C: As a limited preview / allowlist owner, I want to seed first-claim funds without granting transferable assets, so that test users can enter mid-loop without opening an airdrop abuse lane.
   - PRD-GAME-011D: As a `runtime_engineer`, I want claim/refund accounting to preserve funding-source provenance, so that restricted starter funds cannot be converted into transferable main token through release or reclaim.
+  - PRD-GAME-011E: As a new account entering PostOnboarding with `owned_claim_count=0`, I want a dedicated `slot-1` claim onboarding flow that reuses the canonical quote and still requires explicit confirmation, so that I can finish the first claim without hunting raw detail text or triggering a silent auto-claim.
 - Critical User Flows:
   1. Flow-AGC-001: `liveops / onboarding / QA seed 发放 restricted starter claim balance -> 账户获得不可转账、带用途范围的 canonical bucket`
   2. Flow-AGC-002: `玩家选择未认领 agent -> 系统返回 slot quote（activation fee / bond / upkeep / cap / eligible balances）-> 若为 slot-1 则 restricted 余额优先参与报价 -> 玩家确认 -> 扣除 activation fee、锁定 bond -> agent 进入 claimed_active`
-  3. Flow-AGC-003: `每个 upkeep epoch 到达 -> 系统按 restricted -> liquid 优先级尝试结算 slot-1 upkeep -> 余额足够则继续持有 -> 不足则进入 upkeep_grace`
-  4. Flow-AGC-004: `玩家在 cooldown 后主动 release -> 系统结清欠费 -> 按原 funding source 退还 bond 剩余部分 -> agent 回到 unclaimed`
-  5. Flow-AGC-005: `claim 进入 grace 后仍未补足 upkeep 或连续闲置达到阈值 -> 系统执行 forced_reclaim -> 计算 slash / refund -> 按 funding source 回写退款 bucket -> agent 回到 unclaimed`
-  6. Flow-AGC-006: `玩家尝试认领第 2/3 个 agent 或发起普通转账 -> 系统拒绝消费 restricted bucket，并返回结构化 blocker`
+  3. Flow-AGC-002A: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 canonical `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` onboarding CTA -> 玩家先选中未认领目标 -> HUD 回显 canonical quote / blocker -> 玩家显式点击 Prepare 后再 Confirm -> Viewer 才提交正式 claim action
+  4. Flow-AGC-003: `每个 upkeep epoch 到达 -> 系统按 restricted -> liquid 优先级尝试结算 slot-1 upkeep -> 余额足够则继续持有 -> 不足则进入 upkeep_grace`
+  5. Flow-AGC-004: `玩家在 cooldown 后主动 release -> 系统结清欠费 -> 按原 funding source 退还 bond 剩余部分 -> agent 回到 unclaimed`
+  6. Flow-AGC-005: `claim 进入 grace 后仍未补足 upkeep 或连续闲置达到阈值 -> 系统执行 forced_reclaim -> 计算 slash / refund -> 按 funding source 回写退款 bucket -> agent 回到 unclaimed`
+  7. Flow-AGC-006: `玩家尝试认领第 2/3 个 agent 或发起普通转账 -> 系统拒绝消费 restricted bucket，并返回结构化 blocker`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -64,6 +66,7 @@
 | Forced Reclaim | `forced_reason`、`forced_reclaim_epoch`、`forced_penalty_amount`、`bond_refund_amount`、`bond_refund_restricted_amount`、`bond_refund_liquid_amount` | 欠费超宽限或持续闲置时系统回收 | `upkeep_grace/inactive_reclaim_candidate -> forced_reclaimed -> unclaimed` | 欠费宽限 `grace_epochs = 2`；闲置阈值 `7` 个 epoch，最晚 `10` 个 epoch 完成回收；`forced_reclaim_penalty_bps = 2000`（作用于剩余 bond） | 仅系统可执行；owner 不能在最终回收点之后阻断 |
 | Transfer Guard | `transferable_balance`、`restricted_balance`、`blocked_reason` | 玩家发起普通 main token 转账或 explorer 导出余额时，系统区分可转账与不可转账余额 | `eligible -> blocked_for_restricted_only` | `transferable_balance = liquid_balance`；`restricted_balance` 只做展示，不计入可转账金额 | `TransferMainToken`、公开转账 API、explorer 排名与总额不得消费或误计 restricted bucket |
 | Reputation Cap | `reputation_tier`、`claim_cap`、`owned_agent_count` | 认领前校验当前账号可占有的 agent 上限 | `eligible -> eligible/blocked_by_cap` | `tier-0 cap=1`、`tier-1 cap=2`、`tier-2+ cap=3` | 非法 tier 或超 cap 直接拒绝，不允许只靠余额绕过 |
+| First Claim Onboarding | `owned_claim_count`、`next_claim_quote.slot_index`、`target_agent_id`、`blocked_reason`、`actor_agent_id` | `owned_claim_count=0` 且 `slot_index=1` 时，HUD 展示专用 `slot-1` CTA；玩家必须先选目标，再执行 `Prepare -> Confirm` 两段式提交 | `quote_ready -> onboarding_visible -> confirmation_open -> claim_submitted` | 只读取 canonical quote / blocker；不得在 Viewer 侧重算 claim 成本，也不得跳过确认直接自动认领 | 认领提交必须绑定当前玩家已注册的 claimer agent，会话 actor 与 claim target 必须分离 |
 
 - Acceptance Criteria:
   - AC-1: 首个 agent 认领没有任何免费分支；v1 必须显式校验 `activation_fee_amount > 0`、`claim_bond_amount > 0`、`upkeep_per_epoch > 0`。
@@ -76,6 +79,7 @@
   - AC-8: Viewer / pure API 必须同时展示 `claim_slot_index`、`activation_fee_amount`、`claim_bond_amount`、`upkeep_per_epoch`、`grace_deadline_epoch`、`release_cooldown_epochs`、`restricted_starter_claim_balance` 与 `eligible_claim_balance`，不允许 UI/API 各算一套。
   - AC-9: `TransferMainToken`、公开转账 API、explorer 余额排序与总额展示必须显式区分 `transferable_balance` 与 `restricted_balance`；restricted 不得被视为可转账资产。
   - AC-10: 本机制不得被表述为现实货币付费解锁、公开售卖 agent 或永久产权出售；它是 gameplay 内部的 main token 承诺成本机制与受限启动资助工具。
+  - AC-11: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` 认领引导卡；该卡必须直接复用 canonical quote / blocker，并要求玩家完成“选目标 -> Prepare -> Confirm”的显式确认链路，不允许静默自动认领。
 - Non-Goals:
   - 不在本专题内定义现实货币购买、法币结算或站外商城。
   - 不把 agent 认领做成永久不可回收的链上产权 NFT。
@@ -92,6 +96,7 @@
   - gameplay 层新增 `agent claim economy` 规则：负责报价、claim 状态机、slot multiplier、cap 和回收逻辑。
   - runtime 负责原子扣费、bond 锁定、epoch upkeep 结算、slash / refund 和记账事件，并新增 `restricted starter claim balance` bucket、可消费范围与 refund provenance。
   - viewer / pure API 只读取 canonical claim 状态、报价字段与 restricted/liquid 余额拆分，不自行推导隐藏成本。
+  - Viewer 的首次 `slot-1` onboarding 只负责把 canonical quote / blocker 和显式确认串成操作流，不新增第二套 claim 规则，也不在 HUD 内静默触发自动认领。
   - main token 账本继续作为唯一价值来源；claim 机制允许 `slot-1` 消费 `restricted starter claim balance + liquid main token` 的 canonical 组合，但转账面与公开资产面只消费 `liquid main token`，不旁路 signed action / audit 链路。
 - Integration Points:
   - `doc/game/prd.md`
@@ -106,6 +111,8 @@
   - restricted grant admin 未登记：当 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids` 缺失、为空、或不包含当前 `issuer_account_id` 时，issue / revoke 必须在 grant / treasury / beneficiary 逻辑之前直接拒绝。
   - restricted bucket 过期：已过 `expires_at_epoch` 的 starter balance 不得进入 quote 可用余额，且必须生成可审计的 `expired` 事件。
   - mixed funding：若 upfront cost 同时由 restricted 与 liquid 支付，系统必须记录 bond provenance；后续 refund/slash 结算必须按该 provenance 拆分。
+  - 首次认领选中自己：若当前选中的 agent 是玩家自己的 claimer agent，Viewer 必须提示重新选择未认领目标，不得把 claimer agent 当成 claim target。
+  - 首次认领已选中已持有目标：若当前选中目标已经属于玩家的 owned claims，Viewer 必须回到“重新选目标”状态，不得继续打开确认。
   - 并发争抢：两个提交同时命中同一 `agent_id` 时，只允许第一个写入 `claim_owner_id`；第二个返回冲突，不得重复扣费。
   - upkeep 结算时余额不足：进入 `upkeep_grace`，并写出 `grace_deadline_epoch`；宽限内补足可用余额后恢复 `claimed_active`。
   - `slot-2/3` 误用 restricted：必须拒绝，并返回 `restricted_balance_not_eligible_for_slot` 一类结构化 blocker。

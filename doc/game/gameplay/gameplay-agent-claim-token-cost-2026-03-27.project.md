@@ -3,7 +3,7 @@
 - 对应设计文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md`
 - 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
 
-审计轮次: 15
+审计轮次: 16
 
 ## 任务拆解
 
@@ -27,6 +27,7 @@
 - [x] TASK-GAMEPLAY-AGC-018 (`PRD-GAME-011`) [test_tier_required]: `runtime_engineer` 已将 governance registry manifest/import/audit 扩成 per-slot threshold：旧 `2-of-3` manifest 继续兼容，`liveops` 这类低权限 slot 可在 manifest 中显式声明 `threshold=1` 形成 `1-of-2` policy，而其余 controller/finality slot 仍默认按 `2-of-3` 审计；相关 drill 脚本也不再把 slot signer count 写死成 `3`。
 - [x] TASK-GAMEPLAY-AGC-019 (`PRD-GAME-011`) [test_tier_required]: `liveops_community` 已补齐 restricted grant runbook 的一次性开通 / manifest 重导入恢复 / 日常 status 判读步骤，明确 governance registry import 是全量 registry 重写而非 slot patch，且重导入后必须重新执行 `UpdateRestrictedStarterClaimAdminRegistry` 才能恢复 `liveops` 发放权限。
 - [x] TASK-GAMEPLAY-AGC-020 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已将 daily restricted grant 的 source bucket 从 `ecosystem_pool` 拆分为独立 `restricted_starter_claim_liveops_pool`，新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action 与 top-up 审计记录，并让 `oasis7_liveops_grant_cli` / runbook / status 全部转向专用池余额。
+- [x] agent-claim-slot-1-onboarding-flow (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已把新账号首个 `slot-1` 认领补成专用 onboarding 流：仅在 `owned_claim_count=0` 且 canonical `next_claim_quote.slot_index=1` 时于 PostOnboarding HUD 展示引导卡，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式确认；Viewer 复用 canonical quote / blocker，不在前端重算成本，也不做静默自动认领。 Trace: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
 
 ## 依赖
 
@@ -38,7 +39,7 @@
 
 ## 状态
 
-- 更新日期: 2026-03-30
+- 更新日期: 2026-04-25
 - 当前状态: completed
 - 当前 owner: `producer_system_designer`
 - 下一任务: `无（当前专题已闭环；后续仅在真实 claim 分布、liveops、QA 或 admin registry 信号异常时再重开）`
@@ -67,6 +68,12 @@
   - `TASK-GAMEPLAY-AGC-019` 已补充 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md` 的实操步骤：新增 `liveops 1-of-2` bootstrap / post-import recovery 顺序、`status` 三个必看布尔位、slot-only manifest 禁止直接 import 的警告，以及 issue/revoke 的推荐 dry-run -> execute 命令序列。
   - `TASK-GAMEPLAY-AGC-020` 已在 `crates/oasis7/src/runtime/main_token.rs`、`world/event_processing/action_to_event_core.rs`、`state/apply_domain_event_main_token.rs` 新增独立 `restricted_starter_claim_liveops_pool` treasury bucket、`TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action 与 top-up 审计记录；top-up 继续固定绑定 `ecosystem_pool` treasury controller slot 的 signer allowlist / threshold policy，而 daily `IssueRestrictedStarterClaimGrant / RevokeRestrictedStarterClaimGrant` 已改为只从专用池出账并把后续 restricted refund 退回同一专用池。
   - `TASK-GAMEPLAY-AGC-020` 已同步更新 `crates/oasis7/src/consensus_action_payload.rs`、`crates/oasis7_node/src/node_runtime_core.rs` 与 `crates/oasis7_node/src/tests_action_payload.rs`，把 top-up action 纳入 shared main-token signed payload gating；`oasis7_liveops_grant_cli status` / `issue` / `revoke` 也已同时显示 `ecosystem_pool` 与 `restricted_starter_claim_liveops_pool` 余额，避免运营继续把 daily 发放误判成直接消耗大池。
+  - `agent-claim-slot-1-onboarding-flow` 已在 `crates/oasis7_proto/src/viewer.rs`、`crates/oasis7/src/viewer/{auth.rs,gameplay_actions.rs,runtime_live/player_gameplay.rs}` 与 `crates/oasis7_viewer/src/egui_right_panel_player_guide/{post_onboarding.rs,hud.rs}` 打通 claim onboarding 所需的协议/鉴权/HUD 链路：`GameplayActionRequest` 新增 `actor_agent_id`，claim/release 改为用当前绑定玩家 agent 作为 claimer actor，Viewer 右侧 HUD 则以 canonical claim quote 驱动“选目标 -> Prepare -> Confirm”的首个 `slot-1` 认领引导，不把目标 agent 错绑成玩家 actor，也不在前台静默自动提交 claim。
+  - `agent-claim-slot-1-onboarding-flow` 已补齐 `crates/oasis7/src/viewer/runtime_live/tests/auth_actions.rs` 与 `crates/oasis7_viewer/src/egui_right_panel_player_mission_tests.rs` 的定向回归，覆盖 bound actor 校验、actor mismatch 拒绝、首个 claim onboarding 展示与“未选目标先引导选择”两类 Viewer 语义。
+  - `agent-claim-slot-1-onboarding-flow` required 验证目标：
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_gameplay_action_claim_ -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 gameplay_action_auth_sign_and_verify_roundtrip -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer player_mission_tests:: -- --nocapture`
   - runtime v1 当前实现使用临时 base defaults：`activation fee=100`、`claim bond=200`、`upkeep=25`、`activation burn=50%`，并按 `reputation_score < 10 / >= 10 / >= 25` 映射 `tier-0 / tier-1 / tier-2+`；这些值供当前实现和测试闭环使用，本轮 producer review 结论为先不因 restricted starter balance 额外改价，后续仅在 lifecycle/liveops 真实数据出现异常时再新开调参专题。
   - 本轮 required 验证已覆盖：首个 claim 非免费、重复认领拒绝、release cooldown refund、欠费 grace -> forced reclaim、idle warning -> forced reclaim。
   - 本轮 viewer / API required 验证已覆盖：

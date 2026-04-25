@@ -85,6 +85,8 @@ struct GameplayActionSigningPayload<'a> {
     operation: &'static str,
     action_id: &'a str,
     target_agent_id: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actor_agent_id: Option<&'a str>,
     player_id: &'a str,
     public_key: &'a str,
     nonce: u64,
@@ -745,10 +747,16 @@ fn build_gameplay_action_signing_payload(
         request.target_agent_id.as_str(),
         "gameplay_action target_agent_id",
     )?;
+    let actor_agent_id = request
+        .actor_agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let payload = GameplayActionSigningPayload {
         operation: "gameplay_action",
         action_id: action_id.as_str(),
         target_agent_id: target_agent_id.as_str(),
+        actor_agent_id,
         player_id,
         public_key,
         nonce,

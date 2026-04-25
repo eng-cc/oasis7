@@ -2,6 +2,7 @@ use super::*;
 
 pub(crate) fn build_player_post_onboarding_snapshot(
     state: &ViewerState,
+    selection: &ViewerSelection,
     control_feedback: Option<&WebTestApiControlFeedbackSnapshot>,
     locale: crate::i18n::UiLocale,
 ) -> PlayerPostOnboardingSnapshot {
@@ -11,7 +12,7 @@ pub(crate) fn build_player_post_onboarding_snapshot(
         .and_then(|snapshot| snapshot.player_gameplay.as_ref())
         .filter(|gameplay| gameplay.stage_id == PlayerGameplayStageId::PostOnboarding)
     {
-        return build_player_post_onboarding_snapshot_from_gameplay(gameplay, locale);
+        return build_player_post_onboarding_snapshot_from_gameplay(gameplay, selection, locale);
     }
 
     build_player_post_onboarding_snapshot_from_events(state, control_feedback, locale)
@@ -124,6 +125,7 @@ fn build_player_post_onboarding_snapshot_from_events(
                 "Branches unlocked: Production Expansion / Governance Influence / Conflict Security"
                     .to_string()
             }),
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -160,6 +162,7 @@ fn build_player_post_onboarding_snapshot_from_events(
             )),
             next_step: post_onboarding_blocker_next_step(reason.as_str(), detail.as_str(), locale),
             branch_hint: None,
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -198,6 +201,7 @@ fn build_player_post_onboarding_snapshot_from_events(
                     .to_string()
             },
             branch_hint: None,
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -233,6 +237,7 @@ fn build_player_post_onboarding_snapshot_from_events(
                     .to_string()
             },
             branch_hint: None,
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -269,6 +274,7 @@ fn build_player_post_onboarding_snapshot_from_events(
                     .to_string()
             },
             branch_hint: None,
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -305,6 +311,7 @@ fn build_player_post_onboarding_snapshot_from_events(
                     .to_string()
             },
             branch_hint: None,
+            claim_onboarding: None,
             action_label: if locale.is_zh() {
                 "进入指挥并推进 1 步"
             } else {
@@ -316,6 +323,7 @@ fn build_player_post_onboarding_snapshot_from_events(
 
 fn build_player_post_onboarding_snapshot_from_gameplay(
     gameplay: &PlayerGameplaySnapshot,
+    selection: &ViewerSelection,
     locale: crate::i18n::UiLocale,
 ) -> PlayerPostOnboardingSnapshot {
     let status = match gameplay.stage_status {
@@ -368,10 +376,198 @@ fn build_player_post_onboarding_snapshot_from_gameplay(
         blocker_detail,
         next_step,
         branch_hint,
+        claim_onboarding: build_player_claim_onboarding_snapshot(gameplay, selection, locale),
         action_label: if locale.is_zh() {
             "进入指挥并推进 1 步"
         } else {
             "Open command and advance 1 step"
         },
+    }
+}
+
+fn build_player_claim_onboarding_snapshot(
+    gameplay: &PlayerGameplaySnapshot,
+    selection: &ViewerSelection,
+    locale: crate::i18n::UiLocale,
+) -> Option<PlayerClaimOnboardingSnapshot> {
+    let claim = gameplay.agent_claim.as_ref()?;
+    if claim.owned_claim_count > 0 {
+        return None;
+    }
+    let quote = claim.next_claim_quote.as_ref()?;
+    if quote.slot_index != 1 {
+        return None;
+    }
+
+    let selected_target_id = selection.current.as_ref().and_then(|current| {
+        matches!(current.kind, crate::SelectionKind::Agent).then(|| current.id.clone())
+    });
+    let selected_is_claimer =
+        selected_target_id.as_deref() == Some(claim.claimer_agent_id.as_str());
+    let selected_is_owned = selected_target_id.as_ref().is_some_and(|target_agent_id| {
+        claim
+            .owned_claims
+            .iter()
+            .any(|owned| owned.target_agent_id == *target_agent_id)
+    });
+    let selected_target_id = if selected_is_claimer || selected_is_owned {
+        None
+    } else {
+        selected_target_id
+    };
+    let quote_summary = localized_claim_quote_summary(quote, locale);
+    let quote_blocker = quote
+        .blocked_reason
+        .as_deref()
+        .map(|reason| localized_claim_quote_blocker(reason, locale));
+
+    let (guidance, blocker_detail, ready_to_prepare, ready_to_submit) = if let Some(
+        target_agent_id,
+    ) =
+        selected_target_id.as_ref()
+    {
+        if let Some(blocker) = quote_blocker {
+            (
+                if locale.is_zh() {
+                    format!(
+                        "目标 {} 已选中，但当前账户还不满足 slot-1 认领条件。",
+                        super::super::truncate_observe_text(target_agent_id, 18)
+                    )
+                } else {
+                    format!(
+                        "Target {} is selected, but the account is still blocked for slot-1 claim.",
+                        super::super::truncate_observe_text(target_agent_id, 18)
+                    )
+                },
+                Some(blocker),
+                false,
+                false,
+            )
+        } else {
+            (
+                if locale.is_zh() {
+                    format!(
+                            "目标 {} 已就绪。确认后会提交正式 claim，并扣除 activation fee、bond 与首期 upkeep。",
+                            super::super::truncate_observe_text(target_agent_id, 18)
+                        )
+                } else {
+                    format!(
+                            "Target {} is ready. Confirming will submit the canonical claim and charge activation fee, bond, and the first upkeep.",
+                            super::super::truncate_observe_text(target_agent_id, 18)
+                        )
+                },
+                None,
+                true,
+                true,
+            )
+        }
+    } else if selected_is_claimer {
+        (
+            if locale.is_zh() {
+                "当前选中的是你自己的控制 agent，不是要认领的目标。先切到情报视图，再选一个未认领 agent。"
+                        .to_string()
+            } else {
+                "The current selection is your bound control agent, not the claim target. Switch to Intel and select an unclaimed agent first."
+                        .to_string()
+            },
+            None,
+            false,
+            false,
+        )
+    } else {
+        (
+            if locale.is_zh() {
+                "slot-1 报价已经准备好。先选中一个未认领 agent，再进入确认。".to_string()
+            } else {
+                "The slot-1 quote is ready. Select an unclaimed agent before entering confirmation."
+                    .to_string()
+            },
+            quote_blocker,
+            false,
+            false,
+        )
+    };
+
+    Some(PlayerClaimOnboardingSnapshot {
+        title: if locale.is_zh() {
+            "首个 Agent 认领"
+        } else {
+            "First Agent Claim"
+        },
+        summary: quote_summary,
+        target_agent_id: selected_target_id,
+        guidance,
+        blocker_detail,
+        select_action_label: if locale.is_zh() {
+            "切到情报并选目标"
+        } else {
+            "Switch to Intel"
+        },
+        prepare_action_label: if locale.is_zh() {
+            "准备认领 slot-1"
+        } else {
+            "Prepare slot-1 claim"
+        },
+        confirm_action_label: if locale.is_zh() {
+            "确认认领"
+        } else {
+            "Confirm claim"
+        },
+        cancel_action_label: if locale.is_zh() { "取消" } else { "Cancel" },
+        ready_to_prepare,
+        ready_to_submit,
+    })
+}
+
+fn localized_claim_quote_summary(
+    quote: &oasis7::simulator::PlayerAgentClaimQuoteSnapshot,
+    locale: crate::i18n::UiLocale,
+) -> String {
+    if locale.is_zh() {
+        format!(
+            "slot-{} 报价：启动 {} = 激活费 {} + bond {} + 首期 upkeep {}；可用 {} = liquid {} + restricted {}。",
+            quote.slot_index,
+            quote.total_upfront_amount,
+            quote.activation_fee_amount,
+            quote.claim_bond_amount,
+            quote.upkeep_per_epoch,
+            quote.eligible_claim_balance,
+            quote.transferable_liquid_balance,
+            quote.restricted_starter_claim_balance
+        )
+    } else {
+        format!(
+            "Slot {} quote: upfront {} = activation {} + bond {} + first upkeep {}; eligible {} = liquid {} + restricted {}.",
+            quote.slot_index,
+            quote.total_upfront_amount,
+            quote.activation_fee_amount,
+            quote.claim_bond_amount,
+            quote.upkeep_per_epoch,
+            quote.eligible_claim_balance,
+            quote.transferable_liquid_balance,
+            quote.restricted_starter_claim_balance
+        )
+    }
+}
+
+fn localized_claim_quote_blocker(reason: &str, locale: crate::i18n::UiLocale) -> String {
+    if reason.starts_with("insufficient_claim_eligible_main_token") {
+        if locale.is_zh() {
+            return "可用于 slot-1 claim 的余额还不够覆盖 activation fee、bond 和首期 upkeep。"
+                .to_string();
+        }
+        return "Eligible slot-1 balance does not yet cover the activation fee, bond, and first upkeep.".to_string();
+    }
+    if reason.starts_with("restricted_balance_not_eligible_for_slot") {
+        if locale.is_zh() {
+            return "restricted starter claim balance 只能用于 slot-1，不能拿来补更高槽位。"
+                .to_string();
+        }
+        return "Restricted starter claim balance is only eligible for slot-1 and cannot fund higher slots.".to_string();
+    }
+    if locale.is_zh() {
+        format!("认领当前仍被 canonical blocker 阻断：{reason}")
+    } else {
+        format!("Canonical claim blocker still applies: {reason}")
     }
 }

@@ -178,6 +178,7 @@ fn run() -> Result<(), String> {
             let request = build_signed_gameplay_action_request(
                 action_id.as_str(),
                 target_agent_id.as_str(),
+                None,
                 player_id.as_str(),
                 private_key_hex.as_str(),
                 public_key_hex.as_deref(),

@@ -1,18 +1,14 @@
-use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use bevy_egui::egui;
 use oasis7::simulator::{
     AgentPromptProfile, LlmChatMessageTrace, LlmChatRole, WorldEventKind,
     DEFAULT_LLM_LONG_TERM_GOAL, DEFAULT_LLM_SHORT_TERM_GOAL, DEFAULT_LLM_SYSTEM_PROMPT,
 };
+use std::collections::BTreeSet;
 
 use crate::{ViewerClient, ViewerState};
-#[path = "egui_right_panel_chat_auth.rs"]
-mod egui_right_panel_chat_auth;
 #[path = "egui_right_panel_chat_presets.rs"]
 mod egui_right_panel_chat_presets;
-use egui_right_panel_chat_auth::*;
+use super::egui_right_panel_chat_auth::*;
 use egui_right_panel_chat_presets::*;
 
 const CHAT_MESSAGE_LIMIT: usize = 96;
@@ -24,12 +20,6 @@ const TOOL_CALL_PREVIEW_CHARS: usize = 180;
 const TOOL_CALL_CARD_MAX_WIDTH: f32 = 380.0;
 const PROMPT_PRESET_DEFAULT_CONTENT_ROWS: usize = 4;
 const PROMPT_PRESET_SCROLL_MAX_HEIGHT: f32 = 320.0;
-const VIEWER_PLAYER_ID: &str = "viewer-player";
-const VIEWER_PLAYER_ID_ENV: &str = "OASIS7_VIEWER_PLAYER_ID";
-const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
-const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
-
-static VIEWER_AUTH_NONCE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ToolCallView {

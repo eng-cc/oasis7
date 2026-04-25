@@ -1,6 +1,12 @@
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
+
+pub(super) const VIEWER_PLAYER_ID: &str = "viewer-player";
+pub(super) const VIEWER_PLAYER_ID_ENV: &str = "OASIS7_VIEWER_PLAYER_ID";
+pub(super) const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
+pub(super) const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 
 #[cfg(target_arch = "wasm32")]
 const VIEWER_AUTH_BOOTSTRAP_OBJECT: &str = "__OASIS7_VIEWER_AUTH_ENV";
@@ -12,6 +18,8 @@ const NODE_TABLE_KEY: &str = "node";
 const NODE_PRIVATE_KEY_FIELD: &str = "private_key";
 #[cfg(not(target_arch = "wasm32"))]
 const NODE_PUBLIC_KEY_FIELD: &str = "public_key";
+
+static VIEWER_AUTH_NONCE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ViewerAuthSigner {
@@ -198,6 +206,24 @@ pub(super) fn attach_agent_chat_auth(
     Ok(())
 }
 
+pub(super) fn attach_gameplay_action_auth(
+    request: &mut oasis7::viewer::GameplayActionRequest,
+    signer: &ViewerAuthSigner,
+    nonce: u64,
+) -> Result<(), String> {
+    request.player_id = signer.player_id.clone();
+    request.public_key = Some(signer.public_key.clone());
+    request.auth = None;
+    let proof = oasis7::viewer::sign_gameplay_action_auth_proof(
+        request,
+        nonce,
+        signer.public_key.as_str(),
+        signer.private_key.as_str(),
+    )?;
+    request.auth = Some(proof);
+    Ok(())
+}
+
 pub(super) fn sign_prompt_control_apply_request(
     request: &mut oasis7::viewer::PromptControlApplyRequest,
     intent: oasis7::viewer::PromptControlAuthIntent,
@@ -213,6 +239,25 @@ pub(super) fn sign_agent_chat_request(
     let signer = resolve_viewer_auth_signer()?;
     let nonce = next_viewer_auth_nonce()?;
     attach_agent_chat_auth(request, &signer, nonce)
+}
+
+pub(super) fn build_signed_gameplay_action_request(
+    action_id: &str,
+    target_agent_id: &str,
+    actor_agent_id: Option<&str>,
+) -> Result<oasis7::viewer::GameplayActionRequest, String> {
+    let signer = resolve_viewer_auth_signer()?;
+    let nonce = next_viewer_auth_nonce()?;
+    let mut request = oasis7::viewer::GameplayActionRequest {
+        action_id: action_id.to_string(),
+        target_agent_id: target_agent_id.to_string(),
+        actor_agent_id: actor_agent_id.map(ToOwned::to_owned),
+        player_id: signer.player_id.clone(),
+        public_key: None,
+        auth: None,
+    };
+    attach_gameplay_action_auth(&mut request, &signer, nonce)?;
+    Ok(request)
 }
 
 pub(super) fn build_session_register_request(
@@ -265,4 +310,9 @@ pub(super) fn sync_viewer_auth_nonce_from_state(state: &ViewerState) {
             Err(next) => current = next,
         }
     }
+}
+
+#[cfg(test)]
+pub(super) fn viewer_auth_nonce_for_tests() -> u64 {
+    VIEWER_AUTH_NONCE_COUNTER.load(Ordering::SeqCst)
 }

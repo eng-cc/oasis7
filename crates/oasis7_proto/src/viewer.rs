@@ -171,6 +171,8 @@ pub struct AgentChatRequest {
 pub struct GameplayActionRequest {
     pub action_id: String,
     pub target_agent_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_agent_id: Option<String>,
     pub player_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_key: Option<String>,
@@ -789,6 +791,7 @@ mod tests {
             request: GameplayActionRequest {
                 action_id: "build_factory_smelter_mk1".to_string(),
                 target_agent_id: "agent-0".to_string(),
+                actor_agent_id: None,
                 player_id: "player-1".to_string(),
                 public_key: Some("pk-1".to_string()),
                 auth: Some(PlayerAuthProof {

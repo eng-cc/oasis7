@@ -157,6 +157,7 @@
 - [x] TASK-GAME-063 (PRD-GAME-012) [test_tier_required]: `runtime_engineer` 已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAME-064 (PRD-GAME-012) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到首屏主语义。
 - [x] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；当前结论已从 `watch` 收口为 `hold`，因为 formal lane 虽已恢复 first-step floor，但仍稳定卡在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本出现回退到 `first_session_loop.create_first_world_feedback / 0%` 并伴随 `logicalTime/eventSeq` 冻结。
+- [x] agent-claim-slot-1-onboarding-flow (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已为新账号首个 `slot-1` 认领补齐专用 onboarding 流：当 canonical `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，PostOnboarding HUD 会展示 claim CTA，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式确认；链路复用 canonical quote / blocker，并通过 `actor_agent_id` 把 claimer actor 与 claim target 正确分离。 Trace: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
@@ -296,6 +297,7 @@
 - ROUND-059 进展: `liveops_community` 已完成 `TASK-GAME-050`，新增 `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`，把 restricted grant 的 v1 运营口径收口为单一 `issuer_id=liveops`、三类允许的 `issuance_reason`、按 reason 区分的 expiry 策略、推荐 revoke 条件与 incident fallback；这意味着 runtime lifecycle 与 liveops 操作边界都已闭环，当前 blocker 正式收敛为 `TASK-GAME-051` 的 QA lifecycle/audit matrix。
 - ROUND-060 进展: `qa_engineer` 已完成 `TASK-GAME-051`，新增 `doc/testing/evidence/game-agent-claim-restricted-grant-lifecycle-matrix-2026-03-29.md`，并用 fresh required/full 复跑确认：grant issue metadata、expiry/revoke、ecosystem treasury source-sink、terminal refund sink redirect、viewer compat 与 transfer/explorer non-bypass 全部 `pass`。`PRD-GAME-011` 的 restricted grant blocker 已解除，game 根项目的下一条活跃任务回到 `TASK-GAME-036`。
 - ROUND-061 进展: `producer_system_designer` 已完成 `TASK-GAME-058`，为 `doc/game/README.md` 增加轻量“从这里开始”入口，显式区分产品目标、执行追踪、玩法总览、limited preview / closed beta readiness 口径与高频 claim 规则专题，避免根入口继续承担长表索引职责。
+- ROUND-062 进展: `viewer_engineer` 已完成 `agent-claim-slot-1-onboarding-flow`，把“新账号首个 agent 是否应自动占用 slot-1”收口为“有专用 onboarding，但不做静默自动认领”：PostOnboarding HUD 现在会在 canonical `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时展示引导卡，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式提交流程；底层 gameplay action 同步新增 `actor_agent_id`，确保 claim/release 使用当前绑定玩家 agent 作为 claimer actor，而不是把目标 agent 错绑成 session actor。
 - 说明: 本文档仅维护 game 设计执行状态；过程记录在 `doc/devlog/2026-03-05.md`、`doc/devlog/2026-03-06.md`、`doc/devlog/2026-03-07.md`、`doc/devlog/2026-03-15.md`、`doc/devlog/2026-03-18.md`、`doc/devlog/2026-03-21.md` 与 `doc/devlog/2026-03-29.md`。
 
 ## 阶段收口角色交接

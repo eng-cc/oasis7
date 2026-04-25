@@ -89,6 +89,7 @@ pub(super) fn build_signed_agent_chat_request(
 pub(super) fn build_signed_gameplay_action_request(
     action_id: &str,
     target_agent_id: &str,
+    actor_agent_id: Option<&str>,
     player_id: &str,
     private_key_hex: &str,
     public_key_hex: Option<&str>,
@@ -98,6 +99,7 @@ pub(super) fn build_signed_gameplay_action_request(
     let request = GameplayActionRequest {
         action_id: action_id.to_string(),
         target_agent_id: target_agent_id.to_string(),
+        actor_agent_id: actor_agent_id.map(ToOwned::to_owned),
         player_id: player_id.to_string(),
         public_key: Some(public_key.clone()),
         auth: None,
