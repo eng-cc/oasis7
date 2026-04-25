@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
@@ -54,14 +54,18 @@ function JsonBlock(props) {
 
 function DiagnosticDetails(props) {
   const locale = () => props.locale ?? uiLocale();
+  const [isOpen, setIsOpen] = createSignal(false);
+  const resolvedValue = () => (typeof props.value === "function" ? props.value() : props.value);
   return (
-    <details class="diagnostic">
+    <details class="diagnostic" onToggle={(event) => setIsOpen(event.currentTarget.open)}>
       <summary>{props.label ?? tr(locale(), "原始诊断", "Raw diagnostics")}</summary>
       <div class="stack" style="margin-top:10px;">
         <Show when={props.note}>
           <div class="feedback-detail">{props.note}</div>
         </Show>
-        <JsonBlock value={props.value} />
+        <Show when={isOpen()}>
+          <JsonBlock value={resolvedValue()} />
+        </Show>
       </div>
     </details>
   );
@@ -1050,7 +1054,12 @@ function DetailsPanel() {
     metrics: core.state.metrics,
     hostedAccess: core.clone(core.state.hostedAccess),
   });
-  const snapshotCounts = () => snapshotSummary().counts;
+  const snapshotCounts = () => ({
+    agents: Object.keys(core.state.snapshot?.model?.agents || {}).length,
+    locations: Object.keys(core.state.snapshot?.model?.locations || {}).length,
+    promptProfiles: Object.keys(core.state.snapshot?.model?.agent_prompt_profiles || {}).length,
+    executionDebugContexts: Object.keys(core.state.snapshot?.model?.agent_execution_debug_contexts || {}).length,
+  });
   const hasSnapshotDiagnostics = () =>
     !!core.state.snapshot || !!core.state.metrics || !!core.state.hostedAccess;
 
@@ -1088,7 +1097,7 @@ function DetailsPanel() {
               "只在需要排查快照结构或 hosted access 原始字段时展开。",
               "Expand only when you need to inspect the raw snapshot shape or hosted access fields.",
             )}
-            value={snapshotSummary()}
+            value={snapshotSummary}
           />
         </Show>
       </div>
