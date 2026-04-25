@@ -20,6 +20,6 @@ acceptance:
   - "Chain status / observability surfaces both protocol-level and transport-level replication retry cooldown state."
   - "Required targeted tests for oasis7_net and oasis7_node pass in the task worktree."
 handoff_to: []
-updated_at: 2026-04-24T23:41:22+08:00
-last_started_at: 2026-04-24T21:56:05+08:00
-last_closed_at: 2026-04-24T23:41:21+08:00
+updated_at: 2026-04-25T11:41:04+08:00
+last_started_at: 2026-04-25T10:30:26+08:00
+last_closed_at: 2026-04-25T11:41:04+08:00
