@@ -967,9 +967,9 @@
     - `rg -n "PRD-README-048|AC-37|DEC-RM-048|whitepaper-style-overview|readme-project-overview-whitepaper-2026-04-25" README.md doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/README.md doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md .pm/tasks/task_5963ea33d3854bef802154b2996bea89.yaml .pm/tasks/task_5963ea33d3854bef802154b2996bea89.execution.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [ ] site-whitepaper-entry-alignment (PRD-README-049) [test_tier_required]: 按白皮书式项目总览更新站点首页与文档中心的公开 framing，补齐“两阶段路径”和技术预览边界表达，并新增白皮书总览展示入口。 Trace: .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml
-  - 产物文件: `site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html`、`doc/readme/prd.md`、`doc/readme/project.md`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`
-  - 验收命令 (`test_tier_required`): `rg -n "PRD-README-049|AC-38|DEC-RM-049|白皮书|Project Overview|开放世界沙盒游戏|开放世界游戏平台|technical preview" doc/readme/prd.md doc/readme/project.md site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`、`./scripts/doc-governance-check.sh`、`git diff --check`
+- [x] site-whitepaper-entry-alignment (PRD-README-049) [test_tier_required]: 按白皮书式项目总览更新站点首页与文档中心的公开 framing，补齐“两阶段路径”、目标态 ownership/gov 边界表达，并新增站内白皮书静态展示页与展示入口。 Trace: .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml
+  - 产物文件: `site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html`、`site/doc/cn/project-overview.html`、`site/doc/en/project-overview.html`、`doc/readme/prd.md`、`doc/readme/project.md`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`
+  - 验收命令 (`test_tier_required`): `rg -n "PRD-README-049|AC-38|DEC-RM-049|白皮书|Project Overview|开放世界沙盒游戏|开放世界游戏平台|technical preview|共同塑造|共同治理|共同受益" doc/readme/prd.md doc/readme/project.md site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html site/doc/cn/project-overview.html site/doc/en/project-overview.html .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`、`./scripts/doc-governance-check.sh`、`git diff --check`
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立热点路径治理专题三件套、新增 `doc/readme/governance/README.md` 作为 canonical 子域入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 
 ## 依赖
@@ -979,8 +979,9 @@
 
 ## 状态
 - 更新日期: 2026-04-25
-- 当前状态: in_progress
-- 下一任务: `site-whitepaper-entry-alignment`（按白皮书式项目总览继续同步站点首页和文档中心的公开 framing，并补一个可直接进入总览的站点入口。）
+- 当前状态: completed
+- 下一任务: 无（当前模块主项目无未完成任务；若后续继续扩展主站白皮书页内容或做站点内中英更多专题页，再新开独立任务。）
+- 最新完成: `site-whitepaper-entry-alignment`（已把站点首页和文档中心继续收口到白皮书式项目总览口径，新增站内 `project-overview.html` 中英文静态页，并把原先跳 GitHub blob 的总览入口改成站内展示入口。）
 - 最新完成: `whitepaper-style-overview`（已新增 `readme-project-overview-whitepaper-2026-04-25.md` 作为 Explanation 类型项目总览，把“项目是什么、为什么要做、世界/玩法/系统如何组合、当前技术预览边界是什么”压到一份长说明里，并把入口接回根 README 与 `readme/governance`。）
 - 最新完成: `xiaohongshu-token-usage-post-pack`（已为小红书第十四篇补齐真实累计 token 用量素材包，用项目累计请求 / token / 花费数据解释 AI 成本主要烧在需求反复、文档、返工、验证与上下文切换，而不是单次生成炫技。）
 - 最新完成: `readme-governance-path-governance`（已为 `doc/readme/governance/` 补齐 canonical 子域入口 `doc/readme/governance/README.md`，并把模块首屏从“若干具体 liveops/operator 文档直链”收口为“先进入热点子域再按主题分流”。）

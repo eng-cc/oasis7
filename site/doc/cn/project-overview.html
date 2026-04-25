@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="oasis7 项目总览：用一份白皮书式长说明解释项目目标、世界模型、玩家边界、两阶段路径与当前技术预览边界。"
+    />
+    <meta property="og:title" content="oasis7 项目总览 | 白皮书式说明" />
+    <meta
+      property="og:description"
+      content="一份面向第一次接触 oasis7 的读者的长说明：项目是什么、为什么要做、怎么玩、世界如何运转，以及当前做到哪一步。"
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:image" content="../../assets/images/og-cover.png" />
+    <meta property="og:locale" content="zh_CN" />
+    <title>oasis7 项目总览 | 白皮书式说明</title>
+    <link rel="canonical" href="https://eng-cc.github.io/oasis7/doc/cn/project-overview.html" />
+    <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/doc/cn/project-overview.html" />
+    <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/doc/en/project-overview.html" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg" />
+    <link rel="stylesheet" href="../../assets/styles.css" />
+    <script defer src="../../assets/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html">
+        <span class="brand-mark"></span>
+        <span>oasis7 docs</span>
+      </a>
+      <nav class="nav" data-menu data-section-nav>
+        <a href="#summary">总览</a>
+        <a href="#why">为什么做</a>
+        <a href="#vision">愿景</a>
+        <a href="#play">玩家位置</a>
+        <a href="#status">当前状态</a>
+      </nav>
+      <button class="menu-button" type="button" aria-label="切换菜单" data-menu-toggle>☰</button>
+      <div class="lang-switch" aria-label="语言切换">
+        <button
+          class="lang-icon-button"
+          type="button"
+          aria-label="切换语言"
+          aria-expanded="false"
+          aria-haspopup="true"
+          aria-controls="lang-popover-menu"
+          data-lang-toggle
+        >
+          <img src="../../assets/images/globe.svg" alt="" aria-hidden="true" />
+        </button>
+        <div class="lang-popover" id="lang-popover-menu" data-lang-popover>
+          <a class="active" href="project-overview.html" aria-current="page" data-lang-choice="zh" data-lang-item>中文</a>
+          <a href="../en/project-overview.html" data-lang-choice="en" data-lang-item>English</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top" class="docs-main">
+      <section class="section docs-hero" data-reveal>
+        <p class="eyebrow">Project Overview</p>
+        <h1>oasis7 项目总览</h1>
+        <p class="subtitle">
+          这是一份白皮书式长说明。它面向第一次接触 `oasis7` 的读者，用来回答几个最基本的问题：
+          这个项目是什么，为什么值得做，玩家在里面扮演什么角色，世界如何运转，以及当前公开边界到底到哪一步。
+        </p>
+        <div class="cta-row">
+          <a class="button primary" href="#summary">先看总览</a>
+          <a class="button secondary" href="../../index.html">回到主站</a>
+          <a class="button ghost" href="index.html">返回文档中心</a>
+        </div>
+        <div class="proof-strip">
+          <span class="proof-chip is-highlight">文档类型：Explanation / Overview</span>
+          <span class="proof-chip">公开边界：技术预览（尚不可玩）</span>
+          <span class="proof-chip">注意：这不是新的规格真值</span>
+        </div>
+      </section>
+
+      <section id="summary" class="section" data-reveal>
+        <h2>一句话总览</h2>
+        <p class="section-intro">
+          `oasis7` 是一个文明模拟游戏。LLM 驱动的 Agent 会在一个持续运行的小行星带世界里采集、生产、交易、结盟、冲突；
+          资源、制度和去中心化共识都不是背景板，而是真会限制行为的东西。
+        </p>
+        <div class="grid cards-2">
+          <article class="card card-spotlight">
+            <h3>它是什么</h3>
+            <p>一个持续运行的世界，不是一次性演示。战争、经济、治理会落在同一个系统里，互相留下后果。</p>
+          </article>
+          <article class="card">
+            <h3>玩家是谁</h3>
+            <p>玩家更像世界外的战略引导者。你定目标、改限制、推治理，然后看世界如何回应，而不是逐个点击单位动作。</p>
+          </article>
+          <article class="card">
+            <h3>它不是什么</h3>
+            <p>它不是给 NPC 套聊天壳的应用，也不是靠静态脚本向前推的沙盒。项目关心的是世界能否自己长出组织、协议和冲突。</p>
+          </article>
+          <article class="card">
+            <h3>这页不替代什么</h3>
+            <p>这页只承担解释职责，不替代 `README.md`、`world-rule.md`、`doc/core/prd.md`、`doc/game/**` 和各模块 PRD / project 真值。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="why" class="section" data-reveal>
+        <h2>为什么要做这个项目</h2>
+        <p class="section-intro">
+          很多 AI 游戏或 Agent Demo 的问题，不一定出在模型上，更常见的是世界不够结实：会说话，但不承担后果；有亮点，但撑不起长期博弈。
+        </p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>常见缺口</h3>
+            <p>Agent 很会说，但世界规则像演示脚本，没有资源守恒、时间推进和可审计状态，玩家更像在拉木偶线。</p>
+          </article>
+          <article class="card">
+            <h3>`oasis7` 的做法</h3>
+            <p>先把几个硬问题摆在前面：时间是否持续推进、能源与计算有没有成本、玩家影响力边界在哪里、规则能不能演化、状态变化是否可记录与回放。</p>
+          </article>
+        </div>
+        <article class="card">
+          <h3>项目真正想验证的东西</h3>
+          <p>
+            当 Agent 有长期记忆，受世界规则约束，还能通过 WASM 扩展能力时，一个世界能不能自己长出组织、市场、协议和冲突。
+            如果这个问题不先回答，后面的文明、治理、战争和经济，最后都容易退回“展示效果”。
+          </p>
+        </article>
+      </section>
+
+      <section id="vision" class="section" data-reveal>
+        <h2>愿景与两阶段路径</h2>
+        <p class="section-intro">
+          愿景不只是“内容更多”或者“技术更强”。更重要的是，让玩家进入一个会记住行为、会累积历史、会因为选择而改变面貌的世界，并且能自由探索自己想走的路。
+        </p>
+        <div class="grid cards-3">
+          <article class="card">
+            <h3>参与感与成就感</h3>
+            <p>目标不是让玩家旁观一套自动系统，而是让人在同一个持续世界里建设、试错、结盟、对抗，并留下痕迹。</p>
+          </article>
+          <article class="card">
+            <h3>创作者的位置</h3>
+            <p>创作者不只是消费者。后面如果条件成熟，创作者应该能发布自己的 `mod / 模块`，围绕不同规则去组织不同玩法。</p>
+          </article>
+          <article class="card">
+            <h3>目标态边界</h3>
+            <p>更长远的方向，是让游戏本身和关键数据逐步走向由参与者共同塑造、共同治理、共同受益。这里说的是愿景，不是当前已完成的法律或链上事实。</p>
+          </article>
+        </div>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>第一阶段：开放世界沙盒游戏</h3>
+            <p>先把参与感、探索欲和成就感做扎实，让玩家愿意在同一个持续世界里待下来，也让创作者开始能用 `mod / 模块` 组织玩法。</p>
+          </article>
+          <article class="card">
+            <h3>第二阶段：开放世界游戏平台</h3>
+            <p>后续再把它演进成开放世界游戏平台，让不同规则集、不同 mod 生态和不同参与角色能在同一底盘上继续长出来。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="play" class="section" data-reveal>
+        <h2>玩家、世界与玩法</h2>
+        <p class="section-intro">
+          玩家不是世界中的实体。玩家更像世界外的战略提供者，可以给 Agent 设定高层目标、调整提示词或决策偏好、部署模块、推动治理与联盟决策。
+        </p>
+        <div class="grid cards-3">
+          <article class="card">
+            <h3>你能做</h3>
+            <p>定目标、改约束、影响组织方式和世界结构。乐趣不在手速，而在于你的判断会留下怎样的后果。</p>
+          </article>
+          <article class="card">
+            <h3>你不能做</h3>
+            <p>不能直接接管 Agent，不能绕过世界规则直接改状态，也不能暂停时间把每一步都抠到最优。</p>
+          </article>
+          <article class="card">
+            <h3>你会得到什么</h3>
+            <p>先看到单次行动反馈，再看到几天尺度的联盟和交易，最后看到更长线的制度变化和权力变化。</p>
+          </article>
+        </div>
+        <article class="card">
+          <h3>世界的三个气质</h3>
+          <p>它是活的，时间继续流动；它是硬的，资源、移动、计算和冲突都要付成本；它也是可塑的，很多社会结构不是预设剧情，而是世界内主体自己造出来的。</p>
+        </article>
+      </section>
+
+      <section class="section" data-reveal>
+        <h2>技术底座为什么这样搭</h2>
+        <p class="section-intro">
+          `oasis7` 当前的高层架构大致是 `LLM Agents -> WASM Modules -> World Runtime -> Consensus Layer -> Distributed Storage & Networking`。
+        </p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>设计意图</h3>
+            <p>LLM 提供决策和解释空间，WASM 承接可部署、可审计、可升级的高阶逻辑，Runtime 负责规则验证和状态推进，共识层负责多节点可验证性。</p>
+          </article>
+          <article class="card">
+            <h3>代价与取舍</h3>
+            <p>这会让系统复杂度更高、工程收口更慢，但项目宁可慢一点，也不想靠破坏世界一致性的方式去换一个更顺滑的 Demo。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="status" class="section" data-reveal>
+        <h2>当前到底做到哪一步</h2>
+        <p class="section-intro">
+          这里最好把“能研究”“能验证”“能公开试玩”三个层次拆开看。现在已经能读懂它想做什么，也能检查文档、架构、验证链路和部分构建入口，但还不该把它当成一个已进入大众可玩阶段的成熟产品。
+        </p>
+        <div class="timeline">
+          <article class="timeline-item done">
+            <span class="status-tag done">已明确</span>
+            <h3>项目全貌与规则边界</h3>
+            <p>项目主定位、世界规则、玩家边界和玩法骨架已经有正式文档入口。</p>
+          </article>
+          <article class="timeline-item done">
+            <span class="status-tag done">已验证</span>
+            <h3>技术预览链路</h3>
+            <p>runtime、viewer、testing 与文档链已经能承载技术预览阶段的构建、手册和验证说明。</p>
+          </article>
+          <article class="timeline-item active">
+            <span class="status-tag active">当前边界</span>
+            <h3>还不能误读成公开可玩版</h3>
+            <p>浏览器可验证、构建可下载，不等于已经可以直接对外大规模试玩。当前仍是技术预览，尚不可玩。</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>© <span data-year></span> oasis7 docs · 这是站内项目总览页，不替代规格真值。</p>
+    </footer>
+  </body>
+</html>
