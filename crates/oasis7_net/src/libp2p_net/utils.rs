@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use futures::channel::mpsc;
@@ -49,6 +50,51 @@ pub(super) fn push_bounded_clone<T: Clone>(
     push_bounded_vec(&mut guard, value, max_len);
 }
 
+pub(super) fn push_bounded_string_with_cooldown(
+    values: &Arc<Mutex<Vec<String>>>,
+    recent_values_at_ms: &mut HashMap<String, i64>,
+    value: String,
+    max_len: usize,
+    lock_label: &str,
+    now_ms: i64,
+    cooldown_ms: i64,
+) -> bool {
+    push_bounded_string_with_keyed_cooldown(
+        values,
+        recent_values_at_ms,
+        value.clone(),
+        value,
+        max_len,
+        lock_label,
+        now_ms,
+        cooldown_ms,
+    )
+}
+
+pub(super) fn push_bounded_string_with_keyed_cooldown(
+    values: &Arc<Mutex<Vec<String>>>,
+    recent_values_at_ms: &mut HashMap<String, i64>,
+    key: String,
+    value: String,
+    max_len: usize,
+    lock_label: &str,
+    now_ms: i64,
+    cooldown_ms: i64,
+) -> bool {
+    if cooldown_ms > 0 {
+        recent_values_at_ms.retain(|_, last_ms| now_ms.saturating_sub(*last_ms) < cooldown_ms);
+        if recent_values_at_ms
+            .get(key.as_str())
+            .is_some_and(|last_ms| now_ms.saturating_sub(*last_ms) < cooldown_ms)
+        {
+            return false;
+        }
+        recent_values_at_ms.insert(key, now_ms);
+    }
+    push_bounded_clone(values, value, max_len, lock_label);
+    true
+}
+
 pub(super) fn push_bounded_vec<T>(values: &mut Vec<T>, value: T, max_len: usize) {
     let max_len = max_len.max(1);
     values.push(value);
@@ -63,4 +109,110 @@ pub(super) fn should_republish(last_ms: i64, now_ms: i64, interval_ms: i64) -> b
         return false;
     }
     now_ms.saturating_sub(last_ms) >= interval_ms
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_bounded_string_with_cooldown_suppresses_repeat_within_window() {
+        let values = Arc::new(Mutex::new(Vec::new()));
+        let mut recent_values_at_ms = HashMap::new();
+
+        assert!(push_bounded_string_with_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "libp2p connection established peer=peer-a".to_string(),
+            8,
+            "lock errors",
+            1_000,
+            5_000,
+        ));
+        assert!(!push_bounded_string_with_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "libp2p connection established peer=peer-a".to_string(),
+            8,
+            "lock errors",
+            4_000,
+            5_000,
+        ));
+        assert!(push_bounded_string_with_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "libp2p connection established peer=peer-a".to_string(),
+            8,
+            "lock errors",
+            6_001,
+            5_000,
+        ));
+
+        let guard = values.lock().expect("lock errors");
+        assert_eq!(
+            guard.as_slice(),
+            &[
+                "libp2p connection established peer=peer-a".to_string(),
+                "libp2p connection established peer=peer-a".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn push_bounded_string_with_cooldown_keeps_distinct_messages() {
+        let values = Arc::new(Mutex::new(Vec::new()));
+        let mut recent_values_at_ms = HashMap::new();
+
+        assert!(push_bounded_string_with_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "libp2p connection closed peer=peer-a num_established=1 active_path=/ip4/1.1.1.1/udp/4101/quic-v1".to_string(),
+            8,
+            "lock errors",
+            1_000,
+            5_000,
+        ));
+        assert!(push_bounded_string_with_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "libp2p connection closed peer=peer-a num_established=2 active_path=/ip4/1.1.1.1/udp/4101/quic-v1".to_string(),
+            8,
+            "lock errors",
+            2_000,
+            5_000,
+        ));
+
+        let guard = values.lock().expect("lock errors");
+        assert_eq!(guard.len(), 2);
+    }
+
+    #[test]
+    fn push_bounded_string_with_keyed_cooldown_suppresses_distinct_messages_for_same_key() {
+        let values = Arc::new(Mutex::new(Vec::new()));
+        let mut recent_values_at_ms = HashMap::new();
+
+        assert!(push_bounded_string_with_keyed_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "connection-closed:peer-a".to_string(),
+            "libp2p connection closed peer=peer-a num_established=7 active_path=/ip4/1.1.1.1/tcp/4101".to_string(),
+            8,
+            "lock errors",
+            1_000,
+            5_000,
+        ));
+        assert!(!push_bounded_string_with_keyed_cooldown(
+            &values,
+            &mut recent_values_at_ms,
+            "connection-closed:peer-a".to_string(),
+            "libp2p connection closed peer=peer-a num_established=8 active_path=/ip4/1.1.1.1/tcp/4102".to_string(),
+            8,
+            "lock errors",
+            2_000,
+            5_000,
+        ));
+
+        let guard = values.lock().expect("lock errors");
+        assert_eq!(guard.len(), 1);
+    }
 }
