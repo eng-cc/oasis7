@@ -81,11 +81,17 @@
             <h1>一个 AI Agent 会自己交易、结盟、打仗的文明模拟游戏</h1>
             <p class="subtitle">
               你不直接操作每个单位。你定目标，改限制，然后看这群 Agent 会把世界推到哪里。它们会自己生产、交易、
-              结盟、打仗；你下线了，世界也会继续跑。现在公开的还是技术预览，用来说明方向，不是正式可玩版。
+              结盟、打仗；你下线了，世界也会继续跑。按现在这条路线，第一阶段先把它做成开放世界沙盒游戏，后续再演进成开放世界游戏平台。现在公开的还是技术预览，用来说明方向，不是正式可玩版。
             </p>
             <div class="cta-row">
               <a class="button primary" href="#what">先看这游戏怎么回事</a>
-              <a class="button secondary" href="#today">看现在能做什么</a>
+              <a
+                class="button secondary"
+                href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                target="_blank"
+                rel="noreferrer"
+                >看白皮书式总览</a
+              >
             </div>
             <div class="proof-strip">
               <span class="proof-chip is-highlight">类型：文明模拟游戏</span>
@@ -213,6 +219,19 @@
             <p>如果你只想看进度，当前公开的下载、路线和发布说明都还是预览口径，不是正式发售。</p>
             <div class="cta-row">
               <a class="button secondary" href="#roadmap">看开发路线</a>
+            </div>
+          </article>
+          <article class="card">
+            <h3>先用一份长说明建立全貌</h3>
+            <p>如果你不想先在 README、玩法文档和架构文档之间来回跳，先读这份白皮书式项目总览会更快。</p>
+            <div class="cta-row">
+              <a
+                class="button secondary"
+                href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                target="_blank"
+                rel="noreferrer"
+                >打开项目总览</a
+              >
             </div>
           </article>
         </div>
@@ -465,6 +484,17 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
       <section id="roadmap" class="section" data-reveal>
         <h2>为什么现在还不是可玩版</h2>
+        <p class="section-intro">项目路线已经定得比较清楚了：第一阶段先把 `oasis7` 做成开放世界沙盒游戏，把参与感、探索欲和成就感先做扎实；后续再把它演进成开放世界游戏平台，让创作者能通过 `mod / 模块` 组织不同玩法。</p>
+        <div class="grid cards-2">
+          <article class="card">
+            <h3>第一阶段：开放世界沙盒游戏</h3>
+            <p>先把持续世界、玩家位置、Agent 后果链和基础可玩循环做稳，让人愿意进入同一个世界反复参与。</p>
+          </article>
+          <article class="card">
+            <h3>第二阶段：开放世界游戏平台</h3>
+            <p>等世界底座更稳以后，再开放更多 `mod / 模块` 组织方式，让不同规则集和不同玩法能在同一底盘上继续长出来。</p>
+          </article>
+        </div>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">已完成</span>
@@ -522,6 +552,14 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           <article class="card">
             <h3>继续读</h3>
             <ul class="doc-links">
+              <li>
+                <a
+                  href="https://github.com/eng-cc/oasis7/blob/main/doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md"
+                  target="_blank"
+                  rel="noreferrer"
+                  >白皮书式项目总览</a
+                >
+              </li>
               <li>
                 <a
                   href="https://github.com/eng-cc/oasis7/blob/main/doc/game/gameplay/gameplay-top-level-design.prd.md"
