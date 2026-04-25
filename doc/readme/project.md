@@ -953,6 +953,20 @@
     - `file site/social/xiaohongshu-token-usage-cover.png`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] whitepaper-style-overview (PRD-README-048) [test_tier_required]: 新增一份白皮书式项目总览，用 Explanation 文档收口“项目是什么、为什么存在、世界/玩法/系统如何拼起来、当前预览边界在哪”，并把入口接入根 README 与 readme/governance 导航。 Trace: .pm/tasks/task_5963ea33d3854bef802154b2996bea89.yaml
+  - 产物文件:
+    - `README.md`
+    - `doc/readme/prd.md`
+    - `doc/readme/project.md`
+    - `doc/readme/prd.index.md`
+    - `doc/readme/governance/README.md`
+    - `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`
+    - `.pm/tasks/task_5963ea33d3854bef802154b2996bea89.yaml`
+    - `.pm/tasks/task_5963ea33d3854bef802154b2996bea89.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "PRD-README-048|AC-37|DEC-RM-048|whitepaper-style-overview|readme-project-overview-whitepaper-2026-04-25" README.md doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/README.md doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md .pm/tasks/task_5963ea33d3854bef802154b2996bea89.yaml .pm/tasks/task_5963ea33d3854bef802154b2996bea89.execution.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立热点路径治理专题三件套、新增 `doc/readme/governance/README.md` 作为 canonical 子域入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 
 ## 依赖
@@ -961,9 +975,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-20
+- 更新日期: 2026-04-25
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务；若后续继续做 `governance/` 季度复核或簇内治理，再新开独立任务。）
+- 最新完成: `whitepaper-style-overview`（已新增 `readme-project-overview-whitepaper-2026-04-25.md` 作为 Explanation 类型项目总览，把“项目是什么、为什么要做、世界/玩法/系统如何组合、当前技术预览边界是什么”压到一份长说明里，并把入口接回根 README 与 `readme/governance`。）
 - 最新完成: `xiaohongshu-token-usage-post-pack`（已为小红书第十四篇补齐真实累计 token 用量素材包，用项目累计请求 / token / 花费数据解释 AI 成本主要烧在需求反复、文档、返工、验证与上下文切换，而不是单次生成炫技。）
 - 最新完成: `readme-governance-path-governance`（已为 `doc/readme/governance/` 补齐 canonical 子域入口 `doc/readme/governance/README.md`，并把模块首屏从“若干具体 liveops/operator 文档直链”收口为“先进入热点子域再按主题分流”。）
 - 最新完成: `game-positioning-alignment`（已将根 README、世界规则入口与站点首页中英首页的公开主定位统一收口为“文明模拟游戏”，并保持技术预览 / 尚不可玩边界不变。）
