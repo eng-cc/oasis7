@@ -92,7 +92,10 @@ output/
   node-distfs/<node_id>/
     replication_commit_messages/           # hot commit mirror
     replication_commit_messages_cold_index.json
-    store/                                 # canonical log / cold blobs
+    replication_commit_messages.cold-index/
+      index.json
+      segments/                           # fixed height-range packed cold commits
+    store/                                 # distfs blobs + legacy cold commit compatibility blobs
 ```
 
 ### 5.2 数据分层
@@ -221,11 +224,20 @@ struct StorageColdIndexRangeAnchor {
     last_content_hash: String,
     entry_count: usize,
 }
+
+struct CommitMessagePackRef {
+    segment_id: String,
+    offset: u64,
+    len: u64,
+    content_hash: String,
+}
 ```
 
 #### 设计说明
 - 共享 cold index 目录采用 `<namespace>.cold-index/index.json`；有分段数据时统一使用同级 `segments/` 目录承载 payload。
 - `hot_range` 表示当前仍保留在热路径中的连续键范围；对 replication 即 latest-based height window，对 tick/archive 则可映射为 tick range。
+- `replication_commit_messages` 的冷归档默认采用固定高度跨度的 segmented pack 布局：同一高度段内的 commit message 以 `len + payload` 追加进共享 `.pack` 文件，cold index 只保留 `segment_id + offset + len + content_hash`，从而避免“小 commit 一文件”带来的 inode 与块边界放大。
+- 旧 `height -> content_hash` 冷索引在第一次读回/维护时会自动迁移到 `CommitMessagePackRef`，并在 pack 索引落盘成功后删除不再被 file index / pin 引用的 legacy CAS blob。
 - `cold_range_anchor` 只承载冷区边界锚点而不是全量 payload，最低要求为 `from_key` / `to_key` / `first_content_hash` / `last_content_hash` / `entry_count`，供审计、metrics 与 seek 策略共用；cold-index scan 与按 key seek 的边界必须从同一 anchor 派生。
 - rollout 期间 canonical 与 legacy alias 采用双写 + 读时回填策略：若 `<namespace>.cold-index/index.json` 或旧别名缺失，读取路径会补回另一侧，避免已有样本和脚本立即失效。
 

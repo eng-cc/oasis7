@@ -170,7 +170,7 @@ pub(crate) fn load_commit_message_from_root(
                 }
             })?
         }
-        super::commit_retention::CommitMessageReadbackSource::ColdArchive { content_hash } => {
+        super::commit_retention::CommitMessageReadbackSource::ColdCasArchive { content_hash } => {
             let store = LocalCasStore::new(root_dir.join("store"));
             let bytes = store
                 .get_verified(content_hash.as_str())
@@ -180,6 +180,27 @@ pub(crate) fn load_commit_message_from_root(
                     reason: format!(
                         "parse cold commit message for height {} hash {} failed: {}",
                         height, content_hash, err
+                    ),
+                }
+            })?
+        }
+        super::commit_retention::CommitMessageReadbackSource::ColdPackArchive { pack_ref } => {
+            let bytes =
+                super::commit_retention::load_commit_message_pack_entry(root_dir, &pack_ref)?;
+            let computed_hash = blake3_hex(bytes.as_slice());
+            if computed_hash != pack_ref.content_hash {
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "pack commit message hash mismatch for height {} segment {}: expected={}, actual={}",
+                        height, pack_ref.segment_id, pack_ref.content_hash, computed_hash
+                    ),
+                });
+            }
+            serde_json::from_slice::<GossipReplicationMessage>(&bytes).map_err(|err| {
+                NodeError::Replication {
+                    reason: format!(
+                        "parse packed cold commit message for height {} segment {} failed: {}",
+                        height, pack_ref.segment_id, err
                     ),
                 }
             })?

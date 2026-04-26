@@ -44,7 +44,7 @@
 - [x] TASK-WORLD_RUNTIME-033 (PRD-WORLD_RUNTIME-014/015) [test_tier_required + test_tier_full]: 建立 launcher / chain runtime / soak profile 的 footprint gate、GC fail-safe 与重启恢复联合验证。
 - [x] TASK-WORLD_RUNTIME-034 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 输出详细技术设计文档，明确 canonical replay log / checkpoint / GC / metrics / migration 方案。
 - [x] TASK-WORLD_RUNTIME-035 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 将专题项目进一步拆解为 T1.1 ~ T7.5 子任务，明确执行顺序、依赖边界与测试闭环。
-- [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication 存储补上 cold-index-aware orphan sweep，并将 `files_index` / 热 commit / cold-index 落盘切到 compact JSON，减少 legacy orphan blob 与 pretty-json 膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
+- [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication 存储补上 cold-index-aware orphan sweep，将 `files_index` / 热 commit / cold-index 落盘切到 compact JSON，并把冷 commit 归档从“一块一文件”收敛为 segmented pack + offset 索引，减少 legacy orphan blob、inode 数和 pretty-json 膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
 - [x] TASK-WORLD_RUNTIME-036 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 同步 `doc/world-runtime/README.md` 与 `doc/world-runtime/prd.index.md` 的模块入口索引，补齐近期专题、模块职责与根目录收口口径。
 - [x] TASK-WORLD_RUNTIME-037 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 清理 `doc/world-runtime/prd.md` 顶部重复的根级兼容执行入口，保持接口区导航唯一。
 - [x] TASK-WORLD_RUNTIME-038 (PRD-WORLD_RUNTIME-019) [test_tier_required]: 为工厂补齐生产阻塞/恢复状态与审计事件，确保前期工业引导能由 runtime 状态与事件历史解释。

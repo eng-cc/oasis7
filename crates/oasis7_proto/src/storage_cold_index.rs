@@ -6,6 +6,7 @@ pub const STORAGE_COLD_INDEX_MANIFEST_FILE: &str = "index.json";
 pub const STORAGE_COLD_INDEX_SEGMENTS_DIR: &str = "segments";
 pub const STORAGE_COLD_INDEX_KEY_KIND_HEIGHT: &str = "height";
 pub const STORAGE_COLD_INDEX_VALUE_KIND_CONTENT_HASH: &str = "content_hash";
+pub const STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF: &str = "commit_pack_ref";
 
 fn storage_cold_index_schema_v1() -> u32 {
     STORAGE_COLD_INDEX_SCHEMA_V1
