@@ -630,6 +630,96 @@ fn load_commit_message_cold_index_restores_compat_alias_from_canonical_manifest(
 }
 
 #[test]
+fn load_commit_message_by_height_rejects_invalid_pack_segment_id() {
+    let dir = temp_dir("commit-cold-pack-invalid-segment-id");
+    let world_id = "world-commit-cold-pack-invalid-segment-id";
+    let config = NodeReplicationConfig::new(&dir).expect("config");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    let cold_index_path = dir
+        .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+        .join(STORAGE_COLD_INDEX_MANIFEST_FILE);
+    std::fs::create_dir_all(cold_index_path.parent().expect("cold index parent"))
+        .expect("create cold index dir");
+    std::fs::write(
+        &cold_index_path,
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "namespace": COMMIT_MESSAGE_DIR,
+            "key_kind": "height",
+            "value_kind": STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
+            "by_height": {
+                "1": {
+                    "segment_id": "../escape",
+                    "offset": 0,
+                    "len": 16,
+                    "content_hash": "deadbeef"
+                }
+            }
+        }))
+        .expect("serialize invalid cold index"),
+    )
+    .expect("write invalid cold index");
+
+    let err = runtime
+        .load_commit_message_by_height(world_id, 1)
+        .expect_err("invalid segment id should fail");
+    assert!(
+        matches!(err, NodeError::Replication { reason } if reason.contains("invalid commit message pack segment id"))
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_commit_message_by_height_rejects_out_of_bounds_pack_entry() {
+    let dir = temp_dir("commit-cold-pack-out-of-bounds");
+    let world_id = "world-commit-cold-pack-out-of-bounds";
+    let config = NodeReplicationConfig::new(&dir).expect("config");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    let segment_id = "00000000000000000001-00000000000000000256";
+    let segment_dir = dir
+        .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+        .join("segments");
+    std::fs::create_dir_all(&segment_dir).expect("create segments dir");
+    std::fs::write(segment_dir.join(format!("{segment_id}.pack")), [0u8; 8])
+        .expect("write short pack file");
+
+    let cold_index_path = dir
+        .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+        .join(STORAGE_COLD_INDEX_MANIFEST_FILE);
+    std::fs::write(
+        &cold_index_path,
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "namespace": COMMIT_MESSAGE_DIR,
+            "key_kind": "height",
+            "value_kind": STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
+            "by_height": {
+                "1": {
+                    "segment_id": segment_id,
+                    "offset": 0,
+                    "len": 32,
+                    "content_hash": "deadbeef"
+                }
+            }
+        }))
+        .expect("serialize out-of-bounds cold index"),
+    )
+    .expect("write out-of-bounds cold index");
+
+    let err = runtime
+        .load_commit_message_by_height(world_id, 1)
+        .expect_err("out-of-bounds pack entry should fail");
+    assert!(
+        matches!(err, NodeError::Replication { reason } if reason.contains("pack entry out of bounds"))
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn commit_cold_index_scan_anchor_matches_readback_boundaries() {
     let dir = temp_dir("commit-cold-index-scan-anchor");
     let world_id = "world-commit-cold-index-scan-anchor";
