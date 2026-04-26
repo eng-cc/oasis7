@@ -15,6 +15,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://eng-cc.github.io/oasis7/en/" />
     <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta property="og:image:alt" content="oasis7 preview homepage cover showing the AI-agent civilization simulation positioning and preview status" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="oasis7 | AI-Agent Civilization Sim Preview" />
@@ -23,6 +24,7 @@
       content="You set goals and constraints, autonomous agents execute, and the world keeps changing under resource and governance pressure. Current build is still a technical preview."
     />
     <meta name="twitter:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta name="twitter:image:alt" content="oasis7 preview homepage cover showing the AI-agent civilization simulation positioning and preview status" />
     <meta name="theme-color" content="#060b11" />
     <title>oasis7 | AI-Agent Civilization Sim Preview</title>
     <link rel="canonical" href="https://eng-cc.github.io/oasis7/en/" />
@@ -34,19 +36,18 @@
     <script defer src="../assets/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#top">Skip to main content</a>
     <header class="topbar">
       <a class="brand" href="#top">
         <span class="brand-mark"></span>
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#what">What It Is</a>
-        <a href="#role">How You Play</a>
+        <a href="#what">Gameplay First</a>
         <a href="#today">What You Can Do Now</a>
-        <a href="#download">Preview Build</a>
         <a href="#proof">Proof Chain</a>
+        <a href="#download">Preview Build</a>
         <a href="#roadmap">Roadmap</a>
-        <a href="#architecture">Foundation</a>
         <a href="../doc/en/index.html">Docs Hub</a>
         <a href="#contribute">Follow Along</a>
       </nav>
@@ -80,14 +81,15 @@
             <p class="eyebrow">Technical Preview</p>
             <h1>A civilization sim where AI agents trade, ally, and fight on their own</h1>
             <p class="subtitle">
-              You are not meant to click every unit yourself. You set goals, change constraints, and watch what happens next.
-              The agents in this world can produce, trade, ally, fight, and govern on their own, and the world keeps going after you log off.
-              The current path is to ship it first as an open-world sandbox game, then evolve it into an open-world game platform. What is public today is still a technical preview. It is here to show the direction, not to pretend the game is already open.
+              You are not meant to click every unit yourself. You set civilization goals, operating constraints, and governance boundaries,
+              then the agents decide how to produce, trade, ally, and fight inside those rules. The world keeps running and leaves replayable evidence behind.
+              What is public today is a technical preview for validating that direction. It is not a hosted web join or a public player launch.
             </p>
             <div class="cta-row">
-              <a class="button primary" href="#what">See The Game In 30 Seconds</a>
+              <a class="button primary" href="#what">See The Core Loop In 30 Seconds</a>
+              <a class="button secondary" href="#proof">See Verifiable Proof</a>
               <a
-                class="button secondary"
+                class="button ghost"
                 href="../doc/en/project-overview.html"
                 target="_blank"
                 rel="noreferrer"
@@ -96,7 +98,8 @@
             </div>
             <div class="proof-strip">
               <span class="proof-chip is-highlight">Genre: civilization sim</span>
-              <span class="proof-chip">Status: technical preview, not playable yet</span>
+              <span class="proof-chip" data-homepage-claim="preview-status">Status: technical preview, not playable yet</span>
+              <span class="proof-chip" data-homepage-claim="default-web-entry">Default web verification entry: software_safe</span>
             </div>
             <div class="hero-stats">
               <article class="metric-box">
@@ -116,14 +119,35 @@
               <figcaption>This is the current validation view. It shows how the world runs, but it is not the public player version.</figcaption>
             </figure>
             <div class="pulse-panel">
-              <p class="panel-title">What You Actually Do Here</p>
+              <p class="panel-title">How You Influence Agents</p>
               <ul>
-                <li><span>First</span><strong>set goals</strong></li>
-                <li><span>Then</span><strong>change rules and limits</strong></li>
-                <li><span>Then keep adjusting</span><strong>trade, war, and alliances react</strong></li>
+                <li><span>You provide</span><strong>goals, constraints, governance bounds</strong></li>
+                <li><span>Agents decide</span><strong>production, trade, alliances, war</strong></li>
+                <li><span>The world records</span><strong>prices, relations, policy, replay evidence</strong></li>
               </ul>
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section class="section" data-reveal>
+        <h2>Why It Is Still Worth Following Now</h2>
+        <p class="section-intro">
+          This is not a public playable build yet, but it is already beyond a hand-wavy promise. You can inspect reproducible evidence, send builder feedback, and track how the public surface is moving.
+        </p>
+        <div class="grid cards-3">
+          <article class="card card-spotlight">
+            <h3>There is already inspectable proof</h3>
+            <p>Replay, live runtime events, and governance-side effects are already public enough to verify instead of just being promised.</p>
+          </article>
+          <article class="card">
+            <h3>You can send builder feedback now</h3>
+            <p data-homepage-claim="builder-feedback">The most useful public input right now is builder feedback: blockers, confusing edges, and validation friction.</p>
+          </article>
+          <article class="card">
+            <h3>Do not mistake roadmap for product access</h3>
+            <p data-homepage-claim="future-platform-boundary">It may later evolve into a broader platform, but it is not a creator-facing mod / modules platform yet.</p>
+          </article>
         </div>
       </section>
 
@@ -156,42 +180,46 @@
       <section id="role" class="section" data-reveal>
         <h2>You give orders, but you do not take over every unit</h2>
         <p class="section-intro">
-          The interesting part is not APM. It is seeing what your goals and constraints turn into once a group of agents starts acting on them.
+          The key point is not just “you do not directly control units.” It is understanding which levers you own, which decisions agents own, and which boundaries the system enforces.
         </p>
         <div class="story-path">
           <article class="story-step" data-story-step>
             <span class="story-step-index">01</span>
-            <h3>Set Direction</h3>
-            <p>Decide what you want first: expansion, survival, industrial output, influence, or governance power.</p>
+            <h3>You Set Direction</h3>
+            <p>Decide whether the civilization should expand, survive, stockpile resources, or fight for influence and governance power.</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">02</span>
-            <h3>Set Constraints</h3>
-            <p>Use prompts, modular logic, and rules to shape behavior instead of clicking each action yourself.</p>
+            <h3>You Set Boundaries</h3>
+            <p>You provide goals, rules, and governance constraints instead of manually clicking every next action.</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">03</span>
-            <h3>Read The Consequences</h3>
-            <p>Markets, alliances, logistics, wars, and policy proposals become the visible result of those choices.</p>
+            <h3>Agents Decide Inside Runtime Rules</h3>
+            <p>They choose how to produce, trade, ally, fight, and govern within resource, time, and legality constraints.</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">04</span>
-            <h3>Adapt Without Reset</h3>
-            <p>You do not pause the world and erase mistakes. You react to the consequences and keep going.</p>
+            <h3>You Read Consequences</h3>
+            <p>Markets, alliances, logistics, and policy proposals turn your inputs into a consequence chain you can inspect later.</p>
           </article>
         </div>
-        <div class="grid cards-3">
+        <div class="grid cards-2">
           <article class="card">
             <h3>What You Can Do</h3>
-            <p>Set high-level goals, change prompts, guide modular expansion, and shape how agents coordinate.</p>
+            <p>Set high-level goals, tighten constraints, and shape governance boundaries that influence how civilizations coordinate.</p>
           </article>
           <article class="card">
-            <h3>What You Cannot Do</h3>
-            <p>You do not directly puppeteer agents, bypass world rules, or freeze time to optimize every move.</p>
+            <h3>What Agents Decide</h3>
+            <p>Agents choose the action details themselves. They are not direct puppets, even when you strongly influence their incentives.</p>
+          </article>
+          <article class="card">
+            <h3>What The System Blocks</h3>
+            <p>The runtime blocks direct override, rule bypass, and any claim that future platform capabilities are already public entry points.</p>
           </article>
           <article class="card">
             <h3>What You Should Expect</h3>
-            <p>First you see action-level feedback, then day-scale changes in trade and alliances, then longer shifts in institutions and power.</p>
+            <p>First action-level feedback, then day-scale shifts in trade and alliances, then longer changes in institutions and power.</p>
           </article>
         </div>
       </section>
@@ -199,9 +227,9 @@
       <section id="today" class="section" data-reveal>
         <h2>What You Can Do Right Now</h2>
         <p class="section-intro">
-          You cannot jump into a public playable build yet, but you can already understand the direction, run the local preview, and inspect the proof chain.
+          Treat this page as a public entry page, not a flattened command sheet. First decide whether you want to understand the game, inspect proof, download preview builds, or keep going on a builder path.
         </p>
-        <div class="grid cards-3">
+        <div class="grid cards-2">
           <article class="card">
             <h3>Understand The Vision</h3>
             <p>Use the docs hub, world rules, and gameplay docs to decide whether this direction is worth following.</p>
@@ -210,75 +238,142 @@
             </div>
           </article>
           <article class="card">
-            <h3>Run The Technical Preview</h3>
-            <p>If you are comfortable building locally, you can already verify replay, live runtime, and viewer connectivity.</p>
+            <h3>Start With The Default Web Entry</h3>
+            <p>The current formal web-facing verification path is `software_safe`. `standard_3d` is an opt-in visual surface, and `pure_api` is the programmatic surface.</p>
             <div class="cta-row">
               <a class="button secondary" href="#proof">See Proof Chain</a>
             </div>
           </article>
           <article class="card">
-            <h3>Track The Build Toward Playability</h3>
-            <p>Downloads, release notes, and roadmap are public, but they still describe preview status rather than a live launch.</p>
+            <h3>Decide Whether To Download Preview Builds</h3>
+            <p>Public downloads are still preview-validation assets. They are not positioned as a normal player launch or a hosted join flow.</p>
             <div class="cta-row">
-              <a class="button secondary" href="#roadmap">See Roadmap</a>
+              <a class="button secondary" href="#download">See Preview Builds</a>
             </div>
           </article>
           <article class="card">
-            <h3>Start with the long overview</h3>
-            <p>If you do not want to bounce between README, gameplay docs, and architecture docs first, the whitepaper-style project overview is the fastest way to get the whole picture.</p>
+            <h3>If You Are A Builder</h3>
+            <p>The homepage no longer flattens every command. Full validation commands, troubleshooting steps, and diagnostic boundaries now stay in the docs hub.</p>
             <div class="cta-row">
               <a
                 class="button secondary"
-                href="../doc/en/project-overview.html"
+                href="../doc/en/index.html"
                 target="_blank"
                 rel="noreferrer"
-                >Open Overview</a
+                >Open Docs Hub</a
               >
             </div>
           </article>
         </div>
-        <article class="quickstart card">
-          <h3>If you want to run it yourself, you are still on a developer path</h3>
-          <ol class="steps">
-            <li>Clone the repository and enter the workspace.</li>
-            <li>Run `env -u RUSTC_WRAPPER cargo check` to confirm the environment.</li>
-            <li>Replay first, then switch to live mode and confirm event flow plus viewer connectivity.</li>
-          </ol>
-          <div class="grid cards-2 quickstart-grid">
-            <article class="card quickstart-card">
-              <h3>Offline Verification (Recommended)</h3>
-              <p>Confirm data output, server startup, and viewer connectivity before anything else.</p>
-              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_server -- .data/world_viewer_data 127.0.0.1:5010
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
-            </article>
-            <article class="card quickstart-card">
-              <h3>Live Verification (`standard_3d` / `software_safe`)</h3>
-              <p>Verify real-time events, panel updates, and control flow in the continuous runtime path.</p>
-              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-# Diagnostics only: --no-llm is observer/debug-only and not formal verification evidence
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
-            </article>
+        <details class="developer-details card">
+          <summary>If you want to validate it yourself, expand the builder path</summary>
+          <div class="developer-details-body">
+            <ol class="steps">
+              <li>First confirm that you want builder validation, not a normal-player join flow.</li>
+              <li>Prioritize the `software_safe` formal web path; keep full commands, replay steps, and troubleshooting details in the docs hub.</li>
+              <li>`--no-llm` stays diagnostic-only and is no longer shown as a homepage primary path.</li>
+            </ol>
+            <div class="cta-row">
+              <a class="button secondary" href="../doc/en/index.html">Open Docs Hub</a>
+              <a class="button ghost" href="../doc/en/project-overview.html" target="_blank" rel="noreferrer">Open Overview</a>
+            </div>
           </div>
-          <p class="doc-entry-note">
-            Full parameters, troubleshooting, and test matrix live in the
-            <a href="../doc/en/index.html">documentation hub (EN)</a>.
-          </p>
-          <p class="doc-entry-note">The current preview exposes three public access surfaces: `standard_3d`, `software_safe`, and `pure_api`. LLM/script decisions and Local Provider lanes describe execution style, not extra public modes.</p>
-          <p class="doc-entry-note">The first build usually takes longer. After that it gets much faster, but it is still a validation path, not the public game.</p>
-        </article>
+        </details>
+      </section>
+
+      <section id="proof" class="section" data-reveal>
+        <h2>What can already be checked today</h2>
+        <p class="section-intro">This section does not claim public playability. It shows that inputs, agent decisions, and world-side effects already leave a consequence chain you can inspect.</p>
+        <div class="proof-switcher" data-proof-switcher>
+          <p class="proof-switcher-label">Switch Evidence Scenario</p>
+          <div class="proof-switcher-controls" role="group" aria-label="Switch evidence scenario" data-proof-controls>
+            <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
+              minimal
+            </button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
+          </div>
+        </div>
+
+        <div class="proof-grid">
+          <article class="proof-card proof-card-key">
+            <h3>Minimal Verifiable Case</h3>
+            <ol class="proof-list">
+              <li>You provide a goal, constraint, or governance boundary</li>
+              <li>Agents decide how to execute within runtime legality and resource limits</li>
+              <li>The world records prices, alliances, and governance outcomes as events</li>
+              <li>You can replay the chain through replay, live runtime, and audit traces</li>
+            </ol>
+            <a class="button secondary" href="#today">Back To Public Entry Options</a>
+          </article>
+
+          <article class="proof-card">
+            <h3>Event Slice (Auto-switched)</h3>
+            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
+[tick=133] minimal::scheduler stable -> next decision window
+[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
+            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
+[tick=091] twin_region::agent-2 accepted -> shared production boost
+[tick=097] twin_region::alliance tension rises -> treaty renegotiation</code></pre>
+            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
+[tick=149] triad_region::multi-party pact signed
+[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
+          </article>
+        </div>
+
+        <div class="proof-strip">
+          <span class="proof-chip">Coverage: replay + live runtime + audit trace</span>
+          <span class="proof-chip">Public surfaces: software_safe / standard_3d / pure_api</span>
+          <span class="proof-chip">Primary entry today: software_safe</span>
+          <span class="proof-chip is-highlight">Status: testable, not playable</span>
+        </div>
+        <p class="doc-entry-note">For deeper validation, the formal web-facing verification path defaults to `software_safe`. `standard_3d` is an opt-in visual surface, and `pure_api` is the programmatic surface.</p>
+
+        <div class="proof-timeline" data-proof-timeline>
+          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
+            <span>Tick 128</span>
+            <p>minimal: a harvest action is accepted, showing the input-to-world action path is linked.</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
+            <span>Tick 136</span>
+            <p>minimal: a market spike is recorded, showing that the chain already reaches visible consequences.</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
+            <span>Tick 91</span>
+            <p>twin_region: a trade event completes, showing multi-agent coordination can be traced into production effects.</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
+            <span>Tick 97</span>
+            <p>twin_region: alliance friction rises, showing strategy inputs can alter relationship structure.</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
+            <span>Tick 149</span>
+            <p>triad_region: a multi-party pact lands on-chain, showing governance signaling is already auditable.</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
+            <span>Tick 155</span>
+            <p>triad_region: a governance vote closes, showing institutional consequences are observable too.</p>
+          </article>
+        </div>
       </section>
 
       <section id="download" class="section" data-reveal>
         <h2>If you want to try it yourself, what is public today is still just preview builds</h2>
         <p class="section-intro">The public downloads are still for preview validation, not for a normal player launch. Each platform gets one main package so you do not have to make a packaging decision first.</p>
+        <div class="boundary-banner" data-homepage-claim="download-boundary">
+          <p class="boundary-title">Check whether this path is for you</p>
+          <ul class="boundary-list">
+            <li><strong>Good fit:</strong> builders who want to validate preview builds and report blockers or install friction.</li>
+            <li><strong>Not for:</strong> people expecting a hosted web join or a public player launch experience.</li>
+            <li><strong>Current boundary:</strong> this is not a hosted web join or a public player launch, and formal announcement is still pending.</li>
+          </ul>
+        </div>
         <p class="release-meta">
           Current version: <strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="Published">publish time pending</span>
           <a data-release-notes-link href="https://github.com/eng-cc/oasis7/releases/latest">Release notes</a>
         </p>
-        <p class="doc-entry-note">Formal announcement is still pending. The current release notes are mainly build notes and verification info, not a player launch notice.</p>
+        <p class="doc-entry-note">The current release notes are mainly build notes and verification info, not a player launch notice.</p>
         <div class="download-surface" data-download-surface>
           <div class="download-surface-main">
             <p class="eyebrow" data-download-primary-badge>Recommended for this device</p>
@@ -410,83 +505,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
         </div>
       </section>
 
-      <section id="proof" class="section" data-reveal>
-        <h2>What can already be checked today</h2>
-        <p class="section-intro">This section is not a claim that the game is playable. It is a simple status report: the current preview already produces commands, events, screenshots, and replay artifacts that other people can reproduce.</p>
-        <div class="proof-switcher" data-proof-switcher>
-          <p class="proof-switcher-label">Switch Evidence Scenario</p>
-          <div class="proof-switcher-controls" role="group" aria-label="Switch evidence scenario" data-proof-controls>
-            <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
-              minimal
-            </button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
-          </div>
-        </div>
-
-        <div class="proof-grid">
-          <article class="proof-card proof-card-key">
-            <h3>What already runs end to end</h3>
-            <ol class="proof-list">
-              <li>Run `oasis7_viewer_demo` or `oasis7_viewer_live` to produce in-world events</li>
-              <li>Expose replay or live endpoints through the server runtime</li>
-              <li>Connect the viewer and check whether events and rule feedback line up</li>
-            </ol>
-            <a class="button secondary" href="#today">Reproduce This Flow</a>
-          </article>
-
-          <article class="proof-card">
-            <h3>Event Slice (Auto-switched)</h3>
-            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
-[tick=133] minimal::scheduler stable -> next decision window
-[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
-            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
-[tick=091] twin_region::agent-2 accepted -> shared production boost
-[tick=097] twin_region::alliance tension rises -> treaty renegotiation</code></pre>
-            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
-[tick=149] triad_region::multi-party pact signed
-[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
-          </article>
-        </div>
-
-	        <div class="proof-strip">
-	          <span class="proof-chip">Coverage: replay + live runtime + audit trace</span>
-	          <span class="proof-chip">Access surfaces: standard_3d / software_safe / pure_api</span>
-	          <span class="proof-chip">Visible outputs: commands + events + screenshots</span>
-	          <span class="proof-chip is-highlight">Status: testable, not playable</span>
-	        </div>
-
-        <div class="proof-timeline" data-proof-timeline>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 128</span>
-            <p>minimal: harvest event shows the command-to-event pipeline is working.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 136</span>
-            <p>minimal: market spike event shows warning output is coming through.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 91</span>
-            <p>twin_region: trade event shows multi-agent interaction is traceable.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 97</span>
-            <p>twin_region: alliance-friction event shows conflict transitions are visible.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 149</span>
-            <p>triad_region: pact event shows the governance-signaling path is working.</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 155</span>
-            <p>triad_region: vote-close event shows regime transitions can be traced.</p>
-          </article>
-        </div>
-      </section>
-
       <section id="roadmap" class="section" data-reveal>
         <h2>Why it is still not playable</h2>
-        <p class="section-intro">The product path is clearer now: phase one is an open-world sandbox game built around participation, exploration, and consequence; later it should expand into an open-world game platform where creators can organize different play styles through `mod / modules`.</p>
+        <p class="section-intro">The path is clearer now: first stabilize oasis7 as an open-world sandbox game. Only later does it make sense to talk about broader platformization. That second half is a target state, not a public capability today.</p>
         <div class="grid cards-2">
           <article class="card">
             <h3>Phase One: open-world sandbox game</h3>
@@ -494,10 +515,10 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>
           <article class="card">
             <h3>Phase Two: open-world game platform</h3>
-            <p>Once that base is steadier, open it up further so different rule sets and creator-driven `mod / modules` can grow on top of the same world layer.</p>
+            <p>Only after the foundation is steadier does it make sense to discuss creator-facing `mod / modules` organization. The current public site does not present that as an already-open platform promise.</p>
           </article>
         </div>
-        <p class="doc-entry-note">The longer-term direction is for the game and its key data to move toward something participants can shape, govern, and benefit from together. That is a target-state vision, not a current legal structure or on-chain fact.</p>
+        <p class="doc-entry-note">The gap to a public playable build still includes unstable public-access boundaries, incomplete install trust-chain work, and a feedback loop that is still builder-grade. The longer-term “shape / govern / benefit together” direction is also still a target-state vision, not a current on-chain fact.</p>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">Done</span>
@@ -532,7 +553,7 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
         <div class="architecture-flow">
           <article class="arch-node">
             <h3>Gameplay Layer</h3>
-            <p>War, governance, and economy rules are loaded and replaced as modular WASM units.</p>
+            <p>What is public today is a controlled set of built-in rule modules. Creator-facing `mod / modules` organization belongs to a later phase.</p>
           </article>
           <article class="arch-node">
             <h3>Runtime Kernel</h3>
@@ -588,11 +609,19 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             </ul>
           </article>
           <article class="card">
-            <h3>Contribute</h3>
-            <p>The most useful help right now is not broad hype. It is work that makes the world easier to trust, easier to read, and closer to a real playable release.</p>
+            <h3>Three Ways To Keep Following</h3>
+            <p>If you are not here to open a PR immediately, you still have clear next steps: inspect proof, report builder feedback, or track release evolution.</p>
+            <ul class="doc-links">
+              <li><a href="#proof">Go back to proof chain</a></li>
+              <li><a href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer">Report blocker / builder feedback</a></li>
+              <li><a href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer">Track release evolution</a></li>
+            </ul>
             <div class="cta-row">
               <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
                 >Open Issue</a
+              >
+              <a class="button ghost" href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer"
+                >See Releases</a
               >
               <a class="button primary" href="https://github.com/eng-cc/oasis7/pulls" target="_blank" rel="noreferrer"
                 >Open PR</a
