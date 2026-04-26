@@ -433,6 +433,11 @@ impl WorldState {
                 rejection_reason: None,
             },
         );
+        let latest_request_id = self
+            .latest_first_agent_claim_approval_request_ids_by_claimer
+            .entry(claimer_agent_id.to_string())
+            .or_insert(request_id);
+        *latest_request_id = (*latest_request_id).max(request_id);
         self.next_first_agent_claim_approval_request_id = self
             .next_first_agent_claim_approval_request_id
             .max(request_id.saturating_add(1))

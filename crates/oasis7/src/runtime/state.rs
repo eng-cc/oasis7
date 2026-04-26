@@ -483,6 +483,8 @@ pub struct WorldState {
     pub restricted_starter_claim_grants: BTreeMap<String, RestrictedStarterClaimGrantState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub first_agent_claim_approval_requests: BTreeMap<u64, FirstAgentClaimApprovalRequestState>,
+    #[serde(default)]
+    pub latest_first_agent_claim_approval_request_ids_by_claimer: BTreeMap<String, u64>,
     #[serde(default = "default_next_first_agent_claim_approval_request_id")]
     pub next_first_agent_claim_approval_request_id: u64,
     #[serde(default)]
@@ -580,6 +582,7 @@ impl Default for WorldState {
             main_token_balances: BTreeMap::new(),
             restricted_starter_claim_grants: BTreeMap::new(),
             first_agent_claim_approval_requests: BTreeMap::new(),
+            latest_first_agent_claim_approval_request_ids_by_claimer: BTreeMap::new(),
             next_first_agent_claim_approval_request_id:
                 default_next_first_agent_claim_approval_request_id(),
             main_token_genesis_buckets: BTreeMap::new(),
@@ -623,6 +626,23 @@ impl WorldState {
         }
 
         sync_compat_world_materials(&self.material_ledgers, &mut self.materials);
+    }
+
+    pub fn migrate_compat_first_agent_claim_approval_request_index(&mut self) {
+        if self.first_agent_claim_approval_requests.is_empty()
+            || !self
+                .latest_first_agent_claim_approval_request_ids_by_claimer
+                .is_empty()
+        {
+            return;
+        }
+        for request in self.first_agent_claim_approval_requests.values() {
+            let entry = self
+                .latest_first_agent_claim_approval_request_ids_by_claimer
+                .entry(request.claimer_agent_id.clone())
+                .or_insert(request.request_id);
+            *entry = (*entry).max(request.request_id);
+        }
     }
 
     pub fn has_data_access_permission(
@@ -893,6 +913,7 @@ impl WorldState {
         now: WorldTime,
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
+        self.migrate_compat_first_agent_claim_approval_request_index();
         match event {
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
