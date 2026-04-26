@@ -509,6 +509,7 @@ fn build_player_post_onboarding_snapshot_surfaces_first_claim_onboarding() {
                 forced_reclaim_penalty_bps: 2000,
                 blocked_reason: None,
             }),
+            first_agent_claim_approval_request: None,
             owned_claims: Vec::new(),
         }),
     });
@@ -572,6 +573,7 @@ fn build_player_post_onboarding_snapshot_requests_target_before_first_claim() {
                 forced_reclaim_penalty_bps: 2000,
                 blocked_reason: None,
             }),
+            first_agent_claim_approval_request: None,
             owned_claims: Vec::new(),
         }),
     });
