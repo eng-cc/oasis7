@@ -19,6 +19,7 @@ use super::{write_json_compact, COMMIT_MESSAGE_DIR};
 
 const COMMIT_MESSAGE_PACK_HEIGHT_SPAN: u64 = 256;
 const COMMIT_MESSAGE_PACK_ENTRY_LEN_BYTES: u64 = 8;
+const MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES: u64 = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct CommitMessagePackRef {
@@ -240,13 +241,34 @@ pub(super) fn write_commit_message_pack_entry(
             reason: format!("create dir {} failed: {}", parent.display(), err),
         })?;
     }
-    let offset = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+    let entry_len = u64::try_from(bytes.len()).map_err(|_| NodeError::Replication {
+        reason: format!(
+            "commit message pack entry length {} exceeds u64 capacity",
+            bytes.len()
+        ),
+    })?;
+    if entry_len > MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "commit message pack entry too large for {}: {} > {}",
+                path.display(),
+                entry_len,
+                MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES
+            ),
+        });
+    }
     let mut file = OpenOptions::new()
         .create(true)
+        .read(true)
         .append(true)
         .open(&path)
         .map_err(|err| NodeError::Replication {
             reason: format!("open {} failed: {}", path.display(), err),
+        })?;
+    let offset = file
+        .seek(SeekFrom::End(0))
+        .map_err(|err| NodeError::Replication {
+            reason: format!("seek {} to end failed: {}", path.display(), err),
         })?;
     file.write_all(&(bytes.len() as u64).to_le_bytes())
         .map_err(|err| NodeError::Replication {
@@ -268,7 +290,53 @@ pub(super) fn load_commit_message_pack_entry(
     root_dir: &Path,
     pack_ref: &CommitMessagePackRef,
 ) -> Result<Vec<u8>, NodeError> {
+    if !is_valid_commit_message_pack_segment_id(pack_ref.segment_id.as_str()) {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "invalid commit message pack segment id: {}",
+                pack_ref.segment_id
+            ),
+        });
+    }
     let path = commit_message_pack_segment_path_from_root(root_dir, pack_ref.segment_id.as_str());
+    if pack_ref.len > MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "pack entry length {} exceeds max allowed {} for {}",
+                pack_ref.len,
+                MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES,
+                path.display()
+            ),
+        });
+    }
+    let file_size = fs::metadata(&path)
+        .map_err(|err| NodeError::Replication {
+            reason: format!("metadata {} failed: {}", path.display(), err),
+        })?
+        .len();
+    let entry_end = pack_ref
+        .offset
+        .checked_add(COMMIT_MESSAGE_PACK_ENTRY_LEN_BYTES)
+        .and_then(|value| value.checked_add(pack_ref.len))
+        .ok_or_else(|| NodeError::Replication {
+            reason: format!(
+                "pack entry bounds overflow for {} at offset {} with len {}",
+                path.display(),
+                pack_ref.offset,
+                pack_ref.len
+            ),
+        })?;
+    if entry_end > file_size {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "pack entry out of bounds for {} at offset {} with len {} (file size {})",
+                path.display(),
+                pack_ref.offset,
+                pack_ref.len,
+                file_size
+            ),
+        });
+    }
     let mut file = fs::File::open(&path).map_err(|err| NodeError::Replication {
         reason: format!("open {} failed: {}", path.display(), err),
     })?;
@@ -564,6 +632,22 @@ fn commit_message_pack_segment_id(height: u64) -> String {
     let segment_end =
         segment_start.saturating_add(COMMIT_MESSAGE_PACK_HEIGHT_SPAN.saturating_sub(1));
     format!("{segment_start:020}-{segment_end:020}")
+}
+
+fn is_valid_commit_message_pack_segment_id(segment_id: &str) -> bool {
+    if segment_id.len() != 41 {
+        return false;
+    }
+    for (idx, ch) in segment_id.chars().enumerate() {
+        if idx == 20 {
+            if ch != '-' {
+                return false;
+            }
+        } else if !ch.is_ascii_digit() {
+            return false;
+        }
+    }
+    true
 }
 
 fn commit_message_pack_segment_path_from_root(root_dir: &Path, segment_id: &str) -> PathBuf {
