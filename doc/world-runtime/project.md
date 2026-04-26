@@ -24,6 +24,10 @@
     - `crates/oasis7/src/simulator/persist.rs`
     - `crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs`
     - `crates/oasis7/src/viewer/runtime_live/tests/snapshot_progress.rs`
+    - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
+    - `crates/oasis7_viewer/software_safe_src/main.jsx`
+    - `crates/oasis7_viewer/software_safe.js`
+    - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `.agents/skills/oasis7/references/governance-call-surfaces.md`
     - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
   - 验收命令 (`test_tier_required`):
@@ -31,6 +35,8 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_api_tests:: -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_viewer_live compat_snapshot_exposes_player_agent_claim_overview -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime --bin oasis7_viewer_live`
+    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm run build:software-safe`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-001 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 完成 world-runtime PRD 改写，建立运行时设计主入口。
