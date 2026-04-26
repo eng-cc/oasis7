@@ -110,6 +110,8 @@ impl PosNodeEngine {
             committed_height: 0,
             network_committed_height: 0,
             replication_persisted_height: 0,
+            last_replication_successor_probe_height: None,
+            last_replication_successor_probe_at_ms: None,
             storage_challenge_fallback_height: 1,
             recent_storage_challenge_successes: BTreeMap::new(),
             pending: None,
@@ -195,6 +197,7 @@ impl PosNodeEngine {
                 endpoint,
                 node_id,
                 world_id,
+                now_ms,
                 replication.as_deref_mut(),
             )?
         } else {

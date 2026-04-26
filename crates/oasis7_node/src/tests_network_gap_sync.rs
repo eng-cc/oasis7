@@ -180,6 +180,143 @@ fn runtime_network_replication_gap_sync_fetch_commit_success_cache_reuses_valida
 }
 
 #[test]
+fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
+    let dir_remote = temp_dir("successor-probe-cooldown-remote");
+    let dir_local = temp_dir("successor-probe-cooldown-local");
+    let world_id = "world-successor-probe-cooldown";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (mut engine, mut replication, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        124,
+        125,
+        Arc::clone(&network),
+    );
+    let expected_hash = message.record.content_hash.clone();
+    let expected_blob = message.payload.clone();
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let request_count = Arc::clone(&request_count);
+                let message = message.clone();
+                move |payload| {
+                    *request_count.lock().expect("lock request count") += 1;
+                    let request =
+                        serde_json::from_slice::<super::replication::FetchCommitRequest>(payload)
+                            .map_err(|err| WorldError::DistributedValidationFailed {
+                            reason: format!("decode fetch commit request failed: {err}"),
+                        })?;
+                    let response = if request.height == 1 {
+                        super::replication::FetchCommitResponse {
+                            found: true,
+                            message: Some(message.clone()),
+                        }
+                    } else {
+                        super::replication::FetchCommitResponse {
+                            found: false,
+                            message: None,
+                        }
+                    };
+                    serde_json::to_vec(&response).map_err(|err| {
+                        WorldError::DistributedValidationFailed {
+                            reason: format!("encode fetch commit response failed: {err}"),
+                        }
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            Box::new(move |payload| {
+                let request =
+                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                        .map_err(|err| WorldError::DistributedValidationFailed {
+                            reason: format!("decode fetch blob request failed: {err}"),
+                        })?;
+                serde_json::to_vec(&super::replication::FetchBlobResponse {
+                    found: request.content_hash == expected_hash,
+                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                })
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("encode fetch blob response failed: {err}"),
+                })
+            }),
+        )
+        .expect("register fetch blob handler");
+
+    let synced = engine
+        .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
+        .expect("sync height 1");
+    let GapSyncHeightOutcome::Synced {
+        block_hash,
+        committed_at_ms,
+    } = synced
+    else {
+        panic!("expected synced outcome for height 1");
+    };
+    engine
+        .record_synced_replication_height(1, block_hash, committed_at_ms)
+        .expect("record synced height 1");
+    *request_count.lock().expect("lock request count") = 0;
+
+    let first = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            1_000,
+            Some(&mut replication),
+        )
+        .expect("first successor probe");
+    assert!(
+        !first,
+        "not-found successor probe should not hold proposals"
+    );
+    assert_eq!(*request_count.lock().expect("lock request count"), 1);
+
+    let second = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            1_200,
+            Some(&mut replication),
+        )
+        .expect("second successor probe");
+    assert!(!second, "cooldown skip should keep proposal hold disabled");
+    assert_eq!(
+        *request_count.lock().expect("lock request count"),
+        1,
+        "same successor height should not be re-probed inside cooldown"
+    );
+
+    let third = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            2_100,
+            Some(&mut replication),
+        )
+        .expect("third successor probe");
+    assert!(
+        !third,
+        "not-found after cooldown should still keep proposal hold disabled"
+    );
+    assert_eq!(*request_count.lock().expect("lock request count"), 2);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
 fn runtime_network_replication_gap_sync_fetch_commit_success_cache_skips_invalid_commit() {
     let dir_remote = temp_dir("gap-sync-fetch-commit-invalid-cache-remote");
     let dir_local = temp_dir("gap-sync-fetch-commit-invalid-cache-local");

@@ -59,6 +59,12 @@ impl PendingPeerRecordRequest {
 
 const PEER_RECORD_REQUEST_COOLDOWN_MS: i64 = 60_000;
 
+pub(super) fn peer_record_world_id(template: Option<&PeerRecord>) -> &str {
+    template
+        .map(|record| record.world_id.as_str())
+        .unwrap_or_default()
+}
+
 fn peer_record_request_in_cooldown(
     cooldowns: &mut HashMap<PeerId, i64>,
     peer_id: PeerId,
@@ -205,6 +211,7 @@ pub(super) fn maybe_queue_discovery_peer_record(
     swarm: &mut Swarm<Behaviour>,
     pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
     pending_discovery_peer_records: &mut HashSet<PeerId>,
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
     peer_id: PeerId,
     local_peer_id: PeerId,
     world_id: &str,
@@ -212,6 +219,7 @@ pub(super) fn maybe_queue_discovery_peer_record(
     if world_id.trim().is_empty()
         || peer_id == local_peer_id
         || pending_discovery_peer_records.contains(&peer_id)
+        || discovered_peer_records.contains_key(&peer_id)
     {
         return;
     }
@@ -414,6 +422,7 @@ pub(super) fn handle_rendezvous_discovered(
     cached_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
     traffic_metrics: &SharedLibp2pTrafficMetrics,
     connected_peers: &[PeerId],
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
     local_peer_id: PeerId,
     template: Option<&PeerRecord>,
     max_error_messages: usize,
@@ -443,6 +452,7 @@ pub(super) fn handle_rendezvous_discovered(
             swarm,
             pending_dht,
             pending_discovery_peer_records,
+            discovered_peer_records,
             peer_id,
             local_peer_id,
             world_id,
@@ -651,11 +661,10 @@ pub(super) fn handle_peer_record_response(
                         swarm,
                         pending_dht,
                         pending_discovery_peer_records,
+                        discovered_peer_records,
                         discovered_peer_id,
                         local_peer_id,
-                        peer_record_template
-                            .map(|record| record.world_id.as_str())
-                            .unwrap_or_default(),
+                        peer_record_world_id(peer_record_template),
                     );
                     let _ = request_cached_peer_record_via(
                         swarm,

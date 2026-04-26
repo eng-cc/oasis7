@@ -50,7 +50,7 @@ use discovery::{
     handle_request_response_request, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
-    maybe_request_connected_peer_record, peer_record_enables_rendezvous,
+    maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
     process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
     PendingPeerRecordRequest,
 };
@@ -492,12 +492,12 @@ impl Libp2pNetwork {
                                                             &mut swarm,
                                                             &mut pending_dht,
                                                             &mut pending_discovery_peer_records,
+                                                            &discovered_peer_records,
                                                             peer_id,
                                                             local_peer_id,
-                                                            peer_record_template
-                                                                .as_ref()
-                                                                .map(|record| record.world_id.as_str())
-                                                                .unwrap_or_default(),
+                                                            peer_record_world_id(
+                                                                peer_record_template.as_ref(),
+                                                            ),
                                                         );
                                                         maybe_request_cached_peer_record(
                                                             &mut swarm,
@@ -618,12 +618,12 @@ impl Libp2pNetwork {
                                                 &mut swarm,
                                                 &mut pending_dht,
                                                 &mut pending_discovery_peer_records,
+                                                &discovered_peer_records,
                                                 peer,
                                                 local_peer_id,
-                                                peer_record_template
-                                                    .as_ref()
-                                                    .map(|record| record.world_id.as_str())
-                                                    .unwrap_or_default(),
+                                                peer_record_world_id(
+                                                    peer_record_template.as_ref(),
+                                                ),
                                             );
                                             if peers.contains(&peer) {
                                                 maybe_request_connected_peer_record(
@@ -743,6 +743,7 @@ impl Libp2pNetwork {
                                                 &mut cached_peer_record_cooldowns,
                                                 &event_traffic_metrics,
                                                 peers.as_slice(),
+                                                &discovered_peer_records,
                                                 local_peer_id,
                                                 peer_record_template.as_ref(),
                                                 max_error_messages,
@@ -907,12 +908,10 @@ impl Libp2pNetwork {
                                         &mut swarm,
                                         &mut pending_dht,
                                         &mut pending_discovery_peer_records,
+                                        &discovered_peer_records,
                                         peer_id,
                                         local_peer_id,
-                                        peer_record_template
-                                            .as_ref()
-                                            .map(|record| record.world_id.as_str())
-                                            .unwrap_or_default(),
+                                        peer_record_world_id(peer_record_template.as_ref()),
                                     );
                                     maybe_request_connected_peer_record(
                                         &mut swarm,

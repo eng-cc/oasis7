@@ -141,6 +141,7 @@ const STORAGE_GATE_FALLBACK_SAMPLES_PER_CHECK: usize = 3;
 const STORAGE_CHALLENGE_SUCCESS_CACHE_MAX_AGE_HEIGHTS: u64 = 2;
 const REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT: usize = 3;
 const REPLICATION_FETCH_BLOB_GENERIC_ROUTE_ATTEMPTS: usize = 3;
+const REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS: i64 = 1_000;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
 const FINALITY_LATENCY_HISTORY_LIMIT: usize = 128;
 
@@ -816,6 +817,8 @@ struct PosNodeEngine {
     committed_height: u64,
     network_committed_height: u64,
     replication_persisted_height: u64,
+    last_replication_successor_probe_height: Option<u64>,
+    last_replication_successor_probe_at_ms: Option<i64>,
     storage_challenge_fallback_height: u64,
     recent_storage_challenge_successes: BTreeMap<String, u64>,
     pending: Option<PendingProposal>,

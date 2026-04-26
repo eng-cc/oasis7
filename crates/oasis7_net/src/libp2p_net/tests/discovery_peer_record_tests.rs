@@ -100,6 +100,54 @@ fn process_discovered_peer_record_keeps_dht_only_suspect_peer_non_dialable() {
 }
 
 #[test]
+fn maybe_queue_discovery_peer_record_skips_peer_with_cached_record() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let local_peer_id = PeerId::random();
+    let known_peer_key = Keypair::generate_ed25519();
+    let known_peer_id = PeerId::from(known_peer_key.public());
+    let unknown_peer_id = PeerId::random();
+    let mut pending_dht = HashMap::new();
+    let mut pending_discovery_peer_records = HashSet::new();
+    let discovered_peer_records = HashMap::from([(
+        known_peer_id,
+        super::signed_discovery_peer_record(
+            &known_peer_key,
+            vec![crate::dht::PeerDiscoverySource::Dht],
+            1,
+        ),
+    )]);
+
+    super::super::discovery::maybe_queue_discovery_peer_record(
+        &mut swarm,
+        &mut pending_dht,
+        &mut pending_discovery_peer_records,
+        &discovered_peer_records,
+        known_peer_id,
+        local_peer_id,
+        "world-a",
+    );
+    assert!(pending_dht.is_empty());
+    assert!(pending_discovery_peer_records.is_empty());
+
+    super::super::discovery::maybe_queue_discovery_peer_record(
+        &mut swarm,
+        &mut pending_dht,
+        &mut pending_discovery_peer_records,
+        &discovered_peer_records,
+        unknown_peer_id,
+        local_peer_id,
+        "world-a",
+    );
+    assert_eq!(pending_dht.len(), 1);
+    assert!(pending_discovery_peer_records.contains(&unknown_peer_id));
+}
+
+#[test]
 fn maybe_request_cached_peer_record_does_not_use_target_peer_as_proxy() {
     let mut swarm = super::super::swarm_behaviour::build_swarm(
         &Keypair::generate_ed25519(),
