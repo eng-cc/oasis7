@@ -72,6 +72,23 @@
     - `bash -n scripts/release-prepare-bundle.sh`
     - `bash -n scripts/build-game-launcher-bundle.sh`
     - `git diff --check`
+- [x] homepage-entry-claim-boundary-hardening (PRD-SITE-001/003/004/009/010) [test_tier_required]: 收紧首页为公开入口页，明确当前公开入口、builder 验证路径与未来平台方向的边界，并补齐 homepage claim/parity gate、移动端无脚本导航与基础 a11y 收口。 Trace: .pm/tasks/task_46ed3d5e9da64dc2a9b56ede6a5735c5.yaml
+  - 产物文件:
+    - `doc/site/prd.md`
+    - `doc/site/project.md`
+    - `site/index.html`
+    - `site/en/index.html`
+    - `site/assets/styles.css`
+    - `site/assets/app.js`
+    - `scripts/site-homepage-claim-check.sh`
+    - `scripts/site-link-check.sh`
+    - `.github/workflows/pages.yml`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-link-check.sh`
+    - `./scripts/site-manual-sync-check.sh`
+    - `./scripts/site-download-check.sh`
+    - `./scripts/site-homepage-claim-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/site/design.md`
@@ -84,9 +101,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-24
+- 更新日期: 2026-04-26
 - 当前状态: active
-- 下一任务: 待补充
+- 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 最新完成: `homepage-entry-claim-boundary-hardening`（中英首页已按“公开访客入口 -> builder 验证 -> future platform”三层收紧 claim；`software_safe` 已被固定为默认 formal Web 入口，新增 homepage claim/parity gate，并补齐移动端 no-JS 导航与 skip-link a11y 收口。）
 - 最新完成: `homepage-game-explainer`（公开首页已改成游戏说明优先的首屏；中英页同步收紧首屏信息密度，先回答“这是什么 / 你在这里做什么 / 现在是否可玩”，技术验证与下载细节下沉到后续版块。）
 - 最新完成: `TASK-SITE-022`（GitHub Release 公开下载产物已切到 `.deb` / `.dmg` / `.exe` 原生安装器；中英首页与下载校验脚本已同步，不再将 `.tar.gz` / `.zip` 暴露为公开下载主入口。）
 - 最新完成: `TASK-SITE-021`（中英首页在线验证示例已把 `--no-llm` 明确收紧为 observer/debug-only 诊断路径，不再暗示可作为正式在线验证证据。）

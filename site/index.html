@@ -15,6 +15,7 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://eng-cc.github.io/oasis7/" />
     <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta property="og:image:alt" content="oasis7 技术预览首页封面图，强调 AI Agent 文明模拟游戏与技术预览状态" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="oasis7 | AI Agent 文明模拟游戏技术预览" />
@@ -23,6 +24,7 @@
       content="你提供目标与约束，Agent 在持续世界里推进战争、经济与治理。当前仍是技术预览，尚不可玩。"
     />
     <meta name="twitter:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta name="twitter:image:alt" content="oasis7 技术预览首页封面图，强调 AI Agent 文明模拟游戏与技术预览状态" />
     <meta name="theme-color" content="#060b11" />
     <title>oasis7 | AI Agent 文明模拟游戏技术预览</title>
     <link rel="canonical" href="https://eng-cc.github.io/oasis7/" />
@@ -34,19 +36,18 @@
     <script defer src="assets/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#top">跳到正文</a>
     <header class="topbar">
       <a class="brand" href="#top">
         <span class="brand-mark"></span>
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#what">这是什么</a>
-        <a href="#role">你怎么玩</a>
+        <a href="#what">先看玩法</a>
         <a href="#today">现在能做什么</a>
-        <a href="#download">开发预览</a>
         <a href="#proof">证据链</a>
+        <a href="#download">开发预览</a>
         <a href="#roadmap">路线</a>
-        <a href="#architecture">底座</a>
         <a href="doc/cn/index.html">文档中心</a>
         <a href="#contribute">跟进</a>
       </nav>
@@ -80,13 +81,14 @@
             <p class="eyebrow">开发中技术预览</p>
             <h1>一个 AI Agent 会自己交易、结盟、打仗的文明模拟游戏</h1>
             <p class="subtitle">
-              你不直接操作每个单位。你定目标，改限制，然后看这群 Agent 会把世界推到哪里。它们会自己生产、交易、
-              结盟、打仗；你下线了，世界也会继续跑。按现在这条路线，第一阶段先把它做成开放世界沙盒游戏，后续再演进成开放世界游戏平台。现在公开的还是技术预览，用来说明方向，不是正式可玩版。
+              你不直接操作每个单位。你给文明目标、行动约束和治理边界，Agent 自己决定怎么生产、交易、结盟和打仗；
+              世界继续运行，也会留下回放和事件证据。当前公开的是技术预览，用来验证这套玩法方向，不是 hosted web join，也不是正式玩家发布。
             </p>
             <div class="cta-row">
-              <a class="button primary" href="#what">先看这游戏怎么回事</a>
+              <a class="button primary" href="#what">30 秒看懂玩法</a>
+              <a class="button secondary" href="#proof">先看可验证证据</a>
               <a
-                class="button secondary"
+                class="button ghost"
                 href="doc/cn/project-overview.html"
                 target="_blank"
                 rel="noreferrer"
@@ -95,7 +97,8 @@
             </div>
             <div class="proof-strip">
               <span class="proof-chip is-highlight">类型：文明模拟游戏</span>
-              <span class="proof-chip">状态：技术预览（还不能玩）</span>
+              <span class="proof-chip" data-homepage-claim="preview-status">状态：技术预览（还不能玩）</span>
+              <span class="proof-chip" data-homepage-claim="default-web-entry">默认网页验证入口：software_safe</span>
             </div>
             <div class="hero-stats">
               <article class="metric-box">
@@ -115,14 +118,35 @@
               <figcaption>这是当前的研发验证视图。能看出世界怎么跑，但还不是对外开放的玩家版本。</figcaption>
             </figure>
             <div class="pulse-panel">
-              <p class="panel-title">你在这里做什么</p>
+              <p class="panel-title">玩家影响 Agent 的链路</p>
               <ul>
-                <li><span>先定目标</span><strong>扩张、守成、囤资源</strong></li>
-                <li><span>再定限制</span><strong>提示词、模块、制度</strong></li>
-                <li><span>看结果再继续改</span><strong>交易、冲突、联盟都会变</strong></li>
+                <li><span>你给输入</span><strong>目标、约束、治理边界</strong></li>
+                <li><span>Agent 自主决定</span><strong>生产、交易、联盟、战争</strong></li>
+                <li><span>世界留下后果</span><strong>价格、关系、政策、回放证据</strong></li>
               </ul>
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section class="section" data-reveal>
+        <h2>为什么现在仍值得跟进</h2>
+        <p class="section-intro">
+          现在还不是公开可玩版，但已经不是一句概念口号。你已经能看到可复验的事件证据、明确的 builder 反馈入口，以及后续会如何公开推进。
+        </p>
+        <div class="grid cards-3">
+          <article class="card card-spotlight">
+            <h3>先看得见证据</h3>
+            <p>当前已经能公开展示 replay、在线事件和治理后果链，不需要先相信一句“以后会有”。</p>
+          </article>
+          <article class="card">
+            <h3>现在能给 builder 反馈</h3>
+            <p data-homepage-claim="builder-feedback">如果你愿意跟进技术预览，现在最有价值的是报 blocker、指出理解摩擦、补真实验证反馈。</p>
+          </article>
+          <article class="card">
+            <h3>先别误会成已开放平台</h3>
+            <p data-homepage-claim="future-platform-boundary">后续会往开放世界游戏平台演进，但当前还不是 creator-facing 的 mod / 模块平台。</p>
+          </article>
         </div>
       </section>
 
@@ -154,42 +178,46 @@
       <section id="role" class="section" data-reveal>
         <h2>你下命令，但不接管每个单位</h2>
         <p class="section-intro">
-          这里的乐趣不在手速，而在于你给出的目标和限制，会怎么被一群有记忆的 Agent 一步步执行下去。
+          这里的关键不是“不能直控”这句话本身，而是你到底通过什么杠杆影响 Agent，以及系统会把哪些边界拦住。
         </p>
         <div class="story-path">
           <article class="story-step" data-story-step>
             <span class="story-step-index">01</span>
-            <h3>先给方向</h3>
-            <p>先想清楚你要什么。是扩张、守成、囤资源，还是去争治理权。</p>
+            <h3>你先给方向</h3>
+            <p>先决定文明要扩张、守成、囤资源，还是去争影响力和治理权。</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">02</span>
-            <h3>再给约束</h3>
-            <p>再通过提示词、WASM 模块和制度安排，约束 Agent 愿意做什么，不愿意做什么。</p>
+            <h3>再给边界</h3>
+            <p>你给的是目标、规则约束和治理边界，不是替每个 Agent 手动点下一步。</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">03</span>
-            <h3>观察世界反应</h3>
-            <p>然后看市场价格、联盟关系、物流网络和治理提案怎么变，这些都是策略留下的后果。</p>
+            <h3>Agent 自己决策</h3>
+            <p>它们会在 runtime 规则里自己决定生产、交易、联盟、战争和治理动作。</p>
           </article>
           <article class="story-step" data-story-step>
             <span class="story-step-index">04</span>
-            <h3>继续修正策略</h3>
-            <p>世界不会停下来等你重开。你只能看着后果继续修正目标、换模块、改制度。</p>
+            <h3>你再读后果</h3>
+            <p>市场价格、联盟关系、物流网络和治理提案会把你的输入变成可回看的后果链。</p>
           </article>
         </div>
-        <div class="grid cards-3">
+        <div class="grid cards-2">
           <article class="card">
             <h3>你能做</h3>
-            <p>你可以定高层目标、调整 Agent 提示、安排模块扩展，影响文明怎么生产、合作和开战。</p>
+            <p>你可以定高层目标、收紧约束、调整治理边界，影响文明怎么生产、合作和开战。</p>
           </article>
           <article class="card">
-            <h3>你不能做</h3>
-            <p>你不能直接接管 Agent，也不能绕过世界规则，更不能暂停时间把每一步都抠到最优。</p>
+            <h3>Agent 自己决定</h3>
+            <p>Agent 会在资源、时间和制度限制下自己决定行动细节，不会变成你手里的遥控木偶。</p>
+          </article>
+          <article class="card">
+            <h3>系统会拦住</h3>
+            <p>直接接管、绕过规则或把未来平台能力当成当前公开入口，都会被 runtime 和公开口径一起卡住。</p>
           </article>
           <article class="card">
             <h3>你会看到</h3>
-            <p>你会先看到单次行动的反馈，再看到几天尺度的联盟和交易，最后看到更长线的制度变化和权力变化。</p>
+            <p>你会先看到单次行动反馈，再看到几天尺度的联盟和交易，最后看到更长线的制度和权力变化。</p>
           </article>
         </div>
       </section>
@@ -197,9 +225,9 @@
       <section id="today" class="section" data-reveal>
         <h2>现在你能做什么</h2>
         <p class="section-intro">
-          现在还不能像普通玩家那样直接开一局，但已经能看清楚方向，也能把本地技术预览跑起来看看。
+          先把这页当成公开入口页，而不是开发者命令总表。先判断你是想理解玩法、看证据、下载开发预览，还是继续走 builder 验证。
         </p>
-        <div class="grid cards-3">
+        <div class="grid cards-2">
           <article class="card">
             <h3>先理解玩法</h3>
             <p>如果你想先判断这条路值不值得继续看，先看玩法总纲、世界规则和玩家边界。</p>
@@ -208,75 +236,142 @@
             </div>
           </article>
           <article class="card">
-            <h3>亲手跑技术预览</h3>
-            <p>如果你愿意本地构建，可以跑离线回放或在线验证，确认事件流和观测链路已经接上了。</p>
+            <h3>先看默认网页验证面</h3>
+            <p>当前默认 formal Web 入口看的是 `software_safe`。`standard_3d` 是 opt-in 可视化访问面，`pure_api` 是程序化访问面。</p>
             <div class="cta-row">
               <a class="button secondary" href="#proof">看证据链</a>
             </div>
           </article>
           <article class="card">
-            <h3>跟进版本演化</h3>
-            <p>如果你只想看进度，当前公开的下载、路线和发布说明都还是预览口径，不是正式发售。</p>
+            <h3>再决定要不要下载</h3>
+            <p>当前公开下载仍是开发预览构建，适合技术预览验证和 builder 反馈，不是面向普通玩家的正式发售。</p>
             <div class="cta-row">
-              <a class="button secondary" href="#roadmap">看开发路线</a>
+              <a class="button secondary" href="#download">看开发预览</a>
             </div>
           </article>
           <article class="card">
-            <h3>先用一份长说明建立全貌</h3>
-            <p>如果你不想先在 README、玩法文档和架构文档之间来回跳，先读这份白皮书式项目总览会更快。</p>
+            <h3>如果你是 builder</h3>
+            <p>首页不再平铺全部命令。完整验证命令、排障路径和诊断约束都下沉到文档中心，避免把开发者路径误当公开主入口。</p>
             <div class="cta-row">
               <a
                 class="button secondary"
-                href="doc/cn/project-overview.html"
+                href="doc/cn/index.html"
                 target="_blank"
                 rel="noreferrer"
-                >打开项目总览</a
+                >打开文档中心</a
               >
             </div>
           </article>
         </div>
-        <article class="quickstart card">
-          <h3>如果你想自己跑，现在走的还是开发者路径</h3>
-          <ol class="steps">
-            <li>克隆仓库并进入目录。</li>
-            <li>执行 `env -u RUSTC_WRAPPER cargo check` 确认环境可用。</li>
-            <li>先跑回放，再切到在线模式，确认事件与 viewer 连接链路能复现。</li>
-          </ol>
-          <div class="grid cards-2 quickstart-grid">
-            <article class="card quickstart-card">
-              <h3>离线验证（推荐）</h3>
-              <p>先确认数据产出、服务启动和 viewer 连接正常。</p>
-              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_demo -- twin_region_bootstrap --out .data/world_viewer_data
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_server -- .data/world_viewer_data 127.0.0.1:5010
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5010</code></pre>
-            </article>
-            <article class="card quickstart-card">
-              <h3>在线验证（standard_3d / software_safe）</h3>
-              <p>进入持续运行模式，看实时事件、观测面板和控制链路是否正常。</p>
-              <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-# 仅诊断：--no-llm 只用于 observer/debug，不计入正式验证证据
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
-            </article>
+        <details class="developer-details card">
+          <summary>如果你要自己验证，再展开开发者路径</summary>
+          <div class="developer-details-body">
+            <ol class="steps">
+              <li>先确认你要的是 builder 验证，而不是普通玩家直接加入。</li>
+              <li>优先按 `software_safe` 的 formal Web 路径看在线验证；完整命令、回放与诊断约束都去文档中心看。</li>
+              <li>`--no-llm` 只保留在排障/诊断语境，不再作为首页 primary path 展示。</li>
+            </ol>
+            <div class="cta-row">
+              <a class="button secondary" href="doc/cn/index.html">看文档中心</a>
+              <a class="button ghost" href="doc/cn/project-overview.html" target="_blank" rel="noreferrer">看完整总览</a>
+            </div>
           </div>
-          <p class="doc-entry-note">
-            参数说明、排障路径与测试矩阵请前往
-            <a href="doc/cn/index.html">文档中心（中文）</a>。
-          </p>
-          <p class="doc-entry-note">当前公开的三种访问面是 `standard_3d`、`software_safe`、`pure_api`。其中 LLM / script 决策和 Local Provider lane 说的是执行方式，不是新的公开模式。</p>
-          <p class="doc-entry-note">第一次构建通常会慢一些。后面会快很多，但这条路本质上还是技术验证，不是正式开玩。</p>
-        </article>
+        </details>
+      </section>
+
+      <section id="proof" class="section" data-reveal>
+        <h2>现在已经能验证到哪一步</h2>
+        <p class="section-intro">这部分证明的不是“已经能玩了”，而是“你给输入以后，Agent 和世界确实会留下可回看的后果链”。</p>
+        <div class="proof-switcher" data-proof-switcher>
+          <p class="proof-switcher-label">切换证据场景</p>
+          <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
+            <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
+              minimal
+            </button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
+          </div>
+        </div>
+
+        <div class="proof-grid">
+          <article class="proof-card proof-card-key">
+            <h3>最小可验证案例</h3>
+            <ol class="proof-list">
+              <li>你先给文明一个目标、约束或治理边界</li>
+              <li>Agent 在 runtime 规则里自己决定怎么执行</li>
+              <li>世界把价格、联盟、治理变化写成事件与后果</li>
+              <li>你可以通过 replay、live runtime 和审计轨迹回看这条链</li>
+            </ol>
+            <a class="button secondary" href="#today">回到当前公开入口</a>
+          </article>
+
+          <article class="proof-card">
+            <h3>事件片段（自动切换）</h3>
+            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
+[tick=133] minimal::scheduler stable -> next decision window
+[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
+            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
+[tick=091] twin_region::agent-2 accepted -> shared production boost
+[tick=097] twin_region::alliance tension rises -> treaty renegotiation</code></pre>
+            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
+[tick=149] triad_region::multi-party pact signed
+[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
+          </article>
+        </div>
+
+        <div class="proof-strip">
+          <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
+          <span class="proof-chip">公开访问面：software_safe / standard_3d / pure_api</span>
+          <span class="proof-chip">当前主入口：software_safe</span>
+          <span class="proof-chip is-highlight">现状：能验证，还不能玩</span>
+        </div>
+        <p class="doc-entry-note">如果你要继续深挖，这里的正式网页验证面默认看 `software_safe`；`standard_3d` 只是 opt-in 可视化访问面，`pure_api` 是程序化访问面。</p>
+
+        <div class="proof-timeline" data-proof-timeline>
+          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
+            <span>Tick 128</span>
+            <p>minimal：采集动作通过，说明你的输入已经能被世界动作链接住。</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
+            <span>Tick 136</span>
+            <p>minimal：价格波动被记录，说明后果链不只停在“动作已执行”。</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
+            <span>Tick 91</span>
+            <p>twin_region：交易事件完成，能追到多 Agent 协同带来的生产后果。</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
+            <span>Tick 97</span>
+            <p>twin_region：联盟摩擦上升，说明策略输入已经开始改变关系结构。</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
+            <span>Tick 149</span>
+            <p>triad_region：多方协定事件落盘，治理信号已经能进入可审计轨迹。</p>
+          </article>
+          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
+            <span>Tick 155</span>
+            <p>triad_region：治理投票结束，说明制度层后果也能被持续观测。</p>
+          </article>
+        </div>
       </section>
 
       <section id="download" class="section" data-reveal>
         <h2>如果你想亲手试，现在只有开发预览构建</h2>
         <p class="section-intro">现在公开下载的还是开发预览构建，不是普通玩家直接开玩的版本。页面尽量每个平台只给一个主包，省得你先在安装包之间做判断。</p>
+        <div class="boundary-banner" data-homepage-claim="download-boundary">
+          <p class="boundary-title">先确认这条路适不适合你</p>
+          <ul class="boundary-list">
+            <li><strong>适合：</strong>愿意验证技术预览、反馈 blocker 和安装摩擦的 builder。</li>
+            <li><strong>不适合：</strong>期待直接通过网页加入，或寻找面向普通玩家的正式发售体验。</li>
+            <li><strong>当前边界：</strong>这不是 hosted web join，也不是正式玩家发布；正式公告仍在准备中。</li>
+          </ul>
+        </div>
         <p class="release-meta">
           当前版本：<strong data-release-tag>latest</strong>
           <span data-release-date data-release-date-prefix="发布时间">发布时间待同步</span>
           <a data-release-notes-link href="https://github.com/eng-cc/oasis7/releases/latest">查看发布说明</a>
         </p>
-        <p class="doc-entry-note">先说明一下：正式公告还没发。这里的“发布说明”主要写构建说明和校验信息，不是面向玩家的正式公告。</p>
+        <p class="doc-entry-note">这里的“发布说明”主要写构建说明和校验信息，不是面向玩家的正式公告。</p>
         <div class="download-surface" data-download-surface>
           <div class="download-surface-main">
             <p class="eyebrow" data-download-primary-badge>当前设备推荐</p>
@@ -408,83 +503,9 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
         </div>
       </section>
 
-      <section id="proof" class="section" data-reveal>
-        <h2>现在已经能验证到哪一步</h2>
-        <p class="section-intro">这部分不是说“已经能玩了”，只是把现状摆出来：现在已经能产出命令、事件、截图和回放证据，而且别人可以照着同一条链路自己跑一遍。</p>
-        <div class="proof-switcher" data-proof-switcher>
-          <p class="proof-switcher-label">切换证据场景</p>
-          <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
-            <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
-              minimal
-            </button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
-          </div>
-        </div>
-
-        <div class="proof-grid">
-          <article class="proof-card proof-card-key">
-            <h3>现在已经能跑通的链路</h3>
-            <ol class="proof-list">
-              <li>执行 `oasis7_viewer_demo` 或 `oasis7_viewer_live`，先把事件产出来</li>
-              <li>通过 server 暴露回放或在线观测接口</li>
-              <li>连上 viewer，看事件链路和规则反馈是不是对的</li>
-            </ol>
-            <a class="button secondary" href="#today">按命令复现验证</a>
-          </article>
-
-          <article class="proof-card">
-            <h3>事件片段（自动切换）</h3>
-            <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
-[tick=133] minimal::scheduler stable -> next decision window
-[tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
-            <pre data-proof-code data-proof-panel="twin" data-proof-visible="false"><code>[tick=084] twin_region::agent-1 request trade(energy)
-[tick=091] twin_region::agent-2 accepted -> shared production boost
-[tick=097] twin_region::alliance tension rises -> treaty renegotiation</code></pre>
-            <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
-[tick=149] triad_region::multi-party pact signed
-[tick=155] triad_region::policy vote closes -> regime shift</code></pre>
-          </article>
-        </div>
-
-        <div class="proof-strip">
-          <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
-          <span class="proof-chip">访问面：standard_3d / software_safe / pure_api</span>
-          <span class="proof-chip">能看到：命令、事件、截图</span>
-          <span class="proof-chip is-highlight">现状：能验证，还不能玩</span>
-        </div>
-
-        <div class="proof-timeline" data-proof-timeline>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 128</span>
-            <p>minimal：采集动作通过，说明事件采集链路是通的。</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
-            <span>Tick 136</span>
-            <p>minimal：价格波动事件能看到，说明观测和告警链路是通的。</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 91</span>
-            <p>twin_region：交易事件完成，能追到协同生产的结果。</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="twin" data-proof-visible="false">
-            <span>Tick 97</span>
-            <p>twin_region：冲突事件出现，说明事件流还在连续往下走。</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 149</span>
-            <p>triad_region：多方协定事件落盘，治理事件已经能输出。</p>
-          </article>
-          <article class="proof-timeline-item" data-proof-event="triad" data-proof-visible="false">
-            <span>Tick 155</span>
-            <p>triad_region：治理投票结束，执行态切换也已经能看到。</p>
-          </article>
-        </div>
-      </section>
-
       <section id="roadmap" class="section" data-reveal>
         <h2>为什么现在还不是可玩版</h2>
-        <p class="section-intro">项目路线已经定得比较清楚了：第一阶段先把 `oasis7` 做成开放世界沙盒游戏，把参与感、探索欲和成就感先做扎实；后续再把它演进成开放世界游戏平台，让创作者能通过 `mod / 模块` 组织不同玩法。</p>
+        <p class="section-intro">项目路线已经比较清楚了：第一阶段先把 `oasis7` 做成开放世界沙盒游戏；后续才会再往平台化走。后半句是目标态，不是当前已经对外开放的能力。</p>
         <div class="grid cards-2">
           <article class="card">
             <h3>第一阶段：开放世界沙盒游戏</h3>
@@ -492,10 +513,10 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
           </article>
           <article class="card">
             <h3>第二阶段：开放世界游戏平台</h3>
-            <p>等世界底座更稳以后，再开放更多 `mod / 模块` 组织方式，让不同规则集和不同玩法能在同一底盘上继续长出来。</p>
+            <p>等世界底座更稳以后，再讨论 creator-facing 的 `mod / 模块` 组织方式；当前公开页不把它当成已经开放的平台承诺。</p>
           </article>
         </div>
-        <p class="doc-entry-note">更长远的方向，是让游戏本身和关键数据逐步走向由参与者共同塑造、共同治理、共同受益。这里说的是目标态愿景，不是当前已经完成的法律结构、平台治理结构或链上事实。</p>
+        <p class="doc-entry-note">现在离 public playable build 还差的，至少包括：公开接入边界未稳定、安装信任链未补齐、反馈闭环仍偏 builder 级别。更长远的共同塑造/治理/受益，也仍然是目标态愿景，不是当前链上事实。</p>
         <div class="timeline">
           <article class="timeline-item done">
             <span class="status-tag done">已完成</span>
@@ -522,26 +543,26 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
       <section id="architecture" class="section" data-reveal>
         <h2>为什么这个世界能持续运行</h2>
-        <p class="section-intro">如果你更关心底层怎么搭，这里是关键：玩法模块、运行时、viewer 和治理层是分开约束的。世界变化要按统一规则落地，也得留下证据。</p>
+        <p class="section-intro">如果你更关心底层怎么搭，这里是关键：玩法层、运行时、viewer 和治理层是分开约束的。世界变化要按统一规则落地，也得留下证据。</p>
         <figure class="architecture-figure">
           <img src="assets/images/architecture-flow.svg" alt="oasis7 引擎架构流示意图" loading="lazy" />
-          <figcaption>Gameplay Layer -> Runtime Kernel -> Viewer/Tooling -> Governance，确保扩展可控且结果可审计。</figcaption>
+          <figcaption>玩法层 -> 运行时内核 -> 观测与工具 -> 共识与治理，确保扩展可控且结果可审计。</figcaption>
         </figure>
         <div class="architecture-flow">
           <article class="arch-node">
-            <h3>Gameplay Layer</h3>
-            <p>战争、治理、经济这些规则都能用 WASM 模块来加载和替换。</p>
+            <h3>玩法层</h3>
+            <p>当前公开的是受控内建规则模块；未来才会逐步讨论 creator-facing 的 `mod / 模块` 组织方式。</p>
           </article>
           <article class="arch-node">
-            <h3>Runtime Kernel</h3>
+            <h3>运行时内核</h3>
             <p>资源守恒、时间单向、动作合法性这些硬约束都在这里卡住。</p>
           </article>
           <article class="arch-node">
-            <h3>Viewer &amp; Tooling</h3>
+            <h3>观测与工具</h3>
             <p>离线回放、在线订阅和调试面板共用同一条事件证据链。</p>
           </article>
           <article class="arch-node">
-            <h3>Consensus &amp; Governance</h3>
+            <h3>共识与治理</h3>
             <p>模块怎么升级、规则怎么改，要走提案和治理流程，不是谁想改就改。</p>
           </article>
         </div>
@@ -586,11 +607,19 @@ env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
             </ul>
           </article>
           <article class="card">
-            <h3>参与共建</h3>
-            <p>现在更需要的是把世界做扎实的改进提案，比如可观测性、规则表达、治理机制和可玩性验证。</p>
+            <h3>继续跟进的三条路</h3>
+            <p>如果你不是直接来提 PR，也还有明确入口：先看证据、报 builder 反馈、跟进 release 演化。</p>
+            <ul class="doc-links">
+              <li><a href="#proof">先回看证据链</a></li>
+              <li><a href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer">提交 blocker / builder feedback</a></li>
+              <li><a href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer">跟进 release 演化</a></li>
+            </ul>
             <div class="cta-row">
               <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
                 >提交 Issue</a
+              >
+              <a class="button ghost" href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer"
+                >看 Release</a
               >
               <a class="button primary" href="https://github.com/eng-cc/oasis7/pulls" target="_blank" rel="noreferrer"
                 >提交 PR</a

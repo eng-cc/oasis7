@@ -39,6 +39,9 @@
   - SC-6: 首页不得出现与真实状态冲突的“已可玩/赛季进行中”表述（违规数 0）。
   - SC-7: `doc/site/github-pages/**` 活跃专题中的当前校验命令、viewer crate 路径与 wasm 包名必须统一使用 `oasis7_viewer` / `crates/oasis7*` 口径；旧品牌 viewer 包名与源码路径仅允许保留在历史证据或外部原文引用中。
   - SC-8: 首页首屏与首个信息段必须在 30 秒内回答“这是什么游戏 / 玩家如何参与 / 现在可以做什么”，避免陌生访客把公开站点误读为纯工程状态页。
+  - SC-9: 首页必须显式区分“公开访客入口”“builder/developer 验证路径”“未来平台化方向”三层，不允许把当前公开能力、诊断命令和未来模块平台目标混写成同一层承诺。
+  - SC-10: 中英首页必须共享同一组首页 claim gate，至少锁定可玩状态、默认公开访问面、下载边界、正式公告状态与未来平台仍未开放这五类关键口径。
+  - SC-11: 移动端首页在脚本失效时仍保留可达导航入口，且键盘用户进入页面后可直接跳过顶栏进入正文。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -60,12 +63,14 @@
 - PRD-SITE-007: As a `producer_system_designer`, I want public site copy to remain aligned with candidate posture, so that release promises never outrun internal review status.
 - PRD-SITE-008: As a 新访问者, I want the public site and release downloads to use the canonical `oasis7` repo path and asset names, so that branding, links, and downloaded files stay consistent.
 - PRD-SITE-009: As a 新访问者, I want the homepage to explain the game genre, player role, and current availability before technical validation details, so that I can decide within the first screen whether oasis7 is worth following.
+- PRD-SITE-010: As a 新访问者, I want the homepage to separate current public entry, builder verification, and future platform direction, so that I do not mistake preview validation or roadmap language for a live player promise.
 - Critical User Flows:
   1. Flow-SITE-001: `访问首页 -> 理解价值与入口 -> 跳转安装/文档`
   2. Flow-SITE-002: `发布前执行链接检查 -> 处理断链 -> 复测通过`
   3. Flow-SITE-003: `发布后监控质量指标 -> 发现退化 -> 回滚或修复`
   4. Flow-SITE-004: `确认真实可玩状态 -> 回写首页/文档入口口径 -> 复核中英一致性 -> 发布`
   5. Flow-SITE-005: `陌生访客访问首页 -> 在首屏理解游戏类型/玩家角色/当前开放状态 -> 决定继续看玩法、技术预览或文档`
+  6. Flow-SITE-006: `陌生访客访问首页 -> 区分当前可做的事/开发者验证/未来目标态 -> 选择继续看证据、下载预览或回到文档`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -73,6 +78,7 @@
 | 发布下载链路 | 版本号、资产地址、校验信息 | 发布后自动校验可用性 | `prepared -> published -> verified` | 最新版本优先展示 | 发布负责人审批上线 |
 | 质量门禁巡检 | 链接状态、性能指标、可访问性结果 | 巡检失败阻断发布 | `checking -> passed/blocked` | 严重问题优先修复 | 维护者可解阻断（需说明） |
 | 对外状态口径 | 产品状态（playable / preview）、禁用词列表、状态标识文案 | 发布前校验首页与文档入口文案是否匹配真实状态 | `draft -> aligned -> published` | 真实状态字段优先于营销文案 | 模块维护者可改，发布责任人复核 |
+| 首页入口分层与 claim gate | 首屏定位、默认公开访问面、builder 验证入口、未来方向、下载边界、中英镜像 claim | 发布前校验首页是否把当前公开能力/开发者路径/未来平台目标分层表达，并校验关键 claim 中英一致 | `draft -> aligned -> published -> gated` | 先公开访客入口，再 builder 验证，再 future roadmap；诊断路径不得进入 primary CTA | 模块维护者可改，发布责任人复核 |
 - Acceptance Criteria:
   - AC-1: site PRD 定义页面层级、内容同步和发布链路。
   - AC-2: site project 文档任务映射 PRD-SITE-ID。
@@ -82,6 +88,10 @@
   - AC-6: `doc/site/github-pages/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
   - AC-7: `doc/site/github-pages/**` 活跃专题中的当前 `cargo check -p` 命令、viewer crate 路径与 wasm 包名必须写为 `oasis7_viewer` / `crates/oasis7*`；旧品牌 viewer 包名与源码路径仅允许保留在历史证据或外部原文引用中。
   - AC-8: `site/index.html` 与 `site/en/index.html` 的首屏和首个正文段必须明确交代游戏类型、玩家扮演的角色、核心差异点，以及“当前仍是技术预览”的边界，且中英结构保持同构。
+  - AC-9: 首页必须明确说明 `software_safe` 是默认 formal Web 入口，`standard_3d` 只属于 opt-in 可视化访问面；`--no-llm` 仅允许出现在诊断/排障语境，不得继续作为首页 primary path 展示。
+  - AC-10: 首页必须以访客能理解的语言拆开“当前公开可做的事”“builder/developer 验证路径”“未来模块平台方向”，并明确当前未开放 creator-facing module/platform。
+  - AC-11: `site/index.html` 与 `site/en/index.html` 都必须通过统一的 homepage claim/parity check，覆盖可玩状态、下载边界、正式公告状态、公开访问面与未来平台边界。
+  - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
@@ -106,6 +116,8 @@
   - 并发发布：同版本并发发布时只允许一个发布会话生效。
   - 数据异常：版本元数据错误时不展示到公开页面。
   - 状态漂移：若产品尚不可玩但页面出现“已可玩/赛季进行中”表述，发布流程必须阻断并回写文案。
+  - 入口漂移：若首页把 builder 命令、未来平台目标或诊断入口写成当前公开主入口，发布流程必须阻断并回写文案。
+  - 无脚本访问：若移动端脚本失效导致导航入口不可达，发布流程必须阻断并回写实现。
 - Non-Functional Requirements:
   - NFR-SITE-1: 发布后关键链接可用率 100%。
   - NFR-SITE-2: 核心页面性能与可访问性指标达到门禁阈值。
@@ -113,6 +125,8 @@
   - NFR-SITE-4: 发布回滚流程可在限定时间内执行。
   - NFR-SITE-5: 站点输出不得暴露内部敏感配置。
   - NFR-SITE-6: “可玩状态口径一致性”检查在发布前必须完成且误报率 <= 5%（按月统计）。
+  - NFR-SITE-7: 首页 claim/parity gate 必须覆盖 CN/EN 双首页，并在 Pages workflow 中执行，避免关键对外承诺静默漂移。
+  - NFR-SITE-8: 首页主要导航在移动端不依赖脚本才能可达；键盘访问路径需具备可见 skip link。
 - Security & Privacy: 站点不得暴露内部凭据与敏感配置；下载链路需具备来源可验证性。
 
 ## 5. Risks & Roadmap
@@ -138,6 +152,7 @@
 | PRD-SITE-007 | TASK-SITE-010 | `test_tier_required` | 技术预览主口径与新占位并存且无冲突 | 对外承诺边界控制 |
 | PRD-SITE-008 | TASK-SITE-015/016/017/018 | `test_tier_required` | `site/**`、GitHub Release 下载入口、release workflow 当前路径/包名与 `doc/site/github-pages/**` 历史专题标题全部切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径 | 对外品牌一致性、下载链路稳定性 |
 | PRD-SITE-009 | homepage-game-explainer | `test_tier_required` | 中英首页首屏信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
+| PRD-SITE-010 | homepage-entry-claim-boundary-hardening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -148,3 +163,5 @@
 | DEC-SITE-005 | 站点先补“说明准备态”占位，再等待正式公告入口 | 直接在公开站点暗示正式发布已临近 | 站点公开承诺必须保持晚于内部正式沟通动作。 |
 | DEC-SITE-006 | 公开站点、GitHub Pages canonical 与 release 资产名统一为 `oasis7` | 保留旧 `oasis7` 外显名称仅改仓库 slug | 外部访问者最先接触的是站点与下载名，品牌必须先在这一层完全一致。 |
 | DEC-SITE-007 | 首页优先讲清“游戏是什么、玩家像什么、现在能做什么”，技术验证与下载说明下沉到后续版块 | 继续让首屏以技术预览、命令链路和工程状态为主 | 对陌生访客来说，先理解产品语义，再判断是否深入技术细节，才是更低摩擦的公开入口。 |
+| DEC-SITE-008 | 首页公开入口按“访客理解 -> builder 验证 -> 未来方向”三层分流，并显式把 `software_safe` 设为默认 formal Web 入口 | 继续把访问面 taxonomy、开发命令和未来平台目标混写在同一层 | 可同时降低误导风险、减少陌生访客理解负担，并保持 runtime 真值可审计。 |
+| DEC-SITE-009 | Pages 发布前新增 homepage claim/parity gate 与基础无脚本/a11y 约束 | 继续只依赖链接/手册/下载静态检查 | 首页承担最高风险的对外承诺，需要单独门禁而不是把口径漂移留给人工发现。 |

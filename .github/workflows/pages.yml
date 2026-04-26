@@ -6,6 +6,7 @@ on:
     paths:
       - "site/**"
       - "scripts/site-link-check.sh"
+      - "scripts/site-homepage-claim-check.sh"
       - "scripts/site-manual-sync-check.sh"
       - "scripts/site-download-check.sh"
       - "doc/world-simulator/viewer/viewer-manual.manual.md"
@@ -35,6 +36,7 @@ jobs:
       - name: Run Site Quality Gates
         run: |
           ./scripts/site-link-check.sh
+          ./scripts/site-homepage-claim-check.sh
           ./scripts/site-manual-sync-check.sh
           ./scripts/site-download-check.sh
 

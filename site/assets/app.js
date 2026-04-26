@@ -1,4 +1,5 @@
 (() => {
+  document.documentElement.setAttribute("data-js", "true");
   const LANGUAGE_REDIRECT_KEY = "oasis7_pages_lang_redirect_done_v1";
   const LANGUAGE_MANUAL_CHOICE_KEY = "oasis7_pages_lang_manual_choice_v1";
 
