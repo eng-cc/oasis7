@@ -526,6 +526,38 @@ impl World {
                     revoke_reason.as_str(),
                 ),
             )),
+            Action::SubmitFirstAgentClaimApprovalRequest { claimer_agent_id } => {
+                Ok(WorldEventBody::Domain(
+                    self.evaluate_submit_first_agent_claim_approval_request_action(
+                        action_id,
+                        claimer_agent_id.as_str(),
+                    ),
+                ))
+            }
+            Action::ApproveFirstAgentClaimApprovalRequest {
+                operator_account_id,
+                request_id,
+                expires_at_epoch,
+            } => Ok(WorldEventBody::Domain(
+                self.evaluate_approve_first_agent_claim_approval_request_action(
+                    action_id,
+                    operator_account_id.as_str(),
+                    *request_id,
+                    *expires_at_epoch,
+                ),
+            )),
+            Action::RejectFirstAgentClaimApprovalRequest {
+                operator_account_id,
+                request_id,
+                reason,
+            } => Ok(WorldEventBody::Domain(
+                self.evaluate_reject_first_agent_claim_approval_request_action(
+                    action_id,
+                    operator_account_id.as_str(),
+                    *request_id,
+                    reason.as_str(),
+                ),
+            )),
             Action::TransferMaterial {
                 requester_agent_id,
                 from_ledger,

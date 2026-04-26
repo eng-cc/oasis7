@@ -210,6 +210,20 @@ fn handle_chain_status_connection(
         return Ok(());
     }
 
+    if agent_claim_api::maybe_handle_agent_claim_request(
+        &mut stream,
+        &buffer[..bytes],
+        &runtime,
+        method,
+        target,
+        path,
+        node_id,
+        world_id,
+        execution_world_dir,
+    )? {
+        return Ok(());
+    }
+
     if gameplay_submit_api::maybe_handle_gameplay_submit_request(
         &mut stream,
         &buffer[..bytes],

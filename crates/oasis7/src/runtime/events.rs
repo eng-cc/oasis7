@@ -400,6 +400,19 @@ pub enum Action {
         beneficiary_account_id: String,
         revoke_reason: String,
     },
+    SubmitFirstAgentClaimApprovalRequest {
+        claimer_agent_id: String,
+    },
+    ApproveFirstAgentClaimApprovalRequest {
+        operator_account_id: String,
+        request_id: u64,
+        expires_at_epoch: u64,
+    },
+    RejectFirstAgentClaimApprovalRequest {
+        operator_account_id: String,
+        request_id: u64,
+        reason: String,
+    },
     ClaimAgent {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -699,6 +712,17 @@ impl Action {
             | Action::RevokeRestrictedStarterClaimGrant {
                 issuer_account_id, ..
             } => Some(issuer_account_id.as_str()),
+            Action::SubmitFirstAgentClaimApprovalRequest { claimer_agent_id } => {
+                Some(claimer_agent_id.as_str())
+            }
+            Action::ApproveFirstAgentClaimApprovalRequest {
+                operator_account_id,
+                ..
+            }
+            | Action::RejectFirstAgentClaimApprovalRequest {
+                operator_account_id,
+                ..
+            } => Some(operator_account_id.as_str()),
             Action::ClaimAgent {
                 claimer_agent_id, ..
             }
