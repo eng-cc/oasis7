@@ -50,6 +50,7 @@ fn test_module_artifact_signing_key() -> SigningKey {
 }
 
 mod agent_claims;
+mod agent_claims_first_agent_approval;
 #[cfg(feature = "test_tier_full")]
 mod agent_default_modules;
 mod apply_domain_event_guards;
