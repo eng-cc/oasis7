@@ -13,10 +13,15 @@ contains_fixed_pattern() {
   local pattern="$1"
   local file_path="$2"
   if command -v rg >/dev/null 2>&1; then
-    rg -Fq -- "${pattern}" "${file_path}"
-    return $?
+    if rg -Fq -- "${pattern}" "${file_path}"; then
+      return 0
+    fi
+    return 1
   fi
-  grep -Fq -- "${pattern}" "${file_path}"
+  if grep -Fq -- "${pattern}" "${file_path}"; then
+    return 0
+  fi
+  return 1
 }
 
 check_required_patterns() {

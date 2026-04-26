@@ -795,6 +795,10 @@ h3 {
   display: none;
 }
 
+.developer-details summary::marker {
+  content: "";
+}
+
 .developer-details summary::after {
   content: "+";
   display: inline-flex;
