@@ -31,6 +31,7 @@ use super::transport_paths::{
     dial_transport_path, peer_record_transport_paths, select_preferred_transport_path,
     sync_known_transport_paths, TransportPath,
 };
+use super::utils::push_bounded_string_with_keyed_cooldown;
 use super::{push_bounded_clone, Handler};
 
 pub(super) enum PendingPeerRecordRequest {
@@ -63,6 +64,86 @@ pub(super) fn peer_record_world_id(template: Option<&PeerRecord>) -> &str {
     template
         .map(|record| record.world_id.as_str())
         .unwrap_or_default()
+}
+
+pub(super) fn log_routing_updated(
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    lifecycle_event_errors_last_prune_at_ms: &mut Option<i64>,
+    max_error_messages: usize,
+    now_ms: i64,
+    cooldown_ms: i64,
+    peer: PeerId,
+    addresses_debug: String,
+) {
+    push_bounded_string_with_keyed_cooldown(
+        event_errors,
+        lifecycle_event_errors_at_ms,
+        lifecycle_event_errors_last_prune_at_ms,
+        format!("routing-updated:{peer}"),
+        format!("libp2p routing updated peer={peer} addrs={addresses_debug}"),
+        max_error_messages,
+        "lock errors",
+        now_ms,
+        cooldown_ms,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn handle_routing_updated(
+    swarm: &mut Swarm<Behaviour>,
+    pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,
+    pending_discovery_peer_records: &mut HashSet<PeerId>,
+    discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
+    peer: PeerId,
+    addresses_debug: String,
+    local_peer_id: PeerId,
+    peer_record_template: Option<&PeerRecord>,
+    peers: &[PeerId],
+    pending_peer_record_requests: &mut HashMap<
+        request_response::OutboundRequestId,
+        PendingPeerRecordRequest,
+    >,
+    pending_connected_peer_records: &mut HashSet<PeerId>,
+    connected_peer_record_cooldowns: &mut HashMap<PeerId, i64>,
+    event_traffic_metrics: &SharedLibp2pTrafficMetrics,
+    event_errors: &Arc<Mutex<Vec<String>>>,
+    lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    lifecycle_event_errors_last_prune_at_ms: &mut Option<i64>,
+    max_error_messages: usize,
+    now_ms: i64,
+    cooldown_ms: i64,
+) {
+    log_routing_updated(
+        event_errors,
+        lifecycle_event_errors_at_ms,
+        lifecycle_event_errors_last_prune_at_ms,
+        max_error_messages,
+        now_ms,
+        cooldown_ms,
+        peer,
+        addresses_debug,
+    );
+    maybe_queue_discovery_peer_record(
+        swarm,
+        pending_dht,
+        pending_discovery_peer_records,
+        discovered_peer_records,
+        peer,
+        local_peer_id,
+        peer_record_world_id(peer_record_template),
+    );
+    if peers.contains(&peer) {
+        maybe_request_connected_peer_record(
+            swarm,
+            pending_peer_record_requests,
+            pending_connected_peer_records,
+            connected_peer_record_cooldowns,
+            event_traffic_metrics,
+            peer,
+            local_peer_id,
+        );
+    }
 }
 
 fn peer_record_request_in_cooldown(

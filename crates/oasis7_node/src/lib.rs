@@ -819,6 +819,7 @@ struct PosNodeEngine {
     replication_persisted_height: u64,
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
+    last_replication_successor_probe_hold: Option<bool>,
     storage_challenge_fallback_height: u64,
     recent_storage_challenge_successes: BTreeMap<String, u64>,
     pending: Option<PendingProposal>,

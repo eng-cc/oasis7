@@ -23,8 +23,10 @@ impl PosNodeEngine {
             "probe_from_height",
             "probing replication successor commit",
         )?;
-        if self.replication_successor_probe_on_cooldown(probe_height, now_ms) {
-            return Ok(false);
+        if let Some(last_hold_decision) =
+            self.replication_successor_probe_cooldown_decision(probe_height, now_ms)
+        {
+            return Ok(last_hold_decision);
         }
 
         match self.sync_replication_height_once(
@@ -40,38 +42,54 @@ impl PosNodeEngine {
             }) => {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
+                self.last_replication_successor_probe_hold = None;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
                 self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;
                 Ok(true)
             }
             Ok(GapSyncHeightOutcome::NotFound) => {
-                self.note_replication_successor_probe_attempt(probe_height, now_ms);
+                self.note_replication_successor_probe_attempt(probe_height, now_ms, false);
                 Ok(false)
             }
             Err(err) if replication_request_waitable_connection_gap(&err) => {
-                self.note_replication_successor_probe_attempt(probe_height, now_ms);
+                self.note_replication_successor_probe_attempt(probe_height, now_ms, true);
                 Ok(true)
             }
             Err(err) => Err(err),
         }
     }
 
-    fn replication_successor_probe_on_cooldown(&self, probe_height: u64, now_ms: i64) -> bool {
-        matches!(
-            (
-                self.last_replication_successor_probe_height,
-                self.last_replication_successor_probe_at_ms,
-            ),
-            (Some(last_height), Some(last_at_ms))
+    fn replication_successor_probe_cooldown_decision(
+        &self,
+        probe_height: u64,
+        now_ms: i64,
+    ) -> Option<bool> {
+        match (
+            self.last_replication_successor_probe_height,
+            self.last_replication_successor_probe_at_ms,
+            self.last_replication_successor_probe_hold,
+        ) {
+            (Some(last_height), Some(last_at_ms), Some(last_hold_decision))
                 if last_height == probe_height
-                    && now_ms.saturating_sub(last_at_ms) < REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS
-        )
+                    && now_ms.saturating_sub(last_at_ms)
+                        < REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS =>
+            {
+                Some(last_hold_decision)
+            }
+            _ => None,
+        }
     }
 
-    fn note_replication_successor_probe_attempt(&mut self, probe_height: u64, now_ms: i64) {
+    fn note_replication_successor_probe_attempt(
+        &mut self,
+        probe_height: u64,
+        now_ms: i64,
+        hold_proposals: bool,
+    ) {
         self.last_replication_successor_probe_height = Some(probe_height);
         self.last_replication_successor_probe_at_ms = Some(now_ms);
+        self.last_replication_successor_probe_hold = Some(hold_proposals);
     }
 }
 

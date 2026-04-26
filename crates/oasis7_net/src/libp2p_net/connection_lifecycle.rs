@@ -112,6 +112,7 @@ pub(super) fn prune_redundant_peer_connections(
     peer_id: PeerId,
     event_errors: &Arc<Mutex<Vec<String>>>,
     lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    lifecycle_event_errors_last_prune_at_ms: &mut Option<i64>,
     max_error_messages: usize,
     now_ms: i64,
     cooldown_ms: i64,
@@ -132,6 +133,7 @@ pub(super) fn prune_redundant_peer_connections(
         push_bounded_string_with_keyed_cooldown(
             event_errors,
             lifecycle_event_errors_at_ms,
+            lifecycle_event_errors_last_prune_at_ms,
             format!("connection-pruned:{peer_id}"),
             format!(
                 "libp2p redundant connections pruned peer={peer_id} count={}",
@@ -148,6 +150,7 @@ pub(super) fn prune_redundant_peer_connections(
 pub(super) fn log_active_transport_path(
     event_errors: &Arc<Mutex<Vec<String>>>,
     lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
+    lifecycle_event_errors_last_prune_at_ms: &mut Option<i64>,
     peer_id: PeerId,
     active_path: Option<&TransportPath>,
     max_error_messages: usize,
@@ -160,6 +163,7 @@ pub(super) fn log_active_transport_path(
     push_bounded_string_with_keyed_cooldown(
         event_errors,
         lifecycle_event_errors_at_ms,
+        lifecycle_event_errors_last_prune_at_ms,
         format!(
             "transport-active:{peer_id}:{}:{}",
             active_path.kind_label(),
