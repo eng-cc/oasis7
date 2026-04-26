@@ -112,6 +112,7 @@ impl PosNodeEngine {
             replication_persisted_height: 0,
             last_replication_successor_probe_height: None,
             last_replication_successor_probe_at_ms: None,
+            last_replication_successor_probe_hold: None,
             storage_challenge_fallback_height: 1,
             recent_storage_challenge_successes: BTreeMap::new(),
             pending: None,

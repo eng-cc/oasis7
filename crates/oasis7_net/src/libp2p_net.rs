@@ -47,7 +47,7 @@ use constructor_support::{
 };
 use discovery::{
     clear_pending_peer_record_request, handle_peer_record_response, handle_rendezvous_discovered,
-    handle_request_response_request, maybe_discover_rendezvous_namespace,
+    handle_request_response_request, handle_routing_updated, maybe_discover_rendezvous_namespace,
     maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
     maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
     maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
@@ -104,8 +104,7 @@ pub use traffic_metrics::{
 use transport_paths::{retry_transport_path_after_error, TransportPath};
 use utils::{
     decode_membership_directory, decode_world_head, now_ms, push_bounded_clone,
-    push_bounded_string_with_cooldown, push_bounded_string_with_keyed_cooldown, should_republish,
-    try_send_command,
+    push_bounded_string_with_keyed_cooldown, should_republish, try_send_command,
 };
 use wire_bytes::{init_shared_wire_byte_counters, SharedLibp2pWireByteCounters};
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
@@ -226,6 +225,7 @@ impl Libp2pNetwork {
             let mut cached_peer_record_cooldowns: HashMap<PeerId, i64> = HashMap::new();
             let mut cached_discovery_peer_cooldowns: HashMap<PeerId, i64> = HashMap::new();
             let mut lifecycle_event_errors_at_ms: HashMap<String, i64> = HashMap::new();
+            let mut lifecycle_event_errors_last_prune_at_ms = None;
             let mut pending_rendezvous_registers: HashSet<PeerId> = HashSet::new();
             let mut pending_rendezvous_discovers: HashSet<PeerId> = HashSet::new();
             let mut registered_rendezvous_nodes: HashSet<PeerId> = HashSet::new();
@@ -605,37 +605,27 @@ impl Libp2pNetwork {
                                             }
                                         }
                                         kad::Event::RoutingUpdated { peer, addresses, .. } => {
-                                            push_bounded_string_with_cooldown(
-                                                &event_errors,
-                                                &mut lifecycle_event_errors_at_ms,
-                                                format!("libp2p routing updated peer={peer} addrs={addresses:?}"),
-                                                max_error_messages,
-                                                "lock errors",
-                                                now_ms(),
-                                                LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
-                                            );
-                                            maybe_queue_discovery_peer_record(
+                                            handle_routing_updated(
                                                 &mut swarm,
                                                 &mut pending_dht,
                                                 &mut pending_discovery_peer_records,
                                                 &discovered_peer_records,
                                                 peer,
+                                                format!("{addresses:?}"),
                                                 local_peer_id,
-                                                peer_record_world_id(
-                                                    peer_record_template.as_ref(),
-                                                ),
+                                                peer_record_template.as_ref(),
+                                                peers.as_slice(),
+                                                &mut pending_peer_record_requests,
+                                                &mut pending_connected_peer_records,
+                                                &mut connected_peer_record_cooldowns,
+                                                &event_traffic_metrics,
+                                                &event_errors,
+                                                &mut lifecycle_event_errors_at_ms,
+                                                &mut lifecycle_event_errors_last_prune_at_ms,
+                                                max_error_messages,
+                                                now_ms(),
+                                                LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
                                             );
-                                            if peers.contains(&peer) {
-                                                maybe_request_connected_peer_record(
-                                                    &mut swarm,
-                                                    &mut pending_peer_record_requests,
-                                                    &mut pending_connected_peer_records,
-                                                    &mut connected_peer_record_cooldowns,
-                                                    &event_traffic_metrics,
-                                                    peer,
-                                                    local_peer_id,
-                                                );
-                                            }
                                         }
                                         _ => {}
                                     }
@@ -859,6 +849,7 @@ impl Libp2pNetwork {
                                     push_bounded_string_with_keyed_cooldown(
                                         &event_errors,
                                         &mut lifecycle_event_errors_at_ms,
+                                        &mut lifecycle_event_errors_last_prune_at_ms,
                                         format!("connection-established:{peer_id}"),
                                         format!("libp2p connection established peer={peer_id}"),
                                         max_error_messages,
@@ -887,6 +878,7 @@ impl Libp2pNetwork {
                                     log_active_transport_path(
                                         &event_errors,
                                         &mut lifecycle_event_errors_at_ms,
+                                        &mut lifecycle_event_errors_last_prune_at_ms,
                                         peer_id,
                                         refreshed_active_path.as_ref(),
                                         max_error_messages,
@@ -900,6 +892,7 @@ impl Libp2pNetwork {
                                         peer_id,
                                         &event_errors,
                                         &mut lifecycle_event_errors_at_ms,
+                                        &mut lifecycle_event_errors_last_prune_at_ms,
                                         max_error_messages,
                                         now_ms(),
                                         LIFECYCLE_EVENT_ERROR_COOLDOWN_MS,
@@ -1011,6 +1004,7 @@ impl Libp2pNetwork {
                                         push_bounded_string_with_keyed_cooldown(
                                             &event_errors,
                                             &mut lifecycle_event_errors_at_ms,
+                                            &mut lifecycle_event_errors_last_prune_at_ms,
                                             format!("connection-closed-partial:{peer_id}"),
                                             format!(
                                                 "libp2p connection closed peer={peer_id} num_established={num_established} active_path={}",
@@ -1069,6 +1063,7 @@ impl Libp2pNetwork {
                                         push_bounded_string_with_keyed_cooldown(
                                             &event_errors,
                                             &mut lifecycle_event_errors_at_ms,
+                                            &mut lifecycle_event_errors_last_prune_at_ms,
                                             format!("connection-closed-final:{peer_id}"),
                                             format!("libp2p connection closed peer={peer_id}"),
                                             max_error_messages,

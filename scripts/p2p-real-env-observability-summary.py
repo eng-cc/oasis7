@@ -267,8 +267,10 @@ def summarize_replication(raw_status: dict) -> dict:
         alerts.append("recent_replication_errors_high")
     elif recent_errors:
         alerts.append("recent_replication_errors_present")
-    if retry_cooldown_peer_count > 0:
+    if protocol_retry_cooldown_peer_count > 0:
         alerts.append("protocol_retry_cooldown_active")
+    if transport_retry_cooldown_peer_count > 0:
+        alerts.append("transport_retry_cooldown_active")
     alerts = unique_sorted(alerts)
     return {
         "status": determine_module_status(
@@ -281,6 +283,7 @@ def summarize_replication(raw_status: dict) -> dict:
         "registered_protocol_count": len(replication.get("registered_protocols") or []),
         "recent_error_count": len(recent_errors),
         "recent_error_groups": dict(sorted(error_groups.items())),
+        "retry_cooldown_peer_count": retry_cooldown_peer_count,
         "protocol_retry_cooldown_peer_count": protocol_retry_cooldown_peer_count,
         "transport_retry_cooldown_peer_count": transport_retry_cooldown_peer_count,
     }
