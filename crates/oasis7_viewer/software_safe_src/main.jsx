@@ -382,6 +382,28 @@ function WorldSummaryPanel() {
                   </EventCard>
                 )}
               </Show>
+              <Show when={gameplay().firstAgentClaimApprovalRequest}>
+                {(request) => (
+                  (() => {
+                    const display = core.describeFirstAgentClaimApprovalRequest(request(), locale());
+                    return (
+                  <EventCard
+                    title={tr(locale(), "首个 Agent Claim 审批", "First Agent Claim Approval")}
+                    badge={display?.label || "unknown"}
+                    badgeClass={display?.badgeClass || "badge badge--warn"}
+                    meta={display?.meta || `request=${request().requestId}`}
+                  >
+                    <div class="feedback-summary">
+                      {display?.summary || request().status || "unknown"}
+                    </div>
+                    <For each={display?.details || []}>
+                      {(detail) => <div class="feedback-detail">{detail}</div>}
+                    </For>
+                  </EventCard>
+                    );
+                  })()
+                )}
+              </Show>
               <div>
                 <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
                 <div class="event-list">

@@ -55,7 +55,7 @@
 - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
   - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
 - SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
-- SC-25: 首个 agent `slot-1` claim 必须补齐 `submit request -> pending review -> approve/reject -> approved restricted grant -> ClaimAgent` 的链上闭环；`/v1/chain/agent-claim/**` 需要提供可直接调用的 request/review surface，玩家与运营都能从 runtime 真值读到同一条审批状态。
+- SC-25: 首个 agent `slot-1` claim 必须补齐 `submit request -> pending review -> approve/reject -> approved restricted grant -> ClaimAgent` 的链上闭环；`/v1/chain/agent-claim/**` 需要提供可直接调用的 request/review surface，玩家与运营都能从 runtime 真值读到同一条审批状态，且 `software_safe` 正式玩法摘要必须能直接展示该状态。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -272,7 +272,7 @@
 | PRD-WORLD_RUNTIME-038 | task_c79092f4b50d4d52a36b11fe0fe5eb5e | `test_tier_required` | `libp2p` substream wire-byte 计数定向回归、chain status schema 回归、repo-owned traffic summary/observability 脚本口径更新、`doc-governance-check`、`git diff --check` | control-plane byte counters 真值补齐、payload 与非 payload 的可解释边界 |
 | PRD-WORLD_RUNTIME-039 | task_f15a1d9ea3194c39aa35158bf93d8ff1 | `test_tier_required` | `/v1/chain/status.consensus` commit freshness / pending proposal / queue pressure / inbound timing reject 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | 节点共识堵塞分类、提交停滞与队列压力真值补齐 |
 | PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
-| PRD-WORLD_RUNTIME-040 | task_95128237584e403bbaa24b24b5c024b9 | `test_tier_required` | 首个 claim 审批 request/approve/reject/claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` API 回归、viewer claim snapshot 审批状态回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、运营审批真值、slot-1 restricted grant 发放闭环 |
+| PRD-WORLD_RUNTIME-040 | task_95128237584e403bbaa24b24b5c024b9 | `test_tier_required` | 首个 claim 审批 request/approve/reject/claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` API 回归、viewer claim snapshot 审批状态回归、`software_safe` 正式摘要渲染回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、运营审批真值、slot-1 restricted grant 发放闭环 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

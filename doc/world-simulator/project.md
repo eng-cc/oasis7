@@ -1,5 +1,5 @@
 # world-simulator PRD Project（审计轮次: 7；任务拆解含 PRD-ID 映射）
-- [ ] first-agent-claim-approval-closure (PRD-WORLD_SIMULATOR-045) [test_tier_required]: 补齐首个 agent claim 的产品闭环，并同步落地 `PRD-WORLD_RUNTIME-040` 对应 runtime 治理接口与 viewer snapshot 回流。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
+- [ ] first-agent-claim-approval-closure (PRD-WORLD_SIMULATOR-045) [test_tier_required]: 补齐首个 agent claim 的产品闭环，并同步落地 `PRD-WORLD_RUNTIME-040` 对应 runtime 治理接口、viewer snapshot 回流与 `software_safe` 正式摘要状态卡。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
 - [x] TASK-WORLD_SIMULATOR-001 (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 完成 world-simulator PRD 改写，建立模拟层设计主入口。
 - [x] TASK-WORLD_SIMULATOR-002 (PRD-WORLD_SIMULATOR-001/002) [test_tier_required]: 对齐场景系统、Viewer、启动器的统一验收清单。
 - [x] TASK-WORLD_SIMULATOR-003 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 固化 Web-first 闭环与 LLM 链路的测试证据模板。
