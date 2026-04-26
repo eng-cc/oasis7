@@ -1,9 +1,10 @@
 use crate::runtime::{
     agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier, AgentClaimState,
-    WorldState,
+    FirstAgentClaimApprovalRequestStatus, WorldState,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot, PlayerAgentClaimSnapshot,
+    PlayerFirstAgentClaimApprovalRequestSnapshot,
 };
 
 pub(super) fn build_player_agent_claim_snapshot(
@@ -130,10 +131,38 @@ pub(super) fn build_player_agent_claim_snapshot(
         slot_1_eligible_claim_balance: liquid_main_token_balance
             .saturating_add(restricted_starter_claim_balance),
         next_claim_quote,
+        first_agent_claim_approval_request: latest_first_agent_claim_approval_request_snapshot(
+            state,
+            primary_agent_id,
+        ),
         owned_claims: owned_claims
             .iter()
             .map(|claim| owned_claim_to_snapshot(state, claim, current_epoch, epoch_length_ticks))
             .collect(),
+    })
+}
+
+fn latest_first_agent_claim_approval_request_snapshot(
+    state: &WorldState,
+    primary_agent_id: &str,
+) -> Option<PlayerFirstAgentClaimApprovalRequestSnapshot> {
+    let request = state
+        .first_agent_claim_approval_requests
+        .values()
+        .filter(|request| request.claimer_agent_id == primary_agent_id)
+        .max_by_key(|request| request.request_id)?;
+    Some(PlayerFirstAgentClaimApprovalRequestSnapshot {
+        request_id: request.request_id,
+        status: first_agent_claim_approval_status_label(request.status).to_string(),
+        requested_slot_index: request.requested_slot_index,
+        requested_reputation_tier: request.requested_reputation_tier,
+        requested_total_upfront_amount: request.requested_total_upfront_amount,
+        requested_at_epoch: request.requested_at_epoch,
+        updated_at_epoch: request.updated_at_epoch,
+        operator_account_id: request.operator_account_id.clone(),
+        approved_amount: request.approved_amount,
+        expires_at_epoch: request.expires_at_epoch,
+        rejection_reason: request.rejection_reason.clone(),
     })
 }
 
@@ -201,4 +230,14 @@ fn claim_status(claim: &AgentClaimState, current_epoch: u64) -> &'static str {
 
 fn agent_claim_epoch(time: u64, epoch_length_ticks: u64) -> u64 {
     time / epoch_length_ticks.max(1)
+}
+
+fn first_agent_claim_approval_status_label(
+    status: FirstAgentClaimApprovalRequestStatus,
+) -> &'static str {
+    match status {
+        FirstAgentClaimApprovalRequestStatus::Pending => "pending",
+        FirstAgentClaimApprovalRequestStatus::Approved => "approved",
+        FirstAgentClaimApprovalRequestStatus::Rejected => "rejected",
+    }
 }

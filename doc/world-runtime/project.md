@@ -3,6 +3,36 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [ ] first-agent-claim-approval-closure (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐首个 agent `slot-1` claim 的申请、运营审核、批准/拒绝、grant 发放与最终 `ClaimAgent` 直连 API 闭环；玩家与运营都必须从同一条 runtime 真值读取 request 状态。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/world-simulator/prd.md`
+    - `doc/world-simulator/project.md`
+    - `crates/oasis7/src/runtime/events.rs`
+    - `crates/oasis7/src/runtime/events/domain_event.rs`
+    - `crates/oasis7/src/runtime/main_token.rs`
+    - `crates/oasis7/src/runtime/state.rs`
+    - `crates/oasis7/src/runtime/state/apply_domain_event_main_token_restricted_claims.rs`
+    - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
+    - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core_main_token.rs`
+    - `crates/oasis7/src/runtime/tests/agent_claims.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/status_server_support.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/runtime_status_util.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/agent_claim_api.rs`
+    - `crates/oasis7/src/simulator/persist.rs`
+    - `crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs`
+    - `crates/oasis7/src/viewer/runtime_live/tests/snapshot_progress.rs`
+    - `.agents/skills/oasis7/references/governance-call-surfaces.md`
+    - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::agent_claims:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_api_tests:: -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_viewer_live compat_snapshot_exposes_player_agent_claim_overview -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime --bin oasis7_viewer_live`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-001 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 完成 world-runtime PRD 改写，建立运行时设计主入口。
 - [x] TASK-WORLD_RUNTIME-002 (PRD-WORLD_RUNTIME-001/002) [test_tier_required]: 补齐 runtime 核心边界（确定性、WASM、治理）验收清单。
   - 产物文件:

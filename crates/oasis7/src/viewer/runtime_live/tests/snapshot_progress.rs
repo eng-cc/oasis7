@@ -361,6 +361,55 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
 }
 
 #[test]
+fn compat_snapshot_exposes_first_agent_claim_approval_request_status() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+
+    server
+        .world
+        .set_governance_execution_policy(crate::runtime::GovernanceExecutionPolicy {
+            epoch_length_ticks: 1,
+            ..crate::runtime::GovernanceExecutionPolicy::default()
+        })
+        .expect("set governance policy");
+    server
+        .world
+        .set_agent_reputation_score(primary_agent_id.as_str(), 0)
+        .expect("set reputation");
+    server.world.submit_action(
+        crate::runtime::Action::SubmitFirstAgentClaimApprovalRequest {
+            claimer_agent_id: primary_agent_id.clone(),
+        },
+    );
+    server
+        .world
+        .step()
+        .expect("submit first claim approval request");
+
+    let snapshot = server.compat_snapshot();
+    let approval_request = snapshot
+        .player_gameplay
+        .as_ref()
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .and_then(|claim| claim.first_agent_claim_approval_request.as_ref())
+        .expect("approval request snapshot");
+    assert_eq!(approval_request.request_id, 1);
+    assert_eq!(approval_request.status, "pending");
+    assert_eq!(approval_request.requested_slot_index, 1);
+    assert_eq!(approval_request.requested_reputation_tier, 0);
+    assert!(approval_request.requested_total_upfront_amount > 0);
+}
+
+#[test]
 fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

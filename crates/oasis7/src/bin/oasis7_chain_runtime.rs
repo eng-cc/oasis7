@@ -24,6 +24,8 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use runtime_status_util::now_unix_ms;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[path = "oasis7_chain_runtime/agent_claim_api.rs"]
+mod agent_claim_api;
 #[path = "oasis7_chain_runtime/balances_api.rs"]
 mod balances_api;
 #[path = "oasis7_chain_runtime/cli.rs"]
