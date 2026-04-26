@@ -331,6 +331,13 @@ fn load_commit_message_by_height_reads_from_cold_index_after_hot_prune() {
         .expect("hot commit height 3 should exist");
     assert_eq!(loaded_3.record.content_hash, message_3.record.content_hash);
 
+    let hot_bytes = std::fs::read(&hot_3).expect("read hot commit json");
+    assert_eq!(
+        hot_bytes.iter().filter(|byte| **byte == b'\n').count(),
+        0,
+        "hot commit mirror should be written without pretty-print newlines"
+    );
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -397,6 +404,57 @@ fn commit_cold_index_uses_canonical_layout_and_refreshes_hot_range() {
                 entry_count: 1,
             }
         )
+    );
+
+    let canonical_bytes = std::fs::read(&canonical_path).expect("read canonical cold index");
+    assert!(
+        !canonical_bytes.contains(&b'\n'),
+        "cold index manifest should be written without pretty-print newlines"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn prune_hot_commit_messages_sweeps_existing_orphan_blobs_after_offload() {
+    let dir = temp_dir("commit-prune-orphan-sweep");
+    let world_id = "world-commit-prune-orphan-sweep";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(2)
+        .expect("hot commit cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    let message_1 = signed_remote_message(71, world_id, "node-b", 1);
+    let message_2 = signed_remote_message(72, world_id, "node-b", 2);
+    runtime
+        .persist_commit_message(1, &message_1)
+        .expect("persist message 1");
+    runtime
+        .persist_commit_message(2, &message_2)
+        .expect("persist message 2");
+
+    let legacy_bytes = serde_json::to_vec_pretty(&message_1).expect("legacy pretty payload");
+    let legacy_hash = runtime
+        .store
+        .put_bytes(legacy_bytes.as_slice())
+        .expect("store orphan payload");
+    let legacy_blob_path = dir
+        .join("store")
+        .join("blobs")
+        .join(format!("{legacy_hash}.blob"));
+    assert!(
+        legacy_blob_path.exists(),
+        "legacy orphan blob should exist before sweep"
+    );
+
+    runtime
+        .persist_commit_message(3, &signed_remote_message(73, world_id, "node-b", 3))
+        .expect("persist message 3");
+
+    assert!(
+        !legacy_blob_path.exists(),
+        "hot-window offload should opportunistically prune legacy orphan blobs"
     );
 
     let _ = std::fs::remove_dir_all(&dir);

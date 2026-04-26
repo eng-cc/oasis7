@@ -235,6 +235,20 @@ pub(super) fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> Result<
     })
 }
 
+pub(super) fn write_json_compact<T: Serialize>(path: &Path, value: &T) -> Result<(), NodeError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| NodeError::Replication {
+            reason: format!("create dir {} failed: {}", parent.display(), err),
+        })?;
+    }
+    let bytes = serde_json::to_vec(value).map_err(|err| NodeError::Replication {
+        reason: format!("serialize {} failed: {}", path.display(), err),
+    })?;
+    fs::write(path, bytes).map_err(|err| NodeError::Replication {
+        reason: format!("write {} failed: {}", path.display(), err),
+    })
+}
+
 pub(super) fn distfs_error_to_node_error<E>(err: E) -> NodeError
 where
     E: std::fmt::Debug,

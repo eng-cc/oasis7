@@ -143,6 +143,13 @@ fn file_store_overwrite_updates_hash_and_metadata() {
     let store = LocalCasStore::new(&dir);
 
     let first = store.write_file("a/note.txt", b"v1").expect("write first");
+    let first_blob_path = store
+        .blob_path(first.content_hash.as_str())
+        .expect("first blob path");
+    assert!(
+        first_blob_path.exists(),
+        "first blob should exist before overwrite"
+    );
     let second = store
         .write_file("a/note.txt", b"v2-data")
         .expect("write second");
@@ -160,6 +167,10 @@ fn file_store_overwrite_updates_hash_and_metadata() {
         .expect("exists");
     assert_eq!(stat.content_hash, second.content_hash);
     assert_eq!(stat.size_bytes, 7);
+    assert!(
+        !first_blob_path.exists(),
+        "unreferenced overwrite blob should be pruned immediately"
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -169,19 +180,49 @@ fn file_store_delete_removes_mapping() {
     let dir = temp_dir("file-delete");
     let store = LocalCasStore::new(&dir);
 
-    store
+    let written = store
         .write_file("workspace/a.log", b"to-delete")
         .expect("write");
+    let blob_path = store
+        .blob_path(written.content_hash.as_str())
+        .expect("blob path");
+    assert!(blob_path.exists(), "blob should exist before delete");
     let removed = store.delete_file("workspace/a.log").expect("delete");
     assert!(removed);
     assert!(store.stat_file("workspace/a.log").expect("stat").is_none());
     assert!(!store.delete_file("workspace/a.log").expect("delete again"));
+    assert!(
+        !blob_path.exists(),
+        "delete should prune the now-unreferenced blob"
+    );
 
     let read_result = store.read_file("workspace/a.log");
     assert!(matches!(
         read_result,
         Err(WorldError::DistributedValidationFailed { .. })
     ));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_store_compacts_files_index_json() {
+    let dir = temp_dir("file-index-compact");
+    let store = LocalCasStore::new(&dir);
+
+    store
+        .write_file("docs/readme.txt", b"hello distfs file")
+        .expect("write");
+
+    let bytes = fs::read(store.files_index_path()).expect("read files index");
+    assert!(
+        !bytes.contains(&b'\n'),
+        "files index should be written without pretty-print newlines"
+    );
+    assert!(
+        !bytes.windows(2).any(|window| window == b"  "),
+        "files index should not contain indentation padding"
+    );
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -322,12 +363,7 @@ fn file_index_audit_reports_missing_dangling_and_orphan_blobs() {
     let store = LocalCasStore::new(&dir);
 
     let live = store.write_file("live.txt", b"live").expect("write live");
-    let orphan = store
-        .write_file("orphan.txt", b"orphan")
-        .expect("write orphan");
-    store
-        .delete_file("orphan.txt")
-        .expect("delete orphan mapping");
+    let orphan_hash = store.put_bytes(b"orphan").expect("write orphan blob");
 
     let missing = store
         .write_file("missing.txt", b"missing")
@@ -352,7 +388,7 @@ fn file_index_audit_reports_missing_dangling_and_orphan_blobs() {
         .contains(&missing.content_hash));
     assert!(!report.missing_file_blob_hashes.contains(&live.content_hash));
     assert!(report.dangling_pin_hashes.contains(&dangling_pin_hash));
-    assert!(report.orphan_blob_hashes.contains(&orphan.content_hash));
+    assert!(report.orphan_blob_hashes.contains(&orphan_hash));
     assert!(!report.is_clean());
 
     let _ = fs::remove_dir_all(&dir);
@@ -366,10 +402,7 @@ fn prune_orphan_blobs_removes_only_unreferenced_data() {
     let live = store
         .write_file("live.txt", b"live-data")
         .expect("write live");
-    let orphan = store
-        .write_file("old.txt", b"old-data")
-        .expect("write orphan");
-    store.delete_file("old.txt").expect("delete orphan mapping");
+    let orphan_hash = store.put_bytes(b"old-data").expect("write orphan");
 
     let pinned_hash = store.put_bytes(b"pinned-data").expect("put pinned");
     store.pin(pinned_hash.as_str()).expect("pin");
@@ -378,9 +411,7 @@ fn prune_orphan_blobs_removes_only_unreferenced_data() {
     assert!(freed > 0);
     assert!(store.has(live.content_hash.as_str()).expect("live exists"));
     assert!(store.has(pinned_hash.as_str()).expect("pinned exists"));
-    assert!(!store
-        .has(orphan.content_hash.as_str())
-        .expect("orphan removed"));
+    assert!(!store.has(orphan_hash.as_str()).expect("orphan removed"));
 
     let _ = fs::remove_dir_all(&dir);
 }

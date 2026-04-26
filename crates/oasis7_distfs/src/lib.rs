@@ -192,6 +192,30 @@ impl LocalCasStore {
         write_json_atomic(file_index, &self.files_index_path)
     }
 
+    fn remove_blob_if_unreferenced_in_index(
+        &self,
+        file_index: &FileIndexFile,
+        content_hash: &str,
+    ) -> Result<bool, WorldError> {
+        validate_hash(content_hash)?;
+        if file_index
+            .files
+            .values()
+            .any(|metadata| metadata.content_hash == content_hash)
+        {
+            return Ok(false);
+        }
+        if self.is_pinned(content_hash)? {
+            return Ok(false);
+        }
+        let path = self.blob_path(content_hash)?;
+        if !path.exists() {
+            return Ok(false);
+        }
+        fs::remove_file(path)?;
+        Ok(true)
+    }
+
     pub fn pin(&self, content_hash: &str) -> Result<(), WorldError> {
         validate_hash(content_hash)?;
         if !self.has(content_hash)? {
@@ -299,8 +323,16 @@ impl LocalCasStore {
             size_bytes: bytes.len() as u64,
             updated_at_ms: now_unix_time_ms(),
         };
-        file_index.files.insert(normalized_path, metadata.clone());
+        let replaced_hash = file_index
+            .files
+            .insert(normalized_path, metadata.clone())
+            .map(|previous| previous.content_hash);
         self.save_file_index(&file_index)?;
+        if let Some(replaced_hash) = replaced_hash {
+            if replaced_hash != metadata.content_hash {
+                self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
+            }
+        }
         Ok(metadata)
     }
 
@@ -317,11 +349,16 @@ impl LocalCasStore {
             ensure_file_hash_precondition(&file_index, &normalized_path, Some(expected_hash))?;
         }
 
-        let removed = file_index.files.remove(&normalized_path).is_some();
-        if removed {
+        let removed_hash = file_index
+            .files
+            .remove(&normalized_path)
+            .map(|metadata| metadata.content_hash);
+        if let Some(removed_hash) = removed_hash {
             self.save_file_index(&file_index)?;
+            self.remove_blob_if_unreferenced_in_index(&file_index, removed_hash.as_str())?;
+            return Ok(true);
         }
-        Ok(removed)
+        Ok(false)
     }
 
     pub fn audit_file_index(&self) -> Result<FileIndexAuditReport, WorldError> {
@@ -458,8 +495,16 @@ impl FileStore for LocalCasStore {
             updated_at_ms: now_unix_time_ms(),
         };
         let mut file_index = self.load_file_index()?;
-        file_index.files.insert(normalized_path, metadata.clone());
+        let replaced_hash = file_index
+            .files
+            .insert(normalized_path, metadata.clone())
+            .map(|previous| previous.content_hash);
         self.save_file_index(&file_index)?;
+        if let Some(replaced_hash) = replaced_hash {
+            if replaced_hash != metadata.content_hash {
+                self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
+            }
+        }
         Ok(metadata)
     }
 
@@ -477,11 +522,16 @@ impl FileStore for LocalCasStore {
     fn delete_file(&self, path: &str) -> Result<bool, WorldError> {
         let normalized_path = normalize_file_path(path)?;
         let mut file_index = self.load_file_index()?;
-        let removed = file_index.files.remove(&normalized_path).is_some();
-        if removed {
+        let removed_hash = file_index
+            .files
+            .remove(&normalized_path)
+            .map(|metadata| metadata.content_hash);
+        if let Some(removed_hash) = removed_hash {
             self.save_file_index(&file_index)?;
+            self.remove_blob_if_unreferenced_in_index(&file_index, removed_hash.as_str())?;
+            return Ok(true);
         }
-        Ok(removed)
+        Ok(false)
     }
 
     fn stat_file(&self, path: &str) -> Result<Option<FileMetadata>, WorldError> {
@@ -802,7 +852,7 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), WorldError> {
 
 fn write_json_atomic<T: Serialize>(value: &T, path: &Path) -> Result<(), WorldError> {
     let tmp = unique_atomic_temp_path(path);
-    let bytes = serde_json::to_vec_pretty(value)?;
+    let bytes = serde_json::to_vec(value)?;
     fs::write(&tmp, bytes)?;
     fs::rename(&tmp, path)?;
     Ok(())
