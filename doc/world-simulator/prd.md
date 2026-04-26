@@ -10,6 +10,7 @@
 ## 范围
 - 覆盖 world-simulator 模块当前能力设计、接口边界、测试口径与演进路线。
 - 覆盖 PRD-ID 到 `doc/world-simulator/project.md` 的任务映射。
+- 覆盖 `oasis7` Local Provider 主链路中治理相关 direct-call / observability 边界，并通过分册维护。
 - 覆盖启动器链路中的链上转账能力（通过分册维护详细条款）。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
@@ -56,6 +57,7 @@
   - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-040）
   - `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`（PRD-WORLD_SIMULATOR-040 supporting spec）
   - `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`（PRD-WORLD_SIMULATOR-037/040 formal review）
+  - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`（PRD-WORLD_SIMULATOR-037/040 supporting spec）
   - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`（PRD-WORLD_SIMULATOR-039）
   - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`（PRD-WORLD_SIMULATOR-041）
   - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`（PRD-WORLD_SIMULATOR-044）

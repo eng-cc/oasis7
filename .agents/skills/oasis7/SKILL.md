@@ -67,6 +67,7 @@ curl -sS http://127.0.0.1:18789/health
 
 For exact field values and launch examples, read `references/real-play-config.md`.
 For Viewer / `software_safe` / observer-only UI boundaries, read `references/viewer-ui-lanes.md`.
+For governance-adjacent direct-call boundaries (`snapshot` / `chat` / `prompt_control` / `gameplay_action` / chain submit vs claim observability), read `references/governance-call-surfaces.md`.
 
 ### 2. Download a playable release bundle
 
@@ -204,6 +205,18 @@ If you need Viewer / `software_safe` behavior, fallback rules, or current observ
 - 若需要复用持久 `chain storage profile`，先确认操作者知道该 profile 下会继续使用同一 node key material
 - `oasis7` / release bundle 不应导出、回显或要求粘贴真实 node private key；只允许说明如何保护它
 
+### 5.3 Governance And Direct-Call Boundary
+
+当前 `oasis7` skill 里的治理相关调用面，要严格区分三层：
+
+- 观测面：`snapshot --player-gameplay-only` 可读 `agent_claim`、quote、restricted slot-1 eligibility 等治理状态
+- authority 写入面：`chat` / `prompt_control` / `gameplay_action` 走 `ViewerRequest` + `PlayerAuthProof`
+- 链提交面：只有链链接后的 `GameplayAction` 会继续转发到 `POST /v1/chain/gameplay/submit`
+
+当前不要把 `claim_agent` 说成通用直调 API。
+仓库真值是：claim quote / owned state 已可观测，但 `oasis7` 还没有一个通用 `claim_agent` helper 或 raw HTTP endpoint 文档入口。
+细节、示例和边界见 `references/governance-call-surfaces.md`。
+
 ### 6. Run parity smoke
 
 Use this as the fastest real verification path:
@@ -287,6 +300,7 @@ If the run fails, inspect in this order:
 6. Parity artifacts under `output/provider_parity/*`
 
 For common failure strings and what to check next, read `references/failure-signatures.md`. Run `doctor` first when you need a fast local diagnosis summary.
+如果问题不是“为什么跑不起来”，而是“哪些治理动作可以直接调用、哪些还不能”，优先转到 `references/governance-call-surfaces.md`。
 
 Current known reality:
 

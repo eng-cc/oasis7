@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-04-18
+更新时间：2026-04-26
 
 ## 入口
 - 模块 PRD：`doc/world-simulator/prd.md`
@@ -16,11 +16,11 @@
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-04-18）
-- `doc/world-simulator/`：553 份文件
+## 密度快照（2026-04-26）
+- `doc/world-simulator/`：558 份文件
 - `doc/world-simulator/viewer/`：297 份文件
-- `doc/world-simulator/launcher/`：84 份文件
-- `doc/world-simulator/llm/`：54 份文件
+- `doc/world-simulator/launcher/`：90 份文件
+- `doc/world-simulator/llm/`：55 份文件
 - `doc/world-simulator/kernel/`：36 份文件
 - `doc/world-simulator/m4/`：36 份文件
 - `doc/world-simulator/scenario/`：30 份文件
@@ -29,9 +29,9 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `viewer/` | 296 | Viewer UI、Web 闭环、`software_safe`、2D/3D、操作手册与 QA/发布闭环 |
-| `launcher/` | 84 | 启动器、控制面、链上转账、explorer、自引导体验 |
-| `llm/` | 54 | provider、本地桥接、direct-connect、体验等价与双模式策略 |
+| `viewer/` | 297 | Viewer UI、Web 闭环、`software_safe`、2D/3D、操作手册与 QA/发布闭环 |
+| `launcher/` | 90 | 启动器、控制面、链上转账、explorer、自引导体验 |
+| `llm/` | 55 | provider、本地桥接、direct-connect、体验等价、双模式策略与治理调用面 |
 | `kernel/` | 36 | 规则桥接、WASM 执行、runtime 约束、资源与制度规则 |
 | `m4/` | 36 | M4 路线、阶段拆分与配套设计 |
 | `scenario/` | 30 | 场景定义、初始化、配置模板与环境准备 |
@@ -43,6 +43,7 @@
 - `doc/world-simulator/llm/llm-provider-agent-direct-connect-review-2026-04-06.md`：`provider agent direct connect` 的正式 review，适合在判断双模式产品完整性、实施差距和后续 remediation 时定向进入。
 - `doc/world-simulator/llm/provider-agent-dual-mode-contract-2026-03-16.md`：`Local Provider` 双轨模式的 observation / action contract supporting spec。
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`：`Local Provider` `P0` 默认 profile supporting spec，用于解释 provider-side 行为约束与 parity 口径。
+- `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`：`oasis7` 当前治理调用面说明，适合在判断 `snapshot/chat/prompt/gameplay_action/chain submit` 与 claim observability 边界时定向进入。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。

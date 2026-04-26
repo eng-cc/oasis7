@@ -76,6 +76,16 @@ Operator rules:
 - if you intentionally reuse a persistent profile, treat it like a wallet/validator identity and confirm backup + rotation ownership before recording or screen sharing
 - if you only want Local Provider NPC behavior and do not need chain state, add `--chain-disable` when launching outside the current `oasis7-run.sh play` helper
 
+## Governance Call Surface
+
+Do not collapse all gameplay/governance actions into one mental model:
+
+- `snapshot --player-gameplay-only`: read claim quote / claim state / recent gameplay feedback
+- `chat` / `prompt_control` / `gameplay_action`: signed viewer-authority write surface
+- `POST /v1/chain/gameplay/submit`: narrow chain-linked gameplay submit surface, not a generic claim/governance endpoint
+
+For the current direct-call examples and the explicit “claim is observable but not documented as a generic direct-call API” boundary, read `references/governance-call-surfaces.md`.
+
 ## Bundle-First Entry
 
 For a real试玩，先下载 GitHub Release 的平台安装器，再把 Local Provider provider 配到解包后的 bundle：

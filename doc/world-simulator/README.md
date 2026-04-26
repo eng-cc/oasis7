@@ -7,6 +7,7 @@
 - 想看当前执行任务、负责人、测试层级与最新完成态：`doc/world-simulator/project.md`
 - 想先进入 Viewer 热点子域，而不是在接近 300 份 Viewer 文档里盲扫：`doc/world-simulator/viewer/README.md`
 - 想执行 Viewer、走 Web 闭环或查操作步骤：`doc/world-simulator/viewer/viewer-manual.manual.md`
+- 想确认 `oasis7` 的治理调用面里，哪些可直接调、哪些只是可观测状态：`doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/world-simulator/prd.index.md`
 - 想给仓库外读者分享公开可读手册：`site/doc/cn/viewer-manual.html` / `site/doc/en/viewer-manual.html`
 
@@ -34,17 +35,17 @@
 - 汇总 Web 闭环、启动器可用性、场景初始化与规则执行相关专题。
 - 承接 world-simulator 与 runtime / viewer / testing 的跨模块体验收口。
 
-## 热点子域导航（2026-04-17 快照）
+## 热点子域导航（2026-04-26 快照）
 - `viewer/`（297）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
-- `launcher/`（81）：启动器、控制面、转账、explorer 与自引导体验。
-- `llm/`（54）：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
+- `launcher/`（90）：启动器、控制面、转账、explorer 与自引导体验。
+- `llm/`（55）：provider、loopback、本地桥接、体验等价、direct-connect 与治理调用面口径。
 - `kernel/`（36）：规则桥接、WASM 执行、资源与 runtime 约束。
 - `m4/`（36）：M4 方案与配套设计。
 - `scenario/`（30）：场景初始化、配置与模板。
 - `prd/`（9）：验收模板、质量趋势与补充附件。
 
 ## 高密度提示
-- `doc/world-simulator/` 当前共有 550 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- `doc/world-simulator/` 当前共有 558 份文件；这一层入口不再尝试把热点专题直接摊平展示。
 - `doc/world-simulator/viewer/` 当前共有 297 份文件；模块级入口只负责把你送到 `viewer/README.md`，不再在根入口直接承担 Viewer 子域分流。
 - 需要完整活跃专题清单时，进入 `doc/world-simulator/prd.index.md`；需要历史回溯时，再按具体任务或专题路径进入。
 

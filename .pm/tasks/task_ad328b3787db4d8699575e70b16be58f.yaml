@@ -1,0 +1,20 @@
+task_uid: task_ad328b3787db4d8699575e70b16be58f
+title: "add oasis7 governance booklet and product-chain call docs"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-oasis7-governance-call-surface
+execution_log_path: .pm/tasks/task_ad328b3787db4d8699575e70b16be58f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+  - .agents/skills/oasis7/SKILL.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-037
+  - PRD-WORLD_SIMULATOR-040
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-26T11:36:32+08:00
+last_started_at: 2026-04-26T11:14:32+08:00
+last_closed_at: 2026-04-26T11:36:32+08:00
