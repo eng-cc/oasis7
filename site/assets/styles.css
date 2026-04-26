@@ -39,11 +39,13 @@ body {
 html {
   scroll-behavior: smooth;
   width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   min-height: 100vh;
   width: 100%;
+  overflow-x: hidden;
   font-family: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: var(--text);
   line-height: 1.62;
@@ -402,11 +404,13 @@ h3 {
   align-items: center;
   justify-content: center;
   gap: 0.24rem;
+  max-width: 100%;
   border-radius: 12px;
   border: 1px solid transparent;
   padding: 0.62rem 1rem;
   font-weight: 700;
   letter-spacing: 0.01em;
+  text-align: center;
   text-decoration: none;
   transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
@@ -543,6 +547,7 @@ h3 {
 .pulse-panel li {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 0.5rem;
   border-radius: 9px;
   border: 1px solid rgba(131, 188, 220, 0.2);
@@ -551,15 +556,20 @@ h3 {
 }
 
 .pulse-panel li span {
+  min-width: 0;
+  flex: 1 1 8rem;
   font-size: 0.75rem;
   color: #b8d0de;
 }
 
 .pulse-panel li strong {
+  min-width: 0;
+  flex: 1 1 11rem;
   font-size: 0.73rem;
   color: #8fffbe;
   letter-spacing: 0.03em;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .section-intro {
@@ -1119,12 +1129,16 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 0.34rem;
+  max-width: 100%;
   border-radius: 999px;
   border: 1px solid rgba(131, 188, 220, 0.24);
   background: rgba(8, 19, 31, 0.88);
   color: #b9cfdd;
   font-size: 0.76rem;
+  line-height: 1.35;
   padding: 0.3rem 0.64rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .proof-strip .proof-chip::before {
@@ -1443,6 +1457,7 @@ code {
     border-left: none;
     border-right: none;
     padding: 0.56rem 0.78rem;
+    gap: 0.56rem;
     flex-wrap: wrap;
   }
 
@@ -1508,6 +1523,7 @@ code {
 
   .nav {
     width: 100%;
+    max-width: 100%;
     margin-left: 0;
     order: 3;
     flex-wrap: wrap;
@@ -1517,13 +1533,15 @@ code {
 
   html[data-js="true"] .nav {
     position: absolute;
-    top: 3.06rem;
-    right: 0.9rem;
+    top: calc(100% + 0.38rem);
+    left: 0.78rem;
+    right: 0.78rem;
     display: none;
     flex-direction: column;
     align-items: stretch;
     gap: 0.32rem;
-    width: min(82vw, 280px);
+    width: auto;
+    max-width: calc(100vw - 1.56rem);
     padding: 0.72rem;
     border-radius: var(--radius-lg);
     border: 1px solid var(--line-soft);
@@ -1591,6 +1609,29 @@ code {
     width: 100%;
   }
 
+  .hero .proof-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero .proof-strip .proof-chip {
+    width: 100%;
+  }
+
+  .pulse-panel li {
+    flex-direction: column;
+    gap: 0.22rem;
+  }
+
+  .pulse-panel li span,
+  .pulse-panel li strong {
+    flex: none;
+  }
+
+  .pulse-panel li strong {
+    text-align: left;
+  }
+
   .metric-box strong {
     font-size: 1.32rem;
   }
@@ -1628,13 +1669,19 @@ code {
     width: 100%;
   }
 
-  .cta-row .button.ghost {
-    width: calc(50% - 0.24rem);
+  .hero-figure,
+  .pulse-panel,
+  .metric-box,
+  .card,
+  .proof-card,
+  .timeline-item,
+  .story-step,
+  .lattice-feature,
+  .download-surface-main,
+  .download-support-card,
+  .developer-details summary,
+  .developer-details-body {
     min-width: 0;
-  }
-
-  .cta-row .button.ghost + .button.ghost {
-    width: calc(50% - 0.24rem);
   }
 }
 
