@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::NodeError;
 
-use super::{write_json_pretty, COMMIT_MESSAGE_DIR};
+use super::{write_json_compact, COMMIT_MESSAGE_DIR};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct CommitMessageColdIndex {
@@ -166,11 +166,11 @@ pub(super) fn write_commit_message_cold_index_to_root(
     root_dir: &Path,
     cold_index: &CommitMessageColdIndex,
 ) -> Result<(), NodeError> {
-    write_json_pretty(
+    write_json_compact(
         commit_message_cold_index_manifest_path_from_root(root_dir).as_path(),
         cold_index,
     )?;
-    write_json_pretty(
+    write_json_compact(
         commit_message_cold_index_compat_alias_path_from_root(root_dir).as_path(),
         cold_index,
     )

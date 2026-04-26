@@ -56,6 +56,9 @@
 - [x] T7.4 (PRD-WORLD_RUNTIME-014/015) [test_tier_full]: 对接 launcher / chain runtime / soak 场景，验证 `dev_local`、`release_default`、`soak_forensics` 三档 profile 口径一致。
 - [x] T7.5 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 回写专题 PRD / project、模块项目文档、`testing-manual.md`（如测试入口变化）与 `doc/devlog/2026-03-08.md`，归档体积对比与回放验证结论。
 
+### T8 Replication footprint follow-up
+- [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication store 增加 cold-index-aware orphan sweep，并将 `files_index` / `replication_commit_messages` / cold-index 落盘切到 compact JSON，减少 legacy orphan blob 与 pretty-json 块膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
+
 ## 执行顺序与依赖
 - M1（契约冻结）: 先完成 T1.1 ~ T1.4，冻结 replay truth-source、checkpoint manifest 与外部 effect contract；T2 / T3 / T6 以此为前置。
 - M2（写路径与 GC）: 再完成 T2.1 ~ T2.4 与 T3.1 ~ T3.3，优先解决 execution bridge 历史 refs 与 sidecar blob 无界增长。
@@ -79,9 +82,9 @@
 - `testing-manual.md`
 
 ## 状态
-- 更新日期: 2026-03-08
+- 更新日期: 2026-04-26
 - 当前状态: completed
-- 已完成: T0、T0.1、T1.1、T1.2、T1.3、T1.4、T1.5、T2.1、T2.2、T2.3、T2.4、T2.5、T3.1、T3.2、T3.3、T3.4、T4.1、T4.2、T4.3、T4.4、T5.1、T5.2、T5.3、T5.4、T6.1、T6.2、T6.3、T6.4、T6.5、T7.1
+- 已完成: T0、T0.1、T1.1、T1.2、T1.3、T1.4、T1.5、T2.1、T2.2、T2.3、T2.4、T2.5、T3.1、T3.2、T3.3、T3.4、T4.1、T4.2、T4.3、T4.4、T5.1、T5.2、T5.3、T5.4、T6.1、T6.2、T6.3、T6.4、T6.5、T7.1、T8.1
 - 已拆解待执行: 无
 - 进行中: 无
 - 阻塞项: 无；但 T2 / T3 / T6 / T7 的实现必须以前置 T1 契约冻结为准。
@@ -99,4 +102,6 @@
 - 本轮新增（2026-03-11 / T7.4 启动）: 已补 `oasis7_game_launcher` / `oasis7_web_launcher` 的 tri-profile 参数透传回归，并向 `viewer_engineer` 发起 bundle / launcher 实测 handoff。
 - 本轮新增（2026-03-11 / T7.4 viewer）: 已生成 `doc/world-runtime/evidence/runtime-launcher-profile-consistency-2026-03-11.md`，通过 bundle 实物与 `bash -x` trace 确认 `run-game.sh` / `run-web-launcher.sh` / `run-chain-runtime.sh` 对三档 profile 的注入口径一致。
 - 本轮新增（2026-03-11 / T7.5）: 已完成专题/模块/testing-manual/devlog 收口，并将 T7.2~T7.4 的正式 evidence 归档到专题状态。
+- 本轮新增（2026-04-26 / T8.1）: 已为 replication hot-window offload 增加 cold-index-aware orphan sweep；定向样本确认旧 `record + payload[]` envelope orphan blob 会在下一次 offload 后被清理，而不会误删 cold index 仍引用的归档 commit。
+- 本轮新增（2026-04-26 / T8.1）: `LocalCasStore` 现会在 path overwrite/delete 后即时清理不再被 `files_index`/pin 引用的旧 blob；`files_index`、热 commit mirror 与 cold-index 现改为 compact JSON 落盘，避免 pretty-json 把 `<1 KiB` 提交记录推过 `4 KiB` 块边界。
 - 下一任务: 无（本专题当前轮次完成）

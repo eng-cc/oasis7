@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use oasis7_distfs::{
     apply_replication_record, blake3_hex, build_replication_record_with_epoch, BlobStore as _,
-    FileReplicationRecord, LocalCasStore, SingleWriterReplicationGuard,
+    FileReplicationRecord, FileStore as _, LocalCasStore, SingleWriterReplicationGuard,
     StorageChallengeProbeConfig, StorageChallengeProbeReport,
 };
 use oasis7_proto::world_error::WorldError;
@@ -38,7 +38,8 @@ use self::support::{
     normalize_replication_public_key_hex_for_config,
     normalize_replication_public_key_hex_for_request, sign_fetch_blob_request,
     sign_fetch_commit_request, sign_replication_message, signing_key_from_hex,
-    verify_replication_message_signature, verify_signed_fetch_request, write_json_pretty,
+    verify_replication_message_signature, verify_signed_fetch_request, write_json_compact,
+    write_json_pretty,
 };
 pub(crate) use self::support::{load_blob_from_root, load_commit_message_from_root};
 
@@ -646,7 +647,7 @@ impl ReplicationRuntime {
         height: u64,
         message: &GossipReplicationMessage,
     ) -> Result<(), NodeError> {
-        write_json_pretty(self.config.commit_message_path(height).as_path(), message)?;
+        write_json_compact(self.config.commit_message_path(height).as_path(), message)?;
         self.prune_hot_commit_messages()
     }
 
@@ -685,7 +686,65 @@ impl ReplicationRuntime {
                 reason: format!("remove {} failed: {}", path.display(), err),
             })?;
         }
+        self.prune_store_orphans()?;
         Ok(())
+    }
+
+    fn prune_store_orphans(&self) -> Result<u64, NodeError> {
+        let mut referenced_hashes = BTreeSet::new();
+        for metadata in self
+            .store
+            .list_files()
+            .map_err(distfs_error_to_node_error)?
+        {
+            referenced_hashes.insert(metadata.content_hash);
+        }
+        for pinned_hash in self.store.list_pins().map_err(distfs_error_to_node_error)? {
+            referenced_hashes.insert(pinned_hash);
+        }
+        let cold_index = load_commit_message_cold_index_from_root(self.config.root_dir.as_path())?;
+        referenced_hashes.extend(cold_index.by_height.values().cloned());
+
+        let blobs_dir = self.config.root_dir.join("store").join("blobs");
+        if !blobs_dir.exists() {
+            return Ok(0);
+        }
+
+        let mut freed = 0u64;
+        for entry in fs::read_dir(&blobs_dir).map_err(|err| NodeError::Replication {
+            reason: format!("read_dir {} failed: {}", blobs_dir.display(), err),
+        })? {
+            let entry = entry.map_err(|err| NodeError::Replication {
+                reason: format!("read_dir {} entry failed: {}", blobs_dir.display(), err),
+            })?;
+            if !entry
+                .file_type()
+                .map_err(|err| NodeError::Replication {
+                    reason: format!("stat {} failed: {}", entry.path().display(), err),
+                })?
+                .is_file()
+            {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("blob") {
+                continue;
+            }
+            let Some(content_hash) = path.file_stem().and_then(|stem| stem.to_str()) else {
+                return Err(NodeError::Replication {
+                    reason: format!("invalid blob file name: {}", path.display()),
+                });
+            };
+            if referenced_hashes.contains(content_hash) {
+                continue;
+            }
+            let size = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+            fs::remove_file(&path).map_err(|err| NodeError::Replication {
+                reason: format!("remove {} failed: {}", path.display(), err),
+            })?;
+            freed = freed.saturating_add(size);
+        }
+        Ok(freed)
     }
 
     pub(crate) fn load_commit_message_by_height(
