@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>software_safe first agent claim evidence</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f172a;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      iframe {
+        border: 0;
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      id="software-safe-frame"
+      src="./software_safe.html?test_api=1&connect=0"
+      title="software_safe first agent claim evidence"
+    ></iframe>
+    <script>
+      const snapshot = {
+        time: 12,
+        player_gameplay: {
+          stage_id: "first_session_loop",
+          stage_status: "active",
+          goal_id: "first_session_loop.create_first_world_feedback",
+          goal_kind: "CreateFirstWorldFeedback",
+          goal_title: "Claim your first agent slot",
+          objective: "Submit the first claim approval request before claiming slot-1.",
+          progress_detail: "Approval request is pending operator review.",
+          progress_percent: 24,
+          blocker_kind: null,
+          blocker_detail: null,
+          next_step_hint: "Wait for review or contact operations if the request is stale.",
+          branch_hint: null,
+          available_actions: [],
+          recent_feedback: null,
+          agent_claim: {
+            claimer_agent_id: "agent-0",
+            current_epoch: 3,
+            reputation_tier: 0,
+            claim_cap: 1,
+            owned_claim_count: 0,
+            liquid_main_token_balance: 0,
+            restricted_starter_claim_balance: 0,
+            slot_1_eligible_claim_balance: 0,
+            next_claim_quote: null,
+            first_agent_claim_approval_request: {
+              request_id: 7,
+              status: "pending",
+              requested_slot_index: 1,
+              requested_reputation_tier: 0,
+              requested_total_upfront_amount: 325,
+              requested_at_epoch: 3,
+              updated_at_epoch: 3,
+              operator_account_id: null,
+              approved_amount: null,
+              expires_at_epoch: null,
+              rejection_reason: null
+            },
+            owned_claims: []
+          }
+        }
+      };
+
+      const frame = document.getElementById("software-safe-frame");
+
+      function injectSnapshot() {
+        const api = frame?.contentWindow?.__AW_TEST__;
+        if (!api?.injectSnapshot) {
+          window.setTimeout(injectSnapshot, 100);
+          return;
+        }
+        api.injectSnapshot(snapshot);
+      }
+
+      frame.addEventListener("load", () => {
+        window.setTimeout(injectSnapshot, 150);
+      });
+    </script>
+  </body>
+</html>

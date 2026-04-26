@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 globalThis.window = {
-  location: { search: "", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011", pathname: "/software_safe.html" },
+  location: { search: "?test_api=1", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1", pathname: "/software_safe.html" },
   history: { replaceState() {} },
   localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
   addEventListener() {},
@@ -136,6 +136,122 @@ const core = await import("../software_safe_src/legacy_core.js");
 {
   const gameplaySummary = core.buildGameplaySummary("zh");
   assert.match(gameplaySummary.assetGovernanceHandoff, /资产 \/ 治理动作/);
+}
+
+{
+  const approvedDisplay = core.describeFirstAgentClaimApprovalRequest({
+    requestId: 9,
+    status: "approved",
+    requestedSlotIndex: 1,
+    requestedReputationTier: 0,
+    requestedTotalUpfrontAmount: 325,
+    requestedAtEpoch: 3,
+    updatedAtEpoch: 4,
+    operatorAccountId: "ops-1",
+    approvedAmount: 325,
+    expiresAtEpoch: 9,
+    rejectionReason: null,
+  });
+  assert.equal(approvedDisplay.label, "approved");
+  assert.equal(approvedDisplay.badgeClass, "badge badge--good");
+  assert.match(approvedDisplay.summary, /Approved amount: 325/);
+  assert(approvedDisplay.details.includes("approved_amount=325"));
+  assert(approvedDisplay.details.includes("expires_at_epoch=9"));
+  assert(approvedDisplay.details.includes("operator=ops-1"));
+
+  const rejectedDisplay = core.describeFirstAgentClaimApprovalRequest({
+    requestId: 10,
+    status: "rejected",
+    requestedSlotIndex: 1,
+    requestedReputationTier: 0,
+    requestedTotalUpfrontAmount: 325,
+    requestedAtEpoch: 3,
+    updatedAtEpoch: 5,
+    operatorAccountId: "ops-2",
+    approvedAmount: null,
+    expiresAtEpoch: null,
+    rejectionReason: "missing_reputation_proof",
+  });
+  assert.equal(rejectedDisplay.label, "rejected");
+  assert.equal(rejectedDisplay.badgeClass, "badge badge--warn");
+  assert.match(rejectedDisplay.summary, /rejected/i);
+  assert(rejectedDisplay.details.includes("operator=ops-2"));
+  assert(rejectedDisplay.details.includes("rejection_reason=missing_reputation_proof"));
+
+  const unknownDisplay = core.describeFirstAgentClaimApprovalRequest({
+    requestId: 11,
+    status: "queued_for_manual_recheck",
+    requestedSlotIndex: 1,
+    requestedReputationTier: 0,
+    requestedTotalUpfrontAmount: 325,
+    requestedAtEpoch: 3,
+    updatedAtEpoch: 6,
+    operatorAccountId: null,
+    approvedAmount: null,
+    expiresAtEpoch: null,
+    rejectionReason: null,
+  });
+  assert.equal(unknownDisplay.label, "unknown");
+  assert.equal(unknownDisplay.badgeClass, "badge badge--warn");
+  assert.match(unknownDisplay.summary, /unrecognized approval status/i);
+  assert.match(unknownDisplay.summary, /queued_for_manual_recheck/);
+}
+
+{
+  const injectedState = core.injectSnapshot({
+    time: 12,
+    player_gameplay: {
+      stage_id: "first_session_loop",
+      stage_status: "active",
+      goal_id: "first_session_loop.create_first_world_feedback",
+      goal_kind: "CreateFirstWorldFeedback",
+      goal_title: "Claim your first agent slot",
+      objective: "Submit the first claim approval request before claiming slot-1.",
+      progress_detail: "Approval request is pending operator review.",
+      progress_percent: 24,
+      blocker_kind: null,
+      blocker_detail: null,
+      next_step_hint: "Wait for review or contact operations if the request is stale.",
+      branch_hint: null,
+      available_actions: [],
+      recent_feedback: null,
+      agent_claim: {
+        claimer_agent_id: "agent-0",
+        current_epoch: 3,
+        reputation_tier: 0,
+        claim_cap: 1,
+        owned_claim_count: 0,
+        liquid_main_token_balance: 0,
+        restricted_starter_claim_balance: 0,
+        slot_1_eligible_claim_balance: 0,
+        next_claim_quote: null,
+        first_agent_claim_approval_request: {
+          request_id: 7,
+          status: "pending",
+          requested_slot_index: 1,
+          requested_reputation_tier: 0,
+          requested_total_upfront_amount: 325,
+          requested_at_epoch: 3,
+          updated_at_epoch: 3,
+          operator_account_id: null,
+          approved_amount: null,
+          expires_at_epoch: null,
+          rejection_reason: null,
+        },
+        owned_claims: [],
+      },
+    },
+  });
+  assert.equal(injectedState.logicalTime, 12);
+  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.status, "pending");
+  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestId, "7");
+  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestedTotalUpfrontAmount, "325");
+  const pendingDisplay = core.describeFirstAgentClaimApprovalRequest(
+    injectedState.gameplaySummary.firstAgentClaimApprovalRequest,
+  );
+  assert.equal(pendingDisplay.label, "pending");
+  assert.equal(pendingDisplay.badgeClass, "badge badge--accent");
+  assert.match(pendingDisplay.summary, /recorded on-chain/i);
 }
 
 {
