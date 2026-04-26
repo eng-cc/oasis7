@@ -146,11 +146,11 @@ fn latest_first_agent_claim_approval_request_snapshot(
     state: &WorldState,
     primary_agent_id: &str,
 ) -> Option<PlayerFirstAgentClaimApprovalRequestSnapshot> {
-    let request = state
-        .first_agent_claim_approval_requests
-        .values()
-        .filter(|request| request.claimer_agent_id == primary_agent_id)
-        .max_by_key(|request| request.request_id)?;
+    let request_id = state
+        .latest_first_agent_claim_approval_request_ids_by_claimer
+        .get(primary_agent_id)
+        .copied()?;
+    let request = state.first_agent_claim_approval_requests.get(&request_id)?;
     Some(PlayerFirstAgentClaimApprovalRequestSnapshot {
         request_id: request.request_id,
         status: first_agent_claim_approval_status_label(request.status).to_string(),

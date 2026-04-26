@@ -135,6 +135,84 @@ fn first_agent_claim_approval_request_persists_pending_state() {
         WorldEventBody::Domain(DomainEvent::FirstAgentClaimApprovalRequested { request_id, .. })
             if *request_id == 1
     ));
+    assert_eq!(
+        world
+            .state()
+            .latest_first_agent_claim_approval_request_ids_by_claimer
+            .get("alice"),
+        Some(&1)
+    );
+}
+
+#[test]
+fn first_agent_claim_approval_index_migrates_legacy_requests() {
+    let mut state = WorldState::default();
+    state.first_agent_claim_approval_requests.insert(
+        3,
+        FirstAgentClaimApprovalRequestState {
+            request_id: 3,
+            claimer_agent_id: "alice".to_string(),
+            requested_slot_index: 1,
+            requested_reputation_tier: 0,
+            requested_total_upfront_amount: 325,
+            requested_at_epoch: 3,
+            status: FirstAgentClaimApprovalRequestStatus::Rejected,
+            updated_at_epoch: 4,
+            operator_account_id: Some("liveops".to_string()),
+            approved_amount: None,
+            expires_at_epoch: None,
+            rejection_reason: Some("legacy".to_string()),
+        },
+    );
+    state.first_agent_claim_approval_requests.insert(
+        5,
+        FirstAgentClaimApprovalRequestState {
+            request_id: 5,
+            claimer_agent_id: "alice".to_string(),
+            requested_slot_index: 1,
+            requested_reputation_tier: 1,
+            requested_total_upfront_amount: 488,
+            requested_at_epoch: 5,
+            status: FirstAgentClaimApprovalRequestStatus::Pending,
+            updated_at_epoch: 5,
+            operator_account_id: None,
+            approved_amount: None,
+            expires_at_epoch: None,
+            rejection_reason: None,
+        },
+    );
+    state.first_agent_claim_approval_requests.insert(
+        4,
+        FirstAgentClaimApprovalRequestState {
+            request_id: 4,
+            claimer_agent_id: "bob".to_string(),
+            requested_slot_index: 1,
+            requested_reputation_tier: 0,
+            requested_total_upfront_amount: 325,
+            requested_at_epoch: 4,
+            status: FirstAgentClaimApprovalRequestStatus::Approved,
+            updated_at_epoch: 4,
+            operator_account_id: Some("liveops".to_string()),
+            approved_amount: Some(325),
+            expires_at_epoch: Some(10),
+            rejection_reason: None,
+        },
+    );
+
+    state.migrate_compat_first_agent_claim_approval_request_index();
+
+    assert_eq!(
+        state
+            .latest_first_agent_claim_approval_request_ids_by_claimer
+            .get("alice"),
+        Some(&5)
+    );
+    assert_eq!(
+        state
+            .latest_first_agent_claim_approval_request_ids_by_claimer
+            .get("bob"),
+        Some(&4)
+    );
 }
 
 #[test]
