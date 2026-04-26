@@ -1,6 +1,7 @@
 use super::*;
 use oasis7_proto::storage_cold_index::{
     storage_cold_index_dir_name, STORAGE_COLD_INDEX_MANIFEST_FILE,
+    STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF,
 };
 use std::path::PathBuf;
 
@@ -55,6 +56,18 @@ fn signed_remote_message(
     };
     message.signature_hex = Some(sign_replication_message(&message, &signer).expect("sign"));
     message
+}
+
+fn cold_entry_content_hash(
+    cold_index: &commit_retention::CommitMessageColdIndex,
+    height: u64,
+) -> String {
+    cold_index
+        .by_height
+        .get(&height)
+        .expect("cold entry")
+        .content_hash()
+        .to_string()
 }
 
 #[test]
@@ -377,7 +390,10 @@ fn commit_cold_index_uses_canonical_layout_and_refreshes_hot_range() {
     let cold_index = load_commit_message_cold_index_from_root(dir.as_path()).expect("cold index");
     assert_eq!(cold_index.manifest.namespace, COMMIT_MESSAGE_DIR);
     assert_eq!(cold_index.manifest.key_kind, "height");
-    assert_eq!(cold_index.manifest.value_kind, "content_hash");
+    assert_eq!(
+        cold_index.manifest.value_kind,
+        STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF
+    );
     assert_eq!(
         cold_index.manifest.hot_range,
         Some(oasis7_proto::storage_cold_index::StorageColdIndexRange {
@@ -391,16 +407,8 @@ fn commit_cold_index_uses_canonical_layout_and_refreshes_hot_range() {
             oasis7_proto::storage_cold_index::StorageColdIndexRangeAnchor {
                 from_key: 1,
                 to_key: 1,
-                first_content_hash: cold_index
-                    .by_height
-                    .get(&1)
-                    .expect("height 1 anchor hash")
-                    .clone(),
-                last_content_hash: cold_index
-                    .by_height
-                    .get(&1)
-                    .expect("height 1 anchor hash")
-                    .clone(),
+                first_content_hash: cold_entry_content_hash(&cold_index, 1),
+                last_content_hash: cold_entry_content_hash(&cold_index, 1),
                 entry_count: 1,
             }
         )
@@ -411,6 +419,53 @@ fn commit_cold_index_uses_canonical_layout_and_refreshes_hot_range() {
         !canonical_bytes.contains(&b'\n'),
         "cold index manifest should be written without pretty-print newlines"
     );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn commit_cold_index_packs_multiple_heights_into_shared_segment_file() {
+    let dir = temp_dir("commit-cold-pack-shared-segment");
+    let world_id = "world-commit-cold-pack-shared-segment";
+    let config = NodeReplicationConfig::new(&dir)
+        .expect("config")
+        .with_max_hot_commit_messages(2)
+        .expect("hot commit cap");
+    let runtime = ReplicationRuntime::new(&config, "node-a").expect("runtime");
+
+    for height in 1..=4 {
+        runtime
+            .persist_commit_message(
+                height,
+                &signed_remote_message(120 + height as u8, world_id, "node-b", height),
+            )
+            .expect("persist packed commit message");
+    }
+
+    let cold_index = load_commit_message_cold_index_from_root(dir.as_path()).expect("cold index");
+    let entry_1 = cold_index.by_height.get(&1).expect("height 1");
+    let entry_2 = cold_index.by_height.get(&2).expect("height 2");
+    match (entry_1, entry_2) {
+        (
+            commit_retention::CommitMessageColdEntry::PackRef(pack_1),
+            commit_retention::CommitMessageColdEntry::PackRef(pack_2),
+        ) => {
+            assert_eq!(
+                pack_1.segment_id, pack_2.segment_id,
+                "nearby cold heights should share one pack segment"
+            );
+            assert!(
+                pack_2.offset > pack_1.offset,
+                "later packed commit should append after earlier one"
+            );
+            let segment_path = dir
+                .join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR))
+                .join("segments")
+                .join(format!("{}.pack", pack_1.segment_id));
+            assert!(segment_path.exists(), "pack segment should exist");
+        }
+        _ => panic!("cold entries should be rewritten as pack refs"),
+    }
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -472,23 +527,41 @@ fn load_commit_message_by_height_migrates_legacy_only_cold_index_to_canonical_la
 
     let message_1 = signed_remote_message(91, world_id, "node-b", 1);
     let message_2 = signed_remote_message(92, world_id, "node-b", 2);
-    let message_3 = signed_remote_message(93, world_id, "node-b", 3);
-    runtime
-        .persist_commit_message(1, &message_1)
-        .expect("persist message 1");
-    runtime
-        .persist_commit_message(2, &message_2)
-        .expect("persist message 2");
-    runtime
-        .persist_commit_message(3, &message_3)
-        .expect("persist message 3");
+    let message_1_bytes = serde_json::to_vec(&message_1).expect("serialize message 1");
+    let message_2_bytes = serde_json::to_vec(&message_2).expect("serialize message 2");
+    let hash_1 = runtime
+        .store
+        .put_bytes(message_1_bytes.as_slice())
+        .expect("store legacy message 1");
+    let hash_2 = runtime
+        .store
+        .put_bytes(message_2_bytes.as_slice())
+        .expect("store legacy message 2");
+    let legacy_blob_1 = runtime.store.blobs_dir().join(format!("{hash_1}.blob"));
+    let legacy_blob_2 = runtime.store.blobs_dir().join(format!("{hash_2}.blob"));
+    assert!(legacy_blob_1.exists(), "legacy blob 1 should exist");
+    assert!(legacy_blob_2.exists(), "legacy blob 2 should exist");
 
+    let legacy_index_path = dir.join("replication_commit_messages_cold_index.json");
+    std::fs::write(
+        &legacy_index_path,
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "namespace": COMMIT_MESSAGE_DIR,
+            "key_kind": "height",
+            "value_kind": "content_hash",
+            "by_height": {
+                "1": hash_1,
+                "2": hash_2,
+            }
+        }))
+        .expect("serialize legacy cold index"),
+    )
+    .expect("write legacy cold index");
     let canonical_dir = dir.join(storage_cold_index_dir_name(COMMIT_MESSAGE_DIR));
-    std::fs::remove_dir_all(&canonical_dir).expect("remove canonical cold index dir");
     assert!(
-        dir.join("replication_commit_messages_cold_index.json")
-            .exists(),
-        "legacy cold index should still exist"
+        !canonical_dir.exists(),
+        "canonical cold index dir should not exist before migration"
     );
 
     let loaded_1 = runtime
@@ -501,6 +574,22 @@ fn load_commit_message_by_height_migrates_legacy_only_cold_index_to_canonical_la
             .join(STORAGE_COLD_INDEX_MANIFEST_FILE)
             .exists(),
         "legacy-only cold index should backfill canonical manifest on read"
+    );
+    let cold_index = load_commit_message_cold_index_from_root(dir.as_path()).expect("cold index");
+    assert_eq!(
+        cold_index.manifest.value_kind,
+        STORAGE_COLD_INDEX_VALUE_KIND_COMMIT_PACK_REF
+    );
+    assert!(
+        matches!(
+            cold_index.by_height.get(&1),
+            Some(commit_retention::CommitMessageColdEntry::PackRef(_))
+        ),
+        "legacy hash entry should migrate into pack ref"
+    );
+    assert!(
+        !legacy_blob_1.exists() && !legacy_blob_2.exists(),
+        "migrated legacy CAS blobs should be deleted once pack refs are persisted"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -578,12 +667,12 @@ fn commit_cold_index_scan_anchor_matches_readback_boundaries() {
         .expect("load last cold height")
         .expect("last cold commit exists");
     assert_eq!(
-        cold_index.by_height.get(&anchor.from_key),
-        Some(&anchor.first_content_hash)
+        cold_entry_content_hash(&cold_index, anchor.from_key),
+        anchor.first_content_hash
     );
     assert_eq!(
-        cold_index.by_height.get(&anchor.to_key),
-        Some(&anchor.last_content_hash)
+        cold_entry_content_hash(&cold_index, anchor.to_key),
+        anchor.last_content_hash
     );
     assert_eq!(
         first_cold.record.content_hash,

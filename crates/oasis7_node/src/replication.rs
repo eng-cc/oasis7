@@ -30,7 +30,9 @@ mod support;
 
 use self::commit_retention::{
     build_commit_message_retention_plan, has_commit_message_cold_index,
-    load_commit_message_cold_index_from_root, write_commit_message_cold_index_to_root,
+    load_commit_message_cold_index_from_root, prune_unreferenced_commit_message_pack_files,
+    write_commit_message_cold_index_to_root, write_commit_message_pack_entry,
+    CommitMessageColdEntry,
 };
 use self::support::{
     distfs_error_to_node_error, fetch_blob_request_signing_bytes,
@@ -664,10 +666,13 @@ impl ReplicationRuntime {
                 reason: format!("read {} failed: {}", candidate.path.display(), err),
             })?;
             let content_hash = blake3_hex(bytes.as_slice());
-            self.store
-                .put(content_hash.as_str(), bytes.as_slice())
-                .map_err(distfs_error_to_node_error)?;
-            offloaded.push((candidate.height, content_hash, candidate.path));
+            let pack_ref = write_commit_message_pack_entry(
+                self.config.root_dir.as_path(),
+                candidate.height,
+                bytes.as_slice(),
+                content_hash.as_str(),
+            )?;
+            offloaded.push((candidate.height, pack_ref, candidate.path));
         }
         if offloaded.is_empty() && !had_cold_index {
             return Ok(());
@@ -675,11 +680,14 @@ impl ReplicationRuntime {
 
         let mut cold_index =
             load_commit_message_cold_index_from_root(self.config.root_dir.as_path())?;
-        for (height, content_hash, _) in &offloaded {
-            cold_index.by_height.insert(*height, content_hash.clone());
+        for (height, pack_ref, _) in &offloaded {
+            cold_index
+                .by_height
+                .insert(*height, CommitMessageColdEntry::PackRef(pack_ref.clone()));
         }
         cold_index.refresh_metadata(&retention_plan.hot_window);
         write_commit_message_cold_index_to_root(self.config.root_dir.as_path(), &cold_index)?;
+        prune_unreferenced_commit_message_pack_files(self.config.root_dir.as_path(), &cold_index)?;
 
         for (_, _, path) in offloaded {
             fs::remove_file(&path).map_err(|err| NodeError::Replication {
@@ -703,7 +711,17 @@ impl ReplicationRuntime {
             referenced_hashes.insert(pinned_hash);
         }
         let cold_index = load_commit_message_cold_index_from_root(self.config.root_dir.as_path())?;
-        referenced_hashes.extend(cold_index.by_height.values().cloned());
+        referenced_hashes.extend(
+            cold_index
+                .by_height
+                .values()
+                .filter_map(|entry| match entry {
+                    CommitMessageColdEntry::LegacyContentHash(content_hash) => {
+                        Some(content_hash.to_string())
+                    }
+                    CommitMessageColdEntry::PackRef(_) => None,
+                }),
+        );
 
         let blobs_dir = self.config.root_dir.join("store").join("blobs");
         if !blobs_dir.exists() {

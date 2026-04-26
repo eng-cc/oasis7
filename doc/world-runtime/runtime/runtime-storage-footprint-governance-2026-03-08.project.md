@@ -57,7 +57,7 @@
 - [x] T7.5 (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 回写专题 PRD / project、模块项目文档、`testing-manual.md`（如测试入口变化）与 `doc/devlog/2026-03-08.md`，归档体积对比与回放验证结论。
 
 ### T8 Replication footprint follow-up
-- [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication store 增加 cold-index-aware orphan sweep，并将 `files_index` / `replication_commit_messages` / cold-index 落盘切到 compact JSON，减少 legacy orphan blob 与 pretty-json 块膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
+- [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication store 增加 cold-index-aware orphan sweep，将 `files_index` / `replication_commit_messages` / cold-index 落盘切到 compact JSON，并把冷 commit 归档从“一块一文件”收敛为 segmented pack + offset 索引，减少 legacy orphan blob、inode 数和 pretty-json 块膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
 
 ## 执行顺序与依赖
 - M1（契约冻结）: 先完成 T1.1 ~ T1.4，冻结 replay truth-source、checkpoint manifest 与外部 effect contract；T2 / T3 / T6 以此为前置。
@@ -104,4 +104,6 @@
 - 本轮新增（2026-03-11 / T7.5）: 已完成专题/模块/testing-manual/devlog 收口，并将 T7.2~T7.4 的正式 evidence 归档到专题状态。
 - 本轮新增（2026-04-26 / T8.1）: 已为 replication hot-window offload 增加 cold-index-aware orphan sweep；定向样本确认旧 `record + payload[]` envelope orphan blob 会在下一次 offload 后被清理，而不会误删 cold index 仍引用的归档 commit。
 - 本轮新增（2026-04-26 / T8.1）: `LocalCasStore` 现会在 path overwrite/delete 后即时清理不再被 `files_index`/pin 引用的旧 blob；`files_index`、热 commit mirror 与 cold-index 现改为 compact JSON 落盘，避免 pretty-json 把 `<1 KiB` 提交记录推过 `4 KiB` 块边界。
+- 本轮新增（2026-04-26 / T8.1）: `replication_commit_messages` 冷归档现默认写入 `<namespace>.cold-index/segments/*.pack` 的固定高度段 pack 文件，cold index 仅记录 `segment_id + offset + len + content_hash`；同段多条冷 commit 共享同一文件，避免继续为每条冷 commit 保留独立 CAS blob。
+- 本轮新增（2026-04-26 / T8.1）: 旧 `height -> content_hash` 冷索引兼容样本会在第一次读回时自动迁移到 pack ref，并在 pack 索引落盘后删除不再被 file index / pin 引用的 legacy cold blob。
 - 下一任务: 无（本专题当前轮次完成）
