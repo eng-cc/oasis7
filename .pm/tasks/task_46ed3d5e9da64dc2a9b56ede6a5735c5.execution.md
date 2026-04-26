@@ -23,3 +23,8 @@ Example:
 - 完成内容: 通过 headless Chrome + CDP 以 `390px` 真移动视口复核首页，确认 `menu-button` / `lang-switch` 都在屏内，`scrollWidth` 与 `clientWidth` 同为 `390`，不再存在真实横向溢出。
 - 完成内容: 修正了移动端 `pulse-panel` 纵向布局继承桌面 `flex-basis` 导致的异常留白；最新截图证据已输出到 `output/agent-browser/homepage-mobile-cdp-v2.png` 与 `output/agent-browser/homepage-desktop-v2.png`。
 - 遗留事项: `agent-browser` 仍在 `page.setViewportSize: Target crashed` 阶段崩溃，因此这轮视觉验证继续使用 headless Chrome / CDP 旁路完成，后续若要恢复 viewer Web 自动截图链路，需单独排查 agent-browser 运行时环境。
+
+## 2026-04-26 13:20:28 CST / viewer_engineer
+- 完成内容: 处理 PR #157 的 4 条 unresolved review comments：为中英首页 `main#top` 补 `tabindex="-1"` 以修复 skip-link 键盘焦点；为 `developer-details summary` 补 `summary::marker` 以兼容 Firefox；重写 `site-homepage-claim-check.sh` 的 pattern 检查分支，避免在 `set -e` 下因为 `rg` / `grep` 未命中而提前退出。
+- 完成内容: 已复跑 `./scripts/site-homepage-claim-check.sh`、`./scripts/site-link-check.sh`、`git diff --check`，确认评论指向的 a11y / 跨浏览器 / shell 行为问题已闭环且未引入静态回归。
+- 遗留事项: 修复 push 后仍需显式执行 `resolveReviewThread` 收口 GitHub 线程；`reviewDecision` / `mergeStateStatus` 仍需单独复核，不能把 thread resolved 直接当成 merge-ready。
