@@ -26,6 +26,7 @@ Use this skill when the task involves any of these:
 - Launch the product path with `oasis7_game_launcher` in `provider_loopback_http` mode
 - Run `P0-001` parity smoke or inspect Local Provider latency / wait-only failures
 - Explain which Local Provider settings are required for a real local试玩
+- Explain or operate the current chain-runtime governance / first-agent-claim call surfaces
 
 Do not use this skill for:
 
@@ -67,6 +68,7 @@ curl -sS http://127.0.0.1:18789/health
 
 For exact field values and launch examples, read `references/real-play-config.md`.
 For Viewer / `software_safe` / observer-only UI boundaries, read `references/viewer-ui-lanes.md`.
+For governance review / approval / claim direct-call endpoints and snapshot readback, read `references/governance-call-surfaces.md`.
 
 ### 2. Download a playable release bundle
 
@@ -193,6 +195,7 @@ bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
 
 UI is optional here.
 If you need Viewer / `software_safe` behavior, fallback rules, or current observer-only boundaries, read `references/viewer-ui-lanes.md`.
+If you need the direct governance review / approval / claim chain, read `references/governance-call-surfaces.md`.
 
 ### 5.2 Chain Key Safety
 

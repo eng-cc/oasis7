@@ -23,12 +23,12 @@ use super::gameplay_state::{
 };
 use super::governance::{GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry};
 use super::main_token::{
-    main_token_bucket_unlocked_amount, MainTokenAccountBalance, MainTokenConfig,
-    MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
-    MainTokenNodePointsBridgeDistribution, MainTokenNodePointsBridgeEpochRecord,
-    MainTokenScheduledPolicyUpdate, MainTokenSupplyState, MainTokenTreasuryDistributionRecord,
-    RestrictedStarterClaimGrantState, RestrictedStarterClaimLiveopsPoolTopUpRecord,
-    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    main_token_bucket_unlocked_amount, FirstAgentClaimApprovalRequestState,
+    MainTokenAccountBalance, MainTokenConfig, MainTokenEpochIssuanceRecord,
+    MainTokenGenesisAllocationBucketState, MainTokenNodePointsBridgeDistribution,
+    MainTokenNodePointsBridgeEpochRecord, MainTokenScheduledPolicyUpdate, MainTokenSupplyState,
+    MainTokenTreasuryDistributionRecord, RestrictedStarterClaimGrantState,
+    RestrictedStarterClaimLiveopsPoolTopUpRecord, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::{
@@ -71,6 +71,10 @@ fn default_next_module_instance_id() -> u64 {
 }
 
 fn default_next_module_release_request_id() -> u64 {
+    1
+}
+
+fn default_next_first_agent_claim_approval_request_id() -> u64 {
     1
 }
 
@@ -477,6 +481,10 @@ pub struct WorldState {
     pub main_token_balances: BTreeMap<String, MainTokenAccountBalance>,
     #[serde(default)]
     pub restricted_starter_claim_grants: BTreeMap<String, RestrictedStarterClaimGrantState>,
+    #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
+    pub first_agent_claim_approval_requests: BTreeMap<u64, FirstAgentClaimApprovalRequestState>,
+    #[serde(default = "default_next_first_agent_claim_approval_request_id")]
+    pub next_first_agent_claim_approval_request_id: u64,
     #[serde(default)]
     pub main_token_genesis_buckets: BTreeMap<String, MainTokenGenesisAllocationBucketState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -571,6 +579,9 @@ impl Default for WorldState {
             main_token_supply: MainTokenSupplyState::default(),
             main_token_balances: BTreeMap::new(),
             restricted_starter_claim_grants: BTreeMap::new(),
+            first_agent_claim_approval_requests: BTreeMap::new(),
+            next_first_agent_claim_approval_request_id:
+                default_next_first_agent_claim_approval_request_id(),
             main_token_genesis_buckets: BTreeMap::new(),
             main_token_epoch_issuance_records: BTreeMap::new(),
             main_token_treasury_balances: BTreeMap::new(),
@@ -916,17 +927,6 @@ impl WorldState {
             | DomainEvent::PowerRedeemed { .. }
             | DomainEvent::PowerRedeemRejected { .. }
             | DomainEvent::NodePointsSettlementApplied { .. }
-            | DomainEvent::MainTokenGenesisInitialized { .. }
-            | DomainEvent::MainTokenVestingClaimed { .. }
-            | DomainEvent::MainTokenTransferred { .. }
-            | DomainEvent::MainTokenEpochIssued { .. }
-            | DomainEvent::MainTokenFeeSettled { .. }
-            | DomainEvent::MainTokenPolicyUpdateScheduled { .. }
-            | DomainEvent::MainTokenTreasuryDistributed { .. }
-            | DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. }
-            | DomainEvent::RestrictedStarterClaimGrantIssued { .. }
-            | DomainEvent::RestrictedStarterClaimGrantExpired { .. }
-            | DomainEvent::RestrictedStarterClaimGrantRevoked { .. }
             | DomainEvent::MaterialTransferred { .. }
             | DomainEvent::MaterialTransitStarted { .. }
             | DomainEvent::MaterialTransitCompleted { .. }
@@ -944,6 +944,22 @@ impl WorldState {
             | DomainEvent::RecipeProfileGoverned { .. }
             | DomainEvent::FactoryProfileGoverned { .. } => {
                 self.apply_domain_event_core(event, now)?
+            }
+            DomainEvent::MainTokenGenesisInitialized { .. }
+            | DomainEvent::MainTokenVestingClaimed { .. }
+            | DomainEvent::MainTokenTransferred { .. }
+            | DomainEvent::MainTokenEpochIssued { .. }
+            | DomainEvent::MainTokenFeeSettled { .. }
+            | DomainEvent::MainTokenPolicyUpdateScheduled { .. }
+            | DomainEvent::MainTokenTreasuryDistributed { .. }
+            | DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. }
+            | DomainEvent::RestrictedStarterClaimGrantIssued { .. }
+            | DomainEvent::RestrictedStarterClaimGrantExpired { .. }
+            | DomainEvent::RestrictedStarterClaimGrantRevoked { .. }
+            | DomainEvent::FirstAgentClaimApprovalRequested { .. }
+            | DomainEvent::FirstAgentClaimApprovalApproved { .. }
+            | DomainEvent::FirstAgentClaimApprovalRejected { .. } => {
+                self.apply_domain_event_main_token(event, now)?
             }
             DomainEvent::GameplayPolicyUpdated { .. }
             | DomainEvent::EconomicContractOpened { .. }

@@ -1,0 +1,22 @@
+task_uid: task_95128237584e403bbaa24b24b5c024b9
+title: "first agent claim approval closure"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-first-agent-claim-approval-closure
+execution_log_path: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+  - doc/world-simulator/project.md
+  - crates/oasis7/src/runtime/tests/agent_claims.rs
+  - crates/oasis7/src/bin/oasis7_chain_runtime/agent_claim_api.rs
+  - crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-040
+  - PRD-WORLD_SIMULATOR-045
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-26T14:15:16+08:00
+last_started_at: 2026-04-26T12:44:11+08:00

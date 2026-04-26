@@ -371,4 +371,188 @@ impl WorldState {
         grant.status_reason = Some(revoke_reason.to_string());
         Ok(())
     }
+
+    pub(super) fn apply_first_agent_claim_approval_requested(
+        &mut self,
+        request_id: u64,
+        claimer_agent_id: &str,
+        requested_slot_index: u8,
+        requested_reputation_tier: u8,
+        requested_total_upfront_amount: u64,
+        requested_at_epoch: u64,
+    ) -> Result<(), WorldError> {
+        if request_id == 0 {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "first agent claim approval request_id must be > 0".to_string(),
+            });
+        }
+        let claimer_agent_id = claimer_agent_id.trim();
+        if claimer_agent_id.is_empty() {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "first agent claim approval claimer_agent_id cannot be empty".to_string(),
+            });
+        }
+        if requested_slot_index != 1 {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval requested_slot_index must be 1: {}",
+                    requested_slot_index
+                ),
+            });
+        }
+        if requested_total_upfront_amount == 0 {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "first agent claim approval requested_total_upfront_amount must be > 0"
+                    .to_string(),
+            });
+        }
+        if self
+            .first_agent_claim_approval_requests
+            .contains_key(&request_id)
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request already exists: request_id={request_id}"
+                ),
+            });
+        }
+        self.first_agent_claim_approval_requests.insert(
+            request_id,
+            FirstAgentClaimApprovalRequestState {
+                request_id,
+                claimer_agent_id: claimer_agent_id.to_string(),
+                requested_slot_index,
+                requested_reputation_tier,
+                requested_total_upfront_amount,
+                requested_at_epoch,
+                status: FirstAgentClaimApprovalRequestStatus::Pending,
+                updated_at_epoch: requested_at_epoch,
+                operator_account_id: None,
+                approved_amount: None,
+                expires_at_epoch: None,
+                rejection_reason: None,
+            },
+        );
+        self.next_first_agent_claim_approval_request_id = self
+            .next_first_agent_claim_approval_request_id
+            .max(request_id.saturating_add(1))
+            .max(1);
+        Ok(())
+    }
+
+    pub(super) fn apply_first_agent_claim_approval_approved(
+        &mut self,
+        request_id: u64,
+        operator_account_id: &str,
+        claimer_agent_id: &str,
+        approved_amount: u64,
+        issuance_reason: &str,
+        spend_scope: &str,
+        source_treasury_bucket_id: &str,
+        approved_at_epoch: u64,
+        expires_at_epoch: u64,
+    ) -> Result<(), WorldError> {
+        let request = self
+            .first_agent_claim_approval_requests
+            .get(&request_id)
+            .cloned()
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request missing for approve: request_id={request_id}"
+                ),
+            })?;
+        if request.status != FirstAgentClaimApprovalRequestStatus::Pending {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request not pending for approve: request_id={} status={:?}",
+                    request_id, request.status
+                ),
+            });
+        }
+        if request.claimer_agent_id != claimer_agent_id {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval claimer mismatch: request_id={} expected={} actual={}",
+                    request_id, request.claimer_agent_id, claimer_agent_id
+                ),
+            });
+        }
+        if approved_amount == 0 {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "first agent claim approval approved_amount must be > 0".to_string(),
+            });
+        }
+        self.apply_restricted_starter_claim_grant_issued(
+            operator_account_id,
+            claimer_agent_id,
+            source_treasury_bucket_id,
+            approved_amount,
+            issuance_reason,
+            spend_scope,
+            approved_at_epoch,
+            expires_at_epoch,
+        )?;
+        let request = self
+            .first_agent_claim_approval_requests
+            .get_mut(&request_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request missing after grant issue: request_id={request_id}"
+                ),
+            })?;
+        request.status = FirstAgentClaimApprovalRequestStatus::Approved;
+        request.updated_at_epoch = approved_at_epoch;
+        request.operator_account_id = Some(operator_account_id.to_string());
+        request.approved_amount = Some(approved_amount);
+        request.expires_at_epoch = Some(expires_at_epoch);
+        request.rejection_reason = None;
+        Ok(())
+    }
+
+    pub(super) fn apply_first_agent_claim_approval_rejected(
+        &mut self,
+        request_id: u64,
+        operator_account_id: &str,
+        claimer_agent_id: &str,
+        rejected_at_epoch: u64,
+        reason: &str,
+    ) -> Result<(), WorldError> {
+        let request = self
+            .first_agent_claim_approval_requests
+            .get_mut(&request_id)
+            .ok_or_else(|| WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request missing for reject: request_id={request_id}"
+                ),
+            })?;
+        if request.status != FirstAgentClaimApprovalRequestStatus::Pending {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval request not pending for reject: request_id={} status={:?}",
+                    request_id, request.status
+                ),
+            });
+        }
+        if request.claimer_agent_id != claimer_agent_id {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "first agent claim approval claimer mismatch for reject: request_id={} expected={} actual={}",
+                    request_id, request.claimer_agent_id, claimer_agent_id
+                ),
+            });
+        }
+        let reason = reason.trim();
+        if reason.is_empty() {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: "first agent claim approval reject reason cannot be empty".to_string(),
+            });
+        }
+        request.status = FirstAgentClaimApprovalRequestStatus::Rejected;
+        request.updated_at_epoch = rejected_at_epoch;
+        request.operator_account_id = Some(operator_account_id.to_string());
+        request.approved_amount = None;
+        request.expires_at_epoch = None;
+        request.rejection_reason = Some(reason.to_string());
+        Ok(())
+    }
 }

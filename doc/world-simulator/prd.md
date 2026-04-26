@@ -214,6 +214,7 @@
   - SC-106: viewer/client 收口后，runtime/tooling 的源码内嵌负向测试 helper / fixture 命名也必须继续收口到 `removed_old_brand` 等中性语义；旧品牌 env/profile 字面量仅允许作为“已移除 alias 的负向输入”存在，不得继续作为测试 helper 主命名或默认 fixture 身份。
   - SC-107: 活跃角色卡、core 主入口与 world-runtime 主文档必须使用当前 `oasis7*` / `OASIS7_*` 口径描述现行 crate/path/env；旧 `oasis7*` / `OASIS7_*` 仅允许保留在历史任务、归档专题或负向测试输入中，不得继续作为 owner 文档或模块主入口的当前说明。
   - SC-108: GitHub Release 的三平台公开资产必须继续保持“每个平台一个安装包或可直接运行入口”边界：Linux `.deb` 安装后有 `/usr/bin/oasis7-client`，macOS `.dmg` 内有可双击的 `oasis7 Client Launcher.app`，Windows `.exe` 作为 NSIS 安装器在安装后提供可启动客户端的入口（如安装完成后启动选项和开始菜单入口），且 bundle 校验脚本会在平台原生入口缺失时直接失败。
+  - SC-109: `slot-1` onboarding 不能只停留在文档；world-simulator 必须存在玩家可提交的首个 claim 审批申请入口、运营可直接调用的 pending review / approve / reject 接口，以及玩家可见的审批状态回流，使“点击 claim 后发生什么”能落在真实产品链路与链上记录上。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -227,6 +228,7 @@
   - LLM 链路核验（测试人员）：每周例行 + 发布前专项，聚焦可用性、回退策略与错误签名。
   - 启动器转账操作（启动器玩家）：按需触发，典型为启动后 1~3 次余额查询与转账提交。
   - 发布复核（发布负责人）：每个版本候选至少 1 次，汇总 checklist、证据模板与回归结论。
+  - 首个 agent onboarding（新账号玩家 / 运营）：按需触发，典型为玩家先提交 `slot-1` 审批申请、运营查看 pending queue 并批准/拒绝、玩家随后完成首次 `ClaimAgent`。
 - User Stories:
   - PRD-WORLD_SIMULATOR-001: As a 模拟层开发者, I want unified world-simulator contracts, so that scenario evolution is stable.
   - PRD-WORLD_SIMULATOR-002: As a Viewer 开发者, I want consistent web-first UX rules, so that user paths remain predictable.
@@ -271,6 +273,7 @@
   - PRD-WORLD_SIMULATOR-041: As a 制作人 / viewer_engineer / qa_engineer, I want all 3D visualization work paused and the current user-interaction branch held as a staged reference, so that near-term capacity stays on non-3D interaction scope, especially `software_safe`, launcher/runtime interaction, and gameplay closure, while future resumption remains auditable.
   - PRD-WORLD_SIMULATOR-042: As a release user / producer / QA, I want each platform release asset to expose a native install or launch entrypoint, so that I can open the downloaded artifact without reverse-engineering bundle-only shell wrappers.
   - PRD-WORLD_SIMULATOR-044: As a 启动器玩家 / 运维人员, I want the launcher explorer to read like a mainnet-grade block explorer, so that I can inspect chain state with clear hierarchy, faster scanning, and lower context-switch cost.
+  - PRD-WORLD_SIMULATOR-045: As a 新账号玩家 / `liveops_community`, I want a complete first-agent claim approval flow with direct callable request/review APIs and player-visible status, so that `slot-1` onboarding no longer depends on undocumented manual grants.
 - 模式分层说明：按 `PRD-CORE-009`，`PRD-WORLD_SIMULATOR-039` 对应玩家访问模式 `software_safe`，且现在承接低保真但正式可玩的主要 Web 入口；`standard_3d` 继续保留为 visual QA / screenshot / spatial review 模式，而不是默认浏览器主路径。`PRD-WORLD_SIMULATOR-037` 定义 provider-backed Local Provider 路径（`agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`；`agent_direct_connect/provider_loopback_http` 仅作兼容 alias），`PRD-WORLD_SIMULATOR-040` 定义 `player_parity / headless_agent / debug_viewer` execution lane；`PRD-WORLD_SIMULATOR-041` 只定义当前研发优先级与冻结策略，不新增玩家访问模式。`non-3D interaction` / `2D 优先` 在这里是 Viewer 当前 delivery priority 或 interaction scope，不是 `software_safe` 的别名，也不是新的 mode_id。当前 `standard_3d` taxonomy 继续保留，但进入暂停研发态，不再接受新的 3D feature 承诺。
 - Critical User Flows:
   1. Flow-WS-001（Web-first 闭环）:
@@ -668,6 +671,7 @@
 | PRD-WORLD_SIMULATOR-042 | TASK-WORLD_SIMULATOR-308/309 | `test_tier_required` | `bash -n scripts/build-game-launcher-bundle.sh` + `bash -n scripts/package-native-installer.sh` + `bash -n scripts/validate-release-platform-entrypoints.sh` + Linux 实 bundle/`.deb` 验证（`./scripts/build-game-launcher-bundle.sh --out-dir <tmp>/linux-bundle --profile release`、`./scripts/validate-release-platform-entrypoints.sh --platform linux-x64 --bundle-dir <tmp>/linux-bundle`、`./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/linux-bundle --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0`、`dpkg-deb --contents <tmp>/out/oasis7-linux-x64.deb`） + macOS/Windows dry-run 入口检查（`./scripts/build-game-launcher-bundle.sh --dry-run --target-triple x86_64-apple-darwin ...`、`./scripts/build-game-launcher-bundle.sh --dry-run --target-triple x86_64-pc-windows-msvc ...`） | Release 下载资产的可运行性、平台原生入口真值、bundle 和安装包之间的入口一致性 |
 | PRD-WORLD_SIMULATOR-043 | `task_5d40365b4e714e5799a3baa834e84515` / `task_22a0d58d0d9445b1ad74127c25768d8d` / `task_85eb196085584f8e9ebb9b3f988cd169` / `task_3ec0a2b3318344209a2569fa294d05d1` / `task_30d0e01f74a3ced99f104893beb9d53f` | `test_tier_required` | `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `bash -n scripts/build-game-launcher-bundle.sh` + `git diff --check` + `rg -n "AppImage|notariz|codesign|standard installer|主 CTA|覆盖安装|config.toml|reward-runtime-execution-world" doc/world-simulator doc/site/github-pages site scripts/build-game-launcher-bundle.sh` + Windows bundle/installer dry-run + Linux AppImage dry-run | 普通用户向安装分发口径、公开下载面的一包一平台主路径、平台信任链、升级/覆盖边界与支持边界 |
 | PRD-WORLD_SIMULATOR-044 | `task_552222a529fa48489eab10deb789ed54` | `test_tier_required` | `./scripts/doc-governance-check.sh` + `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher -- --nocapture` + `env -u RUSTC_WRAPPER cargo check -p oasis7_client_launcher --target wasm32-unknown-unknown` + `env -u RUSTC_WRAPPER cargo fmt --all` + Web-first explorer smoke（agent-browser） | 启动器区块链浏览器的主链级信息架构、跨 tab 可扫描性、详情核查效率与跨端一致性 |
+| PRD-WORLD_SIMULATOR-045 | `task_95128237584e403bbaa24b24b5c024b9` | `test_tier_required` | `/v1/chain/agent-claim/approval-request/submit`、`/v1/chain/agent-claim/approval-requests`、approve/reject/claim 直连 API 回归 + viewer claim snapshot 审批状态回流 + `./scripts/doc-governance-check.sh` + `git diff --check` | 新账号首个 agent onboarding、运营审批入口、玩家 claim 前后状态可解释性 |
 
 - Decision Log:
 
