@@ -147,6 +147,7 @@ fn first_agent_claim_approval_request_persists_pending_state() {
 #[test]
 fn first_agent_claim_approval_index_migrates_legacy_requests() {
     let mut state = WorldState::default();
+    state.next_first_agent_claim_approval_request_id = 2;
     state.first_agent_claim_approval_requests.insert(
         3,
         FirstAgentClaimApprovalRequestState {
@@ -213,6 +214,7 @@ fn first_agent_claim_approval_index_migrates_legacy_requests() {
             .get("bob"),
         Some(&4)
     );
+    assert_eq!(state.next_first_agent_claim_approval_request_id, 6);
 }
 
 #[test]
