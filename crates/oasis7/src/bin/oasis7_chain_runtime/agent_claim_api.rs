@@ -408,7 +408,9 @@ fn parse_approval_requests_query(target: &str) -> Result<ApprovalRequestsQuery, 
     let mut query = ApprovalRequestsQuery::default();
     for pair in raw_query.split('&').filter(|pair| !pair.is_empty()) {
         let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-        match key {
+        let key = percent_decode(key);
+        let value = percent_decode(value);
+        match key.as_str() {
             "claimer_agent_id" => {
                 let value = value.trim();
                 if !value.is_empty() {
@@ -430,13 +432,50 @@ fn parse_approval_requests_query(target: &str) -> Result<ApprovalRequestsQuery, 
 fn parse_approval_request_status(
     raw: &str,
 ) -> Result<FirstAgentClaimApprovalRequestStatus, String> {
-    match raw {
+    match raw.trim().to_ascii_lowercase().as_str() {
         "pending" => Ok(FirstAgentClaimApprovalRequestStatus::Pending),
         "approved" => Ok(FirstAgentClaimApprovalRequestStatus::Approved),
         "rejected" => Ok(FirstAgentClaimApprovalRequestStatus::Rejected),
         _ => Err(format!(
             "unsupported approval request status filter: {raw} (expected pending|approved|rejected)"
         )),
+    }
+}
+
+fn percent_decode(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut cursor = 0_usize;
+    let mut output = Vec::with_capacity(bytes.len());
+
+    while cursor < bytes.len() {
+        let byte = bytes[cursor];
+        if byte == b'+' {
+            output.push(b' ');
+            cursor += 1;
+            continue;
+        }
+        if byte == b'%' && cursor + 2 < bytes.len() {
+            let high = hex_value(bytes[cursor + 1]);
+            let low = hex_value(bytes[cursor + 2]);
+            if let (Some(high), Some(low)) = (high, low) {
+                output.push((high << 4) | low);
+                cursor += 3;
+                continue;
+            }
+        }
+        output.push(byte);
+        cursor += 1;
+    }
+
+    String::from_utf8(output).unwrap_or_else(|_| raw.to_string())
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
 

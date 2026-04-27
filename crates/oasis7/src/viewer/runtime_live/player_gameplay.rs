@@ -257,6 +257,19 @@ impl ViewerRuntimeLiveServer {
                     target_agent_id: Some(request.target_agent_id.clone()),
                 });
             }
+            ensure_agent_player_access_runtime(
+                &self.world,
+                &self.llm_sidecar,
+                request.target_agent_id.as_str(),
+                verified.player_id.as_str(),
+                public_key.as_deref(),
+            )
+            .map_err(|err| GameplayActionError {
+                code: err.code,
+                message: err.message,
+                action_id: Some(request.action_id.clone()),
+                target_agent_id: err.agent_id,
+            })?;
         } else {
             ensure_agent_player_access_runtime(
                 &self.world,

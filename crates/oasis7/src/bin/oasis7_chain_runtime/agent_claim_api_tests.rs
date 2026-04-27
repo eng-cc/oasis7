@@ -1,5 +1,5 @@
 use super::{
-    maybe_handle_agent_claim_request, parse_approval_request_status,
+    maybe_handle_agent_claim_request, parse_approval_request_status, parse_approval_requests_query,
     reset_agent_claim_api_state_for_tests, ChainAgentClaimActionResponse,
     ChainAgentClaimApprovalRequestsResponse, ChainAgentClaimSubmitRequest,
     ChainFirstAgentClaimApprovalApproveRequest, ChainFirstAgentClaimApprovalRejectRequest,
@@ -257,12 +257,37 @@ fn approval_request_status_filter_parses_known_values() {
         FirstAgentClaimApprovalRequestStatus::Pending
     );
     assert_eq!(
+        parse_approval_request_status("PeNdInG").expect("mixed-case pending"),
+        FirstAgentClaimApprovalRequestStatus::Pending
+    );
+    assert_eq!(
         parse_approval_request_status("approved").expect("approved"),
+        FirstAgentClaimApprovalRequestStatus::Approved
+    );
+    assert_eq!(
+        parse_approval_request_status("APPROVED").expect("uppercase approved"),
         FirstAgentClaimApprovalRequestStatus::Approved
     );
     assert_eq!(
         parse_approval_request_status("rejected").expect("rejected"),
         FirstAgentClaimApprovalRequestStatus::Rejected
+    );
+    assert_eq!(
+        parse_approval_request_status("Rejected").expect("mixed-case rejected"),
+        FirstAgentClaimApprovalRequestStatus::Rejected
+    );
+}
+
+#[test]
+fn approval_requests_query_percent_decodes_filters() {
+    let query = parse_approval_requests_query(
+        "/v1/chain/agent-claim/approval-requests?status=PeNdInG&claimer_agent_id=ali%63e",
+    )
+    .expect("parse approval requests query");
+    assert_eq!(query.claimer_agent_id_filter.as_deref(), Some("alice"));
+    assert_eq!(
+        query.status_filter,
+        Some(FirstAgentClaimApprovalRequestStatus::Pending)
     );
 }
 
@@ -337,7 +362,7 @@ fn approval_requests_list_handler_returns_pending_request_rows() {
     )));
     let world_dir = pending_request_world_dir();
     let http_request = build_http_request(
-        "/v1/chain/agent-claim/approval-requests?status=pending",
+        "/v1/chain/agent-claim/approval-requests?status=PeNdInG&claimer_agent_id=ali%63e",
         "GET",
         "",
     );

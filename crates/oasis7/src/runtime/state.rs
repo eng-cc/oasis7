@@ -629,10 +629,20 @@ impl WorldState {
     }
 
     pub fn migrate_compat_first_agent_claim_approval_request_index(&mut self) {
-        if self.first_agent_claim_approval_requests.is_empty()
-            || !self
-                .latest_first_agent_claim_approval_request_ids_by_claimer
-                .is_empty()
+        if self.first_agent_claim_approval_requests.is_empty() {
+            return;
+        }
+        let highest_request_id = self
+            .first_agent_claim_approval_requests
+            .last_key_value()
+            .map(|(request_id, _)| *request_id)
+            .unwrap_or(0);
+        self.next_first_agent_claim_approval_request_id = self
+            .next_first_agent_claim_approval_request_id
+            .max(highest_request_id.saturating_add(1).max(1));
+        if !self
+            .latest_first_agent_claim_approval_request_ids_by_claimer
+            .is_empty()
         {
             return;
         }
