@@ -1,3 +1,4 @@
+use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_vec;
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7_proto::storage_profile::StorageProfile;
 use std::collections::BTreeSet;
@@ -191,7 +192,7 @@ impl Default for CliOptions {
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
-            chain_replication_bootstrap_peers: Vec::new(),
+            chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_vec(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS,
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT,

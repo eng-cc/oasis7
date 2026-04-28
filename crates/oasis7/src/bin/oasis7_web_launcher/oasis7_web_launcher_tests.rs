@@ -18,6 +18,7 @@ use super::{
     ServiceState, DEFAULT_CHAIN_NODE_ID, DEFAULT_CHAIN_STATUS_BIND, DEFAULT_LISTEN_BIND,
     DEFAULT_SCENARIO,
 };
+use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use oasis7_proto::storage_profile::StorageProfile;
 
 #[test]
@@ -36,10 +37,10 @@ fn parse_options_defaults() {
     );
     assert_eq!(options.initial_config.chain_p2p_user_mode, "auto_join");
     assert!(!options.initial_config.chain_p2p_accept_public_entry);
-    assert!(options
-        .initial_config
-        .chain_replication_bootstrap_peers
-        .is_empty());
+    assert_eq!(
+        options.initial_config.chain_replication_bootstrap_peers,
+        default_chain_replication_bootstrap_peers_csv()
+    );
     assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");

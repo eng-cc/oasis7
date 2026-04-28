@@ -27,6 +27,7 @@ use super::{
     VIEWER_AGENT_PROVIDER_URL_ENV, VIEWER_AUTH_BOOTSTRAP_OBJECT, VIEWER_AUTH_PRIVATE_KEY_ENV,
     VIEWER_AUTH_PUBLIC_KEY_ENV, VIEWER_PLAYER_ID_ENV, WORLDSIM_PROVIDER_CONTRACT,
 };
+use oasis7::launcher_bootstrap_peers::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS;
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7::simulator::{WorldConfig, WorldModel, WorldSnapshot};
 use oasis7::viewer::{ViewerRequest, ViewerResponse, VIEWER_PROTOCOL_VERSION};
@@ -103,7 +104,13 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_node_role, "sequencer");
     assert_eq!(options.chain_p2p_user_mode, "auto_join");
     assert!(!options.chain_p2p_accept_public_entry);
-    assert!(options.chain_replication_bootstrap_peers.is_empty());
+    assert_eq!(
+        options.chain_replication_bootstrap_peers,
+        DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS
+            .iter()
+            .map(|peer| (*peer).to_string())
+            .collect::<Vec<_>>()
+    );
     assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
     assert_eq!(options.chain_pos_proposal_tick_phase, 9);

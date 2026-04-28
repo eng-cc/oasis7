@@ -1,0 +1,21 @@
+task_uid: task_e81e085cf2614cfd82e6c7bb411144d6
+title: "launcher 内置官方 bootstrap anchors 默认值"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-launcher-default-bootstrap-anchors
+execution_log_path: .pm/tasks/task_e81e085cf2614cfd82e6c7bb411144d6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md
+  - doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-015
+acceptance:
+  - "launcher 默认配置内置 bootstrap1.oasis7.tech 与 bootstrap2.oasis7.tech 的官方 bootstrap multiaddr，普通新用户无需手动填写 bootstrap peers 即可尝试入网"
+  - "web/native launcher 继续允许高级用户覆盖 bootstrap peers，并保持 multiaddr 校验与 runtime 透传"
+handoff_to: []
+updated_at: 2026-04-28T16:53:43+08:00
+last_started_at: 2026-04-28T16:42:12+08:00
+last_closed_at: 2026-04-28T16:53:43+08:00
