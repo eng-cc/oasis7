@@ -62,6 +62,7 @@ export const state = {
   lastControlFeedback: null,
   lastPromptFeedback: null,
   lastChatFeedback: null,
+  lastGameplayActionFeedback: null,
   snapshot: null,
   metrics: null,
   hostedAccess: null,
@@ -1078,6 +1079,16 @@ function describeSemanticFeedback(feedback, locale = state.uiLocale) {
         : "Open diagnostics for the exact backend rejection.";
       return description;
     }
+    if (feedback.kind === "gameplay_action") {
+      description.label = isLocaleZh(locale) ? "玩法动作失败" : "Gameplay action failed";
+      description.summary = isLocaleZh(locale)
+        ? "正式玩法动作没有完成。"
+        : "The gameplay action did not complete.";
+      description.detail = isLocaleZh(locale)
+        ? "展开诊断可查看 runtime 返回的拒绝原因。"
+        : "Open diagnostics for the runtime rejection details.";
+      return description;
+    }
     description.label = code || "Request failed";
     description.summary = diagnostics || (isLocaleZh(locale) ? "请求失败。" : "The request failed.");
     description.detail = isLocaleZh(locale)
@@ -1150,6 +1161,27 @@ function describeSemanticFeedback(feedback, locale = state.uiLocale) {
     return description;
   }
 
+  if (feedback.kind === "gameplay_action") {
+    if (feedback.stage === "ack") {
+      const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
+      description.label = isLocaleZh(locale) ? "玩法动作已受理" : "Gameplay action accepted";
+      description.summary = isLocaleZh(locale)
+        ? `动作已在 tick ${acceptedAtTick} 进入 runtime 队列。`
+        : `The action entered the runtime queue at tick ${acceptedAtTick}.`;
+      description.detail = feedback?.response?.message
+        || (isLocaleZh(locale)
+          ? "请继续观察 gameplay feedback 或刷新后的快照。"
+          : "Watch gameplay feedback or the refreshed snapshot for the next world-state change.");
+      return description;
+    }
+    description.label = isLocaleZh(locale) ? "玩法动作进行中" : "Gameplay action in progress";
+    description.summary = feedback.effect || (isLocaleZh(locale) ? "玩法动作请求正在处理。" : "Gameplay action request is in flight.");
+    description.detail = isLocaleZh(locale)
+      ? "请等待 ack/error 或新的 gameplay 快照反馈。"
+      : "Wait for ack/error or a new gameplay snapshot update.";
+    return description;
+  }
+
   return description;
 }
 
@@ -1196,22 +1228,62 @@ function buildGameplaySummary(locale = state.uiLocale) {
     return null;
   }
 
+  const agents = Object.keys(state.snapshot?.model?.agents || {});
+  const locations = Object.keys(state.snapshot?.model?.locations || {});
+  const missingAgents = agents.length === 0;
+  const missingLocations = locations.length === 0;
+  const emptyEntityBlocker = missingAgents || missingLocations
+    ? (() => {
+        const missing = [];
+        if (missingAgents) {
+          missing.push(isLocaleZh(locale) ? "Agent" : "agents");
+        }
+        if (missingLocations) {
+          missing.push(isLocaleZh(locale) ? "地点" : "locations");
+        }
+        const missingLabel = missing.join(isLocaleZh(locale) ? " / " : "/");
+        return {
+          blockerKind: "runtime_snapshot_empty_entities",
+          blockerDetail: isLocaleZh(locale)
+            ? `runtime 已发布玩法进度，但当前快照没有 ${missingLabel}，formal web entry 暂时无法继续。`
+            : `Runtime published gameplay progress, but the current snapshot has no ${missingLabel}; the formal web entry cannot continue yet.`,
+          nextStepHint: isLocaleZh(locale)
+            ? "先刷新快照；如果实体仍然为空，请修复或重启 runtime world bootstrap 后再继续。"
+            : "Request a fresh snapshot first. If entities stay empty, repair or restart the runtime world bootstrap before continuing.",
+          disabledReason: isLocaleZh(locale)
+            ? `当前快照缺少 ${missingLabel}；刷新快照或修复 runtime bootstrap 后再试。`
+            : `Current snapshot is missing ${missingLabel}; refresh the snapshot or repair runtime bootstrap before retrying.`,
+        };
+      })()
+    : null;
+
   const progressRaw = Number(gameplay.progress_percent);
   const progressPercent = Number.isFinite(progressRaw)
     ? Math.max(0, Math.min(100, Math.floor(progressRaw)))
     : null;
   const availableActions = Array.isArray(gameplay.available_actions)
     ? gameplay.available_actions
-      .filter((action) => {
-        const protocolAction = String(action?.protocol_action || "").trim();
-        return protocolAction !== "live_control.play" && protocolAction !== "live_control.step";
-      })
       .map((action) => ({
         actionId: action?.action_id || null,
         label: action?.label || null,
         protocolAction: action?.protocol_action || null,
         targetAgentId: action?.target_agent_id || null,
-        disabledReason: action?.disabled_reason || null,
+        disabledReason:
+          action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot"
+            ? action?.disabled_reason || null
+            : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
+        executeKind:
+          action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot"
+            ? "request_snapshot"
+            : action?.protocol_action === "live_control.step"
+              ? "step"
+              : action?.protocol_action === "live_control.play"
+                ? "play"
+                : action?.protocol_action === "gameplay_action.submit"
+                  ? "gameplay_action"
+                  : action?.protocol_action === "agent_chat"
+                    ? "agent_chat"
+                    : "unsupported",
       }))
     : [];
   const recentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
@@ -1249,17 +1321,25 @@ function buildGameplaySummary(locale = state.uiLocale) {
 
   return {
     stageId: gameplay.stage_id || null,
-    stageStatus: gameplay.stage_status || null,
+    stageStatus: emptyEntityBlocker ? "blocked" : gameplay.stage_status || null,
     goalId: gameplay.goal_id || null,
     goalKind: gameplay.goal_kind || null,
     goalTitle: gameplay.goal_title || null,
     objective: gameplay.objective || null,
     progressDetail: gameplay.progress_detail || null,
     progressPercent,
-    blockerKind: gameplay.blocker_kind || null,
-    blockerDetail: gameplay.blocker_detail || null,
-    nextStepHint: gameplay.next_step_hint || null,
+    blockerKind: emptyEntityBlocker ? emptyEntityBlocker.blockerKind : gameplay.blocker_kind || null,
+    blockerDetail: emptyEntityBlocker
+      ? gameplay.blocker_detail
+        ? `${emptyEntityBlocker.blockerDetail} Existing runtime blocker: ${gameplay.blocker_detail}`
+        : emptyEntityBlocker.blockerDetail
+      : gameplay.blocker_detail || null,
+    nextStepHint: emptyEntityBlocker ? emptyEntityBlocker.nextStepHint : gameplay.next_step_hint || null,
     branchHint: gameplay.branch_hint || null,
+    entityCounts: {
+      agents: agents.length,
+      locations: locations.length,
+    },
     availableActions,
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
@@ -1362,6 +1442,7 @@ function getState() {
     lastControlFeedback: snapshotControlFeedback(state.lastControlFeedback),
     lastPromptFeedback: snapshotSemanticFeedback(state.lastPromptFeedback),
     lastChatFeedback: snapshotSemanticFeedback(state.lastChatFeedback),
+    lastGameplayActionFeedback: snapshotSemanticFeedback(state.lastGameplayActionFeedback),
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
     softwareSafeReason: state.softwareSafeReason,
@@ -1628,7 +1709,7 @@ function describeControls() {
         description: "Preview, apply, or rollback prompt overrides for an agent",
       },
     ],
-    usage: "Use fillControlExample(action), sendControl(action), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
+    usage: "Use fillControlExample(action), sendControl(action), sendGameplayAction(actionIdOrPayload), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
       "software_safe acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
       "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
@@ -2126,6 +2207,29 @@ async function buildSessionRegisterAuthProof(request, auth) {
     payload.requested_agent_id = request.requested_agent_id;
   }
   payload.force_rebind = request.force_rebind === true;
+  const signingPayload = buildAuthEnvelope(payload);
+  return {
+    scheme: "ed25519",
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+    signature: await signAuthPayload(signingPayload, auth),
+  };
+}
+
+async function buildGameplayActionAuthProof(request, auth) {
+  const nonce = nextAuthNonce();
+  const payload = {
+    operation: "gameplay_action",
+    action_id: request.action_id,
+    target_agent_id: request.target_agent_id,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+  };
+  if (request.actor_agent_id != null) {
+    payload.actor_agent_id = request.actor_agent_id;
+  }
   const signingPayload = buildAuthEnvelope(payload);
   return {
     scheme: "ed25519",
@@ -2837,6 +2941,151 @@ function sendPromptControl(mode, payload = null) {
   return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
 }
 
+function gameplayActionRequiresActorAgent(actionId) {
+  return actionId === "claim_agent" || actionId === "release_agent_claim";
+}
+
+function resolveGameplayActionRequest(actionOrId) {
+  if (typeof actionOrId === "string") {
+    const actions = Array.isArray(state.snapshot?.player_gameplay?.available_actions)
+      ? state.snapshot.player_gameplay.available_actions
+      : [];
+    return actions.find((action) => action?.action_id === actionOrId) || null;
+  }
+  return actionOrId && typeof actionOrId === "object" ? actionOrId : null;
+}
+
+function sendGameplayAction(actionOrId) {
+  const action = resolveGameplayActionRequest(actionOrId);
+  if (!action) {
+    return { ok: false, reason: "gameplay action is unavailable in the current snapshot" };
+  }
+
+  const protocolAction = String(action.protocol_action || "").trim();
+  if (protocolAction === "request_snapshot" || protocolAction === "world.request_snapshot") {
+    requestSnapshotSafe();
+    state.lastGameplayActionFeedback = {
+      id: nextRequestId(),
+      kind: "gameplay_action",
+      action: action.action_id || "request_snapshot",
+      agentId: action.target_agent_id || null,
+      accepted: true,
+      ok: true,
+      stage: "ack",
+      reason: null,
+      effect: "snapshot refresh requested",
+      response: {
+        action_id: action.action_id || "request_snapshot",
+        target_agent_id: action.target_agent_id || "",
+        accepted_at_tick: state.logicalTime,
+        message: "snapshot refresh requested",
+      },
+    };
+    render();
+    return { ok: true, feedback: snapshotSemanticFeedback(state.lastGameplayActionFeedback) };
+  }
+  if (protocolAction === "live_control.step") {
+    return { ok: true, feedback: sendControl("step", { count: 1 }) };
+  }
+  if (protocolAction === "live_control.play") {
+    return { ok: true, feedback: sendControl("play", null) };
+  }
+  if (protocolAction !== "gameplay_action.submit") {
+    return { ok: false, reason: `unsupported gameplay action protocol: ${protocolAction || "(empty)"}` };
+  }
+
+  const actionId = String(action.action_id || "").trim();
+  const targetAgentId = String(action.target_agent_id || "").trim();
+  if (!actionId || !targetAgentId) {
+    return { ok: false, reason: "gameplay_action.submit requires action_id and target_agent_id" };
+  }
+  const disabledReason = String(action.disabled_reason || "").trim();
+  if (disabledReason) {
+    return { ok: false, reason: disabledReason };
+  }
+
+  const feedback = createSemanticFeedback("gameplay_action", actionId, targetAgentId, {
+    effect: "queued for signing and send",
+    targetAgentId,
+    protocolAction,
+  });
+  state.lastGameplayActionFeedback = feedback;
+  render();
+
+  void (async () => {
+    try {
+      await ensureHostedPlayerAuthAvailable();
+      assertSemanticCapability(actionId);
+      feedback.stage = "registering";
+      feedback.effect = "registering player session";
+      render();
+      await ensureRegisteredPlayerSession(targetAgentId);
+      feedback.stage = "signing";
+      feedback.effect = "building auth proof";
+      render();
+      const request = {
+        action_id: actionId,
+        target_agent_id: targetAgentId,
+        player_id: state.auth.playerId,
+        public_key: state.auth.publicKey,
+      };
+      if (gameplayActionRequiresActorAgent(actionId)) {
+        request.actor_agent_id = state.auth.boundAgentId || targetAgentId;
+      }
+      request.auth = await buildGameplayActionAuthProof(request, state.auth);
+      feedback.stage = "sent";
+      feedback.effect = "gameplay action sent; waiting for ack";
+      state.lastGameplayActionFeedback = feedback;
+      sendJson({
+        type: "gameplay_action",
+        request,
+      });
+      render();
+    } catch (error) {
+      feedback.stage = "error";
+      feedback.ok = false;
+      feedback.accepted = false;
+      feedback.reason = String(error);
+      feedback.effect = "gameplay action send failed";
+      state.lastGameplayActionFeedback = feedback;
+      render();
+    }
+  })();
+
+  return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
+}
+
+function handleGameplayActionAck(ack) {
+  const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
+    "gameplay_action",
+    ack?.action_id || "gameplay_action",
+    ack?.target_agent_id || null,
+  );
+  feedback.stage = "ack";
+  feedback.ok = true;
+  feedback.accepted = true;
+  feedback.reason = null;
+  feedback.effect = ack?.message || `gameplay action accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
+  feedback.response = clone(ack);
+  state.lastGameplayActionFeedback = feedback;
+  requestSnapshotSafe();
+}
+
+function handleGameplayActionError(error) {
+  const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
+    "gameplay_action",
+    error?.action_id || "gameplay_action",
+    error?.target_agent_id || null,
+  );
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = error?.message || error?.code || "gameplay action failed";
+  feedback.effect = error?.code || "gameplay action error";
+  feedback.response = clone(error);
+  state.lastGameplayActionFeedback = feedback;
+}
+
 function applyPromptAckLocally(ack) {
   const agentId = ack?.agent_id;
   if (!agentId || !state.snapshot?.model) {
@@ -3146,6 +3395,12 @@ function handleViewerMessage(message) {
       break;
     case "agent_chat_error":
       handleAgentChatError(message.error);
+      break;
+    case "gameplay_action_ack":
+      handleGameplayActionAck(message.ack);
+      break;
+    case "gameplay_action_error":
+      handleGameplayActionError(message.error);
       break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
@@ -3912,6 +4167,7 @@ function installTestApi() {
     describeControls,
     fillControlExample,
     sendControl,
+    sendGameplayAction,
     runSteps,
     setMode,
     focus,
@@ -4010,6 +4266,7 @@ export {
   selectedAgentId,
   sendAgentChat,
   sendControl,
+  sendGameplayAction,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,
