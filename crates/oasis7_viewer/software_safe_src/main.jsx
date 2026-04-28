@@ -276,8 +276,10 @@ function WorldSummaryPanel() {
   const locale = () => uiLocale();
   const state = core.state;
   const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const gameplayActionFeedback = () => core.snapshotSemanticFeedback(state.lastGameplayActionFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
+  const gameplayActionFeedbackDisplay = () => core.describeSemanticFeedback(gameplayActionFeedback(), locale());
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const authSurface = () => core.buildAuthSurfaceModel();
@@ -404,6 +406,9 @@ function WorldSummaryPanel() {
                   })()
                 )}
               </Show>
+              <Show when={gameplayActionFeedback()}>
+                {(feedback) => <FeedbackCard feedback={feedback()} display={gameplayActionFeedbackDisplay()} />}
+              </Show>
               <div>
                 <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
                 <div class="event-list">
@@ -423,6 +428,34 @@ function WorldSummaryPanel() {
                             {action.disabledReason
                               || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer.")}
                           </div>
+                          <Show
+                            when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action"}
+                          >
+                            <div class="toolbar">
+                              <button
+                                disabled={Boolean(action.disabledReason)}
+                                onClick={() => core.sendGameplayAction(action)}
+                              >
+                                {action.executeKind === "request_snapshot"
+                                  ? tr(locale(), "刷新快照", "Refresh Snapshot")
+                                  : action.executeKind === "step"
+                                    ? tr(locale(), "推进一步", "Advance One Step")
+                                    : action.executeKind === "play"
+                                      ? tr(locale(), "恢复实时推进", "Resume Live Play")
+                                      : tr(locale(), "提交玩法动作", "Submit Gameplay Action")}
+                              </button>
+                            </div>
+                          </Show>
+                          <Show when={action.executeKind === "agent_chat"}>
+                            <div class="toolbar">
+                              <button
+                                disabled={Boolean(action.disabledReason)}
+                                onClick={() => core.applySelection({ kind: "agent", id: action.targetAgentId })}
+                              >
+                                {tr(locale(), "切到聊天面板", "Use Chat Panel")}
+                              </button>
+                            </div>
+                          </Show>
                         </EventCard>
                       )}
                     </For>

@@ -46,7 +46,7 @@
 - `software_safe` 模式下必须保留的能力：
   - 连接状态、`tick/logicalTime/eventSeq/error` 可见
   - 基础世界观察能力：目标列表、地点/Agent 语义概览、最近事件/反馈
-  - 基础交互能力：选中 1 个 Agent/地点，并以纯实时观察方式查看世界/语义反馈；页面内不再暴露 `play/pause/step`、tick jump 等回放控制
+  - 基础交互能力：选中 1 个 Agent/地点，并通过 canonical gameplay actions 查看/推进世界语义反馈；若 runtime 已发布 `request_snapshot`、`live_control.play|step`、`gameplay_action.submit` 等动作，页面必须显式给出执行入口、禁用原因或 handoff
   - 浏览器正式玩法动作：带 auth/bootstrap 时可执行选中 Agent 的 `prompt/chat/rollback`，并显式展示 session/auth/recovery/blocking semantics
   - formal gameplay 叙事信息：至少能看到当前 `stage/goal/progress/blocker/next_step` 或等价的 canonical 玩家语义摘要
   - `__AW_TEST__` /脚本采证能力：agent-browser 可以在无硬件 GPU 的浏览器环境下完成正式 Web 主链路采证
@@ -96,7 +96,8 @@
   - canonical 玩家语义摘要：`stage/goal/progress/blocker/next_step` 或等价字段
   - 当页面带有 viewer auth bootstrap 时，选中 Agent 的最小 `prompt/chat` 控制面（至少覆盖 Agent Chat 发送、消息流展示，以及 prompt override 的 preview/apply/rollback）；其中 prompt override 编辑表单允许收纳为显式 settings toggle，默认不必直接展开，但 automation API 与 ack/error 可观测性必须保持可用
   - 明确的 blocked / not_exposed / handoff 文案，告诉玩家哪些正式动作仍需转到其他 surface
-- 作为纯实时主入口，`software_safe` 不再在页面或 canonical gameplay summary 中暴露 `live_control.play`、`live_control.step`、tick jump 一类回放/推进动作；若底层协议仍保留这些控制，仅允许内部测试/自动化显式调用。
+- `software_safe` 不再单独维护一组脱离 runtime 的旧式回放控制面板；但当 canonical `available_actions` 已发布 `request_snapshot`、`live_control.play|step` 或 `gameplay_action.submit` 时，主入口必须显式暴露这些动作，而不能把它们降级成只读状态卡。
+- 若 runtime 已发布 canonical gameplay summary，但当前快照缺少继续游玩所需的 `model.agents` 或 `model.locations`，主入口必须显式展示 `runtime_snapshot_empty_entities` blocker，并将除刷新快照之外的动作视为 blocked。
 - 可延后/不保留：
   - 3D 摄像机、2D/3D 切换
   - 粒子、氛围、光照、景深、环境图生成
@@ -132,6 +133,8 @@
 - AC-6: `standard` 在硬件可用时仍可独立验证高保真画面，但其 PASS 不得替代 `software_safe` 的 formal Web gameplay PASS。
 - AC-7: `software_safe` 若未暴露 `main_token_transfer` 等专门动作，页面必须显式说明该动作未在此 surface 暴露，并给出 handoff 指引；不得让用户误以为这是 bug 或隐式权限失败。
 - AC-8: 当 runtime live 使用 `Local Provider(Local HTTP)` 驱动 Agent 时，software-safe 页面必须显式标识自身处于 `debug_viewer` 旁路订阅层，并把 execution lane 期望 metadata 与 provider 实际 readiness check 分开展示：前者至少包含选中 Agent 的 `mode/schema/environment/fallback`，后者至少包含 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error`；此时 prompt/chat 控制面需要明确提示 observer-only 边界。
+- AC-9: canonical `available_actions` 不得只作为 ready/handoff 状态卡存在；对 `request_snapshot`、`live_control.play|step`、`gameplay_action.submit` 这类已支持动作，页面必须提供直接执行入口，并保持反馈可观察。
+- AC-10: 当 gameplay summary 与空实体快照并存时，runtime 或 viewer 至少一侧必须显式把该状态标记为 `runtime_snapshot_empty_entities` blocker，且除刷新快照外不得把主玩法动作继续显示成可执行。
 
 ## 6. Non-Functional Requirements
 - NFR-1: `software_safe` 模式不得依赖硬件 GPU；在 software renderer / 无 WebGL / 受限 WebGL 环境下仍可启动。
@@ -315,3 +318,21 @@
   - AC-23: `software_safe` 页面在 Local Provider observer/debug 场景下，必须同时可读地展示“lane 期望 metadata”和“provider 实际 readiness check”，且二者标题/文案不能混淆。
   - AC-24: actual provider check 至少展示 `status` 与 `source`，在可用时展示 `fallback_reason`、`capabilities`、`supported_action_sets`，在失败时展示结构化 `error`。
   - AC-25: repo-owned contract regression 至少覆盖一条 Local Provider readiness truth 断言，验证 `compatibility_status=degraded` 时仍可单独看到 `provider_check_status=ready` 之类的语义分层，而不是把二者合并成单一字段。
+
+## 增量需求（2026-04-28 / 主入口可玩性解阻）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - 当前 `software_safe` 已是浏览器正式主入口，但页面把 canonical `available_actions` 渲染成只读状态卡，导致 runtime 明明已发布 `request_snapshot`、`live_control.play|step`、`gameplay_action.submit` 等动作，玩家仍然无法直接继续推进。
+  - 同时，runtime 可能发布 `player_gameplay` 进度摘要，却返回没有 `agents/locations` 的空模型；这会让主入口表现成“有目标但无法继续”的静默死胡同。
+- Proposed Solution:
+  - `software_safe` 前端必须把 canonical `available_actions` 收口为“状态 + 可执行入口”的统一动作卡。
+  - runtime compat snapshot 在发现 gameplay summary 与空实体模型并存时，必须主动回写显式 blocker，并把除刷新快照外的动作统一禁用；viewer 前端也要保留同类 defensive fallback，避免旧后端或中间态再次形成静默死局。
+- Functional Constraints:
+  - 不恢复独立的旧式播放控制面板；只允许围绕 runtime 发布的 canonical `available_actions` 暴露最小执行入口。
+  - 不引入新的 gameplay 后端协议；继续复用现有 `request_snapshot` / `live_control.*` / `gameplay_action.submit` / `agent_chat` 契约。
+  - 对于仍需走其他 surface 的动作，必须给出明确 handoff，而不是默默缺失。
+- Acceptance Criteria:
+  - AC-36: `software_safe` 页面在存在 canonical `available_actions` 时，必须为已支持动作显示按钮或等价执行控件，而不是只展示 ready/handoff 徽标。
+  - AC-37: `software_safe` 页面在 runtime 发布 `live_control.play|step` 时，玩家可以直接从正式摘要区触发这些动作，并看到控制反馈或后续 gameplay feedback。
+  - AC-38: `software_safe` 页面在 runtime 发布 `gameplay_action.submit` 时，玩家可以直接提交该玩法动作，并看到 ack/error 或后续快照反馈。
+  - AC-39: 当 gameplay summary 与空实体快照并存时，页面必须显式显示 `runtime_snapshot_empty_entities` blocker，并阻止玩家误以为页面“只是还没点到地方”。

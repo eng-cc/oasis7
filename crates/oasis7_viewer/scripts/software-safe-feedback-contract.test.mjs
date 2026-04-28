@@ -82,6 +82,10 @@ const core = await import("../software_safe_src/legacy_core.js");
 
 {
   core.state.snapshot = {
+    model: {
+      agents: { "agent-0": { id: "agent-0" } },
+      locations: { "loc-0": { id: "loc-0" } },
+    },
     player_gameplay: {
       stage_id: "post_onboarding",
       stage_status: "blocked",
@@ -127,8 +131,10 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.stageId, "post_onboarding");
   assert.equal(gameplaySummary.stageStatus, "blocked");
   assert.equal(gameplaySummary.progressPercent, 68);
-  assert.equal(gameplaySummary.availableActions.length, 1);
-  assert.equal(gameplaySummary.availableActions[0].actionId, "request_snapshot");
+  assert.deepEqual(
+    gameplaySummary.availableActions.map((action) => action.actionId),
+    ["advance_step", "request_snapshot"],
+  );
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
 }
@@ -200,6 +206,10 @@ const core = await import("../software_safe_src/legacy_core.js");
 {
   const injectedState = core.injectSnapshot({
     time: 12,
+    model: {
+      agents: { "agent-0": { id: "agent-0", location_id: "loc-0", resources: {} } },
+      locations: { "loc-0": { id: "loc-0", name: "Loc 0", resources: {} } },
+    },
     player_gameplay: {
       stage_id: "first_session_loop",
       stage_status: "active",
@@ -262,6 +272,10 @@ const core = await import("../software_safe_src/legacy_core.js");
 
 {
   core.state.snapshot = {
+    model: {
+      agents: { "agent-0": { id: "agent-0" } },
+      locations: { "loc-0": { id: "loc-0" } },
+    },
     player_gameplay: {
       next_step_hint: "Enable LLM access before retrying world controls.",
       available_actions: [
@@ -290,7 +304,10 @@ const core = await import("../software_safe_src/legacy_core.js");
     },
   };
   const gameplaySummary = core.buildGameplaySummary();
-  assert.deepEqual(gameplaySummary.availableActions.map((action) => action.actionId), ["request_snapshot"]);
+  assert.deepEqual(
+    gameplaySummary.availableActions.map((action) => action.actionId),
+    ["advance_step", "resume_play", "request_snapshot"],
+  );
   core.state.controlProfile = "live";
   const feedback = core.sendControl("step");
   assert.equal(feedback.accepted, false);
@@ -298,6 +315,54 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(feedback.reason, "missing env variable: OASIS7_LLM_MODEL");
   assert.match(feedback.effect, /control blocked by gameplay gate/i);
   assert.equal(feedback.hint, "Enable LLM access before retrying world controls.");
+}
+
+{
+  core.state.snapshot = {
+    model: {
+      agents: {},
+      locations: {},
+    },
+    player_gameplay: {
+      stage_id: "post_onboarding",
+      stage_status: "active",
+      goal_id: "post_onboarding.establish_first_capability",
+      goal_kind: "EstablishFirstCapability",
+      goal_title: "Establish your first sustainable capability",
+      objective: "Do not stall after onboarding.",
+      progress_detail: "Progress exists, but entities are missing from the viewer snapshot.",
+      progress_percent: 20,
+      blocker_kind: null,
+      blocker_detail: null,
+      next_step_hint: "this will be replaced by the empty-entity guard",
+      branch_hint: null,
+      available_actions: [
+        {
+          action_id: "advance_step",
+          label: "Advance 1 step",
+          protocol_action: "live_control.step",
+          target_agent_id: null,
+          disabled_reason: null,
+        },
+        {
+          action_id: "request_snapshot",
+          label: "Request snapshot",
+          protocol_action: "request_snapshot",
+          target_agent_id: null,
+          disabled_reason: null,
+        },
+      ],
+      recent_feedback: null,
+      agent_claim: null,
+    },
+  };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.stageStatus, "blocked");
+  assert.equal(gameplaySummary.blockerKind, "runtime_snapshot_empty_entities");
+  assert.match(gameplaySummary.blockerDetail, /no agents\/locations|没有 Agent \/ 地点/i);
+  assert.match(gameplaySummary.nextStepHint, /fresh snapshot|刷新快照/i);
+  assert.equal(gameplaySummary.availableActions[0].disabledReason !== null, true);
+  assert.equal(gameplaySummary.availableActions[1].disabledReason, null);
 }
 
 {

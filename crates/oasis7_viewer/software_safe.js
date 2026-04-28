@@ -769,6 +769,7 @@ const state = {
   lastControlFeedback: null,
   lastPromptFeedback: null,
   lastChatFeedback: null,
+  lastGameplayActionFeedback: null,
   snapshot: null,
   metrics: null,
   hostedAccess: null,
@@ -1638,6 +1639,12 @@ function describeSemanticFeedback(feedback, locale = state.uiLocale) {
       description.detail = isLocaleZh(locale) ? "展开诊断可查看后端拒绝的具体原因。" : "Open diagnostics for the exact backend rejection.";
       return description;
     }
+    if (feedback.kind === "gameplay_action") {
+      description.label = isLocaleZh(locale) ? "玩法动作失败" : "Gameplay action failed";
+      description.summary = isLocaleZh(locale) ? "正式玩法动作没有完成。" : "The gameplay action did not complete.";
+      description.detail = isLocaleZh(locale) ? "展开诊断可查看 runtime 返回的拒绝原因。" : "Open diagnostics for the runtime rejection details.";
+      return description;
+    }
     description.label = code || "Request failed";
     description.summary = diagnostics || (isLocaleZh(locale) ? "请求失败。" : "The request failed.");
     description.detail = isLocaleZh(locale) ? "展开诊断可查看后端原始载荷。" : "Open diagnostics for the raw backend payload.";
@@ -1683,6 +1690,19 @@ function describeSemanticFeedback(feedback, locale = state.uiLocale) {
     description.detail = isLocaleZh(locale) ? "请等待 ack/error 返回后再发送下一条消息。" : "Wait for ack/error before sending another message.";
     return description;
   }
+  if (feedback.kind === "gameplay_action") {
+    if (feedback.stage === "ack") {
+      const acceptedAtTick = Number(feedback?.response?.accepted_at_tick || 0);
+      description.label = isLocaleZh(locale) ? "玩法动作已受理" : "Gameplay action accepted";
+      description.summary = isLocaleZh(locale) ? `动作已在 tick ${acceptedAtTick} 进入 runtime 队列。` : `The action entered the runtime queue at tick ${acceptedAtTick}.`;
+      description.detail = feedback?.response?.message || (isLocaleZh(locale) ? "请继续观察 gameplay feedback 或刷新后的快照。" : "Watch gameplay feedback or the refreshed snapshot for the next world-state change.");
+      return description;
+    }
+    description.label = isLocaleZh(locale) ? "玩法动作进行中" : "Gameplay action in progress";
+    description.summary = feedback.effect || (isLocaleZh(locale) ? "玩法动作请求正在处理。" : "Gameplay action request is in flight.");
+    description.detail = isLocaleZh(locale) ? "请等待 ack/error 或新的 gameplay 快照反馈。" : "Wait for ack/error or a new gameplay snapshot update.";
+    return description;
+  }
   return description;
 }
 function describePromptVersionState(feedback = state.lastPromptFeedback, locale = state.uiLocale) {
@@ -1711,17 +1731,35 @@ function buildGameplaySummary(locale = state.uiLocale) {
   if (!gameplay || typeof gameplay !== "object") {
     return null;
   }
+  const agents = Object.keys(state.snapshot?.model?.agents || {});
+  const locations = Object.keys(state.snapshot?.model?.locations || {});
+  const missingAgents = agents.length === 0;
+  const missingLocations = locations.length === 0;
+  const emptyEntityBlocker = missingAgents || missingLocations ? (() => {
+    const missing = [];
+    if (missingAgents) {
+      missing.push(isLocaleZh(locale) ? "Agent" : "agents");
+    }
+    if (missingLocations) {
+      missing.push(isLocaleZh(locale) ? "地点" : "locations");
+    }
+    const missingLabel = missing.join(isLocaleZh(locale) ? " / " : "/");
+    return {
+      blockerKind: "runtime_snapshot_empty_entities",
+      blockerDetail: isLocaleZh(locale) ? `runtime 已发布玩法进度，但当前快照没有 ${missingLabel}，formal web entry 暂时无法继续。` : `Runtime published gameplay progress, but the current snapshot has no ${missingLabel}; the formal web entry cannot continue yet.`,
+      nextStepHint: isLocaleZh(locale) ? "先刷新快照；如果实体仍然为空，请修复或重启 runtime world bootstrap 后再继续。" : "Request a fresh snapshot first. If entities stay empty, repair or restart the runtime world bootstrap before continuing.",
+      disabledReason: isLocaleZh(locale) ? `当前快照缺少 ${missingLabel}；刷新快照或修复 runtime bootstrap 后再试。` : `Current snapshot is missing ${missingLabel}; refresh the snapshot or repair runtime bootstrap before retrying.`
+    };
+  })() : null;
   const progressRaw = Number(gameplay.progress_percent);
   const progressPercent = Number.isFinite(progressRaw) ? Math.max(0, Math.min(100, Math.floor(progressRaw))) : null;
-  const availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.filter((action) => {
-    const protocolAction = String(action?.protocol_action || "").trim();
-    return protocolAction !== "live_control.play" && protocolAction !== "live_control.step";
-  }).map((action) => ({
+  const availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => ({
     actionId: action?.action_id || null,
     label: action?.label || null,
     protocolAction: action?.protocol_action || null,
     targetAgentId: action?.target_agent_id || null,
-    disabledReason: action?.disabled_reason || null
+    disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? action?.disabled_reason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
+    executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
   })) : [];
   const recentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object" ? {
     action: gameplay.recent_feedback.action || null,
@@ -1747,17 +1785,21 @@ function buildGameplaySummary(locale = state.uiLocale) {
   } : null;
   return {
     stageId: gameplay.stage_id || null,
-    stageStatus: gameplay.stage_status || null,
+    stageStatus: emptyEntityBlocker ? "blocked" : gameplay.stage_status || null,
     goalId: gameplay.goal_id || null,
     goalKind: gameplay.goal_kind || null,
     goalTitle: gameplay.goal_title || null,
     objective: gameplay.objective || null,
     progressDetail: gameplay.progress_detail || null,
     progressPercent,
-    blockerKind: gameplay.blocker_kind || null,
-    blockerDetail: gameplay.blocker_detail || null,
-    nextStepHint: gameplay.next_step_hint || null,
+    blockerKind: emptyEntityBlocker ? emptyEntityBlocker.blockerKind : gameplay.blocker_kind || null,
+    blockerDetail: emptyEntityBlocker ? gameplay.blocker_detail ? `${emptyEntityBlocker.blockerDetail} Existing runtime blocker: ${gameplay.blocker_detail}` : emptyEntityBlocker.blockerDetail : gameplay.blocker_detail || null,
+    nextStepHint: emptyEntityBlocker ? emptyEntityBlocker.nextStepHint : gameplay.next_step_hint || null,
     branchHint: gameplay.branch_hint || null,
+    entityCounts: {
+      agents: agents.length,
+      locations: locations.length
+    },
     availableActions,
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
@@ -1847,6 +1889,7 @@ function getState() {
     lastControlFeedback: snapshotControlFeedback(state.lastControlFeedback),
     lastPromptFeedback: snapshotSemanticFeedback(state.lastPromptFeedback),
     lastChatFeedback: snapshotSemanticFeedback(state.lastChatFeedback),
+    lastGameplayActionFeedback: snapshotSemanticFeedback(state.lastGameplayActionFeedback),
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
     softwareSafeReason: state.softwareSafeReason,
@@ -2098,7 +2141,7 @@ function describeControls() {
         description: "Preview, apply, or rollback prompt overrides for an agent"
       }
     ],
-    usage: "Use fillControlExample(action), sendControl(action), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
+    usage: "Use fillControlExample(action), sendControl(action), sendGameplayAction(actionIdOrPayload), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
       "software_safe acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
       "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
@@ -2555,6 +2598,28 @@ async function buildSessionRegisterAuthProof(request, auth) {
     payload.requested_agent_id = request.requested_agent_id;
   }
   payload.force_rebind = request.force_rebind === true;
+  const signingPayload = buildAuthEnvelope(payload);
+  return {
+    scheme: "ed25519",
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+    signature: await signAuthPayload(signingPayload, auth)
+  };
+}
+async function buildGameplayActionAuthProof(request, auth) {
+  const nonce = nextAuthNonce();
+  const payload = {
+    operation: "gameplay_action",
+    action_id: request.action_id,
+    target_agent_id: request.target_agent_id,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce
+  };
+  if (request.actor_agent_id != null) {
+    payload.actor_agent_id = request.actor_agent_id;
+  }
   const signingPayload = buildAuthEnvelope(payload);
   return {
     scheme: "ed25519",
@@ -3211,6 +3276,139 @@ function sendPromptControl(mode, payload = null) {
   render();
   return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
 }
+function gameplayActionRequiresActorAgent(actionId) {
+  return actionId === "claim_agent" || actionId === "release_agent_claim";
+}
+function resolveGameplayActionRequest(actionOrId) {
+  if (typeof actionOrId === "string") {
+    const actions = Array.isArray(state.snapshot?.player_gameplay?.available_actions) ? state.snapshot.player_gameplay.available_actions : [];
+    return actions.find((action) => action?.action_id === actionOrId) || null;
+  }
+  return actionOrId && typeof actionOrId === "object" ? actionOrId : null;
+}
+function sendGameplayAction(actionOrId) {
+  const action = resolveGameplayActionRequest(actionOrId);
+  if (!action) {
+    return { ok: false, reason: "gameplay action is unavailable in the current snapshot" };
+  }
+  const protocolAction = String(action.protocol_action || "").trim();
+  if (protocolAction === "request_snapshot" || protocolAction === "world.request_snapshot") {
+    requestSnapshotSafe();
+    state.lastGameplayActionFeedback = {
+      id: nextRequestId(),
+      kind: "gameplay_action",
+      action: action.action_id || "request_snapshot",
+      agentId: action.target_agent_id || null,
+      accepted: true,
+      ok: true,
+      stage: "ack",
+      reason: null,
+      effect: "snapshot refresh requested",
+      response: {
+        action_id: action.action_id || "request_snapshot",
+        target_agent_id: action.target_agent_id || "",
+        accepted_at_tick: state.logicalTime,
+        message: "snapshot refresh requested"
+      }
+    };
+    render();
+    return { ok: true, feedback: snapshotSemanticFeedback(state.lastGameplayActionFeedback) };
+  }
+  if (protocolAction === "live_control.step") {
+    return { ok: true, feedback: sendControl("step", { count: 1 }) };
+  }
+  if (protocolAction === "live_control.play") {
+    return { ok: true, feedback: sendControl("play", null) };
+  }
+  if (protocolAction !== "gameplay_action.submit") {
+    return { ok: false, reason: `unsupported gameplay action protocol: ${protocolAction || "(empty)"}` };
+  }
+  const actionId = String(action.action_id || "").trim();
+  const targetAgentId = String(action.target_agent_id || "").trim();
+  if (!actionId || !targetAgentId) {
+    return { ok: false, reason: "gameplay_action.submit requires action_id and target_agent_id" };
+  }
+  const disabledReason = String(action.disabled_reason || "").trim();
+  if (disabledReason) {
+    return { ok: false, reason: disabledReason };
+  }
+  const feedback = createSemanticFeedback("gameplay_action", actionId, targetAgentId, {
+    effect: "queued for signing and send",
+    targetAgentId,
+    protocolAction
+  });
+  state.lastGameplayActionFeedback = feedback;
+  render();
+  void (async () => {
+    try {
+      await ensureHostedPlayerAuthAvailable();
+      assertSemanticCapability(actionId);
+      feedback.stage = "registering";
+      feedback.effect = "registering player session";
+      render();
+      await ensureRegisteredPlayerSession(targetAgentId);
+      feedback.stage = "signing";
+      feedback.effect = "building auth proof";
+      render();
+      const request = {
+        action_id: actionId,
+        target_agent_id: targetAgentId,
+        player_id: state.auth.playerId,
+        public_key: state.auth.publicKey
+      };
+      if (gameplayActionRequiresActorAgent(actionId)) {
+        request.actor_agent_id = state.auth.boundAgentId || targetAgentId;
+      }
+      request.auth = await buildGameplayActionAuthProof(request, state.auth);
+      feedback.stage = "sent";
+      feedback.effect = "gameplay action sent; waiting for ack";
+      state.lastGameplayActionFeedback = feedback;
+      sendJson({
+        type: "gameplay_action",
+        request
+      });
+      render();
+    } catch (error) {
+      feedback.stage = "error";
+      feedback.ok = false;
+      feedback.accepted = false;
+      feedback.reason = String(error);
+      feedback.effect = "gameplay action send failed";
+      state.lastGameplayActionFeedback = feedback;
+      render();
+    }
+  })();
+  return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
+}
+function handleGameplayActionAck(ack) {
+  const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
+    "gameplay_action",
+    ack?.action_id || "gameplay_action",
+    ack?.target_agent_id || null
+  );
+  feedback.stage = "ack";
+  feedback.ok = true;
+  feedback.accepted = true;
+  feedback.reason = null;
+  feedback.effect = ack?.message || `gameplay action accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
+  feedback.response = clone(ack);
+  state.lastGameplayActionFeedback = feedback;
+  requestSnapshotSafe();
+}
+function handleGameplayActionError(error) {
+  const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
+    "gameplay_action",
+    error?.action_id || "gameplay_action",
+    error?.target_agent_id || null
+  );
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = error?.message || error?.code || "gameplay action failed";
+  feedback.effect = error?.code || "gameplay action error";
+  feedback.response = clone(error);
+  state.lastGameplayActionFeedback = feedback;
+}
 function applyPromptAckLocally(ack) {
   const agentId = ack?.agent_id;
   if (!agentId || !state.snapshot?.model) {
@@ -3494,6 +3692,12 @@ function handleViewerMessage(message) {
     case "agent_chat_error":
       handleAgentChatError(message.error);
       break;
+    case "gameplay_action_ack":
+      handleGameplayActionAck(message.ack);
+      break;
+    case "gameplay_action_error":
+      handleGameplayActionError(message.error);
+      break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
       break;
@@ -3616,6 +3820,7 @@ function installTestApi() {
     describeControls,
     fillControlExample,
     sendControl,
+    sendGameplayAction,
     runSteps,
     setMode,
     focus,
@@ -3672,7 +3877,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=toolbar><button data-entry=standard-viewer-current-locale></button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$20 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$21 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$22 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$33 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$34 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row>`), _tmpl$35 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=toolbar><button data-entry=standard-viewer-current-locale></button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$12 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$13 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$15 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>Acquire Hosted Player Session`), _tmpl$16 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>Release Hosted Player Session`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$20 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$21 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$22 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02);border-color:rgba(255,184,77,0.35)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack"><div class=badge-row></div><div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
 function uiLocale() {
   return state.uiLocale;
 }
@@ -3993,8 +4198,10 @@ function WorldSummaryPanel() {
   const locale = () => uiLocale();
   const state$1 = state;
   const gameplaySummary = () => buildGameplaySummary(locale());
+  const gameplayActionFeedback = () => snapshotSemanticFeedback(state$1.lastGameplayActionFeedback);
   const promptFeedback = () => snapshotSemanticFeedback(state$1.lastPromptFeedback);
   const chatFeedback = () => snapshotSemanticFeedback(state$1.lastChatFeedback);
+  const gameplayActionFeedbackDisplay = () => describeSemanticFeedback(gameplayActionFeedback(), locale());
   const promptFeedbackDisplay = () => describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => describeSemanticFeedback(chatFeedback(), locale());
   const authSurface = () => buildAuthSurfaceModel();
@@ -4244,6 +4451,18 @@ function WorldSummaryPanel() {
                 }
               });
             })()
+          }), createComponent(Show, {
+            get when() {
+              return gameplayActionFeedback();
+            },
+            children: (feedback) => createComponent(FeedbackCard, {
+              get feedback() {
+                return feedback();
+              },
+              get display() {
+                return gameplayActionFeedbackDisplay();
+              }
+            })
           }), (() => {
             var _el$78 = _tmpl$20(), _el$79 = _el$78.firstChild, _el$80 = _el$79.nextSibling;
             insert(_el$79, () => tr(locale(), "可用玩法动作", "Available Gameplay Actions"));
@@ -4277,9 +4496,39 @@ function WorldSummaryPanel() {
                       return `protocol=${action.protocolAction || "-"} · target=${action.targetAgentId || "-"}`;
                     },
                     get children() {
-                      var _el$88 = _tmpl$4();
-                      insert(_el$88, () => action.disabledReason || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
-                      return _el$88;
+                      return [(() => {
+                        var _el$88 = _tmpl$4();
+                        insert(_el$88, () => action.disabledReason || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
+                        return _el$88;
+                      })(), createComponent(Show, {
+                        get when() {
+                          return action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action";
+                        },
+                        get children() {
+                          var _el$89 = _tmpl$21(), _el$90 = _el$89.firstChild;
+                          _el$90.$$click = () => sendGameplayAction(action);
+                          insert(_el$90, (() => {
+                            var _c$ = memo(() => action.executeKind === "request_snapshot");
+                            return () => _c$() ? tr(locale(), "刷新快照", "Refresh Snapshot") : memo(() => action.executeKind === "step")() ? tr(locale(), "推进一步", "Advance One Step") : memo(() => action.executeKind === "play")() ? tr(locale(), "恢复实时推进", "Resume Live Play") : tr(locale(), "提交玩法动作", "Submit Gameplay Action");
+                          })());
+                          createRenderEffect(() => _el$90.disabled = Boolean(action.disabledReason));
+                          return _el$89;
+                        }
+                      }), createComponent(Show, {
+                        get when() {
+                          return action.executeKind === "agent_chat";
+                        },
+                        get children() {
+                          var _el$91 = _tmpl$21(), _el$92 = _el$91.firstChild;
+                          _el$92.$$click = () => applySelection({
+                            kind: "agent",
+                            id: action.targetAgentId
+                          });
+                          insert(_el$92, () => tr(locale(), "切到聊天面板", "Use Chat Panel"));
+                          createRenderEffect(() => _el$92.disabled = Boolean(action.disabledReason));
+                          return _el$91;
+                        }
+                      })];
                     }
                   })
                 });
@@ -4396,99 +4645,99 @@ function WorldSummaryPanel() {
             });
           },
           children: (debug) => [(() => {
-            var _el$89 = _tmpl$14();
-            insert(_el$89, createComponent(Badge, {
+            var _el$93 = _tmpl$14();
+            insert(_el$93, createComponent(Badge, {
               "class": "badge badge--accent",
               children: "selected agent lane"
             }), null);
-            insert(_el$89, createComponent(Badge, {
+            insert(_el$93, createComponent(Badge, {
               get children() {
                 return `provider=${debug().provider_mode || "-"}`;
               }
             }), null);
-            insert(_el$89, createComponent(Badge, {
+            insert(_el$93, createComponent(Badge, {
               get children() {
                 return `mode=${debug().execution_mode || "-"}`;
               }
             }), null);
-            insert(_el$89, createComponent(Badge, {
+            insert(_el$93, createComponent(Badge, {
               get children() {
                 return `env=${debug().environment_class || "-"}`;
               }
             }), null);
-            return _el$89;
+            return _el$93;
           })(), (() => {
-            var _el$90 = _tmpl$14();
-            insert(_el$90, createComponent(Badge, {
+            var _el$94 = _tmpl$14();
+            insert(_el$94, createComponent(Badge, {
               get children() {
                 return `obs=${debug().observation_schema_version || "-"}`;
               }
             }), null);
-            insert(_el$90, createComponent(Badge, {
+            insert(_el$94, createComponent(Badge, {
               get children() {
                 return `act=${debug().action_schema_version || "-"}`;
               }
             }), null);
-            insert(_el$90, createComponent(Badge, {
+            insert(_el$94, createComponent(Badge, {
               get children() {
                 return `agentProfile=${debug().agent_profile || "-"}`;
               }
             }), null);
-            insert(_el$90, createComponent(Badge, {
+            insert(_el$94, createComponent(Badge, {
               get children() {
                 return `providerFallback=${debug().fallback_reason || "-"}`;
               }
             }), null);
-            return _el$90;
+            return _el$94;
           })(), createComponent(EmptyState, {
             style: "margin-top:-2px;",
             get children() {
               return tr(locale(), "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。", "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.");
             }
           }), (() => {
-            var _el$91 = _tmpl$14();
-            insert(_el$91, createComponent(Badge, {
+            var _el$95 = _tmpl$14();
+            insert(_el$95, createComponent(Badge, {
               "class": "badge badge--accent",
               children: "provider check"
             }), null);
-            insert(_el$91, createComponent(Badge, {
+            insert(_el$95, createComponent(Badge, {
               get children() {
                 return `status=${debug().provider_check_status || "-"}`;
               }
             }), null);
-            insert(_el$91, createComponent(Badge, {
+            insert(_el$95, createComponent(Badge, {
               get children() {
                 return `source=${debug().provider_check_source || "-"}`;
               }
             }), null);
-            insert(_el$91, createComponent(Badge, {
+            insert(_el$95, createComponent(Badge, {
               get children() {
                 return `fallback=${debug().provider_check_fallback_reason || "-"}`;
               }
             }), null);
-            return _el$91;
+            return _el$95;
           })(), createComponent(Show, {
             get when() {
               return debug().provider_check_error || debug().provider_reported_capabilities?.length || debug().provider_reported_supported_action_sets?.length;
             },
             get children() {
-              var _el$92 = _tmpl$14();
-              insert(_el$92, createComponent(Badge, {
+              var _el$96 = _tmpl$14();
+              insert(_el$96, createComponent(Badge, {
                 get children() {
                   return `actualCaps=${(debug().provider_reported_capabilities || []).join(",") || "-"}`;
                 }
               }), null);
-              insert(_el$92, createComponent(Badge, {
+              insert(_el$96, createComponent(Badge, {
                 get children() {
                   return `actualActions=${(debug().provider_reported_supported_action_sets || []).join(",") || "-"}`;
                 }
               }), null);
-              insert(_el$92, createComponent(Badge, {
+              insert(_el$96, createComponent(Badge, {
                 get children() {
                   return `checkError=${debug().provider_check_error || "-"}`;
                 }
               }), null);
-              return _el$92;
+              return _el$96;
             }
           }), createComponent(JsonBlock, {
             get value() {
@@ -4621,53 +4870,53 @@ function WorldSummaryPanel() {
         return state$1.hostedAdmission;
       },
       children: (admission) => (() => {
-        var _el$93 = _tmpl$14();
-        insert(_el$93, createComponent(Badge, {
+        var _el$97 = _tmpl$14();
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `activeSlots=${admission().active_player_sessions}/${admission().max_player_sessions}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `effectiveSlots=${admission().effective_player_sessions == null ? "-" : `${admission().effective_player_sessions}/${admission().max_player_sessions}`}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `runtimeBound=${admission().runtime_bound_player_sessions ?? "-"}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `runtimeOnly=${admission().runtime_only_player_sessions ?? "-"}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `runtimeProbe=${admission().runtime_probe_status || "-"}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `issueBudget=${admission().remaining_issue_budget}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `leaseTTL=${admission().slot_lease_ttl_ms}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `issued=${admission().issued_players_total}`;
           }
         }), null);
-        insert(_el$93, createComponent(Badge, {
+        insert(_el$97, createComponent(Badge, {
           get children() {
             return `released=${admission().released_players_total}`;
           }
         }), null);
-        return _el$93;
+        return _el$97;
       })()
     }), _el$68);
     insert(_el$52, createComponent(Show, {
@@ -4690,30 +4939,30 @@ function WorldSummaryPanel() {
         return hostedRecoveryHint();
       },
       children: (hint) => (() => {
-        var _el$94 = _tmpl$21(), _el$95 = _el$94.firstChild, _el$96 = _el$95.firstChild, _el$97 = _el$95.nextSibling, _el$98 = _el$97.firstChild, _el$99 = _el$98.nextSibling, _el$100 = _el$99.firstChild;
-        insert(_el$96, () => tr(locale(), "托管恢复", "Hosted Recovery"));
-        insert(_el$98, createComponent(Badge, {
+        var _el$98 = _tmpl$22(), _el$99 = _el$98.firstChild, _el$100 = _el$99.firstChild, _el$101 = _el$99.nextSibling, _el$102 = _el$101.firstChild, _el$103 = _el$102.nextSibling, _el$104 = _el$103.firstChild;
+        insert(_el$100, () => tr(locale(), "托管恢复", "Hosted Recovery"));
+        insert(_el$102, createComponent(Badge, {
           "class": "badge badge--warn",
           get children() {
             return hint().kind;
           }
         }), null);
-        insert(_el$98, createComponent(Badge, {
+        insert(_el$102, createComponent(Badge, {
           get children() {
             return hint().title;
           }
         }), null);
-        insert(_el$97, createComponent(EmptyState, {
+        insert(_el$101, createComponent(EmptyState, {
           get children() {
             return hint().detail;
           }
-        }), _el$99);
-        _el$100.$$click = () => {
+        }), _el$103);
+        _el$104.$$click = () => {
           void retryHostedPlayerIdentityIssue();
         };
-        insert(_el$100, () => hint().cta);
-        createRenderEffect(() => _el$100.disabled = state$1.auth.issueInFlight);
-        return _el$94;
+        insert(_el$104, () => hint().cta);
+        createRenderEffect(() => _el$104.disabled = state$1.auth.issueInFlight);
+        return _el$98;
       })()
     }), _el$68);
     insert(_el$52, createComponent(Show, {
@@ -4982,27 +5231,27 @@ function InteractionPanel() {
     });
   }
   return (() => {
-    var _el$101 = _tmpl$32(), _el$102 = _el$101.firstChild, _el$104 = _el$102.nextSibling;
-    insert(_el$102, createComponent(Badge, {
+    var _el$105 = _tmpl$33(), _el$106 = _el$105.firstChild, _el$108 = _el$106.nextSibling;
+    insert(_el$106, createComponent(Badge, {
       "class": "badge badge--accent",
       children: "Agent Interaction"
     }), null);
-    insert(_el$102, createComponent(Badge, {
+    insert(_el$106, createComponent(Badge, {
       get children() {
         return `agent=${agentId()}`;
       }
     }), null);
-    insert(_el$102, createComponent(Badge, {
+    insert(_el$106, createComponent(Badge, {
       get children() {
         return `activePrompt=${`v${promptVersionState().currentVersion}`}`;
       }
     }), null);
-    insert(_el$102, createComponent(Badge, {
+    insert(_el$106, createComponent(Badge, {
       get children() {
         return `nextRollback=${`v${promptVersionState().nextRollbackTargetVersion}`}`;
       }
     }), null);
-    insert(_el$102, createComponent(Show, {
+    insert(_el$106, createComponent(Show, {
       get when() {
         return promptVersionState().restoredFromVersion != null;
       },
@@ -5014,7 +5263,7 @@ function InteractionPanel() {
         });
       }
     }), null);
-    insert(_el$101, createComponent(Show, {
+    insert(_el$105, createComponent(Show, {
       get when() {
         return debugContext()?.provider_mode === "provider_loopback_http";
       },
@@ -5025,8 +5274,8 @@ function InteractionPanel() {
           }
         });
       }
-    }), _el$104);
-    insert(_el$101, createComponent(Show, {
+    }), _el$108);
+    insert(_el$105, createComponent(Show, {
       get when() {
         return debugContext()?.provider_mode !== "provider_loopback_http";
       },
@@ -5044,24 +5293,24 @@ function InteractionPanel() {
           },
           get children() {
             return [(() => {
-              var _el$103 = _tmpl$14();
-              insert(_el$103, createComponent(Badge, {
+              var _el$107 = _tmpl$14();
+              insert(_el$107, createComponent(Badge, {
                 "class": "badge badge--good",
                 get children() {
                   return authSurface().currentTier;
                 }
               }), null);
-              insert(_el$103, createComponent(Badge, {
+              insert(_el$107, createComponent(Badge, {
                 get children() {
                   return `player=${state.auth.playerId}`;
                 }
               }), null);
-              insert(_el$103, createComponent(Badge, {
+              insert(_el$107, createComponent(Badge, {
                 get children() {
                   return `source=${authSurface().source}`;
                 }
               }), null);
-              return _el$103;
+              return _el$107;
             })(), createComponent(EmptyState, {
               get children() {
                 return promptCapability().reason;
@@ -5070,18 +5319,18 @@ function InteractionPanel() {
           }
         });
       }
-    }), _el$104);
-    insert(_el$104, createComponent(Badge, {
+    }), _el$108);
+    insert(_el$108, createComponent(Badge, {
       get children() {
         return `boundPlayer=${binding()?.playerId || "-"}`;
       }
     }), null);
-    insert(_el$104, createComponent(Badge, {
+    insert(_el$108, createComponent(Badge, {
       get children() {
         return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
       }
     }), null);
-    insert(_el$104, createComponent(Badge, {
+    insert(_el$108, createComponent(Badge, {
       get ["class"]() {
         return promptCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5089,7 +5338,7 @@ function InteractionPanel() {
         return `prompt=${promptCapability().enabled ? "enabled" : promptCapability().code}`;
       }
     }), null);
-    insert(_el$104, createComponent(Badge, {
+    insert(_el$108, createComponent(Badge, {
       get ["class"]() {
         return chatCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5097,7 +5346,7 @@ function InteractionPanel() {
         return `chat=${chatCapability().enabled ? "enabled" : chatCapability().code}`;
       }
     }), null);
-    insert(_el$104, createComponent(Badge, {
+    insert(_el$108, createComponent(Badge, {
       get ["class"]() {
         return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5105,19 +5354,19 @@ function InteractionPanel() {
         return `mainToken=${assetLaneStatusText()}`;
       }
     }), null);
-    insert(_el$101, createComponent(EmptyState, {
+    insert(_el$105, createComponent(EmptyState, {
       get children() {
         return assetLaneDetail();
       }
     }), null);
-    insert(_el$101, createComponent(PanelSection, {
+    insert(_el$105, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane");
       },
       get children() {
         return [(() => {
-          var _el$105 = _tmpl$14();
-          insert(_el$105, createComponent(Badge, {
+          var _el$109 = _tmpl$14();
+          insert(_el$109, createComponent(Badge, {
             get ["class"]() {
               return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
             },
@@ -5125,17 +5374,17 @@ function InteractionPanel() {
               return `main_token_transfer=${assetLaneStatusText()}`;
             }
           }), null);
-          insert(_el$105, createComponent(Badge, {
+          insert(_el$109, createComponent(Badge, {
             get children() {
               return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
             }
           }), null);
-          insert(_el$105, createComponent(Badge, {
+          insert(_el$109, createComponent(Badge, {
             get children() {
               return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
             }
           }), null);
-          return _el$105;
+          return _el$109;
         })(), createComponent(EmptyState, {
           get children() {
             return assetLaneDetail();
@@ -5145,41 +5394,41 @@ function InteractionPanel() {
             return mainTokenTransferPolicy()?.reason || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.");
           }
         }), (() => {
-          var _el$106 = _tmpl$22(), _el$107 = _el$106.firstChild;
-          insert(_el$107, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-          return _el$106;
+          var _el$110 = _tmpl$23(), _el$111 = _el$110.firstChild;
+          insert(_el$111, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+          return _el$110;
         })()];
       }
     }), null);
-    insert(_el$101, createComponent(PanelSection, {
+    insert(_el$105, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "Agent 聊天", "Agent Chat");
       },
       get children() {
         return [(() => {
-          var _el$108 = _tmpl$23(), _el$109 = _el$108.firstChild, _el$110 = _el$109.nextSibling;
-          insert(_el$109, () => tr(locale(), "消息", "Message"));
-          _el$110.$$input = (event) => {
+          var _el$112 = _tmpl$24(), _el$113 = _el$112.firstChild, _el$114 = _el$113.nextSibling;
+          insert(_el$113, () => tr(locale(), "消息", "Message"));
+          _el$114.$$input = (event) => {
             state.chatDraft.message = String(event.currentTarget.value || "");
             state.chatDraft.dirty = true;
           };
           createRenderEffect((_p$) => {
             var _v$7 = tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent"), _v$8 = !chatCapability().enabled;
-            _v$7 !== _p$.e && setAttribute(_el$110, "placeholder", _p$.e = _v$7);
-            _v$8 !== _p$.t && (_el$110.disabled = _p$.t = _v$8);
+            _v$7 !== _p$.e && setAttribute(_el$114, "placeholder", _p$.e = _v$7);
+            _v$8 !== _p$.t && (_el$114.disabled = _p$.t = _v$8);
             return _p$;
           }, {
             e: void 0,
             t: void 0
           });
-          createRenderEffect(() => _el$110.value = state.chatDraft.message);
-          return _el$108;
+          createRenderEffect(() => _el$114.value = state.chatDraft.message);
+          return _el$112;
         })(), (() => {
-          var _el$111 = _tmpl$24(), _el$112 = _el$111.firstChild;
-          _el$112.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
-          insert(_el$112, () => tr(locale(), "发送聊天", "Send Chat"));
-          createRenderEffect(() => _el$112.disabled = !chatCapability().enabled);
-          return _el$111;
+          var _el$115 = _tmpl$25(), _el$116 = _el$115.firstChild;
+          _el$116.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
+          insert(_el$116, () => tr(locale(), "发送聊天", "Send Chat"));
+          createRenderEffect(() => _el$116.disabled = !chatCapability().enabled);
+          return _el$115;
         })(), createComponent(Show, {
           get when() {
             return chatFeedback();
@@ -5200,9 +5449,9 @@ function InteractionPanel() {
             }
           })
         }), (() => {
-          var _el$113 = _tmpl$20(), _el$114 = _el$113.firstChild, _el$115 = _el$114.nextSibling;
-          insert(_el$114, () => tr(locale(), "消息流", "Message Flow"));
-          insert(_el$115, createComponent(Show, {
+          var _el$117 = _tmpl$20(), _el$118 = _el$117.firstChild, _el$119 = _el$118.nextSibling;
+          insert(_el$118, () => tr(locale(), "消息流", "Message Flow"));
+          insert(_el$119, createComponent(Show, {
             get when() {
               return chatHistory().length > 0;
             },
@@ -5237,18 +5486,18 @@ function InteractionPanel() {
               });
             }
           }));
-          return _el$113;
+          return _el$117;
         })()];
       }
     }), null);
-    insert(_el$101, createComponent(PanelSection, {
+    insert(_el$105, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings");
       },
       get children() {
         return [(() => {
-          var _el$116 = _tmpl$14();
-          insert(_el$116, createComponent(Badge, {
+          var _el$120 = _tmpl$14();
+          insert(_el$120, createComponent(Badge, {
             get ["class"]() {
               return promptOverridesVisible() ? "badge badge--good" : "badge";
             },
@@ -5256,25 +5505,25 @@ function InteractionPanel() {
               return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
             }
           }), null);
-          insert(_el$116, createComponent(Badge, {
+          insert(_el$120, createComponent(Badge, {
             get children() {
               return tr(locale(), "本地设置持久化", "locally persisted");
             }
           }), null);
-          return _el$116;
+          return _el$120;
         })(), createComponent(EmptyState, {
           get children() {
             return promptSettingsSummary();
           }
         }), (() => {
-          var _el$117 = _tmpl$25(), _el$118 = _el$117.firstChild;
-          _el$118.$$click = () => togglePromptOverridesVisible();
-          insert(_el$118, promptSettingsButtonLabel);
-          return _el$117;
+          var _el$121 = _tmpl$26(), _el$122 = _el$121.firstChild;
+          _el$122.$$click = () => togglePromptOverridesVisible();
+          insert(_el$122, promptSettingsButtonLabel);
+          return _el$121;
         })()];
       }
     }), null);
-    insert(_el$101, createComponent(Show, {
+    insert(_el$105, createComponent(Show, {
       get when() {
         return promptOverridesVisible();
       },
@@ -5283,97 +5532,97 @@ function InteractionPanel() {
           title: "Prompt Overrides",
           get children() {
             return [(() => {
-              var _el$119 = _tmpl$4();
-              insert(_el$119, () => promptVersionState().summary);
-              return _el$119;
+              var _el$123 = _tmpl$4();
+              insert(_el$123, () => promptVersionState().summary);
+              return _el$123;
             })(), (() => {
-              var _el$120 = _tmpl$4();
-              insert(_el$120, () => promptVersionState().detail);
-              return _el$120;
+              var _el$124 = _tmpl$4();
+              insert(_el$124, () => promptVersionState().detail);
+              return _el$124;
             })(), createComponent(Show, {
               get when() {
                 return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
               },
               get children() {
-                var _el$121 = _tmpl$26(), _el$122 = _el$121.firstChild, _el$123 = _el$122.nextSibling;
-                insert(_el$122, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                _el$123.$$input = (event) => {
+                var _el$125 = _tmpl$27(), _el$126 = _el$125.firstChild, _el$127 = _el$126.nextSibling;
+                insert(_el$126, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                _el$127.$$input = (event) => {
                   state.strongAuth.approvalCode = String(event.currentTarget.value || "");
                 };
-                createRenderEffect(() => _el$123.value = state.strongAuth.approvalCode || "");
-                return _el$121;
+                createRenderEffect(() => _el$127.value = state.strongAuth.approvalCode || "");
+                return _el$125;
               }
             }), (() => {
-              var _el$124 = _tmpl$27(), _el$125 = _el$124.firstChild, _el$126 = _el$125.nextSibling;
-              insert(_el$125, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
-              _el$126.$$input = (event) => {
+              var _el$128 = _tmpl$28(), _el$129 = _el$128.firstChild, _el$130 = _el$129.nextSibling;
+              insert(_el$129, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
+              _el$130.$$input = (event) => {
                 state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$126.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$126.value = state.promptDraft.systemPrompt);
-              return _el$124;
+              createRenderEffect(() => _el$130.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$130.value = state.promptDraft.systemPrompt);
+              return _el$128;
             })(), (() => {
-              var _el$127 = _tmpl$28(), _el$128 = _el$127.firstChild, _el$129 = _el$128.nextSibling;
-              insert(_el$128, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-              _el$129.$$input = (event) => {
+              var _el$131 = _tmpl$29(), _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling;
+              insert(_el$132, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+              _el$133.$$input = (event) => {
                 state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$129.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$129.value = state.promptDraft.shortTermGoal);
-              return _el$127;
+              createRenderEffect(() => _el$133.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$133.value = state.promptDraft.shortTermGoal);
+              return _el$131;
             })(), (() => {
-              var _el$130 = _tmpl$29(), _el$131 = _el$130.firstChild, _el$132 = _el$131.nextSibling;
-              insert(_el$131, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-              _el$132.$$input = (event) => {
+              var _el$134 = _tmpl$30(), _el$135 = _el$134.firstChild, _el$136 = _el$135.nextSibling;
+              insert(_el$135, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+              _el$136.$$input = (event) => {
                 state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$132.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$132.value = state.promptDraft.longTermGoal);
-              return _el$130;
+              createRenderEffect(() => _el$136.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$136.value = state.promptDraft.longTermGoal);
+              return _el$134;
             })(), (() => {
-              var _el$133 = _tmpl$30(), _el$134 = _el$133.firstChild, _el$135 = _el$134.nextSibling;
-              _el$134.$$click = () => sendPromptControl("preview", null);
-              insert(_el$134, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
-              _el$135.$$click = () => sendPromptControl("apply", null);
-              insert(_el$135, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
+              var _el$137 = _tmpl$31(), _el$138 = _el$137.firstChild, _el$139 = _el$138.nextSibling;
+              _el$138.$$click = () => sendPromptControl("preview", null);
+              insert(_el$138, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
+              _el$139.$$click = () => sendPromptControl("apply", null);
+              insert(_el$139, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
               createRenderEffect((_p$) => {
                 var _v$9 = !promptCapability().enabled, _v$0 = !promptCapability().enabled;
-                _v$9 !== _p$.e && (_el$134.disabled = _p$.e = _v$9);
-                _v$0 !== _p$.t && (_el$135.disabled = _p$.t = _v$0);
+                _v$9 !== _p$.e && (_el$138.disabled = _p$.e = _v$9);
+                _v$0 !== _p$.t && (_el$139.disabled = _p$.t = _v$0);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              return _el$133;
+              return _el$137;
             })(), (() => {
-              var _el$136 = _tmpl$31(), _el$137 = _el$136.firstChild, _el$138 = _el$137.firstChild, _el$139 = _el$138.nextSibling, _el$140 = _el$137.nextSibling;
-              insert(_el$138, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-              _el$139.$$input = (event) => {
+              var _el$140 = _tmpl$32(), _el$141 = _el$140.firstChild, _el$142 = _el$141.firstChild, _el$143 = _el$142.nextSibling, _el$144 = _el$141.nextSibling;
+              insert(_el$142, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+              _el$143.$$input = (event) => {
                 const nextValue = Number(event.currentTarget.value || 0);
                 state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
                 requestRender();
               };
-              _el$140.$$click = () => {
+              _el$144.$$click = () => {
                 sendPromptControl("rollback", {
                   toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                 });
               };
-              insert(_el$140, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
+              insert(_el$144, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
               createRenderEffect((_p$) => {
                 var _v$1 = !promptCapability().enabled, _v$10 = !promptCapability().enabled;
-                _v$1 !== _p$.e && (_el$139.disabled = _p$.e = _v$1);
-                _v$10 !== _p$.t && (_el$140.disabled = _p$.t = _v$10);
+                _v$1 !== _p$.e && (_el$143.disabled = _p$.e = _v$1);
+                _v$10 !== _p$.t && (_el$144.disabled = _p$.t = _v$10);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              createRenderEffect(() => _el$139.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-              return _el$136;
+              createRenderEffect(() => _el$143.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+              return _el$140;
             })(), createComponent(Show, {
               get when() {
                 return promptFeedback();
@@ -5421,7 +5670,7 @@ function InteractionPanel() {
         });
       }
     }), null);
-    return _el$101;
+    return _el$105;
   })();
 }
 function DetailsPanel() {
@@ -5446,20 +5695,20 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$141 = _tmpl$34(), _el$142 = _el$141.firstChild, _el$143 = _el$142.nextSibling, _el$144 = _el$143.firstChild, _el$145 = _el$144.nextSibling;
-    insert(_el$142, createComponent(Badge, {
+    var _el$145 = _tmpl$35(), _el$146 = _el$145.firstChild, _el$147 = _el$146.nextSibling, _el$148 = _el$147.firstChild, _el$149 = _el$148.nextSibling;
+    insert(_el$146, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
         return tr(locale(), "已选中", "Selected");
       }
     }), null);
-    insert(_el$142, createComponent(Badge, {
+    insert(_el$146, createComponent(Badge, {
       get children() {
         return selectedLabel();
       }
     }), null);
-    insert(_el$141, createComponent(InteractionPanel, {}), _el$143);
-    insert(_el$141, createComponent(Show, {
+    insert(_el$145, createComponent(InteractionPanel, {}), _el$147);
+    insert(_el$145, createComponent(Show, {
       get when() {
         return state.selectedObject;
       },
@@ -5477,35 +5726,35 @@ function DetailsPanel() {
           }
         });
       }
-    }), _el$143);
-    insert(_el$144, () => tr(locale(), "世界规模", "World Scale"));
-    insert(_el$145, createComponent(Badge, {
+    }), _el$147);
+    insert(_el$148, () => tr(locale(), "世界规模", "World Scale"));
+    insert(_el$149, createComponent(Badge, {
       get children() {
         return `agents=${snapshotCounts().agents}`;
       }
     }), null);
-    insert(_el$145, createComponent(Badge, {
+    insert(_el$149, createComponent(Badge, {
       get children() {
         return `locations=${snapshotCounts().locations}`;
       }
     }), null);
-    insert(_el$145, createComponent(Badge, {
+    insert(_el$149, createComponent(Badge, {
       get children() {
         return `promptProfiles=${snapshotCounts().promptProfiles}`;
       }
     }), null);
-    insert(_el$145, createComponent(Badge, {
+    insert(_el$149, createComponent(Badge, {
       get children() {
         return `debugContexts=${snapshotCounts().executionDebugContexts}`;
       }
     }), null);
-    insert(_el$143, createComponent(EmptyState, {
+    insert(_el$147, createComponent(EmptyState, {
       style: "margin-top:10px;",
       get children() {
         return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。", "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.");
       }
     }), null);
-    insert(_el$143, createComponent(Show, {
+    insert(_el$147, createComponent(Show, {
       get when() {
         return hasSnapshotDiagnostics();
       },
@@ -5524,38 +5773,38 @@ function DetailsPanel() {
         });
       }
     }), null);
-    insert(_el$141, createComponent(Show, {
+    insert(_el$145, createComponent(Show, {
       get when() {
         return state.lastError;
       },
       get children() {
-        var _el$146 = _tmpl$33(), _el$147 = _el$146.firstChild, _el$148 = _el$147.nextSibling;
-        insert(_el$147, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$148, () => state.lastError);
-        return _el$146;
+        var _el$150 = _tmpl$34(), _el$151 = _el$150.firstChild, _el$152 = _el$151.nextSibling;
+        insert(_el$151, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$152, () => state.lastError);
+        return _el$150;
       }
     }), null);
-    return _el$141;
+    return _el$145;
   })();
 }
 function AppShell() {
   const locale = () => uiLocale();
   return [(() => {
-    var _el$149 = _tmpl$35(), _el$150 = _el$149.firstChild, _el$151 = _el$150.firstChild, _el$152 = _el$150.nextSibling;
-    insert(_el$151, () => tr(locale(), "目标", "Targets"));
-    insert(_el$152, createComponent(TargetsPanel, {}));
-    return _el$149;
-  })(), (() => {
-    var _el$153 = _tmpl$35(), _el$154 = _el$153.firstChild, _el$155 = _el$154.firstChild, _el$156 = _el$154.nextSibling;
-    insert(_el$155, () => tr(locale(), "世界摘要", "World Summary"));
-    insert(_el$154, createComponent(ViewerEntryMenu, {}), null);
-    insert(_el$156, createComponent(WorldSummaryPanel, {}));
+    var _el$153 = _tmpl$36(), _el$154 = _el$153.firstChild, _el$155 = _el$154.firstChild, _el$156 = _el$154.nextSibling;
+    insert(_el$155, () => tr(locale(), "目标", "Targets"));
+    insert(_el$156, createComponent(TargetsPanel, {}));
     return _el$153;
   })(), (() => {
-    var _el$157 = _tmpl$35(), _el$158 = _el$157.firstChild, _el$159 = _el$158.firstChild, _el$160 = _el$158.nextSibling;
-    insert(_el$159, () => tr(locale(), "明细", "Details"));
-    insert(_el$160, createComponent(DetailsPanel, {}));
+    var _el$157 = _tmpl$36(), _el$158 = _el$157.firstChild, _el$159 = _el$158.firstChild, _el$160 = _el$158.nextSibling;
+    insert(_el$159, () => tr(locale(), "世界摘要", "World Summary"));
+    insert(_el$158, createComponent(ViewerEntryMenu, {}), null);
+    insert(_el$160, createComponent(WorldSummaryPanel, {}));
     return _el$157;
+  })(), (() => {
+    var _el$161 = _tmpl$36(), _el$162 = _el$161.firstChild, _el$163 = _el$162.firstChild, _el$164 = _el$162.nextSibling;
+    insert(_el$163, () => tr(locale(), "明细", "Details"));
+    insert(_el$164, createComponent(DetailsPanel, {}));
+    return _el$161;
   })()];
 }
 const app = document.getElementById("app");

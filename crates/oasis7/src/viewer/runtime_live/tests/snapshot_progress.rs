@@ -194,6 +194,45 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
 }
 
 #[test]
+fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
+    let mut gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &crate::runtime::WorldState::default(),
+        true,
+        None,
+        true,
+        None,
+        false,
+        None,
+    );
+    super::super::gameplay_snapshot::apply_runtime_snapshot_empty_entities_blocker(
+        &mut gameplay,
+        true,
+        true,
+    );
+    assert_eq!(
+        gameplay.stage_status,
+        crate::simulator::PlayerGameplayStageStatus::Blocked
+    );
+    assert_eq!(
+        gameplay.blocker_kind.as_deref(),
+        Some("runtime_snapshot_empty_entities")
+    );
+    assert!(gameplay
+        .blocker_detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("no agents/locations")));
+    assert_eq!(
+        gameplay.available_actions[0].protocol_action,
+        "request_snapshot"
+    );
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .filter(|action| action.protocol_action != "request_snapshot")
+        .all(|action| action.disabled_reason.is_some()));
+}
+
+#[test]
 fn compat_snapshot_exposes_player_agent_claim_overview() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
