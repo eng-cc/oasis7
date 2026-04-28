@@ -1,0 +1,22 @@
+task_uid: task_886e2ef4878645a6a6ab69c588dce57e
+title: "freeze gameplay scope around early retention"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-gameplay-early-retention-focus-order
+execution_log_path: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+doc_refs: []
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "publish a short-horizon gameplay focus order"
+  - "document what is deferred until early retention gates recover"
+  - "make future feature work evaluable against the focus order"
+handoff_to: []
+updated_at: 2026-04-28T09:00:54+08:00
+last_started_at: 2026-04-28T08:57:08+08:00
+last_closed_at: 2026-04-28T09:00:54+08:00

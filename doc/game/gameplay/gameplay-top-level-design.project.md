@@ -64,6 +64,8 @@
 
 口径更新（2026-04-15）: T8 当前已将 producer verdict 拆成两层。`10-minute trust gate` 只判断“是否已经值得继续玩”，`first capability gate` 再判断“首个持续能力是否已闭环”。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not yet proven`。
 
+- [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式改写为“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业停机/修复可读 -> 间接控制因果与下一步”四级优先顺序，并补充 defer 规则：在这些 blocker 清空前，不扩大战争/治理/元进度在首局中的曝光，也不允许用 `--no-llm` / operator-only lane 充当正式放行依据。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
+
 ## 依赖
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
