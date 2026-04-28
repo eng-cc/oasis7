@@ -1,0 +1,20 @@
+task_uid: task_ecb385beef23445bbc32450a6dd972c4
+title: "Close GitHub issue #46 with existing post-onboarding evidence"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-github-issue-46-closeout
+execution_log_path: .pm/tasks/task_ecb385beef23445bbc32450a6dd972c4.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+doc_refs:
+  - doc/playability_test_result/card_2026_03_19_09_40_56.md
+related_prd:
+  - PRD-GAME-007
+acceptance:
+  - "Issue #46 comment cites headed Web and no-UI evidence, then closes the issue without changing product scope."
+handoff_to: []
+updated_at: 2026-04-28T16:25:45+08:00
+last_started_at: 2026-04-28T16:23:55+08:00
+last_closed_at: 2026-04-28T16:25:45+08:00
