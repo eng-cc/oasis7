@@ -148,8 +148,8 @@ impl ClientLauncherApp {
                     }
                     if field.id == "chain_replication_bootstrap_peers" {
                         ui.small(self.tr(
-                            "多个 bootstrap peer 可用逗号、分号或空白分隔，例如 /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
-                            "Separate multiple bootstrap peers with commas, semicolons, or whitespace, for example /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
+                            "多个 bootstrap peer 可用逗号、分号或空白分隔，例如 /dns4/bootstrap1.oasis7.tech/tcp/5611 或 /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
+                            "Separate multiple bootstrap peers with commas, semicolons, or whitespace, for example /dns4/bootstrap1.oasis7.tech/tcp/5611 or /ip4/127.0.0.1/tcp/4100/p2p/<peer-id>",
                         ));
                     }
                 }

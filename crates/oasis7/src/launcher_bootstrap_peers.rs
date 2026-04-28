@@ -1,7 +1,7 @@
 use multiaddr::Multiaddr;
 
-const MULTIADDR_EXAMPLE: &str = "/ip4/127.0.0.1/tcp/4100/p2p/<peer-id>";
-pub const DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS: [&str; 2] = [
+const MULTIADDR_EXAMPLE: &str = "/dns4/bootstrap1.oasis7.tech/tcp/5611";
+pub const DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS: &[&str] = &[
     "/dns4/bootstrap1.oasis7.tech/tcp/5611",
     "/dns4/bootstrap2.oasis7.tech/tcp/5612",
 ];

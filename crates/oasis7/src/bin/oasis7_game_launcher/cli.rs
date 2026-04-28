@@ -132,6 +132,8 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 let value = parse_required_value(&mut iter, "--chain-replication-network-peer")?;
                 validate_chain_replication_network_peer(value.as_str())?;
                 if !explicit_chain_replication_bootstrap_peers {
+                    // The first explicit bootstrap peer switches CLI behavior from
+                    // "use bundled defaults" to "use only the caller-provided list".
                     options.chain_replication_bootstrap_peers.clear();
                     explicit_chain_replication_bootstrap_peers = true;
                 }
@@ -402,7 +404,7 @@ Options:\n\
   --chain-p2p-reject-public-entry\n\
                                keep conservative fallback when auto mode suggests public entry (default)\n\
   --chain-replication-network-peer <multiaddr>\n\
-                               oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable)\n\
+                               oasis7_chain_runtime replication bootstrap peer multiaddr (repeatable; first explicit value replaces bundled defaults)\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\
   --chain-pos-slot-duration-ms <n>\n\
                                oasis7_chain_runtime PoS slot duration ms (default: {DEFAULT_CHAIN_POS_SLOT_DURATION_MS})\n\
