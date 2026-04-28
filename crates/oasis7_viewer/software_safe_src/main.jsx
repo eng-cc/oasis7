@@ -133,6 +133,59 @@ function PanelSection(props) {
   );
 }
 
+function CalloutCard(props) {
+  return (
+    <div class={`callout ${props.variant === "warn" ? "callout--warn" : ""}`}>
+      <div class="callout__header">
+        <div class="callout__title">{props.title}</div>
+        <Show when={props.badge}>
+          <Badge class={props.badgeClass ?? "badge badge--warn"}>{props.badge}</Badge>
+        </Show>
+      </div>
+      <div class="callout__body">{props.children}</div>
+    </div>
+  );
+}
+
+function EmptyEntityRecoveryCard(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const gameplay = () => (typeof props.gameplay === "function" ? props.gameplay() : props.gameplay);
+
+  return (
+    <CalloutCard
+      title={props.title ?? tr(locale(), "当前快照没有可继续游玩的实体", "Current Snapshot Has No Playable Entities")}
+      badge={gameplay()?.blockerKind || "blocked"}
+      badgeClass="badge badge--warn"
+      variant="warn"
+    >
+      <div class="feedback-summary">
+        {gameplay()?.blockerDetail
+          || tr(
+            locale(),
+            "runtime 已发布玩法摘要，但当前快照还没有可选 Agent 或地点。",
+            "Runtime published gameplay summary, but the current snapshot still has no selectable agents or locations.",
+          )}
+      </div>
+      <Show when={gameplay()?.nextStepHint}>
+        <div class="feedback-detail">{gameplay().nextStepHint}</div>
+      </Show>
+      <Show when={gameplay()?.entityCounts}>
+        <div class="badge-row">
+          <Badge>{`agents=${gameplay().entityCounts.agents}`}</Badge>
+          <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
+        </div>
+      </Show>
+      <div class="feedback-detail">
+        {tr(
+          locale(),
+          "如果中间栏仍保留“刷新快照”动作，先从那里重拉一次；如果数量仍然是 0，就需要修复或重启 runtime world bootstrap。",
+          "If the middle column still exposes a refresh action, pull a fresh snapshot there first. If the counts stay at 0, repair or restart the runtime world bootstrap.",
+        )}
+      </div>
+    </CalloutCard>
+  );
+}
+
 function ViewerEntryMenu() {
   const locale = () => uiLocale();
   const viewerEntryUrls = () => buildViewerEntryUrls(locale());
@@ -297,6 +350,15 @@ function WorldSummaryPanel() {
       && (state.auth.pendingForceRebind
         || state.auth.runtimeStatus === "rebind_retrying"
         || state.auth.runtimeStatus === "rebind_registering");
+  const showPlayerSessionSurface = () =>
+    String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+      || state.auth.available
+      || !!hostedRecoveryHint();
+  const diagnosticsSummaryBadges = () => [
+    `debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`,
+    `auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`,
+    `events=${state.recentEvents.length}`,
+  ];
 
   return (
     <div class="stack">
@@ -306,9 +368,7 @@ function WorldSummaryPanel() {
         <Badge class={core.connectionBadgeClass()}>
           {tr(locale(), "连接状态", "connection")}={state.connectionStatus}
         </Badge>
-        <Badge>{`debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`}</Badge>
         <Badge>{`rendererClass=${state.rendererClass}`}</Badge>
-        <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
       </div>
       <PanelSection title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}>
         <Show
@@ -332,6 +392,31 @@ function WorldSummaryPanel() {
                   }`}
                 </Badge>
               </div>
+              <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
+                <CalloutCard
+                  title={
+                    gameplay().blockerKind === "runtime_snapshot_empty_entities"
+                      ? tr(locale(), "当前阻塞：空快照", "Current Blocker: Empty Snapshot")
+                      : tr(locale(), "当前阻塞", "Current Blocker")
+                  }
+                  badge={gameplay().blockerKind || "blocked"}
+                  badgeClass="badge badge--warn"
+                  variant="warn"
+                >
+                  <div class="feedback-summary">
+                    {gameplay().blockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
+                  </div>
+                  <Show when={gameplay().nextStepHint}>
+                    <div class="feedback-detail">{gameplay().nextStepHint}</div>
+                  </Show>
+                  <Show when={gameplay().entityCounts}>
+                    <div class="badge-row">
+                      <Badge>{`agents=${gameplay().entityCounts.agents}`}</Badge>
+                      <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
+                    </div>
+                  </Show>
+                </CalloutCard>
+              </Show>
               <EventCard
                 title={gameplay().goalTitle || tr(locale(), "当前目标", "Current Goal")}
                 badge={gameplay().progressPercent == null ? "n/a" : `${gameplay().progressPercent}%`}
@@ -342,26 +427,6 @@ function WorldSummaryPanel() {
                   <div class="feedback-detail">{gameplay().progressDetail}</div>
                 </Show>
               </EventCard>
-              <EventCard title={tr(locale(), "下一步", "Next Step")} badge={gameplay().stageStatus || "-"}>
-                <div class="feedback-summary">
-                  {gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
-                </div>
-                <Show when={gameplay().branchHint}>
-                  <div class="feedback-detail">{gameplay().branchHint}</div>
-                </Show>
-              </EventCard>
-              <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
-                <EventCard
-                  title={tr(locale(), "阻塞 / 交接", "Blocked / Handoff")}
-                  badge={gameplay().blockerKind || "blocked"}
-                  badgeClass="badge badge--warn"
-                >
-                  <div class="feedback-summary">
-                    {gameplay().blockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
-                  </div>
-                  <div class="feedback-detail">{gameplay().assetGovernanceHandoff}</div>
-                </EventCard>
-              </Show>
               <Show when={gameplay().recentFeedback}>
                 {(feedback) => (
                   <EventCard
@@ -406,6 +471,14 @@ function WorldSummaryPanel() {
                   })()
                 )}
               </Show>
+              <EventCard title={tr(locale(), "下一步", "Next Step")} badge={gameplay().stageStatus || "-"}>
+                <div class="feedback-summary">
+                  {gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
+                </div>
+                <Show when={gameplay().branchHint}>
+                  <div class="feedback-detail">{gameplay().branchHint}</div>
+                </Show>
+              </EventCard>
               <Show when={gameplayActionFeedback()}>
                 {(feedback) => <FeedbackCard feedback={feedback()} display={gameplayActionFeedbackDisplay()} />}
               </Show>
@@ -462,16 +535,20 @@ function WorldSummaryPanel() {
                   </Show>
                 </div>
               </div>
-              <EventCard title={tr(locale(), "缺失动作交接", "Missing Action Handoff")} badge="explicit" badgeClass="badge badge--warn">
+              <CalloutCard
+                title={tr(locale(), "未在此页暴露的动作", "Actions Not Exposed On This Page")}
+                badge="handoff"
+                badgeClass="badge badge--warn"
+              >
                 <div class="feedback-summary">{gameplay().assetGovernanceHandoff}</div>
                 <div class="feedback-detail">
                   {tr(
                     locale(),
-                    "资产 / 治理相关能力请走下面的单独 lane。本页刻意不把转账表单塞进 primary Web entry。",
-                    "Use the Asset / Governance Lane below for policy visibility. This page intentionally keeps transfer forms out of the primary Web entry.",
+                    "资产 / 治理相关能力请走单独 lane；这张主入口页面只保留正式玩法所需的最小动作面。",
+                    "Asset and governance actions stay on their dedicated lane; this primary entry only keeps the minimum surface needed for formal gameplay.",
                   )}
                 </div>
-              </EventCard>
+              </CalloutCard>
             </>
           )}
         </Show>
@@ -482,157 +559,21 @@ function WorldSummaryPanel() {
         <MetricCard label={tr(locale(), "世界", "World")} value={state.worldId || "-"} />
         <MetricCard label={tr(locale(), "Viewer 服务", "Viewer Server")} value={state.server || "-"} />
       </div>
-      <div class="badge-row">
-        <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
-        <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
-        <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
-      </div>
-      <PanelSection title={tr(locale(), "执行 Lane", "Execution Lanes")}>
-        <div class="badge-row">
-          <Badge class="badge badge--accent">debug_viewer</Badge>
-          <Badge>{`status=${state.debugViewerStatus}`}</Badge>
-          <Badge>{`renderMode=${state.renderMode}`}</Badge>
-          <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
-        </div>
-        <EmptyState style="margin-top:-2px;">
-          {tr(
-            locale(),
-            "debug_viewer 是只读订阅 lane，只负责消费 runtime 快照和事件；关闭这个 viewer 不会停止 agent lane。",
-            "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.",
-          )}
-        </EmptyState>
-        <Show
-          when={selectedDebug()}
-          fallback={
-            <EmptyState>
-              Select an agent to compare the headless execution lane against this debug_viewer observer
-              lane.
-            </EmptyState>
-          }
-        >
-          {(debug) => (
-            <>
-            <div class="badge-row">
-              <Badge class="badge badge--accent">selected agent lane</Badge>
-                <Badge>{`provider=${debug().provider_mode || "-"}`}</Badge>
-                <Badge>{`mode=${debug().execution_mode || "-"}`}</Badge>
-                <Badge>{`env=${debug().environment_class || "-"}`}</Badge>
-              </div>
-              <div class="badge-row">
-                <Badge>{`obs=${debug().observation_schema_version || "-"}`}</Badge>
-                <Badge>{`act=${debug().action_schema_version || "-"}`}</Badge>
-                <Badge>{`agentProfile=${debug().agent_profile || "-"}`}</Badge>
-                <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
-              </div>
-              <EmptyState style="margin-top:-2px;">
-                {tr(
-                  locale(),
-                  "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
-                  "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.",
-                )}
-              </EmptyState>
-              <div class="badge-row">
-                <Badge class="badge badge--accent">provider check</Badge>
-                <Badge>{`status=${debug().provider_check_status || "-"}`}</Badge>
-                <Badge>{`source=${debug().provider_check_source || "-"}`}</Badge>
-                <Badge>{`fallback=${debug().provider_check_fallback_reason || "-"}`}</Badge>
-              </div>
-              <Show
-                when={
-                  debug().provider_check_error ||
-                  debug().provider_reported_capabilities?.length ||
-                  debug().provider_reported_supported_action_sets?.length
-                }
-              >
-                <div class="badge-row">
-                  <Badge>{`actualCaps=${(debug().provider_reported_capabilities || []).join(",") || "-"}`}</Badge>
-                  <Badge>
-                    {`actualActions=${(debug().provider_reported_supported_action_sets || []).join(",") || "-"}`}
-                  </Badge>
-                  <Badge>{`checkError=${debug().provider_check_error || "-"}`}</Badge>
-                </div>
-              </Show>
-              <JsonBlock value={debug()} />
-            </>
-          )}
-        </Show>
-      </PanelSection>
-      <div class="badge-row">
-        <Badge class={state.auth.available ? "badge badge--good" : "badge badge--warn"}>
-          {`auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`}
-        </Badge>
-        <Badge class="badge badge--accent">{`tier=${authSurface().currentTier}`}</Badge>
-        <Badge>{`source=${authSurface().source}`}</Badge>
-        <Badge>{`deploymentHint=${authSurface().deploymentHint}`}</Badge>
-        <Badge>{`player=${state.auth.playerId || "-"}`}</Badge>
-        <Badge>{`pubkey=${state.auth.publicKey ? `${state.auth.publicKey.slice(0, 10)}…` : "-"}`}</Badge>
-        <Badge>{`epoch=${state.auth.sessionEpoch == null ? "-" : state.auth.sessionEpoch}`}</Badge>
-        <Badge>{`runtime=${state.auth.runtimeStatus || "-"}`}</Badge>
-        <Badge>{`boundAgent=${state.auth.boundAgentId || "-"}`}</Badge>
-        <Badge>{`requestedAgent=${state.auth.pendingRequestedAgentId || "-"}`}</Badge>
-        <Badge>{state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle"}</Badge>
-      </div>
-      <Show when={state.auth.recoveryErrorCode || state.auth.recoveryErrorMessage}>
-        <div class="badge-row">
-          <Badge class="badge badge--warn">{`recoveryError=${state.auth.recoveryErrorCode || "-"}`}</Badge>
-          <Badge>{state.auth.recoveryErrorMessage || "-"}</Badge>
-        </div>
-      </Show>
-      <Show when={showRebindNotice()}>
-        <div class="badge-row">
-          <Badge class="badge badge--accent">rebind</Badge>
-          <Badge>{`target=${state.auth.pendingRequestedAgentId || "-"}`}</Badge>
-          <Badge>{state.auth.pendingForceRebind ? "mode=force_rebind" : "mode=awaiting_retry"}</Badge>
-        </div>
-        <EmptyState>
-          Player session is switching to the requested agent and the current action will continue after
-          registration succeeds.
-        </EmptyState>
-      </Show>
-      <Show when={state.auth.rebindNotice}>
-        <EmptyState>{state.auth.rebindNotice}</EmptyState>
-      </Show>
-      <Show when={state.hostedAdmission}>
-        {(admission) => (
+      <Show when={showPlayerSessionSurface()}>
+        <PanelSection title={tr(locale(), "玩家会话", "Player Session")}>
           <div class="badge-row">
-            <Badge>{`activeSlots=${admission().active_player_sessions}/${admission().max_player_sessions}`}</Badge>
-            <Badge>
-              {`effectiveSlots=${
-                admission().effective_player_sessions == null
-                  ? "-"
-                  : `${admission().effective_player_sessions}/${admission().max_player_sessions}`
-              }`}
+            <Badge class={state.auth.available ? "badge badge--good" : "badge badge--warn"}>
+              {`auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`}
             </Badge>
-            <Badge>{`runtimeBound=${admission().runtime_bound_player_sessions ?? "-"}`}</Badge>
-            <Badge>{`runtimeOnly=${admission().runtime_only_player_sessions ?? "-"}`}</Badge>
-            <Badge>{`runtimeProbe=${admission().runtime_probe_status || "-"}`}</Badge>
-            <Badge>{`issueBudget=${admission().remaining_issue_budget}`}</Badge>
-            <Badge>{`leaseTTL=${admission().slot_lease_ttl_ms}`}</Badge>
-            <Badge>{`issued=${admission().issued_players_total}`}</Badge>
-            <Badge>{`released=${admission().released_players_total}`}</Badge>
+            <Badge class="badge badge--accent">{`tier=${authSurface().currentTier}`}</Badge>
+            <Badge>{`player=${state.auth.playerId || "-"}`}</Badge>
+            <Badge>{`boundAgent=${state.auth.boundAgentId || "-"}`}</Badge>
           </div>
-        )}
-      </Show>
-      <Show when={state.hostedAdmission?.runtime_probe_error}>
-        <div class="badge-row">
-          <Badge class="badge badge--warn">{`runtimeProbeError=${state.hostedAdmission.runtime_probe_error}`}</Badge>
-        </div>
-      </Show>
-      <Show when={hostedRecoveryHint()}>
-        {(hint) => (
-          <div
-            class="panel panel--nested"
-            style="background:rgba(255,255,255,0.02); border-color:rgba(255,184,77,0.35);"
-          >
-            <div class="panel__header">
-              <div class="panel__title">{tr(locale(), "托管恢复", "Hosted Recovery")}</div>
-            </div>
-            <div class="panel__body stack">
-              <div class="badge-row">
-                <Badge class="badge badge--warn">{hint().kind}</Badge>
-                <Badge>{hint().title}</Badge>
-              </div>
-              <EmptyState>{hint().detail}</EmptyState>
+          <EmptyState>
+            {hostedRecoveryHint()?.detail || state.auth.rebindNotice || authSurface().currentTierReason}
+          </EmptyState>
+          <Show when={hostedRecoveryHint()}>
+            {(hint) => (
               <div class="toolbar">
                 <button
                   data-auth-action="retry-issue"
@@ -644,133 +585,288 @@ function WorldSummaryPanel() {
                   {hint().cta}
                 </button>
               </div>
+            )}
+          </Show>
+          <Show
+            when={
+              !state.auth.available
+              && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+              && !hostedRecoveryHint()
+            }
+          >
+            <div class="toolbar">
+              <button
+                data-auth-action="retry-issue"
+                disabled={state.auth.issueInFlight}
+                onClick={() => {
+                  void core.retryHostedPlayerIdentityIssue();
+                }}
+              >
+                {tr(locale(), "领取玩家会话", "Acquire Player Session")}
+              </button>
             </div>
-          </div>
-        )}
-      </Show>
-      <Show
-        when={
-          !state.auth.available
-          && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
-          && !hostedRecoveryHint()
-        }
-      >
-        <div class="toolbar">
-          <button
-            data-auth-action="retry-issue"
-            disabled={state.auth.issueInFlight}
-            onClick={() => {
-              void core.retryHostedPlayerIdentityIssue();
-            }}
-          >
-            Acquire Hosted Player Session
-          </button>
-        </div>
-      </Show>
-      <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
-        <div class="toolbar">
-          <button
-            data-auth-action="logout"
-            onClick={() => {
-              void core.logoutHostedPlayerSession();
-            }}
-          >
-            Release Hosted Player Session
-          </button>
-        </div>
-      </Show>
-      <PanelSection title="Session Ladder">
-        <EmptyState>{authSurface().currentTierReason}</EmptyState>
-        <div class="event-list">
-          <For each={authSurface().tiers}>
-            {(tier) => (
-              <EventCard title={tier.label} badge={tier.status} badgeClass={tierBadgeClass(tier.status)} meta={tier.reason} />
-            )}
-          </For>
-        </div>
-        <div class="badge-row">
-          <Badge class={authSurface().capabilities.prompt_control.enabled ? "badge badge--good" : "badge badge--warn"}>
-            {`prompt=${
-              authSurface().capabilities.prompt_control.enabled
-                ? "enabled"
-                : authSurface().capabilities.prompt_control.code
-            }`}
-          </Badge>
-          <Badge class={authSurface().capabilities.agent_chat.enabled ? "badge badge--good" : "badge badge--warn"}>
-            {`chat=${
-              authSurface().capabilities.agent_chat.enabled
-                ? "enabled"
-                : authSurface().capabilities.agent_chat.code
-            }`}
-          </Badge>
-          <Badge class="badge badge--warn">
-            {`mainToken=${authSurface().capabilities.main_token_transfer.code}`}
-          </Badge>
-        </div>
-        <EmptyState>{authSurface().reconnect}</EmptyState>
-      </PanelSection>
-      <Show when={hostedActionMatrixView().length > 0}>
-        <PanelSection title={tr(locale(), "托管动作矩阵", "Hosted Action Matrix")}>
-          <EmptyState>
-            {tr(
-              locale(),
-              "这里是 launcher 导出的 hosted public-join 真值面。QA 应该直接读取这些 action id，而不是只靠按钮状态推断。",
-              "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.",
-            )}
-          </EmptyState>
-          <div class="event-list">
-            <For each={hostedActionMatrixView()}>
-              {(item) => (
-                <EventCard
-                  title={item.actionId}
-                  badge={item.enabled ? "enabled" : item.code || "blocked"}
-                  badgeClass={item.enabled ? "badge badge--good" : "badge badge--warn"}
-                  meta={`required_auth=${item.requiredAuth} · availability=${item.availability}`}
-                >
-                  <EmptyState>{item.reason || "-"}</EmptyState>
-                  <Show when={item.capabilityReason && item.capabilityReason !== item.reason}>
-                    <EmptyState>{`viewer=${item.capabilityReason}`}</EmptyState>
-                  </Show>
-                </EventCard>
-              )}
-            </For>
-          </div>
+          </Show>
+          <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
+            <div class="toolbar">
+              <button
+                data-auth-action="logout"
+                onClick={() => {
+                  void core.logoutHostedPlayerSession();
+                }}
+              >
+                {tr(locale(), "释放玩家会话", "Release Player Session")}
+              </button>
+            </div>
+          </Show>
         </PanelSection>
       </Show>
-      <div class="summary-grid">
-        <MetricCard label={tr(locale(), "Prompt 反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
-          <Show when={promptFeedbackDisplay()}>
-            <Badge class={promptFeedbackDisplay().badgeClass}>
-              {promptFeedbackDisplay().label}
-            </Badge>
-          </Show>
-        </MetricCard>
-        <MetricCard label={tr(locale(), "聊天反馈", "Chat Feedback")} value={chatFeedback()?.stage || "idle"}>
-          <Show when={chatFeedbackDisplay()}>
-            <Badge class={chatFeedbackDisplay().badgeClass}>
-              {chatFeedbackDisplay().label}
-            </Badge>
-          </Show>
-        </MetricCard>
-      </div>
-      <div>
-        <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近事件", "Recent Events")}</div>
-        <div class="event-list">
-          <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待 live 事件…", "Waiting for live events…")}</EmptyState>}>
-            <For each={state.recentEvents}>
-              {(event) => (
-                <EventCard
-                  title={core.summarizeEventTitle(event)}
-                  badge={`#${Number(event.id || 0)}`}
-                  meta={`time=${Number(event.time || 0)}`}
-                >
-                  <JsonBlock value={event.kind} />
-                </EventCard>
+      <details class="panel diagnostic-surface">
+        <summary class="panel__header diagnostic-surface__summary">
+          <div class="diagnostic-surface__title">
+            <div class="panel__title">{tr(locale(), "运行诊断", "Runtime Diagnostics")}</div>
+            <div class="diagnostic-surface__meta">
+              {tr(
+                locale(),
+                "执行 lane、auth/session、托管矩阵与最近事件都收在这里，避免它们继续抢占主玩法首屏。",
+                "Execution lanes, auth/session truth, hosted matrix, and recent events live here so they no longer dominate the primary gameplay viewport.",
               )}
+            </div>
+          </div>
+          <div class="badge-row">
+            <For each={diagnosticsSummaryBadges()}>
+              {(label) => <Badge>{label}</Badge>}
             </For>
+          </div>
+        </summary>
+        <div class="panel__body stack">
+          <div class="badge-row">
+            <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
+            <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
+            <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
+            <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
+          </div>
+          <PanelSection title={tr(locale(), "执行 Lane", "Execution Lanes")}>
+            <div class="badge-row">
+              <Badge class="badge badge--accent">debug_viewer</Badge>
+              <Badge>{`status=${state.debugViewerStatus}`}</Badge>
+              <Badge>{`renderMode=${state.renderMode}`}</Badge>
+              <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
+            </div>
+            <EmptyState style="margin-top:-2px;">
+              {tr(
+                locale(),
+                "debug_viewer 是只读订阅 lane，只负责消费 runtime 快照和事件；关闭这个 viewer 不会停止 agent lane。",
+                "debug_viewer is a read-only subscription lane for runtime snapshots/events; closing the viewer does not stop the agent lane.",
+              )}
+            </EmptyState>
+            <Show
+              when={selectedDebug()}
+              fallback={
+                <EmptyState>
+                  Select an agent to compare the headless execution lane against this debug_viewer observer
+                  lane.
+                </EmptyState>
+              }
+            >
+              {(debug) => (
+                <>
+                  <div class="badge-row">
+                    <Badge class="badge badge--accent">selected agent lane</Badge>
+                    <Badge>{`provider=${debug().provider_mode || "-"}`}</Badge>
+                    <Badge>{`mode=${debug().execution_mode || "-"}`}</Badge>
+                    <Badge>{`env=${debug().environment_class || "-"}`}</Badge>
+                  </div>
+                  <div class="badge-row">
+                    <Badge>{`obs=${debug().observation_schema_version || "-"}`}</Badge>
+                    <Badge>{`act=${debug().action_schema_version || "-"}`}</Badge>
+                    <Badge>{`agentProfile=${debug().agent_profile || "-"}`}</Badge>
+                    <Badge>{`providerFallback=${debug().fallback_reason || "-"}`}</Badge>
+                  </div>
+                  <EmptyState style="margin-top:-2px;">
+                    {tr(
+                      locale(),
+                      "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。",
+                      "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.",
+                    )}
+                  </EmptyState>
+                  <div class="badge-row">
+                    <Badge class="badge badge--accent">provider check</Badge>
+                    <Badge>{`status=${debug().provider_check_status || "-"}`}</Badge>
+                    <Badge>{`source=${debug().provider_check_source || "-"}`}</Badge>
+                    <Badge>{`fallback=${debug().provider_check_fallback_reason || "-"}`}</Badge>
+                  </div>
+                  <Show
+                    when={
+                      debug().provider_check_error
+                      || debug().provider_reported_capabilities?.length
+                      || debug().provider_reported_supported_action_sets?.length
+                    }
+                  >
+                    <div class="badge-row">
+                      <Badge>{`actualCaps=${(debug().provider_reported_capabilities || []).join(",") || "-"}`}</Badge>
+                      <Badge>
+                        {`actualActions=${(debug().provider_reported_supported_action_sets || []).join(",") || "-"}`}
+                      </Badge>
+                      <Badge>{`checkError=${debug().provider_check_error || "-"}`}</Badge>
+                    </div>
+                  </Show>
+                  <JsonBlock value={debug()} />
+                </>
+              )}
+            </Show>
+          </PanelSection>
+          <div class="badge-row">
+            <Badge class={state.auth.available ? "badge badge--good" : "badge badge--warn"}>
+              {`auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`}
+            </Badge>
+            <Badge class="badge badge--accent">{`tier=${authSurface().currentTier}`}</Badge>
+            <Badge>{`source=${authSurface().source}`}</Badge>
+            <Badge>{`deploymentHint=${authSurface().deploymentHint}`}</Badge>
+            <Badge>{`player=${state.auth.playerId || "-"}`}</Badge>
+            <Badge>{`pubkey=${state.auth.publicKey ? `${state.auth.publicKey.slice(0, 10)}…` : "-"}`}</Badge>
+            <Badge>{`epoch=${state.auth.sessionEpoch == null ? "-" : state.auth.sessionEpoch}`}</Badge>
+            <Badge>{`runtime=${state.auth.runtimeStatus || "-"}`}</Badge>
+            <Badge>{`boundAgent=${state.auth.boundAgentId || "-"}`}</Badge>
+            <Badge>{`requestedAgent=${state.auth.pendingRequestedAgentId || "-"}`}</Badge>
+            <Badge>{state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle"}</Badge>
+          </div>
+          <Show when={state.auth.recoveryErrorCode || state.auth.recoveryErrorMessage}>
+            <div class="badge-row">
+              <Badge class="badge badge--warn">{`recoveryError=${state.auth.recoveryErrorCode || "-"}`}</Badge>
+              <Badge>{state.auth.recoveryErrorMessage || "-"}</Badge>
+            </div>
           </Show>
+          <Show when={showRebindNotice()}>
+            <div class="badge-row">
+              <Badge class="badge badge--accent">rebind</Badge>
+              <Badge>{`target=${state.auth.pendingRequestedAgentId || "-"}`}</Badge>
+              <Badge>{state.auth.pendingForceRebind ? "mode=force_rebind" : "mode=awaiting_retry"}</Badge>
+            </div>
+            <EmptyState>
+              Player session is switching to the requested agent and the current action will continue after
+              registration succeeds.
+            </EmptyState>
+          </Show>
+          <Show when={state.hostedAdmission}>
+            {(admission) => (
+              <div class="badge-row">
+                <Badge>{`activeSlots=${admission().active_player_sessions}/${admission().max_player_sessions}`}</Badge>
+                <Badge>
+                  {`effectiveSlots=${
+                    admission().effective_player_sessions == null
+                      ? "-"
+                      : `${admission().effective_player_sessions}/${admission().max_player_sessions}`
+                  }`}
+                </Badge>
+                <Badge>{`runtimeBound=${admission().runtime_bound_player_sessions ?? "-"}`}</Badge>
+                <Badge>{`runtimeOnly=${admission().runtime_only_player_sessions ?? "-"}`}</Badge>
+                <Badge>{`runtimeProbe=${admission().runtime_probe_status || "-"}`}</Badge>
+                <Badge>{`issueBudget=${admission().remaining_issue_budget}`}</Badge>
+                <Badge>{`leaseTTL=${admission().slot_lease_ttl_ms}`}</Badge>
+                <Badge>{`issued=${admission().issued_players_total}`}</Badge>
+                <Badge>{`released=${admission().released_players_total}`}</Badge>
+              </div>
+            )}
+          </Show>
+          <Show when={state.hostedAdmission?.runtime_probe_error}>
+            <div class="badge-row">
+              <Badge class="badge badge--warn">{`runtimeProbeError=${state.hostedAdmission.runtime_probe_error}`}</Badge>
+            </div>
+          </Show>
+          <PanelSection title="Session Ladder">
+            <EmptyState>{authSurface().currentTierReason}</EmptyState>
+            <div class="event-list">
+              <For each={authSurface().tiers}>
+                {(tier) => (
+                  <EventCard title={tier.label} badge={tier.status} badgeClass={tierBadgeClass(tier.status)} meta={tier.reason} />
+                )}
+              </For>
+            </div>
+            <div class="badge-row">
+              <Badge class={authSurface().capabilities.prompt_control.enabled ? "badge badge--good" : "badge badge--warn"}>
+                {`prompt=${
+                  authSurface().capabilities.prompt_control.enabled
+                    ? "enabled"
+                    : authSurface().capabilities.prompt_control.code
+                }`}
+              </Badge>
+              <Badge class={authSurface().capabilities.agent_chat.enabled ? "badge badge--good" : "badge badge--warn"}>
+                {`chat=${
+                  authSurface().capabilities.agent_chat.enabled
+                    ? "enabled"
+                    : authSurface().capabilities.agent_chat.code
+                }`}
+              </Badge>
+              <Badge class="badge badge--warn">
+                {`mainToken=${authSurface().capabilities.main_token_transfer.code}`}
+              </Badge>
+            </div>
+            <EmptyState>{authSurface().reconnect}</EmptyState>
+          </PanelSection>
+          <Show when={hostedActionMatrixView().length > 0}>
+            <PanelSection title={tr(locale(), "托管动作矩阵", "Hosted Action Matrix")}>
+              <EmptyState>
+                {tr(
+                  locale(),
+                  "这里是 launcher 导出的 hosted public-join 真值面。QA 应该直接读取这些 action id，而不是只靠按钮状态推断。",
+                  "This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.",
+                )}
+              </EmptyState>
+              <div class="event-list">
+                <For each={hostedActionMatrixView()}>
+                  {(item) => (
+                    <EventCard
+                      title={item.actionId}
+                      badge={item.enabled ? "enabled" : item.code || "blocked"}
+                      badgeClass={item.enabled ? "badge badge--good" : "badge badge--warn"}
+                      meta={`required_auth=${item.requiredAuth} · availability=${item.availability}`}
+                    >
+                      <EmptyState>{item.reason || "-"}</EmptyState>
+                      <Show when={item.capabilityReason && item.capabilityReason !== item.reason}>
+                        <EmptyState>{`viewer=${item.capabilityReason}`}</EmptyState>
+                      </Show>
+                    </EventCard>
+                  )}
+                </For>
+              </div>
+            </PanelSection>
+          </Show>
+          <div class="summary-grid">
+            <MetricCard label={tr(locale(), "Prompt 反馈", "Prompt Feedback")} value={promptFeedback()?.stage || "idle"}>
+              <Show when={promptFeedbackDisplay()}>
+                <Badge class={promptFeedbackDisplay().badgeClass}>
+                  {promptFeedbackDisplay().label}
+                </Badge>
+              </Show>
+            </MetricCard>
+            <MetricCard label={tr(locale(), "聊天反馈", "Chat Feedback")} value={chatFeedback()?.stage || "idle"}>
+              <Show when={chatFeedbackDisplay()}>
+                <Badge class={chatFeedbackDisplay().badgeClass}>
+                  {chatFeedbackDisplay().label}
+                </Badge>
+              </Show>
+            </MetricCard>
+          </div>
+          <div>
+            <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近事件", "Recent Events")}</div>
+            <div class="event-list">
+              <Show when={state.recentEvents.length > 0} fallback={<EmptyState>{tr(locale(), "等待 live 事件…", "Waiting for live events…")}</EmptyState>}>
+                <For each={state.recentEvents}>
+                  {(event) => (
+                    <EventCard
+                      title={core.summarizeEventTitle(event)}
+                      badge={`#${Number(event.id || 0)}`}
+                      meta={`time=${Number(event.time || 0)}`}
+                    >
+                      <JsonBlock value={event.kind} />
+                    </EventCard>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
     </div>
   );
 }
@@ -778,6 +874,7 @@ function WorldSummaryPanel() {
 function InteractionPanel() {
   const locale = () => uiLocale();
   const agentId = () => core.selectedAgentId();
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
   const authSurface = () => core.buildAuthSurfaceModel();
   const promptCapability = () => authSurface().capabilities.prompt_control;
   const chatCapability = () => authSurface().capabilities.agent_chat;
@@ -826,6 +923,9 @@ function InteractionPanel() {
       : tr(locale(), "显示 Prompt Overrides", "Show Prompt Overrides");
 
   if (!agentId()) {
+    if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
+      return <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />;
+    }
     return <EmptyState>{tr(locale(), "先选中一个 Agent，才能解锁 prompt/chat 控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
   }
 
@@ -1094,6 +1194,7 @@ function InteractionPanel() {
 
 function DetailsPanel() {
   const locale = () => uiLocale();
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
@@ -1125,7 +1226,20 @@ function DetailsPanel() {
         <Badge>{selectedLabel()}</Badge>
       </div>
       <InteractionPanel />
-      <Show when={core.state.selectedObject} fallback={<EmptyState>{tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.")}</EmptyState>}>
+      <Show
+        when={core.state.selectedObject}
+        fallback={
+          gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"
+            ? (
+              <EmptyEntityRecoveryCard
+                locale={locale()}
+                gameplay={gameplaySummary}
+                title={tr(locale(), "对象明细暂时不可用", "Object Details Are Temporarily Unavailable")}
+              />
+            )
+            : <EmptyState>{tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.")}</EmptyState>
+        }
+      >
         <JsonBlock value={core.clone(core.state.selectedObject)} />
       </Show>
       <div>
