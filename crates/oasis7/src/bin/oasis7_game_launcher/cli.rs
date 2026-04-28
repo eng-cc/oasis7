@@ -4,6 +4,7 @@ use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peer;
 pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
     let mut options = CliOptions::default();
     let mut iter = args.peekable();
+    let mut explicit_chain_replication_bootstrap_peers = false;
 
     while let Some(arg) = iter.next() {
         match arg {
@@ -130,6 +131,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--chain-replication-network-peer" => {
                 let value = parse_required_value(&mut iter, "--chain-replication-network-peer")?;
                 validate_chain_replication_network_peer(value.as_str())?;
+                if !explicit_chain_replication_bootstrap_peers {
+                    options.chain_replication_bootstrap_peers.clear();
+                    explicit_chain_replication_bootstrap_peers = true;
+                }
                 options.chain_replication_bootstrap_peers.push(value);
             }
             "--chain-node-tick-ms" => {
