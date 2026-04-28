@@ -97,7 +97,7 @@
   - 这条链路会不会促使玩家继续玩？
 - 评分规则：每项 `0/1`，合计 `player_leverage_score=0~5`；`4~5 => pass`，`2~3 => watch`，`0~1 => block`。
 
-| 样本 | 玩家关键动作 | 世界因此变化 | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 说明 |
+| 样本 | 玩家关键动作 `player_action` | 世界因此变化 `world_change_due_to_player` | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 说明 |
 | --- | --- | --- | --- | --- | --- | --- |
 | A | formal lane 下持续推进 controls，成功把会话带到 `PostOnboarding` | 世界显式进入 `post_onboarding.establish_first_capability`，并给出 `goal/progress` | `3/5` | `watch` | `no` | 这条样本证明玩家至少能把世界推进到下一阶段，但当前包里仍不足以证明“哪一个玩家选择”打开了一个会让人想继续玩的新决策，因此不能只凭世界活跃或阶段推进就判成 leverage pass。 |
 | B | 玩家同样把样本推进到 `PostOnboarding` | 世界先前进，随后语义回退到 `first_session_loop` 并冻结 | `1/5` | `block` | `no` | 该样本不能稳定证明玩家持续拥有杠杆；更强事实是“玩家推进后系统回退并冻结”，所以它是 trust blocker，而不是 world activity 成功样本。 |

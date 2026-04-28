@@ -52,7 +52,7 @@
   - PRD-PLAYABILITY_TEST_RESULT-001: As an 评测者, I want a normalized feedback template, so that results are comparable across sessions.
   - PRD-PLAYABILITY_TEST_RESULT-002: As a 玩法负责人, I want issue severity and ownership, so that follow-up is actionable.
   - PRD-PLAYABILITY_TEST_RESULT-003: As a 发布负责人, I want traceable evidence packages, so that release decisions are auditable.
-  - PRD-PLAYABILITY_TEST_RESULT-004: As a `producer_system_designer`, I want playability reviews to separate player leverage from ambient world activity, so that “interesting simulation” cannot be误报成“meaningful play”.
+  - PRD-PLAYABILITY_TEST_RESULT-004: As a `producer_system_designer`, I want playability reviews to separate player leverage from ambient world activity, so that “interesting simulation” cannot be misreported as “meaningful play”.
 - Critical User Flows:
   1. Flow-PLY-001: `启动体验会话 -> 填写标准卡片 -> 提交归档 -> 进入问题池`
   2. Flow-PLY-002: `对比多版本卡片 -> 提取高频问题 -> 指派修复 -> 回填结果`
