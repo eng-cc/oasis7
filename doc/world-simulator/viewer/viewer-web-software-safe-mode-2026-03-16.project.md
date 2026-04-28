@@ -6,6 +6,7 @@
 审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将 `software_safe` formal summary 中的 canonical `available_actions` 从只读状态卡恢复为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
+- [x] software-safe-primary-entry-diagnostics-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 execution lane/auth/session 诊断收进折叠 diagnostics surface，把 blocker 与 handoff 拆开表达，并在空实体快照时为右栏 Details 提供恢复指引而不是继续提示“先选 Agent”。 Trace: .pm/tasks/task_eef97592fc6145628348e8897d54c411.yaml
 - [x] T0 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 完成“Viewer Web Software-Safe Mode”PRD / Design / Project 建模，并回写模块主文档、索引与 devlog。
 - [x] T1 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `oasis7_game_launcher` / Web 静态入口增加 bootstrap shell 与 `render_mode=standard|auto|software_safe` 选路契约。
 - [x] T2 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 落地 `software_safe` MVP 前端，覆盖连接状态、目标列表、对象详情、`play/pause/step` 与最近事件/反馈。
@@ -62,6 +63,7 @@
 - 最近更新：2026-04-24（按最新试玩反馈收口右侧 `Details` 面板：移除默认展开的大块 `Snapshot Summary` JSON，改为紧凑世界规模 badge + 折叠式原始诊断，避免低价值快照占据主玩法右栏。）
 - 最近更新：2026-04-24（继续收口主屏设置项：将 `Language and Viewer Entry` 改为 `World Summary` 右上角紧凑菜单，不再占据独立主内容卡片。）
 - 最近更新：2026-04-28（新增 playability unblock follow-up：formal summary 重新暴露 canonical 可执行动作，并为 gameplay summary + 空实体快照并存场景补显式 blocker。）
+- 最近更新：2026-04-28（新增 diagnostics declutter follow-up：将 execution lane/auth/session/hosted matrix 收入口径明确的折叠 diagnostics surface，首屏 blocker 与右栏恢复提示改为优先表达空实体快照恢复语义。）
 - 阻塞项：本专题主入口 contract 与 formal gameplay PASS 证据均已完成；当前剩余事项已转为 README / current-entry / release claim 口径同步，以及 `PRD-WORLD_SIMULATOR-037/038` parity/latency experimental follow-up，不能再把本专题记成“缺 provider 配置导致 blocked”。
 
 ## 备注

@@ -1,6 +1,7 @@
 # world-simulator PRD Project（审计轮次: 7；任务拆解含 PRD-ID 映射）
 - [ ] first-agent-claim-approval-closure (PRD-WORLD_SIMULATOR-045) [test_tier_required]: 补齐首个 agent claim 的产品闭环，并同步落地 `PRD-WORLD_RUNTIME-040` 对应 runtime 治理接口、viewer snapshot 回流与 `software_safe` 正式摘要状态卡。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
+- [x] software-safe-primary-entry-diagnostics-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 execution lane/auth/session 诊断从 `software_safe` 主入口默认视口收进口径明确的折叠 diagnostics surface，并在空实体快照时把 blocker 与恢复指引提升为首屏主状态。 Trace: .pm/tasks/task_eef97592fc6145628348e8897d54c411.yaml
 - [x] TASK-WORLD_SIMULATOR-001 (PRD-WORLD_SIMULATOR-001) [test_tier_required]: 完成 world-simulator PRD 改写，建立模拟层设计主入口。
 - [x] TASK-WORLD_SIMULATOR-002 (PRD-WORLD_SIMULATOR-001/002) [test_tier_required]: 对齐场景系统、Viewer、启动器的统一验收清单。
 - [x] TASK-WORLD_SIMULATOR-003 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 固化 Web-first 闭环与 LLM 链路的测试证据模板。
@@ -692,7 +693,6 @@
 - [x] TASK-WORLD_SIMULATOR-200 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 将 `oasis7_web_launcher` 与 `oasis7_client_launcher` 的 launcher 定向测试函数命名切到 `compat` 语义，收口测试层里残留的 `before_legacy` / `legacy_name` 口径。
   - 产物文件:
     - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/project.md`
     - `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`
     - `crates/oasis7_client_launcher/src/platform_ops.rs`
     - `crates/oasis7_client_launcher/src/main_tests.rs`

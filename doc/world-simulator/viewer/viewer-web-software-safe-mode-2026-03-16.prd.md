@@ -256,6 +256,23 @@
   - AC-31: 语言切换与标准 Viewer 跳转必须在顶部右侧的紧凑入口中保持可达。
   - AC-32: `Formal Gameplay Summary` 成为首屏主要内容，不再被设置型入口顶在正文最前面。
 
+## 增量需求（2026-04-28, 主入口诊断收口）
+- PRD-ID: `PRD-WORLD_SIMULATOR-039`
+- Problem Statement:
+  - `software_safe` 虽然已经恢复 canonical 可执行动作与审批状态卡，但主入口首屏仍混排 execution lane、auth/session、hosted matrix、最近事件等诊断层信息；空实体快照时，右栏还会继续提示“先选 Agent”，导致真正的 blocker 与恢复路径没有成为首要视觉状态。
+- Proposed Solution:
+  - 将 execution lane / auth / session / hosted matrix / recent events 收进一个口径明确的折叠 diagnostics surface；
+  - 在 `Formal Gameplay Summary` 中把 blocker 与 handoff 拆成独立 surface，避免“runtime 阻塞”与“资产治理另走 lane”混成一张卡；
+  - 当 `runtime_snapshot_empty_entities` 命中时，右栏 `Details` 与交互面优先展示恢复指引，而不是继续催促选择不存在的 Agent。
+- Functional Constraints:
+  - 不移除 execution lane、auth/session、hosted matrix、recent events 等诊断真值，只调整其默认可见层级。
+  - 不把领取/释放玩家会话这类必要 CTA 藏进深层诊断，避免玩家入口再次失去可操作性。
+  - 不新增新的 runtime/viewer 协议字段；仅重排当前页面信息架构与默认表达顺序。
+- Acceptance Criteria:
+  - AC-33: `software_safe` 主入口默认视口不再常驻展示 execution lane、auth/session ladder、hosted action matrix 与最近事件详情；这些信息必须在折叠 diagnostics surface 内保持可达。
+  - AC-34: `runtime_snapshot_empty_entities` 命中时，`Formal Gameplay Summary` 的 blocker card 必须独立于 asset/governance handoff 表达，并成为首屏主状态之一。
+  - AC-35: 空实体快照且无可选 Agent 时，右栏 `Details` / `Interaction` 需要显示恢复指引与当前实体计数，而不是继续显示“先选 Agent”。
+
 ## 增量需求（2026-04-16）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
 - Problem Statement:
