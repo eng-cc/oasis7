@@ -157,6 +157,7 @@
 - [x] TASK-GAME-063 (PRD-GAME-012) [test_tier_required]: `runtime_engineer` 已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAME-064 (PRD-GAME-012) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到首屏主语义。
 - [x] TASK-GAME-065 (PRD-GAME-012) [test_tier_required]: `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane，并在复制 `main` 的 real provider `config.toml` 后完成 `3` 条 active-LLM 10 分钟正式样本；当前结论已从 `watch` 收口为 `hold`，因为 formal lane 虽已恢复 first-step floor，但仍稳定卡在 `post_onboarding.establish_first_capability / 20%`，且其中 `2` 条样本出现回退到 `first_session_loop.create_first_world_feedback / 0%` 并伴随 `logicalTime/eventSeq` 冻结。
+- [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式写回主文档：当前只允许按“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业状态/停机修复可读 -> 间接控制因果与下一步”推进；在这些 early-retention blocker 清空前，不扩大战争/治理/元进度在首局中的曝光，也不允许把 debug/probe lane 结果包装成正式留存进展。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
 - [x] agent-claim-slot-1-onboarding-flow (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已为新账号首个 `slot-1` 认领补齐专用 onboarding 流：当 canonical `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，PostOnboarding HUD 会展示 claim CTA，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式确认；链路复用 canonical quote / blocker，并通过 `actor_agent_id` 把 claimer actor 与 claim target 正确分离。 Trace: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
 
 ## 依赖

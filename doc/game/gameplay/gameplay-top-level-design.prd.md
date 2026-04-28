@@ -217,24 +217,32 @@
 
 ## 2.7 当前两周收口重点（2026-04-09）
 
-在当前 `internal_playable_alpha_late` 阶段，接下来两周不再把新增宏系统功能当作主目标，而是优先收口 10 分钟留存。
+在当前 `internal_playable_alpha_late` 阶段，当前 gameplay scope 必须继续冻结在 early-retention recovery，而不是重新发散到更宽的宏系统曝光。
 
-优先顺序固定为：
+当前短周期 focus order 固定为：
 
-1. 首次进入与最小控制地板。
-2. 首个持续能力包 / capability gate follow-up（`PostOnboarding` 后 `15~45` 分钟 / `1~3` sessions）。
-3. 首屏降噪与玩家身份收束。
-4. 后果可见化与奖励节奏。
-5. active-LLM 正式 10 分钟 trust gate。
+1. 恢复并守住 active-LLM formal lane 的 `10-minute trust gate` 地板，确保首次控制、世界推进、主目标可读与“愿意继续玩”的基础判断重新成立。
+2. 收口 `PostOnboarding -> first capability gate` 的正式承接，保证玩家在后续 `15~45` 分钟或 `1~3` 次会话内持续得到 `goal / progress / blocker / next_step`，而不是完成新手后掉回自由漂浮观察态。
+3. 把工业链状态、停机原因与修复动作收成 canonical 玩家语义，让玩家能判断“为什么没产出、现在该修哪里”，而不是靠 raw log 或猜测推进。
+4. 收口间接控制下的 control-feeling：必须持续给出动作状态、主因果、阻塞分类与最可执行的下一步，避免体验退化成“看 AI 自己决定”。
+5. 只有在前 4 项稳定后，才允许重新扩大治理、战争、元进度等宏系统在首局和早期 session 里的曝光或承诺。
+
+范围冻结规则：
+
+- 任何新增玩法提案如果不能直接改善前 4 项之一，默认延后，不进入当前冲刺主路径。
+- 如果某项工作主要扩大世界复杂度、卖点数量或系统展示面，但不能降低 early-retention blocker，则必须记为 deferred，而不是与 trust/capability 修复并行抢优先级。
+- `--no-llm`、operator-only、Prompt Ops 或其他 debug/probe lane 只能用于排障，不得作为“当前 focus order 已完成”的放行依据。
+- 当前 producer 正式口径继续保持：`trust gate = hold`、`first capability gate = not_run`；在这两个门恢复前，不得把“更宽的宏系统可见度”当作首局问题的替代解法。
 
 补充口径：
-- 当前两周冲刺优先用 `10-minute trust gate` 判断“是否已经值得继续玩”。
-- “首个持续能力是否已经闭环”继续由 follow-up capability gate 判定，并与 `PostOnboarding` 的 `15~45` 分钟里程碑口径对齐。
+- `10-minute trust gate` 负责回答“是否已经值得继续玩”。
+- `first capability gate` 负责回答“首个持续能力是否已经闭环”，并继续与 `PostOnboarding` 的 `15~45` 分钟里程碑口径对齐。
 
-非目标：
-- 不继续扩大战争/治理/元进度在首局中的曝光。
-- 不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
-- 不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
+当前 defer 范围：
+- 暂不继续扩大战争/治理/元进度在首局中的曝光。
+- 暂不把新的宏系统入口包装成 first-session 主卖点。
+- 暂不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
+- 暂不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
 
 专题口径见 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
 
