@@ -60,9 +60,9 @@
 - [x] `viewer_engineer` / `runtime_engineer`：已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 runtime floor 已恢复，但 retention gate 仍被 `TASK-GAME-065` 判定为 `hold`。
 - [x] `runtime_engineer` / `viewer_engineer`：已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的目标包。
 - [x] `viewer_engineer` / `agent_engineer`：已收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
-- `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；按当前拆分口径，active-LLM formal truth 为 `10-minute trust gate = hold`（因 `3` 条 active-LLM 10 分钟正式样本中有 `2` 条出现阶段回退并冻结世界时间，尚不足以证明“已经值得继续玩”）、`first capability gate = not yet proven`（`3` 条样本均未形成“首个可持续能力”闭环）。
+- `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；按当前拆分口径，active-LLM formal truth 为 `10-minute trust gate = hold`（因 `3` 条 active-LLM 10 分钟正式样本中有 `2` 条出现阶段回退并冻结世界时间，尚不足以证明“已经值得继续玩”）、`first capability gate = not_run`（当前 trust floor 已再次回退到更前置 blocker，因此 capability gate 未进入，不能再把旧样本表述成“当前已跑但尚未证明”）。
 
-口径更新（2026-04-15）: T8 当前已将 producer verdict 拆成两层。`10-minute trust gate` 只判断“是否已经值得继续玩”，`first capability gate` 再判断“首个持续能力是否已闭环”。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not yet proven`。
+口径更新（2026-04-15）: T8 当前已将 producer verdict 拆成两层。`10-minute trust gate` 只判断“是否已经值得继续玩”，`first capability gate` 再判断“首个持续能力是否已闭环”。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not_run`；原因不是 capability 已独立判失败，而是 trust floor 再次回退后 capability gate 当前未进入。
 
 - [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式改写为“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业停机/修复可读 -> 间接控制因果与下一步”四级优先顺序，并补充 defer 规则：在这些 blocker 清空前，不扩大战争/治理/元进度在首局中的曝光，也不允许用 `--no-llm` / operator-only lane 充当正式放行依据。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
 

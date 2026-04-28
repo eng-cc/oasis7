@@ -98,7 +98,7 @@
 - 当前 owner: `producer_system_designer`
 - 下一任务: 由 `producer_system_designer` 先按 `TASK-GAME-065` 的 `10-minute trust gate` 阻断签名继续拆 runtime/viewer 修复切片，再在 trust gate 稳定后单独重开 capability follow-up 复验。
 
-口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not yet proven`。
+口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not_run`；原因不是 capability 已单独判失败，而是 trust floor 回退后当前 formal lane 尚未进入 capability gate。
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
