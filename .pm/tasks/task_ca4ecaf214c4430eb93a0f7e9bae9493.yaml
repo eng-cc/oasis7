@@ -1,0 +1,28 @@
+task_uid: task_ca4ecaf214c4430eb93a0f7e9bae9493
+title: "formalize explicit player leverage evidence rubric"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-playability-test-result-player-leverage-rubric
+execution_log_path: .pm/tasks/task_ca4ecaf214c4430eb93a0f7e9bae9493.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/playability_test_result/project.md
+  - doc/testing/project.md
+doc_refs:
+  - doc/playability_test_result/prd.md
+  - doc/playability_test_result/project.md
+  - doc/testing/prd.md
+  - doc/testing/project.md
+related_prd:
+  - PRD-PLAYABILITY_TEST_RESULT-001
+  - PRD-PLAYABILITY_TEST_RESULT-003
+  - PRD-TESTING-003
+acceptance:
+  - "playability card and evidence bundle explicitly separate player leverage from world activity"
+  - "trust gate and future playability verdicts ask what changed because of the player"
+  - "module PRD/project trace the new rubric and required verification"
+handoff_to: []
+updated_at: 2026-04-28T20:08:57+08:00
+last_started_at: 2026-04-28T19:57:54+08:00
+last_closed_at: 2026-04-28T20:08:57+08:00

@@ -88,6 +88,28 @@
 | B | `20260410-132858` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-132858/` | `doc/playability_test_result/card_2026_04_10_13_28_58.md` | 先到 `post_onboarding / 20%`，随后在样本中后段 UI 语义回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=22`、`eventSeq=7` 在余下样本保持不变 | formal lane 不只是 capability 没闭环，还出现 trust 级别的阶段回退并伴随时间冻结，属于更强的 blocker。 |
 | C | `20260410-134323` | `output/playwright/retention-active-llm-formal/active-llm-retention-20260410-134323/` | `doc/playability_test_result/card_2026_04_10_13_43_23.md` | 先到 `post_onboarding / 20%`，随后在样本前中段即回退到 `first_session_loop.create_first_world_feedback / 0%`，且 `logicalTime=13`、`eventSeq=6` 在余下样本保持不变 | B 的回退冻结签名在另一独立 10 分钟样本中再次复现，说明当前 `10-minute trust gate = hold` 不是单次偶发噪音。 |
 
+### Player leverage rubric overlay (`#166`)
+- 本轮额外按 `player leverage` 口径复核 5 个问题：
+  - 玩家做了什么关键动作？
+  - 世界有什么变化可以归因到这个动作？
+  - 玩家能否解释结果为什么发生？
+  - 结果有没有打开新的决策？
+  - 这条链路会不会促使玩家继续玩？
+- 评分规则：每项 `0/1`，合计 `player_leverage_score=0~5`；`4~5 => pass`，`2~3 => watch`，`0~1 => block`。
+
+| 样本 | 玩家关键动作 | 世界因此变化 | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 说明 |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | formal lane 下持续推进 controls，成功把会话带到 `PostOnboarding` | 世界显式进入 `post_onboarding.establish_first_capability`，并给出 `goal/progress` | `3/5` | `watch` | `no` | 这条样本证明玩家至少能把世界推进到下一阶段，但当前包里仍不足以证明“哪一个玩家选择”打开了一个会让人想继续玩的新决策，因此不能只凭世界活跃或阶段推进就判成 leverage pass。 |
+| B | 玩家同样把样本推进到 `PostOnboarding` | 世界先前进，随后语义回退到 `first_session_loop` 并冻结 | `1/5` | `block` | `no` | 该样本不能稳定证明玩家持续拥有杠杆；更强事实是“玩家推进后系统回退并冻结”，所以它是 trust blocker，而不是 world activity 成功样本。 |
+| C | 玩家推进 formal lane 并短暂进入 `PostOnboarding` | 世界很快回退并冻结，新的决策没有稳定打开 | `1/5` | `block` | `no` | 与 B 同签名复现，说明当前失败不是“世界不够热闹”，而是玩家刚获得一点杠杆就丢失了它。 |
+
+### Player leverage verdict
+- 当前正式样本不是“只有 world activity、完全没有 player leverage”。
+- 但当前也不能给出稳定 `player leverage pass`：
+  - A 只有 `watch`
+  - B/C 直接 `block`
+- 因此当前 trust gate 的 `hold` 必须继续保持；即使世界曾经活跃、阶段曾经推进，也不能把它误判成“玩家已经获得稳定而有意义的参与感”。
+
 ### Supplemental shorter samples
 - `20260410-111006`
   - `playDurationMs=300000`

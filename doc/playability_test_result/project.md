@@ -44,6 +44,7 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-PLAYABILITY_TEST_RESULT-013 (PRD-PLAYABILITY_TEST_RESULT-001) [test_tier_required]: 执行 ROUND-010 `playability_test_result` 入口治理，为证据模块 README 增加 evidence-first“从这里开始”，并明确 README 与 `topics/`、`evidence/`、`prd.index.md` 的边界。
+- [x] playability-player-leverage-rubric (PRD-PLAYABILITY_TEST_RESULT-001/003/004) [test_tier_required]: 为反馈卡、发布证据包与 trust-gate 样例补 `player leverage != world activity` 的显式证据字段、裁决规则与代表性回写。 Trace: .pm/tasks/task_ca4ecaf214c4430eb93a0f7e9bae9493.yaml
 
 ## 依赖
 - doc/playability_test_result/prd.index.md
@@ -53,9 +54,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-03-30
+- 更新日期: 2026-04-28
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务）
+- 最新完成: `playability-player-leverage-rubric`（已为反馈卡、发布证据包与 trust-gate 样例补 `player leverage` 独立裁决层，明确禁止再用“世界很活跃”替代“玩家有效参与”。）
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-013`（已为 `playability_test_result` README 增加轻量“从这里开始”，明确评分口径、执行追踪、结果卡、专题卡组与正式证据样例的阅读顺序，并保持 README 不替代 `topics/` / `evidence/` / `prd.index.md`。）
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-012`（已将专题卡组前置命令与 `game-test` 当前 viewer dist 路径统一切到 `oasis7` / `oasis7_viewer` 口径。）
 - 最新完成: `TASK-PLAYABILITY_TEST_RESULT-011`（将前期工业引导专题卡组迁入 `topics/`，统一引用与根目录收口口径）。

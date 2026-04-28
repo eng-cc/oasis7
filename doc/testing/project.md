@@ -25,6 +25,7 @@
     - `test -f doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md`
     - `test -f doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
     - `rg -n "首次通过率|阶段内逃逸率|平均修复时长|红黄绿阈值" doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
+- [x] playability-player-leverage-evidence-rubric (PRD-TESTING-003) [test_tier_required]: 要求正式 gameplay/trust evidence packet 显式回答“玩家做了什么、世界因此变了什么”，并补 `world_activity_only` 防误报字段与 trust-gate 样例回写。 Trace: .pm/tasks/task_ca4ecaf214c4430eb93a0f7e9bae9493.yaml
 - [x] TASK-TESTING-005 (PRD-TESTING-002/003) [test_tier_required]: 建立模块级专题任务映射索引（2026-03-02 批次）。
 - [x] TASK-TESTING-006 (PRD-TESTING-001/002/003) [test_tier_required]: 对齐 strict PRD schema，补齐关键流程/规格矩阵/边界异常/NFR/验证与决策记录。
 - [x] TASK-TESTING-007 (PRD-TESTING-004) [test_tier_required]: 完成 `ci-wasm32-target-install` 专题文档逐篇人工迁移到 strict schema，并统一 `.prd` 命名。
@@ -322,6 +323,7 @@
 ## 状态
 - 更新日期: 2026-04-23
 - 当前状态: active
+- 当前窗口摘要: `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
 - 当前窗口摘要: `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 `transactions` / `recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` live contract 证据。
 - 当前窗口摘要: `required-gate-ondemand-launcher-web-build`、`rust-required-gate-ondemand-scope` 与 `wasm-determinism-gate-ondemand-scope` 已把 GitHub required gate 收口为 stable context + changed-path on-demand 执行；launcher/shared runtime 命中时会额外补跑 launcher Web `trunk build`。

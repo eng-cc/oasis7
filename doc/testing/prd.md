@@ -34,6 +34,7 @@
   - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`。
   - SC-3: Web UI 闭环与分布式长跑在发布流程中有可追溯证据，且明确区分 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 两条驱动链路。
     - SC-3A: `release-gate-web` 在 `renderMode=software_safe` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent。
+    - SC-3B: 正式 gameplay evidence packet 必须显式区分 `player leverage` 与 `ambient world activity`，并回答“玩家做了什么、世界因此变了什么、这是否打开下一步决策”。
   - SC-4: 测试任务 100% 映射 PRD-TESTING-ID。
   - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.project.md` 命名。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
@@ -52,6 +53,7 @@
   - 失效复盘：出现逃逸缺陷后补齐回归与触发矩阵。
   - 前期工业体验回归：影响 `首个制成品 / 停机恢复 / 首座工厂单元` 时，补跑 required-tier 手动卡组。
   - 创世配置冻结前审计：每次准备冻结 Token 分配表时执行一次 required-tier 配置审计。
+  - 信任门 / 留存证据复核：每次宣称“玩家值得继续玩”前，必须先检查该样本是否只是世界在自己运转。
 - User Stories:
   - PRD-TESTING-001: As a 测试维护者, I want one canonical testing strategy, so that suite evolution stays coherent.
   - PRD-TESTING-002: As a 开发者, I want clear trigger matrices, so that I can run the right tests efficiently.
@@ -67,13 +69,14 @@
   5. Flow-TST-005: `触发 wasm hash 校验 -> 跨 runner 对账 -> required check 放行/阻断 -> 发布链路收口`
   6. Flow-TST-006: `识别工业引导体验改动 -> 运行自动化前置 -> 执行 playability 卡组 -> 回写 QA 阻断结论`
   7. Flow-TST-007: `读取 token 创世参数表 -> 逐项核对比例/recipient/vesting/流通边界 -> 输出 QA verdict -> 回流 producer 决策`
+  8. Flow-TST-008: `汇总 trust/playability 样本 -> 回答玩家动作与玩家导致的世界变化 -> 标记 world_activity_only -> 再给 pass/watch/block 结论`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面默认走 `agent-browser`；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样 | QA/发布与产品 owner 共同遵循 |
 | software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
-| 证据包归档 | 命令、日志、截图、结论、责任人 | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引 | 测试维护者负责最终校验 |
+| 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
 | 缺陷回归闭环 | 缺陷ID、触发条件、修复提交、复测结论 | 缺陷关闭前必须绑定回归记录 | `opened -> fixed -> regressed -> closed` | 高风险缺陷优先回归 | QA/维护者可更新状态 |
 | 文档格式迁移 | 旧文档路径、约束点清单、目标命名 | 人工重写并更名，补全映射与验证证据 | `inventory -> migrated -> validated` | 先迁移活跃文档、后迁移归档文档 | 维护者审批迁移质量，贡献者执行 |
 | Builtin wasm hash 治理 | 模块集、canonical token、runner 摘要、required check context、release evidence、scope planner | 执行 Docker canonical `sync --check`、按 changed paths 规划 scope、摘要导出与证据对账、分支保护同步 | `check-only -> planned -> reconciled -> protected` | 发布清单仅允许 `linux-x86_64` canonical token，identity 输入使用 receipt + 白名单；无关 PR 保持 stable required-context no-op | 本地默认只读校验，写路径限定非 CI 的显式授权 |
@@ -99,6 +102,7 @@
   - AC-13: `token-genesis-allocation-audit-checklist-2026-03-22` 专题文档与执行模板落盘并映射 `TASK-TESTING-062`，明确创世参数审计项、阻断条件、证据字段与 verdict 口径。
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
+  - AC-15: 正式 gameplay/trust evidence 至少要有 1 条代表性样本明确记录 `player_action`、`world_change_due_to_player`、`player_leverage_score` 与 `world_activity_only`，否则不得宣称“玩家已有 meaningful participation”。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -127,6 +131,7 @@
 - Edge Cases & Error Handling:
   - 网络波动：外部依赖失败时记录失败签名并支持重试，不静默跳过。
   - 空产物：测试通过但缺证据产物视为不通过。
+  - 活跃世界误报：若样本只证明 autonomous simulation 存在，但没有玩家导致的世界变化证据，必须显式标 `world_activity_only` 并阻止玩法放行结论升级。
   - 权限不足：CI 环境权限不足时标记阻塞并输出最小修复建议。
   - 超时：长跑套件超时需产出中间状态，防止误判为无结果。
   - 并发冲突：同一产物路径并发写入时强制分目录隔离。
@@ -145,6 +150,7 @@
   - NFR-TST-6: 文档迁移批次在不降低治理质量的前提下保持可审阅粒度（每任务对应单文档或单专题）。
   - NFR-TST-7: builtin wasm hash 校验在多 runner 下可复现且差异可定位到模块与平台维度。
   - NFR-TST-8: Token 创世 QA 审计模板字段完整率必须为 `100%`，缺任何一项关键字段都不能给 `pass`。
+  - NFR-TST-9: 正式 gameplay evidence 审查者必须能在 30 秒内看出“玩家是否真的改变了世界”，无需从长日志里二次拼装。
 - Security & Privacy: 测试日志与产物需避免泄露凭据；外部 API 测试使用最小化数据并执行脱敏。
 
 ## 5. Risks & Roadmap
@@ -166,7 +172,7 @@
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-001 | TASK-TESTING-001/002/005/006 | `test_tier_required` | S0~S10 触发矩阵核验、手册一致性检查 | 分层测试入口与执行标准 |
 | PRD-TESTING-002 | TASK-TESTING-002/003/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | 证据模板抽样、发布前必填字段检查、release workflow 复用链路核验、runtime gate shard 聚合验证、required-gate changed-path planner 回归、launcher Web build 命中/未命中验证，以及 Windows checkout 兼容路径扫描 | 发布链路可信性与可复现性 |
-| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察、launcher Web build 逃逸缺陷回归与 Windows checkout 失败签名回归 | 长期质量治理与发布风险控制 |
+| PRD-TESTING-003 | TASK-TESTING-003/004/006/053/054/055/056/release-windows-invalid-path-blocker/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build/playability-player-leverage-evidence-rubric | `test_tier_full` | 趋势指标回顾、缺陷逃逸复盘、release 关键路径对比，以及 required-gate scope 剪裁后的长期时延观察、launcher Web build 逃逸缺陷回归、Windows checkout 失败签名回归与 gameplay evidence 的 `player leverage` / `world_activity_only` 抽样审查 | 长期质量治理与发布风险控制 |
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
@@ -178,3 +184,4 @@
 | DEC-TST-003 | 以手册驱动触发矩阵统一口径 | 各模块自行定义测试口径 | 可减少跨模块冲突和遗漏。 |
 | DEC-TST-004 | legacy 专题文档采用逐篇人工迁移并统一 `.prd` 命名 | 自动脚本批量改写 | 可确保内容语义与约束不丢失。 |
 | DEC-TST-005 | Token 创世前增加 QA 审计清单与阻断 verdict | 仅由 producer/runtime 自审 | 经济配置错误一旦进入创世，后续修复成本极高。 |
+| DEC-TST-006 | 在正式 gameplay evidence 中单列 `player leverage` 审查层 | 继续只看 world delta / activity / 总体有趣度 | `#166` 暴露的是“玩家是否参与有效”而不是“世界有没有动起来”，需要单独防误报。 |

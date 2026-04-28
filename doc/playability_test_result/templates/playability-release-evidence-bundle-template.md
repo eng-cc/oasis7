@@ -36,6 +36,11 @@
 | 节奏与总体体验 |  |  |
 | 总评 |  |  |
 
+### 玩家杠杆摘要
+| 卡片 ID | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 玩家做了什么 | 世界因此变了什么 | 是否打开新决策 | 是否形成继续玩的理由 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |  |  |
+
 ### 高优问题摘要
 | Issue ID | 严重级 | 当前状态 | owner | 是否阻断发布 | 证据路径 |
 | --- | --- | --- | --- | --- | --- |
@@ -52,20 +57,23 @@
 
 ### 结论摘要
 - 继续可玩的主要依据：
+- 玩家杠杆成立的代表性样本：
+- 只有 world activity、尚未证明 player leverage 的样本：
 - 需观察项：
 - 高优先级阻断项：
 - 豁免 / 例外：
 - 建议结论：`pass` / `fail` / `blocked`
 
 ## 对接规则
-- `pass`：无未豁免 `高优先级阻断`，且来源卡片、评分摘要、关键证据路径完整。
-- `fail`：存在未豁免 `高优先级阻断`，或复测后仍无法满足当前版本体验要求。
-- `blocked`：卡片、Issue、testing 证据包任一关键引用缺失。
+- `pass`：无未豁免 `高优先级阻断`，且至少 1 条代表性样本明确回答“玩家做了什么、世界因此变了什么”，并给出 `leverage verdict=pass`。
+- `fail`：存在未豁免 `高优先级阻断`，或代表性样本复测后仍只能给出 `world_activity_only=yes` / `leverage verdict=block`。
+- `blocked`：卡片、Issue、testing 证据包或 `player leverage` 关键字段任一缺失。
 - 若 testing 证据包为 `blocked`，则可玩性证据包最高只能为 `blocked`。
 
 ## 最小审查清单
 - 是否绑定版本、testing 证据包与 core go/no-go 记录。
 - 是否至少列出 1 张卡片和 1 个结论标签。
+- 是否至少列出 1 条 `player leverage` 代表性样本，而不是只给 world delta / world activity。
 - 是否列出所有高优问题及其当前状态。
 - `pass/fail/blocked` 是否被卡片、Issue、截图 / 录屏 / console 路径直接支撑。
 - 是否已回写 `doc/playability_test_result/project.md`、`doc/testing/project.md` 与 `doc/devlog/YYYY-MM-DD.md`。
