@@ -406,6 +406,9 @@ function WorldSummaryPanel() {
                   <div class="feedback-summary">
                     {gameplay().blockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
                   </div>
+                  <Show when={gameplay().blockerSupplementalDetail}>
+                    <div class="feedback-detail">{gameplay().blockerSupplementalDetail}</div>
+                  </Show>
                   <Show when={gameplay().nextStepHint}>
                     <div class="feedback-detail">{gameplay().nextStepHint}</div>
                   </Show>

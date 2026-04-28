@@ -1318,6 +1318,10 @@ function buildGameplaySummary(locale = state.uiLocale) {
           rejectionReason: gameplay.agent_claim.first_agent_claim_approval_request.rejection_reason || null,
         }
       : null;
+  const runtimeBlockerKind = gameplay.blocker_kind || null;
+  const runtimeBlockerDetail = gameplay.blocker_detail || null;
+  const runtimeAlreadyPublishedEmptyEntityBlocker =
+    runtimeBlockerKind === "runtime_snapshot_empty_entities";
 
   return {
     stageId: gameplay.stage_id || null,
@@ -1328,13 +1332,24 @@ function buildGameplaySummary(locale = state.uiLocale) {
     objective: gameplay.objective || null,
     progressDetail: gameplay.progress_detail || null,
     progressPercent,
-    blockerKind: emptyEntityBlocker ? emptyEntityBlocker.blockerKind : gameplay.blocker_kind || null,
-    blockerDetail: emptyEntityBlocker
-      ? gameplay.blocker_detail
-        ? `${emptyEntityBlocker.blockerDetail} Existing runtime blocker: ${gameplay.blocker_detail}`
-        : emptyEntityBlocker.blockerDetail
-      : gameplay.blocker_detail || null,
-    nextStepHint: emptyEntityBlocker ? emptyEntityBlocker.nextStepHint : gameplay.next_step_hint || null,
+    blockerKind: runtimeAlreadyPublishedEmptyEntityBlocker
+      ? runtimeBlockerKind
+      : emptyEntityBlocker
+        ? emptyEntityBlocker.blockerKind
+        : runtimeBlockerKind,
+    blockerDetail: runtimeAlreadyPublishedEmptyEntityBlocker
+      ? runtimeBlockerDetail || emptyEntityBlocker?.blockerDetail || null
+      : emptyEntityBlocker
+        ? emptyEntityBlocker.blockerDetail
+        : runtimeBlockerDetail,
+    blockerSupplementalDetail: emptyEntityBlocker && runtimeBlockerDetail && !runtimeAlreadyPublishedEmptyEntityBlocker
+      ? runtimeBlockerDetail
+      : null,
+    nextStepHint: runtimeAlreadyPublishedEmptyEntityBlocker
+      ? gameplay.next_step_hint || emptyEntityBlocker?.nextStepHint || null
+      : emptyEntityBlocker
+        ? emptyEntityBlocker.nextStepHint
+        : gameplay.next_step_hint || null,
     branchHint: gameplay.branch_hint || null,
     entityCounts: {
       agents: agents.length,
@@ -2945,6 +2960,20 @@ function gameplayActionRequiresActorAgent(actionId) {
   return actionId === "claim_agent" || actionId === "release_agent_claim";
 }
 
+function normalizeGameplayActionRequest(action) {
+  if (!action || typeof action !== "object") {
+    return null;
+  }
+  const normalized = {
+    ...action,
+    protocol_action: action.protocol_action || action.protocolAction || null,
+    action_id: action.action_id || action.actionId || null,
+    target_agent_id: action.target_agent_id || action.targetAgentId || null,
+    disabled_reason: action.disabled_reason || action.disabledReason || null,
+  };
+  return normalized;
+}
+
 function resolveGameplayActionRequest(actionOrId) {
   if (typeof actionOrId === "string") {
     const actions = Array.isArray(state.snapshot?.player_gameplay?.available_actions)
@@ -2952,7 +2981,16 @@ function resolveGameplayActionRequest(actionOrId) {
       : [];
     return actions.find((action) => action?.action_id === actionOrId) || null;
   }
-  return actionOrId && typeof actionOrId === "object" ? actionOrId : null;
+  if (!actionOrId || typeof actionOrId !== "object") {
+    return null;
+  }
+  if (typeof actionOrId.actionId === "string" && actionOrId.actionId.trim()) {
+    const resolved = resolveGameplayActionRequest(actionOrId.actionId.trim());
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return normalizeGameplayActionRequest(actionOrId);
 }
 
 function sendGameplayAction(actionOrId) {
