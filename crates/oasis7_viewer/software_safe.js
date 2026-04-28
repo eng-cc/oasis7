@@ -1783,6 +1783,9 @@ function buildGameplaySummary(locale = state.uiLocale) {
     expiresAtEpoch: gameplay.agent_claim.first_agent_claim_approval_request.expires_at_epoch == null ? null : normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.expires_at_epoch),
     rejectionReason: gameplay.agent_claim.first_agent_claim_approval_request.rejection_reason || null
   } : null;
+  const runtimeBlockerKind = gameplay.blocker_kind || null;
+  const runtimeBlockerDetail = gameplay.blocker_detail || null;
+  const runtimeAlreadyPublishedEmptyEntityBlocker = runtimeBlockerKind === "runtime_snapshot_empty_entities";
   return {
     stageId: gameplay.stage_id || null,
     stageStatus: emptyEntityBlocker ? "blocked" : gameplay.stage_status || null,
@@ -1792,9 +1795,10 @@ function buildGameplaySummary(locale = state.uiLocale) {
     objective: gameplay.objective || null,
     progressDetail: gameplay.progress_detail || null,
     progressPercent,
-    blockerKind: emptyEntityBlocker ? emptyEntityBlocker.blockerKind : gameplay.blocker_kind || null,
-    blockerDetail: emptyEntityBlocker ? gameplay.blocker_detail ? `${emptyEntityBlocker.blockerDetail} Existing runtime blocker: ${gameplay.blocker_detail}` : emptyEntityBlocker.blockerDetail : gameplay.blocker_detail || null,
-    nextStepHint: emptyEntityBlocker ? emptyEntityBlocker.nextStepHint : gameplay.next_step_hint || null,
+    blockerKind: runtimeAlreadyPublishedEmptyEntityBlocker ? runtimeBlockerKind : emptyEntityBlocker ? emptyEntityBlocker.blockerKind : runtimeBlockerKind,
+    blockerDetail: runtimeAlreadyPublishedEmptyEntityBlocker ? runtimeBlockerDetail || emptyEntityBlocker?.blockerDetail || null : emptyEntityBlocker ? emptyEntityBlocker.blockerDetail : runtimeBlockerDetail,
+    blockerSupplementalDetail: emptyEntityBlocker && runtimeBlockerDetail && !runtimeAlreadyPublishedEmptyEntityBlocker ? runtimeBlockerDetail : null,
+    nextStepHint: runtimeAlreadyPublishedEmptyEntityBlocker ? gameplay.next_step_hint || emptyEntityBlocker?.nextStepHint || null : emptyEntityBlocker ? emptyEntityBlocker.nextStepHint : gameplay.next_step_hint || null,
     branchHint: gameplay.branch_hint || null,
     entityCounts: {
       agents: agents.length,
@@ -3279,12 +3283,34 @@ function sendPromptControl(mode, payload = null) {
 function gameplayActionRequiresActorAgent(actionId) {
   return actionId === "claim_agent" || actionId === "release_agent_claim";
 }
+function normalizeGameplayActionRequest(action) {
+  if (!action || typeof action !== "object") {
+    return null;
+  }
+  const normalized = {
+    ...action,
+    protocol_action: action.protocol_action || action.protocolAction || null,
+    action_id: action.action_id || action.actionId || null,
+    target_agent_id: action.target_agent_id || action.targetAgentId || null,
+    disabled_reason: action.disabled_reason || action.disabledReason || null
+  };
+  return normalized;
+}
 function resolveGameplayActionRequest(actionOrId) {
   if (typeof actionOrId === "string") {
     const actions = Array.isArray(state.snapshot?.player_gameplay?.available_actions) ? state.snapshot.player_gameplay.available_actions : [];
     return actions.find((action) => action?.action_id === actionOrId) || null;
   }
-  return actionOrId && typeof actionOrId === "object" ? actionOrId : null;
+  if (!actionOrId || typeof actionOrId !== "object") {
+    return null;
+  }
+  if (typeof actionOrId.actionId === "string" && actionOrId.actionId.trim()) {
+    const resolved = resolveGameplayActionRequest(actionOrId.actionId.trim());
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return normalizeGameplayActionRequest(actionOrId);
 }
 function sendGameplayAction(actionOrId) {
   const action = resolveGameplayActionRequest(actionOrId);
@@ -4388,30 +4414,39 @@ function WorldSummaryPanel() {
                     return _el$89;
                   })(), createComponent(Show, {
                     get when() {
-                      return gameplay().nextStepHint;
+                      return gameplay().blockerSupplementalDetail;
                     },
                     get children() {
                       var _el$90 = _tmpl$4();
-                      insert(_el$90, () => gameplay().nextStepHint);
+                      insert(_el$90, () => gameplay().blockerSupplementalDetail);
                       return _el$90;
+                    }
+                  }), createComponent(Show, {
+                    get when() {
+                      return gameplay().nextStepHint;
+                    },
+                    get children() {
+                      var _el$91 = _tmpl$4();
+                      insert(_el$91, () => gameplay().nextStepHint);
+                      return _el$91;
                     }
                   }), createComponent(Show, {
                     get when() {
                       return gameplay().entityCounts;
                     },
                     get children() {
-                      var _el$91 = _tmpl$12();
-                      insert(_el$91, createComponent(Badge, {
+                      var _el$92 = _tmpl$12();
+                      insert(_el$92, createComponent(Badge, {
                         get children() {
                           return `agents=${gameplay().entityCounts.agents}`;
                         }
                       }), null);
-                      insert(_el$91, createComponent(Badge, {
+                      insert(_el$92, createComponent(Badge, {
                         get children() {
                           return `locations=${gameplay().entityCounts.locations}`;
                         }
                       }), null);
-                      return _el$91;
+                      return _el$92;
                     }
                   })];
                 }
@@ -4434,9 +4469,9 @@ function WorldSummaryPanel() {
                   return gameplay().progressDetail;
                 },
                 get children() {
-                  var _el$92 = _tmpl$4();
-                  insert(_el$92, () => gameplay().progressDetail);
-                  return _el$92;
+                  var _el$93 = _tmpl$4();
+                  insert(_el$93, () => gameplay().progressDetail);
+                  return _el$93;
                 }
               });
             }
@@ -4459,26 +4494,26 @@ function WorldSummaryPanel() {
               },
               get children() {
                 return [(() => {
-                  var _el$100 = _tmpl$11();
-                  insert(_el$100, () => feedback().effect || feedback().reason || "Gameplay feedback updated.");
-                  return _el$100;
+                  var _el$101 = _tmpl$11();
+                  insert(_el$101, () => feedback().effect || feedback().reason || "Gameplay feedback updated.");
+                  return _el$101;
                 })(), createComponent(Show, {
                   get when() {
                     return feedback().reason;
                   },
                   get children() {
-                    var _el$101 = _tmpl$4();
-                    insert(_el$101, () => feedback().reason);
-                    return _el$101;
+                    var _el$102 = _tmpl$4();
+                    insert(_el$102, () => feedback().reason);
+                    return _el$102;
                   }
                 }), createComponent(Show, {
                   get when() {
                     return feedback().hint;
                   },
                   get children() {
-                    var _el$102 = _tmpl$4();
-                    insert(_el$102, () => feedback().hint);
-                    return _el$102;
+                    var _el$103 = _tmpl$4();
+                    insert(_el$103, () => feedback().hint);
+                    return _el$103;
                   }
                 })];
               }
@@ -4504,17 +4539,17 @@ function WorldSummaryPanel() {
                 },
                 get children() {
                   return [(() => {
-                    var _el$103 = _tmpl$11();
-                    insert(_el$103, () => display?.summary || request().status || "unknown");
-                    return _el$103;
+                    var _el$104 = _tmpl$11();
+                    insert(_el$104, () => display?.summary || request().status || "unknown");
+                    return _el$104;
                   })(), createComponent(For, {
                     get each() {
                       return display?.details || [];
                     },
                     children: (detail) => (() => {
-                      var _el$104 = _tmpl$4();
-                      insert(_el$104, detail);
-                      return _el$104;
+                      var _el$105 = _tmpl$4();
+                      insert(_el$105, detail);
+                      return _el$105;
                     })()
                   })];
                 }
@@ -4529,17 +4564,17 @@ function WorldSummaryPanel() {
             },
             get children() {
               return [(() => {
-                var _el$93 = _tmpl$11();
-                insert(_el$93, () => gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update."));
-                return _el$93;
+                var _el$94 = _tmpl$11();
+                insert(_el$94, () => gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update."));
+                return _el$94;
               })(), createComponent(Show, {
                 get when() {
                   return gameplay().branchHint;
                 },
                 get children() {
-                  var _el$94 = _tmpl$4();
-                  insert(_el$94, () => gameplay().branchHint);
-                  return _el$94;
+                  var _el$95 = _tmpl$4();
+                  insert(_el$95, () => gameplay().branchHint);
+                  return _el$95;
                 }
               })];
             }
@@ -4556,9 +4591,9 @@ function WorldSummaryPanel() {
               }
             })
           }), (() => {
-            var _el$95 = _tmpl$21(), _el$96 = _el$95.firstChild, _el$97 = _el$96.nextSibling;
-            insert(_el$96, () => tr(locale(), "可用玩法动作", "Available Gameplay Actions"));
-            insert(_el$97, createComponent(Show, {
+            var _el$96 = _tmpl$21(), _el$97 = _el$96.firstChild, _el$98 = _el$97.nextSibling;
+            insert(_el$97, () => tr(locale(), "可用玩法动作", "Available Gameplay Actions"));
+            insert(_el$98, createComponent(Show, {
               get when() {
                 return gameplay().availableActions.length > 0;
               },
@@ -4589,36 +4624,36 @@ function WorldSummaryPanel() {
                     },
                     get children() {
                       return [(() => {
-                        var _el$105 = _tmpl$4();
-                        insert(_el$105, () => action.disabledReason || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
-                        return _el$105;
+                        var _el$106 = _tmpl$4();
+                        insert(_el$106, () => action.disabledReason || tr(locale(), "无需打开 visual QA viewer，也可以直接从正式 Web 入口执行。", "Playable from the formal Web entry without opening the visual QA viewer."));
+                        return _el$106;
                       })(), createComponent(Show, {
                         get when() {
                           return action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action";
                         },
                         get children() {
-                          var _el$106 = _tmpl$22(), _el$107 = _el$106.firstChild;
-                          _el$107.$$click = () => sendGameplayAction(action);
-                          insert(_el$107, (() => {
+                          var _el$107 = _tmpl$22(), _el$108 = _el$107.firstChild;
+                          _el$108.$$click = () => sendGameplayAction(action);
+                          insert(_el$108, (() => {
                             var _c$ = memo(() => action.executeKind === "request_snapshot");
                             return () => _c$() ? tr(locale(), "刷新快照", "Refresh Snapshot") : memo(() => action.executeKind === "step")() ? tr(locale(), "推进一步", "Advance One Step") : memo(() => action.executeKind === "play")() ? tr(locale(), "恢复实时推进", "Resume Live Play") : tr(locale(), "提交玩法动作", "Submit Gameplay Action");
                           })());
-                          createRenderEffect(() => _el$107.disabled = Boolean(action.disabledReason));
-                          return _el$106;
+                          createRenderEffect(() => _el$108.disabled = Boolean(action.disabledReason));
+                          return _el$107;
                         }
                       }), createComponent(Show, {
                         get when() {
                           return action.executeKind === "agent_chat";
                         },
                         get children() {
-                          var _el$108 = _tmpl$22(), _el$109 = _el$108.firstChild;
-                          _el$109.$$click = () => applySelection({
+                          var _el$109 = _tmpl$22(), _el$110 = _el$109.firstChild;
+                          _el$110.$$click = () => applySelection({
                             kind: "agent",
                             id: action.targetAgentId
                           });
-                          insert(_el$109, () => tr(locale(), "切到聊天面板", "Use Chat Panel"));
-                          createRenderEffect(() => _el$109.disabled = Boolean(action.disabledReason));
-                          return _el$108;
+                          insert(_el$110, () => tr(locale(), "切到聊天面板", "Use Chat Panel"));
+                          createRenderEffect(() => _el$110.disabled = Boolean(action.disabledReason));
+                          return _el$109;
                         }
                       })];
                     }
@@ -4626,7 +4661,7 @@ function WorldSummaryPanel() {
                 });
               }
             }));
-            return _el$95;
+            return _el$96;
           })(), createComponent(CalloutCard, {
             get title() {
               return tr(locale(), "未在此页暴露的动作", "Actions Not Exposed On This Page");
@@ -4635,13 +4670,13 @@ function WorldSummaryPanel() {
             badgeClass: "badge badge--warn",
             get children() {
               return [(() => {
-                var _el$98 = _tmpl$11();
-                insert(_el$98, () => gameplay().assetGovernanceHandoff);
-                return _el$98;
-              })(), (() => {
-                var _el$99 = _tmpl$4();
-                insert(_el$99, () => tr(locale(), "资产 / 治理相关能力请走单独 lane；这张主入口页面只保留正式玩法所需的最小动作面。", "Asset and governance actions stay on their dedicated lane; this primary entry only keeps the minimum surface needed for formal gameplay."));
+                var _el$99 = _tmpl$11();
+                insert(_el$99, () => gameplay().assetGovernanceHandoff);
                 return _el$99;
+              })(), (() => {
+                var _el$100 = _tmpl$4();
+                insert(_el$100, () => tr(locale(), "资产 / 治理相关能力请走单独 lane；这张主入口页面只保留正式玩法所需的最小动作面。", "Asset and governance actions stay on their dedicated lane; this primary entry only keeps the minimum surface needed for formal gameplay."));
+                return _el$100;
               })()];
             }
           })]
@@ -4726,13 +4761,13 @@ function WorldSummaryPanel() {
                 return hostedRecoveryHint();
               },
               children: (hint) => (() => {
-                var _el$110 = _tmpl$17(), _el$111 = _el$110.firstChild;
-                _el$111.$$click = () => {
+                var _el$111 = _tmpl$17(), _el$112 = _el$111.firstChild;
+                _el$112.$$click = () => {
                   void retryHostedPlayerIdentityIssue();
                 };
-                insert(_el$111, () => hint().cta);
-                createRenderEffect(() => _el$111.disabled = state$1.auth.issueInFlight);
-                return _el$110;
+                insert(_el$112, () => hint().cta);
+                createRenderEffect(() => _el$112.disabled = state$1.auth.issueInFlight);
+                return _el$111;
               })()
             }), createComponent(Show, {
               get when() {
@@ -4836,99 +4871,99 @@ function WorldSummaryPanel() {
             });
           },
           children: (debug) => [(() => {
-            var _el$112 = _tmpl$12();
-            insert(_el$112, createComponent(Badge, {
+            var _el$113 = _tmpl$12();
+            insert(_el$113, createComponent(Badge, {
               "class": "badge badge--accent",
               children: "selected agent lane"
             }), null);
-            insert(_el$112, createComponent(Badge, {
+            insert(_el$113, createComponent(Badge, {
               get children() {
                 return `provider=${debug().provider_mode || "-"}`;
               }
             }), null);
-            insert(_el$112, createComponent(Badge, {
+            insert(_el$113, createComponent(Badge, {
               get children() {
                 return `mode=${debug().execution_mode || "-"}`;
               }
             }), null);
-            insert(_el$112, createComponent(Badge, {
+            insert(_el$113, createComponent(Badge, {
               get children() {
                 return `env=${debug().environment_class || "-"}`;
               }
             }), null);
-            return _el$112;
+            return _el$113;
           })(), (() => {
-            var _el$113 = _tmpl$12();
-            insert(_el$113, createComponent(Badge, {
+            var _el$114 = _tmpl$12();
+            insert(_el$114, createComponent(Badge, {
               get children() {
                 return `obs=${debug().observation_schema_version || "-"}`;
               }
             }), null);
-            insert(_el$113, createComponent(Badge, {
+            insert(_el$114, createComponent(Badge, {
               get children() {
                 return `act=${debug().action_schema_version || "-"}`;
               }
             }), null);
-            insert(_el$113, createComponent(Badge, {
+            insert(_el$114, createComponent(Badge, {
               get children() {
                 return `agentProfile=${debug().agent_profile || "-"}`;
               }
             }), null);
-            insert(_el$113, createComponent(Badge, {
+            insert(_el$114, createComponent(Badge, {
               get children() {
                 return `providerFallback=${debug().fallback_reason || "-"}`;
               }
             }), null);
-            return _el$113;
+            return _el$114;
           })(), createComponent(EmptyState, {
             style: "margin-top:-2px;",
             get children() {
               return tr(locale(), "上面的 lane badge 表示 phase-1 期望执行 contract；下面的 provider check badge 表示 runtime_live 基于 /v1/provider/info 和 /v1/provider/health 的真实探测结果。", "Lane badges show the expected phase-1 execution contract. Provider check badges below show the actual runtime_live probe against /v1/provider/info and /v1/provider/health.");
             }
           }), (() => {
-            var _el$114 = _tmpl$12();
-            insert(_el$114, createComponent(Badge, {
+            var _el$115 = _tmpl$12();
+            insert(_el$115, createComponent(Badge, {
               "class": "badge badge--accent",
               children: "provider check"
             }), null);
-            insert(_el$114, createComponent(Badge, {
+            insert(_el$115, createComponent(Badge, {
               get children() {
                 return `status=${debug().provider_check_status || "-"}`;
               }
             }), null);
-            insert(_el$114, createComponent(Badge, {
+            insert(_el$115, createComponent(Badge, {
               get children() {
                 return `source=${debug().provider_check_source || "-"}`;
               }
             }), null);
-            insert(_el$114, createComponent(Badge, {
+            insert(_el$115, createComponent(Badge, {
               get children() {
                 return `fallback=${debug().provider_check_fallback_reason || "-"}`;
               }
             }), null);
-            return _el$114;
+            return _el$115;
           })(), createComponent(Show, {
             get when() {
               return debug().provider_check_error || debug().provider_reported_capabilities?.length || debug().provider_reported_supported_action_sets?.length;
             },
             get children() {
-              var _el$115 = _tmpl$12();
-              insert(_el$115, createComponent(Badge, {
+              var _el$116 = _tmpl$12();
+              insert(_el$116, createComponent(Badge, {
                 get children() {
                   return `actualCaps=${(debug().provider_reported_capabilities || []).join(",") || "-"}`;
                 }
               }), null);
-              insert(_el$115, createComponent(Badge, {
+              insert(_el$116, createComponent(Badge, {
                 get children() {
                   return `actualActions=${(debug().provider_reported_supported_action_sets || []).join(",") || "-"}`;
                 }
               }), null);
-              insert(_el$115, createComponent(Badge, {
+              insert(_el$116, createComponent(Badge, {
                 get children() {
                   return `checkError=${debug().provider_check_error || "-"}`;
                 }
               }), null);
-              return _el$115;
+              return _el$116;
             }
           }), createComponent(JsonBlock, {
             get value() {
@@ -5049,53 +5084,53 @@ function WorldSummaryPanel() {
         return state$1.hostedAdmission;
       },
       children: (admission) => (() => {
-        var _el$116 = _tmpl$12();
-        insert(_el$116, createComponent(Badge, {
+        var _el$117 = _tmpl$12();
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `activeSlots=${admission().active_player_sessions}/${admission().max_player_sessions}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `effectiveSlots=${admission().effective_player_sessions == null ? "-" : `${admission().effective_player_sessions}/${admission().max_player_sessions}`}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `runtimeBound=${admission().runtime_bound_player_sessions ?? "-"}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `runtimeOnly=${admission().runtime_only_player_sessions ?? "-"}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `runtimeProbe=${admission().runtime_probe_status || "-"}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `issueBudget=${admission().remaining_issue_budget}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `leaseTTL=${admission().slot_lease_ttl_ms}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `issued=${admission().issued_players_total}`;
           }
         }), null);
-        insert(_el$116, createComponent(Badge, {
+        insert(_el$117, createComponent(Badge, {
           get children() {
             return `released=${admission().released_players_total}`;
           }
         }), null);
-        return _el$116;
+        return _el$117;
       })()
     }), _el$84);
     insert(_el$74, createComponent(Show, {
@@ -5363,27 +5398,27 @@ function InteractionPanel() {
     });
   }
   return (() => {
-    var _el$117 = _tmpl$33(), _el$118 = _el$117.firstChild, _el$120 = _el$118.nextSibling;
-    insert(_el$118, createComponent(Badge, {
+    var _el$118 = _tmpl$33(), _el$119 = _el$118.firstChild, _el$121 = _el$119.nextSibling;
+    insert(_el$119, createComponent(Badge, {
       "class": "badge badge--accent",
       children: "Agent Interaction"
     }), null);
-    insert(_el$118, createComponent(Badge, {
+    insert(_el$119, createComponent(Badge, {
       get children() {
         return `agent=${agentId()}`;
       }
     }), null);
-    insert(_el$118, createComponent(Badge, {
+    insert(_el$119, createComponent(Badge, {
       get children() {
         return `activePrompt=${`v${promptVersionState().currentVersion}`}`;
       }
     }), null);
-    insert(_el$118, createComponent(Badge, {
+    insert(_el$119, createComponent(Badge, {
       get children() {
         return `nextRollback=${`v${promptVersionState().nextRollbackTargetVersion}`}`;
       }
     }), null);
-    insert(_el$118, createComponent(Show, {
+    insert(_el$119, createComponent(Show, {
       get when() {
         return promptVersionState().restoredFromVersion != null;
       },
@@ -5395,7 +5430,7 @@ function InteractionPanel() {
         });
       }
     }), null);
-    insert(_el$117, createComponent(Show, {
+    insert(_el$118, createComponent(Show, {
       get when() {
         return debugContext()?.provider_mode === "provider_loopback_http";
       },
@@ -5406,8 +5441,8 @@ function InteractionPanel() {
           }
         });
       }
-    }), _el$120);
-    insert(_el$117, createComponent(Show, {
+    }), _el$121);
+    insert(_el$118, createComponent(Show, {
       get when() {
         return debugContext()?.provider_mode !== "provider_loopback_http";
       },
@@ -5425,24 +5460,24 @@ function InteractionPanel() {
           },
           get children() {
             return [(() => {
-              var _el$119 = _tmpl$12();
-              insert(_el$119, createComponent(Badge, {
+              var _el$120 = _tmpl$12();
+              insert(_el$120, createComponent(Badge, {
                 "class": "badge badge--good",
                 get children() {
                   return authSurface().currentTier;
                 }
               }), null);
-              insert(_el$119, createComponent(Badge, {
+              insert(_el$120, createComponent(Badge, {
                 get children() {
                   return `player=${state.auth.playerId}`;
                 }
               }), null);
-              insert(_el$119, createComponent(Badge, {
+              insert(_el$120, createComponent(Badge, {
                 get children() {
                   return `source=${authSurface().source}`;
                 }
               }), null);
-              return _el$119;
+              return _el$120;
             })(), createComponent(EmptyState, {
               get children() {
                 return promptCapability().reason;
@@ -5451,18 +5486,18 @@ function InteractionPanel() {
           }
         });
       }
-    }), _el$120);
-    insert(_el$120, createComponent(Badge, {
+    }), _el$121);
+    insert(_el$121, createComponent(Badge, {
       get children() {
         return `boundPlayer=${binding()?.playerId || "-"}`;
       }
     }), null);
-    insert(_el$120, createComponent(Badge, {
+    insert(_el$121, createComponent(Badge, {
       get children() {
         return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
       }
     }), null);
-    insert(_el$120, createComponent(Badge, {
+    insert(_el$121, createComponent(Badge, {
       get ["class"]() {
         return promptCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5470,7 +5505,7 @@ function InteractionPanel() {
         return `prompt=${promptCapability().enabled ? "enabled" : promptCapability().code}`;
       }
     }), null);
-    insert(_el$120, createComponent(Badge, {
+    insert(_el$121, createComponent(Badge, {
       get ["class"]() {
         return chatCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5478,7 +5513,7 @@ function InteractionPanel() {
         return `chat=${chatCapability().enabled ? "enabled" : chatCapability().code}`;
       }
     }), null);
-    insert(_el$120, createComponent(Badge, {
+    insert(_el$121, createComponent(Badge, {
       get ["class"]() {
         return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
       },
@@ -5486,19 +5521,19 @@ function InteractionPanel() {
         return `mainToken=${assetLaneStatusText()}`;
       }
     }), null);
-    insert(_el$117, createComponent(EmptyState, {
+    insert(_el$118, createComponent(EmptyState, {
       get children() {
         return assetLaneDetail();
       }
     }), null);
-    insert(_el$117, createComponent(PanelSection, {
+    insert(_el$118, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane");
       },
       get children() {
         return [(() => {
-          var _el$121 = _tmpl$12();
-          insert(_el$121, createComponent(Badge, {
+          var _el$122 = _tmpl$12();
+          insert(_el$122, createComponent(Badge, {
             get ["class"]() {
               return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
             },
@@ -5506,17 +5541,17 @@ function InteractionPanel() {
               return `main_token_transfer=${assetLaneStatusText()}`;
             }
           }), null);
-          insert(_el$121, createComponent(Badge, {
+          insert(_el$122, createComponent(Badge, {
             get children() {
               return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
             }
           }), null);
-          insert(_el$121, createComponent(Badge, {
+          insert(_el$122, createComponent(Badge, {
             get children() {
               return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
             }
           }), null);
-          return _el$121;
+          return _el$122;
         })(), createComponent(EmptyState, {
           get children() {
             return assetLaneDetail();
@@ -5526,41 +5561,41 @@ function InteractionPanel() {
             return mainTokenTransferPolicy()?.reason || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.");
           }
         }), (() => {
-          var _el$122 = _tmpl$23(), _el$123 = _el$122.firstChild;
-          insert(_el$123, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-          return _el$122;
+          var _el$123 = _tmpl$23(), _el$124 = _el$123.firstChild;
+          insert(_el$124, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+          return _el$123;
         })()];
       }
     }), null);
-    insert(_el$117, createComponent(PanelSection, {
+    insert(_el$118, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "Agent 聊天", "Agent Chat");
       },
       get children() {
         return [(() => {
-          var _el$124 = _tmpl$24(), _el$125 = _el$124.firstChild, _el$126 = _el$125.nextSibling;
-          insert(_el$125, () => tr(locale(), "消息", "Message"));
-          _el$126.$$input = (event) => {
+          var _el$125 = _tmpl$24(), _el$126 = _el$125.firstChild, _el$127 = _el$126.nextSibling;
+          insert(_el$126, () => tr(locale(), "消息", "Message"));
+          _el$127.$$input = (event) => {
             state.chatDraft.message = String(event.currentTarget.value || "");
             state.chatDraft.dirty = true;
           };
           createRenderEffect((_p$) => {
             var _v$7 = tr(locale(), "给当前选中的 Agent 发一条消息", "Send a message to the selected agent"), _v$8 = !chatCapability().enabled;
-            _v$7 !== _p$.e && setAttribute(_el$126, "placeholder", _p$.e = _v$7);
-            _v$8 !== _p$.t && (_el$126.disabled = _p$.t = _v$8);
+            _v$7 !== _p$.e && setAttribute(_el$127, "placeholder", _p$.e = _v$7);
+            _v$8 !== _p$.t && (_el$127.disabled = _p$.t = _v$8);
             return _p$;
           }, {
             e: void 0,
             t: void 0
           });
-          createRenderEffect(() => _el$126.value = state.chatDraft.message);
-          return _el$124;
+          createRenderEffect(() => _el$127.value = state.chatDraft.message);
+          return _el$125;
         })(), (() => {
-          var _el$127 = _tmpl$25(), _el$128 = _el$127.firstChild;
-          _el$128.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
-          insert(_el$128, () => tr(locale(), "发送聊天", "Send Chat"));
-          createRenderEffect(() => _el$128.disabled = !chatCapability().enabled);
-          return _el$127;
+          var _el$128 = _tmpl$25(), _el$129 = _el$128.firstChild;
+          _el$129.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
+          insert(_el$129, () => tr(locale(), "发送聊天", "Send Chat"));
+          createRenderEffect(() => _el$129.disabled = !chatCapability().enabled);
+          return _el$128;
         })(), createComponent(Show, {
           get when() {
             return chatFeedback();
@@ -5581,9 +5616,9 @@ function InteractionPanel() {
             }
           })
         }), (() => {
-          var _el$129 = _tmpl$21(), _el$130 = _el$129.firstChild, _el$131 = _el$130.nextSibling;
-          insert(_el$130, () => tr(locale(), "消息流", "Message Flow"));
-          insert(_el$131, createComponent(Show, {
+          var _el$130 = _tmpl$21(), _el$131 = _el$130.firstChild, _el$132 = _el$131.nextSibling;
+          insert(_el$131, () => tr(locale(), "消息流", "Message Flow"));
+          insert(_el$132, createComponent(Show, {
             get when() {
               return chatHistory().length > 0;
             },
@@ -5618,18 +5653,18 @@ function InteractionPanel() {
               });
             }
           }));
-          return _el$129;
+          return _el$130;
         })()];
       }
     }), null);
-    insert(_el$117, createComponent(PanelSection, {
+    insert(_el$118, createComponent(PanelSection, {
       get title() {
         return tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings");
       },
       get children() {
         return [(() => {
-          var _el$132 = _tmpl$12();
-          insert(_el$132, createComponent(Badge, {
+          var _el$133 = _tmpl$12();
+          insert(_el$133, createComponent(Badge, {
             get ["class"]() {
               return promptOverridesVisible() ? "badge badge--good" : "badge";
             },
@@ -5637,25 +5672,25 @@ function InteractionPanel() {
               return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
             }
           }), null);
-          insert(_el$132, createComponent(Badge, {
+          insert(_el$133, createComponent(Badge, {
             get children() {
               return tr(locale(), "本地设置持久化", "locally persisted");
             }
           }), null);
-          return _el$132;
+          return _el$133;
         })(), createComponent(EmptyState, {
           get children() {
             return promptSettingsSummary();
           }
         }), (() => {
-          var _el$133 = _tmpl$26(), _el$134 = _el$133.firstChild;
-          _el$134.$$click = () => togglePromptOverridesVisible();
-          insert(_el$134, promptSettingsButtonLabel);
-          return _el$133;
+          var _el$134 = _tmpl$26(), _el$135 = _el$134.firstChild;
+          _el$135.$$click = () => togglePromptOverridesVisible();
+          insert(_el$135, promptSettingsButtonLabel);
+          return _el$134;
         })()];
       }
     }), null);
-    insert(_el$117, createComponent(Show, {
+    insert(_el$118, createComponent(Show, {
       get when() {
         return promptOverridesVisible();
       },
@@ -5664,97 +5699,97 @@ function InteractionPanel() {
           title: "Prompt Overrides",
           get children() {
             return [(() => {
-              var _el$135 = _tmpl$4();
-              insert(_el$135, () => promptVersionState().summary);
-              return _el$135;
-            })(), (() => {
               var _el$136 = _tmpl$4();
-              insert(_el$136, () => promptVersionState().detail);
+              insert(_el$136, () => promptVersionState().summary);
               return _el$136;
+            })(), (() => {
+              var _el$137 = _tmpl$4();
+              insert(_el$137, () => promptVersionState().detail);
+              return _el$137;
             })(), createComponent(Show, {
               get when() {
                 return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join";
               },
               get children() {
-                var _el$137 = _tmpl$27(), _el$138 = _el$137.firstChild, _el$139 = _el$138.nextSibling;
-                insert(_el$138, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                _el$139.$$input = (event) => {
+                var _el$138 = _tmpl$27(), _el$139 = _el$138.firstChild, _el$140 = _el$139.nextSibling;
+                insert(_el$139, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                _el$140.$$input = (event) => {
                   state.strongAuth.approvalCode = String(event.currentTarget.value || "");
                 };
-                createRenderEffect(() => _el$139.value = state.strongAuth.approvalCode || "");
-                return _el$137;
+                createRenderEffect(() => _el$140.value = state.strongAuth.approvalCode || "");
+                return _el$138;
               }
             }), (() => {
-              var _el$140 = _tmpl$28(), _el$141 = _el$140.firstChild, _el$142 = _el$141.nextSibling;
-              insert(_el$141, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
-              _el$142.$$input = (event) => {
+              var _el$141 = _tmpl$28(), _el$142 = _el$141.firstChild, _el$143 = _el$142.nextSibling;
+              insert(_el$142, () => tr(locale(), "System Prompt 覆盖", "System Prompt Override"));
+              _el$143.$$input = (event) => {
                 state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$142.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$142.value = state.promptDraft.systemPrompt);
-              return _el$140;
+              createRenderEffect(() => _el$143.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$143.value = state.promptDraft.systemPrompt);
+              return _el$141;
             })(), (() => {
-              var _el$143 = _tmpl$29(), _el$144 = _el$143.firstChild, _el$145 = _el$144.nextSibling;
-              insert(_el$144, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-              _el$145.$$input = (event) => {
+              var _el$144 = _tmpl$29(), _el$145 = _el$144.firstChild, _el$146 = _el$145.nextSibling;
+              insert(_el$145, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+              _el$146.$$input = (event) => {
                 state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$145.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$145.value = state.promptDraft.shortTermGoal);
-              return _el$143;
+              createRenderEffect(() => _el$146.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$146.value = state.promptDraft.shortTermGoal);
+              return _el$144;
             })(), (() => {
-              var _el$146 = _tmpl$30(), _el$147 = _el$146.firstChild, _el$148 = _el$147.nextSibling;
-              insert(_el$147, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-              _el$148.$$input = (event) => {
+              var _el$147 = _tmpl$30(), _el$148 = _el$147.firstChild, _el$149 = _el$148.nextSibling;
+              insert(_el$148, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+              _el$149.$$input = (event) => {
                 state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                 state.promptDraft.dirty = true;
               };
-              createRenderEffect(() => _el$148.disabled = !promptCapability().enabled);
-              createRenderEffect(() => _el$148.value = state.promptDraft.longTermGoal);
-              return _el$146;
+              createRenderEffect(() => _el$149.disabled = !promptCapability().enabled);
+              createRenderEffect(() => _el$149.value = state.promptDraft.longTermGoal);
+              return _el$147;
             })(), (() => {
-              var _el$149 = _tmpl$31(), _el$150 = _el$149.firstChild, _el$151 = _el$150.nextSibling;
-              _el$150.$$click = () => sendPromptControl("preview", null);
-              insert(_el$150, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
-              _el$151.$$click = () => sendPromptControl("apply", null);
-              insert(_el$151, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
+              var _el$150 = _tmpl$31(), _el$151 = _el$150.firstChild, _el$152 = _el$151.nextSibling;
+              _el$151.$$click = () => sendPromptControl("preview", null);
+              insert(_el$151, () => tr(locale(), "预览 Prompt", "Preview Prompt"));
+              _el$152.$$click = () => sendPromptControl("apply", null);
+              insert(_el$152, () => tr(locale(), "应用 Prompt", "Apply Prompt"));
               createRenderEffect((_p$) => {
                 var _v$9 = !promptCapability().enabled, _v$0 = !promptCapability().enabled;
-                _v$9 !== _p$.e && (_el$150.disabled = _p$.e = _v$9);
-                _v$0 !== _p$.t && (_el$151.disabled = _p$.t = _v$0);
+                _v$9 !== _p$.e && (_el$151.disabled = _p$.e = _v$9);
+                _v$0 !== _p$.t && (_el$152.disabled = _p$.t = _v$0);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              return _el$149;
+              return _el$150;
             })(), (() => {
-              var _el$152 = _tmpl$32(), _el$153 = _el$152.firstChild, _el$154 = _el$153.firstChild, _el$155 = _el$154.nextSibling, _el$156 = _el$153.nextSibling;
-              insert(_el$154, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-              _el$155.$$input = (event) => {
+              var _el$153 = _tmpl$32(), _el$154 = _el$153.firstChild, _el$155 = _el$154.firstChild, _el$156 = _el$155.nextSibling, _el$157 = _el$154.nextSibling;
+              insert(_el$155, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+              _el$156.$$input = (event) => {
                 const nextValue = Number(event.currentTarget.value || 0);
                 state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
                 requestRender();
               };
-              _el$156.$$click = () => {
+              _el$157.$$click = () => {
                 sendPromptControl("rollback", {
                   toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
                 });
               };
-              insert(_el$156, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
+              insert(_el$157, () => tr(locale(), "回滚 Prompt", "Rollback Prompt"));
               createRenderEffect((_p$) => {
                 var _v$1 = !promptCapability().enabled, _v$10 = !promptCapability().enabled;
-                _v$1 !== _p$.e && (_el$155.disabled = _p$.e = _v$1);
-                _v$10 !== _p$.t && (_el$156.disabled = _p$.t = _v$10);
+                _v$1 !== _p$.e && (_el$156.disabled = _p$.e = _v$1);
+                _v$10 !== _p$.t && (_el$157.disabled = _p$.t = _v$10);
                 return _p$;
               }, {
                 e: void 0,
                 t: void 0
               });
-              createRenderEffect(() => _el$155.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-              return _el$152;
+              createRenderEffect(() => _el$156.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+              return _el$153;
             })(), createComponent(Show, {
               get when() {
                 return promptFeedback();
@@ -5802,7 +5837,7 @@ function InteractionPanel() {
         });
       }
     }), null);
-    return _el$117;
+    return _el$118;
   })();
 }
 function DetailsPanel() {
@@ -5828,20 +5863,20 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$157 = _tmpl$35(), _el$158 = _el$157.firstChild, _el$159 = _el$158.nextSibling, _el$160 = _el$159.firstChild, _el$161 = _el$160.nextSibling;
-    insert(_el$158, createComponent(Badge, {
+    var _el$158 = _tmpl$35(), _el$159 = _el$158.firstChild, _el$160 = _el$159.nextSibling, _el$161 = _el$160.firstChild, _el$162 = _el$161.nextSibling;
+    insert(_el$159, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
         return tr(locale(), "已选中", "Selected");
       }
     }), null);
-    insert(_el$158, createComponent(Badge, {
+    insert(_el$159, createComponent(Badge, {
       get children() {
         return selectedLabel();
       }
     }), null);
-    insert(_el$157, createComponent(InteractionPanel, {}), _el$159);
-    insert(_el$157, createComponent(Show, {
+    insert(_el$158, createComponent(InteractionPanel, {}), _el$160);
+    insert(_el$158, createComponent(Show, {
       get when() {
         return state.selectedObject;
       },
@@ -5867,35 +5902,35 @@ function DetailsPanel() {
           }
         });
       }
-    }), _el$159);
-    insert(_el$160, () => tr(locale(), "世界规模", "World Scale"));
-    insert(_el$161, createComponent(Badge, {
+    }), _el$160);
+    insert(_el$161, () => tr(locale(), "世界规模", "World Scale"));
+    insert(_el$162, createComponent(Badge, {
       get children() {
         return `agents=${snapshotCounts().agents}`;
       }
     }), null);
-    insert(_el$161, createComponent(Badge, {
+    insert(_el$162, createComponent(Badge, {
       get children() {
         return `locations=${snapshotCounts().locations}`;
       }
     }), null);
-    insert(_el$161, createComponent(Badge, {
+    insert(_el$162, createComponent(Badge, {
       get children() {
         return `promptProfiles=${snapshotCounts().promptProfiles}`;
       }
     }), null);
-    insert(_el$161, createComponent(Badge, {
+    insert(_el$162, createComponent(Badge, {
       get children() {
         return `debugContexts=${snapshotCounts().executionDebugContexts}`;
       }
     }), null);
-    insert(_el$159, createComponent(EmptyState, {
+    insert(_el$160, createComponent(EmptyState, {
       style: "margin-top:10px;",
       get children() {
         return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。", "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.");
       }
     }), null);
-    insert(_el$159, createComponent(Show, {
+    insert(_el$160, createComponent(Show, {
       get when() {
         return hasSnapshotDiagnostics();
       },
@@ -5914,38 +5949,38 @@ function DetailsPanel() {
         });
       }
     }), null);
-    insert(_el$157, createComponent(Show, {
+    insert(_el$158, createComponent(Show, {
       get when() {
         return state.lastError;
       },
       get children() {
-        var _el$162 = _tmpl$34(), _el$163 = _el$162.firstChild, _el$164 = _el$163.nextSibling;
-        insert(_el$163, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$164, () => state.lastError);
-        return _el$162;
+        var _el$163 = _tmpl$34(), _el$164 = _el$163.firstChild, _el$165 = _el$164.nextSibling;
+        insert(_el$164, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$165, () => state.lastError);
+        return _el$163;
       }
     }), null);
-    return _el$157;
+    return _el$158;
   })();
 }
 function AppShell() {
   const locale = () => uiLocale();
   return [(() => {
-    var _el$165 = _tmpl$36(), _el$166 = _el$165.firstChild, _el$167 = _el$166.firstChild, _el$168 = _el$166.nextSibling;
-    insert(_el$167, () => tr(locale(), "目标", "Targets"));
-    insert(_el$168, createComponent(TargetsPanel, {}));
-    return _el$165;
+    var _el$166 = _tmpl$36(), _el$167 = _el$166.firstChild, _el$168 = _el$167.firstChild, _el$169 = _el$167.nextSibling;
+    insert(_el$168, () => tr(locale(), "目标", "Targets"));
+    insert(_el$169, createComponent(TargetsPanel, {}));
+    return _el$166;
   })(), (() => {
-    var _el$169 = _tmpl$36(), _el$170 = _el$169.firstChild, _el$171 = _el$170.firstChild, _el$172 = _el$170.nextSibling;
-    insert(_el$171, () => tr(locale(), "世界摘要", "World Summary"));
-    insert(_el$170, createComponent(ViewerEntryMenu, {}), null);
-    insert(_el$172, createComponent(WorldSummaryPanel, {}));
-    return _el$169;
+    var _el$170 = _tmpl$36(), _el$171 = _el$170.firstChild, _el$172 = _el$171.firstChild, _el$173 = _el$171.nextSibling;
+    insert(_el$172, () => tr(locale(), "世界摘要", "World Summary"));
+    insert(_el$171, createComponent(ViewerEntryMenu, {}), null);
+    insert(_el$173, createComponent(WorldSummaryPanel, {}));
+    return _el$170;
   })(), (() => {
-    var _el$173 = _tmpl$36(), _el$174 = _el$173.firstChild, _el$175 = _el$174.firstChild, _el$176 = _el$174.nextSibling;
-    insert(_el$175, () => tr(locale(), "明细", "Details"));
-    insert(_el$176, createComponent(DetailsPanel, {}));
-    return _el$173;
+    var _el$174 = _tmpl$36(), _el$175 = _el$174.firstChild, _el$176 = _el$175.firstChild, _el$177 = _el$175.nextSibling;
+    insert(_el$176, () => tr(locale(), "明细", "Details"));
+    insert(_el$177, createComponent(DetailsPanel, {}));
+    return _el$174;
   })()];
 }
 const app = document.getElementById("app");

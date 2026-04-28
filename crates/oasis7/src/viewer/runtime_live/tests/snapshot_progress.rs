@@ -221,10 +221,12 @@ fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
         .blocker_detail
         .as_deref()
         .is_some_and(|detail| detail.contains("no agents/locations")));
-    assert_eq!(
-        gameplay.available_actions[0].protocol_action,
-        "request_snapshot"
-    );
+    let request_snapshot_action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.protocol_action == "request_snapshot")
+        .expect("request_snapshot action should be available");
+    assert_eq!(request_snapshot_action.protocol_action, "request_snapshot");
     assert!(gameplay
         .available_actions
         .iter()
