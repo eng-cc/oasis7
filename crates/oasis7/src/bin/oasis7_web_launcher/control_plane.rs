@@ -884,7 +884,7 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
         .is_err()
     {
         issues.push(
-            "chain replication bootstrap peers must use multiaddr values like /ip4/.../tcp/.../p2p/...".to_string(),
+            "chain replication bootstrap peers must use multiaddr values like /dns4/bootstrap1.oasis7.tech/tcp/5611 or /ip4/203.0.113.10/tcp/4100/p2p/<peer-id>".to_string(),
         );
     }
 

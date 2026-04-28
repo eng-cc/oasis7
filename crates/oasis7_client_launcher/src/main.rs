@@ -772,10 +772,10 @@ impl ConfigIssue {
                 "Public entry requires explicit confirmation of public-entry responsibility"
             }
             (Self::ChainReplicationBootstrapPeersInvalid, UiLanguage::ZhCn) => {
-                "链复制 bootstrap peers 必须是 /ip4/.../tcp/.../p2p/... 这类 multiaddr，多个地址可用逗号、分号或空白分隔"
+                "链复制 bootstrap peers 必须是 /dns4/bootstrap1.oasis7.tech/tcp/5611 或 /ip4/.../tcp/.../p2p/<peer-id> 这类 multiaddr，多个地址可用逗号、分号或空白分隔"
             }
             (Self::ChainReplicationBootstrapPeersInvalid, UiLanguage::EnUs) => {
-                "Chain replication bootstrap peers must use multiaddr values like /ip4/.../tcp/.../p2p/...; separate multiple entries with commas, semicolons, or whitespace"
+                "Chain replication bootstrap peers must use multiaddr values like /dns4/bootstrap1.oasis7.tech/tcp/5611 or /ip4/.../tcp/.../p2p/<peer-id>; separate multiple entries with commas, semicolons, or whitespace"
             }
             (Self::ChainTickMsInvalid, UiLanguage::ZhCn) => {
                 "链节点轮询间隔毫秒（chain node poll interval ms）必须是正整数"
