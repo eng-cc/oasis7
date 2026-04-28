@@ -403,6 +403,40 @@ pub(super) fn build_player_gameplay_snapshot(
     }
 }
 
+pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
+    gameplay: &mut PlayerGameplaySnapshot,
+    missing_agents: bool,
+    missing_locations: bool,
+) {
+    if !missing_agents && !missing_locations {
+        return;
+    }
+    let mut missing_parts = Vec::new();
+    if missing_agents {
+        missing_parts.push("agents");
+    }
+    if missing_locations {
+        missing_parts.push("locations");
+    }
+    let missing_summary = missing_parts.join("/");
+    let disabled_reason =
+        format!("runtime snapshot is missing {missing_summary}; refresh snapshot or repair runtime bootstrap first");
+    gameplay.stage_status = PlayerGameplayStageStatus::Blocked;
+    gameplay.blocker_kind = Some("runtime_snapshot_empty_entities".to_string());
+    gameplay.blocker_detail = Some(format!(
+        "runtime exposed gameplay progress but no {missing_summary} in the viewer snapshot; primary web entry cannot continue yet"
+    ));
+    gameplay.next_step_hint =
+        "Request a fresh snapshot. If entities stay empty, restart or repair the runtime world bootstrap before retrying gameplay."
+            .to_string();
+    for action in &mut gameplay.available_actions {
+        if action.protocol_action == "request_snapshot" {
+            continue;
+        }
+        action.disabled_reason = Some(disabled_reason.clone());
+    }
+}
+
 fn base_available_actions(
     first_agent_id: Option<&str>,
     gameplay_enabled: bool,

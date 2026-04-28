@@ -59,7 +59,8 @@ use claim_snapshot::build_player_agent_claim_snapshot;
 use control_plane::RuntimeLlmSidecar;
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use gameplay_snapshot::{
-    build_player_gameplay_snapshot, player_gameplay_feedback_from_control_ack,
+    apply_runtime_snapshot_empty_entities_blocker, build_player_gameplay_snapshot,
+    player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
 use session_policy::{
@@ -934,22 +935,29 @@ impl ViewerRuntimeLiveServer {
                     self.world.governance_execution_policy().epoch_length_ticks,
                 )
             });
+        let model = runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar);
+        let mut player_gameplay = build_player_gameplay_snapshot(
+            self.world.state(),
+            self.confirmed_player_gameplay_progress_time.is_some(),
+            self.latest_player_gameplay_feedback.as_ref(),
+            gameplay_gate.is_none(),
+            gameplay_gate.as_deref(),
+            self.llm_sidecar.is_llm_mode() && self.llm_sidecar.supports_agent_chat(),
+            primary_agent_claim,
+        );
+        apply_runtime_snapshot_empty_entities_blocker(
+            &mut player_gameplay,
+            model.agents.is_empty(),
+            model.locations.is_empty(),
+        );
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
             time: self.world.state().time,
             config: self.snapshot_config.clone(),
-            model: runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar),
+            model,
             runtime_snapshot: Some(runtime_snapshot),
-            player_gameplay: Some(build_player_gameplay_snapshot(
-                self.world.state(),
-                self.confirmed_player_gameplay_progress_time.is_some(),
-                self.latest_player_gameplay_feedback.as_ref(),
-                gameplay_gate.is_none(),
-                gameplay_gate.as_deref(),
-                self.llm_sidecar.is_llm_mode() && self.llm_sidecar.supports_agent_chat(),
-                primary_agent_claim,
-            )),
+            player_gameplay: Some(player_gameplay),
             chunk_runtime: ChunkRuntimeConfig::default(),
             next_event_id,
             next_action_id,
