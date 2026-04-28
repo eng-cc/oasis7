@@ -48,6 +48,7 @@
   - AC-2: `/api/state` 返回游戏与区块链独立状态字段，客户端不再用 `snapshot.running` 推断链状态。
   - AC-2a: `/api/state` 在链就绪时同步返回 `chain_replication_status.local_peer_id/connected_peers/peer_healths`，供 native/web 启动器在 `节点观测` 摘要卡与可单独打开的 peer 明细窗口里直接展示已连接 peer 信息，而不新增第二套客户端探针。
   - AC-2b: 启动器配置增加 `chain_replication_bootstrap_peers` 入口，支持通过持久化配置文件与 launcher 界面填写 bootstrap peer multiaddr，并在 native/web 控制面启动链时统一透传为 `oasis7_chain_runtime --replication-network-peer <multiaddr>`。
+  - AC-2c: 启动器默认配置内置官方 bootstrap anchors：`/dns4/bootstrap1.oasis7.tech/tcp/5611` 与 `/dns4/bootstrap2.oasis7.tech/tcp/5612`，保证普通新用户在不手动填写 bootstrap peers 的情况下也能获得默认入网锚点；高级用户仍可覆盖该列表。
   - AC-3: `oasis7_client_launcher` native 不再直接拉起 `oasis7_game_launcher` / `oasis7_chain_runtime`，改为通过 `oasis7_web_launcher` API 控制。
   - AC-4: wasm/web 启动器的“启动区块链/停止区块链”按钮恢复可操作，并与 native 同状态语义。
   - AC-5: native 与 web 在“自动拉起链 + 游戏/链独立启停 + 状态展示”行为上保持一致。
@@ -64,6 +65,7 @@
   - `oasis7_web_launcher` 升级为统一控制平面：内部维护游戏进程与区块链进程两套状态。
   - `oasis7_client_launcher` native 与 wasm 共用 API 驱动状态机；native 增加本地服务进程守护。
   - UI 层继续复用同一套 egui 渲染与 schema 字段映射。
+  - launcher 默认 bootstrap anchors 由共享配置常量统一提供，避免 `game_launcher`、`web_launcher`、`client_launcher` 三处默认值漂移。
 - Integration Points:
   - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
   - `crates/oasis7_client_launcher/src/main.rs`

@@ -31,7 +31,9 @@ use super::{
     OASIS7_CLIENT_LAUNCHER_LANG_ENV,
 };
 use eframe::egui;
-use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
+use oasis7::launcher_bootstrap_peers::{
+    default_chain_replication_bootstrap_peers_csv, parse_chain_replication_bootstrap_peers,
+};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
@@ -198,7 +200,10 @@ fn launch_config_defaults_enable_llm() {
     assert!(config.chain_node_id.starts_with("viewer-live-node-fresh-"));
     assert_eq!(config.chain_p2p_user_mode, "auto_join");
     assert!(!config.chain_p2p_accept_public_entry);
-    assert!(config.chain_replication_bootstrap_peers.is_empty());
+    assert_eq!(
+        config.chain_replication_bootstrap_peers,
+        default_chain_replication_bootstrap_peers_csv()
+    );
 }
 
 #[test]

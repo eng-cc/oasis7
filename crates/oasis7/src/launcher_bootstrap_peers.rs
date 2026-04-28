@@ -1,6 +1,21 @@
 use multiaddr::Multiaddr;
 
 const MULTIADDR_EXAMPLE: &str = "/ip4/127.0.0.1/tcp/4100/p2p/<peer-id>";
+pub const DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS: [&str; 2] = [
+    "/dns4/bootstrap1.oasis7.tech/tcp/5611",
+    "/dns4/bootstrap2.oasis7.tech/tcp/5612",
+];
+
+pub fn default_chain_replication_bootstrap_peers_csv() -> String {
+    DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS.join(",")
+}
+
+pub fn default_chain_replication_bootstrap_peers_vec() -> Vec<String> {
+    DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS
+        .iter()
+        .map(|peer| (*peer).to_string())
+        .collect()
+}
 
 pub fn parse_chain_replication_bootstrap_peer(raw: &str) -> Result<String, String> {
     let token = raw.trim();
@@ -29,7 +44,34 @@ pub fn parse_chain_replication_bootstrap_peers(raw: &str) -> Result<Vec<String>,
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_chain_replication_bootstrap_peer, parse_chain_replication_bootstrap_peers};
+    use super::{
+        default_chain_replication_bootstrap_peers_csv,
+        default_chain_replication_bootstrap_peers_vec, parse_chain_replication_bootstrap_peer,
+        parse_chain_replication_bootstrap_peers, DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
+    };
+
+    #[test]
+    fn default_chain_replication_bootstrap_peers_match_official_anchor_domains() {
+        assert_eq!(
+            DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
+            [
+                "/dns4/bootstrap1.oasis7.tech/tcp/5611",
+                "/dns4/bootstrap2.oasis7.tech/tcp/5612",
+            ]
+        );
+        assert_eq!(
+            default_chain_replication_bootstrap_peers_csv(),
+            "/dns4/bootstrap1.oasis7.tech/tcp/5611,/dns4/bootstrap2.oasis7.tech/tcp/5612"
+                .to_string()
+        );
+        assert_eq!(
+            default_chain_replication_bootstrap_peers_vec(),
+            vec![
+                "/dns4/bootstrap1.oasis7.tech/tcp/5611".to_string(),
+                "/dns4/bootstrap2.oasis7.tech/tcp/5612".to_string(),
+            ]
+        );
+    }
 
     #[test]
     fn parse_chain_replication_bootstrap_peer_accepts_valid_multiaddr() {

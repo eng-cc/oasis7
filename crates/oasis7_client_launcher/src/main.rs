@@ -17,6 +17,7 @@ use feedback_entry::FeedbackDraft;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 use llm_settings::LlmSettingsPanel;
+use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use platform_ops::open_browser;
 use platform_ops::resolve_static_dir_path;
 #[cfg(not(target_arch = "wasm32"))]
@@ -459,7 +460,7 @@ impl Default for LaunchConfig {
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
-            chain_replication_bootstrap_peers: String::new(),
+            chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_csv(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
             chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
             chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
