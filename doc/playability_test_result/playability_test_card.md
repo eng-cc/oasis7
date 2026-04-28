@@ -280,47 +280,47 @@
 
 ## 25. 本局最关键的玩家动作是什么？
 
-- 动作：
-- 发生步骤 / 时间点：
+- 动作（`player_action`）：
+- 发生步骤 / 时间点（`player_action_step_or_time`）：
 
 ---
 
 ## 26. 世界里有什么变化是因为这个动作发生的？
 
-- 变化内容：
-- 证据路径：
+- 变化内容（`world_change_due_to_player`）：
+- 证据路径（`evidence_path`）：
 
 ---
 
 ## 27. 因果可解释性（0/1）
 
-- [ ] 我能解释为什么会出现这次变化
+- [ ] 我能解释为什么会出现这次变化（`causal_explainable`）
 
 ---
 
 ## 28. 是否打开新决策（0/1）
 
-- [ ] 这次变化打开了新的可选策略 / 下一步
+- [ ] 这次变化打开了新的可选策略 / 下一步（`opened_decision`）
 
 ---
 
 ## 29. 是否形成继续玩的理由（0/1）
 
-- [ ] 正因为这条链路，我想继续玩下去
+- [ ] 正因为这条链路，我想继续玩下去（`return_hook`）
 
 ---
 
 ## 30. 玩家杠杆汇总
 
-- 玩家关键动作明确（0/1）：
-- 世界变化可归因到玩家（0/1）：
-- 玩家能解释结果（0/1）：
-- 结果打开新决策（0/1）：
-- 这条链路会促使继续玩（0/1）：
+- 玩家关键动作明确（`player_action_present`, 0/1）：
+- 世界变化可归因到玩家（`world_change_attributable_to_player`, 0/1）：
+- 玩家能解释结果（`causal_explainable`, 0/1）：
+- 结果打开新决策（`opened_decision`, 0/1）：
+- 这条链路会促使继续玩（`return_hook`, 0/1）：
 - `player_leverage_score`（0~5）：
-- `leverage verdict`：`pass` / `watch` / `block`
+- `leverage_verdict`：`pass` / `watch` / `block`
 - `world_activity_only`：`yes` / `no`
-- 备注：
+- 备注（`notes`）：
 
 # 附录
 下面内容是自动回填，非玩家填写

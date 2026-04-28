@@ -321,7 +321,7 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-23
+- 更新日期: 2026-04-28
 - 当前状态: active
 - 当前窗口摘要: `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。

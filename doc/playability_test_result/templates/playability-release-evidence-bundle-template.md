@@ -37,7 +37,7 @@
 | 总评 |  |  |
 
 ### 玩家杠杆摘要
-| 卡片 ID | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 玩家做了什么 | 世界因此变了什么 | 是否打开新决策 | 是否形成继续玩的理由 |
+| 卡片 ID | `player_leverage_score` | `leverage verdict` | `world_activity_only` | 玩家做了什么 (`player_action`) | 世界因此变了什么 (`world_change_due_to_player`) | 是否打开新决策 (`opened_decision`) | 是否形成继续玩的理由 (`return_hook`) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |  |  |
 
