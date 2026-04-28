@@ -1,0 +1,22 @@
+task_uid: task_eef97592fc6145628348e8897d54c411
+title: "software_safe primary entry diagnostics declutter"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-software-safe-primary-entry-diagnostics-declutter
+execution_log_path: .pm/tasks/task_eef97592fc6145628348e8897d54c411.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-039
+acceptance:
+  - "Move execution lane/auth/session diagnostics out of the software_safe primary entry default viewport into a collapsed diagnostics surface."
+  - "Split current blocker messaging from generic handoff messaging so empty-entity/runtime blockers are the dominant primary entry state."
+  - "When there is no selectable entity because the runtime snapshot is empty, the details panel shows recovery guidance instead of telling the user to select an agent."
+handoff_to: []
+updated_at: 2026-04-28T16:59:26+08:00
+last_started_at: 2026-04-28T16:41:48+08:00
+last_closed_at: 2026-04-28T16:59:26+08:00

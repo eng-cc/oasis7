@@ -203,6 +203,34 @@
         font-size: 12px;
         line-height: 1.5;
       }
+      .callout {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .callout--warn {
+        border-color: rgba(251, 191, 36, 0.42);
+        background: rgba(251, 191, 36, 0.08);
+      }
+      .callout__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .callout__title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .callout__body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
       .diagnostic {
         border-top: 1px dashed var(--border);
         padding-top: 10px;
@@ -247,6 +275,32 @@
         background: rgba(9, 17, 26, 0.98);
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
       }
+      .diagnostic-surface {
+        overflow: hidden;
+      }
+      .diagnostic-surface summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      .diagnostic-surface summary::-webkit-details-marker {
+        display: none;
+      }
+      .diagnostic-surface__summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .diagnostic-surface__title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .diagnostic-surface__meta {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
       .empty {
         color: var(--muted);
         border: 1px dashed var(--border);
@@ -268,6 +322,7 @@
       @media (max-width: 1240px) {
         .shell { grid-template-columns: 1fr; }
         .list, .event-list { max-height: none; }
+        .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
       }
     </style>
   </head>
