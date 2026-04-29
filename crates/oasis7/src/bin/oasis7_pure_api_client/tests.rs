@@ -1,5 +1,6 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
+use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
@@ -86,6 +87,8 @@ fn build_signed_gameplay_action_request_attaches_auth() {
 fn collect_until_reports_timeout_when_peer_stays_open() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let addr = listener.local_addr().expect("listener addr");
+    let (request_seen_tx, request_seen_rx) = mpsc::channel();
+    let (release_server_tx, release_server_rx) = mpsc::channel();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("accept client");
         let reader_stream = stream.try_clone().expect("clone reader stream");
@@ -108,24 +111,33 @@ fn collect_until_reports_timeout_when_peer_stays_open() {
         .expect("write hello");
         line.clear();
         reader.read_line(&mut line).expect("read request");
-        thread::sleep(Duration::from_millis(120));
+        request_seen_tx.send(()).expect("signal request observed");
+        release_server_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("wait for timeout assertion to finish");
     });
 
     let mut conn = ViewerConnection::connect(
         addr.to_string().as_str(),
         "timeout-test-client",
-        Duration::from_millis(80),
+        Duration::from_millis(50),
     )
     .expect("connect viewer");
     conn.send(&ViewerRequest::RequestSnapshot)
         .expect("request snapshot");
+    request_seen_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("server observed request");
     let err = conn
         .collect_until(
-            Duration::from_millis(80),
+            Duration::from_millis(50),
             terminal_snapshot,
             "waiting for snapshot response",
         )
         .expect_err("collect_until should time out");
     assert!(err.contains("timeout after"), "unexpected error: {err}");
+    release_server_tx
+        .send(())
+        .expect("release server after timeout assertion");
     server.join().expect("server join");
 }

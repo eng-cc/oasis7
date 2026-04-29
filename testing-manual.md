@@ -404,7 +404,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
 ./scripts/oasis7-pure-api-parity-smoke.sh --tier full --bundle-dir output/release/game-launcher-local --with-llm
 ```
   - 结果说明：
-    当前脚本已覆盖 `player_gameplay`、正式 `gameplay_action` 推进、`reconnect-sync --with-snapshot` 恢复，以及 `FirstSessionLoop -> PostOnboarding -> stabilize_first_line_after_output|choose_midloop_path` 的 required/full 收口路径。
+    当前脚本已覆盖 `player_gameplay`、正式 `gameplay_action` 推进、`reconnect-sync --with-snapshot` 恢复，以及 `FirstSessionLoop -> PostOnboarding -> establish_first_capability|stabilize_first_line_after_output|choose_midloop_path` 的 required/full 收口路径。
     `parity_verified` 当前以 `doc/testing/evidence/pure-api-shared-player-gameplay-parity-2026-04-28.md` 为准；旧 `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md` 只保留历史输入，不再作为 no-LLM 正式可玩性的现行依据。
 - 快速入口：
 ```bash

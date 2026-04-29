@@ -6,7 +6,7 @@
 审计轮次: 2
 ## 任务拆解（含 PRD-ID 映射）
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将 `software_safe` formal summary 中的 canonical `available_actions` 从只读状态卡恢复为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
-- [ ] shared-player-gameplay-contract-parity (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `runtime_engineer` 固定 `software_safe` / `pure_api` 共用 `snapshot.player_gameplay` 回答同一组玩家问题的 contract，补 active-LLM scope，并收口 pure API parity smoke / evidence 的现行口径。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
+- [x] shared-player-gameplay-contract-parity (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `runtime_engineer` 固定 `software_safe` / `pure_api` 共用 `snapshot.player_gameplay` 回答同一组玩家问题的 contract，补 active-LLM scope，并收口 pure API parity smoke / evidence 的现行口径。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
 - [x] software-safe-primary-entry-diagnostics-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 execution lane/auth/session 诊断收进折叠 diagnostics surface，把 blocker 与 handoff 拆开表达，并在空实体快照时为右栏 Details 提供恢复指引而不是继续提示“先选 Agent”。 Trace: .pm/tasks/task_eef97592fc6145628348e8897d54c411.yaml
 - [x] T0 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 完成“Viewer Web Software-Safe Mode”PRD / Design / Project 建模，并回写模块主文档、索引与 devlog。
 - [x] T1 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `oasis7_game_launcher` / Web 静态入口增加 bootstrap shell 与 `render_mode=standard|auto|software_safe` 选路契约。
