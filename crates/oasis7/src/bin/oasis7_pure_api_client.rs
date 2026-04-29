@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5023";
 const DEFAULT_CLIENT: &str = "oasis7_pure_api_client";
-const DEFAULT_TIMEOUT_MS: u64 = 3_000;
+const DEFAULT_TIMEOUT_MS: u64 = 20_000;
 
 #[path = "oasis7_pure_api_client/support.rs"]
 mod oasis7_pure_api_client_support;
@@ -447,6 +447,12 @@ struct ViewerConnection {
     hello_ack: Value,
 }
 
+enum ReadResponseOutcome {
+    Response(CollectedResponse),
+    TimedOut,
+    Closed,
+}
+
 impl ViewerConnection {
     fn connect(addr: &str, client: &str, timeout: Duration) -> Result<Self, String> {
         let stream =
@@ -509,13 +515,19 @@ impl ViewerConnection {
             if remaining.is_zero() {
                 return Err(format!("{timeout_context}: timeout after {timeout:?}"));
             }
-            let Some(response) = self.read_response(remaining)? else {
-                return Err(format!("{timeout_context}: connection closed"));
-            };
-            let terminal = is_terminal(&response.response) || is_terminal_error(&response.response);
-            responses.push(response);
-            if terminal {
-                return Ok(responses);
+            match self.read_response(remaining)? {
+                ReadResponseOutcome::Response(response) => {
+                    let terminal =
+                        is_terminal(&response.response) || is_terminal_error(&response.response);
+                    responses.push(response);
+                    if terminal {
+                        return Ok(responses);
+                    }
+                }
+                ReadResponseOutcome::TimedOut => {}
+                ReadResponseOutcome::Closed => {
+                    return Err(format!("{timeout_context}: connection closed"));
+                }
             }
         }
     }
@@ -529,26 +541,30 @@ impl ViewerConnection {
                 return Ok(responses);
             }
             match self.read_response(remaining)? {
-                Some(response) => responses.push(response),
-                None => return Ok(responses),
+                ReadResponseOutcome::Response(response) => responses.push(response),
+                ReadResponseOutcome::TimedOut => {}
+                ReadResponseOutcome::Closed => return Ok(responses),
             }
         }
     }
 
-    fn read_response(&mut self, timeout: Duration) -> Result<Option<CollectedResponse>, String> {
+    fn read_response(&mut self, timeout: Duration) -> Result<ReadResponseOutcome, String> {
         self.reader
             .get_mut()
             .set_read_timeout(Some(timeout))
             .map_err(|err| format!("set_read_timeout failed: {err}"))?;
         let mut line = String::new();
         match self.reader.read_line(&mut line) {
-            Ok(0) => Ok(None),
+            Ok(0) => Ok(ReadResponseOutcome::Closed),
             Ok(_) => {
                 let raw: Value = serde_json::from_str(line.trim_end())
                     .map_err(|err| format!("parse response json failed: {err}"))?;
                 let response: ViewerResponse = serde_json::from_value(raw.clone())
                     .map_err(|err| format!("decode response failed: {err}"))?;
-                Ok(Some(CollectedResponse { response, raw }))
+                Ok(ReadResponseOutcome::Response(CollectedResponse {
+                    response,
+                    raw,
+                }))
             }
             Err(err)
                 if matches!(
@@ -558,13 +574,14 @@ impl ViewerConnection {
                         | std::io::ErrorKind::Interrupted
                 ) =>
             {
-                Ok(None)
+                Ok(ReadResponseOutcome::TimedOut)
             }
             Err(err) => Err(format!("read response failed: {err}")),
         }
     }
 }
 
+#[derive(Debug)]
 struct CollectedResponse {
     response: ViewerResponse,
     raw: Value,

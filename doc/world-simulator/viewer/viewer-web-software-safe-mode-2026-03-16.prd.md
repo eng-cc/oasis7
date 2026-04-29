@@ -318,7 +318,8 @@
   - AC-19: 浏览器产品默认入口必须以 `software_safe` 为主，而不是依赖 `standard` 成为 formal gameplay 前置。
   - AC-20: `software_safe` 必须能承接浏览器主玩法闭环，同时显式区分“已暴露动作”和“需 handoff 的专门动作”。
   - AC-21: `standard` 必须被文档与测试口径收口为 visual QA / screenshot mode；其 PASS 不得替代 `software_safe` formal Web PASS。
-  - AC-22: `pure_api` 在 mode taxonomy 与项目任务规划中继续保持一等公民定位，使用场景明确为无 UI、自动化、长稳与集成。
+- AC-22: `pure_api` 在 mode taxonomy 与项目任务规划中继续保持一等公民定位，使用场景明确为无 UI、自动化、长稳与集成。
+- AC-22A: `software_safe` 与 `pure_api` 这两个 formal 玩家 surface 必须能从同一份 `snapshot.player_gameplay` 事实源回答同一组核心问题：`stage_id`（当前阶段）、`goal_title/objective`（当前目标）、`progress_detail/progress_percent`（进度）、`blocker_kind/blocker_detail`（当前阻塞）、`next_step_hint`（下一步建议），以及 `recent_feedback`/`branch_hint`（最近关键世界变化与分支抉择提示）。`pure_api` 的 `parity_verified` 只在 active LLM access 下有效；若以 no-LLM 运行，只能作为 blocked/observer-debug 诊断样本。
 
 ## 增量需求（2026-04-08 / provider readiness truth）
 - PRD-ID: `PRD-WORLD_SIMULATOR-039`
