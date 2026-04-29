@@ -1,0 +1,19 @@
+task_uid: task_ebf98fe337b44bd8b10e7574316dee67
+title: "Close issue 163 shared gameplay semantics parity across Web and pure API"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-gameplay-parity-shared-player-gameplay-contract
+execution_log_path: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/testing/evidence/pure-api-parity-validation-2026-03-19.md
+  - testing-manual.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-04-29T09:14:57+08:00
+last_started_at: 2026-04-28T21:40:37+08:00
+last_closed_at: 2026-04-29T09:14:57+08:00

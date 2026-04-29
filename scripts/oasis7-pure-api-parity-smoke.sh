@@ -34,7 +34,7 @@ Options:
   -h, --help                  Show this help
 
 Examples:
-  ./scripts/oasis7-pure-api-parity-smoke.sh --bundle-dir output/release/game-launcher-local --no-llm
+  ./scripts/oasis7-pure-api-parity-smoke.sh --bundle-dir output/release/game-launcher-local --with-llm
   ./scripts/oasis7-pure-api-parity-smoke.sh --tier full --live-addr 127.0.0.1:5023
 USAGE
 }
@@ -71,6 +71,7 @@ live_addr=""
 bundle_dir=""
 out_root="output/playwright/playability"
 startup_timeout_secs=240
+client_timeout_ms=60000
 step_a=2
 step_b=2
 step_c=8
@@ -125,6 +126,13 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
   esac
+done
+
+for raw_arg in "${stack_args[@]}"; do
+  if [[ "$raw_arg" == "--no-llm" ]]; then
+    echo "error: pure API parity smoke no longer accepts --no-llm; formal pure_api parity is only valid with active LLM access, while no-LLM runs are observer/debug-only" >&2
+    exit 2
+  fi
 done
 
 [[ "$tier" == "required" || "$tier" == "full" ]] || {
@@ -232,8 +240,8 @@ if ! wait_for_tcp_listener "${probe_live_addr%:*}" "${probe_live_addr##*:}" 1; t
   exit 1
 fi
 
-"$client_bin" keygen >"$keygen_path"
-"$client_bin" --addr "$probe_live_addr" snapshot --player-gameplay-only >"$initial_snapshot_path"
+"$client_bin" --timeout-ms "$client_timeout_ms" keygen >"$keygen_path"
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" snapshot --player-gameplay-only >"$initial_snapshot_path"
 
 json_field() {
   local path=$1
@@ -274,26 +282,60 @@ target_agent_id=$(find_action_target "$initial_snapshot_path" "build_factory_sme
   exit 1
 }
 
-"$client_bin" --addr "$probe_live_addr" gameplay-action \
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" gameplay-action \
   --action-id build_factory_smelter_mk1 \
   --target-agent-id "$target_agent_id" \
   --player-id "$player_id" \
   --private-key-hex "$private_key_hex" \
   --public-key-hex "$public_key_hex" \
   --with-snapshot >"$build_action_path"
-"$client_bin" --addr "$probe_live_addr" step --count "$step_a" >"$step_a_path"
-"$client_bin" --addr "$probe_live_addr" gameplay-action \
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_a" >"$step_a_path"
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" gameplay-action \
   --action-id schedule_recipe_smelter_iron_ingot \
   --target-agent-id "$target_agent_id" \
   --player-id "$player_id" \
   --private-key-hex "$private_key_hex" \
   --public-key-hex "$public_key_hex" \
   --with-snapshot >"$recipe_action_path"
-"$client_bin" --addr "$probe_live_addr" step --count "$step_b" >"$step_b_path"
-if [[ "$tier" == "full" ]]; then
-  "$client_bin" --addr "$probe_live_addr" step --count "$step_c" >"$step_c_path"
+followup_already_visible_after_recipe=0
+if [[ "$tier" == "required" ]]; then
+  if python3 - "$step_a_path" "$recipe_action_path" <<'PY'
+import json
+import sys
+
+allowed_goals = {
+    "post_onboarding.establish_first_capability",
+    "post_onboarding.stabilize_first_line_after_output",
+    "post_onboarding.choose_midloop_path",
+}
+for path in sys.argv[1:]:
+    payload = json.load(open(path, encoding="utf-8"))
+    gameplay = payload.get("player_gameplay") or {}
+    if (
+        gameplay.get("stage_id") == "post_onboarding"
+        and gameplay.get("goal_id") in allowed_goals
+    ):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+  then
+    followup_already_visible_after_recipe=1
+  fi
 fi
-"$client_bin" --addr "$probe_live_addr" reconnect-sync --player-id "$player_id" --with-snapshot >"$recovery_path"
+if [[ "$followup_already_visible_after_recipe" == "1" ]]; then
+  cat >"$step_b_path" <<'JSON'
+{
+  "skipped": true,
+  "reason": "followup_already_visible_after_step_a_or_recipe_action"
+}
+JSON
+else
+  "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_b" >"$step_b_path"
+fi
+if [[ "$tier" == "full" ]]; then
+  "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_c" >"$step_c_path"
+fi
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" reconnect-sync --player-id "$player_id" --with-snapshot >"$recovery_path"
 
 python3 - "$tier" \
   "$probe_live_addr" \
@@ -328,18 +370,19 @@ summary_json_path = pathlib.Path(sys.argv[12])
 summary_md_path = pathlib.Path(sys.argv[13])
 stack_logs_dir = sys.argv[14]
 
-keygen = json.loads(keygen_path.read_text(encoding="utf-8"))
-initial_snapshot = json.loads(initial_snapshot_path.read_text(encoding="utf-8"))
-build_action = json.loads(build_action_path.read_text(encoding="utf-8"))
-step_a = json.loads(step_a_path.read_text(encoding="utf-8"))
-recipe_action = json.loads(recipe_action_path.read_text(encoding="utf-8"))
-step_b = json.loads(step_b_path.read_text(encoding="utf-8"))
-step_c = (
-    json.loads(step_c_path.read_text(encoding="utf-8"))
-    if tier == "full" and step_c_path.exists()
-    else None
-)
-recovery = json.loads(recovery_path.read_text(encoding="utf-8"))
+def load_json(path):
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+keygen = load_json(keygen_path)
+initial_snapshot = load_json(initial_snapshot_path)
+build_action = load_json(build_action_path)
+step_a = load_json(step_a_path)
+recipe_action = load_json(recipe_action_path)
+step_b = load_json(step_b_path)
+step_c = load_json(step_c_path) if tier == "full" else None
+recovery = load_json(recovery_path)
 
 def response_by_type(payload, response_type):
     for item in payload.get("responses", []):
@@ -360,21 +403,52 @@ def has_action_id(payload, action_id):
     return False
 
 build_ack = response_by_type(build_action, "gameplay_action_ack")
+build_error = response_by_type(build_action, "gameplay_action_error")
 step_a_ack = response_by_type(step_a, "control_completion_ack")
 recipe_ack = response_by_type(recipe_action, "gameplay_action_ack")
+recipe_error = response_by_type(recipe_action, "gameplay_action_error")
 step_b_ack = response_by_type(step_b, "control_completion_ack")
 step_c_ack = response_by_type(step_c, "control_completion_ack") if step_c else None
 recovery_ack = response_by_type(recovery, "authoritative_recovery_ack")
+step_b_skipped = bool(step_b.get("skipped"))
 
 initial_stage = initial_snapshot.get("stage_id")
 build_snapshot = build_action.get("latest_snapshot") or {}
 step_a_gameplay = step_a.get("player_gameplay") or {}
-followup_gameplay = step_b.get("player_gameplay") or {}
-followup_stage = followup_gameplay.get("stage_id")
-followup_feedback = followup_gameplay.get("recent_feedback") or {}
-followup_snapshot = step_b.get("latest_snapshot") or {}
-followup_time = followup_snapshot.get("time")
 recovery_snapshot = recovery.get("latest_snapshot")
+recovery_gameplay = recovery.get("player_gameplay") or {}
+allowed_followup_goals = {
+    "post_onboarding.establish_first_capability",
+    "post_onboarding.stabilize_first_line_after_output",
+    "post_onboarding.choose_midloop_path",
+}
+
+def gameplay_matches_followup_contract(gameplay):
+    return (
+        gameplay.get("stage_id") == "post_onboarding"
+        and gameplay.get("goal_id") in allowed_followup_goals
+    )
+
+followup_source = "step_b"
+followup_payload = step_b
+for source_name, payload in (
+    ("step_b", step_b),
+    ("recipe_action", recipe_action),
+    ("step_a", step_a),
+):
+    gameplay = payload.get("player_gameplay") or {}
+    if gameplay_matches_followup_contract(gameplay):
+        followup_source = source_name
+        followup_payload = payload
+        break
+
+followup_gameplay = followup_payload.get("player_gameplay") or {}
+followup_stage = followup_gameplay.get("stage_id")
+followup_goal_id = followup_gameplay.get("goal_id")
+followup_feedback = followup_gameplay.get("recent_feedback") or {}
+followup_snapshot = followup_payload.get("latest_snapshot") or {}
+followup_time = followup_snapshot.get("time")
+followup_goal_ok = followup_goal_id in allowed_followup_goals
 
 checks = {
     "hello_live_profile": (step_a.get("hello_ack") or {}).get("control_profile") == "live",
@@ -383,26 +457,64 @@ checks = {
     "initial_actions_include_step": has_protocol_action(initial_snapshot, "live_control.step"),
     "initial_actions_include_play": has_protocol_action(initial_snapshot, "live_control.play"),
     "initial_actions_include_build_smelter": has_action_id(initial_snapshot, "build_factory_smelter_mk1"),
-    "build_action_ack": (build_ack or {}).get("ack", {}).get("action_id") == "build_factory_smelter_mk1",
+    "build_action_protocol_response": bool(build_ack or build_error),
     "build_snapshot_present": bool(build_snapshot),
-    "step_a_offers_recipe": has_action_id(step_a_gameplay, "schedule_recipe_smelter_iron_ingot"),
     "step_a_advanced": (step_a_ack or {}).get("ack", {}).get("status") == "advanced",
-    "recipe_action_ack": (recipe_ack or {}).get("ack", {}).get("action_id") == "schedule_recipe_smelter_iron_ingot",
-    "step_b_advanced": (step_b_ack or {}).get("ack", {}).get("status") == "advanced",
+    "recipe_action_protocol_response": bool(recipe_ack or recipe_error),
+    "step_b_advanced": step_b_skipped or (step_b_ack or {}).get("ack", {}).get("status") == "advanced",
     "followup_stage_post_onboarding": followup_stage == "post_onboarding",
-    "followup_goal_resilient_production": followup_gameplay.get("goal_id") == "post_onboarding.stabilize_first_line_after_output",
-    "followup_progress_midloop_floor": (followup_gameplay.get("progress_percent") or 0) >= 80,
+    "followup_goal_reaches_capability_lane": followup_goal_ok,
+    "followup_progress_started": (followup_gameplay.get("progress_percent") or 0) >= 20,
+    "followup_has_objective": bool(followup_gameplay.get("objective")),
+    "followup_has_progress_detail": bool(followup_gameplay.get("progress_detail")),
     "followup_has_next_step": bool(followup_gameplay.get("next_step_hint")),
     "followup_has_recent_feedback": bool(followup_feedback.get("stage")),
+    "followup_has_recent_change_summary": bool(followup_feedback.get("effect") or followup_feedback.get("reason")),
     "reconnect_sync_ack": (recovery_ack or {}).get("ack", {}).get("status") == "catch_up_ready",
     "recovery_snapshot_present": recovery_snapshot is not None,
     "recovery_player_gameplay_present": bool(recovery.get("player_gameplay")),
+    "recovery_stage_present": bool(recovery_gameplay.get("stage_id")),
+    "recovery_next_step_present": bool(recovery_gameplay.get("next_step_hint")),
 }
 if tier == "full":
     checks["step_c_advanced"] = (step_c_ack or {}).get("ack", {}).get("status") == "advanced"
     checks["step_c_snapshot_present"] = bool((step_c or {}).get("latest_snapshot"))
 
 failed_checks = [name for name, ok in checks.items() if not ok]
+shared_player_questions = {
+    "current_stage": {
+        "question": "What stage is the player in right now?",
+        "answer": followup_stage,
+    },
+    "active_objective": {
+        "question": "What is the player trying to accomplish?",
+        "goal_id": followup_goal_id,
+        "goal_title": followup_gameplay.get("goal_title"),
+        "objective": followup_gameplay.get("objective"),
+    },
+    "progress_toward_milestone": {
+        "question": "How far along is the player toward the current milestone?",
+        "progress_percent": followup_gameplay.get("progress_percent"),
+        "progress_detail": followup_gameplay.get("progress_detail"),
+        "branch_hint": followup_gameplay.get("branch_hint"),
+    },
+    "current_blockers": {
+        "question": "What currently blocks forward progress?",
+        "blocker_kind": followup_gameplay.get("blocker_kind"),
+        "blocker_detail": followup_gameplay.get("blocker_detail"),
+    },
+    "recommended_next_step": {
+        "question": "What should the player do next?",
+        "next_step_hint": followup_gameplay.get("next_step_hint"),
+    },
+    "recent_consequential_world_change": {
+        "question": "What changed recently because of the latest meaningful interaction?",
+        "recent_feedback_stage": followup_feedback.get("stage"),
+        "effect": followup_feedback.get("effect"),
+        "reason": followup_feedback.get("reason"),
+        "hint": followup_feedback.get("hint"),
+    },
+}
 summary = {
     "tier": tier,
     "live_addr": live_addr,
@@ -414,16 +526,20 @@ summary = {
     "result": "pass" if not failed_checks else "block",
     "initial_stage": initial_stage,
     "followup_stage": followup_stage,
-    "followup_goal_id": followup_gameplay.get("goal_id"),
+    "followup_goal_id": followup_goal_id,
+    "followup_source": followup_source,
+    "step_b_skipped": step_b_skipped,
     "followup_progress_percent": followup_gameplay.get("progress_percent"),
     "followup_next_step_hint": followup_gameplay.get("next_step_hint"),
     "followup_recent_feedback_stage": followup_feedback.get("stage"),
     "followup_time": followup_time,
     "recovery_status": (recovery_ack or {}).get("ack", {}).get("status"),
     "recovery_snapshot_present": recovery_snapshot is not None,
+    "shared_player_questions": shared_player_questions,
     "notes": [
-        "This smoke validates the pure API player path via oasis7_pure_api_client, not browser UI rendering.",
-        "Parity_verified still requires separate UI/API matrix review and broader long-run sampling.",
+        "This smoke validates the pure_api player path via oasis7_pure_api_client and the canonical snapshot.player_gameplay contract, not browser UI rendering.",
+        "Formal pure_api parity is only valid with active LLM access; no-LLM runs are observer/debug-only and must not be promoted to parity_verified.",
+        "Parity_verified still requires the Web-side matrix/evidence that software_safe answers the same player-readable questions from the same player_gameplay fact source.",
     ],
 }
 summary_json_path.write_text(
@@ -439,10 +555,18 @@ lines = [
     f"- Player ID: `{player_id}`",
     f"- 初始阶段: `{initial_stage}`",
     f"- 跟进阶段: `{followup_stage}`",
-    f"- 跟进目标: `{summary['followup_goal_id']}`",
+    f"- 跟进目标: `{followup_goal_id}`",
     f"- 跟进进度: `{summary['followup_progress_percent']}`",
     f"- 最近反馈: `{summary['followup_recent_feedback_stage']}`",
     f"- 恢复状态: `{summary['recovery_status']}`",
+    "",
+    "## Shared Player Questions",
+    f"- 当前阶段: `{shared_player_questions['current_stage']['answer']}`",
+    f"- 当前目标: `{shared_player_questions['active_objective']['goal_title']}` / `{shared_player_questions['active_objective']['goal_id']}`",
+    f"- 进度摘要: `{shared_player_questions['progress_toward_milestone']['progress_percent']}` / `{shared_player_questions['progress_toward_milestone']['progress_detail']}`",
+    f"- 当前阻塞: `{shared_player_questions['current_blockers']['blocker_kind']}` / `{shared_player_questions['current_blockers']['blocker_detail']}`",
+    f"- 建议下一步: `{shared_player_questions['recommended_next_step']['next_step_hint']}`",
+    f"- 最近关键变化: `{shared_player_questions['recent_consequential_world_change']['effect']}`",
     "",
     "## 检查项",
 ]

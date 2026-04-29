@@ -1,3 +1,8 @@
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
+use std::thread;
+use std::time::Duration;
+
 use super::*;
 
 fn fixed_private_key_hex(seed: u8) -> String {
@@ -75,4 +80,52 @@ fn build_signed_gameplay_action_request_attaches_auth() {
     assert_eq!(request.player_id, "player-1");
     assert!(request.public_key.is_some());
     assert!(request.auth.is_some());
+}
+
+#[test]
+fn collect_until_reports_timeout_when_peer_stays_open() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let addr = listener.local_addr().expect("listener addr");
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("accept client");
+        let reader_stream = stream.try_clone().expect("clone reader stream");
+        let writer_stream = stream.try_clone().expect("clone writer stream");
+        let mut reader = BufReader::new(reader_stream);
+        let mut writer = writer_stream;
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("read hello");
+        let hello = ViewerResponse::HelloAck {
+            server: "oasis7".to_string(),
+            version: VIEWER_PROTOCOL_VERSION,
+            world_id: "test-world".to_string(),
+            control_profile: oasis7::viewer::ViewerControlProfile::Live,
+        };
+        writeln!(
+            writer,
+            "{}",
+            serde_json::to_string(&hello).expect("serialize hello")
+        )
+        .expect("write hello");
+        line.clear();
+        reader.read_line(&mut line).expect("read request");
+        thread::sleep(Duration::from_millis(120));
+    });
+
+    let mut conn = ViewerConnection::connect(
+        addr.to_string().as_str(),
+        "timeout-test-client",
+        Duration::from_millis(80),
+    )
+    .expect("connect viewer");
+    conn.send(&ViewerRequest::RequestSnapshot)
+        .expect("request snapshot");
+    let err = conn
+        .collect_until(
+            Duration::from_millis(80),
+            terminal_snapshot,
+            "waiting for snapshot response",
+        )
+        .expect_err("collect_until should time out");
+    assert!(err.contains("timeout after"), "unexpected error: {err}");
+    server.join().expect("server join");
 }
