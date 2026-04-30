@@ -10,7 +10,7 @@ use crate::runtime::{
 use crate::simulator::{
     evaluate_provider_compatibility, Action as SimulatorAction, ActionCatalogEntry, ActionResult,
     AgentDecision, AgentDecisionTrace, AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
-    LlmAgentBehavior, OpenAiChatCompletionClient, ProviderBackedAgentBehavior,
+    LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderBackedAgentBehavior,
     ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
     WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot,
     CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
@@ -55,6 +55,8 @@ const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDER_PROFILE";
 const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
+const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
+const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
@@ -92,6 +94,16 @@ pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
     pub(in crate::viewer::runtime_live) error: Option<String>,
     checked_at_unix_ms: u64,
     cache_key: String,
+}
+
+fn resolve_runtime_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
+    let configured_timeout_ms = configured_timeout_ms.max(1);
+    let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|value| value.max(1))
+        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
 }
 
 enum RuntimeDecisionRunner {
@@ -735,8 +747,14 @@ impl RuntimeLlmSidecar {
                     if runner.get(agent_id.as_str()).is_some() {
                         continue;
                     }
-                    let mut behavior = LlmAgentBehavior::from_env(agent_id.clone())
-                        .map_err(|err| format!("llm init failed for {}: {err}", agent_id))?;
+                    let mut config = LlmAgentConfig::from_default_sources_for_agent(
+                        agent_id.as_str(),
+                    )
+                    .map_err(|err| format!("llm init failed for {}: {:?}", agent_id, err))?;
+                    config.timeout_ms = resolve_runtime_live_llm_timeout_ms(config.timeout_ms);
+                    let client = OpenAiChatCompletionClient::from_config(&config)
+                        .map_err(|err| format!("llm init failed for {}: {:?}", agent_id, err))?;
+                    let mut behavior = LlmAgentBehavior::new(agent_id.clone(), config, client);
                     if let Some(profile) = self.prompt_profiles.get(agent_id.as_str()) {
                         behavior.apply_prompt_overrides(
                             profile.system_prompt_override.clone(),
@@ -794,6 +812,12 @@ impl RuntimeLlmSidecar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn runtime_llm_timeout_env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn bind_agent_player_emits_unbind_before_rebind_for_same_agent() {
@@ -854,5 +878,22 @@ mod tests {
                 .map(String::as_str),
             Some("pubkey-b")
         );
+    }
+
+    #[test]
+    fn runtime_live_llm_timeout_defaults_to_trust_floor_budget() {
+        let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
+        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
+    }
+
+    #[test]
+    fn runtime_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
+        let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
+        std::env::set_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS, "9000");
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 9_000);
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(4_000), 4_000);
+        std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
     }
 }

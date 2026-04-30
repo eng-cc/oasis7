@@ -565,6 +565,60 @@ fn compat_snapshot_keeps_first_session_loop_after_bootstrap_tick_blocked_feedbac
 }
 
 #[test]
+fn compat_snapshot_blocks_first_session_when_chain_sync_is_unavailable() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
+        action: "chain_sync".to_string(),
+        stage: "blocked".to_string(),
+        effect: "committed runtime sync failed before the viewer could observe new world state"
+            .to_string(),
+        reason: Some(
+            "execution world is not ready; missing persistence file(s): snapshot.json, journal.json"
+                .to_string(),
+        ),
+        hint: Some(
+            "wait for the execution world persistence files to appear, or restart/repair the chain runtime bootstrap before refreshing gameplay"
+                .to_string(),
+        ),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    });
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert_eq!(
+        gameplay.stage_id,
+        crate::simulator::PlayerGameplayStageId::FirstSessionLoop
+    );
+    assert_eq!(
+        gameplay.stage_status,
+        crate::simulator::PlayerGameplayStageStatus::Blocked
+    );
+    assert_eq!(gameplay.goal_id, "first_session_loop.recover_runtime_sync");
+    assert_eq!(
+        gameplay.blocker_kind.as_deref(),
+        Some("execution_world_not_ready")
+    );
+    assert!(gameplay
+        .blocker_detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("execution world is not ready")));
+    assert!(gameplay
+        .available_actions
+        .iter()
+        .filter(|action| action.protocol_action != "request_snapshot")
+        .all(|action| action.disabled_reason.is_some()));
+}
+
+#[test]
 fn compat_snapshot_keeps_post_onboarding_blocked_after_confirmed_progress() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

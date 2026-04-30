@@ -254,6 +254,42 @@ impl ViewerRuntimeLiveServer {
         self.latest_player_gameplay_feedback = Some(feedback);
     }
 
+    fn record_chain_sync_failure(&mut self, error: &ViewerRuntimeLiveServerError) {
+        let reason = match error {
+            ViewerRuntimeLiveServerError::Serde(message) => message.clone(),
+            ViewerRuntimeLiveServerError::Runtime(err) => format!("{err:?}"),
+            ViewerRuntimeLiveServerError::Init(message) => message.clone(),
+            ViewerRuntimeLiveServerError::Io(err) => err.to_string(),
+        };
+        let hint = if reason.contains("execution world is not ready") {
+            "wait for the execution world persistence files to appear, or restart/repair the chain runtime bootstrap before refreshing gameplay"
+                .to_string()
+        } else {
+            "repair the chain runtime sync path, then refresh gameplay to confirm the committed world is available"
+                .to_string()
+        };
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+            action: "chain_sync".to_string(),
+            stage: "blocked".to_string(),
+            effect: "committed runtime sync failed before the viewer could observe new world state"
+                .to_string(),
+            reason: Some(reason),
+            hint: Some(hint),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        });
+    }
+
+    fn clear_chain_sync_failure_feedback(&mut self) {
+        if self
+            .latest_player_gameplay_feedback
+            .as_ref()
+            .is_some_and(|feedback| feedback.action == "chain_sync")
+        {
+            self.latest_player_gameplay_feedback = None;
+        }
+    }
+
     fn confirm_player_gameplay_progress(&mut self) {
         self.confirmed_player_gameplay_progress_time = Some(self.world.state().time);
     }
