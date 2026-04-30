@@ -383,6 +383,14 @@ fn chain_execution_world_dir(node_id: &str) -> String {
         .into_owned()
 }
 
+fn missing_execution_world_persistence_files(world_dir: &Path) -> Vec<PathBuf> {
+    ["snapshot.json", "journal.json"]
+        .into_iter()
+        .map(|name| world_dir.join(name))
+        .filter(|path| !path.exists())
+        .collect()
+}
+
 fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
     let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
     let mut args = vec![
@@ -603,8 +611,44 @@ fn wait_until_ready(
                 chain_status_host, chain_status_port, err
             )
         })?;
+        poll_startup_health(world_child, chain_child.as_deref_mut())?;
+        wait_for_chain_execution_world_ready(
+            Path::new(chain_execution_world_dir(options.chain_node_id.as_str()).as_str()),
+            Duration::from_secs(30),
+            world_child,
+            chain_child.as_deref_mut(),
+        )?;
     }
     Ok(())
+}
+
+fn wait_for_chain_execution_world_ready(
+    execution_world_dir: &Path,
+    timeout: Duration,
+    world_child: &mut Child,
+    mut chain_child: Option<&mut Child>,
+) -> Result<(), String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        poll_startup_health(world_child, chain_child.as_deref_mut())?;
+        let missing = missing_execution_world_persistence_files(execution_world_dir);
+        if missing.is_empty() {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            let missing_list = missing
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "execution world persistence did not become ready under {} before timeout; missing: {}",
+                execution_world_dir.display(),
+                missing_list
+            ));
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
 }
 
 fn monitor_world_chain_and_server(

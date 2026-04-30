@@ -12,7 +12,7 @@ use oasis7_node::{NodeCommittedActionBatchesHandle, NodeRuntime};
 use crate::geometry::space_distance_cm;
 use crate::simulator::{
     initialize_kernel, Action, ActionResult, ActionSubmitter, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, LlmAgentBehavior, LlmAgentBuildError,
+    AgentPromptProfile, AgentRunner, LlmAgentBehavior, LlmAgentBuildError, LlmAgentConfig,
     OpenAiChatCompletionClient, PromptUpdateOperation, ResourceKind, ResourceOwner, RunnerMetrics,
     WorldConfig, WorldEvent, WorldEventKind, WorldInitConfig, WorldInitError, WorldKernel,
     WorldScenario, WorldSnapshot,

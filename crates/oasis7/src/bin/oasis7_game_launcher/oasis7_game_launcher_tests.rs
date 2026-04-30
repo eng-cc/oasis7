@@ -10,7 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use super::{
     apply_viewer_live_env_overrides, build_game_url, build_oasis7_chain_runtime_args,
     build_oasis7_viewer_live_command, build_viewer_auth_bootstrap_script, content_type_for_path,
-    parse_host_port, parse_options, query_runtime_bound_players, resolve_static_asset_path,
+    missing_execution_world_persistence_files, parse_host_port, parse_options,
+    query_runtime_bound_players, resolve_static_asset_path,
     resolve_viewer_auth_bootstrap_for_embedded_server, resolve_viewer_auth_bootstrap_from_path,
     resolve_viewer_static_dir_with_override, sanitize_index_html_for_embedded_server,
     sanitize_relative_request_path, viewer_dev_dist_candidates, CliOptions, ViewerAuthBootstrap,
@@ -729,6 +730,26 @@ fn build_oasis7_chain_runtime_args_supports_all_storage_profiles() {
         assert!(args.contains(&"--storage-profile".to_string()));
         assert!(args.contains(&expected.to_string()));
     }
+}
+
+#[test]
+fn missing_execution_world_persistence_files_reports_snapshot_and_journal() {
+    let temp_dir = make_temp_dir("execution_world_missing");
+    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
+    assert_eq!(missing.len(), 2);
+    assert!(missing.iter().any(|path| path.ends_with("snapshot.json")));
+    assert!(missing.iter().any(|path| path.ends_with("journal.json")));
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn missing_execution_world_persistence_files_ignores_ready_world_dir() {
+    let temp_dir = make_temp_dir("execution_world_ready");
+    fs::write(temp_dir.join("snapshot.json"), "{}").expect("write snapshot");
+    fs::write(temp_dir.join("journal.json"), "{}").expect("write journal");
+    let missing = missing_execution_world_persistence_files(temp_dir.as_path());
+    assert!(missing.is_empty());
+    let _ = fs::remove_dir_all(temp_dir);
 }
 
 #[test]

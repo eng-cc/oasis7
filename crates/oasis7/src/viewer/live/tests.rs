@@ -7,7 +7,7 @@ use oasis7_node::{
 use std::io::{BufRead, BufReader, BufWriter};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -220,6 +220,28 @@ fn live_server_config_supports_llm_mode() {
 
     let script_config = llm_config.with_decision_mode(ViewerLiveDecisionMode::Script);
     assert_eq!(script_config.decision_mode, ViewerLiveDecisionMode::Script);
+}
+
+fn viewer_live_llm_timeout_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+#[test]
+fn viewer_live_llm_timeout_defaults_to_trust_floor_budget() {
+    let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
+    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
+    assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 30_000);
+    assert_eq!(resolve_viewer_live_llm_timeout_ms(8_000), 8_000);
+}
+
+#[test]
+fn viewer_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
+    let _guard = viewer_live_llm_timeout_env_lock().lock().expect("env lock");
+    std::env::set_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS", "9000");
+    assert_eq!(resolve_viewer_live_llm_timeout_ms(180_000), 9_000);
+    assert_eq!(resolve_viewer_live_llm_timeout_ms(4_000), 4_000);
+    std::env::remove_var("OASIS7_VIEWER_LIVE_LLM_TIMEOUT_MS");
 }
 
 #[test]

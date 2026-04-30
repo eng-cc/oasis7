@@ -40,6 +40,10 @@ struct ChainLinkedRuntimeDispatch {
     responses: Vec<ViewerResponse>,
 }
 
+fn session_requests_runtime_feedback(session: &RuntimeLiveSession) -> bool {
+    !session.subscribed.is_empty()
+}
+
 impl ViewerRuntimeLiveServer {
     pub(super) fn sync_chain_linked_runtime(
         &mut self,
@@ -56,7 +60,16 @@ impl ViewerRuntimeLiveServer {
             return Ok(false);
         };
 
-        let prepared = prepare_chain_linked_runtime_update(chain_status_bind)?;
+        let prepared = match prepare_chain_linked_runtime_update(chain_status_bind) {
+            Ok(prepared) => prepared,
+            Err(err) => {
+                if session_requests_runtime_feedback(session) {
+                    self.record_chain_sync_failure(&err);
+                }
+                return Err(err);
+            }
+        };
+        self.clear_chain_sync_failure_feedback();
         let dispatch = self.apply_chain_linked_runtime_update(prepared, session)?;
         for response in dispatch.responses {
             send_response(writer, &response)?;
@@ -83,9 +96,19 @@ impl ViewerRuntimeLiveServer {
             return Ok(false);
         };
 
-        let prepared = prepare_chain_linked_runtime_update(chain_status_bind.as_str())?;
+        let prepared = match prepare_chain_linked_runtime_update(chain_status_bind.as_str()) {
+            Ok(prepared) => prepared,
+            Err(err) => {
+                if session_requests_runtime_feedback(session) {
+                    let mut server = lock_shared_server(shared)?;
+                    server.record_chain_sync_failure(&err);
+                }
+                return Err(err);
+            }
+        };
         let dispatch = {
             let mut server = lock_shared_server(shared)?;
+            server.clear_chain_sync_failure_feedback();
             server.apply_chain_linked_runtime_update(prepared, session)?
         };
         for response in dispatch.responses {

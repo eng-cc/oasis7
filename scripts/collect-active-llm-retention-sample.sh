@@ -632,7 +632,7 @@ retention_progressed = (
     )
 )
 
-checks = {
+trust_gate_checks = {
     "connected": initial_state.get("connectionStatus") == "connected",
     "step8Advanced": step8_feedback.get("stage") == "completed_advanced",
     "selectedAgent": entry_state.get("selectedKind") == "agent" and bool(entry_state.get("selectedId")),
@@ -647,11 +647,18 @@ checks = {
     ),
     "noRuntimeError": not bool(final_state.get("lastError")),
     "playNotBlocked": pre_pause_feedback.get("stage") != "blocked",
+}
+first_capability_checks = {
     "retentionProgressed": retention_progressed,
 }
+trust_gate_result = "pass" if all(trust_gate_checks.values()) else "watch"
+first_capability_result = "pass" if all(first_capability_checks.values()) else "watch"
 
 summary = {
-    "result": "pass" if all(checks.values()) else "watch",
+    "result": trust_gate_result,
+    "resultScope": "trust_gate",
+    "trustGateResult": trust_gate_result,
+    "firstCapabilityResult": first_capability_result,
     "gameUrl": game_url,
     "stackLogsDir": stack_logs_dir or None,
     "artifacts": {
@@ -669,7 +676,8 @@ summary = {
         "consoleLog": str(console_log),
         "consoleErrorsLog": str(console_errors_log),
     },
-    "checks": checks,
+    "checks": trust_gate_checks,
+    "firstCapabilityChecks": first_capability_checks,
     "notes": {
         "renderer": browser_env.get("renderer"),
         "renderMode": (browser_env.get("state") or {}).get("renderMode"),
@@ -709,12 +717,21 @@ lines = [
     "# Active-LLM formal retention sample summary",
     "",
     f"- result: `{summary['result']}`",
+    f"- result scope: `{summary['resultScope']}`",
+    f"- trust gate result: `{summary['trustGateResult']}`",
+    f"- first capability result: `{summary['firstCapabilityResult']}`",
     f"- url: `{game_url}`",
     f"- stack logs: `{stack_logs_dir or 'n/a'}`",
     "",
-    "## Checks",
+    "## Trust Gate Checks",
 ]
-for key, value in checks.items():
+for key, value in trust_gate_checks.items():
+    lines.append(f"- {key}: `{value}`")
+lines.extend([
+    "",
+    "## First Capability Checks",
+])
+for key, value in first_capability_checks.items():
     lines.append(f"- {key}: `{value}`")
 lines.extend([
     "",

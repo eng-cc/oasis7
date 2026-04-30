@@ -22,6 +22,31 @@ fn blocked_control_hint(error_code: Option<&str>) -> String {
     }
 }
 
+fn first_session_runtime_sync_blocker(
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<(String, String, String)> {
+    let feedback = recent_feedback?;
+    if feedback.action != "chain_sync" {
+        return None;
+    }
+    if !matches!(feedback.stage.as_str(), "blocked" | "completed_no_progress") {
+        return None;
+    }
+    let detail = feedback.reason.clone().unwrap_or_else(|| {
+        "committed runtime sync did not expose a usable world snapshot".to_string()
+    });
+    let kind = if detail.contains("execution world is not ready") {
+        "execution_world_not_ready".to_string()
+    } else {
+        "runtime_sync_unavailable".to_string()
+    };
+    let hint = feedback.hint.clone().unwrap_or_else(|| {
+        "repair the runtime sync path, then refresh gameplay to confirm the committed world is available"
+            .to_string()
+    });
+    Some((kind, detail, hint))
+}
+
 pub(super) fn player_gameplay_feedback_from_control_ack(
     mode: &ViewerControl,
     ack: &ControlCompletionAck,
@@ -158,6 +183,47 @@ pub(super) fn build_player_gameplay_snapshot(
     let has_recovery_history =
         primary_factory.is_some_and(|factory| factory.production.last_resumed_at.is_some());
     let industry_stage = state.industry_progress.stage;
+
+    if !has_confirmed_world_progress
+        && !has_material_flow
+        && !has_factory_ready
+        && !has_recipe_running
+        && !has_first_output
+        && latest_blocker.is_none()
+    {
+        if let Some((blocker_kind, blocker_detail, next_step_hint)) =
+            first_session_runtime_sync_blocker(recent_feedback)
+        {
+            let disabled_reason =
+                "committed runtime sync is unavailable; refresh the snapshot or repair runtime bootstrap first"
+                    .to_string();
+            for action in &mut available_actions {
+                if action.protocol_action == "request_snapshot" {
+                    continue;
+                }
+                action.disabled_reason = Some(disabled_reason.clone());
+            }
+            return PlayerGameplaySnapshot {
+                stage_id: PlayerGameplayStageId::FirstSessionLoop,
+                stage_status: PlayerGameplayStageStatus::Blocked,
+                goal_id: "first_session_loop.recover_runtime_sync".to_string(),
+                goal_kind: PlayerGameplayGoalKind::CreateFirstWorldFeedback,
+                goal_title: "Recover committed runtime sync".to_string(),
+                objective: "Repair the committed runtime feed before retrying the first world-feedback loop.".to_string(),
+                progress_detail:
+                    "The first-session loop is blocked because the viewer cannot read a committed runtime world yet."
+                        .to_string(),
+                progress_percent: 0,
+                blocker_kind: Some(blocker_kind),
+                blocker_detail: Some(blocker_detail),
+                next_step_hint,
+                branch_hint: None,
+                available_actions,
+                recent_feedback: recent_feedback.cloned(),
+                agent_claim,
+            };
+        }
+    }
 
     if !has_confirmed_world_progress
         && !has_material_flow
