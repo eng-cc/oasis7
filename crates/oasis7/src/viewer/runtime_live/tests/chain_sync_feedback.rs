@@ -7,7 +7,7 @@ fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
-        ViewerLiveServerConfig::new(WorldScenario::Minimal)
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
@@ -53,7 +53,7 @@ fn chain_linked_runtime_missing_persistence_without_subscription_does_not_poison
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
-        ViewerLiveServerConfig::new(WorldScenario::Minimal)
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
