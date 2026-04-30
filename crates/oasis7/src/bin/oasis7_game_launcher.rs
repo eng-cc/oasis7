@@ -612,8 +612,9 @@ fn wait_until_ready(
             )
         })?;
         poll_startup_health(world_child, chain_child.as_deref_mut())?;
+        let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
         wait_for_chain_execution_world_ready(
-            Path::new(chain_execution_world_dir(options.chain_node_id.as_str()).as_str()),
+            Path::new(execution_world_dir.as_str()),
             Duration::from_secs(30),
             world_child,
             chain_child.as_deref_mut(),
