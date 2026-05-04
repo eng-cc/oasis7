@@ -35,6 +35,7 @@
 - [x] `runtime_engineer`：补齐工业里程碑所需的生产完成、停机、恢复状态与审计事件，确保结果可由状态与事件历史解释。
 - [x] `viewer_engineer`：把 `已接受 / 执行中 / 已产出 / 停机原因` 做成主界面显式反馈，优先覆盖首个制成品与工厂开工场景。
 - [x] `qa_engineer`：新增“首个制成品 / 停机恢复 / 首座工厂单元”playability 卡片与 `test_tier_required` 手动回归链路。
+- [x] issue-162-industrial-chain-legibility-closeout (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已将 `#162` 的 closeout trace 显式映射到 T4/T8 既有事实：工业状态、停机原因、恢复提示与首个工业里程碑已在 canonical player surface 上具备玩家可读反馈；该 closeout 不替代 active-LLM trust/capability gate 的独立结论。 Trace: .pm/tasks/task_4da3948c1c2c457c9529ee661e4af03d.yaml
 
 ### T5 PostOnboarding 阶段目标链（2026-03-18）
 - [x] 冻结 `FirstSessionLoop -> PostOnboarding -> MidLoop` 的阶段承接口径，并新增专题 PRD / design / project。
