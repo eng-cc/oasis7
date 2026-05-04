@@ -1,0 +1,24 @@
+task_uid: task_4da3948c1c2c457c9529ee661e4af03d
+title: "issue 162 industrial chain legibility closeout"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-issue-162-industrial-chain-legibility-closeout
+execution_log_path: .pm/tasks/task_4da3948c1c2c457c9529ee661e4af03d.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md
+doc_refs: []
+related_prd:
+  - PRD-GAME-001
+  - PRD-GAME-002
+  - PRD-GAME-012
+acceptance:
+  - "Issue #162 closeout cites canonical player-facing industrial status, blocker taxonomy, and repair guidance surfaces."
+  - "Project and execution log record why issue #162 is closed without overstating unresolved trust/capability blockers."
+  - "Doc governance checks pass for the trace-only closeout change."
+handoff_to: []
+updated_at: 2026-05-03T12:07:59+08:00
+last_started_at: 2026-05-03T12:07:59+08:00
