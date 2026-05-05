@@ -175,7 +175,7 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-15
+- 更新日期: 2026-05-04
 - 当前状态: in_progress
 - 下一任务: 由 `producer_system_designer` 基于本轮 trust-gate 复验，先拆出一轮专门解释 `step accepted -> queued` 且 `logicalTime/eventSeq` 不推进的 runtime/viewer 修复切片；只有在 active-LLM `software_safe` trust floor 再次通过后，才允许重新进入正式 trust sample，再决定是否恢复后续 capability gate 复验。
 - 已登记待排任务: 当前 2026-04-15 shared active-LLM rerun 已证明 trust gate 再次回退到更前置的 first-step blocker，因此 capability gate 暂停；在该 blocker 修复前，不得把 active-LLM trust/capability gate 对外表述为 `continue_playing`。
