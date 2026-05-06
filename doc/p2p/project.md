@@ -654,6 +654,8 @@
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
     - `crates/oasis7/src/bin/oasis7_chain_runtime/governance_registry.rs`
+    - `crates/oasis7/src/bin/oasis7_governance_registry_audit.rs`
+    - `crates/oasis7/src/runtime/tests/governance_validator_admission.rs`
     - `doc/p2p/prd.md`
     - `doc/p2p/project.md`
     - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
@@ -663,7 +665,8 @@
   - 验收命令 (`test_tier_required`):
     - `rg -n "approved_candidate|probation_ready|activation_epoch|formal validator admission|governance registry" doc/p2p/prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime governance_registry -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 governance_validator_admission -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 audit_report_ -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定，并将 replication 的 connection-gap 失败从 protocol 级短冷却继续推进到 peer-level transport cooldown；`unsupported` 与 `fetch_commit` 的 `ErrNotFound` 保持 protocol-scoped，同时把 protocol/transport cooldown 状态透出到 chain status 与 triad observability。后续已继续把 `oasis7_net` 生命周期事件面改成基于 peer/语义 key 的短窗去重，并在 `ConnectionEstablished` 后立即裁剪同一 peer 的冗余已建立连接，实测将 `sequencer_ecs` 的 `transport.connection_closed` 从四位数压回两位数、runtime CPU 从 `173.0%` 压到 `122.0%`。 Trace: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.yaml

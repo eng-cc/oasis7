@@ -33,6 +33,10 @@ impl World {
                 | Action::GrantMetaProgress { .. }
                 | Action::UpdateGameplayPolicy { .. }
                 | Action::UpdateRestrictedStarterClaimAdminRegistry { .. }
+                | Action::SubmitGovernanceValidatorAdmission { .. }
+                | Action::ApproveGovernanceValidatorAdmission { .. }
+                | Action::ActivateGovernanceValidatorAdmission { .. }
+                | Action::RevokeGovernanceValidatorAdmission { .. }
                 | Action::OpenEconomicContract { .. }
                 | Action::AcceptEconomicContract { .. }
                 | Action::SettleEconomicContract { .. }

@@ -50,8 +50,9 @@ use super::events::{ActionEnvelope, MaterialTransitPriority};
 use super::governance::{
     GovernanceExecutionPolicy, GovernanceFinalityEpochSnapshot, GovernanceFinalitySignerRegistry,
     GovernanceIdentityPenaltyMonitorStats, GovernanceIdentityPenaltyRecord,
-    GovernanceMainTokenControllerRegistry, Proposal,
+    GovernanceMainTokenControllerRegistry, GovernanceValidatorAdmissionRecord, Proposal,
 };
+use super::main_token::main_token_account_id_from_node_public_key;
 use super::manifest::Manifest;
 use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
@@ -324,6 +325,25 @@ impl World {
                     .or_insert(public_key_hex);
             }
         }
+        for record in state.governance_validator_admissions.values() {
+            if record.node_id.trim().is_empty()
+                || record.finality_signer_public_key.trim().is_empty()
+            {
+                continue;
+            }
+            state
+                .node_identity_bindings
+                .entry(record.node_id.clone())
+                .or_insert(record.finality_signer_public_key.clone());
+            state
+                .node_main_token_account_bindings
+                .entry(record.node_id.clone())
+                .or_insert_with(|| {
+                    main_token_account_id_from_node_public_key(
+                        record.finality_signer_public_key.as_str(),
+                    )
+                });
+        }
         #[cfg(any(test, feature = "test_tier_required", feature = "test_tier_full"))]
         state
             .node_identity_bindings
@@ -469,6 +489,12 @@ impl World {
 
     pub fn governance_finality_signer_registry(&self) -> Option<&GovernanceFinalitySignerRegistry> {
         self.state.governance_finality_signer_registry.as_ref()
+    }
+
+    pub fn governance_validator_admissions(
+        &self,
+    ) -> &BTreeMap<String, GovernanceValidatorAdmissionRecord> {
+        &self.state.governance_validator_admissions
     }
 
     pub fn governance_main_token_controller_registry(

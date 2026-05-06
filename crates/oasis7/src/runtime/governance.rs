@@ -262,6 +262,43 @@ pub struct GovernanceMainTokenControllerRegistry {
     pub controller_signer_policies: BTreeMap<String, GovernanceThresholdSignerPolicy>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GovernanceValidatorAdmissionStatus {
+    #[default]
+    Applied,
+    ApprovedCandidate,
+    ProbationReady,
+    Active,
+    Revoked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct GovernanceValidatorAdmissionRecord {
+    #[serde(default)]
+    pub candidate_id: String,
+    #[serde(default)]
+    pub node_id: String,
+    #[serde(default)]
+    pub finality_signer_public_key: String,
+    #[serde(default)]
+    pub operator_owner: String,
+    #[serde(default)]
+    pub public_manifest_hash: String,
+    #[serde(default)]
+    pub requested_at_epoch: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_at_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activation_epoch: Option<u64>,
+    #[serde(default)]
+    pub status: GovernanceValidatorAdmissionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revoked_at_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_reason: Option<String>,
+}
+
 /// Events related to governance actions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
@@ -349,6 +386,32 @@ pub enum GovernanceEvent {
         controller_account_id: String,
         previous_admin_account_ids: Vec<String>,
         next_admin_account_ids: Vec<String>,
+    },
+    ValidatorAdmissionSubmitted {
+        controller_account_id: String,
+        candidate_id: String,
+        node_id: String,
+        finality_signer_public_key: String,
+        operator_owner: String,
+        public_manifest_hash: String,
+        requested_at_epoch: u64,
+    },
+    ValidatorAdmissionApproved {
+        controller_account_id: String,
+        candidate_id: String,
+        approved_at_epoch: u64,
+    },
+    ValidatorAdmissionActivated {
+        controller_account_id: String,
+        candidate_id: String,
+        activation_epoch: u64,
+    },
+    ValidatorAdmissionRevoked {
+        controller_account_id: String,
+        candidate_id: String,
+        node_id: String,
+        revoked_at_epoch: u64,
+        reason: String,
     },
 }
 

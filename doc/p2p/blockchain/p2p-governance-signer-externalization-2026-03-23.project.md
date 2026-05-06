@@ -23,7 +23,7 @@
   - 默认 execution world `output/chain-runtime/viewer-live-node/reward-runtime-execution-world` 已导入 `governance.finality.v1` 与 8 个 controller slot 的 world-state registry；`chain runtime` 现在已支持在启动/恢复时优先读取该 world registry 来覆盖 validator membership / signer binding 与 controller signer policy，但这仍不等于 rotation / revocation / ceremony / QA gate 全部通过
   - finality signer 的 production signing material 仍由人工离线 custody 持有；runtime 不再把 local seed 视为 registry 存在时的真值，且默认 world 首轮真实 finality drill 已完成，但更大范围 rotation / revocation / ceremony / QA gate 仍未收口
   - controller signer policy 虽已支持由 execution world 注入 `NodeRuntime`，但真实 governance account / recipient binding、genesis ceremony 和最终 QA `pass` 仍未完成
-  - validator / finality signer 的 target admission workflow 虽已在本专题冻结，但 candidate registry、activation action、shared-network probation 和正式 operator runbook 仍待后续实现
+  - validator / finality signer 的 runtime admission 闭环现已落到 execution world：`WorldState` 持久化 `governance_validator_admissions`，runtime 提供 `submit/approve/activate/revoke` 治理动作，effective finality registry 会在 activation epoch 到期后自动把 `probation_ready` 候选并入正式 validator truth；剩余未收口的是更大范围 shared-network probation 证据、更多 controller/finality drill 变体，以及最终 ceremony / QA `pass`
 
 ## Transition Freeze Snapshot（public-only）
 - batch id: `oasis7-governance-batch-20260323-01`
@@ -41,9 +41,12 @@
 
 ## Execution Workstream Snapshot（2026-03-23）
 - [x] 在 `WorldState` 持久化 `governance_finality_signer_registry` 与 `governance_main_token_controller_registry`
+ - 已完成补充：`WorldState` 现已持久化 `governance_validator_admissions`
 - [x] `governance_effective_finality_epoch_snapshot` 在 registry 存在时优先使用 world-state signer truth，而不是 deterministic local seed fallback
 - 已完成补充：`oasis7_chain_runtime` 在 execution world 存在 `governance_finality_signer_registry` 时，会用该 world-state registry 覆盖 `NodePosConfig` 的 validator membership / signer binding，并让 replication remote writer allowlist 与 reward runtime node identity binding 继续跟随 effective config
 - [x] chain runtime 启动时可从 execution world 读取 controller signer policy，并覆盖 `NodeConfig.main_token_controller_binding`
+- 已完成补充：runtime 已新增 `Submit/Approve/Activate/RevokeGovernanceValidatorAdmission` 治理动作，并把 `apply -> approved_candidate -> probation_ready -> active -> revoked` 生命周期写入 world-state
+- 已完成补充：effective finality registry 会把 activation epoch 到期的 `probation_ready` 候选自动并入正式 validator truth；`oasis7_chain_runtime` 与 `oasis7_governance_registry_audit` 都已切到读取这份 effective registry
 - 已冻结 validator / finality signer 的准入目标流程：申请材料、审核角色、candidate/probation/active 状态机，以及“world-state registry 激活前不算正式 validator”的边界
 - [x] 新增 `oasis7_governance_registry_import`，可把 operator-local `public_manifest.json` 导入 execution world
 - [x] 新增 `oasis7_governance_registry_audit`，可直接读取 world-state registry，输出 slot threshold / signer count / tolerated failures / manifest match 审计结果
@@ -74,7 +77,7 @@
 2. `producer_system_designer` 判断当前 validator set 是否允许扩容或替换，并冻结预期 `activation_epoch` 窗口。
 3. `runtime_engineer` 校验 node identity 与 finality signer 没有混用，且 bootstrap / reachability / registry 结构符合当前网络架构。
 4. `qa_engineer` 在 candidate world、clone-world 或 shared network 对候选节点执行 registry import/audit、同步和 failover smoke。
-5. 通过后先进入 `approved_candidate` / `probation_ready`，只有到达 activation 条件时才写入 active `governance_finality_signer_registry`。
+5. 通过后先把 candidate 写入 execution world `governance_validator_admissions`，状态进入 `approved_candidate` / `probation_ready`；只有到达 activation 条件时，effective `governance_finality_signer_registry` 才会把该候选并入 active validator set。
 6. runtime 在启动/恢复时从 world-state registry 恢复生效后的 validator membership / signer binding；`--node-validator*` 不再充当正式 admission 机制。
 7. 退出路径统一走 rotation / revocation / failover，并在 world-state registry 留痕。
 
@@ -137,5 +140,5 @@
 ## 状态
 - 当前阶段: completed
 - 执行状态: in_progress
-- 下一步: 将真实 drill 从 `msig.foundation_ops.v1` 与当前 finality single-signer / failover / rejoin 样本继续扩到更多 controller slot，并把本次冻结的 validator / finality signer admission workflow 进一步落成 candidate registry、activation action、shared-network probation 与正式 operator runbook。
-- 最近更新: 2026-05-06（world-registry truth bootstrap + validator admission spec）
+- 下一步: 将真实 drill 从 `msig.foundation_ops.v1` 与当前 finality single-signer / failover / rejoin 样本继续扩到更多 controller slot，并补 shared-network probation 与更正式的 governance approval / operator evidence bundle。
+- 最近更新: 2026-05-06（world-registry truth bootstrap + validator admission runtime implementation）

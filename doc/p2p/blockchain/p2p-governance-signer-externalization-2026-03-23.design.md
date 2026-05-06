@@ -12,7 +12,7 @@
 ## 当前治理 signer 真值
 | Governance scope | 当前来源 | 当前问题 | 生产结论 |
 | --- | --- | --- | --- |
-| `finality signer` | execution world `governance_finality_signer_registry`（存在时）; 否则回退 `world/governance` deterministic local seed | runtime 真值入口已切到 world-state registry，但新增/移除 validator 仍缺正式准入/激活流程 | partial |
+| `finality signer` | execution world `governance_finality_signer_registry` + `governance_validator_admissions` 解析出的 effective registry（存在时）; 否则回退 `world/governance` deterministic local seed | runtime admission / activation 已可落到 world-state，但 shared-network probation 与治理证据链仍未完全闭环 | partial |
 | `controller signer` | execution world `governance_main_token_controller_registry`（存在时）; 否则回退 `NodeConfig.main_token_controller_binding.controller_signer_policies` | controller policy 真值也可由 world-state 恢复，但 appointment / freeze / ceremony 仍未闭环 | partial |
 
 ## 目标态
@@ -68,12 +68,13 @@
 2. `producer_system_designer` 冻结角色与容量策略，确认当前 validator set 是否允许扩容或替换。
 3. `runtime_engineer` 校验 signer key 与 node identity 没有混用，且 candidate 配置符合当前 reachability / bootstrap 架构。
 4. `qa_engineer` 在 candidate world、clone-world 或 shared network 上执行 reachability、同步、registry import/audit 与 failover smoke。
-5. 审核通过后，把 candidate 以非活跃形式记录到治理台账或后续 candidate registry；真正激活时再写入 `governance_finality_signer_registry` 并附带 activation epoch。
+5. 审核通过后，把 candidate 以非活跃形式写入 execution world `governance_validator_admissions`；真正激活时，由 `activation_epoch` 驱动 effective `governance_finality_signer_registry` 把该候选并入 active validator set。
 6. 到达 activation epoch 后，runtime 通过 world-state registry 恢复新的 validator membership / signer binding；`--node-validator*` 不能再作为正式准入动作。
 7. 若发生 compromise、失联或替换，则走 rotation / revocation / failover，同样通过 world-state registry 留痕并生效。
 
 ### 运行时影响
 - active validator set 的唯一长期真值是 execution world 里的 governance registry。
+- execution world 会额外持久化 `governance_validator_admissions`；runtime 以 `base governance_finality_signer_registry + due admissions - revoked admissions` 解析 effective finality registry。
 - local `NodePosConfig` 只负责 bootstrap、测试或显式运维覆盖，不负责长期成员变更。
 - 新节点即使已经拿到二进制与静态配置，只要 governance registry 未激活，也不能自称正式 validator。
 

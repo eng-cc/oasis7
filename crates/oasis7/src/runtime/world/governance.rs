@@ -13,6 +13,8 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "governance_internal.rs"]
 mod governance_internal;
+#[path = "governance_validator_admission.rs"]
+mod governance_validator_admission;
 
 const LOCAL_GOVERNANCE_FINALITY_SIGNERS: [(&str, &str); 2] = [
     (
@@ -130,6 +132,18 @@ impl World {
         Self::ecosystem_treasury_controller_account_id(registry, "restricted claim admin registry")
     }
 
+    pub(super) fn validator_admission_controller_account_id<'a>(
+        registry: &'a GovernanceMainTokenControllerRegistry,
+    ) -> Result<&'a str, WorldError> {
+        let controller_account_id = registry.genesis_controller_account_id.trim();
+        if controller_account_id.is_empty() {
+            return Err(WorldError::GovernancePolicyInvalid {
+                reason: "validator admission controller account_id cannot be empty".to_string(),
+            });
+        }
+        Ok(controller_account_id)
+    }
+
     // ---------------------------------------------------------------------
     // Manifest and governance
     // ---------------------------------------------------------------------
@@ -233,6 +247,14 @@ impl World {
         let registry = Self::validate_governance_main_token_controller_registry(registry)?;
         self.state.governance_main_token_controller_registry = Some(registry);
         Ok(())
+    }
+
+    pub fn resolve_governance_effective_finality_signer_registry(
+        &self,
+    ) -> Result<Option<GovernanceFinalitySignerRegistry>, WorldError> {
+        self.resolve_governance_effective_finality_signer_registry_from_admissions(
+            &self.state.governance_validator_admissions,
+        )
     }
 
     pub fn governance_effective_finality_epoch_snapshot(
