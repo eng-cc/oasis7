@@ -48,11 +48,11 @@ fn audit_filter_rule_decision_events() {
     let action_id = 42;
     let original_action = Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     };
     let override_action = Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     };
     let mut cost = ResourceDelta::default();
     cost.entries.insert(ResourceKind::Electricity, -3);
@@ -108,7 +108,7 @@ fn audit_log_export_writes_file() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 

@@ -9,7 +9,7 @@ fn schedule_recipe_accepts_smelter_recipe_on_smelter_factory() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-smelter".to_string(),
         name: "smelter-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -60,7 +60,7 @@ fn schedule_recipe_accepts_scale_out_recipe_on_smelter_factory() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-smelter".to_string(),
         name: "smelter-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -126,7 +126,7 @@ fn schedule_recipe_rejects_incompatible_factory_kind() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-factory".to_string(),
         name: "factory-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -181,7 +181,7 @@ fn collect_basic_action_sequence(kernel: &mut WorldKernel) -> Vec<WorldEventKind
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-seq".to_string(),
         name: "seq".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kinds.push(kernel.step().expect("register location").kind);
@@ -245,7 +245,7 @@ fn kernel_rule_hooks_run_in_registration_order() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-hook-order".to_string(),
         name: "hook-order".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.step().expect("step with hooks");
@@ -268,7 +268,7 @@ fn kernel_post_action_hook_receives_emitted_event() {
     let action = Action::RegisterLocation {
         location_id: "loc-hook-post".to_string(),
         name: "hook-post".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     };
     let submitted_action_id = kernel.submit_action(action.clone());

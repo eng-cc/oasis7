@@ -845,9 +845,9 @@ fn llm_agent_execute_until_continues_without_llm_until_event() {
         agent_id: "agent-new".to_string(),
         location_id: "loc-new".to_string(),
         pos: GeoPos {
-            x_cm: 5.0,
-            y_cm: 1.0,
-            z_cm: 0.0,
+            x_cm: 5,
+            y_cm: 1,
+            z_cm: 0,
         },
         distance_cm: 5,
     });

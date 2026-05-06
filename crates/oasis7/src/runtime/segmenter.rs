@@ -86,12 +86,12 @@ mod tests {
 
         world.submit_action(Action::RegisterAgent {
             agent_id: "agent-1".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
         world.step().expect("step world");
         world.submit_action(Action::MoveAgent {
             agent_id: "agent-1".to_string(),
-            to: crate::geometry::GeoPos::new(1.0, 1.0, 0.0),
+            to: crate::geometry::GeoPos::new(1, 1, 0),
         });
         world.step().expect("step world");
 

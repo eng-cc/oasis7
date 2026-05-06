@@ -72,7 +72,7 @@ fn record_body_attributes_updates_state() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -110,7 +110,7 @@ fn record_body_attributes_rejects() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -136,7 +136,7 @@ fn record_body_attributes_update_rejects_out_of_range() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -174,7 +174,7 @@ fn record_body_attributes_update_rejects_on_rate_violation() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -229,7 +229,7 @@ fn body_action_updates_view_and_costs_resources() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -267,7 +267,7 @@ fn body_action_rejects_when_insufficient_resources() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -306,7 +306,7 @@ fn body_update_replay_is_consistent() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -361,7 +361,7 @@ fn expand_body_interface_consumes_item_and_adds_slot() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -421,7 +421,7 @@ fn expand_body_interface_rejects_when_item_missing() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -476,7 +476,7 @@ fn expanded_body_state_persists_after_restore() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 

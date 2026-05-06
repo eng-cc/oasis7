@@ -30,7 +30,7 @@ fn init_accepts_module_visual_entities_with_all_anchor_types() {
             kind: "artifact".to_string(),
             label: None,
             anchor: ModuleVisualAnchor::Absolute {
-                pos: GeoPos::new(10.0, 10.0, 0.0),
+                pos: GeoPos::new(10, 10, 0),
             },
         },
     ];
@@ -84,7 +84,7 @@ fn init_rejects_module_visual_when_absolute_anchor_out_of_bounds() {
         kind: "artifact".to_string(),
         label: None,
         anchor: ModuleVisualAnchor::Absolute {
-            pos: GeoPos::new(101.0, 0.0, 0.0),
+            pos: GeoPos::new(101, 0, 0),
         },
     }];
 
@@ -104,7 +104,7 @@ fn kernel_supports_module_visual_entity_upsert_and_remove() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -175,7 +175,7 @@ fn replay_from_snapshot_applies_module_visual_upsert_event() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {

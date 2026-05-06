@@ -62,7 +62,7 @@ fn register_agents(world: &mut World, agent_ids: &[&str]) {
     for (index, agent_id) in agent_ids.iter().enumerate() {
         world.submit_action(Action::RegisterAgent {
             agent_id: (*agent_id).to_string(),
-            pos: pos(index as f64, 0.0),
+            pos: pos(index as i64, 0),
         });
     }
     world.step().expect("register agents");
@@ -720,7 +720,7 @@ fn governance_vote_rejects_voter_not_in_snapshot() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "late".to_string(),
-        pos: pos(3.0, 0.0),
+        pos: pos(3, 0),
     });
     world.step().expect("register late voter");
 

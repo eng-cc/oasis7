@@ -120,7 +120,7 @@ fn harvest_and_refine_follow_resource_ledger_without_free_gain() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "site".to_string(),
         name: "site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {

@@ -29,7 +29,7 @@ fn factory_spec(
 fn register_builder(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 }

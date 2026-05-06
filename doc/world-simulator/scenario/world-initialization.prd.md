@@ -90,11 +90,11 @@
 - `OriginLocationConfig`
   - `enabled: bool`
   - `location_id/name/profile`
-  - `pos: Option<GeoPos>`（空则取空间中心；兼容层仍为 `f64`，但进入世界状态前必须 canonicalize 到整厘米）
+  - `pos: Option<GeoPos>`（空则取空间中心；`GeoPos` 直接使用整数厘米）
   - `resources: ResourceStock`
 - `LocationSeedConfig`
   - `location_id/name/profile`
-  - `pos: Option<GeoPos>`（空则取空间中心；进入世界状态前必须 canonicalize 到整厘米）
+  - `pos: Option<GeoPos>`（空则取空间中心；`GeoPos` 直接使用整数厘米）
   - `resources: ResourceStock`
 - `AsteroidFragmentInitConfig`
   - `enabled: bool`
@@ -119,7 +119,7 @@
   - `WorldKernel.time = 0`
   - `journal` 为空（初始化视为“世界既成事实”）。
 - 生成过程使用 `WorldConfig` 的 `space/asteroid_fragment/power` 配置。
-- 任意初始化入口写入 `WorldModel` 前，位置坐标都必须先 canonicalize 到 `SPACE_UNIT_CM=1` 的整厘米网格，不得把 sub-cm 坐标持久化进世界状态。
+- 任意初始化入口写入 `WorldModel` 时，位置坐标都必须已经满足 `SPACE_UNIT_CM=1` 的整数厘米合同；不接受也不持久化 sub-cm 坐标。
 - 生成顺序：origin → custom locations → asteroid fragments → agents → facilities（确保依赖对象已存在）。
 - 场景模板通过 `WorldInitConfig::from_scenario(scenario, config)` 生成初始化配置。
 - 场景文件由 `WorldScenario` 加载并转换为 `WorldInitConfig`。

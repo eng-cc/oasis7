@@ -148,7 +148,7 @@ fn build_factory_with_module_request_exposes_available_inputs_by_ledger() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -236,7 +236,7 @@ fn schedule_recipe_with_module_request_exposes_available_inputs_by_ledger() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 

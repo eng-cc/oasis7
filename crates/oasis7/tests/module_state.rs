@@ -20,11 +20,11 @@ use oasis7_wasm_abi::ModuleCallErrorCode;
 #[cfg(feature = "test_tier_full")]
 use oasis7_wasm_executor::FixedSandbox;
 
-fn pos(x: f64, y: f64) -> GeoPos {
+fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,
         y_cm: y,
-        z_cm: 0.0,
+        z_cm: 0,
     }
 }
 
@@ -134,7 +134,7 @@ fn reducer_state_updates_and_is_reused() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 

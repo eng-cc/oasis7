@@ -224,7 +224,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     let mut wasm = sandbox();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut wasm)

@@ -7,18 +7,18 @@ fn register_and_move_agent() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 1.0),
+        to: pos(1, 1),
     });
     world.step().unwrap();
 
     let agent = world.state().agents.get("agent-1").unwrap();
-    assert_eq!(agent.state.pos, pos(1.0, 1.0));
+    assert_eq!(agent.state.pos, pos(1, 1));
     assert_eq!(world.journal().len(), 2);
 }
 
@@ -27,14 +27,14 @@ fn snapshot_and_replay() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
     let snapshot = world.snapshot();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(2.0, 2.0),
+        to: pos(2, 2),
     });
     world.step().unwrap();
 
@@ -48,7 +48,7 @@ fn rejects_invalid_actions() {
     let mut world = World::new();
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "missing".to_string(),
-        to: pos(1.0, 1.0),
+        to: pos(1, 1),
     });
     world.step().unwrap();
 
@@ -70,11 +70,11 @@ fn scheduler_round_robin() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     world.step().unwrap();
 
@@ -111,11 +111,11 @@ fn action_id_rolls_over_into_next_era() {
 
     let first_id = world.submit_action(Action::RegisterAgent {
         agent_id: "agent-max".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     let second_id = world.submit_action(Action::RegisterAgent {
         agent_id: "agent-wrap".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
 
     assert_eq!(first_id, u64::MAX);
@@ -136,14 +136,14 @@ fn event_id_rolls_over_into_next_era() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-max".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step 1");
     assert_eq!(world.journal().events.last().expect("event").id, u64::MAX);
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-wrap".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     world.step().expect("step 2");
     assert_eq!(world.journal().events.last().expect("event").id, 1);
@@ -173,11 +173,11 @@ fn emit_resource_transfer_overflow_keeps_balances_atomic() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "from".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "to".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agents");
     world
@@ -229,11 +229,11 @@ fn pending_actions_are_bounded_and_track_evictions() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-b".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     assert_eq!(world.pending_actions_len(), 1);
     assert_eq!(
@@ -256,7 +256,7 @@ fn journal_events_are_bounded_and_track_evictions() {
     for index in 0..3 {
         world.submit_action(Action::RegisterAgent {
             agent_id: format!("agent-{index}"),
-            pos: pos(index as f64, index as f64),
+            pos: pos(index as i64, index as i64),
         });
         world.step().expect("step");
     }
@@ -271,12 +271,12 @@ fn tick_consensus_records_chain_and_verify_across_steps() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step 1");
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 1.0),
+        to: pos(1, 1),
     });
     world.step().expect("step 2");
 
@@ -317,7 +317,7 @@ fn from_snapshot_replay_rebuilds_missing_tick_consensus_records() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step 1");
     let snapshot = world.snapshot();
@@ -325,7 +325,7 @@ fn from_snapshot_replay_rebuilds_missing_tick_consensus_records() {
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(2.0, 2.0),
+        to: pos(2, 2),
     });
     world.step().expect("step 2");
     let journal = world.journal().clone();
@@ -345,7 +345,7 @@ fn tick_consensus_rejects_non_authoritative_submission_after_authority_commit() 
         .expect("bind relay identity");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step");
 

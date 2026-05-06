@@ -48,7 +48,7 @@
 
 #### A1. 统一单位（强约束）
 - 渲染层固定 `1 world unit = 1 meter`。
-- 输入 `GeoPos` 虽仍以 `f64` 承载协议兼容，但世界状态真值要求坐标已 canonicalize 到整厘米；viewer 不得把 sub-cm 浮点残差当作额外语义。
+- 输入 `GeoPos` 直接使用整数厘米；viewer 不得把 sub-cm 浮点残差当作额外语义，也不得假设存在分数厘米输入。
 - 转换公式：
   - `pos_m = pos_cm / 100.0`
   - `radius_m = radius_cm / 100.0`

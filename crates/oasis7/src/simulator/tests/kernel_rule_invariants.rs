@@ -22,7 +22,7 @@ fn kernel_action_behavior_snapshot_stays_stable() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-a".to_string(),
         name: "origin".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: rich_profile,
     });
     kinds.push(event_kind_json(&kernel.step().expect("register loc-a")));
@@ -30,7 +30,7 @@ fn kernel_action_behavior_snapshot_stays_stable() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-b".to_string(),
         name: "target".to_string(),
-        pos: pos(100_000.0, 0.0),
+        pos: pos(100_000, 0),
         profile: LocationProfile::default(),
     });
     kinds.push(event_kind_json(&kernel.step().expect("register loc-b")));
@@ -136,7 +136,7 @@ fn kernel_action_behavior_snapshot_stays_stable() {
             "data": {
                 "location_id": "loc-a",
                 "name": "origin",
-                "pos": { "x_cm": 0.0, "y_cm": 0.0, "z_cm": 0.0 },
+                "pos": { "x_cm": 0, "y_cm": 0, "z_cm": 0 },
                 "profile": {
                     "material": "silicate",
                     "radius_cm": 100,
@@ -149,7 +149,7 @@ fn kernel_action_behavior_snapshot_stays_stable() {
             "data": {
                 "location_id": "loc-b",
                 "name": "target",
-                "pos": { "x_cm": 100000.0, "y_cm": 0.0, "z_cm": 0.0 },
+                "pos": { "x_cm": 100000, "y_cm": 0, "z_cm": 0 },
                 "profile": {
                     "material": "silicate",
                     "radius_cm": 100,
@@ -162,7 +162,7 @@ fn kernel_action_behavior_snapshot_stays_stable() {
             "data": {
                 "agent_id": "agent-1",
                 "location_id": "loc-a",
-                "pos": { "x_cm": 0.0, "y_cm": 0.0, "z_cm": 0.0 }
+                "pos": { "x_cm": 0, "y_cm": 0, "z_cm": 0 }
             }
         },
         {

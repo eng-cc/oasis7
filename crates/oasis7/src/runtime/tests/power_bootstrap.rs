@@ -276,7 +276,7 @@ fn radiation_module_emits_harvest_event() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -289,7 +289,7 @@ fn radiation_module_emits_harvest_event() {
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(100_000.0, 0.0),
+        to: pos(100_000, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -317,7 +317,7 @@ fn storage_module_blocks_continuous_move_when_power_runs_out() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -326,7 +326,7 @@ fn storage_module_blocks_continuous_move_when_power_runs_out() {
     for idx in 0..5 {
         world.submit_action(Action::MoveAgent {
             agent_id: "agent-1".to_string(),
-            to: pos((idx as f64 + 1.0) * 100_000.0, 0.0),
+            to: pos((idx as i64 + 1) * 100_000, 0),
         });
         world
             .step_with_modules(&mut sandbox)

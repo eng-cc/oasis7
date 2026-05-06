@@ -120,7 +120,7 @@ fn due_recipe_jobs_prioritize_survival_over_expansion() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -205,7 +205,7 @@ fn bottleneck_pressure_bumps_recipe_completion_priority() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -295,7 +295,7 @@ fn logistics_sla_metrics_and_priority_are_observable_after_transit_completion() 
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -359,7 +359,7 @@ fn due_transits_prioritize_urgent_before_standard_with_same_ready_at() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -423,7 +423,7 @@ fn due_transits_allow_explicit_priority_override_for_non_urgent_material() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -477,7 +477,7 @@ fn transfer_material_uses_profile_priority_and_loss_class() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -543,7 +543,7 @@ fn schedule_recipe_rejects_when_profile_stage_gate_exceeds_current_stage() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -602,7 +602,7 @@ fn schedule_recipe_rejects_when_product_unlock_stage_exceeds_current_stage() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -679,7 +679,7 @@ fn schedule_recipe_rejects_when_factory_tags_conflict_with_recipe_profile() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -738,7 +738,7 @@ fn schedule_recipe_uses_profile_bottleneck_tags_before_inference() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -808,7 +808,7 @@ fn due_recipe_jobs_prioritize_by_product_role_tag_before_keyword_fallback() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -911,7 +911,7 @@ fn schedule_recipe_applies_product_maintenance_sink_to_consume() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -1000,7 +1000,7 @@ fn recipe_started_market_quote_reflects_governance_tax_change() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -1108,7 +1108,7 @@ fn recipe_started_market_quote_uses_material_profile_transport_loss() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 

@@ -247,7 +247,7 @@ fn spacing_conflict(
     let dx = a_pos.x_cm - b_pos.x_cm;
     let dy = a_pos.y_cm - b_pos.y_cm;
     let dz = a_pos.z_cm - b_pos.z_cm;
-    let min_dist = (a_radius_cm.max(0) + b_radius_cm.max(0) + spacing_cm.max(0)) as f64;
+    let min_dist = a_radius_cm.max(0) + b_radius_cm.max(0) + spacing_cm.max(0);
     (dx * dx + dy * dy + dz * dz) < (min_dist * min_dist)
 }
 
@@ -272,9 +272,9 @@ fn neighboring_chunk_coords(coord: ChunkCoord) -> Vec<ChunkCoord> {
 
 fn chunk_local_space(bounds: ChunkBounds) -> SpaceConfig {
     SpaceConfig {
-        width_cm: (bounds.max.x_cm - bounds.min.x_cm).round().max(0.0) as i64,
-        depth_cm: (bounds.max.y_cm - bounds.min.y_cm).round().max(0.0) as i64,
-        height_cm: (bounds.max.z_cm - bounds.min.z_cm).round().max(0.0) as i64,
+        width_cm: (bounds.max.x_cm - bounds.min.x_cm).max(0),
+        depth_cm: (bounds.max.y_cm - bounds.min.y_cm).max(0),
+        height_cm: (bounds.max.z_cm - bounds.min.z_cm).max(0),
     }
 }
 

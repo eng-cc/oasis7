@@ -6,7 +6,7 @@ fn power_idle_consumption_depletes_agent() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -38,13 +38,13 @@ fn power_tick_dissipates_more_heat_when_hotter() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-low".to_string(),
         name: "low".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: low_profile,
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-high".to_string(),
         name: "high".to_string(),
-        pos: pos(10_000_000.0, 0.0),
+        pos: pos(10_000_000, 0),
         profile: high_profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -123,7 +123,7 @@ fn power_tick_thermal_dissipation_never_makes_heat_negative() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-hot".to_string(),
         name: "hot".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -156,13 +156,13 @@ fn power_shutdown_agent_cannot_move() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(0.0, 1.0),
+        pos: pos(0, 1),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -200,7 +200,7 @@ fn power_charge_recovers_agent() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -230,7 +230,7 @@ fn power_consume_for_decision() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -253,7 +253,7 @@ fn shutdown_agents_list() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -282,7 +282,7 @@ fn power_generation_creates_electricity() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "plant".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -330,7 +330,7 @@ fn build_radiation_power_factory_registers_plant_and_generates_to_owner() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "plant".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -381,13 +381,13 @@ fn power_buy_rejects_when_location_owner_involved() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "source".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "sink".to_string(),
-        pos: pos(0.0, CM_PER_KM as f64),
+        pos: pos(0, CM_PER_KM),
         profile: LocationProfile::default(),
     });
     kernel.step_until_empty();
@@ -417,7 +417,7 @@ fn power_buy_allows_between_colocated_agents() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -474,7 +474,7 @@ fn power_buy_zero_price_uses_dynamic_market_quote() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -537,7 +537,7 @@ fn power_buy_zero_price_equal_supply_keeps_base_price() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -597,7 +597,7 @@ fn power_buy_rejects_price_outside_market_band() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -647,7 +647,7 @@ fn power_transfer_rejects_when_location_owner_involved() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "source".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -691,7 +691,7 @@ fn place_power_order_matches_buy_and_sell_and_clears_book() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -777,7 +777,7 @@ fn power_order_keeps_open_when_quote_below_sell_limit() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -837,7 +837,7 @@ fn cancel_power_order_removes_open_order() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -898,7 +898,7 @@ fn power_order_match_prefers_lower_ask_price() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -992,7 +992,7 @@ fn power_order_match_prefers_earlier_order_at_same_price() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {

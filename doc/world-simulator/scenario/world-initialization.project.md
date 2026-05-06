@@ -46,6 +46,7 @@
 - [x] I31 增加 triad_p2p_bootstrap 场景（多节点单 Agent）与出生地点列表支持
 - [x] I32 文档更新：世界观调整为破碎小行星带
 - [x] space-unit-centimeter-enforcement (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 收口 1cm 空间最小单位契约：初始化/场景/碎片生成写入世界状态前统一 canonicalize 到整厘米，并补充 runtime/simulator 回归测试。 Trace: .pm/tasks/task_d7c44249a4aa42c6b2ec25415873ae7f.yaml
+- [x] space-unit-integer-centimeter-model (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 去除 `GeoPos` 浮点兼容层，直接以整数厘米作为空间主模型，并同步重写初始化/场景/碎片生成/移动与相关回归测试。 Trace: .pm/tasks/task_9d7ffaf28ce4455cbd78038c25e5a98d.yaml
 
 ## 依赖
 - doc/world-simulator/scenario/world-initialization.prd.md

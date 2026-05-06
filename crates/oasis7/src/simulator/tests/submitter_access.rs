@@ -8,7 +8,7 @@ fn player_submitter_cannot_submit_world_actions_directly() {
         Action::RegisterLocation {
             location_id: "loc-1".to_string(),
             name: "base".to_string(),
-            pos: pos(0.0, 0.0),
+            pos: pos(0, 0),
             profile: LocationProfile::default(),
         },
     );

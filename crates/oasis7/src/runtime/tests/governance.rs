@@ -84,7 +84,7 @@ fn build_finality_certificate_with_signers(
     certificate
 }
 
-fn register_agent(world: &mut World, agent_id: &str, x: f64, y: f64) {
+fn register_agent(world: &mut World, agent_id: &str, x: i64, y: i64) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),
         pos: pos(x, y),
@@ -900,7 +900,7 @@ fn governance_emergency_controls_reject_invalid_guardian_signatures() {
 #[test]
 fn governance_identity_penalty_freezes_and_slashes_profile() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 100, 0, GovernanceIdentityStatus::Active)
         .unwrap();
@@ -934,7 +934,7 @@ fn governance_identity_penalty_freezes_and_slashes_profile() {
 #[test]
 fn governance_identity_penalty_appeal_accept_restores_profile() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 50, 0, GovernanceIdentityStatus::Active)
         .unwrap();
@@ -975,7 +975,7 @@ fn governance_identity_penalty_appeal_accept_restores_profile() {
 #[test]
 fn governance_identity_penalty_appeal_respects_deadline() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 30, 0, GovernanceIdentityStatus::Active)
         .unwrap();
@@ -1003,7 +1003,7 @@ fn governance_identity_penalty_appeal_respects_deadline() {
 #[test]
 fn governance_identity_penalty_rejects_duplicate_incident_signature() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 80, 0, GovernanceIdentityStatus::Active)
         .unwrap();
@@ -1040,7 +1040,7 @@ fn governance_identity_penalty_rejects_duplicate_incident_signature() {
 #[test]
 fn governance_identity_penalty_evidence_chain_tracks_appeal_and_resolution() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 60, 0, GovernanceIdentityStatus::Active)
         .unwrap();
@@ -1089,7 +1089,7 @@ fn governance_identity_penalty_evidence_chain_tracks_appeal_and_resolution() {
 #[test]
 fn governance_identity_penalty_monitor_reports_false_positive_and_open_risk() {
     let mut world = World::new();
-    register_agent(&mut world, "agent-1", 0.0, 0.0);
+    register_agent(&mut world, "agent-1", 0, 0);
     world
         .set_governance_identity_profile("agent-1", 100, 0, GovernanceIdentityStatus::Active)
         .unwrap();

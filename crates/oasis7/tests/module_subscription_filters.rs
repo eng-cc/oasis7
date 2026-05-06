@@ -40,11 +40,11 @@ fn apply_module_changes(world: &mut World, changes: ModuleChangeSet) {
     world.apply_proposal(proposal_id).unwrap();
 }
 
-fn pos(x: f64, y: f64) -> GeoPos {
+fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,
         y_cm: y,
-        z_cm: 0.0,
+        z_cm: 0,
     }
 }
 
@@ -105,11 +105,11 @@ fn module_subscription_event_filters_by_agent_id() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-keep".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-skip".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
 
     let output = ModuleOutput {
@@ -191,11 +191,11 @@ fn module_subscription_action_filters_by_agent_id() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-keep".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-skip".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
 
     let output = ModuleOutput {
@@ -478,11 +478,11 @@ fn module_subscription_any_matches() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-keep".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-skip".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
 
     let output = ModuleOutput {
@@ -567,11 +567,11 @@ fn module_subscription_numeric_range_matches() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-in".to_string(),
-        pos: pos(5.0, 0.0),
+        pos: pos(5, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-out".to_string(),
-        pos: pos(-5.0, 0.0),
+        pos: pos(-5, 0),
     });
 
     let output = ModuleOutput {
@@ -655,11 +655,11 @@ fn module_subscription_regex_matches() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-123".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-x".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
 
     let output = ModuleOutput {

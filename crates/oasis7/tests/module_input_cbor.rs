@@ -16,11 +16,11 @@ use sha2::{Digest, Sha256};
 #[cfg(feature = "test_tier_full")]
 use oasis7::runtime::ActionEnvelope;
 
-fn pos(x: f64, y: f64) -> GeoPos {
+fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,
         y_cm: y,
-        z_cm: 0.0,
+        z_cm: 0,
     }
 }
 
@@ -131,7 +131,7 @@ fn module_route_encodes_event_input_as_cbor() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -205,7 +205,7 @@ fn module_route_encodes_action_input_as_cbor() {
         id: 1,
         action: Action::RegisterAgent {
             agent_id: "agent-1".to_string(),
-            pos: pos(0.0, 0.0),
+            pos: pos(0, 0),
         },
     };
     let config_hash = world.current_manifest_hash().unwrap();
@@ -278,7 +278,7 @@ fn module_route_pure_input_omits_state() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 

@@ -68,7 +68,7 @@ fn schedule_recipe_with_module_auto_validates_outputs_before_commit() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -179,7 +179,7 @@ fn schedule_recipe_with_module_blocks_commit_when_product_validation_fails() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -290,7 +290,7 @@ fn validate_product_with_module_uses_module_decision() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
     activate_pure_module(&mut world, "m4.product.logistics_drone", b"product-module");
@@ -355,7 +355,7 @@ fn validate_product_with_module_rejects_when_module_denies() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
     activate_pure_module(&mut world, "m4.product.logistics_drone", b"product-module");
@@ -408,7 +408,7 @@ fn schedule_recipe_marks_factory_blocked_and_resumes_after_inputs_recover() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -532,7 +532,7 @@ fn schedule_recipe_post_action_uses_primary_result_event_before_followup() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 

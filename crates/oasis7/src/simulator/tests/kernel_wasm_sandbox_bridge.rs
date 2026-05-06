@@ -9,7 +9,7 @@ fn register_location_action(location_id: &str) -> Action {
     Action::RegisterLocation {
         location_id: location_id.to_string(),
         name: format!("name-{location_id}"),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     }
 }

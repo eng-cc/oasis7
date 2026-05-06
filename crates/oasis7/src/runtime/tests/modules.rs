@@ -118,7 +118,7 @@ fn perf_route_module_subscriptions_with_many_active_manifests() {
         body: crate::runtime::WorldEventBody::Domain(
             crate::runtime::DomainEvent::AgentRegistered {
                 agent_id: "agent-perf".to_string(),
-                pos: pos(0.0, 0.0),
+                pos: pos(0, 0),
             },
         ),
     };
@@ -126,7 +126,7 @@ fn perf_route_module_subscriptions_with_many_active_manifests() {
         id: 1,
         action: crate::runtime::Action::RegisterAgent {
             agent_id: "agent-perf".to_string(),
-            pos: pos(0.0, 0.0),
+            pos: pos(0, 0),
         },
     };
 

@@ -31,7 +31,7 @@ fn observe_records_chunk_generated_event_with_observe_cause() {
         model.chunks.insert(coord, ChunkState::Unexplored);
     }
 
-    let location_pos = pos(100_000.0, 100_000.0);
+    let location_pos = pos(100_000, 100_000);
     model.locations.insert(
         "origin".to_string(),
         Location::new_with_profile(
@@ -105,9 +105,9 @@ fn action_chunk_generation_consumes_boundary_reservations() {
         location_id: "loc-left".to_string(),
         name: "left".to_string(),
         pos: GeoPos {
-            x_cm: 100_000.0,
-            y_cm: 1_000_000.0,
-            z_cm: 500_000.0,
+            x_cm: 100_000,
+            y_cm: 1_000_000,
+            z_cm: 500_000,
         },
         profile: LocationProfile::default(),
     });
@@ -117,9 +117,9 @@ fn action_chunk_generation_consumes_boundary_reservations() {
         location_id: "loc-right".to_string(),
         name: "right".to_string(),
         pos: GeoPos {
-            x_cm: 3_000_000.0,
-            y_cm: 1_000_000.0,
-            z_cm: 500_000.0,
+            x_cm: 3_000_000,
+            y_cm: 1_000_000,
+            z_cm: 500_000,
         },
         profile: LocationProfile::default(),
     });
@@ -192,9 +192,9 @@ fn step_replenishes_fragments_every_hundred_ticks_at_one_percent() {
             location_id: format!("tick-loc-{i}"),
             name: format!("tick-loc-{i}"),
             pos: GeoPos {
-                x_cm: 1000.0 + i as f64,
-                y_cm: 2000.0 + i as f64,
-                z_cm: 3000.0,
+                x_cm: 1000 + i as i64,
+                y_cm: 2000 + i as i64,
+                z_cm: 3000,
             },
             profile: LocationProfile::default(),
         });
@@ -232,8 +232,8 @@ fn kernel_closed_loop_example() {
         ..Default::default()
     };
     let mut kernel = WorldKernel::with_config(config);
-    let loc1_pos = pos(0.0, 0.0);
-    let loc2_pos = pos(2.0, 2.0);
+    let loc1_pos = pos(0, 0);
+    let loc2_pos = pos(2, 2);
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "plant".to_string(),
@@ -530,7 +530,7 @@ fn debug_grant_resource_adds_requested_amount_to_owner_stock() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-debug".to_string(),
         name: "debug".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -585,7 +585,7 @@ fn refine_compound_consumes_electricity_and_outputs_hardware() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-refine".to_string(),
         name: "refine".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -655,7 +655,7 @@ fn refine_compound_rejects_when_compound_insufficient() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-refine".to_string(),
         name: "refine".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -707,7 +707,7 @@ fn refine_compound_rejects_when_electricity_insufficient() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-refine".to_string(),
         name: "refine".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -762,7 +762,7 @@ fn build_factory_consumes_resources_and_persists_factory_state() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-factory".to_string(),
         name: "factory-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -855,7 +855,7 @@ fn schedule_recipe_consumes_inputs_and_outputs_data() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-factory".to_string(),
         name: "factory-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {

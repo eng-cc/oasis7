@@ -128,27 +128,27 @@ fn triad_release_sla_submit_to_apply_p95_under_60s() {
         &mut world,
         "publisher",
         GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
+            x_cm: 0,
+            y_cm: 0,
+            z_cm: 0,
         },
     );
     register_agent(
         &mut world,
         "approver-security",
         GeoPos {
-            x_cm: 10.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
+            x_cm: 10,
+            y_cm: 0,
+            z_cm: 0,
         },
     );
     register_agent(
         &mut world,
         "approver-economy",
         GeoPos {
-            x_cm: 20.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
+            x_cm: 20,
+            y_cm: 0,
+            z_cm: 0,
         },
     );
 

@@ -5,11 +5,11 @@ use crate::geometry::GeoPos;
 use crate::models::DEFAULT_AGENT_HEIGHT_CM;
 use std::fs;
 
-fn pos(x: f64, y: f64) -> GeoPos {
+fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,
         y_cm: y,
-        z_cm: 0.0,
+        z_cm: 0,
     }
 }
 

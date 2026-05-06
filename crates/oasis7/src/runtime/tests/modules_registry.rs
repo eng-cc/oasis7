@@ -721,13 +721,13 @@ fn step_with_modules_routes_post_action_rejection_event() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
     let deny_output = ModuleOutput {
         new_state: None,
@@ -769,7 +769,7 @@ fn step_with_modules_routes_post_action_rejection_event() {
     match observed_action.action {
         Action::MoveAgent { agent_id, to } => {
             assert_eq!(agent_id, "agent-1");
-            assert_eq!(to, pos(1.0, 0.0));
+            assert_eq!(to, pos(1, 0));
         }
         other => panic!("unexpected observed action: {other:?}"),
     }
@@ -792,6 +792,6 @@ fn step_with_modules_routes_post_action_rejection_event() {
     }
     assert_eq!(
         world.state().agents.get("agent-1").unwrap().state.pos,
-        pos(0.0, 0.0)
+        pos(0, 0)
     );
 }

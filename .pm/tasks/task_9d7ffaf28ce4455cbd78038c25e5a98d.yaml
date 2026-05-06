@@ -1,0 +1,20 @@
+task_uid: task_9d7ffaf28ce4455cbd78038c25e5a98d
+title: "Replace floating GeoPos with integer centimeter model"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-space-unit-integer-centimeter-model
+execution_log_path: .pm/tasks/task_9d7ffaf28ce4455cbd78038c25e5a98d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/scenario/world-initialization.prd.md
+  - doc/world-simulator/scenario/world-initialization.project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-002
+  - PRD-WORLD_SIMULATOR-003
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-06T14:33:48+08:00
+last_started_at: 2026-05-06T13:38:16+08:00
+last_closed_at: 2026-05-06T14:33:47+08:00

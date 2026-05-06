@@ -4,7 +4,7 @@ fn reward_asset_redeem_power_rejected_when_reserve_insufficient() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     let initial_electricity = world
@@ -67,7 +67,7 @@ fn reward_asset_redeem_power_rejects_below_min_redeem_unit() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
 
@@ -113,7 +113,7 @@ fn reward_asset_redeem_power_rejects_epoch_cap_exceeded() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
 
@@ -159,7 +159,7 @@ fn reward_asset_redeem_power_rejects_nonce_replay() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
 
@@ -222,7 +222,7 @@ fn reward_asset_snapshot_roundtrip_persists_redeem_nonce() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_reward_asset_config(RewardAssetConfig {

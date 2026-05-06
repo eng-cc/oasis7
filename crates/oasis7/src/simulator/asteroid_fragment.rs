@@ -154,12 +154,7 @@ fn try_place_fragment(
             config.size_powerlaw_q.max(1.0),
         );
         let radius_cm = radius_cm.round().max(1.0) as i64;
-        let pos = GeoPos {
-            x_cm: x,
-            y_cm: y,
-            z_cm: z,
-        }
-        .canonicalized();
+        let pos = GeoPos::new(x.round() as i64, y.round() as i64, z.round() as i64);
         if min_spacing_cm > 0.0 && !spacing_allows(&pos, radius_cm, placements, min_spacing_cm) {
             continue;
         }
@@ -271,7 +266,7 @@ fn spacing_allows(
         let dy = pos.y_cm - other_pos.y_cm;
         let dz = pos.z_cm - other_pos.z_cm;
         let min_dist = radius_cm + (*other_radius_cm as f64) + min_spacing_cm;
-        if (dx * dx + dy * dy + dz * dz) < (min_dist * min_dist) {
+        if ((dx * dx + dy * dy + dz * dz) as f64) < (min_dist * min_dist) {
             return false;
         }
     }

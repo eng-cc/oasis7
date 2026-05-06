@@ -172,7 +172,7 @@ fn default_sensor_module_emits_observation() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -200,7 +200,7 @@ fn default_mobility_module_rejects_zero_distance_move() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -208,7 +208,7 @@ fn default_mobility_module_rejects_zero_distance_move() {
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(0.0, 0.0),
+        to: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).expect("move step");
 
@@ -232,7 +232,7 @@ fn default_memory_module_records_domain_events() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -269,7 +269,7 @@ fn default_storage_cargo_module_tracks_expand_events() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -316,7 +316,7 @@ fn scenario_modules_limit_mobility_before_sensor_when_power_low() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -326,7 +326,7 @@ fn scenario_modules_limit_mobility_before_sensor_when_power_low() {
     for idx in 0..8 {
         world.submit_action(Action::MoveAgent {
             agent_id: "agent-1".to_string(),
-            to: pos((idx as f64 + 1.0) * 100_000.0, 0.0),
+            to: pos((idx as i64 + 1) * 100_000, 0),
         });
         world
             .step_with_modules(&mut sandbox)
@@ -367,7 +367,7 @@ fn scenario_modules_replay_keeps_state_consistent() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -419,14 +419,14 @@ fn scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
         .expect("register agent-1 step");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -482,7 +482,7 @@ fn scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent() {
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(100_000.0, 0.0),
+        to: pos(100_000, 0),
     });
     world.step_with_modules(&mut sandbox).expect("move step");
     match last_domain_event(&world).expect("move domain event") {
