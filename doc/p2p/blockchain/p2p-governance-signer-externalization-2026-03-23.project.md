@@ -10,6 +10,7 @@
 - [x] GOVSIGN-2 (PRD-P2P-GOVSIGN-002) [test_tier_required]: 冻结两类治理 signer 的长期 source-of-truth、update authority 与禁止项。
 - [x] GOVSIGN-3 (PRD-P2P-GOVSIGN-003) [test_tier_required]: 冻结 failover、rotation、revocation 与 operator ownership gate。
 - [x] GOVSIGN-4 (PRD-P2P-GOVSIGN-004) [test_tier_required]: 冻结 readiness/public-claims/ceremony 对 governance signer 的前置依赖。
+- [x] validator-finality-signer-admission-workflow (PRD-P2P-GOVSIGN-005) [test_tier_required]: 补齐 validator / finality signer 准入目标流程，冻结 `apply -> approved_candidate -> probation_ready -> active -> revoke/rotate` 生命周期，并明确 controller signer 仍为治理内部 appointment。 Trace: .pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.yaml
 
 ## 当前结论
 - 当前阶段:
@@ -22,6 +23,7 @@
   - 默认 execution world `output/chain-runtime/viewer-live-node/reward-runtime-execution-world` 已导入 `governance.finality.v1` 与 8 个 controller slot 的 world-state registry；`chain runtime` 现在已支持在启动/恢复时优先读取该 world registry 来覆盖 validator membership / signer binding 与 controller signer policy，但这仍不等于 rotation / revocation / ceremony / QA gate 全部通过
   - finality signer 的 production signing material 仍由人工离线 custody 持有；runtime 不再把 local seed 视为 registry 存在时的真值，且默认 world 首轮真实 finality drill 已完成，但更大范围 rotation / revocation / ceremony / QA gate 仍未收口
   - controller signer policy 虽已支持由 execution world 注入 `NodeRuntime`，但真实 governance account / recipient binding、genesis ceremony 和最终 QA `pass` 仍未完成
+  - validator / finality signer 的 target admission workflow 虽已在本专题冻结，但 candidate registry、activation action、shared-network probation 和正式 operator runbook 仍待后续实现
 
 ## Transition Freeze Snapshot（public-only）
 - batch id: `oasis7-governance-batch-20260323-01`
@@ -42,6 +44,7 @@
 - [x] `governance_effective_finality_epoch_snapshot` 在 registry 存在时优先使用 world-state signer truth，而不是 deterministic local seed fallback
 - 已完成补充：`oasis7_chain_runtime` 在 execution world 存在 `governance_finality_signer_registry` 时，会用该 world-state registry 覆盖 `NodePosConfig` 的 validator membership / signer binding，并让 replication remote writer allowlist 与 reward runtime node identity binding 继续跟随 effective config
 - [x] chain runtime 启动时可从 execution world 读取 controller signer policy，并覆盖 `NodeConfig.main_token_controller_binding`
+- 已冻结 validator / finality signer 的准入目标流程：申请材料、审核角色、candidate/probation/active 状态机，以及“world-state registry 激活前不算正式 validator”的边界
 - [x] 新增 `oasis7_governance_registry_import`，可把 operator-local `public_manifest.json` 导入 execution world
 - [x] 新增 `oasis7_governance_registry_audit`，可直接读取 world-state registry，输出 slot threshold / signer count / tolerated failures / manifest match 审计结果
 - [x] 已用真实 `public_manifest.json` 在临时 world 目录完成 smoke import，验证 3 个 finality signer + 8 个 controller slot 可落入 world-state registry
@@ -60,6 +63,20 @@
 - [x] 已补 finality baseline rejoin coverage：`signer02` temporary offline 后直接用 baseline manifest rejoin 回到 `ready_for_ops_drill`，证据见 `doc/testing/evidence/governance-registry-live-world-drill-finality-baseline-rejoin-signer02-2026-03-24.md`
 - [ ] 其余 controller slot / additional finality failover / rejoin 变体覆盖仍待继续扩展
 - [ ] genesis address binding / ceremony / QA pass 仍待后续 `MAINNET-3` 收口
+
+## Validator / Finality Signer Admission Target（Spec Gate）
+### 范围边界
+- 公开准入只面向 `validator operator + finality signer`。
+- `controller signer` 继续走治理内部 appointment，不从公开 validator 申请路径进入。
+
+### 目标流程
+1. 申请人提交 `node_id`、`finality_signer_public_key`、reachability 信息、`operator_owner` 和 public-only manifest。
+2. `producer_system_designer` 判断当前 validator set 是否允许扩容或替换，并冻结预期 `activation_epoch` 窗口。
+3. `runtime_engineer` 校验 node identity 与 finality signer 没有混用，且 bootstrap / reachability / registry 结构符合当前网络架构。
+4. `qa_engineer` 在 candidate world、clone-world 或 shared network 对候选节点执行 registry import/audit、同步和 failover smoke。
+5. 通过后先进入 `approved_candidate` / `probation_ready`，只有到达 activation 条件时才写入 active `governance_finality_signer_registry`。
+6. runtime 在启动/恢复时从 world-state registry 恢复生效后的 validator membership / signer binding；`--node-validator*` 不再充当正式 admission 机制。
+7. 退出路径统一走 rotation / revocation / failover，并在 world-state registry 留痕。
 
 ## Operator / QA Runbook（How-to）
 1. 先审计当前 world-state registry，确认所有治理 slot 都符合 manifest 声明的 threshold；若 manifest 未显式声明，则继续按默认 `2-of-3` 且具备单 signer 故障容忍：
@@ -105,7 +122,7 @@
 - `testing-manual.md`
 
 ## 验收命令（本轮）
-- `rg -n "deterministic local seed|controller_signer_policies|NodeConfig|externalized|failover|revocation" doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md doc/p2p/project.md`
+- `rg -n "deterministic local seed|controller_signer_policies|NodeConfig|externalized|failover|revocation|approved_candidate|probation_ready|activation_epoch|controller signer 仍为治理内部 appointment" doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md doc/p2p/project.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime governance_registry -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 world_registry_overrides_node_controller_binding -- --nocapture`
@@ -120,5 +137,5 @@
 ## 状态
 - 当前阶段: completed
 - 执行状态: in_progress
-- 下一步: 将真实 drill 从 `msig.foundation_ops.v1` 与当前 finality single-signer / failover / rejoin 样本继续扩到更多 controller slot；finality 侧下一步更适合转去 shared network / release train 或更复杂网络抖动场景，而不是继续堆同类单槽位样本。
-- 最近更新: 2026-03-24（finality baseline rejoin signer02）
+- 下一步: 将真实 drill 从 `msig.foundation_ops.v1` 与当前 finality single-signer / failover / rejoin 样本继续扩到更多 controller slot，并把本次冻结的 validator / finality signer admission workflow 进一步落成 candidate registry、activation action、shared-network probation 与正式 operator runbook。
+- 最近更新: 2026-05-06（world-registry truth bootstrap + validator admission spec）

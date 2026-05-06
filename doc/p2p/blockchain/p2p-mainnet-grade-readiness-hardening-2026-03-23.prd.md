@@ -33,7 +33,7 @@
 - Critical User Flows:
   1. Flow-P2P-MAINNET-001: `STRAUTH-3 收口 -> producer 复核剩余 blocker -> 拆成 readiness gate -> 进入主模块 project 跟踪`
   2. Flow-P2P-MAINNET-002: `runtime 设计生产 signer custody -> 定义 key source/storage/sign flow -> QA 对照 gate 决定 pass/block`
-  3. Flow-P2P-MAINNET-003: `治理 signer 从 local seed/config 迁出 -> 建立 rotation/revocation/failover 规则 -> 通过后才能进入创世 ceremony`
+  3. Flow-P2P-MAINNET-003: `治理 signer 从 local seed/config 迁出 -> 建立 validator/finality signer 准入/激活流程与 rotation/revocation/failover 规则 -> 通过后才能进入创世 ceremony`
   4. Flow-P2P-MAINNET-004: `冻结 genesis recipient/controller/signer sheet -> 执行 ceremony checklist -> QA 审核证据 -> producer 再做安全阶段重评估`
   5. Flow-P2P-MAINNET-005: `有人提出 mainnet-grade/public-chain-grade 口径 -> liveops 对照 readiness gate -> 任一未过即拒绝`
 - Functional Specification Matrix:
@@ -50,7 +50,7 @@
   - AC-2: 专题必须明确写出：`STRAUTH-3` 的完成只关闭了 signed transaction model 这一类 blocker，不代表 keystore、governance signer 与 genesis ceremony 已完成。
   - AC-3: 必须定义四个 readiness gate，并给出每个 gate 的 `owner/current_state/target_state/test_tier_required`。
   - AC-4: 必须明确生产级 signer custody 的最小完成定义至少包含 `external signer or managed keystore`、`rotation`、`revocation`、`audit trail` 四项。
-  - AC-5: 必须明确治理 finality signer 外部化的最小完成定义至少包含 `no deterministic local seed in production path`、`failover`、`rotation`、`revocation`。
+  - AC-5: 必须明确治理 finality signer 外部化的最小完成定义至少包含 `no deterministic local seed in production path`、`validator/finality signer admission + activation rule`、`failover`、`rotation`、`revocation`。
   - AC-6: 必须明确创世 freeze 真值表在 `recipient/controller/signer policy` 三列全部冻结前，不得进入 mint-ready 判定。
   - AC-7: 必须明确 signer ceremony 的 evidence bundle 至少包含 `public keys/account bindings/threshold policy/operator checklist/QA verdict`，不得记录私钥明文。
   - AC-8: 必须定义 public claims gate，并明确 `mainnet-grade`、`mainstream public-chain-grade security`、`production mint ready` 三类说法在当前阶段全部禁止。

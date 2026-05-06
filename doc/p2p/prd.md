@@ -50,6 +50,7 @@
   - SC-18: 当前链上代币的正式产品命名、runtime `main_token.symbol` / ticker 与公钥派生账户前缀已统一迁移到“绿洲币 / Oasis Coin” / `OC` / `oc:pk:`；对外 API、viewer/client、脚本与测试不得再把 `AWT` / `awt:pk:` 当作现行真值。
   - SC-19: 当前本机 + 2 ECS real-env triad 必须具备一条可审计的“三节点等权 validator”落地路径，明确 validator set、signer binding、static bootstrap、same-window snapshot evidence 与 residual legacy service naming 的边界；当 execution world 已存在 `governance_finality_signer_registry` 时，节点启动/恢复必须优先从该 world-state registry 恢复 validator membership 与 signer binding，而不是继续把 role-separated `observer + sequencer + storage` 或 operator-local env 当成唯一真值拓扑。
   - SC-20: `oasis7` 可以通过独立部署的 bridge-service，把已确认的 `OC` 充值映射为 `New API` 的内部 quota / redeem credit，同时冻结“只支持 one-way service-credit bridge，不是公开兑换所、不是 AMM、也不支持自动提现回 OC”的对外口径。
+  - SC-21: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；`--node-validator*` 与 operator-local env 只能作为 bootstrap 或显式运维覆盖。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -61,6 +62,7 @@
   - hosted world host / operator：需要把可公开分享的 join URL 与私有世界控制面拆开，避免分享试玩地址时连控制权一起暴露。
   - hosted world 远程玩家：需要通过网页先建立 session 再游玩，而不是直接继承 host 节点 signer。
   - 私网 / 家宽 / 企业内网节点运营者：需要在没有公网 IP 的前提下，仍能以正式角色加入网络、同步状态或通过 sentry/relay 参与主链。
+  - validator 候选运营者：需要明确提交什么材料、何时从候选转为 active validator，以及哪些 signer/控制权限并不对外开放。
 - User Scenarios & Frequency:
   - 协议演进评审：每次共识或网络协议改动前执行。
   - 多节点长跑：按周执行并记录稳定性与恢复结果。
@@ -116,7 +118,7 @@
   16. Flow-P2P-016: `operator 运行 triad 完整监控 -> snapshot/host/traffic/wasm 产物全部落盘 -> merged summary 输出 overall status + node-level alerts -> evidence doc 引用 canonical 输出路径`
   17. Flow-P2P-017: `STRAUTH-3 收口后复盘剩余安全缺口 -> 冻结 MAINNET-1~4 readiness gate -> signer custody/governance signer/genesis ceremony 逐项过门禁 -> producer 再决定是否重评阶段`
   18. Flow-P2P-018: `盘点 node/viewer/governance signer 来源 -> 冻结 preview-only bootstrap 与 production target backend 边界 -> rotation/revocation/audit policy 入门禁`
-  19. Flow-P2P-019: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> failover/rotation/revocation 进入治理门禁`
+  19. Flow-P2P-019: `盘点 finality/controller signer 真值 -> 冻结 externalized source-of-truth 与 operator ownership -> 候选 validator 提交 node identity/finality signer/public manifest -> candidate/probation 审核 -> activation 生效后再写入 world-state registry -> failover/rotation/revocation 进入治理门禁`
   20. Flow-P2P-020: `读取 genesis freeze sheet -> 绑定 slot/bucket 真值 -> 执行 ceremony checklist -> QA 审核 evidence bundle -> 决定是否允许 mint-ready 口径`
   21. Flow-P2P-021: `读取 MAINNET-1~3 当前状态 -> 判断哪些仅为 spec gate、哪些已 execution complete -> 冻结 claim allowlist/denylist 与未来升级条件`
   22. Flow-P2P-022: `读取 testing-manual 与安全/readiness 专题 -> 映射 oasis7 当前测试层 -> 对照主流公链 testing benchmark -> 冻结 gap matrix 与下一步验证优先级`
@@ -138,6 +140,7 @@
 | 密码学安全基线评估 | `primitive_status`、`transaction_auth_status`、`account_model_status`、`key_custody_status`、`governance_signer_status`、`genesis_control_status`、`overall_verdict` | 盘点代码/文档真值并输出 system-level verdict；若 blocker 未清零则拒绝高级安全口径 | `unknown -> inventoried -> verdict_frozen` | 只要资产动作缺统一签名交易模型，整体必须保持 `not_mainnet_grade` | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer` 联审 |
 | 主链 Token 签名交易鉴权 | `from_account_id/to_account_id/amount/nonce/public_key/signature` | runtime 先验签并校验 `oc:pk:` 账户绑定，再进入既有余额/nonce 预检与 consensus submit | `unsigned_surface -> transfer_signed_surface` | transfer submit 必须带固定版本签名；`from_account_id` 必须等于 `oc:pk:<public_key_hex>`；其他资产动作仍待后续专题 | `runtime_engineer` 牵头实现，`viewer_engineer`/`qa_engineer` 跟进客户端与回归 |
 | 主流公链测试体系对标 | `layer_id/current_coverage/evidence_paths/gap_status/next_action` | 将 oasis7 suites/evidence 对位到主流公链测试分层，并冻结缺口矩阵与执行优先级 | `draft -> mapped -> prioritized` | 若缺共享网络、真实 drill 证据或 fuzz/property gate，则不得宣称“主流公链级测试成熟度” | `producer_system_designer` 拍板，`qa_engineer` 联审 |
+| Validator / finality signer 治理准入 | `candidate_id/node_id/finality_signer_public_key/operator_owner/public_manifest/activation_epoch/admission_status` | 受理申请、审核 reachability/registry/failover 准入条件，并在 activation 生效后把候选节点写入正式 validator truth | `applied -> approved_candidate -> probation_ready -> active -> rotated/revoked` | 只有 world-state registry 生效后才算正式 validator；`--node-validator*` 与本地 env 改动不算长期 admission 完成态 | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer` 联审 |
 | Hosted world 玩家接入与 session auth | `deployment_mode/session_id/session_level/capability_set/control_plane_scope/strong_auth_state/admission_policy/player_safe_agent_surface` | 将网页远程玩家面、host 控制面与 signer plane 分层；签发 guest/player session，并对敏感动作要求 strong auth | `specified_not_implemented -> trusted_local_only -> hosted_ready` | 只要浏览器仍依赖 `node.private_key` bootstrap、可命中 host 控制面路由或未冻结 admission / `gui-agent` split，就不得判为 hosted-ready | `producer_system_designer` 拍板，`runtime_engineer`/`viewer_engineer`/`qa_engineer`/`liveops_community` 联审 |
 - 三线联合验收清单（TASK-P2P-002）:
 | 线别 | 必跑命令（基线） | 联合验收门禁 | 阻断条件（任一命中即 fail） | 证据产物 |
@@ -169,7 +172,7 @@
   - AC-21: `mainchain-token-signed-transaction-authorization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-033`；`POST /v1/chain/transfer/submit` 必须新增 `public_key/signature` 鉴权、绑定 `oc:pk:<public_key_hex>` 并完成 required 回归。
   - AC-22: `p2p-mainnet-grade-readiness-hardening-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-034`，明确当前阶段只可称为 `limited playable technical preview` + `crypto-hardened preview`，并冻结 `MAINNET-1~4` readiness gate。
   - AC-23: `p2p-production-signer-custody-keystore-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
-  - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 deterministic local seed 与 `NodeConfig` 本地 controller signer policy 只属于 preview/local truth，不得作为 production governance truth。
+  - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
   - AC-25: `p2p-genesis-freeze-ceremony-qa-gate-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
   - AC-26: `p2p-mainnet-public-claims-policy-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-038`，明确 `MAINNET-1~3` 当前仅完成 spec gate、整体 verdict 仍为 `not_mainnet_grade`，并冻结 allowlist/denylist 与 future upgrade conditions。
   - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `shared network/release train` 缺口，以及真实 governance drill 证据的当前优先级。
@@ -266,7 +269,7 @@
   - NFR-P2P-18: 公开 `transfer submit` 面不得存在无签名旁路；请求级鉴权必须在余额/nonce 预检之前完成，且 `oasis7_web_launcher` 代理结构与 runtime 保持同一字段集合。
   - NFR-P2P-19: 在 `MAINNET-1~4` readiness gate 全部通过前，公开口径最多只能使用 `limited playable technical preview` 与 `crypto-hardened preview`，不得升级到 `production mint ready`。
   - NFR-P2P-20: 生产 signer custody 未外部化前，任何本地 `config.toml`、HTML bootstrap 或长期 env 私钥路径都不得进入 production release allowlist。
-  - NFR-P2P-21: 生产 governance truth 未外部化前，任何 deterministic local seed 或单机 `NodeConfig` signer policy 路径都不得进入 production governance allowlist。
+  - NFR-P2P-21: 生产 governance truth 未外部化前，任何 deterministic local seed、单机 `NodeConfig` signer policy、手工 env 改动或 `--node-validator*` 参数注入都不得进入 production governance allowlist 或被视为正式 validator admission 完成态。
   - NFR-P2P-22: 在 genesis slot/bucket 真值、ceremony evidence bundle 与 QA `pass` 完成前，任何 `mint_ready` 或 `production mint ready` 口径都不得进入 public claims allowlist。
   - NFR-P2P-23: 在 `MAINNET-1~3` 仍停留于 spec gate 而 execution blockers 未清零时，任何高于 `crypto-hardened preview` 的 public claims 都必须被 denylist 拒绝。
   - NFR-P2P-24: 在 `shared_devnet/staging/canary` 仍未形成正式 shared-network evidence 前，任何 `release train established`、`shared network validated` 或“对标主流公链测试成熟度已完成”的表述都必须被 denylist 拒绝。
@@ -311,7 +314,7 @@
 | PRD-P2P-015 | TASK-P2P-033 | `test_tier_required` | 签名交易鉴权专题 PRD/project/design 建档、transfer submit 鉴权实现、control-plane schema 同步与定向回归 | 主链 Token 首个公开资产面签名化 |
 | PRD-P2P-016 | TASK-P2P-034 | `test_tier_required` | mainnet-grade readiness 硬化专题 PRD/project/design 建档、剩余 P1/P2 gate 冻结、模块入口映射与文档门禁 | signer custody、治理 signer、创世 ceremony 与 public claims gate |
 | PRD-P2P-017 | TASK-P2P-035 | `test_tier_required` | 生产级 signer custody / keystore 专题 PRD/project/design 建档、signer inventory、环境门禁与 readiness project 回写 | signer source boundary、rotation/revocation/audit 与 release policy |
-| PRD-P2P-018 | TASK-P2P-036 | `test_tier_required` | 治理 signer 外部化专题 PRD/project/design 建档、governance signer inventory、source-of-truth 门禁与 readiness project 回写 | governance truth、failover/rotation/revocation 与 operator ownership |
+| PRD-P2P-018 | TASK-P2P-036 | `test_tier_required` | 治理 signer 外部化专题 PRD/project/design 建档、governance signer inventory、source-of-truth 门禁、validator/finality signer admission target workflow 与 readiness project 回写 | governance truth、validator admission、failover/rotation/revocation 与 operator ownership |
 | PRD-P2P-019 | TASK-P2P-037 | `test_tier_required` + `test_tier_full` | 创世 freeze/ceremony/QA gate 专题 PRD/project/design 建档、freeze sheet blocker 冻结、QA evidence bundle 与 claim gate 回写 | mint readiness、创世执行与对外口径 |
 | PRD-P2P-020 | TASK-P2P-038 | `test_tier_required` | public claims policy 复评专题 PRD/project/design 建档、allowlist/denylist 冻结、future upgrade condition 与 readiness 完结回写 | 对外口径、阶段复评与后续升级条件 |
 | PRD-P2P-021 | TASK-P2P-039 | `test_tier_required` | 主流公链测试体系 benchmark 专题 PRD/project/design 建档、testing-manual 映射、gap matrix 与执行优先级冻结 | 测试成熟度口径、QA 证据体系与后续 hardening 排序 |

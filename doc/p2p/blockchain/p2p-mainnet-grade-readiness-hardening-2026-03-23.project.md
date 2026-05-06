@@ -22,7 +22,7 @@
   - genesis/treasury 已有 controller slot binding 与本地 signer allowlist / threshold enforcement。
 - 仍待完成:
   - 生产级 signer custody / keystore 的工程替换仍待后续 runtime 实施，当前只完成规格 gate。
-  - 治理 signer 外部化的 runtime 工程替换仍待后续实现，当前只完成规格 gate。
+  - 治理 signer 外部化的 runtime 工程替换仍待后续实现，当前只完成规格 gate；其中 validator / finality signer 的准入/激活流程已冻结目标态，但 candidate registry / activation action / probation runbook 仍未落地。
   - 创世 freeze/ceremony/QA 的真实地址、公钥、dry-run 与最终 QA `pass` 仍待后续执行，当前只完成规格 gate。
 
 ## 依赖
