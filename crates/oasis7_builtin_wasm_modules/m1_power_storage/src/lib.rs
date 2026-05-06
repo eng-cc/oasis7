@@ -3,8 +3,8 @@
 use oasis7_wasm_sdk::{
     export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        decode_action, decode_input, empty_output, encode_output, parse_json_geo_pos_cm, GeoPosCm,
+        ModuleCallInput, ModuleEffectIntent, ModuleEmit, ModuleOutput,
     },
     LifecycleStage, WasmModuleLifecycle,
 };
@@ -16,12 +16,7 @@ const MODULE_ID: &str = "m1.power.storage";
 const RULE_DECISION_EMIT_KIND: &str = "rule.decision";
 const CM_PER_KM: i64 = 100_000;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-struct GeoPos {
-    x_cm: f64,
-    y_cm: f64,
-    z_cm: f64,
-}
+type GeoPos = GeoPosCm;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct AgentPowerState {
@@ -61,17 +56,13 @@ fn action_envelope(input: &ModuleCallInput) -> Option<(u64, Value)> {
 }
 
 fn parse_geo_pos(value: &Value) -> Option<GeoPos> {
-    Some(GeoPos {
-        x_cm: value.get("x_cm")?.as_f64()?,
-        y_cm: value.get("y_cm")?.as_f64()?,
-        z_cm: value.get("z_cm")?.as_f64()?,
-    })
+    parse_json_geo_pos_cm(value)
 }
 
 fn space_distance_cm(a: GeoPos, b: GeoPos) -> i64 {
-    let dx_m = (a.x_cm - b.x_cm) / 100.0;
-    let dy_m = (a.y_cm - b.y_cm) / 100.0;
-    let dz_m = (a.z_cm - b.z_cm) / 100.0;
+    let dx_m = (a.x_cm - b.x_cm) as f64 / 100.0;
+    let dy_m = (a.y_cm - b.y_cm) as f64 / 100.0;
+    let dz_m = (a.z_cm - b.z_cm) as f64 / 100.0;
     ((dx_m * dx_m + dy_m * dy_m + dz_m * dz_m).sqrt() * 100.0)
         .round()
         .max(0.0) as i64
@@ -105,9 +96,12 @@ fn radiation_harvest_per_tick(pos: GeoPos) -> i64 {
     if 1 <= 0 {
         return 0;
     }
-    let axis_sum_cm = pos.x_cm.abs() + pos.y_cm.abs() + pos.z_cm.abs();
-    let step = 800_000.max(1) as f64;
-    let bonus = (axis_sum_cm / step).floor() as i64;
+    let axis_sum_cm = pos
+        .x_cm
+        .saturating_abs()
+        .saturating_add(pos.y_cm.saturating_abs())
+        .saturating_add(pos.z_cm.saturating_abs());
+    let bonus = axis_sum_cm / 800_000.max(1);
     let bounded_bonus = bonus.clamp(0, 1.max(0));
     1_i64.saturating_add(bounded_bonus)
 }
