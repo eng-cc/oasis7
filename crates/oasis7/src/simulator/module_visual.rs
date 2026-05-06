@@ -29,7 +29,7 @@ impl Default for ModuleVisualEntity {
             kind: "artifact".to_string(),
             label: None,
             anchor: ModuleVisualAnchor::Absolute {
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
             },
         }
     }

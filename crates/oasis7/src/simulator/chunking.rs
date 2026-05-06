@@ -50,9 +50,9 @@ pub fn chunk_coord_of(pos: GeoPos, space: &SpaceConfig) -> Option<ChunkCoord> {
         return None;
     }
 
-    let x = clamp_chunk_index((pos.x_cm / CHUNK_SIZE_X_CM as f64).floor() as i32, gx);
-    let y = clamp_chunk_index((pos.y_cm / CHUNK_SIZE_Y_CM as f64).floor() as i32, gy);
-    let z = clamp_chunk_index((pos.z_cm / CHUNK_SIZE_Z_CM as f64).floor() as i32, gz);
+    let x = clamp_chunk_index((pos.x_cm / CHUNK_SIZE_X_CM) as i32, gx);
+    let y = clamp_chunk_index((pos.y_cm / CHUNK_SIZE_Y_CM) as i32, gy);
+    let z = clamp_chunk_index((pos.z_cm / CHUNK_SIZE_Z_CM) as i32, gz);
     Some(ChunkCoord { x, y, z })
 }
 
@@ -67,21 +67,13 @@ pub fn chunk_bounds(coord: ChunkCoord, space: &SpaceConfig) -> Option<ChunkBound
     let min_y = coord.y as i64 * CHUNK_SIZE_Y_CM;
     let min_z = coord.z as i64 * CHUNK_SIZE_Z_CM;
 
-    let max_x = ((coord.x as i64 + 1) * CHUNK_SIZE_X_CM).min(space.width_cm) as f64;
-    let max_y = ((coord.y as i64 + 1) * CHUNK_SIZE_Y_CM).min(space.depth_cm) as f64;
-    let max_z = ((coord.z as i64 + 1) * CHUNK_SIZE_Z_CM).min(space.height_cm) as f64;
+    let max_x = ((coord.x as i64 + 1) * CHUNK_SIZE_X_CM).min(space.width_cm);
+    let max_y = ((coord.y as i64 + 1) * CHUNK_SIZE_Y_CM).min(space.depth_cm);
+    let max_z = ((coord.z as i64 + 1) * CHUNK_SIZE_Z_CM).min(space.height_cm);
 
     Some(ChunkBounds {
-        min: GeoPos {
-            x_cm: min_x as f64,
-            y_cm: min_y as f64,
-            z_cm: min_z as f64,
-        },
-        max: GeoPos {
-            x_cm: max_x,
-            y_cm: max_y,
-            z_cm: max_z,
-        },
+        min: GeoPos::new(min_x, min_y, min_z),
+        max: GeoPos::new(max_x, max_y, max_z),
     })
 }
 

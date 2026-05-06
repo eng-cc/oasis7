@@ -207,7 +207,7 @@ impl AgentState {
     pub fn new(agent_id: impl Into<String>, pos: GeoPos) -> Self {
         Self {
             agent_id: agent_id.into(),
-            pos: pos.canonicalized(),
+            pos,
             body: RobotBodySpec::default(),
             resources: ResourceStock::default(),
             body_view: BodyKernelView::default(),

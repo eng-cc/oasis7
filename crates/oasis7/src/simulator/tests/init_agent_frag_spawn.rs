@@ -28,8 +28,8 @@ fn fragment_spawn_positions_stand_off_above_surface() {
     let standoff_cm = center_distance_cm.saturating_sub(fragment.profile.radius_cm.max(1));
 
     assert!(agent.pos.z_cm > fragment.pos.z_cm);
-    assert!((agent.pos.x_cm - fragment.pos.x_cm).abs() < f64::EPSILON);
-    assert!((agent.pos.y_cm - fragment.pos.y_cm).abs() < f64::EPSILON);
+    assert_eq!(agent.pos.x_cm, fragment.pos.x_cm);
+    assert_eq!(agent.pos.y_cm, fragment.pos.y_cm);
     assert!(standoff_cm >= 2_000);
     assert!(standoff_cm <= 5_100);
     assert!(config.space.contains(agent.pos));

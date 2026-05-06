@@ -3,11 +3,11 @@ fn transfer_requires_rule_module() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -33,7 +33,7 @@ fn body_action_requires_body_module() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -67,13 +67,13 @@ fn rule_module_order_is_deterministic() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
 
     let mut outputs = BTreeMap::new();
@@ -121,22 +121,22 @@ fn rule_conflicting_overrides_rejects_action() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
 
     let override_a = Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(2.0, 0.0),
+        to: pos(2, 0),
     };
     let override_b = Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(3.0, 0.0),
+        to: pos(3, 0),
     };
 
     let mut outputs = BTreeMap::new();
@@ -182,18 +182,18 @@ fn rule_deny_overrides_modify() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
 
     let override_action = Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(2.0, 0.0),
+        to: pos(2, 0),
     };
 
     let mut outputs = BTreeMap::new();
@@ -237,18 +237,18 @@ fn rule_same_override_is_applied() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
 
     let override_action = Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(4.0, 0.0),
+        to: pos(4, 0),
     };
 
     let mut outputs = BTreeMap::new();
@@ -274,5 +274,5 @@ fn rule_same_override_is_applied() {
     world.step_with_modules(&mut sandbox).unwrap();
 
     let agent = world.state().agents.get("agent-1").unwrap();
-    assert_eq!(agent.state.pos, pos(4.0, 0.0));
+    assert_eq!(agent.state.pos, pos(4, 0));
 }

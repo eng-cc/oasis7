@@ -211,9 +211,9 @@ mod tests {
         Action::RegisterAgent {
             agent_id: "agent-1".to_string(),
             pos: GeoPos {
-                x_cm: 1.0,
-                y_cm: 2.0,
-                z_cm: 0.0,
+                x_cm: 1,
+                y_cm: 2,
+                z_cm: 0,
             },
         }
     }
@@ -349,7 +349,7 @@ mod tests {
     fn merge_conflicting_overrides() {
         let mut other = action();
         if let Action::RegisterAgent { ref mut pos, .. } = other {
-            pos.x_cm = 9.0;
+            pos.x_cm = 9;
         }
 
         let decisions = vec![

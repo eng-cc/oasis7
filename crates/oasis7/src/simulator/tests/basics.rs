@@ -37,7 +37,7 @@ fn resource_stock_add_rejects_overflow() {
 
 #[test]
 fn agent_and_location_defaults() {
-    let position = pos(0.0, 0.0);
+    let position = pos(0, 0);
     let location = Location::new("loc-1", "base", position);
     let agent = Agent::new("agent-1", "loc-1", position);
 

@@ -17,11 +17,11 @@ impl RuntimeLiveScript {
         if agent_ids.is_empty() {
             world.submit_action(RuntimeAction::RegisterAgent {
                 agent_id: "runtime-agent-0".to_string(),
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
             });
             world.submit_action(RuntimeAction::RegisterAgent {
                 agent_id: "runtime-agent-1".to_string(),
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
             });
             return;
         }
@@ -41,7 +41,7 @@ impl RuntimeLiveScript {
                 } else {
                     self.move_direction = -self.move_direction;
                 }
-                let delta_cm = (self.move_direction * 1_000) as f64;
+                let delta_cm = self.move_direction * 1_000;
                 world.submit_action(RuntimeAction::MoveAgent {
                     agent_id: first.clone(),
                     to: GeoPos::new(from_pos.x_cm + delta_cm, from_pos.y_cm, from_pos.z_cm),
@@ -51,7 +51,7 @@ impl RuntimeLiveScript {
                 if agent_ids.len() < 2 {
                     world.submit_action(RuntimeAction::MoveAgent {
                         agent_id: "missing-agent".to_string(),
-                        to: GeoPos::new(0.0, 0.0, 0.0),
+                        to: GeoPos::new(0, 0, 0),
                     });
                     return;
                 }
@@ -70,7 +70,7 @@ impl RuntimeLiveScript {
                 if agent_ids.len() < 2 {
                     world.submit_action(RuntimeAction::MoveAgent {
                         agent_id: "missing-agent".to_string(),
-                        to: GeoPos::new(0.0, 0.0, 0.0),
+                        to: GeoPos::new(0, 0, 0),
                     });
                     return;
                 }
@@ -88,7 +88,7 @@ impl RuntimeLiveScript {
             _ => {
                 world.submit_action(RuntimeAction::MoveAgent {
                     agent_id: "missing-agent".to_string(),
-                    to: GeoPos::new(0.0, 0.0, 0.0),
+                    to: GeoPos::new(0, 0, 0),
                 });
             }
         }
@@ -200,18 +200,8 @@ pub(super) fn bootstrap_runtime_world(
     seed_agents.sort_by(|left, right| left.0.cmp(&right.0));
 
     if seed_agents.is_empty() {
-        seed_agents.push((
-            "runtime-agent-0".to_string(),
-            GeoPos::new(0.0, 0.0, 0.0),
-            32,
-            8,
-        ));
-        seed_agents.push((
-            "runtime-agent-1".to_string(),
-            GeoPos::new(0.0, 0.0, 0.0),
-            32,
-            8,
-        ));
+        seed_agents.push(("runtime-agent-0".to_string(), GeoPos::new(0, 0, 0), 32, 8));
+        seed_agents.push(("runtime-agent-1".to_string(), GeoPos::new(0, 0, 0), 32, 8));
     }
 
     for (agent_id, pos, _, _) in &seed_agents {

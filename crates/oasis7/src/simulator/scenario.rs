@@ -309,14 +309,7 @@ impl ScenarioLocationGeneratorConfig {
             out.push(LocationSeedConfig {
                 location_id: format!("{}{}", self.id_prefix, index),
                 name: format!("{} {}", self.name_prefix, index),
-                pos: Some(
-                    GeoPos {
-                        x_cm: x,
-                        y_cm: y,
-                        z_cm: z,
-                    }
-                    .canonicalized(),
-                ),
+                pos: Some(GeoPos::new(x, y, z)),
                 profile: LocationProfile::default(),
                 resources: ResourceStock::default(),
             });
@@ -325,12 +318,12 @@ impl ScenarioLocationGeneratorConfig {
     }
 }
 
-fn coord_from_hash(hash: u64, max_cm: i64) -> f64 {
+fn coord_from_hash(hash: u64, max_cm: i64) -> i64 {
     if max_cm <= 0 {
-        return 0.0;
+        return 0;
     }
     let ratio = (hash as f64) / (u64::MAX as f64);
-    (ratio * max_cm as f64).clamp(0.0, max_cm as f64)
+    (ratio * max_cm as f64).round().clamp(0.0, max_cm as f64) as i64
 }
 
 fn splitmix64(mut x: u64) -> u64 {
@@ -352,9 +345,9 @@ pub enum ScenarioPos {
         dz_pct: f64,
     },
     Absolute {
-        x_cm: f64,
-        y_cm: f64,
-        z_cm: f64,
+        x_cm: i64,
+        y_cm: i64,
+        z_cm: i64,
     },
 }
 
@@ -368,36 +361,31 @@ impl ScenarioPos {
                 dz_pct,
             } => {
                 let center = center_pos(space);
-                GeoPos {
-                    x_cm: center.x_cm + offset_component(space.width_cm, dx_pct),
-                    y_cm: center.y_cm + offset_component(space.depth_cm, dy_pct),
-                    z_cm: center.z_cm + offset_component(space.height_cm, dz_pct),
-                }
-                .canonicalized()
+                GeoPos::new(
+                    center.x_cm + offset_component(space.width_cm, dx_pct),
+                    center.y_cm + offset_component(space.depth_cm, dy_pct),
+                    center.z_cm + offset_component(space.height_cm, dz_pct),
+                )
             }
             ScenarioPos::Absolute { x_cm, y_cm, z_cm } => GeoPos::new(x_cm, y_cm, z_cm),
         }
     }
 }
 
-fn offset_component(dim_cm: i64, pct: f64) -> f64 {
+fn offset_component(dim_cm: i64, pct: f64) -> i64 {
     if pct == 0.0 {
-        return 0.0;
+        return 0;
     }
     let raw = dim_cm as f64 * pct;
     if raw.abs() < 1.0 {
-        raw.signum()
+        raw.signum() as i64
     } else {
-        raw
+        raw.round() as i64
     }
 }
 
 fn center_pos(space: &SpaceConfig) -> GeoPos {
-    GeoPos {
-        x_cm: space.width_cm as f64 / 2.0,
-        y_cm: space.depth_cm as f64 / 2.0,
-        z_cm: space.height_cm as f64 / 2.0,
-    }
+    GeoPos::new(space.width_cm / 2, space.depth_cm / 2, space.height_cm / 2)
 }
 
 fn scenario_spec_json(scenario: WorldScenario) -> &'static str {

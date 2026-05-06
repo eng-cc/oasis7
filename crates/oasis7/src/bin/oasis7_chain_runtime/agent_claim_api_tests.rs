@@ -126,7 +126,7 @@ fn stop_runtime(runtime: &Arc<Mutex<NodeRuntime>>) {
 fn register_agent(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
         agent_id: agent_id.to_string(),
-        pos: GeoPos::new(0.0, 0.0, 0.0),
+        pos: GeoPos::new(0, 0, 0),
     });
     world.step().expect("register agent");
 }

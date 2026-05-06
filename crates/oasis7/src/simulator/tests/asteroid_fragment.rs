@@ -54,7 +54,7 @@ fn asteroid_fragment_generator_respects_min_fragment_spacing() {
             let min_dist = (a.profile.radius_cm
                 + b.profile.radius_cm
                 + asteroid_fragment.min_fragment_spacing_cm) as f64;
-            assert!((dx * dx + dy * dy + dz * dz) >= (min_dist * min_dist));
+            assert!(((dx * dx + dy * dy + dz * dz) as f64) >= (min_dist * min_dist));
         }
     }
 }
@@ -297,8 +297,9 @@ fn count_fragments_in_core_zone(fragments: &[Location], space: &SpaceConfig, rat
     fragments
         .iter()
         .filter(|frag| {
-            let distance_ratio =
-                (frag.pos.x_cm - center_x).hypot(frag.pos.y_cm - center_y) / max_distance;
+            let distance_ratio = ((frag.pos.x_cm as f64) - center_x)
+                .hypot((frag.pos.y_cm as f64) - center_y)
+                / max_distance;
             distance_ratio <= core_ratio
         })
         .count()
@@ -334,8 +335,9 @@ fn zone_material_stats(
     };
 
     for fragment in fragments {
-        let ratio =
-            (fragment.pos.x_cm - center_x).hypot(fragment.pos.y_cm - center_y) / max_distance;
+        let ratio = ((fragment.pos.x_cm as f64) - center_x)
+            .hypot((fragment.pos.y_cm as f64) - center_y)
+            / max_distance;
         if ratio <= core {
             out.core_total = out.core_total.saturating_add(1);
             if matches!(

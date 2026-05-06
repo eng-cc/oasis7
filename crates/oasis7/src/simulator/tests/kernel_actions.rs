@@ -8,13 +8,13 @@ fn kernel_registers_and_moves_agent() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
         profile: LocationProfile::default(),
     });
     kernel.step_until_empty();
@@ -30,13 +30,13 @@ fn kernel_registers_and_moves_agent() {
     kernel2.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel2.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
         profile: LocationProfile::default(),
     });
     kernel2.submit_action(Action::RegisterAgent {
@@ -64,13 +64,13 @@ fn kernel_registers_and_moves_agent() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -103,7 +103,7 @@ fn kernel_registers_and_moves_agent() {
 
     let agent = kernel.model().agents.get("agent-1").unwrap();
     assert_eq!(agent.location_id, "loc-2");
-    assert_eq!(agent.pos, pos(1.0, 1.0));
+    assert_eq!(agent.pos, pos(1, 1));
 }
 
 #[test]
@@ -112,13 +112,13 @@ fn kernel_move_requires_energy() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 0.0),
+        pos: pos(1, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -144,9 +144,9 @@ fn kernel_move_requires_energy() {
 fn register_location_rejects_out_of_bounds() {
     let mut kernel = WorldKernel::new();
     let out_of_bounds = GeoPos {
-        x_cm: (DEFAULT_CLOUD_WIDTH_CM + 1) as f64,
-        y_cm: 0.0,
-        z_cm: 0.0,
+        x_cm: DEFAULT_CLOUD_WIDTH_CM + 1,
+        y_cm: 0,
+        z_cm: 0,
     };
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-oob".to_string(),
@@ -171,7 +171,7 @@ fn harvest_radiation_adds_electricity() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-rad".to_string(),
         name: "rad".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -210,7 +210,7 @@ fn harvest_radiation_respects_max_per_tick() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-rad".to_string(),
         name: "rad".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -245,7 +245,7 @@ fn harvest_radiation_applies_thermal_penalty() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-rad".to_string(),
         name: "rad".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -295,19 +295,19 @@ fn harvest_radiation_includes_nearby_sources_and_distance_decay() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "harvest-site".to_string(),
         name: "harvest-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "source-near".to_string(),
         name: "source-near".to_string(),
-        pos: pos(100.0, 0.0),
+        pos: pos(100, 0),
         profile: source_near,
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "source-far".to_string(),
         name: "source-far".to_string(),
-        pos: pos(2_000.0, 0.0),
+        pos: pos(2_000, 0),
         profile: source_far,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -341,7 +341,7 @@ fn harvest_radiation_uses_background_floor_when_no_source() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "site".to_string(),
         name: "site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -378,7 +378,7 @@ fn harvest_radiation_caps_background_floor_when_no_source() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "site".to_string(),
         name: "site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -413,13 +413,13 @@ fn kernel_rejects_move_beyond_max_distance_per_tick() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "far".to_string(),
-        pos: pos(101.0, 0.0),
+        pos: pos(101, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -457,13 +457,13 @@ fn kernel_rejects_move_beyond_max_speed() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "fast".to_string(),
-        pos: pos(101.0, 0.0),
+        pos: pos(101, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -498,7 +498,7 @@ fn kernel_rejects_move_to_same_location() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -534,13 +534,13 @@ fn kernel_move_agent_progresses_over_multiple_ticks_when_speed_is_low() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "target".to_string(),
-        pos: pos(300.0, 0.0),
+        pos: pos(300, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -599,7 +599,7 @@ fn kernel_move_agent_progresses_over_multiple_ticks_when_speed_is_low() {
     ));
     let agent = kernel.model().agents.get("agent-1").expect("agent exists");
     assert_eq!(agent.location_id, "loc-2");
-    assert_eq!(agent.pos, pos(300.0, 0.0));
+    assert_eq!(agent.pos, pos(300, 0));
 }
 
 #[test]
@@ -613,13 +613,13 @@ fn kernel_rejects_move_with_non_positive_agent_speed() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "target".to_string(),
-        pos: pos(10.0, 0.0),
+        pos: pos(10, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -663,13 +663,13 @@ fn kernel_segmented_move_keeps_agent_on_centimeter_grid() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "origin".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "diagonal".to_string(),
-        pos: pos(300.0, 300.0),
+        pos: pos(300, 300),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -695,8 +695,7 @@ fn kernel_segmented_move_keeps_agent_on_centimeter_grid() {
 
     let _ = kernel.step().expect("first move segment");
     let agent = kernel.model().agents.get("agent-1").expect("agent exists");
-    assert_eq!(agent.pos.x_cm.fract(), 0.0);
-    assert_eq!(agent.pos.y_cm.fract(), 0.0);
+    assert_eq!(agent.pos, pos(71, 71));
 }
 
 #[test]
@@ -705,13 +704,13 @@ fn kernel_observe_visibility_range() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "far".to_string(),
-        pos: pos(DEFAULT_VISIBILITY_RANGE_CM as f64 + 1.0, 0.0),
+        pos: pos(DEFAULT_VISIBILITY_RANGE_CM as i64 + 1, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -740,7 +739,7 @@ fn kernel_observe_visibility_range() {
 fn kernel_observe_includes_module_power_and_social_snapshots() {
     let config = WorldConfig::default();
     let mut model = WorldModel::default();
-    let origin = pos(0.0, 0.0);
+    let origin = pos(0, 0);
     model.locations.insert(
         "loc-1".to_string(),
         Location::new_with_profile(
@@ -1055,13 +1054,13 @@ fn movement_cost_uses_calibrated_per_km_in_move_action() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: source_profile,
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(CM_PER_KM as f64, 0.0),
+        pos: pos(CM_PER_KM as i64, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -1098,13 +1097,13 @@ fn kernel_transfer_requires_colocation() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(10.0, 10.0),
+        pos: pos(10, 10),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {

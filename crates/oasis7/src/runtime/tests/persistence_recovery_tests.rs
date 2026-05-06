@@ -5,7 +5,7 @@ fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -45,7 +45,7 @@ fn snapshot_json_without_era_fields_keeps_backward_compatibility() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-legacy".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step");
 
@@ -70,19 +70,19 @@ fn rollback_to_snapshot_resets_state() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
     let snapshot = world.snapshot();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(9.0, 9.0),
+        to: pos(9, 9),
     });
     world.step().unwrap();
     assert_eq!(
         world.state().agents.get("agent-1").unwrap().state.pos,
-        pos(9.0, 9.0)
+        pos(9, 9)
     );
 
     let journal = world.journal().clone();
@@ -103,7 +103,7 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
         .expect("bind relay identity");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step");
 
@@ -150,14 +150,14 @@ fn snapshot_retention_policy_prunes_old_entries() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
     let snap1 = world.create_snapshot().unwrap();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(3.0, 3.0),
+        to: pos(3, 3),
     });
     world.step().unwrap();
     let snap2 = world.create_snapshot().unwrap();
@@ -184,7 +184,7 @@ fn snapshot_file_pruning_removes_old_files() {
     world.save_snapshot_to_dir(&dir).unwrap();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
     world.save_snapshot_to_dir(&dir).unwrap();

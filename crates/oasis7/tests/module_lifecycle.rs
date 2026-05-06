@@ -197,9 +197,9 @@ fn module_routing_emits_event() {
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
         pos: GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
+            x_cm: 0,
+            y_cm: 0,
+            z_cm: 0,
         },
     });
 
@@ -287,9 +287,9 @@ fn replay_preserves_module_events() {
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
         pos: GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
+            x_cm: 0,
+            y_cm: 0,
+            z_cm: 0,
         },
     });
 

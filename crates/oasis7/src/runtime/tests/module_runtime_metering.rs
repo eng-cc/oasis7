@@ -21,7 +21,7 @@ fn setup_active_module_world(owner_agent_id: &str, module_id: &str, wasm_bytes: 
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: owner_agent_id.to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register owner agent");
     world

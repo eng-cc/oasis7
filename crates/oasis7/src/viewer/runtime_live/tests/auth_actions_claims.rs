@@ -35,7 +35,7 @@ fn runtime_gameplay_action_claim_uses_bound_player_agent_as_actor() {
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-target".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server.world.step().expect("register claim target");
 
@@ -104,7 +104,7 @@ fn runtime_gameplay_action_claim_rejects_actor_agent_mismatch() {
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-target".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server.world.step().expect("register claim target");
 
@@ -156,7 +156,7 @@ fn runtime_gameplay_action_claim_rejects_target_agent_bound_to_other_player() {
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-target".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server.world.step().expect("register claim target");
 

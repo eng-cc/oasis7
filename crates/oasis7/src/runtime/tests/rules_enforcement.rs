@@ -416,7 +416,7 @@ fn rule_decision_override_and_cost_apply() {
 
     let override_action = Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(2.0, 3.0),
+        pos: pos(2, 3),
     };
     let mut cost = ResourceDelta::default();
     cost.entries.insert(ResourceKind::Electricity, -3);
@@ -441,12 +441,12 @@ fn rule_decision_override_and_cost_apply() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
     let agent = world.state().agents.get("agent-1").unwrap();
-    assert_eq!(agent.state.pos, pos(2.0, 3.0));
+    assert_eq!(agent.state.pos, pos(2, 3));
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 2);
     assert!(world
         .journal()
@@ -544,7 +544,7 @@ fn rule_decision_rejects_on_insufficient_resources() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -650,7 +650,7 @@ fn rule_decision_cost_overflow_rejected_without_partial_apply() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world
         .step_with_modules(&mut sandbox)
@@ -688,13 +688,13 @@ fn m1_move_rule_rejects_when_insufficient_resources() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(100_000.0, 0.0),
+        to: pos(100_000, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -720,13 +720,13 @@ fn m1_move_rule_denies_same_position() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(0.0, 0.0),
+        to: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -751,11 +751,11 @@ fn m1_visibility_rule_emits_observation() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(10.0, 0.0),
+        pos: pos(10, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -809,11 +809,11 @@ fn m1_transfer_rule_moves_resources() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -870,11 +870,11 @@ fn m1_transfer_rule_rejects_when_insufficient() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -910,11 +910,11 @@ fn m1_transfer_rule_denies_when_not_colocated() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-2".to_string(),
-        pos: pos(10.0, 0.0),
+        pos: pos(10, 0),
     });
     world.step_with_modules(&mut sandbox).unwrap();
 
@@ -944,7 +944,7 @@ fn query_observation_requires_rule_module() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 

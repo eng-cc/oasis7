@@ -104,7 +104,7 @@ fn build_factory_consumes_materials_and_completes_after_delay() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -161,7 +161,7 @@ fn build_factory_prefers_builder_material_ledger_when_available() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -202,7 +202,7 @@ fn schedule_recipe_consumes_inputs_and_power_then_produces_outputs() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -284,7 +284,7 @@ fn schedule_recipe_reads_and_writes_site_material_ledger() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -345,7 +345,7 @@ fn transfer_material_distance_zero_moves_immediately() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -388,7 +388,7 @@ fn transfer_material_cross_site_creates_transit_and_applies_loss() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -449,7 +449,7 @@ fn transfer_material_rejects_when_distance_exceeds_limit() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -486,7 +486,7 @@ fn transfer_material_rejects_when_inflight_capacity_exceeded() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -548,7 +548,7 @@ fn schedule_recipe_rejects_when_factory_slots_are_full() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -628,7 +628,7 @@ fn build_factory_rejects_when_materials_insufficient() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -669,7 +669,7 @@ fn build_factory_with_module_uses_module_decision() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -739,7 +739,7 @@ fn schedule_recipe_with_module_uses_module_plan() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 
@@ -817,7 +817,7 @@ fn schedule_recipe_with_module_rejects_when_module_denies() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register agent");
 

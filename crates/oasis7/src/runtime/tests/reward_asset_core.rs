@@ -319,7 +319,7 @@ fn reward_asset_invariant_report_is_clean_for_valid_state() {
     bind_node_identity(&mut world, "node-signer");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_reward_asset_config(RewardAssetConfig {
@@ -614,7 +614,7 @@ fn reward_asset_redeem_power_signed_action_succeeds_when_policy_requires_signatu
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_reward_asset_config(RewardAssetConfig {
@@ -671,7 +671,7 @@ fn reward_asset_redeem_power_signed_rejects_signer_node_mismatch_when_policy_req
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_reward_asset_config(RewardAssetConfig {
@@ -734,7 +734,7 @@ fn reward_asset_redeem_power_rejects_unsigned_when_policy_requires_signature() {
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_protocol_power_reserve(ProtocolPowerReserve {
@@ -775,7 +775,7 @@ fn reward_asset_redeem_power_signed_rejects_invalid_signature() {
     });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_protocol_power_reserve(ProtocolPowerReserve {
@@ -824,7 +824,7 @@ fn reward_asset_redeem_power_rejects_unbound_node_identity() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world.set_reward_asset_config(RewardAssetConfig {
@@ -862,7 +862,7 @@ fn reward_asset_redeem_power_action_updates_balances_and_reserve() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     let initial_electricity = world
@@ -927,7 +927,7 @@ fn reward_asset_redeem_power_overflow_keeps_state_atomic() {
     bind_node_identity(&mut world, "node-a");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: crate::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register target agent");
     world

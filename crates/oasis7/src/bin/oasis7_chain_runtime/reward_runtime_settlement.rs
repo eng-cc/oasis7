@@ -40,7 +40,7 @@ pub(super) fn auto_redeem_runtime_rewards(
         if !reward_world.state().agents.contains_key(node_id) {
             reward_world.submit_action(RuntimeAction::RegisterAgent {
                 agent_id: node_id.to_string(),
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
             });
             if let Err(err) = reward_world.step() {
                 eprintln!("reward runtime register auto-redeem agent failed: {err:?}");

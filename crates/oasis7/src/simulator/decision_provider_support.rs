@@ -24,11 +24,7 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
     let observation = Observation {
         time: 7,
         agent_id: "agent-1".to_string(),
-        pos: GeoPos {
-            x_cm: 0.0,
-            y_cm: 0.0,
-            z_cm: 0.0,
-        },
+        pos: GeoPos::new(0, 0, 0),
         self_resources: {
             let mut stock = ResourceStock::default();
             let _ = stock.add(ResourceKind::Electricity, 24);
@@ -39,33 +35,21 @@ pub fn golden_decision_provider_fixtures() -> Vec<GoldenDecisionFixture> {
         visible_agents: vec![ObservedAgent {
             agent_id: "agent-2".to_string(),
             location_id: "loc-2".to_string(),
-            pos: GeoPos {
-                x_cm: 100.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
-            },
+            pos: GeoPos::new(100, 0, 0),
             distance_cm: 100,
         }],
         visible_locations: vec![
             ObservedLocation {
                 location_id: "loc-1".to_string(),
                 name: "base".to_string(),
-                pos: GeoPos {
-                    x_cm: 0.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
-                },
+                pos: GeoPos::new(0, 0, 0),
                 profile: Default::default(),
                 distance_cm: 0,
             },
             ObservedLocation {
                 location_id: "loc-2".to_string(),
                 name: "neighbor".to_string(),
-                pos: GeoPos {
-                    x_cm: 100.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
-                },
+                pos: GeoPos::new(100, 0, 0),
                 profile: Default::default(),
                 distance_cm: 100,
             },

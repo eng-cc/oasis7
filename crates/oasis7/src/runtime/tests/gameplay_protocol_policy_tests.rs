@@ -43,20 +43,20 @@ fn move_agent_is_denied_when_target_location_is_forbidden() {
 
     world.submit_action(Action::MoveAgent {
         agent_id: "a".to_string(),
-        to: pos(10.0, 0.0),
+        to: pos(10, 0),
     });
     world.step().expect("forbidden move should be rejected");
     assert_latest_rule_denied_contains(&world, "forbidden_location_ids");
 
     world.submit_action(Action::MoveAgent {
         agent_id: "a".to_string(),
-        to: pos(11.0, 0.0),
+        to: pos(11, 0),
     });
     world.step().expect("non-forbidden move should pass");
     match last_domain_event(&world) {
         DomainEvent::AgentMoved { agent_id, to, .. } => {
             assert_eq!(agent_id, "a");
-            assert_eq!(*to, pos(11.0, 0.0));
+            assert_eq!(*to, pos(11, 0));
         }
         other => panic!("expected AgentMoved, got {other:?}"),
     }

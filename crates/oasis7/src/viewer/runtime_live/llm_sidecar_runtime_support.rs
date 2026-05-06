@@ -321,7 +321,7 @@ fn parse_runtime_location_id(location_id: &str) -> Option<GeoPos> {
     if parts.next().is_some() {
         return None;
     }
-    Some(GeoPos::new(x as f64, y as f64, z as f64))
+    Some(GeoPos::new(x, y, z))
 }
 
 pub(super) fn restore_behavior_long_term_memory_from_model(

@@ -574,7 +574,7 @@ mod tests {
     fn map_runtime_domain_event_agent_registered_uses_runtime_location_id() {
         let event = RuntimeDomainEvent::AgentRegistered {
             agent_id: "a1".to_string(),
-            pos: GeoPos::new(12.0, 34.0, 56.0),
+            pos: GeoPos::new(12, 34, 56),
         };
         let mapped =
             map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
@@ -586,7 +586,7 @@ mod tests {
             } => {
                 assert_eq!(agent_id, "a1");
                 assert_eq!(location_id, "runtime:12:34:56");
-                assert_eq!(pos, GeoPos::new(12.0, 34.0, 56.0));
+                assert_eq!(pos, GeoPos::new(12, 34, 56));
             }
             other => panic!("unexpected mapped event: {other:?}"),
         }
@@ -597,8 +597,8 @@ mod tests {
         let config = WorldConfig::default();
         let event = RuntimeDomainEvent::AgentMoved {
             agent_id: "a1".to_string(),
-            from: GeoPos::new(0.0, 0.0, 0.0),
-            to: GeoPos::new(100_000.0, 0.0, 0.0),
+            from: GeoPos::new(0, 0, 0),
+            to: GeoPos::new(100_000, 0, 0),
         };
         let mapped = map_runtime_domain_event(&event, &config).expect("mapped event");
         match mapped {

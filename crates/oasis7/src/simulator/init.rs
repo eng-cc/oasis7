@@ -318,11 +318,7 @@ pub fn build_world_model(
     initialize_chunk_index(&mut model, &config);
 
     if init.origin.enabled {
-        let pos = init
-            .origin
-            .pos
-            .unwrap_or_else(|| center_pos(&config.space))
-            .canonicalized();
+        let pos = init.origin.pos.unwrap_or_else(|| center_pos(&config.space));
         if !config.space.contains(pos) {
             return Err(WorldInitError::OriginOutOfBounds { pos });
         }
@@ -346,8 +342,7 @@ pub fn build_world_model(
         }
         let pos = location_seed
             .pos
-            .unwrap_or_else(|| center_pos(&config.space))
-            .canonicalized();
+            .unwrap_or_else(|| center_pos(&config.space));
         if !config.space.contains(pos) {
             return Err(WorldInitError::LocationOutOfBounds {
                 location_id: location_seed.location_id.clone(),
@@ -854,7 +849,7 @@ fn spacing_conflict(
     let dx = a_pos.x_cm - b_pos.x_cm;
     let dy = a_pos.y_cm - b_pos.y_cm;
     let dz = a_pos.z_cm - b_pos.z_cm;
-    let min_dist = (a_radius_cm.max(0) + b_radius_cm.max(0) + spacing_cm.max(0)) as f64;
+    let min_dist = a_radius_cm.max(0) + b_radius_cm.max(0) + spacing_cm.max(0);
     (dx * dx + dy * dy + dz * dz) < (min_dist * min_dist)
 }
 
@@ -906,30 +901,30 @@ fn point_to_chunk_distance_cm(pos: GeoPos, bounds: super::chunking::ChunkBounds)
     } else if pos.x_cm > bounds.max.x_cm {
         pos.x_cm - bounds.max.x_cm
     } else {
-        0.0
+        0
     };
     let dy = if pos.y_cm < bounds.min.y_cm {
         bounds.min.y_cm - pos.y_cm
     } else if pos.y_cm > bounds.max.y_cm {
         pos.y_cm - bounds.max.y_cm
     } else {
-        0.0
+        0
     };
     let dz = if pos.z_cm < bounds.min.z_cm {
         bounds.min.z_cm - pos.z_cm
     } else if pos.z_cm > bounds.max.z_cm {
         pos.z_cm - bounds.max.z_cm
     } else {
-        0.0
+        0
     };
-    (dx * dx + dy * dy + dz * dz).sqrt()
+    ((dx * dx + dy * dy + dz * dz) as f64).sqrt()
 }
 
 fn chunk_local_space(bounds: super::chunking::ChunkBounds) -> SpaceConfig {
     SpaceConfig {
-        width_cm: (bounds.max.x_cm - bounds.min.x_cm).floor() as i64,
-        depth_cm: (bounds.max.y_cm - bounds.min.y_cm).floor() as i64,
-        height_cm: (bounds.max.z_cm - bounds.min.z_cm).floor() as i64,
+        width_cm: bounds.max.x_cm - bounds.min.x_cm,
+        depth_cm: bounds.max.y_cm - bounds.min.y_cm,
+        height_cm: bounds.max.z_cm - bounds.min.z_cm,
     }
 }
 
@@ -995,11 +990,7 @@ pub fn initialize_kernel(
 }
 
 fn center_pos(space: &super::world_model::SpaceConfig) -> GeoPos {
-    GeoPos {
-        x_cm: space.width_cm as f64 / 2.0,
-        y_cm: space.depth_cm as f64 / 2.0,
-        z_cm: space.height_cm as f64 / 2.0,
-    }
+    GeoPos::new(space.width_cm / 2, space.depth_cm / 2, space.height_cm / 2)
 }
 
 fn insert_location(model: &mut WorldModel, location: Location) -> Result<(), WorldInitError> {

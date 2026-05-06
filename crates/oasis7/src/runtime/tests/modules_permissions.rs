@@ -86,7 +86,7 @@ fn step_with_modules_routes_domain_events() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
 
     let output = ModuleOutput {
@@ -189,7 +189,7 @@ fn step_with_modules_routes_actions() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
 
     let output = ModuleOutput {
@@ -321,17 +321,17 @@ fn step_with_modules_routes_post_action_with_effective_action_and_result_event()
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
     let action_id = world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(1.0, 0.0),
+        to: pos(1, 0),
     });
     let override_action = Action::MoveAgent {
         agent_id: "agent-1".to_string(),
-        to: pos(9.0, 0.0),
+        to: pos(9, 0),
     };
     let rule_output = ModuleOutput {
         new_state: None,
@@ -375,7 +375,7 @@ fn step_with_modules_routes_post_action_with_effective_action_and_result_event()
     match observed_action.action {
         Action::MoveAgent { agent_id, to } => {
             assert_eq!(agent_id, "agent-1");
-            assert_eq!(to, pos(9.0, 0.0));
+            assert_eq!(to, pos(9, 0));
         }
         other => panic!("unexpected observed action: {other:?}"),
     }
@@ -390,13 +390,13 @@ fn step_with_modules_routes_post_action_with_effective_action_and_result_event()
     match observed_event.body {
         WorldEventBody::Domain(DomainEvent::AgentMoved { agent_id, to, .. }) => {
             assert_eq!(agent_id, "agent-1");
-            assert_eq!(to, pos(9.0, 0.0));
+            assert_eq!(to, pos(9, 0));
         }
         other => panic!("unexpected post_action result event: {other:?}"),
     }
     assert_eq!(
         world.state().agents.get("agent-1").unwrap().state.pos,
-        pos(9.0, 0.0)
+        pos(9, 0)
     );
 }
 
@@ -557,7 +557,7 @@ fn step_with_modules_routes_location_infrastructure_install_as_infrastructure_ti
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "installer-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register installer");
     world
@@ -645,7 +645,7 @@ fn step_with_modules_routes_same_module_id_as_isolated_instances() {
     world.set_policy(PolicySet::allow_all());
     world.submit_action(Action::RegisterAgent {
         agent_id: "installer-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register installer");
     world
@@ -867,7 +867,7 @@ fn module_calls_use_entrypoint_for_kind() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
 
     let mut sandbox = CaptureEntrypointSandbox::default();
