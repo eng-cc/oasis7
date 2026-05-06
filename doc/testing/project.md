@@ -3,6 +3,7 @@
 审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] playability-evidence-stack-2026-05-06 (PRD-TESTING-007) [test_tier_required]: 新增“好玩性证据栈（2026-05-06）”专题，正式定义自动化/agent probe/遥测实验/真人试玩/受控外部信号五层证据、`go/watch/hold/block` 组合规则，以及“自动化不能单独保证好玩”的模块级结论。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
 - [x] shared-player-gameplay-contract-parity (PRD-TESTING-003) [test_tier_required]: 收口 `software_safe` / `pure_api` 共享 `snapshot.player_gameplay` 的玩家可读语义 contract，补 active-LLM scope、旧 no-LLM 口径退役说明，以及 pure API parity smoke 对“同一组玩家问题”的显式摘要。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
 - [x] TASK-TESTING-001 (PRD-TESTING-001) [test_tier_required]: 完成 testing PRD 改写，建立分层测试设计入口。
 - [x] TASK-TESTING-002 (PRD-TESTING-001/002) [test_tier_required]: 对齐 S0~S10 与改动路径触发矩阵。
@@ -331,8 +332,9 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-28
+- 更新日期: 2026-05-06
 - 当前状态: active
+- 当前窗口摘要: `playability-evidence-stack-2026-05-06` 已把“自动化不能单独保证好玩”收口为 testing/governance 正式专题，并给出 L1-L5 证据栈与 `go/watch/hold/block` 组合规则。
 - 当前窗口摘要: `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
 - 当前窗口摘要: `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 `transactions` / `recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` live contract 证据。
