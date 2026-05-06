@@ -3,6 +3,7 @@
 审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] playability-subagent-review-system-2026-05-06 (PRD-TESTING-008) [test_tier_required]: 新增“好玩性 subagent 评审系统（2026-05-06）”专题，设计标准角色 subagent 清单、review packet / output card、trigger matrix、调度顺序与 stop conditions。 Trace: .pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.yaml
 - [x] playability-evidence-stack-2026-05-06 (PRD-TESTING-007) [test_tier_required]: 新增“好玩性证据栈（2026-05-06）”专题，正式定义自动化/agent probe/遥测实验/真人试玩/受控外部信号五层证据、`go/watch/hold/block` 组合规则，以及“自动化不能单独保证好玩”的模块级结论。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
 - [x] shared-player-gameplay-contract-parity (PRD-TESTING-003) [test_tier_required]: 收口 `software_safe` / `pure_api` 共享 `snapshot.player_gameplay` 的玩家可读语义 contract，补 active-LLM scope、旧 no-LLM 口径退役说明，以及 pure API parity smoke 对“同一组玩家问题”的显式摘要。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
 - [x] TASK-TESTING-001 (PRD-TESTING-001) [test_tier_required]: 完成 testing PRD 改写，建立分层测试设计入口。
@@ -334,6 +335,7 @@
 ## 状态
 - 更新日期: 2026-05-06
 - 当前状态: active
+- 当前窗口摘要: `playability-subagent-review-system-2026-05-06` 已把多角色内部人工评审收口成标准角色 subagent 系统，定义默认必开角色、按 changed surface 追加角色、统一 review packet 与 output card，以及 stop conditions。
 - 当前窗口摘要: `playability-evidence-stack-2026-05-06` 已把“自动化不能单独保证好玩”收口为 testing/governance 正式专题，并给出 L1-L5 证据栈与 `go/watch/hold/block` 组合规则。
 - 当前窗口摘要: `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。

@@ -5,6 +5,7 @@
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
 - 想先回答“自动化测试能不能证明游戏好玩、还缺哪层证据”：`doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
+- 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
@@ -41,7 +42,7 @@
 - `ci/`（33）：CI、wasm determinism、tiering 与 gate 保护。
 - `longrun/`（24）：长稳、chaos、soak 与在线稳定性。
 - `launcher/`（18）：启动器链路测试、playtest 与配置自动接线。
-- `governance/`（19）：质量趋势、release-gate 指标、审计检查与好玩性证据栈。
+- `governance/`（22）：质量趋势、release-gate 指标、审计检查、好玩性证据栈与 subagent 评审系统。
 - `templates/`（12）：证据包、报告与检查清单模板；默认按需进入。
 - `performance/`（12）：runtime / viewer 性能观测与方法学。
 - `manual/`（7）：系统测试手册分册与 Web UI 闭环 manual。
