@@ -148,6 +148,7 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
     if options.route_ttl_seconds == 0 {
         return Err("--route-ttl-seconds must be greater than 0".to_string());
     }
+    validate_route_ttl_seconds(options.route_ttl_seconds)?;
     if options.deposit_account_prefix.trim().is_empty() {
         return Err("--deposit-account-prefix must not be empty".to_string());
     }
@@ -248,6 +249,16 @@ fn dispatch_request(
                 Err(err) => json_error_response(&err),
             }
         }
+        (_, "/v1/bridge/bind") | (_, "/v1/bridge/deposit-route") => json_response(
+            405,
+            &json!({
+                "ok": false,
+                "error": {
+                    "code": "method_not_allowed",
+                    "message": format!("{} is not allowed for {}", request.method, path),
+                }
+            }),
+        ),
         _ => json_response(
             404,
             &json!({
@@ -285,4 +296,14 @@ fn now_unix_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or(Duration::from_secs(0))
         .as_millis() as i64
+}
+
+fn validate_route_ttl_seconds(route_ttl_seconds: u64) -> Result<(), String> {
+    let ttl_ms = route_ttl_seconds.checked_mul(1000).ok_or_else(|| {
+        "--route-ttl-seconds is too large to convert into milliseconds".to_string()
+    })?;
+    if ttl_ms > i64::MAX as u64 {
+        return Err("--route-ttl-seconds exceeds the supported millisecond range".to_string());
+    }
+    Ok(())
 }

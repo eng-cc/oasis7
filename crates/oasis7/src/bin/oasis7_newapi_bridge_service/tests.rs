@@ -228,6 +228,29 @@ fn dispatch_request_handles_bind_and_route_http_contract() {
 }
 
 #[test]
+fn dispatch_request_returns_405_for_known_path_with_wrong_method() {
+    let test_service = test_service("http-405", 900);
+    let response = dispatch_request(
+        &test_service.service,
+        HttpRequest {
+            method: "GET".to_string(),
+            path: "/v1/bridge/bind".to_string(),
+            body: Vec::new(),
+        },
+    )
+    .expect("dispatch 405");
+    assert_eq!(response.status_code, 405);
+    let payload: Value = serde_json::from_slice(response.body.as_slice()).expect("parse 405");
+    assert_eq!(
+        payload
+            .get("error")
+            .and_then(|value| value.get("code"))
+            .and_then(Value::as_str),
+        Some("method_not_allowed")
+    );
+}
+
+#[test]
 fn store_reloads_persisted_bindings_and_routes() {
     let test_service = test_service("reload-state", 900);
     let binding = test_service
@@ -264,6 +287,44 @@ fn parse_cli_options_rejects_zero_route_ttl() {
     let err = parse_cli_options(vec!["--route-ttl-seconds".to_string(), "0".to_string()])
         .expect_err("ttl validation");
     assert!(err.contains("greater than 0"));
+}
+
+#[test]
+fn parse_cli_options_rejects_route_ttl_that_overflows_milliseconds() {
+    let err = parse_cli_options(vec![
+        "--route-ttl-seconds".to_string(),
+        u64::MAX.to_string(),
+    ])
+    .expect_err("ttl overflow validation");
+    assert!(err.contains("too large") || err.contains("supported millisecond range"));
+}
+
+#[test]
+fn create_deposit_route_rejects_ttl_overflow_from_service_config() {
+    let test_service = test_service("ttl-overflow", u64::MAX);
+    let binding = test_service
+        .service
+        .bind_user(
+            BindBridgeUserRequest {
+                newapi_user_ref: "user-1".to_string(),
+                oasis_sender_account_id: "oc:pk:sender-1".to_string(),
+            },
+            1_000,
+        )
+        .expect("binding");
+    let err = test_service
+        .service
+        .create_deposit_route(
+            CreateDepositRouteRequest {
+                bridge_user_id: binding.bridge_user_id,
+                pricing_version: Some("pv-1".to_string()),
+                topup_plan_id: None,
+            },
+            2_000,
+        )
+        .expect_err("ttl overflow");
+    assert_eq!(err.status_code, 500);
+    assert_eq!(err.code, "internal_error");
 }
 
 struct TestBridgeService {
