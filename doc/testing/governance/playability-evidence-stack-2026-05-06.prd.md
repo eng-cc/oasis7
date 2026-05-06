@@ -95,6 +95,7 @@
 - Integration Points:
   - `doc/testing/prd.md`
   - `doc/testing/project.md`
+  - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
   - `testing-manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/evidence/gameplay-ten-minute-trust-gate-2026-04-09.md`
