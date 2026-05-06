@@ -158,7 +158,8 @@ fn try_place_fragment(
             x_cm: x,
             y_cm: y,
             z_cm: z,
-        };
+        }
+        .canonicalized();
         if min_spacing_cm > 0.0 && !spacing_allows(&pos, radius_cm, placements, min_spacing_cm) {
             continue;
         }

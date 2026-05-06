@@ -309,11 +309,14 @@ impl ScenarioLocationGeneratorConfig {
             out.push(LocationSeedConfig {
                 location_id: format!("{}{}", self.id_prefix, index),
                 name: format!("{} {}", self.name_prefix, index),
-                pos: Some(GeoPos {
-                    x_cm: x,
-                    y_cm: y,
-                    z_cm: z,
-                }),
+                pos: Some(
+                    GeoPos {
+                        x_cm: x,
+                        y_cm: y,
+                        z_cm: z,
+                    }
+                    .canonicalized(),
+                ),
                 profile: LocationProfile::default(),
                 resources: ResourceStock::default(),
             });
@@ -370,8 +373,9 @@ impl ScenarioPos {
                     y_cm: center.y_cm + offset_component(space.depth_cm, dy_pct),
                     z_cm: center.z_cm + offset_component(space.height_cm, dz_pct),
                 }
+                .canonicalized()
             }
-            ScenarioPos::Absolute { x_cm, y_cm, z_cm } => GeoPos { x_cm, y_cm, z_cm },
+            ScenarioPos::Absolute { x_cm, y_cm, z_cm } => GeoPos::new(x_cm, y_cm, z_cm),
         }
     }
 }

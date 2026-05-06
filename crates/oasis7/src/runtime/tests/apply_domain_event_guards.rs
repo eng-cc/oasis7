@@ -138,6 +138,29 @@ fn claim_release_request_missing_claimer_returns_error_without_mutating_claim() 
 }
 
 #[test]
+fn apply_domain_event_agent_move_rounds_fractional_positions_to_centimeters() {
+    let mut state = WorldState::default();
+    state
+        .agents
+        .insert("agent-1".to_string(), test_agent_cell("agent-1"));
+
+    state
+        .apply_domain_event(
+            &DomainEvent::AgentMoved {
+                agent_id: "agent-1".to_string(),
+                from: pos(0.0, 0.0),
+                to: pos(10.4, 19.6),
+            },
+            1,
+        )
+        .expect("move should apply");
+
+    let agent = state.agents.get("agent-1").expect("agent exists");
+    assert_eq!(agent.state.pos.x_cm, 10.0);
+    assert_eq!(agent.state.pos.y_cm, 20.0);
+}
+
+#[test]
 fn claim_reclaim_missing_claimer_returns_error_without_removing_claim() {
     let mut state = WorldState::default();
     state

@@ -143,7 +143,7 @@ impl Agent {
     pub fn new(id: impl Into<String>, location_id: impl Into<String>, pos: GeoPos) -> Self {
         Self {
             id: id.into(),
-            pos,
+            pos: pos.canonicalized(),
             body: RobotBodySpec::default(),
             location_id: location_id.into(),
             resources: ResourceStock::default(),
@@ -162,7 +162,7 @@ impl Agent {
     ) -> Self {
         Self {
             id: id.into(),
-            pos,
+            pos: pos.canonicalized(),
             body: RobotBodySpec::default(),
             location_id: location_id.into(),
             resources: ResourceStock::default(),
@@ -207,7 +207,7 @@ impl Location {
         Self {
             id: id.into(),
             name: name.into(),
-            pos,
+            pos: pos.canonicalized(),
             profile,
             resources: ResourceStock::default(),
             mined_compound_g: 0,

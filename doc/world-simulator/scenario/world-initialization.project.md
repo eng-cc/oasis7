@@ -45,6 +45,7 @@
 - [x] I30 文档补充场景 ID 稳定性说明
 - [x] I31 增加 triad_p2p_bootstrap 场景（多节点单 Agent）与出生地点列表支持
 - [x] I32 文档更新：世界观调整为破碎小行星带
+- [x] space-unit-centimeter-enforcement (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 收口 1cm 空间最小单位契约：初始化/场景/碎片生成写入世界状态前统一 canonicalize 到整厘米，并补充 runtime/simulator 回归测试。 Trace: .pm/tasks/task_d7c44249a4aa42c6b2ec25415873ae7f.yaml
 
 ## 依赖
 - doc/world-simulator/scenario/world-initialization.prd.md
@@ -53,4 +54,4 @@
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）
-- 当前阶段：I32（世界观调整完成）
+- 当前阶段：I33（1cm 坐标契约收口完成）

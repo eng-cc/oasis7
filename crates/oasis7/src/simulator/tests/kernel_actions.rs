@@ -652,6 +652,54 @@ fn kernel_rejects_move_with_non_positive_agent_speed() {
 }
 
 #[test]
+fn kernel_segmented_move_keeps_agent_on_centimeter_grid() {
+    let mut config = WorldConfig::default();
+    config.move_cost_per_km_electricity = 0;
+    config.physics.max_move_distance_cm_per_tick = i64::MAX;
+    config.physics.max_move_speed_cm_per_s = i64::MAX;
+    config.physics.time_step_s = 1;
+
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-1".to_string(),
+        name: "origin".to_string(),
+        pos: pos(0.0, 0.0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-2".to_string(),
+        name: "diagonal".to_string(),
+        pos: pos(300.0, 300.0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        location_id: "loc-1".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let mut snapshot = kernel.snapshot();
+    snapshot
+        .model
+        .agents
+        .get_mut("agent-1")
+        .expect("agent exists")
+        .kinematics
+        .speed_cm_per_tick = 100;
+    kernel = WorldKernel::from_snapshot(snapshot, kernel.journal_snapshot()).expect("restore");
+
+    kernel.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: "loc-2".to_string(),
+    });
+
+    let _ = kernel.step().expect("first move segment");
+    let agent = kernel.model().agents.get("agent-1").expect("agent exists");
+    assert_eq!(agent.pos.x_cm.fract(), 0.0);
+    assert_eq!(agent.pos.y_cm.fract(), 0.0);
+}
+
+#[test]
 fn kernel_observe_visibility_range() {
     let mut kernel = WorldKernel::new();
     kernel.submit_action(Action::RegisterLocation {
