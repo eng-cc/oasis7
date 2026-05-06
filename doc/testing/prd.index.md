@@ -1,6 +1,6 @@
 # testing PRD 文件级索引
 
-审计轮次: 8
+审计轮次: 9
 
 更新时间：2026-05-06
 
@@ -14,18 +14,19 @@
 - 想先回答 testing 模块覆盖哪些测试层级、证据与门禁边界：先读 `doc/testing/prd.md`
 - 想先回答“自动化能证明什么、不能证明什么，以及判断好玩还缺哪层证据”：先读 `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
 - 想先回答“对应标准角色 subagent 到底怎么设计、如何组合成 review 流程”：先读 `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
+- 想先回答“如何用多个 simulated player personas 补内部玩家视角，但不新增正式 `player` 角色”：先读 `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
 - 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md` 与 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-05-06）
-- `doc/testing/`：184 份文件
+- `doc/testing/`：187 份文件
 - `doc/testing/evidence/`：49 份文件
 - `doc/testing/ci/`：33 份文件
 - `doc/testing/longrun/`：24 份文件
 - `doc/testing/launcher/`：18 份文件
-- `doc/testing/governance/`：22 份文件
+- `doc/testing/governance/`：25 份文件
 - `doc/testing/templates/`：12 份文件
 - `doc/testing/performance/`：12 份文件
 - `doc/testing/manual/`：7 份文件
@@ -38,7 +39,7 @@
 | `ci/` | 33 | CI、wasm determinism、tiering、required check 保护 |
 | `longrun/` | 24 | 长稳、chaos、soak 与在线稳定性 |
 | `launcher/` | 18 | 启动器链路测试、playtest 与配置自动接线 |
-| `governance/` | 22 | 质量趋势、release-gate 指标、审计检查、好玩性证据栈与 subagent 评审系统 |
+| `governance/` | 25 | 质量趋势、release-gate 指标、审计检查、好玩性证据栈、subagent 评审系统与 simulated personas |
 | `templates/` | 12 | 证据包、报告与检查清单模板；默认按需进入 |
 | `performance/` | 12 | runtime / viewer 性能观测与方法学 |
 | `manual/` | 7 | 系统测试手册分册与 Web UI 闭环 manual |
@@ -75,6 +76,7 @@
 | `doc/testing/ci/ci-wasm32-target-install.prd.md` | `doc/testing/ci/ci-wasm32-target-install.design.md` | `doc/testing/ci/ci-wasm32-target-install.project.md` |
 | `doc/testing/governance/llm-skip-tick-ratio-metric.prd.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.design.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.project.md` |
 | `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md` | `doc/testing/governance/playability-evidence-stack-2026-05-06.design.md` | `doc/testing/governance/playability-evidence-stack-2026-05-06.project.md` |
+| `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md` | `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.design.md` | `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.project.md` |
 | `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md` | `doc/testing/governance/playability-subagent-review-system-2026-05-06.design.md` | `doc/testing/governance/playability-subagent-review-system-2026-05-06.project.md` |
 | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.prd.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.design.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md` |
 | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` |

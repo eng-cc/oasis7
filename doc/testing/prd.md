@@ -1,6 +1,6 @@
 # testing PRD
 
-审计轮次: 7
+审计轮次: 8
 
 ## 目标
 - 建立 testing 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -42,6 +42,7 @@
   - SC-7: 主链 Token 创世前具备一份 QA 审计清单，覆盖分配比例、custody/treasury 语义、个人上限、创世流通与首年释放上限，避免带着错误经济配置进入执行。
   - SC-8: testing 模块具备一份正式的 `playability evidence stack` 专题，明确自动化、agent probe、遥测/实验、结构化真人试玩与受控外部信号的分层证明边界，禁止把“自动化已通过”误写为“游戏已被证明好玩”。
   - SC-9: testing 模块具备一份正式的 `playability subagent review system` 专题，明确标准角色 subagent 清单、输入输出 contract、触发矩阵和升级边界，让内部多角色评审可重复执行。
+  - SC-10: testing 模块具备一份正式的 `simulated player persona panel` 专题，明确多个风格化玩家视角如何作为内部假设层接入标准角色 review，同时不新增正式 `player` 角色。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -50,6 +51,7 @@
   - 发布负责人：需要审计级测试证据判断放行。
   - 制作人与经济配置维护者：需要一份可审计的创世配置检查表，避免只靠聊天结论发币。
   - 制作人与玩法 owner：需要一套分层证据栈，区分“没坏”“世界在动”“玩家真的想继续玩”。
+  - 内部玩法评审 owner：需要固定的 simulated personas，避免每次靠临时脑补多个“可能的玩家”。
 - User Scenarios & Frequency:
   - 开发分支回归：每次核心改动后触发一次 required 路径。
   - 发布候选验证：每个候选版本执行 required + full 组合。
@@ -68,6 +70,7 @@
   - PRD-TESTING-006: As a `qa_engineer`, I want a token genesis allocation audit checklist, so that producer/runtime can freeze mint configuration without hidden control or circulation risk.
   - PRD-TESTING-007: As a `producer_system_designer`, I want a canonical playability evidence stack, so that I can judge gameplay fun without conflating automation, world activity, and real player motivation.
   - PRD-TESTING-008: As a workflow owner, I want a designed system for role-based playability review subagents, so that internal multi-role review can run as a standard operating path instead of ad hoc coordination.
+  - PRD-TESTING-009: As a playability reviewer, I want a designed panel of simulated player personas, so that internal review can compare multiple player mindsets without inventing a new formal role taxonomy.
 - Critical User Flows:
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
@@ -79,6 +82,7 @@
   8. Flow-TST-008: `汇总 trust/playability 样本 -> 回答玩家动作与玩家导致的世界变化 -> 标记 world_activity_only -> 再给 pass/watch/block 结论`
   9. Flow-TST-009: `按 evidence stack 标记当前只到 L1/L2/L3/L4/L5 哪一层 -> 明确缺口 -> 再决定是否能声称“值得继续玩”`
   10. Flow-TST-010: `组装 review packet -> 按 changed surface 拉起标准角色 subagent -> 回收 review card -> producer/qa 汇总内部结论`
+  11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +99,7 @@
 | Token 创世配置审计 | `bucket_id`、`ratio_bps`、`recipient`、`cliff_epochs`、`linear_unlock_epochs`、`genesis_liquid`、`founder_cap_bps`、`year1_external_release_cap_bps` | 逐项核对参数表与经济口径，输出 `pass/block` 审计结论 | `draft -> audited -> pass/block` | `sum=10000 bps`；项目战略控制 `5000 bps`；协议长期储备 `3500 bps`；`genesis_liquid=0`；个人上限 `<=1500 bps` | `qa_engineer` 独立出具结论，producer 决定是否冻结 |
 | 好玩性证据栈 | `evidence_layer`、`formal_surface`、`player_leverage_verdict`、`world_activity_only`、`human_playtest_verdict`、`external_signal_status` | 把玩法结论分层标记为 L1 自动化、L2 probe、L3 遥测/实验、L4 真人试玩、L5 外部信号，再输出 `go/watch/hold/block` | `collected -> layered -> decided` | 低层证据不能替代高层证据；自动化 pass 只能证明“没坏/可回归”，不能单独证明“好玩” | `producer_system_designer` 终判，`qa_engineer` 守门 |
 | 好玩性 subagent 评审系统 | `review_packet`、`requested_roles`、`role_review_card`、`aggregated_review_summary` | 按 changed surface 拉起标准角色 subagent，收集 review card，并汇总成内部结论 | `packet_ready -> parallel_review -> aggregated -> escalated/closed` | 默认必开 `producer + qa`；其余按 surface 触发；缺 L5 时不得越权宣称真实外部验证完成 | `producer_system_designer` 编排，`qa_engineer` 守门 |
+| 模拟玩家 persona 面板 | `selected_personas`、`persona_card`、`persona_divergence_summary`、`handoff_recommended_to` | 按主观体验风险选择多个 simulated personas，生成风格化体验假设，再回流标准角色 review | `selected -> simulated -> handed_off -> absorbed` | 不新增正式 `player` 角色；persona 只能补内部假设，不能替代真人试玩或外部验证 | `producer_system_designer` 决定是否开启，命中的标准角色负责收口 |
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
   - AC-2: testing project 文档维护分层测试演进任务。
@@ -116,6 +121,7 @@
   - AC-15: 正式 gameplay/trust evidence 至少要有 1 条代表性样本明确记录 `player_action`、`world_change_due_to_player`、`player_leverage_score` 与 `world_activity_only`，否则不得宣称“玩家已有 meaningful participation”。
   - AC-16: `playability-evidence-stack-2026-05-06` 专题文档必须明确五层证据、组合规则、现有 oasis7 锚点映射，以及“自动化不能单独保证好玩”的正式结论。
   - AC-17: `playability-subagent-review-system-2026-05-06` 专题文档必须明确标准角色 subagent 清单、review packet / output card、trigger matrix、sequencing rules 和 stop conditions。
+  - AC-18: `playability-simulated-player-persona-panel-2026-05-06` 专题文档必须明确固定 persona 清单、persona packet / card、与标准角色 review 的回流方式，以及“不是正式角色、不能替代真人验证”的边界。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -132,6 +138,7 @@
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
   - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
+  - `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
@@ -157,6 +164,7 @@
   - 创世语义误读：若把 `protocol:*` custody account 误当成已初始化 treasury bucket，QA 必须直接阻断。
   - 流通口径漂移：若创世参数表未显式声明 `genesis_liquid=0` 或首年外部释放上限，视为配置不完整。
   - 自动化与真人试玩结论冲突：必须先记为“低层 pass / 高层 hold”，不能把高层体验问题降格成脚本未覆盖。
+  - 模拟 persona 全部正面：只能说明内部假设面板没有发现高价值断点，不能替代真人试玩或外部 session。
 - Non-Functional Requirements:
   - NFR-TST-1: required 套件变更前后执行时间波动 <= 20%。
   - NFR-TST-2: 发布证据包字段完整率 100%。
@@ -169,6 +177,7 @@
   - NFR-TST-9: 正式 gameplay evidence 审查者必须能在 30 秒内看出“玩家是否真的改变了世界”，无需从长日志里二次拼装。
   - NFR-TST-10: 正式玩法结论必须能在 60 秒内回答“当前只证明到哪一层，还缺哪一层”。
   - NFR-TST-11: review orchestrator 必须能在 5 分钟内决定本次改动应开哪些标准角色 subagent。
+  - NFR-TST-12: simulated persona panel 的使用者必须能在 5 分钟内决定该开哪几个 persona，以及它们的结论最终归谁收口。
 - Security & Privacy: 测试日志与产物需避免泄露凭据；外部 API 测试使用最小化数据并执行脱敏。
 
 ## 5. Risks & Roadmap
@@ -196,6 +205,7 @@
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
 | PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | 五层证据栈定义、现有锚点映射、模块入口互链与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
 | PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
+| PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -207,3 +217,4 @@
 | DEC-TST-006 | 在正式 gameplay evidence 中单列 `player leverage` 审查层 | 继续只看 world delta / activity / 总体有趣度 | `#166` 暴露的是“玩家是否参与有效”而不是“世界有没有动起来”，需要单独防误报。 |
 | DEC-TST-007 | 为“是否好玩”建立五层 evidence stack，并明确自动化不能单独保证好玩 | 继续把自动化 pass、世界活跃和真实玩家继续动机混写 | 这三类信号的证明强度不同，混写会持续污染 release/stage 结论。 |
 | DEC-TST-008 | 进一步把多角色内部评审设计成标准角色 subagent 系统 | 继续临时决定这次要不要找哪些角色来看 | 临时协调很难规模化，也无法稳定复用 review 输出。 |
+| DEC-TST-009 | 用 simulated player persona panel 补多风格玩家视角，但不新增正式 `player` 角色 | 直接把 `player` 升格成新的标准角色 | 会破坏仓库角色治理，并混淆内部模拟与外部真人验证。 |
