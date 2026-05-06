@@ -1,11 +1,12 @@
 # testing 文档索引
 
-审计轮次: 8
+审计轮次: 9
 
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
 - 想先回答“自动化测试能不能证明游戏好玩、还缺哪层证据”：`doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
 - 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
+- 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted-world / p2p-shared-network / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
@@ -37,19 +38,19 @@
 - 汇总 CI、启动器、长稳、性能、人工手册与治理专题。
 - 承接跨模块测试范围定义、证据归档与趋势基线建设。
 
-## 热点子域导航（2026-04-10 快照）
+## 热点子域导航（2026-05-06 快照）
 - `evidence/`（49）：发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口。
 - `ci/`（33）：CI、wasm determinism、tiering 与 gate 保护。
 - `longrun/`（24）：长稳、chaos、soak 与在线稳定性。
 - `launcher/`（18）：启动器链路测试、playtest 与配置自动接线。
-- `governance/`（22）：质量趋势、release-gate 指标、审计检查、好玩性证据栈与 subagent 评审系统。
+- `governance/`（25）：质量趋势、release-gate 指标、审计检查、好玩性证据栈、subagent 评审系统与 simulated player personas。
 - `templates/`（12）：证据包、报告与检查清单模板；默认按需进入。
 - `performance/`（12）：runtime / viewer 性能观测与方法学。
 - `manual/`（7）：系统测试手册分册与 Web UI 闭环 manual。
 - `chaos-plans/`（1）：专项 chaos plan 入口。
 
 ## 高密度提示
-- `doc/testing/` 当前共有 178 份文件；这一层入口不再尝试把热点专题直接摊平展示。
+- `doc/testing/` 当前共有 187 份文件；这一层入口不再尝试把热点专题直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/testing/prd.index.md`；进入 `evidence/` 时，优先先读 `doc/testing/evidence/README.md` 再继续下钻；需要 template / blocker 留痕时，再按具体子域进入。
 
 ## 共享约定

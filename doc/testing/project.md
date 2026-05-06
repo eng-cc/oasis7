@@ -1,8 +1,9 @@
 # testing PRD Project
 
-审计轮次: 7
+审计轮次: 8
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] playability-simulated-player-persona-panel-2026-05-06 (PRD-TESTING-009) [test_tier_required]: 新增“模拟玩家 persona 评审面板（2026-05-06）”专题，设计固定 persona 清单、persona packet / card、触发矩阵，以及与标准角色 subagent 的回流边界。 Trace: .pm/tasks/task_a9d3c884a3074ab2b0f3b10dab7bb86e.yaml
 - [x] playability-subagent-review-system-2026-05-06 (PRD-TESTING-008) [test_tier_required]: 新增“好玩性 subagent 评审系统（2026-05-06）”专题，设计标准角色 subagent 清单、review packet / output card、trigger matrix、调度顺序与 stop conditions。 Trace: .pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.yaml
 - [x] playability-evidence-stack-2026-05-06 (PRD-TESTING-007) [test_tier_required]: 新增“好玩性证据栈（2026-05-06）”专题，正式定义自动化/agent probe/遥测实验/真人试玩/受控外部信号五层证据、`go/watch/hold/block` 组合规则，以及“自动化不能单独保证好玩”的模块级结论。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
 - [x] shared-player-gameplay-contract-parity (PRD-TESTING-003) [test_tier_required]: 收口 `software_safe` / `pure_api` 共享 `snapshot.player_gameplay` 的玩家可读语义 contract，补 active-LLM scope、旧 no-LLM 口径退役说明，以及 pure API parity smoke 对“同一组玩家问题”的显式摘要。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
