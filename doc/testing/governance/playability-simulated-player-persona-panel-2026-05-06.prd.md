@@ -3,11 +3,11 @@
 - 对应设计文档: `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.design.md`
 - 对应项目管理文档: `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.project.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 目标
 - 把“agent 可以扮演多个不同风格的 player 视角”正式设计成一套可复用的 testing/governance 专题。
-- 让内部 playability review 在不新增正式 `player` 角色的前提下，稳定补齐多种玩家主观反应假设。
+- 让内部 playability review 在不新增正式 `player` 角色的前提下，稳定补齐多种玩家主观反应假设，并作为 `L4A synthetic internal playability review` 的核心输入。
 
 ## 范围
 - 覆盖 simulated player personas 的清单、输入输出 contract、触发方式、与标准角色 subagent 的协作边界。
@@ -60,7 +60,7 @@
   1. `识别是否存在显著主观体验风险 -> 选择默认或定制 persona 子集 -> 组装 persona review packet`
   2. `并行执行多个 persona 模拟 -> 回收 persona cards -> 标记共性断点 / 风格分歧`
   3. `qa_engineer` / `producer_system_designer` / 命中的工程角色读取 persona cards -> 回写正式 role review card`
-  4. `若需要更高信度 -> 升级到 L4 结构化真人试玩或 L5 受控外部信号`
+  4. `若需要更高信度 -> 从 `L4A` 升级到 `L4B structured human playtest` 或 L5 受控外部信号`
 
 ## 3. Persona Catalog
 | persona_id | 核心风格 | 高敏感项 | 低容忍项 | 最关注的问题 | 默认使用场景 |
@@ -136,7 +136,7 @@
   - persona 之间对同一节点出现明显风格分歧
 - 永远不能越过的边界:
   - persona panel 只能输出内部体验假设与风险线索，不能写成“玩家已经验证喜欢”
-  - persona panel 不能单独替代 L4 结构化真人试玩或 L5 外部信号
+  - persona panel 不能单独替代 `L4B structured human playtest` 或 L5 外部信号
 
 ## 8. Acceptance Criteria
 - AC-1: 专题定义至少 5 类固定 persona，并写清各自偏好与低容忍项。
@@ -160,7 +160,7 @@
 - Edge Cases:
   - 若 persona card 没有一手证据，只是转述 role review：必须标 `secondary_review_only`。
   - 若 selected personas 未覆盖本次改动最关键风险面：必须记为 `panel_incomplete`。
-  - 若 persona panel 全正面，但没有任何真人试玩：仍只能记为内部假设完成。
+  - 若 persona panel 全正面，但没有任何真人试玩：仍只能记为 `L4A` 完成，不能宣称 `L4B` 已完成。
 - Non-Functional Requirements:
   - NFR-SPP-1: 新读者应在 5 分钟内知道何时需要开 persona panel。
   - NFR-SPP-2: 每张 persona card 必须在 30 秒内看出“这个风格的玩家会在哪掉线”。
@@ -180,4 +180,4 @@
 | `DEC-SPP-001` | 用 non-role persona panel 表达玩家视角 | 新增正式 `player` 角色 | 会破坏现有标准角色治理与 PM 约束。 |
 | `DEC-SPP-002` | 固定 5 类高复用 persona | 每次临时想象不同玩家 | 临时脑补不可比较，也无法沉淀治理规范。 |
 | `DEC-SPP-003` | persona 输出先汇入标准角色 review | persona panel 直接给最终放行结论 | 玩家主观模拟不应绕过 QA / producer / 工程角色收口。 |
-| `DEC-SPP-004` | persona panel 只作为内部体验假设层 | 把 persona simulation 当成真实玩家测试 | 证明强度不够，会污染 L4/L5 边界。 |
+| `DEC-SPP-004` | persona panel 只作为 `L4A` 内部体验假设层 | 把 persona simulation 当成真实玩家测试 | 证明强度不够，会污染 `L4B/L5` 边界。 |

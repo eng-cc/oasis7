@@ -141,11 +141,17 @@
 - 目标：验证共识、网络、复制、存储一致性与恢复链路。
 - 性质：不应缺席；否则“整应用测试”会有明显盲区。
 
-### L4 UI 闭环层（Web 为默认）
-- 目标：验证真实用户路径可用性（加载、交互、状态可见、无 console error）。
-- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。制作人试玩 / 发布前人工验收仍优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断，制作人入口则会自动重建。launcher stack 已不再接受 no-LLM 启动；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
-- source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
+### L4A synthetic 内部闭环层（Web 为默认）
+- 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
+- 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 已不再接受 no-LLM 启动；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
+- 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
+
+### L4B 结构化真人试玩层
+- 目标：验证真实人类在有时间、耐心和机会成本约束下，是否看得懂、是否感到有杠杆、是否想继续玩。
+- 默认：制作人试玩 / 发布前人工验收优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。脚本退出后，必须继续填写 `doc/playability_test_result/playability_test_card.md` 或等价正式卡片；只有脚本执行而没有人类主观反馈，不算 `L4B` 完成。
+- 结论边界：这一层可以回答“真人是否真的想继续玩”，但仍不自动等价于外部市场验证。
+- source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
 
 ### L5 长稳与压力层
 - 目标：验证在长时运行/高事件量下系统退化策略和稳定性。
@@ -338,7 +344,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_net --features runtime_bridge --lib
   - `--block-remove-signer-id` 可重复使用；当 block manifest 让 `finality signer_count < threshold` 时，默认预期是 `import_policy_reject`
   - 若对 finality slot 复用原 `signer_id`，真实导入会命中 `GovernancePolicyInvalid`，因为 finality signer 绑定到现有 node identity
 
-### S5：Viewer crate 单测与 wasm 编译套件（L4 前置）
+### S5：Viewer crate 单测与 wasm 编译套件（L4A 前置）
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7_viewer
 env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown
@@ -348,7 +354,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - 这是 UI 闭环前的稳定性筛网；
   - 该套件已并入 `S1/S2` 的默认 gate。
 
-### S6：Web UI 闭环 smoke 套件（L4）
+### S6：Web UI 闭环 smoke 套件（L4A）
 - S6 详细执行步骤、agent-browser 命令、发布门禁与补充约定已拆分到：
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`（需求边界/成功标准）
@@ -370,14 +376,14 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
   - `renderMode=software_safe`：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
   - `renderMode!=software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
-- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。制作人试玩与发布前人工验收若要进入真实产品路径，优先直接执行 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`，脚本退出时会自动关闭该浏览器会话）；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
+- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B human`，优先直接执行 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`，脚本退出时会自动关闭该浏览器会话），并补齐正式 playability 卡。仅执行脚本不填卡，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
 - agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。
 - 防误用约束：
   - `scripts/run-game-test-ab.sh` 仅用于自动化回归哨兵（TTFC/命中率/无进展窗口）；推荐与 `--bundle-dir <bundle>` 搭配做产物态 smoke，但仍不等价于“真实玩家长玩评测”。
 - `run-game-test-ab.sh --headless` 若命中 `SwiftShader` / software renderer，应先确认页面是否已自动切到 `software_safe`；只有未切入 safe-mode 时才按环境阻断处理，不得把 `connectionStatus=connecting` 误判为 fresh Web 构建或玩法回归；Viewer Web 默认继续使用 headed 模式。
-  - 发布前结论仍需补充手动长玩与卡片填写（按 `doc/playability_test_result/game-test.prd.md` 执行）。
+  - 发布前结论仍需补充 `L4B` 手动长玩与卡片填写（按 `doc/playability_test_result/game-test.prd.md` 执行）。
 - 若改动影响前期工业引导（`首个制成品 / 停机恢复 / 首座工厂单元`），必须补跑 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 中对应卡片，并把结论回写正式 playability 卡。
   - 对外样张链路需使用 strict 语义门禁，不得以 `off` / `soft` 结果作为发布判定证据。
 - 若需要为 `#46 PostOnboarding` 补无 UI / 非浏览器验证，执行 `./scripts/viewer-post-onboarding-headless-smoke.sh`。
