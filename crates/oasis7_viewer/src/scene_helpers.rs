@@ -911,18 +911,18 @@ pub(super) fn spawn_label(
 
 pub(super) fn space_origin(space: &SpaceConfig) -> GeoPos {
     GeoPos {
-        x_cm: space.width_cm as f64 / 2.0,
-        y_cm: space.depth_cm as f64 / 2.0,
-        z_cm: space.height_cm as f64 / 2.0,
+        x_cm: space.width_cm / 2,
+        y_cm: space.depth_cm / 2,
+        z_cm: space.height_cm / 2,
     }
 }
 
 pub(super) fn geo_to_vec3(pos: GeoPos, origin: GeoPos, cm_to_unit: f32) -> Vec3 {
     let scale = cm_to_unit as f64;
     Vec3::new(
-        ((pos.x_cm - origin.x_cm) * scale) as f32,
-        ((pos.z_cm - origin.z_cm) * scale) as f32,
-        ((pos.y_cm - origin.y_cm) * scale) as f32,
+        ((pos.x_cm - origin.x_cm) as f64 * scale) as f32,
+        ((pos.z_cm - origin.z_cm) as f64 * scale) as f32,
+        ((pos.y_cm - origin.y_cm) as f64 * scale) as f32,
     )
 }
 

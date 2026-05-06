@@ -88,9 +88,9 @@ fn selection_related_ticks_match_agent_events() {
             "loc-1",
             "L1",
             oasis7::geometry::GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
+                x_cm: 0,
+                y_cm: 0,
+                z_cm: 0,
             },
         ),
     );
@@ -100,9 +100,9 @@ fn selection_related_ticks_match_agent_events() {
             "agent-1",
             "loc-1",
             oasis7::geometry::GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
+                x_cm: 0,
+                y_cm: 0,
+                z_cm: 0,
             },
         ),
     );
@@ -152,9 +152,9 @@ fn selection_related_ticks_match_agent_events() {
                 location_id: "loc-2".to_string(),
                 name: "L2".to_string(),
                 pos: oasis7::geometry::GeoPos {
-                    x_cm: 1.0,
-                    y_cm: 1.0,
-                    z_cm: 1.0,
+                    x_cm: 1,
+                    y_cm: 1,
+                    z_cm: 1,
                 },
                 profile: oasis7::simulator::LocationProfile::default(),
             },

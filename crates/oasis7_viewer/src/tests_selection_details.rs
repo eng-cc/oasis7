@@ -98,19 +98,11 @@ fn update_ui_populates_agent_selection_details_with_llm_trace() {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
     model.agents.insert(
         "agent-1".to_string(),
-        oasis7::simulator::Agent::new(
-            "agent-1",
-            "loc-1",
-            oasis7::geometry::GeoPos::new(1.0, 2.0, 3.0),
-        ),
+        oasis7::simulator::Agent::new("agent-1", "loc-1", oasis7::geometry::GeoPos::new(1, 2, 3)),
     );
 
     let snapshot = oasis7::simulator::WorldSnapshot {
@@ -209,7 +201,7 @@ fn update_ui_populates_agent_selection_details_with_claim_state() {
         .expect("primary agent model")
         .clone();
     target_agent.id = target_agent_id.clone();
-    target_agent.pos = oasis7::geometry::GeoPos::new(4.0, 5.0, 6.0);
+    target_agent.pos = oasis7::geometry::GeoPos::new(4, 5, 6);
     snapshot
         .model
         .agents
@@ -230,7 +222,7 @@ fn update_ui_populates_agent_selection_details_with_claim_state() {
         .expect("primary agent cell")
         .clone();
     target_cell.state.agent_id = target_agent_id.clone();
-    target_cell.state.pos = oasis7::geometry::GeoPos::new(4.0, 5.0, 6.0);
+    target_cell.state.pos = oasis7::geometry::GeoPos::new(4, 5, 6);
     target_cell.last_active = 2;
     runtime_snapshot
         .state
@@ -393,7 +385,7 @@ fn update_ui_populates_location_selection_details() {
     let mut location = oasis7::simulator::Location::new_with_profile(
         "loc-1",
         "Alpha",
-        oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        oasis7::geometry::GeoPos::new(0, 0, 0),
         oasis7::simulator::LocationProfile {
             material: oasis7::simulator::MaterialKind::Silicate,
             radius_cm: 320,

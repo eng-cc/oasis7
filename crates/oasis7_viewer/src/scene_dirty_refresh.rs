@@ -251,9 +251,9 @@ mod tests {
             .location_entities
             .insert(location_id.to_string(), Entity::from_bits(1));
         let pos = GeoPos {
-            x_cm: 1.0,
-            y_cm: 2.0,
-            z_cm: 3.0,
+            x_cm: 1,
+            y_cm: 2,
+            z_cm: 3,
         };
         scene
             .location_positions
@@ -266,9 +266,9 @@ mod tests {
             &scene,
             location_id,
             GeoPos {
-                x_cm: 4.0,
-                y_cm: 2.0,
-                z_cm: 3.0
+                x_cm: 4,
+                y_cm: 2,
+                z_cm: 3
             },
             120
         ));
@@ -280,9 +280,9 @@ mod tests {
         let agent_id = "agent-1";
         let kinematics = AgentKinematics::default();
         let pos = GeoPos {
-            x_cm: 1.0,
-            y_cm: 2.0,
-            z_cm: 3.0,
+            x_cm: 1,
+            y_cm: 2,
+            z_cm: 3,
         };
         scene
             .agent_entities
@@ -346,9 +346,9 @@ mod tests {
                 "loc-1",
                 "Alpha",
                 GeoPos {
-                    x_cm: 0.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
+                    x_cm: 0,
+                    y_cm: 0,
+                    z_cm: 0,
                 },
             ),
         );
@@ -358,9 +358,9 @@ mod tests {
                 "agent-1",
                 "loc-1",
                 GeoPos {
-                    x_cm: 0.0,
-                    y_cm: 0.0,
-                    z_cm: 0.0,
+                    x_cm: 0,
+                    y_cm: 0,
+                    z_cm: 0,
                 },
             ),
         );

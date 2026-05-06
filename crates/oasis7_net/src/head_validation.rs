@@ -215,7 +215,7 @@ mod tests {
 
         world.submit_action(Action::RegisterAgent {
             agent_id: "agent-1".to_string(),
-            pos: GeoPos::new(0.0, 0.0, 0.0),
+            pos: GeoPos::new(0, 0, 0),
         });
         world.step().expect("step world");
 

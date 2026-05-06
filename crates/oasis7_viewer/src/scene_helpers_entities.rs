@@ -719,10 +719,10 @@ pub(super) fn spawn_chunk_entity(
     }
     scene.chunk_entities.remove(&chunk_id);
 
-    let min_x = ((bounds.min.x_cm - origin.x_cm) * cm_to_unit as f64) as f32;
-    let max_x = ((bounds.max.x_cm - origin.x_cm) * cm_to_unit as f64) as f32;
-    let min_z = ((bounds.min.y_cm - origin.y_cm) * cm_to_unit as f64) as f32;
-    let max_z = ((bounds.max.y_cm - origin.y_cm) * cm_to_unit as f64) as f32;
+    let min_x = ((bounds.min.x_cm - origin.x_cm) as f64 * cm_to_unit as f64) as f32;
+    let max_x = ((bounds.max.x_cm - origin.x_cm) as f64 * cm_to_unit as f64) as f32;
+    let min_z = ((bounds.min.y_cm - origin.y_cm) as f64 * cm_to_unit as f64) as f32;
+    let max_z = ((bounds.max.y_cm - origin.y_cm) as f64 * cm_to_unit as f64) as f32;
     let thickness = grid_line_thickness(GridLineKind::Chunk, ViewerCameraMode::TwoD);
     let y = -((space.height_cm as f32) * cm_to_unit * 0.5) + thickness * 0.7;
 

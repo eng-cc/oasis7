@@ -850,12 +850,12 @@ mod tests {
     fn sample_snapshot() -> WorldSnapshot {
         let mut model = WorldModel::default();
 
-        let mut loc_a = Location::new("loc-a", "A", GeoPos::new(0.0, 0.0, 0.0));
+        let mut loc_a = Location::new("loc-a", "A", GeoPos::new(0, 0, 0));
         loc_a
             .resources
             .set(ResourceKind::Electricity, 20)
             .expect("set electricity");
-        let mut loc_b = Location::new("loc-b", "B", GeoPos::new(100.0, 0.0, 0.0));
+        let mut loc_b = Location::new("loc-b", "B", GeoPos::new(100, 0, 0));
         loc_b
             .resources
             .set(ResourceKind::Electricity, 80)
@@ -865,7 +865,7 @@ mod tests {
         model.locations.insert("loc-b".to_string(), loc_b);
         model.agents.insert(
             "agent-1".to_string(),
-            Agent::new("agent-1", "loc-a", GeoPos::new(0.0, 0.0, 0.0)),
+            Agent::new("agent-1", "loc-a", GeoPos::new(0, 0, 0)),
         );
 
         WorldSnapshot {

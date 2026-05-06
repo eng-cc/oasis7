@@ -1068,14 +1068,97 @@ fn move_towards_geo_pos(from: GeoPos, to: GeoPos, step_cm: i64) -> GeoPos {
     let dx = to.x_cm - from.x_cm;
     let dy = to.y_cm - from.y_cm;
     let dz = to.z_cm - from.z_cm;
-    let distance = ((dx * dx + dy * dy + dz * dz) as f64).sqrt();
-    if distance <= f64::EPSILON {
+    let distance_sq = squared_distance_cm(dx, dy, dz);
+    if distance_sq == 0 {
         return to;
     }
+    let step_sq = squared_distance_cm(step_cm, 0, 0);
+    if distance_sq <= step_sq {
+        return to;
+    }
+    let distance = (distance_sq as f64).sqrt();
     let ratio = (step_cm as f64 / distance).clamp(0.0, 1.0);
+    let scaled = [
+        (dx as f64) * ratio,
+        (dy as f64) * ratio,
+        (dz as f64) * ratio,
+    ];
+    let original = [dx, dy, dz];
+    let mut delta = [
+        scaled[0].trunc() as i64,
+        scaled[1].trunc() as i64,
+        scaled[2].trunc() as i64,
+    ];
+
+    let mut order = [0usize, 1, 2];
+    order.sort_by(|left, right| {
+        let left_residual = scaled[*left].abs() - delta[*left].abs() as f64;
+        let right_residual = scaled[*right].abs() - delta[*right].abs() as f64;
+        right_residual
+            .total_cmp(&left_residual)
+            .then_with(|| left.cmp(right))
+    });
+
+    for axis in order {
+        let direction = original[axis].signum();
+        if direction == 0 {
+            continue;
+        }
+        let mut candidate = delta;
+        candidate[axis] += direction;
+        if candidate[axis].abs() > original[axis].abs() {
+            continue;
+        }
+        if squared_distance_cm(candidate[0], candidate[1], candidate[2]) <= step_sq {
+            delta = candidate;
+        }
+    }
+
+    if delta == [0, 0, 0] {
+        let mut dominant_axis = 0usize;
+        for axis in 1..3 {
+            if original[axis].abs() > original[dominant_axis].abs() {
+                dominant_axis = axis;
+            }
+        }
+        delta[dominant_axis] = original[dominant_axis].signum();
+    }
+
     GeoPos::new(
-        from.x_cm + ((dx as f64) * ratio).round() as i64,
-        from.y_cm + ((dy as f64) * ratio).round() as i64,
-        from.z_cm + ((dz as f64) * ratio).round() as i64,
+        from.x_cm + delta[0],
+        from.y_cm + delta[1],
+        from.z_cm + delta[2],
     )
+}
+
+fn squared_distance_cm(x: i64, y: i64, z: i64) -> i128 {
+    let x = x as i128;
+    let y = y as i128;
+    let z = z as i128;
+    (x * x) + (y * y) + (z * z)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::space_distance_cm;
+
+    #[test]
+    fn move_towards_geo_pos_keeps_progress_within_step_budget() {
+        let from = GeoPos::new(0, 0, 0);
+        let to = GeoPos::new(100, 100, 100);
+
+        let moved = move_towards_geo_pos(from, to, 1);
+
+        assert_ne!(moved, from);
+        assert!(space_distance_cm(from, moved) <= 1);
+    }
+
+    #[test]
+    fn move_towards_geo_pos_returns_target_when_step_reaches_destination() {
+        let from = GeoPos::new(0, 0, 0);
+        let to = GeoPos::new(3, 4, 0);
+
+        assert_eq!(move_towards_geo_pos(from, to, 5), to);
+    }
 }

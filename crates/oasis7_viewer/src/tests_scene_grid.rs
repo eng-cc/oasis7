@@ -140,11 +140,7 @@ fn sample_snapshot() -> WorldSnapshot {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
     let mut config = oasis7::simulator::WorldConfig::default();
     config.space.width_cm = 10_000_000;
