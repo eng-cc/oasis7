@@ -145,6 +145,9 @@ const REPLICATION_SUCCESSOR_PROBE_COOLDOWN_MS: i64 = 1_000;
 const EXECUTION_BINDING_HISTORY_LIMIT: usize = 256;
 const FINALITY_LATENCY_HISTORY_LIMIT: usize = 128;
 
+pub const EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE: &str =
+    "execution driver missing predecessor record for non-contiguous committed height";
+
 fn required_network_blob_matches(sample_count: usize) -> usize {
     sample_count
         .min(STORAGE_GATE_NETWORK_MIN_MATCHES_CAP)
@@ -173,16 +176,14 @@ enum GapSyncHeightOutcome {
     NotFound,
 }
 
-fn execution_hook_ptr<'a>(
-    execution_hook: Option<&'a mut dyn NodeExecutionHook>,
-) -> Option<*mut (dyn NodeExecutionHook + 'a)> {
-    execution_hook.map(|hook| hook as *mut dyn NodeExecutionHook)
-}
-
-unsafe fn reborrow_execution_hook_ptr<'a>(
-    execution_hook: Option<*mut (dyn NodeExecutionHook + 'a)>,
-) -> Option<&'a mut dyn NodeExecutionHook> {
-    execution_hook.map(|hook| unsafe { &mut *hook })
+fn with_execution_hook<T>(
+    execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
+    f: impl FnOnce(Option<&mut dyn NodeExecutionHook>) -> T,
+) -> T {
+    match execution_hook {
+        Some(hook) => f(Some(&mut **hook)),
+        None => f(None),
+    }
 }
 
 pub struct NodeRuntime {
@@ -314,7 +315,7 @@ impl NodeRuntime {
                         &mut engine,
                         replication_runtime,
                         self.config.world_id.as_str(),
-                        execution_hook_ptr(Some(hook.as_mut())),
+                        Some(hook.as_mut()),
                     ),
                     Err(_) => Err(NodeError::Execution {
                         reason: "execution hook lock poisoned".to_string(),

@@ -1,14 +1,14 @@
 use super::*;
 
 impl PosNodeEngine {
-    pub(super) fn maybe_hold_proposal_for_replication_successor_probe<'a>(
+    pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         now_ms: i64,
         mut replication: Option<&mut ReplicationRuntime>,
-        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
+        mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<bool, NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(false);
@@ -43,8 +43,8 @@ impl PosNodeEngine {
                 self.last_replication_successor_probe_hold = None;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
-                self.apply_synced_replication_commit(world_id, &payload, unsafe {
-                    reborrow_execution_hook_ptr(execution_hook_ptr)
+                with_execution_hook(&mut execution_hook, |hook| {
+                    self.apply_synced_replication_commit(world_id, &payload, hook)
                 })?;
                 Ok(true)
             }

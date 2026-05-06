@@ -44,17 +44,26 @@ pub(super) fn parse_replication_commit_payload(payload: &[u8]) -> Option<Replica
     serde_json::from_slice::<ReplicationCommitPayload>(payload).ok()
 }
 
-pub(super) fn reconcile_engine_with_persisted_replication<'a>(
+pub(super) fn reconcile_engine_with_persisted_replication(
     engine: &mut PosNodeEngine,
     replication: &ReplicationRuntime,
     world_id: &str,
-    execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
+    mut execution_hook: Option<&mut dyn NodeExecutionHook>,
 ) -> Result<(), NodeError> {
     let latest_persisted_height = replication.latest_persisted_commit_height(world_id)?;
     if latest_persisted_height <= engine.committed_height {
         return Ok(());
     }
-    let mut height = engine.committed_height.saturating_add(1);
+    let mut height =
+        engine
+            .committed_height
+            .checked_add(1)
+            .ok_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "persisted replication reconcile height overflow after committed_height={}",
+                    engine.committed_height
+                ),
+            })?;
     while height <= latest_persisted_height {
         let message = replication
             .load_commit_message_by_height(world_id, height)?
@@ -120,10 +129,19 @@ pub(super) fn reconcile_engine_with_persisted_replication<'a>(
                     height, err
                 ),
             })?;
-        engine.apply_synced_replication_commit(world_id, &payload, unsafe {
-            reborrow_execution_hook_ptr(execution_hook_ptr)
+        with_execution_hook(&mut execution_hook, |hook| {
+            engine.apply_synced_replication_commit(world_id, &payload, hook)
         })?;
-        height = height.saturating_add(1);
+        if height == latest_persisted_height {
+            break;
+        }
+        height = height
+            .checked_add(1)
+            .ok_or_else(|| NodeError::Replication {
+                reason: format!(
+                    "persisted replication reconcile cursor overflow at height={height}"
+                ),
+            })?;
     }
     Ok(())
 }
