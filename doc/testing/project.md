@@ -1,8 +1,9 @@
 # testing PRD Project
 
-审计轮次: 8
+审计轮次: 9
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] playability-l4-synthetic-human-split-2026-05-06 (PRD-TESTING-010) [test_tier_required]: 新增“好玩性 L4 synthetic/human 分层（2026-05-06）”专题，正式把 `L4` 拆成 `L4A synthetic` 与 `L4B human`，并同步 evidence stack、manual 与模块根入口。 Trace: .pm/tasks/task_a68decb0a2c8460aa7d989df7370c901.yaml
 - [x] playability-simulated-player-persona-panel-2026-05-06 (PRD-TESTING-009) [test_tier_required]: 新增“模拟玩家 persona 评审面板（2026-05-06）”专题，设计固定 persona 清单、persona packet / card、触发矩阵，以及与标准角色 subagent 的回流边界。 Trace: .pm/tasks/task_a9d3c884a3074ab2b0f3b10dab7bb86e.yaml
 - [x] playability-subagent-review-system-2026-05-06 (PRD-TESTING-008) [test_tier_required]: 新增“好玩性 subagent 评审系统（2026-05-06）”专题，设计标准角色 subagent 清单、review packet / output card、trigger matrix、调度顺序与 stop conditions。 Trace: .pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.yaml
 - [x] playability-evidence-stack-2026-05-06 (PRD-TESTING-007) [test_tier_required]: 新增“好玩性证据栈（2026-05-06）”专题，正式定义自动化/agent probe/遥测实验/真人试玩/受控外部信号五层证据、`go/watch/hold/block` 组合规则，以及“自动化不能单独保证好玩”的模块级结论。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml

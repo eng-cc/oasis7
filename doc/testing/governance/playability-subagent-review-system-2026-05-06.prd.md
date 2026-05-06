@@ -3,12 +3,12 @@
 - 对应设计文档: `doc/testing/governance/playability-subagent-review-system-2026-05-06.design.md`
 - 对应项目管理文档: `doc/testing/governance/playability-subagent-review-system-2026-05-06.project.md`
 
-审计轮次: 2
+审计轮次: 3
 
 ## 目标
 - 把“多角色内部人工评审可以由标准角色 subagent 补齐”落成一份可执行的 testing/governance 专题。
 - 统一标准角色 subagent 的输入、输出、调度顺序、升级边界与 stop conditions。
-- 明确它们如何接收并收口 `simulated player persona panel` 产出的内部玩家视角假设。
+- 明确它们如何接收并收口 `simulated player persona panel` 产出的内部玩家视角假设，并共同形成 `L4A synthetic internal playability review`。
 
 ## 范围
 - 覆盖内部 playability review 所需的标准角色 subagent 设计、review packet contract、output card schema、与 simulated persona panel 的 handoff contract，以及 orchestration 规则。
@@ -39,7 +39,7 @@
   - SC-3: 系统定义一份统一 review packet，让各角色 review 可以并行，但汇总口径一致。
   - SC-4: 系统定义“默认必开角色”和“按 changed surface 追加角色”的触发矩阵。
   - SC-5: 系统明确 `subagent review = 内部证据编排`，仍不替代 L5 真实外部验证。
-  - SC-6: 系统明确 simulated persona panel 不是正式角色，只能作为标准角色 review 的辅助输入层。
+  - SC-6: 系统明确 simulated persona panel 不是正式角色，只能作为标准角色 review 的辅助输入层，并共同形成 `L4A`。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -60,7 +60,7 @@
   1. `识别当前变更的玩家 surface / 风险面 -> 组装 review packet -> 选择默认 + 按需 subagent`
   2. `若需要补多风格玩家假设 -> 先运行 simulated persona panel -> 回流 persona cards`
   3. `并行执行角色 subagent review -> 回收统一输出卡 -> 标记 blocker / watch / claim drift`
-  4. `producer_system_designer` 汇总各卡 -> 输出内部阶段结论 -> 判断是否仍缺 L5`
+  4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5``
 
 ## 3. Functional Specification Matrix
 | subagent | 默认/按需 | 主要输入 | 必答问题 | 输出 | 不得越权 |
@@ -90,6 +90,7 @@
   - `open_questions`
   - `persona_panel_request`
   - `persona_cards`
+  - `target_l4_lane`: `L4A_only` / `L4A_then_L4B`
 - Output card schema:
   - `role_name`
   - `verdict`: `pass/watch/hold/block`
@@ -122,7 +123,7 @@
 - Phase A: `qa_engineer` + `producer_system_designer` 先确认 review packet 是否完整。
 - Phase B: 若命中主观体验差异风险，先运行 simulated persona panel，回收 persona cards。
 - Phase C: 其余按 changed surface 命中的角色 subagent 并行执行，并吸收 persona cards。
-- Phase D: `qa_engineer` 先做阻断归纳，`producer_system_designer` 再做最终内部结论汇总。
+- Phase D: `qa_engineer` 先做阻断归纳，`producer_system_designer` 再做 `L4A synthetic` 结论汇总。
 - Phase E: 若需要对外说法或 preview，`liveops_community` 在最终汇总后做 claim-envelope 复核。
 
 ## 7. Escalation And Stop Conditions
@@ -137,6 +138,7 @@
   - `runtime` / `wasm` 指出当前体验结论建立在不稳定 contract 上
 - 永远不能被内部 subagent 跳过的 stop line:
   - 缺真实外部信号时，不得把结论写成“已被真实玩家验证”
+  - 缺 `L4B` 真人试玩时，不得把 `L4A` synthetic 结论写成“真人已经想继续玩”
 
 ## 8. Acceptance Criteria
 - AC-1: 新专题定义七类标准角色 subagent。
@@ -162,7 +164,7 @@
   - 若某角色输入为空，但 trigger matrix 命中：必须在输出卡显式写 `insufficient_input`，不能假装评审完成。
   - 若某角色 review 只基于别的角色结论，没有一手证据：必须标记为 `secondary_review_only`。
   - 若 persona cards 已存在，但角色 review 完全忽略其共性断点：必须说明忽略理由，不能静默跳过。
-  - 若多个 subagent 全部正面，但没有任何 L4/L5 证据：只能给“内部准备完成”，不能给“玩法已被证明”。
+  - 若多个 subagent 全部正面，但没有任何 `L4B/L5` 证据：只能给“`L4A synthetic` 准备完成”，不能给“玩法已被证明”。
 - Non-Functional Requirements:
   - NFR-SUB-1: 新读者应在 5 分钟内知道本次改动要开哪些角色 subagent。
   - NFR-SUB-2: 每张输出卡必须在 30 秒内看出该角色到底证明了什么、没证明什么。
