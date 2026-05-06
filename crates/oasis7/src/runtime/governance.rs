@@ -287,6 +287,8 @@ pub struct GovernanceValidatorAdmissionRecord {
     pub public_manifest_hash: String,
     #[serde(default)]
     pub requested_at_epoch: u64,
+    #[serde(default)]
+    pub last_transition_tick: WorldTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_at_epoch: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

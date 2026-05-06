@@ -5,9 +5,11 @@ impl World {
         &self,
         epoch_id: u64,
     ) -> Option<GovernanceFinalityEpochSnapshot> {
-        let registry = self
-            .resolve_governance_effective_finality_signer_registry()
-            .ok()??;
+        let registry = match self.resolve_governance_effective_finality_signer_registry() {
+            Ok(Some(registry)) => registry,
+            Ok(None) => return None,
+            Err(_) => self.state.governance_finality_signer_registry.clone()?,
+        };
         let signer_node_ids: Vec<String> = registry.signer_bindings.keys().cloned().collect();
         let threshold = registry.threshold;
         let threshold_bps = if registry.threshold_bps > 0 {

@@ -135,6 +135,30 @@ fn validator_admission_lifecycle_updates_effective_registry_and_allows_reapply_a
         reapplied.status,
         GovernanceValidatorAdmissionStatus::Applied
     );
+
+    world.submit_action(Action::ApproveGovernanceValidatorAdmission {
+        controller_account_id: "msig.genesis.v1".to_string(),
+        candidate_id: "candidate-c-reapply".to_string(),
+    });
+    world.step().expect("approve reapply validator admission");
+    world.submit_action(Action::ActivateGovernanceValidatorAdmission {
+        controller_account_id: "msig.genesis.v1".to_string(),
+        candidate_id: "candidate-c-reapply".to_string(),
+        activation_epoch: 0,
+    });
+    world.step().expect("activate reapply validator admission");
+
+    let reactivated_registry = world
+        .resolve_governance_effective_finality_signer_registry()
+        .expect("resolve effective registry after reapply")
+        .expect("effective registry after reapply");
+    assert_eq!(
+        reactivated_registry
+            .signer_bindings
+            .get("validator-c")
+            .map(String::as_str),
+        Some("3333333333333333333333333333333333333333333333333333333333333333")
+    );
 }
 
 #[test]
@@ -190,5 +214,57 @@ fn validator_admission_probation_becomes_effective_once_activation_epoch_is_due(
             .get("validator-future")
             .map(String::as_str),
         Some("4444444444444444444444444444444444444444444444444444444444444444")
+    );
+}
+
+#[test]
+fn validator_admission_activate_with_already_due_epoch_becomes_active_immediately() {
+    let mut world = World::new();
+    seed_governance_world(&mut world);
+
+    submit_candidate(
+        &mut world,
+        "candidate-late",
+        "validator-late",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+    );
+    world.submit_action(Action::ApproveGovernanceValidatorAdmission {
+        controller_account_id: "msig.genesis.v1".to_string(),
+        candidate_id: "candidate-late".to_string(),
+    });
+    world.step().expect("approve late validator admission");
+    for _ in 0..15 {
+        world
+            .step()
+            .expect("advance governance epoch before late activation");
+    }
+
+    world.submit_action(Action::ActivateGovernanceValidatorAdmission {
+        controller_account_id: "msig.genesis.v1".to_string(),
+        candidate_id: "candidate-late".to_string(),
+        activation_epoch: 1,
+    });
+    world
+        .step()
+        .expect("activate already-due validator admission");
+
+    let late_record = world
+        .governance_validator_admissions()
+        .get("candidate-late")
+        .expect("late candidate");
+    assert_eq!(
+        late_record.status,
+        GovernanceValidatorAdmissionStatus::Active
+    );
+    let registry = world
+        .resolve_governance_effective_finality_signer_registry()
+        .expect("resolve effective registry for late activation")
+        .expect("effective registry for late activation");
+    assert_eq!(
+        registry
+            .signer_bindings
+            .get("validator-late")
+            .map(String::as_str),
+        Some("5555555555555555555555555555555555555555555555555555555555555555")
     );
 }
