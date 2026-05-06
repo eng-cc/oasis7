@@ -1,26 +1,75 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use oasis7::runtime::{GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy};
+use oasis7::runtime::{
+    GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
+    GovernanceThresholdSignerPolicy,
+};
 use oasis7_node::{
     NodeConfig, NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy,
+    NodePosConfig, PosValidator,
 };
 
+const WORLD_REGISTRY_EQUAL_VALIDATOR_STAKE: u64 = 100;
+
 pub(super) fn apply_world_governance_registry_overrides(
-    config: NodeConfig,
+    mut config: NodeConfig,
     execution_world_dir: &Path,
 ) -> Result<NodeConfig, String> {
     let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
-    let Some(registry) = world.governance_main_token_controller_registry() else {
-        return Ok(config);
-    };
-    let binding = node_main_token_controller_binding_from_registry(
-        registry,
-        config.main_token_controller_binding.clone(),
-    );
-    config
-        .with_main_token_controller_binding(binding)
-        .map_err(|err| format!("failed to apply world governance controller registry: {err:?}"))
+    if let Some(registry) = world.governance_finality_signer_registry() {
+        let pos_config = node_pos_config_from_world_finality_registry(registry, &config.pos_config);
+        config = config.with_pos_config(pos_config).map_err(|err| {
+            format!("failed to apply world governance finality registry: {err:?}")
+        })?;
+    }
+    if let Some(registry) = world.governance_main_token_controller_registry() {
+        let binding = node_main_token_controller_binding_from_registry(
+            registry,
+            config.main_token_controller_binding.clone(),
+        );
+        config = config
+            .with_main_token_controller_binding(binding)
+            .map_err(|err| {
+                format!("failed to apply world governance controller registry: {err:?}")
+            })?;
+    }
+    Ok(config)
+}
+
+fn node_pos_config_from_world_finality_registry(
+    registry: &GovernanceFinalitySignerRegistry,
+    fallback: &NodePosConfig,
+) -> NodePosConfig {
+    let validators = registry
+        .signer_bindings
+        .keys()
+        .cloned()
+        .map(|validator_id| PosValidator {
+            validator_id,
+            stake: WORLD_REGISTRY_EQUAL_VALIDATOR_STAKE,
+        })
+        .collect::<Vec<PosValidator>>();
+    let validator_player_ids = registry
+        .signer_bindings
+        .keys()
+        .cloned()
+        .map(|validator_id| (validator_id.clone(), validator_id))
+        .collect::<BTreeMap<String, String>>();
+    NodePosConfig {
+        validators,
+        validator_player_ids,
+        validator_signer_public_keys: registry.signer_bindings.clone(),
+        supermajority_numerator: fallback.supermajority_numerator,
+        supermajority_denominator: fallback.supermajority_denominator,
+        epoch_length_slots: fallback.epoch_length_slots,
+        slot_duration_ms: fallback.slot_duration_ms,
+        ticks_per_slot: fallback.ticks_per_slot,
+        proposal_tick_phase: fallback.proposal_tick_phase,
+        adaptive_tick_scheduler_enabled: fallback.adaptive_tick_scheduler_enabled,
+        slot_clock_genesis_unix_ms: fallback.slot_clock_genesis_unix_ms,
+        max_past_slot_lag: fallback.max_past_slot_lag,
+    }
 }
 
 fn node_main_token_controller_binding_from_registry(
@@ -62,7 +111,8 @@ fn node_main_token_controller_signer_policy_from_registry(
 mod tests {
     use super::apply_world_governance_registry_overrides;
     use oasis7::runtime::{
-        GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, World,
+        GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
+        GovernanceThresholdSignerPolicy, World,
     };
     use oasis7_node::{NodeConfig, NodeRole};
     use std::collections::{BTreeMap, BTreeSet};
@@ -148,5 +198,79 @@ mod tests {
                 .map(|policy| policy.threshold),
             Some(2)
         );
+    }
+
+    #[test]
+    fn world_finality_registry_overrides_node_pos_config() {
+        let temp_dir = temp_dir("finality-override");
+        let mut world = World::new();
+        world
+            .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
+                slot_id: "governance.finality.v1".to_string(),
+                threshold: 2,
+                threshold_bps: 0,
+                signer_bindings: BTreeMap::from([
+                    (
+                        "validator-a".to_string(),
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    ),
+                    (
+                        "validator-b".to_string(),
+                        "2222222222222222222222222222222222222222222222222222222222222222"
+                            .to_string(),
+                    ),
+                    (
+                        "validator-c".to_string(),
+                        "3333333333333333333333333333333333333333333333333333333333333333"
+                            .to_string(),
+                    ),
+                ]),
+            })
+            .expect("set finality registry");
+        world.save_to_dir(&temp_dir).expect("save execution world");
+
+        let mut config =
+            NodeConfig::new("node-a", "world-a", NodeRole::Sequencer).expect("node config");
+        config.pos_config.slot_duration_ms = 12_000;
+        config.pos_config.ticks_per_slot = 10;
+        config.pos_config.proposal_tick_phase = 9;
+        let config = apply_world_governance_registry_overrides(config, &temp_dir)
+            .expect("apply registry overrides");
+
+        let validator_ids = config
+            .pos_config
+            .validators
+            .iter()
+            .map(|validator| validator.validator_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            validator_ids,
+            vec!["validator-a", "validator-b", "validator-c"]
+        );
+        assert!(config
+            .pos_config
+            .validators
+            .iter()
+            .all(|validator| validator.stake == 100));
+        assert_eq!(
+            config
+                .pos_config
+                .validator_signer_public_keys
+                .get("validator-b")
+                .map(String::as_str),
+            Some("2222222222222222222222222222222222222222222222222222222222222222")
+        );
+        assert_eq!(
+            config
+                .pos_config
+                .validator_player_ids
+                .get("validator-c")
+                .map(String::as_str),
+            Some("validator-c")
+        );
+        assert_eq!(config.pos_config.slot_duration_ms, 12_000);
+        assert_eq!(config.pos_config.ticks_per_slot, 10);
+        assert_eq!(config.pos_config.proposal_tick_phase, 9);
     }
 }

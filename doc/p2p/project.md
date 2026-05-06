@@ -650,6 +650,19 @@
     - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 4 --interval-secs 5 --out-dir .tmp/p2p_real_env_triad`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] world-registry-validator-truth-bootstrap (PRD-P2P-003/026) [test_tier_required]: 让 `oasis7_chain_runtime` 在 execution world 已存在 `governance_finality_signer_registry` 时，用 world-state registry 覆盖本地 PoS validator membership / signer binding，并把 replication remote writer allowlist 与 reward runtime node identity binding 统一切到这份 effective config；`--node-validator*` 退回为 bootstrap 或显式运维覆盖。 Trace: .pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.yaml
+  - 产物文件:
+    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/governance_registry.rs`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`
+    - `.pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime governance_registry -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定，并将 replication 的 connection-gap 失败从 protocol 级短冷却继续推进到 peer-level transport cooldown；`unsupported` 与 `fetch_commit` 的 `ErrNotFound` 保持 protocol-scoped，同时把 protocol/transport cooldown 状态透出到 chain status 与 triad observability。后续已继续把 `oasis7_net` 生命周期事件面改成基于 peer/语义 key 的短窗去重，并在 `ConnectionEstablished` 后立即裁剪同一 peer 的冗余已建立连接，实测将 `sequencer_ecs` 的 `transport.connection_closed` 从四位数压回两位数、runtime CPU 从 `173.0%` 压到 `122.0%`。 Trace: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.yaml
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:
