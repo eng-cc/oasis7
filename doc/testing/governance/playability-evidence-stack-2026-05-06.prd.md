@@ -16,6 +16,7 @@
   - SC-5: 专题文档明确声明“所有内部人工评审环节都可以优先由对应标准角色 subagent 补齐”，同时保留“这不等价于真实外部玩家验证”的硬边界。
   - SC-6: 专题文档明确声明 simulated player personas 与标准角色 subagents 属于 `L4A` 的核心输入，不新增正式角色，也不替代 `L4B` 真人试玩。
   - SC-7: 专题文档明确写出 `L4A != L4B`，并保留未来 calibration 扩展位，但当前不宣称 `L4A` 已可替代 `L4B`。
+  - SC-8: 专题文档明确当前已经提供 repo-local `L4` scaffold 入口 `./scripts/prepare-playability-l4-review.sh`，可以在单个 worktree 内生成 `L4A` packet / role cards / persona cards / `L4B` 卡片副本 / summary，而不是继续依赖临时手写文件。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -45,15 +46,16 @@
   4. `识别需要人工内部评审的环节 -> 按标准角色开对应 subagent`
   5. `若需要多风格主观体验假设 -> 开 simulated player persona panel + 标准角色 subagent -> 形成 L4A`
   6. `若需要真人主观继续游玩证据 -> 执行 `run-producer-playtest.sh` + playability card -> 形成 L4B`
-  7. `汇总各角色评审 -> 保留外部真实验证边界`
+  7. `若需要一轮完整 L4 -> 先运行 `prepare-playability-l4-review.sh` 生成 packet / cards / summary scaffold，再把 L4A 与 L4B 证据收口到同一 artifact 目录`
+  8. `汇总各角色评审 -> 保留外部真实验证边界`
 - Functional Specification Matrix:
 | 证据层 | 主要输入 | 可以证明 | 不能证明 | oasis7 当前锚点 | 默认 owner |
 | --- | --- | --- | --- | --- | --- |
 | L1 自动化基线 | `required/full`、协议回归、Web 闭环脚本、长稳 smoke | 没坏、可重复、主链路能走通、阻断签名稳定可复现 | 玩家是否觉得有趣、是否愿意继续玩 | `testing-manual.md`、`scripts/ci-tests.sh`、`viewer-software-safe-step-regression.sh` | `qa_engineer` |
 | L2 Agent/fixture probe | 脚本化 step/chat/progression、场景推进、受控 bot/fixture 探针 | 可达性、卡点、节奏断点、是否存在“玩家动作后世界无响应” | 情绪价值、审美、长期动机 | `player leverage` rubric、`world_activity_only`、`snapshot.player_gameplay` | `qa_engineer` + 实现 owner |
 | L3 遥测与实验 | progression funnel、停留时长、回流率、A/B、行为事件 | 某方案是否比另一方案更好；玩家在哪些环节退出 | 指标提升是否真的等于“更好玩”；样本外原因解释 | 本专题先冻结字段与决策口径，不在本轮实现采集系统 | `qa_engineer` + `producer_system_designer` |
-| L4A synthetic internal playability review | 标准角色 subagent review、simulated persona panel、formal player surface 上的 scripted/UI closure、synthetic continuation prediction | 以当前内部模型看，哪些风格玩家可能想继续玩、会在哪掉线、哪些 claim 只在 synthetic 里成立 | 真人在真实时间/耐心/机会成本下是否真的愿意继续玩 | `worktree-harness.sh`、S6 Web UI 闭环、role review cards、persona cards | `producer_system_designer` + `qa_engineer` |
-| L4B structured human playtest | playability 卡片、制作人试玩、QA headed rerun、受控访谈 | 真实人类是否看得懂、是否感到有杠杆、是否想继续玩、阻塞点是否可解释 | 大规模外部市场反应 | `run-producer-playtest.sh`、`doc/playability_test_result/card_*.md` | `producer_system_designer` + `qa_engineer` |
+| L4A synthetic internal playability review | 标准角色 subagent review、simulated persona panel、formal player surface 上的 scripted/UI closure、synthetic continuation prediction | 以当前内部模型看，哪些风格玩家可能想继续玩、会在哪掉线、哪些 claim 只在 synthetic 里成立 | 真人在真实时间/耐心/机会成本下是否真的愿意继续玩 | `prepare-playability-l4-review.sh`、`worktree-harness.sh`、S6 Web UI 闭环、role review cards、persona cards | `producer_system_designer` + `qa_engineer` |
+| L4B structured human playtest | playability 卡片、制作人试玩、QA headed rerun、受控访谈 | 真实人类是否看得懂、是否感到有杠杆、是否想继续玩、阻塞点是否可解释 | 大规模外部市场反应 | `prepare-playability-l4-review.sh`、`run-producer-playtest.sh`、`doc/playability_test_result/card_*.md` | `producer_system_designer` + `qa_engineer` |
 | L5 受控外部信号 | limited preview、liveops 反馈、真实玩家 session | 在真实环境下，当前 claim envelope 是否成立 | 广泛市场成功、长期留存已被证明 | `technical preview` / limited preview 口径、liveops signal 回流 | `liveops_community` + `producer_system_designer` |
 - Internal role-subagent mapping:
   - `qa_engineer` subagent: 负责回归、阻断、`player leverage` / `world_activity_only` 审查。
@@ -89,6 +91,7 @@
   - 即使自动化通过、世界时间推进，只要 `L4A/L4B` 仍不能证明玩家拥有稳定杠杆和继续动机，就不能把项目升级成“已证明好玩”。
   - 对应标准角色的 subagent 可以补齐所有内部 synthetic 评审环节，形成 `L4A`，但不能被记作真人 `L4B` 或真实外部玩家。
   - simulated player personas 只能帮助解释“哪类玩家可能掉线 / 困惑 / 无聊”，属于 `L4A`，不能替代 `L4B` 真人试玩卡片或外部会话。
+  - `prepare-playability-l4-review.sh` 只负责把完整 `L4` packet / cards / summary / commands 固定到同一 worktree；生成 scaffold 不等于 `L4A` 或 `L4B` 已完成。
 - Acceptance Criteria:
   - AC-1: 专题文档明确写出 `L4A/L4B` 在内的证据栈与组合规则。
   - AC-2: 至少列出 `software_safe`、`pure_api`、`--no-llm`、`run-producer-playtest.sh`、playability card、`player leverage` rubric、limited preview 这 7 个现有锚点。
@@ -98,6 +101,7 @@
   - AC-6: 明确写出标准角色 subagent 的适用范围、`player` 非标准角色限制，以及“subagent review != 真实外部玩家验证”的硬边界。
   - AC-7: 明确 simulated player persona panel 的定位、固定 persona 清单，以及其与 `L4A/L4B/L5` 的边界。
   - AC-8: 明确 `L4A` 与 `L4B` 的 operator 入口、claim 名称与当前非替代边界。
+  - AC-9: 明确写出 `./scripts/prepare-playability-l4-review.sh` 是当前 repo-local 的完整 `L4` scaffold 入口，只负责产物准备与命令收口，不等于自动完成评审。
 - Non-Goals:
   - 不在本轮实现新的遥测 SDK、实验平台或外部问卷系统。
   - 不把该专题写成某一个玩法切片的结果报告。
@@ -118,6 +122,7 @@
   - `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
   - `doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
   - `testing-manual.md`
+  - `scripts/prepare-playability-l4-review.sh`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/evidence/gameplay-ten-minute-trust-gate-2026-04-09.md`
   - `doc/playability_test_result/README.md`
@@ -131,6 +136,7 @@
   - 少量外部正反馈与内部留存门冲突：仍以 formal lane 的门禁与 blocker 为准，外部反馈只作为 L5 旁证。
   - 多个角色 subagent 都给出正面结论，但还没有真实外部反馈：仍只能停留在内部证据完成，不得上抬成外部验证完成。
   - 多个 simulated personas 与 role subagents 都给出正面反应，但没有任何真人试玩：仍只能记为 `L4A pass / L4B missing`，不得替代 `L4B`。
+  - 只生成了 `L4` scaffold，但 packet / role cards / persona cards / summary 仍未填写：只能记为“operator 准备完成”，不能记为 `L4A` 或 `L4B` 已完成。
 - Non-Functional Requirements:
   - NFR-PES-1: 审查者必须能在 60 秒内看懂每层证据的证明边界。
   - NFR-PES-2: 所有正式玩法结论都必须能指出“当前到达了哪一层、还缺哪一层”。
@@ -169,3 +175,4 @@
 | `DEC-PES-004` | 所有内部人工评审默认可委托给对应标准角色 subagent | 为每个“玩家视角”额外创造非标准正式角色 | 当前仓库已有标准角色体系，新增非标准角色会破坏 execution log / handoff / PM 约束。 |
 | `DEC-PES-005` | simulated personas 只作为 L4-supporting 的内部假设面板 | 把 simulated persona panel 升格为独立证据层或正式角色 | 这样会模糊 persona 假设与真人试玩之间的证明强度差异。 |
 | `DEC-PES-006` | 把 `L4` 拆成 `L4A synthetic` 与 `L4B human` | 继续把 synthetic 与 human 共用一个 `L4` 标签 | 不拆层会持续混淆“agent 预测继续玩”和“真人实际继续玩”。 |
+| `DEC-PES-007` | 当前先提供 repo-local `L4` scaffold，把 packet/card/summary 入口固定下来 | 继续依赖每次临时手写文件名和执行顺序 | 没有稳定入口就无法说当前 PR 已能在单个 worktree 内完整执行 `L4`。 |

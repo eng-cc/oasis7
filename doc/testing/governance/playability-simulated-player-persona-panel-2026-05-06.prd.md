@@ -11,7 +11,8 @@
 
 ## 范围
 - 覆盖 simulated player personas 的清单、输入输出 contract、触发方式、与标准角色 subagent 的协作边界。
-- 不覆盖真实外部玩家招募、问卷平台或自动 orchestration 工具实现。
+- 覆盖当前 repo-local scaffold 入口如何稳定生成 persona packet 与 persona cards。
+- 不覆盖真实外部玩家招募、问卷平台或“自动完成 persona verdict”的自治 orchestration 实现。
 
 ## 接口 / 数据
 - 专题 PRD: `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
@@ -23,8 +24,8 @@
 - 角色真值入口: `.agents/roles/*.md`
 
 ## 里程碑
-- M1 (2026-05-06): 冻结 simulated player persona panel 的固定 persona 清单、输入输出 contract 与越权边界。
-- M2: 若后续需要自动执行，再补 panel runbook / wrapper 层设计。
+- M1 (2026-05-06): 冻结 simulated player persona panel 的固定 persona 清单、输入输出 contract、越权边界，以及 repo-local scaffold 入口。
+- M2: 若后续需要更强自动化，再补 persona 执行/聚合自动化扩展设计。
 
 ## 风险
 - 若 persona 定义模糊，评审输出会退回泛泛而谈的“像玩家一样看看”。
@@ -39,6 +40,7 @@
   - SC-3: persona panel 被明确写成“内部体验假设层”，而不是新的正式 `.agents/roles/` 角色。
   - SC-4: 专题定义 persona panel 与标准角色 subagent 的协作方式、触发矩阵和 stop conditions。
   - SC-5: 专题明确 `persona simulation != 真实玩家验证`，不得替代 L5 外部信号。
+  - SC-6: 当前仓库提供 `./scripts/prepare-playability-l4-review.sh`，能在单个 worktree 内稳定生成 persona packet 上下文和固定 persona cards。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -57,7 +59,7 @@
   - PRD-TESTING-PERSONA-004: As an implementation owner, I want a trigger matrix for when persona simulation is worth running, so that this panel does not become cargo-cult overhead.
   - PRD-TESTING-PERSONA-005: As a workflow owner, I want persona panel outputs to plug into role-based subagent review, so that internal review still closes through standard roles.
 - Critical User Flows:
-  1. `识别是否存在显著主观体验风险 -> 选择默认或定制 persona 子集 -> 组装 persona review packet`
+  1. `识别是否存在显著主观体验风险 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 persona review packet -> 选择默认或定制 persona 子集`
   2. `并行执行多个 persona 模拟 -> 回收 persona cards -> 标记共性断点 / 风格分歧`
   3. `qa_engineer` / `producer_system_designer` / 命中的工程角色读取 persona cards -> 回写正式 role review card`
   4. `若需要更高信度 -> 从 `L4A` 升级到 `L4B structured human playtest` 或 L5 受控外部信号`
@@ -94,6 +96,14 @@
   - `what_this_persona_does_not_prove`
   - `followup_questions`
   - `handoff_recommended_to`
+- Current repo-local scaffold:
+  - `./scripts/prepare-playability-l4-review.sh` 会一次性生成：
+    - `l4-review-packet.md`
+    - `persona-cards/*.md`
+    - `l4-summary.md`
+    - `commands.sh`
+    - `manifest.json`
+  - 该脚本只负责固定 persona 卡位和统一路径，不自动产出 persona 结论。
 
 ## 5. Trigger Matrix
 - Default-open:
@@ -144,6 +154,7 @@
 - AC-3: persona panel 与标准角色 subagent 的协作方式、触发矩阵和升级条件写清。
 - AC-4: 文档明确写出“persona panel 不是正式角色，不进入 `.agents/roles/`”。
 - AC-5: 文档明确写出“persona simulation != 真实玩家验证”的硬边界。
+- AC-6: 文档明确写出当前 repo-local scaffold 入口与其边界: 能生成 persona cards，但不会自动替代 persona 分析与 role handoff。
 
 ## 9. Non-Goals
 - 不在本轮新增正式 `player` 角色。
@@ -157,10 +168,13 @@
   - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
   - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
   - `.agents/roles/*.md`
+  - `scripts/prepare-playability-l4-review.sh`
+  - `doc/testing/templates/playability-l4-persona-card-template.md`
 - Edge Cases:
   - 若 persona card 没有一手证据，只是转述 role review：必须标 `secondary_review_only`。
   - 若 selected personas 未覆盖本次改动最关键风险面：必须记为 `panel_incomplete`。
   - 若 persona panel 全正面，但没有任何真人试玩：仍只能记为 `L4A` 完成，不能宣称 `L4B` 已完成。
+  - 若 scaffold 已生成，但 persona cards 仍为空白模板：只能记为 panel scaffold 完成，不能记为 persona panel 已执行。
 - Non-Functional Requirements:
   - NFR-SPP-1: 新读者应在 5 分钟内知道何时需要开 persona panel。
   - NFR-SPP-2: 每张 persona card 必须在 30 秒内看出“这个风格的玩家会在哪掉线”。
@@ -181,3 +195,4 @@
 | `DEC-SPP-002` | 固定 5 类高复用 persona | 每次临时想象不同玩家 | 临时脑补不可比较，也无法沉淀治理规范。 |
 | `DEC-SPP-003` | persona 输出先汇入标准角色 review | persona panel 直接给最终放行结论 | 玩家主观模拟不应绕过 QA / producer / 工程角色收口。 |
 | `DEC-SPP-004` | persona panel 只作为 `L4A` 内部体验假设层 | 把 persona simulation 当成真实玩家测试 | 证明强度不够，会污染 `L4B/L5` 边界。 |
+| `DEC-SPP-005` | 当前先提供 repo-local scaffold 固定 persona card 路径与汇总接口 | 等未来自动模拟器成熟后再提供 operator 入口 | 没有稳定 scaffold，persona panel 仍停留在一次性手写流程。 |

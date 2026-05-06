@@ -27,6 +27,9 @@
   - `synthetic_ready`
   - `human_ready`
   - `external_ready`
+- Current scaffold:
+  - `scripts/prepare-playability-l4-review.sh` 负责把 `L4A` packet/cards、`L4B` 卡片副本、summary 和推荐命令固定到同一 artifact 目录。
+  - 该 scaffold 只收口 operator 入口，不改变 `L4A` 不能替代 `L4B` 的边界。
 
 ## 4. 约束
 - `L4A` 不能直接替代 `L4B`。

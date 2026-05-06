@@ -28,6 +28,9 @@
   - `role review card`
 - Aggregation:
   - `final internal playability review summary`
+- Current scaffold:
+  - `scripts/prepare-playability-l4-review.sh` 负责在单个 worktree 内预置 `review packet`、`role review card` 模板、`summary` 与推荐命令。
+  - 该 scaffold 不自动替代任何角色给出 verdict。
 
 ## 4. 调度策略
 - 先做 packet 完整性检查。
