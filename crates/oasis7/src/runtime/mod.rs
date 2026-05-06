@@ -88,7 +88,8 @@ pub use governance::{
     GovernanceFinalityEpochSnapshot, GovernanceFinalitySignerRegistry,
     GovernanceIdentityPenaltyMonitorStats, GovernanceIdentityPenaltyRecord,
     GovernanceIdentityPenaltyStatus, GovernanceMainTokenControllerRegistry,
-    GovernanceThresholdSignerPolicy, Proposal, ProposalDecision, ProposalStatus,
+    GovernanceThresholdSignerPolicy, GovernanceValidatorAdmissionRecord,
+    GovernanceValidatorAdmissionStatus, Proposal, ProposalDecision, ProposalStatus,
 };
 
 // Manifest

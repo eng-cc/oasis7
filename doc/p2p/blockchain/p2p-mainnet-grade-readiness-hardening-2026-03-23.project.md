@@ -22,7 +22,7 @@
   - genesis/treasury 已有 controller slot binding 与本地 signer allowlist / threshold enforcement。
 - 仍待完成:
   - 生产级 signer custody / keystore 的工程替换仍待后续 runtime 实施，当前只完成规格 gate。
-  - 治理 signer 外部化的 runtime 工程替换仍待后续实现，当前只完成规格 gate；其中 validator / finality signer 的准入/激活流程已冻结目标态，但 candidate registry / activation action / probation runbook 仍未落地。
+  - 治理 signer 外部化已完成 runtime 工程替换：execution world registry 会覆盖 chain runtime validator/controller truth，validator admission 也已具备 world-state candidate lifecycle 和 activation/revoke 动作；剩余未收口的是 shared-network probation 证据、更大范围 rotation/revocation drill 与最终 ceremony / QA `pass`。
   - 创世 freeze/ceremony/QA 的真实地址、公钥、dry-run 与最终 QA `pass` 仍待后续执行，当前只完成规格 gate。
 
 ## 依赖
@@ -42,5 +42,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 若继续推进，应进入 execution workstreams，分别落地 signer custody、governance truth externalization、genesis binding/ceremony/QA；在这些项完成前，继续执行当前 preview claims policy。
-- 最近更新: 2026-03-23
+- 下一步: 若继续推进，应重点进入 signer custody 与 genesis binding/ceremony/QA，并把 governance admission 的 shared-network probation / live drill 证据继续补齐；在这些项完成前，继续执行当前 preview claims policy。
+- 最近更新: 2026-05-06

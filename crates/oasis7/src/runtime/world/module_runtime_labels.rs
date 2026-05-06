@@ -261,6 +261,18 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         Action::UpdateRestrictedStarterClaimAdminRegistry { .. } => {
             "action.governance.update_restricted_claim_admin_registry"
         }
+        Action::SubmitGovernanceValidatorAdmission { .. } => {
+            "action.governance.submit_validator_admission"
+        }
+        Action::ApproveGovernanceValidatorAdmission { .. } => {
+            "action.governance.approve_validator_admission"
+        }
+        Action::ActivateGovernanceValidatorAdmission { .. } => {
+            "action.governance.activate_validator_admission"
+        }
+        Action::RevokeGovernanceValidatorAdmission { .. } => {
+            "action.governance.revoke_validator_admission"
+        }
         Action::OpenEconomicContract { .. } => "action.gameplay.open_economic_contract",
         Action::AcceptEconomicContract { .. } => "action.gameplay.accept_economic_contract",
         Action::SettleEconomicContract { .. } => "action.gameplay.settle_economic_contract",

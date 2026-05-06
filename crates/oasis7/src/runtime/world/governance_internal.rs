@@ -5,7 +5,9 @@ impl World {
         &self,
         epoch_id: u64,
     ) -> Option<GovernanceFinalityEpochSnapshot> {
-        let registry = self.state.governance_finality_signer_registry.as_ref()?;
+        let registry = self
+            .resolve_governance_effective_finality_signer_registry()
+            .ok()??;
         let signer_node_ids: Vec<String> = registry.signer_bindings.keys().cloned().collect();
         let threshold = registry.threshold;
         let threshold_bps = if registry.threshold_bps > 0 {
@@ -986,6 +988,54 @@ impl World {
                 }
                 profile.updated_at = self.state.time;
             }
+            GovernanceEvent::ValidatorAdmissionSubmitted {
+                controller_account_id,
+                candidate_id,
+                node_id,
+                finality_signer_public_key,
+                operator_owner,
+                public_manifest_hash,
+                requested_at_epoch,
+            } => self.apply_governance_validator_admission_submitted(
+                controller_account_id,
+                candidate_id,
+                node_id,
+                finality_signer_public_key,
+                operator_owner,
+                public_manifest_hash,
+                *requested_at_epoch,
+            )?,
+            GovernanceEvent::ValidatorAdmissionApproved {
+                controller_account_id,
+                candidate_id,
+                approved_at_epoch,
+            } => self.apply_governance_validator_admission_approved(
+                controller_account_id,
+                candidate_id,
+                *approved_at_epoch,
+            )?,
+            GovernanceEvent::ValidatorAdmissionActivated {
+                controller_account_id,
+                candidate_id,
+                activation_epoch,
+            } => self.apply_governance_validator_admission_activated(
+                controller_account_id,
+                candidate_id,
+                *activation_epoch,
+            )?,
+            GovernanceEvent::ValidatorAdmissionRevoked {
+                controller_account_id,
+                candidate_id,
+                node_id,
+                revoked_at_epoch,
+                reason,
+            } => self.apply_governance_validator_admission_revoked(
+                controller_account_id,
+                candidate_id,
+                node_id,
+                *revoked_at_epoch,
+                reason,
+            )?,
             GovernanceEvent::RestrictedStarterClaimAdminRegistryUpdated {
                 controller_account_id,
                 previous_admin_account_ids,

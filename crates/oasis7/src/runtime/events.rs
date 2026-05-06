@@ -508,6 +508,29 @@ pub enum Action {
         #[serde(default)]
         next_admin_account_ids: Vec<String>,
     },
+    SubmitGovernanceValidatorAdmission {
+        controller_account_id: String,
+        candidate_id: String,
+        node_id: String,
+        finality_signer_public_key: String,
+        operator_owner: String,
+        public_manifest_hash: String,
+    },
+    ApproveGovernanceValidatorAdmission {
+        controller_account_id: String,
+        candidate_id: String,
+    },
+    ActivateGovernanceValidatorAdmission {
+        controller_account_id: String,
+        candidate_id: String,
+        activation_epoch: u64,
+    },
+    RevokeGovernanceValidatorAdmission {
+        controller_account_id: String,
+        candidate_id: String,
+        node_id: String,
+        reason: String,
+    },
     OpenEconomicContract {
         creator_agent_id: String,
         contract_id: String,
@@ -787,6 +810,22 @@ impl Action {
                 operator_agent_id, ..
             } => Some(operator_agent_id.as_str()),
             Action::UpdateRestrictedStarterClaimAdminRegistry {
+                controller_account_id,
+                ..
+            }
+            | Action::SubmitGovernanceValidatorAdmission {
+                controller_account_id,
+                ..
+            }
+            | Action::ApproveGovernanceValidatorAdmission {
+                controller_account_id,
+                ..
+            }
+            | Action::ActivateGovernanceValidatorAdmission {
+                controller_account_id,
+                ..
+            }
+            | Action::RevokeGovernanceValidatorAdmission {
                 controller_account_id,
                 ..
             } => Some(controller_account_id.as_str()),

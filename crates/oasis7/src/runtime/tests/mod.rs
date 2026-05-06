@@ -70,6 +70,7 @@ mod gameplay;
 mod gameplay_bootstrap;
 mod gameplay_protocol;
 mod governance;
+mod governance_validator_admission;
 mod main_token;
 mod main_token_economy_audit;
 mod module_action_loop;

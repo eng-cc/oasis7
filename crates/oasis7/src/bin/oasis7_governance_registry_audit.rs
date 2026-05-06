@@ -109,7 +109,10 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
     };
 
     let finality_registry = world
-        .governance_finality_signer_registry()
+        .resolve_governance_effective_finality_signer_registry()
+        .map_err(|err| {
+            format!("resolve effective governance finality signer registry failed: {err:?}")
+        })?
         .ok_or_else(|| "world is missing governance finality signer registry".to_string())?;
     let finality_keys = finality_registry
         .signer_bindings
@@ -400,8 +403,8 @@ fn print_help() {
 mod tests {
     use super::{build_audit_report, parse_options, validate_audit_report, CliOptions};
     use oasis7::runtime::{
-        GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
-        GovernanceThresholdSignerPolicy, World,
+        Action, GovernanceExecutionPolicy, GovernanceFinalitySignerRegistry,
+        GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, World,
     };
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
@@ -771,5 +774,117 @@ mod tests {
         assert_eq!(report.manifest_match_pass, Some(true));
         assert_eq!(report.overall_status, "ready_for_ops_drill");
         assert!(validate_audit_report(&options, &report).is_empty());
+    }
+
+    #[test]
+    fn audit_report_reads_effective_finality_registry_after_validator_activation() {
+        let root = temp_dir("effective-finality");
+        std::fs::create_dir_all(&root).expect("create root");
+        let world_dir = root.join("world");
+        let manifest_path = root.join("public_manifest.json");
+        let mut world = World::new();
+        world
+            .set_governance_execution_policy(GovernanceExecutionPolicy {
+                epoch_length_ticks: 10,
+                ..GovernanceExecutionPolicy::default()
+            })
+            .expect("set governance policy");
+        world
+            .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
+                slot_id: "governance.finality.v1".to_string(),
+                threshold: 2,
+                threshold_bps: 0,
+                signer_bindings: BTreeMap::from([
+                    (
+                        "validator-a".to_string(),
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    ),
+                    (
+                        "validator-b".to_string(),
+                        "2222222222222222222222222222222222222222222222222222222222222222"
+                            .to_string(),
+                    ),
+                ]),
+            })
+            .expect("set finality registry");
+        world
+            .set_governance_main_token_controller_registry(GovernanceMainTokenControllerRegistry {
+                genesis_controller_account_id: "msig.genesis.v1".to_string(),
+                treasury_bucket_controller_slots: BTreeMap::from([(
+                    "ecosystem_pool".to_string(),
+                    "liveops".to_string(),
+                )]),
+                restricted_starter_claim_admin_account_ids: BTreeSet::from(["liveops".to_string()]),
+                controller_signer_policies: BTreeMap::from([
+                    (
+                        "msig.genesis.v1".to_string(),
+                        GovernanceThresholdSignerPolicy {
+                            threshold: 1,
+                            allowed_public_keys: BTreeSet::from([
+                                "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+                                    .to_string(),
+                            ]),
+                        },
+                    ),
+                    (
+                        "liveops".to_string(),
+                        GovernanceThresholdSignerPolicy {
+                            threshold: 1,
+                            allowed_public_keys: BTreeSet::from([
+                                "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"
+                                    .to_string(),
+                            ]),
+                        },
+                    ),
+                ]),
+            })
+            .expect("set controller registry");
+        world.submit_action(Action::SubmitGovernanceValidatorAdmission {
+            controller_account_id: "msig.genesis.v1".to_string(),
+            candidate_id: "candidate-c".to_string(),
+            node_id: "validator-c".to_string(),
+            finality_signer_public_key:
+                "3333333333333333333333333333333333333333333333333333333333333333".to_string(),
+            operator_owner: "ops.team".to_string(),
+            public_manifest_hash: "manifest-c".to_string(),
+        });
+        world.step().expect("submit validator admission");
+        world.submit_action(Action::ApproveGovernanceValidatorAdmission {
+            controller_account_id: "msig.genesis.v1".to_string(),
+            candidate_id: "candidate-c".to_string(),
+        });
+        world.step().expect("approve validator admission");
+        world.submit_action(Action::ActivateGovernanceValidatorAdmission {
+            controller_account_id: "msig.genesis.v1".to_string(),
+            candidate_id: "candidate-c".to_string(),
+            activation_epoch: 0,
+        });
+        world.step().expect("activate validator admission");
+        world.save_to_dir(&world_dir).expect("save world");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&vec![
+                serde_json::json!({"slot_id":"governance.finality.v1","signer_id":"signer01","scheme":"ed25519","threshold":2,"public_key_hex":"1111111111111111111111111111111111111111111111111111111111111111"}),
+                serde_json::json!({"slot_id":"governance.finality.v1","signer_id":"signer02","scheme":"ed25519","threshold":2,"public_key_hex":"2222222222222222222222222222222222222222222222222222222222222222"}),
+                serde_json::json!({"slot_id":"governance.finality.v1","signer_id":"signer03","scheme":"ed25519","threshold":2,"public_key_hex":"3333333333333333333333333333333333333333333333333333333333333333"}),
+                serde_json::json!({"slot_id":"msig.genesis.v1","signer_id":"signer01","scheme":"ed25519","threshold":1,"public_key_hex":"6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"}),
+                serde_json::json!({"slot_id":"liveops","signer_id":"signer01","scheme":"ed25519","threshold":1,"public_key_hex":"13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"})
+            ])
+            .expect("encode manifest"),
+        )
+        .expect("write manifest");
+
+        let options = CliOptions {
+            world_dir,
+            public_manifest: Some(manifest_path),
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_expected_threshold: 2,
+            strict_manifest_match: true,
+            require_single_failure_tolerance: false,
+        };
+        let report = build_audit_report(&options).expect("build report");
+        assert_eq!(report.finality.signer_count, 3);
+        assert_eq!(report.finality.manifest_match, Some(true));
     }
 }
