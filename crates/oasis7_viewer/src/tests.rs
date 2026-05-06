@@ -58,9 +58,9 @@ fn update_ui_populates_world_summary_and_metrics() {
             "loc-1",
             "Alpha",
             oasis7::geometry::GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
+                x_cm: 0,
+                y_cm: 0,
+                z_cm: 0,
             },
         ),
     );
@@ -70,9 +70,9 @@ fn update_ui_populates_world_summary_and_metrics() {
             "loc-2",
             "Beta",
             oasis7::geometry::GeoPos {
-                x_cm: 1.0,
-                y_cm: 1.0,
-                z_cm: 0.0,
+                x_cm: 1,
+                y_cm: 1,
+                z_cm: 0,
             },
         ),
     );
@@ -82,9 +82,9 @@ fn update_ui_populates_world_summary_and_metrics() {
             "agent-1",
             "loc-1",
             oasis7::geometry::GeoPos {
-                x_cm: 0.0,
-                y_cm: 0.0,
-                z_cm: 0.0,
+                x_cm: 0,
+                y_cm: 0,
+                z_cm: 0,
             },
         ),
     );
@@ -164,22 +164,14 @@ fn update_ui_populates_agent_activity_panel() {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
     model.locations.insert(
         "loc-2".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-2",
-            "Beta",
-            oasis7::geometry::GeoPos::new(1.0, 1.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-2", "Beta", oasis7::geometry::GeoPos::new(1, 1, 0)),
     );
 
-    let mut agent = oasis7::simulator::Agent::new("agent-1", "loc-2", GeoPos::new(1.0, 1.0, 0.0));
+    let mut agent = oasis7::simulator::Agent::new("agent-1", "loc-2", GeoPos::new(1, 1, 0));
     agent
         .resources
         .set(ResourceKind::Electricity, 42)
@@ -791,15 +783,15 @@ fn space_origin_is_center_of_bounds() {
         height_cm: 300,
     };
     let origin = space_origin(&space);
-    assert_eq!(origin.x_cm, 50.0);
-    assert_eq!(origin.y_cm, 100.0);
-    assert_eq!(origin.z_cm, 150.0);
+    assert_eq!(origin.x_cm, 50);
+    assert_eq!(origin.y_cm, 100);
+    assert_eq!(origin.z_cm, 150);
 }
 
 #[test]
 fn geo_to_vec3_scales_and_swaps_axes() {
-    let origin = GeoPos::new(100.0, 200.0, 300.0);
-    let pos = GeoPos::new(110.0, 220.0, 330.0);
+    let origin = GeoPos::new(100, 200, 300);
+    let pos = GeoPos::new(110, 220, 330);
     let vec = geo_to_vec3(pos, origin, 0.01);
     assert!((vec.x - 0.1).abs() < 1e-6);
     assert!((vec.y - 0.3).abs() < 1e-6);

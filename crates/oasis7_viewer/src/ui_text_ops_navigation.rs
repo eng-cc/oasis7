@@ -101,11 +101,11 @@ mod tests {
         let mut model = WorldModel::default();
         model.locations.insert(
             "loc-a".to_string(),
-            Location::new("loc-a", "Alpha", GeoPos::new(1.0, 1.0, 1.0)),
+            Location::new("loc-a", "Alpha", GeoPos::new(1, 1, 1)),
         );
         model.locations.insert(
             "loc-b".to_string(),
-            Location::new("loc-b", "Beta", GeoPos::new(2_100_000.0, 1.0, 1.0)),
+            Location::new("loc-b", "Beta", GeoPos::new(2_100_000, 1, 1)),
         );
 
         let snapshot = WorldSnapshot {

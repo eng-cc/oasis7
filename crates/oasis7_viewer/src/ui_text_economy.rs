@@ -159,11 +159,11 @@ mod tests {
     #[test]
     fn economy_dashboard_summary_reports_supply_demand_and_cost_proxy() {
         let mut model = WorldModel::default();
-        let mut agent = Agent::new("agent-1", "loc-a", GeoPos::new(0.0, 0.0, 0.0));
+        let mut agent = Agent::new("agent-1", "loc-a", GeoPos::new(0, 0, 0));
         agent.resources.set(ResourceKind::Electricity, 25).ok();
         model.agents.insert("agent-1".to_string(), agent);
 
-        let mut location = Location::new("loc-a", "Alpha", GeoPos::new(0.0, 0.0, 0.0));
+        let mut location = Location::new("loc-a", "Alpha", GeoPos::new(0, 0, 0));
         location.resources.set(ResourceKind::Data, 9).ok();
         model.locations.insert("loc-a".to_string(), location);
 

@@ -15,11 +15,7 @@ fn update_ui_populates_asset_selection_details() {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
     model.assets.insert(
         "asset-1".to_string(),
@@ -95,11 +91,7 @@ fn update_ui_populates_power_plant_selection_details() {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
     model.power_plants.insert(
         "plant-1".to_string(),
@@ -249,11 +241,7 @@ fn update_ui_populates_fragment_selection_details_with_owner_location() {
     let mut model = oasis7::simulator::WorldModel::default();
     model.locations.insert(
         "loc-1".to_string(),
-        oasis7::simulator::Location::new(
-            "loc-1",
-            "Alpha",
-            oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
-        ),
+        oasis7::simulator::Location::new("loc-1", "Alpha", oasis7::geometry::GeoPos::new(0, 0, 0)),
     );
 
     let snapshot = oasis7::simulator::WorldSnapshot {

@@ -163,7 +163,7 @@ fn sample_agent_activity_snapshot(agent_count: usize) -> WorldSnapshot {
             Agent::new(
                 agent_id.as_str(),
                 location_id.as_str(),
-                GeoPos::new(idx as f64 * 10.0, 0.0, 0.0),
+                GeoPos::new(idx as i64 * 10, 0, 0),
             ),
         );
     }

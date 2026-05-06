@@ -449,7 +449,7 @@ mod tests {
                         kind: "factory".to_string(),
                         label: Some("Assembler".to_string()),
                         anchor: ModuleVisualAnchor::Absolute {
-                            pos: GeoPos::new(10.0, 0.0, 10.0),
+                            pos: GeoPos::new(10, 0, 10),
                         },
                     },
                 },

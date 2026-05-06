@@ -331,7 +331,7 @@ mod tests {
         let mut model = WorldModel::default();
         model.locations.insert(
             "loc-1".to_string(),
-            Location::new("loc-1", "Alpha", GeoPos::new(0.0, 0.0, 0.0)),
+            Location::new("loc-1", "Alpha", GeoPos::new(0, 0, 0)),
         );
         WorldSnapshot {
             version: oasis7::simulator::SNAPSHOT_VERSION,
@@ -358,7 +358,7 @@ mod tests {
                 kind: oasis7::simulator::WorldEventKind::LocationRegistered {
                     location_id: "loc-1".to_string(),
                     name: "a".to_string(),
-                    pos: GeoPos::new(0.0, 0.0, 0.0),
+                    pos: GeoPos::new(0, 0, 0),
                     profile: Default::default(),
                 },
                 runtime_event: None,
@@ -369,7 +369,7 @@ mod tests {
                 kind: oasis7::simulator::WorldEventKind::LocationRegistered {
                     location_id: "loc-2".to_string(),
                     name: "b".to_string(),
-                    pos: GeoPos::new(0.0, 0.0, 0.0),
+                    pos: GeoPos::new(0, 0, 0),
                     profile: Default::default(),
                 },
                 runtime_event: None,
@@ -380,7 +380,7 @@ mod tests {
                 kind: oasis7::simulator::WorldEventKind::LocationRegistered {
                     location_id: "loc-3".to_string(),
                     name: "c".to_string(),
-                    pos: GeoPos::new(0.0, 0.0, 0.0),
+                    pos: GeoPos::new(0, 0, 0),
                     profile: Default::default(),
                 },
                 runtime_event: None,
@@ -424,7 +424,7 @@ mod tests {
             kind: oasis7::simulator::WorldEventKind::LocationRegistered {
                 location_id: "loc-1".to_string(),
                 name: "Alpha".to_string(),
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
                 profile: Default::default(),
             },
             runtime_event: None,
@@ -494,7 +494,7 @@ mod tests {
                     kind: "relay".to_string(),
                     label: None,
                     anchor: oasis7::simulator::ModuleVisualAnchor::Absolute {
-                        pos: GeoPos::new(0.0, 0.0, 0.0),
+                        pos: GeoPos::new(0, 0, 0),
                     },
                 },
             },

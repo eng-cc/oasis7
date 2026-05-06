@@ -168,7 +168,7 @@ fn world_module_store_roundtrip() {
     let key = ModuleRegistry::record_key("m.world", "0.1.0");
     assert!(restored.module_registry().records.contains_key(&key));
     let artifact = restored.load_module(&hash).unwrap();
-    assert_eq!(artifact.bytes, wasm_bytes.to_vec());
+    assert_eq!(artifact.bytes.as_ref(), wasm_bytes);
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -238,7 +238,7 @@ fn world_save_to_dir_with_modules_roundtrip() {
     let key = ModuleRegistry::record_key("m.full", "0.1.0");
     assert!(restored.module_registry().records.contains_key(&key));
     let artifact = restored.load_module(&hash).unwrap();
-    assert_eq!(artifact.bytes, wasm_bytes.to_vec());
+    assert_eq!(artifact.bytes.as_ref(), wasm_bytes);
 
     let _ = fs::remove_dir_all(&dir);
 }

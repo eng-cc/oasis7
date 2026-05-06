@@ -705,7 +705,7 @@ fn feedback_tone_for_event_maps_warning_positive_and_info() {
     let info = feedback_tone_for_event(&WorldEventKind::LocationRegistered {
         location_id: "loc-1".to_string(),
         name: "alpha".to_string(),
-        pos: oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: oasis7::geometry::GeoPos::new(0, 0, 0),
         profile: Default::default(),
     });
     assert_eq!(info, FeedbackTone::Info);
@@ -1060,7 +1060,7 @@ fn rejection_event_count_only_counts_rejected_events() {
             kind: WorldEventKind::LocationRegistered {
                 location_id: "loc-1".to_string(),
                 name: "Alpha".to_string(),
-                pos: GeoPos::new(0.0, 0.0, 0.0),
+                pos: GeoPos::new(0, 0, 0),
                 profile: Default::default(),
             },
             runtime_event: None,

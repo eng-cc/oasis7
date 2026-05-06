@@ -10,15 +10,15 @@ fn sample_snapshot() -> WorldSnapshot {
     let mut model = WorldModel::default();
     model.locations.insert(
         "loc-a".to_string(),
-        Location::new("loc-a", "Alpha", GeoPos::new(0.0, 0.0, 0.0)),
+        Location::new("loc-a", "Alpha", GeoPos::new(0, 0, 0)),
     );
     model.locations.insert(
         "loc-b".to_string(),
-        Location::new("loc-b", "Beta", GeoPos::new(2_100_000.0, 0.0, 0.0)),
+        Location::new("loc-b", "Beta", GeoPos::new(2_100_000, 0, 0)),
     );
     model.agents.insert(
         "agent-1".to_string(),
-        Agent::new("agent-1", "loc-a", GeoPos::new(0.0, 0.0, 0.0)),
+        Agent::new("agent-1", "loc-a", GeoPos::new(0, 0, 0)),
     );
 
     model.module_visual_entities.insert(
@@ -298,7 +298,7 @@ fn sample_large_snapshot(
             Location::new(
                 location_id.as_str(),
                 format!("Location {idx:03}"),
-                GeoPos::new(idx as f64 * 120_000.0, 0.0, (idx % 8) as f64 * 60_000.0),
+                GeoPos::new(idx as i64 * 120_000, 0, (idx % 8) as i64 * 60_000),
             ),
         );
     }
@@ -311,7 +311,7 @@ fn sample_large_snapshot(
             Agent::new(
                 agent_id.as_str(),
                 location_id.as_str(),
-                GeoPos::new(idx as f64 * 1000.0, 0.0, 0.0),
+                GeoPos::new(idx as i64 * 1000, 0, 0),
             ),
         );
     }
