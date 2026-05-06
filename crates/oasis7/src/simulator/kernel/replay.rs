@@ -92,7 +92,7 @@ impl WorldKernel {
                     *pos,
                     &self.config.power,
                 );
-                agent.pos = *pos;
+                agent.pos = pos.canonicalized();
                 self.model.agents.insert(agent_id.clone(), agent);
             }
             WorldEventKind::AgentMoved {

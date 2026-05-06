@@ -7,6 +7,7 @@ impl WorldKernel {
                 pos,
                 profile,
             } => {
+                let pos = pos.canonicalized();
                 if self.model.locations.contains_key(&location_id) {
                     return WorldEventKind::ActionRejected {
                         reason: RejectReason::LocationAlreadyExists { location_id },
@@ -1063,14 +1064,14 @@ impl WorldKernel {
 
 fn move_towards_geo_pos(from: GeoPos, to: GeoPos, step_cm: i64) -> GeoPos {
     if step_cm <= 0 {
-        return from;
+        return from.canonicalized();
     }
     let dx = to.x_cm - from.x_cm;
     let dy = to.y_cm - from.y_cm;
     let dz = to.z_cm - from.z_cm;
     let distance = (dx * dx + dy * dy + dz * dz).sqrt();
     if !distance.is_finite() || distance <= f64::EPSILON {
-        return to;
+        return to.canonicalized();
     }
     let ratio = (step_cm as f64 / distance).clamp(0.0, 1.0);
     GeoPos {
@@ -1078,4 +1079,5 @@ fn move_towards_geo_pos(from: GeoPos, to: GeoPos, step_cm: i64) -> GeoPos {
         y_cm: from.y_cm + dy * ratio,
         z_cm: from.z_cm + dz * ratio,
     }
+    .canonicalized()
 }

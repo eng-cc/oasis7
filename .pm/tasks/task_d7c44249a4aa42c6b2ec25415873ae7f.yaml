@@ -1,0 +1,26 @@
+task_uid: task_d7c44249a4aa42c6b2ec25415873ae7f
+title: "enforce 1cm world position contract"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-world-simulator-space-unit-centimeter-enforcement
+execution_log_path: .pm/tasks/task_d7c44249a4aa42c6b2ec25415873ae7f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/prd.md
+  - doc/world-simulator/project.md
+  - doc/world-simulator/scenario/world-initialization.prd.md
+  - doc/world-simulator/scenario/chunked-fragment-generation.prd.md
+  - doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-002
+  - PRD-WORLD_SIMULATOR-003
+acceptance:
+  - "world state positions do not persist sub-centimeter coordinates"
+  - "scenario and asteroid generation quantize positions to 1cm"
+  - "viewer mapping/tests continue to consume centimeter-semantic positions"
+handoff_to: []
+updated_at: 2026-05-06T13:21:37+08:00
+last_started_at: 2026-05-06T13:04:50+08:00
+last_closed_at: 2026-05-06T13:21:37+08:00

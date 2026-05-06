@@ -54,6 +54,7 @@
 #### 最小空间单位
 - **1 cm**（`SPACE_UNIT_CM = 1`）
 - 所有 block 尺寸、block 原点、chunk 内偏移均以 cm 整数表示。
+- `GeoPos` 目前仍以 `f64` 承载坐标兼容性，但碎片中心、chunk 边界保留与写回世界状态时必须 canonicalize 到整厘米，禁止持久化 sub-cm 坐标。
 
 #### 单块结构（长方体）
 - `FragmentBlock`

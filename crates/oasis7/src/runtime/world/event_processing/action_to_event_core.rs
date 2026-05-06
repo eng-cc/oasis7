@@ -51,6 +51,7 @@ impl World {
     ) -> Result<WorldEventBody, WorldError> {
         match action {
             Action::RegisterAgent { agent_id, pos } => {
+                let pos = pos.canonicalized();
                 if self.state.agents.contains_key(agent_id) {
                     Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                         action_id,
@@ -61,26 +62,24 @@ impl World {
                 } else {
                     Ok(WorldEventBody::Domain(DomainEvent::AgentRegistered {
                         agent_id: agent_id.clone(),
-                        pos: *pos,
+                        pos,
                     }))
                 }
             }
-            Action::MoveAgent { agent_id, to } => match self.state.agents.get(agent_id) {
-                Some(cell) => {
-                    let target_location_id = format!(
-                        "{}:{}:{}",
-                        to.x_cm.round() as i64,
-                        to.y_cm.round() as i64,
-                        to.z_cm.round() as i64
-                    );
-                    if self
-                        .state
-                        .gameplay_policy
-                        .forbidden_location_ids
-                        .iter()
-                        .any(|value| value == &target_location_id)
-                    {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            Action::MoveAgent { agent_id, to } => {
+                let to = to.canonicalized();
+                match self.state.agents.get(agent_id) {
+                    Some(cell) => {
+                        let target_location_id =
+                            format!("{}:{}:{}", to.x_cm as i64, to.y_cm as i64, to.z_cm as i64);
+                        if self
+                            .state
+                            .gameplay_policy
+                            .forbidden_location_ids
+                            .iter()
+                            .any(|value| value == &target_location_id)
+                        {
+                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
                             action_id,
                             reason: RejectReason::RuleDenied {
                                 notes: vec![format!(
@@ -88,20 +87,21 @@ impl World {
                                 )],
                             },
                         }));
+                        }
+                        Ok(WorldEventBody::Domain(DomainEvent::AgentMoved {
+                            agent_id: agent_id.clone(),
+                            from: cell.state.pos,
+                            to,
+                        }))
                     }
-                    Ok(WorldEventBody::Domain(DomainEvent::AgentMoved {
-                        agent_id: agent_id.clone(),
-                        from: cell.state.pos,
-                        to: *to,
-                    }))
+                    None => Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: agent_id.clone(),
+                        },
+                    })),
                 }
-                None => Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                    action_id,
-                    reason: RejectReason::AgentNotFound {
-                        agent_id: agent_id.clone(),
-                    },
-                })),
-            },
+            }
             Action::QueryObservation { agent_id } => {
                 if self.state.agents.contains_key(agent_id) {
                     Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
