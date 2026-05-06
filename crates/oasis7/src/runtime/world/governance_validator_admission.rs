@@ -3,6 +3,17 @@ use super::*;
 use crate::runtime::{GovernanceValidatorAdmissionRecord, GovernanceValidatorAdmissionStatus};
 
 impl World {
+    pub(crate) fn governance_validator_admission_status_for_activation_epoch(
+        current_epoch: u64,
+        activation_epoch: u64,
+    ) -> GovernanceValidatorAdmissionStatus {
+        if activation_epoch <= current_epoch {
+            GovernanceValidatorAdmissionStatus::Active
+        } else {
+            GovernanceValidatorAdmissionStatus::ProbationReady
+        }
+    }
+
     pub(crate) fn validate_governance_validator_admission_record(
         &self,
         mut record: GovernanceValidatorAdmissionRecord,
@@ -33,6 +44,89 @@ impl World {
         Ok(record)
     }
 
+    pub(crate) fn governance_validator_admission_effective_epoch(
+        record: &GovernanceValidatorAdmissionRecord,
+    ) -> u64 {
+        match record.status {
+            GovernanceValidatorAdmissionStatus::Revoked => record
+                .revoked_at_epoch
+                .or(record.activation_epoch)
+                .or(record.approved_at_epoch)
+                .unwrap_or(record.requested_at_epoch),
+            GovernanceValidatorAdmissionStatus::Active
+            | GovernanceValidatorAdmissionStatus::ProbationReady => record
+                .activation_epoch
+                .or(record.approved_at_epoch)
+                .unwrap_or(record.requested_at_epoch),
+            GovernanceValidatorAdmissionStatus::ApprovedCandidate => record
+                .approved_at_epoch
+                .unwrap_or(record.requested_at_epoch),
+            GovernanceValidatorAdmissionStatus::Applied => record.requested_at_epoch,
+        }
+    }
+
+    pub(crate) fn governance_validator_admission_status_precedence(
+        status: GovernanceValidatorAdmissionStatus,
+    ) -> u8 {
+        match status {
+            GovernanceValidatorAdmissionStatus::Revoked => 5,
+            GovernanceValidatorAdmissionStatus::Active => 4,
+            GovernanceValidatorAdmissionStatus::ProbationReady => 3,
+            GovernanceValidatorAdmissionStatus::ApprovedCandidate => 2,
+            GovernanceValidatorAdmissionStatus::Applied => 1,
+        }
+    }
+
+    pub(crate) fn governance_effective_validator_admission_records<'a>(
+        admissions: &'a BTreeMap<String, GovernanceValidatorAdmissionRecord>,
+    ) -> BTreeMap<String, &'a GovernanceValidatorAdmissionRecord> {
+        let mut effective = BTreeMap::new();
+        for record in admissions.values() {
+            let candidate = effective.entry(record.node_id.clone()).or_insert(record);
+            let candidate_order = (
+                candidate.last_transition_tick,
+                Self::governance_validator_admission_effective_epoch(candidate),
+                Self::governance_validator_admission_status_precedence(candidate.status),
+            );
+            let record_order = (
+                record.last_transition_tick,
+                Self::governance_validator_admission_effective_epoch(record),
+                Self::governance_validator_admission_status_precedence(record.status),
+            );
+            if record_order > candidate_order {
+                *candidate = record;
+            }
+        }
+        effective
+    }
+
+    pub(crate) fn governance_validator_admission_keys_for_node(
+        admissions: &BTreeMap<String, GovernanceValidatorAdmissionRecord>,
+        node_id: &str,
+    ) -> Vec<String> {
+        admissions
+            .iter()
+            .filter_map(|(candidate_id, record)| {
+                (record.node_id == node_id).then(|| candidate_id.clone())
+            })
+            .collect()
+    }
+
+    pub(crate) fn governance_validator_admission_record_key_for_node(
+        admissions: &BTreeMap<String, GovernanceValidatorAdmissionRecord>,
+        node_id: &str,
+    ) -> Option<String> {
+        let per_node = Self::governance_effective_validator_admission_records(admissions);
+        per_node
+            .get(node_id)
+            .map(|record| record.candidate_id.clone())
+            .or_else(|| {
+                admissions.iter().find_map(|(candidate_id, record)| {
+                    (record.node_id == node_id).then(|| candidate_id.clone())
+                })
+            })
+    }
+
     pub(crate) fn resolve_governance_effective_finality_signer_registry_from_admissions(
         &self,
         admissions: &BTreeMap<String, GovernanceValidatorAdmissionRecord>,
@@ -41,7 +135,7 @@ impl World {
             return Ok(None);
         };
         let current_epoch = self.current_governance_epoch();
-        for record in admissions.values() {
+        for record in Self::governance_effective_validator_admission_records(admissions).values() {
             match record.status {
                 GovernanceValidatorAdmissionStatus::Revoked => {
                     registry.signer_bindings.remove(record.node_id.as_str());
@@ -99,6 +193,7 @@ impl World {
                 operator_owner: operator_owner.to_string(),
                 public_manifest_hash: public_manifest_hash.to_string(),
                 requested_at_epoch,
+                last_transition_tick: self.state.time,
                 ..GovernanceValidatorAdmissionRecord::default()
             },
         )?;
@@ -192,6 +287,7 @@ impl World {
         }
         record.status = GovernanceValidatorAdmissionStatus::ApprovedCandidate;
         record.approved_at_epoch = Some(approved_at_epoch);
+        record.last_transition_tick = self.state.time;
         Ok(())
     }
 
@@ -242,11 +338,11 @@ impl World {
                 });
             }
             record.activation_epoch = Some(activation_epoch);
-            record.status = if activation_epoch <= current_epoch {
-                GovernanceValidatorAdmissionStatus::Active
-            } else {
-                GovernanceValidatorAdmissionStatus::ProbationReady
-            };
+            record.status = Self::governance_validator_admission_status_for_activation_epoch(
+                current_epoch,
+                activation_epoch,
+            );
+            record.last_transition_tick = self.state.time;
             admissions
         };
         self.resolve_governance_effective_finality_signer_registry_from_admissions(
@@ -281,6 +377,20 @@ impl World {
                 ),
             });
         }
+        let resolved_candidate_id = if self
+            .state
+            .governance_validator_admissions
+            .contains_key(candidate_id)
+        {
+            candidate_id.to_string()
+        } else if let Some(existing_key) = Self::governance_validator_admission_record_key_for_node(
+            &self.state.governance_validator_admissions,
+            node_id,
+        ) {
+            existing_key
+        } else {
+            format!("legacy-revoked:{node_id}")
+        };
         let preview_admissions = {
             let mut admissions = self.state.governance_validator_admissions.clone();
             let current_public_key = self
@@ -298,15 +408,26 @@ impl World {
                         node_id
                     ),
                 })?;
+            let duplicate_keys =
+                Self::governance_validator_admission_keys_for_node(&admissions, node_id);
+            if duplicate_keys.len() > 1 && !duplicate_keys.contains(&resolved_candidate_id) {
+                return Err(WorldError::GovernancePolicyInvalid {
+                    reason: format!(
+                        "validator admission revoke found multiple candidate records for node_id={} candidate_keys={:?}",
+                        node_id, duplicate_keys
+                    ),
+                });
+            }
             let record = admissions
-                .entry(candidate_id.to_string())
+                .entry(resolved_candidate_id.clone())
                 .or_insert_with(|| GovernanceValidatorAdmissionRecord {
-                    candidate_id: candidate_id.to_string(),
+                    candidate_id: resolved_candidate_id.clone(),
                     node_id: node_id.to_string(),
                     finality_signer_public_key: current_public_key.clone(),
                     operator_owner: "governance.revocation".to_string(),
                     public_manifest_hash: "synthetic-revocation".to_string(),
                     requested_at_epoch: revoked_at_epoch,
+                    last_transition_tick: self.state.time,
                     approved_at_epoch: Some(revoked_at_epoch),
                     activation_epoch: Some(revoked_at_epoch),
                     status: GovernanceValidatorAdmissionStatus::Applied,
@@ -317,11 +438,13 @@ impl World {
                 return Err(WorldError::GovernancePolicyInvalid {
                     reason: format!(
                         "validator admission revoke node_id mismatch candidate_id={} expected={} actual={}",
-                        candidate_id, record.node_id, node_id
+                        resolved_candidate_id, record.node_id, node_id
                     ),
                 });
             }
+            record.candidate_id = resolved_candidate_id.clone();
             record.status = GovernanceValidatorAdmissionStatus::Revoked;
+            record.last_transition_tick = self.state.time;
             record.revoked_at_epoch = Some(revoked_at_epoch);
             record.revocation_reason = Some(reason.to_string());
             admissions
