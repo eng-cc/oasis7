@@ -488,6 +488,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required dev_local_storage_profile_clears_pristine_frozen_supply_from_existing_execution_world -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] mainchain-token-newapi-quota-bridge-proposal (PRD-P2P-027) [test_tier_required]: 新增“主链 Token 到 New API 内部额度桥接方案”专题 PRD / design / project，并冻结 `one-way OC -> New API quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、credit adapter、manual review 风控与“不是公开兑换所 / 不支持自动提现回 OC”口径。 Trace: .pm/tasks/task_439da73e233f4395923f4d8cff007305.yaml
+  - 产物文件:
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/README.md`
+    - `doc/p2p/prd.index.md`
+    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
+    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md`
+    - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+    - `.pm/tasks/task_439da73e233f4395923f4d8cff007305.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "New API|bridge-service|bridge_ledger|one-way|quota|redeem credit|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] hosted-public-join-player-session-gate (PRD-P2P-023/024) [test_tier_required]: 将 `hosted_public_join` 正式收口为 public player plane 入口，禁止 `oasis7_client_launcher`、`oasis7_web_launcher` 与 `oasis7_game_launcher` 在该 deployment mode 下拉起本地 `oasis7_chain_runtime` 或 shared-devnet replication requester，并把网页提示改成 guest/player session lane + operator-managed node admission。 Trace: .pm/tasks/task_21dfffe808a24221a70fa5fe3fa895aa.yaml
   - 产物文件:
     - `crates/oasis7/src/hosted_access.rs`
@@ -678,6 +692,7 @@
 - 更新日期: 2026-04-14
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
+- 最新完成: `mainchain-token-newapi-quota-bridge-proposal`（已完成 `OC -> New API quota` 专题建档，正式冻结 one-way service-credit bridge、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、credit adapter 与 operator review fallback；当前明确不支持双向兑回、公开兑换所或浏览器热钱包充值口径。）
 - 最新完成: `TASK-P2P-050`（已收紧 local peer record 地址物化逻辑：默认不再把 loopback/private/unspecified 监听地址写进 `direct_addrs`，而是优先使用已确认的 `confirmed_external_direct_addrs`；同时 `ExternalAddrConfirmed/Expired`、relay reservation 与 listen-surface 变化都会重发 peer record，避免状态真值和 discovery 真值继续分叉。）
 - 最新完成: `TASK-P2P-048`（已修复 p2p provider 子集请求越界 fallback、discovery 单次拨号后不再重试、request-response 丢失远端错误码，以及 replication peer 选择对 blocked peer 缺少优先避让的回归，并补齐 `oasis7_net/oasis7_node` 定向回归。）
 - 最新完成: `hosted-public-join-player-session-gate`（已把 `hosted_public_join` 的 launcher 真值收口为 public player plane：`oasis7_client_launcher` / `oasis7_web_launcher` / `oasis7_game_launcher` 都不再在该 deployment mode 下拉起本地 `oasis7_chain_runtime` 或 shared-devnet replication requester，页面 contract 也改为 guest/player session lane + operator-managed node admission。）
