@@ -1,0 +1,22 @@
+task_uid: task_e56e4cfdb9534919a6f7bc7c6ba62ee9
+title: "implement bridge-service binding and route contract"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-oc-newapi-bridge-proposal
+execution_log_path: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-TBRIDGE-001
+acceptance:
+  - "Implement bridge-service binding and deposit-route contract with tests."
+  - "Persist bridge bindings and routes with repo-owned state storage."
+  - "Document runtime-facing implementation slice and update project tracking."
+handoff_to: []
+updated_at: 2026-05-06T10:51:21+08:00
+last_started_at: 2026-05-06T10:36:06+08:00
+last_closed_at: 2026-05-06T10:51:20+08:00
