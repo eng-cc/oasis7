@@ -1,0 +1,27 @@
+task_uid: task_439da73e233f4395923f4d8cff007305
+title: "define one-way OC to New API quota bridge proposal"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-oc-newapi-bridge-proposal
+execution_log_path: .pm/tasks/task_439da73e233f4395923f4d8cff007305.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+  - doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md
+  - doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md
+doc_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+related_prd:
+  - PRD-P2P-027
+acceptance:
+  - "Freeze one-way OC to New API quota bridge boundary and non-goals."
+  - "Define independent bridge-service, unique deposit mapping, and bridge_ledger reconciliation states."
+  - "Record operator risk gates, manual-review fallback, and module-level doc index links."
+handoff_to: []
+updated_at: 2026-05-06T10:26:10+08:00
+last_started_at: 2026-05-06T09:52:17+08:00
+last_closed_at: 2026-05-06T10:26:10+08:00
