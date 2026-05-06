@@ -1,0 +1,21 @@
+task_uid: task_efe1a5f949e84160a1237302c9064168
+title: "formalize oasis7 playability evidence stack"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-testing-playability-evidence-stack-2026-05-06
+execution_log_path: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+  - doc/game/prd.md
+doc_refs: []
+related_prd:
+  - PRD-TESTING-003
+acceptance:
+  - "testing docs define what automation can and cannot prove about gameplay fun"
+  - "oasis7 gets a layered playability evidence stack covering automation, telemetry, and human playtests"
+handoff_to: []
+updated_at: 2026-05-06T12:29:51+08:00
+last_started_at: 2026-05-06T12:20:34+08:00
+last_closed_at: 2026-05-06T12:29:50+08:00

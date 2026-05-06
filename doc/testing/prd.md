@@ -40,6 +40,7 @@
   - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.project.md` 命名。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
   - SC-7: 主链 Token 创世前具备一份 QA 审计清单，覆盖分配比例、custody/treasury 语义、个人上限、创世流通与首年释放上限，避免带着错误经济配置进入执行。
+  - SC-8: testing 模块具备一份正式的 `playability evidence stack` 专题，明确自动化、agent probe、遥测/实验、结构化真人试玩与受控外部信号的分层证明边界，禁止把“自动化已通过”误写为“游戏已被证明好玩”。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -47,6 +48,7 @@
   - 功能开发者：需要明确改动后最小必跑集合。
   - 发布负责人：需要审计级测试证据判断放行。
   - 制作人与经济配置维护者：需要一份可审计的创世配置检查表，避免只靠聊天结论发币。
+  - 制作人与玩法 owner：需要一套分层证据栈，区分“没坏”“世界在动”“玩家真的想继续玩”。
 - User Scenarios & Frequency:
   - 开发分支回归：每次核心改动后触发一次 required 路径。
   - 发布候选验证：每个候选版本执行 required + full 组合。
@@ -55,6 +57,7 @@
   - 前期工业体验回归：影响 `首个制成品 / 停机恢复 / 首座工厂单元` 时，补跑 required-tier 手动卡组。
   - 创世配置冻结前审计：每次准备冻结 Token 分配表时执行一次 required-tier 配置审计。
   - 信任门 / 留存证据复核：每次宣称“玩家值得继续玩”前，必须先检查该样本是否只是世界在自己运转。
+  - 玩法质量争议复盘：每次出现“自动化通过但体验仍差”的争议时，必须先定位缺的是哪一层证据。
 - User Stories:
   - PRD-TESTING-001: As a 测试维护者, I want one canonical testing strategy, so that suite evolution stays coherent.
   - PRD-TESTING-002: As a 开发者, I want clear trigger matrices, so that I can run the right tests efficiently.
@@ -62,6 +65,7 @@
   - PRD-TESTING-004: As a 文档维护者, I want each legacy testing topic doc manually migrated with content-preserving rewrite, so that historical intent remains accurate after format upgrade.
   - PRD-TESTING-005: As a 发布工程维护者, I want builtin wasm hash chain hardened end-to-end, so that hash drift can be blocked and traced before release.
   - PRD-TESTING-006: As a `qa_engineer`, I want a token genesis allocation audit checklist, so that producer/runtime can freeze mint configuration without hidden control or circulation risk.
+  - PRD-TESTING-007: As a `producer_system_designer`, I want a canonical playability evidence stack, so that I can judge gameplay fun without conflating automation, world activity, and real player motivation.
 - Critical User Flows:
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
@@ -71,6 +75,7 @@
   6. Flow-TST-006: `识别工业引导体验改动 -> 运行自动化前置 -> 执行 playability 卡组 -> 回写 QA 阻断结论`
   7. Flow-TST-007: `读取 token 创世参数表 -> 逐项核对比例/recipient/vesting/流通边界 -> 输出 QA verdict -> 回流 producer 决策`
   8. Flow-TST-008: `汇总 trust/playability 样本 -> 回答玩家动作与玩家导致的世界变化 -> 标记 world_activity_only -> 再给 pass/watch/block 结论`
+  9. Flow-TST-009: `按 evidence stack 标记当前只到 L1/L2/L3/L4/L5 哪一层 -> 明确缺口 -> 再决定是否能声称“值得继续玩”`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -85,6 +90,7 @@
 | Windows 路径兼容校验 | tracked path、invalid segment、gate command、release runner | 在 required gate 早期扫描 git tracked paths，阻断 `windows-2022` 无法 checkout 的文件名进入 release/package-native | `scanned -> pass/block` | 默认按 git tracked path 全量扫描；发现 Windows 非法字符、保留名、尾随空格/点即直接 fail | QA / 发布维护者维护跨平台 release 可达性 |
 | Runtime gate 分片执行 | full-suite shard、sync check、runner capability、日志 artifact | 将 release runtime gate 拆成 core/support/sync 并行 job；聚合 gate 统一裁决是否放行 | `planned -> sharded -> aggregated` | 重型 `oasis7` full-tier 优先单独成 shard，其余 support / sync 独立并行；最终必须全部成功 | QA / 发布维护者维护 runtime 关键路径 |
 | Token 创世配置审计 | `bucket_id`、`ratio_bps`、`recipient`、`cliff_epochs`、`linear_unlock_epochs`、`genesis_liquid`、`founder_cap_bps`、`year1_external_release_cap_bps` | 逐项核对参数表与经济口径，输出 `pass/block` 审计结论 | `draft -> audited -> pass/block` | `sum=10000 bps`；项目战略控制 `5000 bps`；协议长期储备 `3500 bps`；`genesis_liquid=0`；个人上限 `<=1500 bps` | `qa_engineer` 独立出具结论，producer 决定是否冻结 |
+| 好玩性证据栈 | `evidence_layer`、`formal_surface`、`player_leverage_verdict`、`world_activity_only`、`human_playtest_verdict`、`external_signal_status` | 把玩法结论分层标记为 L1 自动化、L2 probe、L3 遥测/实验、L4 真人试玩、L5 外部信号，再输出 `go/watch/hold/block` | `collected -> layered -> decided` | 低层证据不能替代高层证据；自动化 pass 只能证明“没坏/可回归”，不能单独证明“好玩” | `producer_system_designer` 终判，`qa_engineer` 守门 |
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
   - AC-2: testing project 文档维护分层测试演进任务。
@@ -104,6 +110,7 @@
   - AC-14: `required-gate` 必须在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 改动时按需执行 launcher Web `trunk build`，避免仅在 release `build-web-dist` 才暴露 wasm 编译错误。
   - AC-14A: 仓库必须提供轻量 Web/UI automation smoke，允许 `qa_engineer` 在不启动完整 runtime 栈的前提下，用 fixture 页面复用真 `agent-browser` 验证 `viewer-software-safe-step-regression.sh` 的最小浏览器链路与 summary/state 产物契约；该 smoke 只用于 tooling 预检，不替代正式 S6 证据。
   - AC-15: 正式 gameplay/trust evidence 至少要有 1 条代表性样本明确记录 `player_action`、`world_change_due_to_player`、`player_leverage_score` 与 `world_activity_only`，否则不得宣称“玩家已有 meaningful participation”。
+  - AC-16: `playability-evidence-stack-2026-05-06` 专题文档必须明确五层证据、组合规则、现有 oasis7 锚点映射，以及“自动化不能单独保证好玩”的正式结论。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -118,6 +125,7 @@
   - `testing-manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
+  - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
@@ -142,6 +150,7 @@
   - 迁移断链：文档改名后若引用未同步，需在同批次修复并复测。
   - 创世语义误读：若把 `protocol:*` custody account 误当成已初始化 treasury bucket，QA 必须直接阻断。
   - 流通口径漂移：若创世参数表未显式声明 `genesis_liquid=0` 或首年外部释放上限，视为配置不完整。
+  - 自动化与真人试玩结论冲突：必须先记为“低层 pass / 高层 hold”，不能把高层体验问题降格成脚本未覆盖。
 - Non-Functional Requirements:
   - NFR-TST-1: required 套件变更前后执行时间波动 <= 20%。
   - NFR-TST-2: 发布证据包字段完整率 100%。
@@ -152,6 +161,7 @@
   - NFR-TST-7: builtin wasm hash 校验在多 runner 下可复现且差异可定位到模块与平台维度。
   - NFR-TST-8: Token 创世 QA 审计模板字段完整率必须为 `100%`，缺任何一项关键字段都不能给 `pass`。
   - NFR-TST-9: 正式 gameplay evidence 审查者必须能在 30 秒内看出“玩家是否真的改变了世界”，无需从长日志里二次拼装。
+  - NFR-TST-10: 正式玩法结论必须能在 60 秒内回答“当前只证明到哪一层，还缺哪一层”。
 - Security & Privacy: 测试日志与产物需避免泄露凭据；外部 API 测试使用最小化数据并执行脱敏。
 
 ## 5. Risks & Roadmap
@@ -177,6 +187,7 @@
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
+| PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | 五层证据栈定义、现有锚点映射、模块入口互链与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -186,3 +197,4 @@
 | DEC-TST-004 | legacy 专题文档采用逐篇人工迁移并统一 `.prd` 命名 | 自动脚本批量改写 | 可确保内容语义与约束不丢失。 |
 | DEC-TST-005 | Token 创世前增加 QA 审计清单与阻断 verdict | 仅由 producer/runtime 自审 | 经济配置错误一旦进入创世，后续修复成本极高。 |
 | DEC-TST-006 | 在正式 gameplay evidence 中单列 `player leverage` 审查层 | 继续只看 world delta / activity / 总体有趣度 | `#166` 暴露的是“玩家是否参与有效”而不是“世界有没有动起来”，需要单独防误报。 |
+| DEC-TST-007 | 为“是否好玩”建立五层 evidence stack，并明确自动化不能单独保证好玩 | 继续把自动化 pass、世界活跃和真实玩家继续动机混写 | 这三类信号的证明强度不同，混写会持续污染 release/stage 结论。 |
