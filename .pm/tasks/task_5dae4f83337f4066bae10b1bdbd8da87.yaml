@@ -1,0 +1,25 @@
+task_uid: task_5dae4f83337f4066bae10b1bdbd8da87
+title: "tighten homepage first-impression game clarity"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-site-homepage-first-impression-hardening
+execution_log_path: .pm/tasks/task_5dae4f83337f4066bae10b1bdbd8da87.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/site/project.md
+  - site/index.html
+  - site/en/index.html
+doc_refs:
+  - doc/site/prd.md
+  - doc/site/project.md
+related_prd:
+  - PRD-SITE-009
+  - PRD-SITE-010
+acceptance:
+  - "Homepage first screen makes the game setting and player fantasy clearer before technical preview detail."
+  - "CN and EN homepages keep the same claim boundary while reducing first-screen jargon."
+handoff_to: []
+updated_at: 2026-05-06T11:37:33+08:00
+last_started_at: 2026-05-06T11:24:31+08:00
+last_closed_at: 2026-05-06T11:37:33+08:00
