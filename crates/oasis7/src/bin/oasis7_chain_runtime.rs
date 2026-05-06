@@ -243,10 +243,6 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         &keypair,
         &options.node_validator_signer_public_keys,
     )?;
-    let replication_remote_writer_allowlist = build_replication_remote_writer_allowlist(
-        validator_signer_bindings.values(),
-        &options.replication_remote_writer_public_keys,
-    );
     let mut pos_config = NodePosConfig::ethereum_like(validators.clone())
         .with_validator_signer_public_keys(validator_signer_bindings.clone())
         .map_err(|err| format!("failed to apply validator signer bindings: {err:?}"))?;
@@ -276,17 +272,23 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         config = config.with_gossip_optional(bind_addr, options.node_gossip_peers.clone());
     }
 
+    config = apply_traffic_profile_to_node_config(config, &options)?;
+    config = governance_registry::apply_world_governance_registry_overrides(
+        config,
+        paths.execution_world_dir.as_path(),
+    )?;
+    let effective_validator_signer_bindings =
+        config.pos_config.validator_signer_public_keys.clone();
+    let replication_remote_writer_allowlist = build_replication_remote_writer_allowlist(
+        effective_validator_signer_bindings.values(),
+        &options.replication_remote_writer_public_keys,
+    );
     config = config.with_replication(build_node_replication_config(
         options.node_id.as_str(),
         &keypair,
         &storage_profile_config,
         replication_remote_writer_allowlist.as_slice(),
     )?);
-    config = apply_traffic_profile_to_node_config(config, &options)?;
-    config = governance_registry::apply_world_governance_registry_overrides(
-        config,
-        paths.execution_world_dir.as_path(),
-    )?;
 
     let mut runtime = NodeRuntime::new(config);
     if require_execution {
@@ -319,7 +321,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .map_err(|err| {
             format!("failed to derive reward runtime signer keypair for {signer_node_id}: {err}")
         })?;
-    let mut reward_runtime_node_identity_bindings = validator_signer_bindings;
+    let mut reward_runtime_node_identity_bindings = effective_validator_signer_bindings;
     if !reward_runtime_node_identity_bindings.contains_key(signer_node_id.as_str()) {
         reward_runtime_node_identity_bindings.insert(
             signer_node_id.clone(),

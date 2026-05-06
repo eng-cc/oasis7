@@ -19,7 +19,7 @@
 - 选定方案:
   - governance truth target: `on-chain/world-state registry`
 - 当前 blocker:
-  - 默认 execution world `output/chain-runtime/viewer-live-node/reward-runtime-execution-world` 已导入 `governance.finality.v1` 与 8 个 controller slot 的 world-state registry，chain runtime 也已支持启动时优先读取 world registry，但这仍不等于 rotation / revocation / ceremony / QA gate 全部通过
+  - 默认 execution world `output/chain-runtime/viewer-live-node/reward-runtime-execution-world` 已导入 `governance.finality.v1` 与 8 个 controller slot 的 world-state registry；`chain runtime` 现在已支持在启动/恢复时优先读取该 world registry 来覆盖 validator membership / signer binding 与 controller signer policy，但这仍不等于 rotation / revocation / ceremony / QA gate 全部通过
   - finality signer 的 production signing material 仍由人工离线 custody 持有；runtime 不再把 local seed 视为 registry 存在时的真值，且默认 world 首轮真实 finality drill 已完成，但更大范围 rotation / revocation / ceremony / QA gate 仍未收口
   - controller signer policy 虽已支持由 execution world 注入 `NodeRuntime`，但真实 governance account / recipient binding、genesis ceremony 和最终 QA `pass` 仍未完成
 
@@ -40,6 +40,7 @@
 ## Execution Workstream Snapshot（2026-03-23）
 - [x] 在 `WorldState` 持久化 `governance_finality_signer_registry` 与 `governance_main_token_controller_registry`
 - [x] `governance_effective_finality_epoch_snapshot` 在 registry 存在时优先使用 world-state signer truth，而不是 deterministic local seed fallback
+- 已完成补充：`oasis7_chain_runtime` 在 execution world 存在 `governance_finality_signer_registry` 时，会用该 world-state registry 覆盖 `NodePosConfig` 的 validator membership / signer binding，并让 replication remote writer allowlist 与 reward runtime node identity binding 继续跟随 effective config
 - [x] chain runtime 启动时可从 execution world 读取 controller signer policy，并覆盖 `NodeConfig.main_token_controller_binding`
 - [x] 新增 `oasis7_governance_registry_import`，可把 operator-local `public_manifest.json` 导入 execution world
 - [x] 新增 `oasis7_governance_registry_audit`，可直接读取 world-state registry，输出 slot threshold / signer count / tolerated failures / manifest match 审计结果
@@ -106,6 +107,7 @@
 ## 验收命令（本轮）
 - `rg -n "deterministic local seed|controller_signer_policies|NodeConfig|externalized|failover|revocation" doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md doc/p2p/project.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 governance_finality_registry_roundtrip_persists_and_drives_epoch_snapshot -- --nocapture`
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime governance_registry -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 world_registry_overrides_node_controller_binding -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 import_writes_governance_registries_into_world -- --nocapture`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 audit_report_passes_for_matching_two_of_three_registry -- --nocapture`
