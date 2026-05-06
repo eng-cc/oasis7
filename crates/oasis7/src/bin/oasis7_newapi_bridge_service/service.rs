@@ -219,7 +219,7 @@ impl BridgeService {
                 );
                 state.next_route_seq = state.next_route_seq.saturating_add(1);
                 let expires_at_unix_ms =
-                    now_unix_ms.saturating_add((self.config.route_ttl_seconds * 1000) as i64);
+                    compute_route_expiry_unix_ms(self.config.route_ttl_seconds, now_unix_ms)?;
                 let route = DepositRoute {
                     route_id: route_id.clone(),
                     bridge_user_id: bridge_user_id.clone(),
@@ -286,6 +286,19 @@ fn expire_routes(routes: &mut [DepositRoute], now_unix_ms: i64) {
             route.updated_at_unix_ms = now_unix_ms;
         }
     }
+}
+
+fn compute_route_expiry_unix_ms(
+    route_ttl_seconds: u64,
+    now_unix_ms: i64,
+) -> Result<i64, BridgeServiceError> {
+    let ttl_ms_u64 = route_ttl_seconds.checked_mul(1000).ok_or_else(|| {
+        BridgeServiceError::internal("bridge-service route_ttl_seconds overflowed milliseconds")
+    })?;
+    let ttl_ms_i64 = i64::try_from(ttl_ms_u64).map_err(|_| {
+        BridgeServiceError::internal("bridge-service route_ttl_seconds exceeds i64 milliseconds")
+    })?;
+    Ok(now_unix_ms.saturating_add(ttl_ms_i64))
 }
 
 fn map_store_error(err: StoreMutateError<BridgeServiceError>, context: &str) -> BridgeServiceError {

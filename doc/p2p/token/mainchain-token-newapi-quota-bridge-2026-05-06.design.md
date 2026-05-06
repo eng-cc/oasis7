@@ -29,7 +29,7 @@
 - `bridge_user_binding`
   - `bridge_user_id`
   - `newapi_user_ref`
-  - `default_sender_account_id`
+  - `oasis_sender_account_id`
   - `status`
   - `created_at`
 - `deposit_route`
@@ -76,11 +76,11 @@
   - `manual_review -> closed`
 
 ## 5. 关键接口契约
-- `POST /bridge/bind`
+- `POST /v1/bridge/bind`
   - 输入: `newapi_user_ref`, `oasis_sender_account_id`
   - 输出: `binding_status`
   - 约束: 只建立受控绑定，不隐式开户。
-- `POST /bridge/deposit-route`
+- `POST /v1/bridge/deposit-route`
   - 输入: `bridge_user_id`, `pricing_version` 或 `topup_plan_id`
   - 输出: `route_id`, `deposit_account_id`, `expires_at`
   - 约束: 每个活跃 route 必须可唯一映射 beneficiary。
