@@ -1,0 +1,26 @@
+task_uid: task_a0e7f3310afb4a56b5be7aaf05baeb9c
+title: "polish homepage CN/EN intro copy against comparable strategy-sim positioning"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-site-homepage-copy-polish-cn-en
+execution_log_path: .pm/tasks/task_a0e7f3310afb4a56b5be7aaf05baeb9c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/site/prd.md
+  - doc/site/project.md
+doc_refs:
+  - doc/site/prd.md
+  - doc/site/project.md
+related_prd:
+  - PRD-SITE-001
+  - PRD-SITE-004
+  - PRD-SITE-009
+  - PRD-SITE-010
+acceptance:
+  - "Homepage CN/EN intro copy reads like a coherent strategy-sim pitch instead of abrupt internal phrasing."
+  - "Preview-status and claim-boundary language remain aligned with current site PRD."
+handoff_to: []
+updated_at: 2026-05-06T13:39:10+08:00
+last_started_at: 2026-05-06T13:34:02+08:00
+last_closed_at: 2026-05-06T13:39:10+08:00

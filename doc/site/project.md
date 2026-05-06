@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] homepage-copy-polish-cn-en (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略/模拟游戏公开介绍，收紧中英首页首屏、30 秒说明与玩家角色解释区的话术，把突兀的内部机制表达改成“局势 + 玩家身份 + 持续后果”优先，同时保持技术预览与 claim boundary 不变。 Trace: .pm/tasks/task_a0e7f3310afb4a56b5be7aaf05baeb9c.yaml
 - [x] homepage-player-first-hook-follow-up (PRD-SITE-001/004/009/010) [test_tier_required]: 根据普通用户首访 review 再收紧一轮首页：首屏移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成“资源紧张 -> 联盟松动 -> 战争留痕”的局面描述，builder 反馈文案退回折叠开发者路径。 Trace: .pm/tasks/task_cad1e68ecbd544ce8692e0a8a63e52f9.yaml
 - [x] homepage-first-glance-game-hook (PRD-SITE-001/004/009/010) [test_tier_required]: 继续把中英首页的第一眼感受从“技术验证页”推向“游戏入口页”：首屏标题改成玩家动作与文明幻想优先，默认网页验证入口和 builder 语境降为次级说明，`future-platform` 边界移出首排解释卡但保持 claim gate 不变。 Trace: .pm/tasks/task_24dd9a89a2084480a620e474b2dcd0e2.yaml
 - [x] homepage-first-impression-hardening (PRD-SITE-001/004/009/010) [test_tier_required]: 在不放宽首页公开 claim boundary 的前提下，继续收紧中英首页首屏与首个解释区块，把“破碎小行星带世界、玩家是文明外部指挥者、AI Agent 自主经营/交易/结盟/开战”的游戏画面放到第一次感知里，并把首屏 jargon 压到次级位置。 Trace: .pm/tasks/task_5dae4f83337f4066bae10b1bdbd8da87.yaml
@@ -107,6 +108,7 @@
 - 更新日期: 2026-05-06
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 最新完成: `homepage-copy-polish-cn-en`（中英首页 hero、30 秒说明、玩家角色解释区与社媒摘要已参考同类策略/模拟游戏公开介绍改成“局势 + 身份 + 后果”优先的话术，去掉“你不直接点单位 / You are not micromanaging units”这类突兀开场，同时保持技术预览与 claim boundary 原样收紧。）
 - 最新完成: `homepage-player-first-hook-follow-up`（首屏已移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成资源紧张/联盟松动/战争留痕的局面化描述，builder 文案已退回折叠开发者路径；英文页同步做了一轮去术语化与更游戏化表达。）
 - 最新完成: `homepage-first-glance-game-hook`（中英首页首屏改成“玩家动作 + 文明幻想”优先：默认网页验证入口降为次级说明，builder / hosted-join 边界退出主标题段，future-platform claim 移到首个解释区块脚注，首页第一眼更像游戏入口而不是技术验证页。）
 - 最新完成: `homepage-first-impression-hardening`（中英首页首屏已把“破碎小行星带世界 + 文明外部指挥者 + Agent 自主经营/交易/结盟/开战”前置，首个解释区块改成题材/玩家幻想优先，builder 与 future-platform 边界保留但不再抢首感。）
