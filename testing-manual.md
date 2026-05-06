@@ -144,12 +144,16 @@
 ### L4A synthetic 内部闭环层（Web 为默认）
 - 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
 - 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-game-test.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 已不再接受 no-LLM 启动；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
+- 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 fail-fast。
+- 最低完成定义：至少回填 review packet、`producer_system_designer` / `qa_engineer` 角色卡，以及命中的其余角色卡与 persona cards；只跑 harness / S6，不回填这些卡片，不算 `L4A` 完成。
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
 
 ### L4B 结构化真人试玩层
 - 目标：验证真实人类在有时间、耐心和机会成本约束下，是否看得懂、是否感到有杠杆、是否想继续玩。
 - 默认：制作人试玩 / 发布前人工验收优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。脚本退出后，必须继续填写 `doc/playability_test_result/playability_test_card.md` 或等价正式卡片；只有脚本执行而没有人类主观反馈，不算 `L4B` 完成。
+- 与 `L4A` 的衔接：`./scripts/prepare-playability-l4-review.sh` 会在同一 artifact 目录里复制 `l4b-playability-test-card.md`，并生成可直接执行的 `commands.sh`。若目标是完整 `L4`，应在同一 scaffold 目录同时收口 `L4A` packet / cards、`L4B` 人测卡和最终 `l4-summary.md`。
+- 最低完成定义：脚本实际跑过、真人实际游玩过、`l4b-playability-test-card.md`（或等价正式卡片）已回填，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有人类主观反馈或 summary，不算完整 `L4B`。
 - 结论边界：这一层可以回答“真人是否真的想继续玩”，但仍不自动等价于外部市场验证。
 - source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
 

@@ -30,6 +30,9 @@
 - Aggregation:
   - `persona divergence summary`
   - `role review card`
+- Current scaffold:
+  - `scripts/prepare-playability-l4-review.sh` 负责在单个 worktree 内预置 persona cards、summary 与统一路径。
+  - 该 scaffold 不自动替代 persona 分析或标准角色 handoff。
 
 ## 4. 调度策略
 - 先由 `producer_system_designer` / `qa_engineer` 判断本次改动是否值得开启 persona panel。

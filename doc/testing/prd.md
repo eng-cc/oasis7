@@ -44,6 +44,7 @@
   - SC-9: testing 模块具备一份正式的 `playability subagent review system` 专题，明确标准角色 subagent 清单、输入输出 contract、触发矩阵和升级边界，让内部多角色评审可重复执行。
   - SC-10: testing 模块具备一份正式的 `simulated player persona panel` 专题，明确多个风格化玩家视角如何作为内部假设层接入标准角色 review，同时不新增正式 `player` 角色。
   - SC-11: testing 模块明确把 `L4` 拆成 `L4A synthetic internal playability review` 与 `L4B structured human playtest`，避免把 agent 角色扮演和真人继续游玩意愿混写成同一层结论。
+  - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` 卡片副本、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -127,12 +128,13 @@
   - AC-17: `playability-subagent-review-system-2026-05-06` 专题文档必须明确标准角色 subagent 清单、review packet / output card、trigger matrix、sequencing rules 和 stop conditions。
   - AC-18: `playability-simulated-player-persona-panel-2026-05-06` 专题文档必须明确固定 persona 清单、persona packet / card、与标准角色 review 的回流方式，以及“不是正式角色、不能替代真人验证”的边界。
   - AC-19: `playability-l4-synthetic-human-split-2026-05-06` 专题文档必须明确 `L4A/L4B` 的定义、operator 入口、claim 边界与当前非替代承诺。
+  - AC-20: `scripts/prepare-playability-l4-review.sh` 与 `doc/testing/templates/playability-l4-*.md` 必须能在当前 worktree 下生成一套完整 `L4` scaffold，至少包含 review packet、role review cards、persona cards、summary、`L4B` 卡片副本和推荐命令文件。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: `scripts/ci-tests.sh`、agent-browser 闭环工具、`oasis7_web_launcher` GUI Agent 接口、长跑脚本、结果汇总工具。
+- Tool Requirements: `scripts/ci-tests.sh`、agent-browser 闭环工具、`oasis7_web_launcher` GUI Agent 接口、长跑脚本、结果汇总工具、`scripts/prepare-playability-l4-review.sh`。
 - Evaluation Strategy: 通过门禁通过率、缺陷逃逸率、回归定位时长、证据完整度衡量测试体系质量。
 
 ## 4. Technical Specifications
@@ -145,12 +147,17 @@
   - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
   - `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
   - `doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
+  - `doc/testing/templates/playability-l4-review-packet-template.md`
+  - `doc/testing/templates/playability-l4-role-review-card-template.md`
+  - `doc/testing/templates/playability-l4-persona-card-template.md`
+  - `doc/testing/templates/playability-l4-summary-template.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
   - `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md`
   - `scripts/check-windows-paths.sh`
   - `scripts/ci-tests.sh`
+  - `scripts/prepare-playability-l4-review.sh`
   - `scripts/viewer-software-safe-step-regression-smoke.sh`
   - `scripts/sync-m1-builtin-wasm-artifacts.sh`
   - `scripts/ci-m1-wasm-summary.sh`
@@ -211,10 +218,10 @@
 | PRD-TESTING-004 | TASK-TESTING-007/008/009/010/011/012/013/014/015/016/017/018/019/020/021/022/023/024/025/026/027/028/029/030/031/032/033/034/035/036/059/060/061 | `test_tier_required` | 原文约束点映射审查、命名与引用回归检查、历史专题标题零残留校验、活跃专题当前真值命名回归检查 | 专题文档可维护性与追溯一致性 |
 | PRD-TESTING-005 | TASK-TESTING-037/038/039/040/wasm-determinism-gate-ondemand-scope | `test_tier_required` | keyed manifest/strict policy/changed-path scope planner/多 runner required checks/identity 输入收敛回归 | builtin wasm 发布链路稳定性 |
 | PRD-TESTING-006 | TASK-TESTING-062 | `test_tier_required` | token 创世参数表审计清单、执行模板、p2p/testing 模块追踪回写 | 主链 Token 创世冻结与经济配置门禁 |
-| PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | 五层证据栈定义、现有锚点映射、模块入口互链与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
-| PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
-| PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
-| PRD-TESTING-010 | playability-l4-synthetic-human-split-2026-05-06 | `test_tier_required` | `L4A/L4B` 分层、manual 入口、claim 边界与根入口互链抽样检查 | synthetic/human 玩法证据治理 |
+| PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | 五层证据栈定义、现有锚点映射、模块入口互链、repo-local `L4` scaffold 入口与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
+| PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、scaffold 入口、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
+| PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、persona scaffold、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
+| PRD-TESTING-010 | playability-l4-synthetic-human-split-2026-05-06 | `test_tier_required` | `L4A/L4B` 分层、manual 入口、repo-local scaffold、claim 边界与根入口互链抽样检查 | synthetic/human 玩法证据治理 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

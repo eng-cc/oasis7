@@ -12,7 +12,8 @@
 
 ## 范围
 - 覆盖内部 playability review 所需的标准角色 subagent 设计、review packet contract、output card schema、与 simulated persona panel 的 handoff contract，以及 orchestration 规则。
-- 不覆盖真实外部玩家研究方法，也不覆盖自动 orchestration 工具实现。
+- 覆盖当前 repo-local scaffold 入口如何稳定生成 review packet、role review cards 和最终 summary。
+- 不覆盖真实外部玩家研究方法，也不覆盖“自动执行所有角色评审”的自治 orchestration 实现。
 
 ## 接口 / 数据
 - 专题 PRD: `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
@@ -23,8 +24,8 @@
 - 角色真值入口: `.agents/roles/*.md`
 
 ## 里程碑
-- M1 (2026-05-06): 冻结标准角色 subagent 清单、输入输出 contract 与 orchestration 规则。
-- M2: 若后续需要自动化执行，再补 runbook / wrapper 层设计。
+- M1 (2026-05-06): 冻结标准角色 subagent 清单、输入输出 contract、orchestration 规则，以及 repo-local scaffold 入口。
+- M2: 若后续需要更强自动化，再补“自动执行角色评审 / 自动聚合 verdict”的扩展设计。
 
 ## 风险
 - 若角色输入输出不统一，多角色 review 仍会退回临时口头协作。
@@ -40,6 +41,7 @@
   - SC-4: 系统定义“默认必开角色”和“按 changed surface 追加角色”的触发矩阵。
   - SC-5: 系统明确 `subagent review = 内部证据编排`，仍不替代 L5 真实外部验证。
   - SC-6: 系统明确 simulated persona panel 不是正式角色，只能作为标准角色 review 的辅助输入层，并共同形成 `L4A`。
+  - SC-7: 当前仓库提供 `./scripts/prepare-playability-l4-review.sh`，能在单个 worktree 内稳定生成 review packet、七类 role review cards、summary 和推荐命令文件。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -57,7 +59,7 @@
   - PRD-TESTING-SUBAGENT-003: As an implementation owner, I want a changed-surface trigger matrix, so that I only run the necessary role subagents.
   - PRD-TESTING-SUBAGENT-004: As a stage owner, I want explicit escalation and stop conditions, so that review conflicts or missing external evidence are not hidden.
 - Critical User Flows:
-  1. `识别当前变更的玩家 surface / 风险面 -> 组装 review packet -> 选择默认 + 按需 subagent`
+  1. `识别当前变更的玩家 surface / 风险面 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 review packet -> 选择默认 + 按需 subagent`
   2. `若需要补多风格玩家假设 -> 先运行 simulated persona panel -> 回流 persona cards`
   3. `并行执行角色 subagent review -> 回收统一输出卡 -> 标记 blocker / watch / claim drift`
   4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5``
@@ -99,6 +101,14 @@
   - `what_this_does_not_prove`
   - `required_followups`
   - `claim_boundary_note`
+- Current repo-local scaffold:
+  - `./scripts/prepare-playability-l4-review.sh` 会一次性生成：
+    - `l4-review-packet.md`
+    - `role-review-cards/*.md`
+    - `l4-summary.md`
+    - `commands.sh`
+    - `manifest.json`
+  - 该脚本只负责产物预置、路径冻结和 `L4A/L4B` 命令推荐；不会自动替代各角色做 verdict。
 
 ## 5. Trigger Matrix
 - Always-open:
@@ -146,6 +156,7 @@
 - AC-3: review packet contract 与 output card schema 明确可复用。
 - AC-4: trigger matrix、sequencing rules、stop conditions 都被写清。
 - AC-5: 明确“内部 subagent review 全补齐”与“L5 外部真实验证完成”是两回事。
+- AC-6: 明确写出当前 repo-local scaffold 入口与其边界: 能稳定生成 packet/card/summary，但不会自动完成 role verdict。
 
 ## 9. Non-Goals
 - 不在本轮实现自动 orchestration 脚本。
@@ -160,11 +171,15 @@
   - `doc/testing/prd.md`
   - `doc/testing/project.md`
   - `testing-manual.md`
+  - `scripts/prepare-playability-l4-review.sh`
+  - `doc/testing/templates/playability-l4-review-packet-template.md`
+  - `doc/testing/templates/playability-l4-role-review-card-template.md`
 - Edge Cases:
   - 若某角色输入为空，但 trigger matrix 命中：必须在输出卡显式写 `insufficient_input`，不能假装评审完成。
   - 若某角色 review 只基于别的角色结论，没有一手证据：必须标记为 `secondary_review_only`。
   - 若 persona cards 已存在，但角色 review 完全忽略其共性断点：必须说明忽略理由，不能静默跳过。
   - 若多个 subagent 全部正面，但没有任何 `L4B/L5` 证据：只能给“`L4A synthetic` 准备完成”，不能给“玩法已被证明”。
+  - 若 scaffold 已生成，但命中的 role cards 未填写完：只能记为 packet/card 预置完成，不能记为 subagent review 已完成。
 - Non-Functional Requirements:
   - NFR-SUB-1: 新读者应在 5 分钟内知道本次改动要开哪些角色 subagent。
   - NFR-SUB-2: 每张输出卡必须在 30 秒内看出该角色到底证明了什么、没证明什么。
@@ -186,3 +201,4 @@
 | `DEC-PSRS-003` | 先 `qa + producer` 校验 packet，再并行其余角色 | 所有角色一上来全并行 | 输入包若不完整，会放大噪音和重复劳动。 |
 | `DEC-PSRS-004` | 保留 `liveops_community` 作为 claim-envelope 终段复核 | 让工程角色直接决定对外表达 | 工程结论和对外口径不是同一边界。 |
 | `DEC-PSRS-005` | 把 simulated personas 作为非正式玩家视角层接入标准角色 review | 把 `player` 升格成新的正式角色 | 会破坏现有角色治理边界，也会混淆内部模拟与外部验证。 |
+| `DEC-PSRS-006` | 当前先提供 repo-local scaffold 生成 packet/card/summary | 等自动 orchestration 全做完后再给 operator 入口 | 没有稳定 scaffold，当前 PR 仍无法在单个 worktree 内完整准备 `L4A`。 |

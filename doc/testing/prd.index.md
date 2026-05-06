@@ -14,6 +14,7 @@
 - 想先回答 testing 模块覆盖哪些测试层级、证据与门禁边界：先读 `doc/testing/prd.md`
 - 想先回答“自动化能证明什么、不能证明什么，以及判断好玩还缺哪层证据”：先读 `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
 - 想先回答“为什么 `L4` 需要拆成 `L4A synthetic` 和 `L4B human`，以及 agent 角色扮演为什么还不能直接当真人试玩”：先读 `doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
+- 想直接在一个 worktree 里准备完整 `L4A + L4B` 执行包：先读 `testing-manual.md` 的 `L4A/L4B` 段落，再执行 `./scripts/prepare-playability-l4-review.sh`
 - 想先回答“对应标准角色 subagent 到底怎么设计、如何组合成 review 流程”：先读 `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“如何用多个 simulated player personas 补内部玩家视角，但不新增正式 `player` 角色”：先读 `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
@@ -22,13 +23,13 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-05-06）
-- `doc/testing/`：190 份文件
+- `doc/testing/`：194 份文件
 - `doc/testing/evidence/`：49 份文件
 - `doc/testing/ci/`：33 份文件
 - `doc/testing/longrun/`：24 份文件
 - `doc/testing/launcher/`：18 份文件
 - `doc/testing/governance/`：28 份文件
-- `doc/testing/templates/`：12 份文件
+- `doc/testing/templates/`：16 份文件
 - `doc/testing/performance/`：12 份文件
 - `doc/testing/manual/`：7 份文件
 - `doc/testing/chaos-plans/`：1 份文件

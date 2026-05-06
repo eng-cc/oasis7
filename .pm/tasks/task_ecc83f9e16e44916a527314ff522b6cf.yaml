@@ -1,0 +1,26 @@
+task_uid: task_ecc83f9e16e44916a527314ff522b6cf
+title: "make PR186 runnable for complete L4 validation"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-testing-playability-l4-execution-closure-pr186-2026-05-06
+execution_log_path: .pm/tasks/task_ecc83f9e16e44916a527314ff522b6cf.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+  - doc/testing/prd.md
+  - testing-manual.md
+  - doc/playability_test_result/README.md
+doc_refs: []
+related_prd:
+  - PRD-TESTING-007
+  - PRD-TESTING-008
+  - PRD-TESTING-009
+  - PRD-TESTING-010
+acceptance:
+  - "PR186 provides runnable L4A and L4B execution scaffolds, not only policy docs"
+  - "operators can produce a complete L4 artifact set inside one worktree without inventing ad hoc packet/card files"
+handoff_to: []
+updated_at: 2026-05-06T22:27:44+08:00
+last_started_at: 2026-05-06T21:08:40+08:00
+last_closed_at: 2026-05-06T22:27:43+08:00

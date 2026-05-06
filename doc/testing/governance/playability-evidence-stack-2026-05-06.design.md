@@ -26,6 +26,7 @@
 - 专题 Project: `doc/testing/governance/playability-evidence-stack-2026-05-06.project.md`
 - 模块根入口: `doc/testing/prd.md`、`doc/testing/project.md`
 - 操作手册入口: `testing-manual.md`
+- repo-local `L4` scaffold 入口: `scripts/prepare-playability-l4-review.sh`
 - 真人试玩 / 玩法结果入口: `doc/playability_test_result/*`
 
 ## 4. 约束与边界
