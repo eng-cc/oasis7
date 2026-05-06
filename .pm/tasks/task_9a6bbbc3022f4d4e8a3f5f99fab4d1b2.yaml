@@ -1,0 +1,21 @@
+task_uid: task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2
+title: "design role-based playability review subagents"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-testing-playability-subagent-review-system-2026-05-06
+execution_log_path: .pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/prd.md
+  - doc/testing/project.md
+doc_refs: []
+related_prd:
+  - PRD-TESTING-007
+acceptance:
+  - "testing governance defines the standard role subagents for internal playability review"
+  - "docs specify role inputs outputs review order and evidence boundaries for subagent-based review"
+handoff_to: []
+updated_at: 2026-05-06T13:02:58+08:00
+last_started_at: 2026-05-06T12:55:47+08:00
+last_closed_at: 2026-05-06T13:02:58+08:00
