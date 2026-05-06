@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] homepage-first-glance-game-hook (PRD-SITE-001/004/009/010) [test_tier_required]: 继续把中英首页的第一眼感受从“技术验证页”推向“游戏入口页”：首屏标题改成玩家动作与文明幻想优先，默认网页验证入口和 builder 语境降为次级说明，`future-platform` 边界移出首排解释卡但保持 claim gate 不变。 Trace: .pm/tasks/task_24dd9a89a2084480a620e474b2dcd0e2.yaml
 - [x] homepage-first-impression-hardening (PRD-SITE-001/004/009/010) [test_tier_required]: 在不放宽首页公开 claim boundary 的前提下，继续收紧中英首页首屏与首个解释区块，把“破碎小行星带世界、玩家是文明外部指挥者、AI Agent 自主经营/交易/结盟/开战”的游戏画面放到第一次感知里，并把首屏 jargon 压到次级位置。 Trace: .pm/tasks/task_5dae4f83337f4066bae10b1bdbd8da87.yaml
 - [x] homepage-game-explainer (PRD-SITE-001/004/009) [test_tier_required]: 重构公开首页的首屏与前两屏信息架构，优先讲清楚 `oasis7` 是什么游戏、玩家如何参与、当前开放到哪一步，再把技术验证、下载与证据链下沉到后续版块。 Trace: .pm/tasks/task_b4555727572646f8a3c2bc6a6ecfc6b3.yaml
 - [x] TASK-SITE-001 (PRD-SITE-001) [test_tier_required]: 完成 site PRD 改写，建立站点设计主入口。
@@ -105,6 +106,7 @@
 - 更新日期: 2026-05-06
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 最新完成: `homepage-first-glance-game-hook`（中英首页首屏改成“玩家动作 + 文明幻想”优先：默认网页验证入口降为次级说明，builder / hosted-join 边界退出主标题段，future-platform claim 移到首个解释区块脚注，首页第一眼更像游戏入口而不是技术验证页。）
 - 最新完成: `homepage-first-impression-hardening`（中英首页首屏已把“破碎小行星带世界 + 文明外部指挥者 + Agent 自主经营/交易/结盟/开战”前置，首个解释区块改成题材/玩家幻想优先，builder 与 future-platform 边界保留但不再抢首感。）
 - 最新完成: `homepage-entry-claim-boundary-hardening`（中英首页已按“公开访客入口 -> builder 验证 -> future platform”三层收紧 claim；`software_safe` 已被固定为默认 formal Web 入口，新增 homepage claim/parity gate，并补齐移动端 no-JS 导航与 skip-link a11y 收口。）
 - 最新完成: `homepage-game-explainer`（公开首页已改成游戏说明优先的首屏；中英页同步收紧首屏信息密度，先回答“这是什么 / 你在这里做什么 / 现在是否可玩”，技术验证与下载细节下沉到后续版块。）

@@ -459,6 +459,13 @@ h3 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.hero-availability-note {
+  margin: 0.72rem 0 0;
+  max-width: 58ch;
+  color: #8ea8bc;
+  font-size: 0.8rem;
+}
+
 .metric-box {
   position: relative;
   border: 1px solid rgba(131, 188, 220, 0.22);
@@ -576,6 +583,12 @@ h3 {
   margin: 0 0 0.78rem;
   color: var(--text-soft);
   max-width: 70ch;
+}
+
+.section-footnote {
+  margin: 0.82rem 0 0;
+  color: #8ea8bc;
+  font-size: 0.84rem;
 }
 
 .card-spotlight {
@@ -1620,6 +1633,11 @@ code {
 
   .hero .proof-strip .proof-chip {
     width: 100%;
+  }
+
+  .hero-availability-note,
+  .section-footnote {
+    font-size: 0.78rem;
   }
 
   .pulse-panel li {
