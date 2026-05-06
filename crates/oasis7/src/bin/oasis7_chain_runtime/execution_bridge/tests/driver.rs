@@ -325,7 +325,7 @@ fn node_runtime_execution_driver_persists_chain_records() {
 }
 
 #[test]
-fn node_runtime_execution_driver_tolerates_non_contiguous_commit_heights() {
+fn node_runtime_execution_driver_rejects_non_contiguous_commit_without_predecessor_record() {
     let dir = temp_dir("execution-driver-gap");
     let state_path = dir.join("state.json");
     let world_dir = dir.join("world");
@@ -353,7 +353,7 @@ fn node_runtime_execution_driver_tolerates_non_contiguous_commit_heights() {
             committed_at_unix_ms: 1_000,
         })
         .expect("first commit");
-    let gap_commit = driver
+    let err = driver
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
@@ -365,16 +365,119 @@ fn node_runtime_execution_driver_tolerates_non_contiguous_commit_heights() {
             committed_actions: Vec::new(),
             committed_at_unix_ms: 3_000,
         })
-        .expect("gap commit");
-
-    assert_eq!(gap_commit.execution_height, 3);
+        .expect_err("gap commit without predecessor record should fail");
+    assert!(
+        err.contains("missing predecessor record"),
+        "unexpected gap error: {err}"
+    );
     assert!(records_dir.join("00000000000000000001.json").exists());
-    assert!(records_dir.join("00000000000000000003.json").exists());
+    assert!(!records_dir.join("00000000000000000003.json").exists());
     assert!(!records_dir.join("00000000000000000002.json").exists());
 
     let state = load_execution_bridge_state(state_path.as_path()).expect("load state");
-    assert_eq!(state.last_applied_committed_height, 3);
-    assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h3"));
+    assert_eq!(state.last_applied_committed_height, 1);
+    assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h1"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
+    let dir = temp_dir("execution-driver-gap-restore");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver =
+        NodeRuntimeExecutionDriver::new(state_path.clone(), world_dir, records_dir, storage_root)
+            .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    let first = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("first commit");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 2,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "node-h2".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 2_000,
+        })
+        .expect("second commit");
+    let third = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 3,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "node-h3".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 3_000,
+        })
+        .expect("third commit");
+
+    let replayed_first = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: empty_action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("replay first commit");
+    assert_eq!(replayed_first.execution_height, first.execution_height);
+    assert_eq!(
+        replayed_first.execution_block_hash,
+        first.execution_block_hash
+    );
+    assert_eq!(
+        replayed_first.execution_state_root,
+        first.execution_state_root
+    );
+
+    let replayed_third = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            height: 3,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "node-h3".to_string(),
+            action_root: empty_action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 3_000,
+        })
+        .expect("replay third commit after restoring predecessor");
+    assert_eq!(replayed_third.execution_height, third.execution_height);
+    assert_eq!(
+        replayed_third.execution_block_hash,
+        third.execution_block_hash
+    );
+    assert_eq!(
+        replayed_third.execution_state_root,
+        third.execution_state_root
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

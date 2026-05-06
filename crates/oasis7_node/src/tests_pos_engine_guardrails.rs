@@ -106,6 +106,54 @@ fn pos_engine_stays_pending_without_peer_votes_when_auto_attest_disabled() {
 }
 
 #[test]
+fn pos_engine_non_expected_proposer_does_not_open_local_proposal() {
+    let validators = multi_validators();
+    let probe_config = NodeConfig::new("node-a", "world-non-proposer-probe", NodeRole::Sequencer)
+        .expect("probe config")
+        .with_pos_validators(validators.clone())
+        .expect("probe validators");
+    let probe_engine = PosNodeEngine::new(&probe_config).expect("probe engine");
+    let expected = probe_engine
+        .expected_proposer(0)
+        .expect("expected proposer for slot 0");
+    let non_proposer = validators
+        .iter()
+        .map(|validator| validator.validator_id.as_str())
+        .find(|validator_id| *validator_id != expected)
+        .expect("non proposer");
+
+    let config = NodeConfig::new(
+        non_proposer,
+        "world-non-proposer-probe",
+        NodeRole::Sequencer,
+    )
+    .expect("config")
+    .with_pos_validators(validators)
+    .expect("validators")
+    .with_auto_attest_all_validators(true);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let snapshot = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("tick");
+
+    assert_eq!(snapshot.consensus_snapshot.latest_height, 0);
+    assert_eq!(snapshot.consensus_snapshot.committed_height, 0);
+    assert_eq!(engine.committed_height, 0);
+    assert!(engine.pending.is_none());
+}
+
+#[test]
 fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
     let config =
         NodeConfig::new("node-a", "world-overflow-apply", NodeRole::Observer).expect("config");
@@ -240,7 +288,7 @@ fn pos_engine_restore_state_snapshot_rejects_overflow_without_partial_state() {
     };
 
     let err = engine
-        .restore_state_snapshot(snapshot)
+        .restore_state_snapshot(snapshot, None)
         .expect_err("committed height overflow must fail");
     assert!(
         matches!(err, NodeError::Replication { reason } if reason.contains("committed_height"))
@@ -256,6 +304,101 @@ fn pos_engine_restore_state_snapshot_rejects_overflow_without_partial_state() {
             .map(|proposal| proposal.block_hash.as_str()),
         Some("pending-restore")
     );
+}
+
+#[test]
+fn sequencer_commit_binding_rejects_missing_execution_hashes() {
+    let config = NodeConfig::new("node-b", "world-missing-exec-binding", NodeRole::Sequencer)
+        .expect("config");
+    let engine = PosNodeEngine::new(&config).expect("engine");
+
+    let err = engine
+        .commit_execution_binding_for_height(1)
+        .expect_err("sequencer commit binding must require execution hashes");
+
+    assert!(
+        matches!(err, NodeError::Consensus { reason } if reason.contains("missing execution binding"))
+    );
+}
+
+#[test]
+fn sequencer_restore_state_snapshot_rejects_committed_head_ahead_of_execution() {
+    let config =
+        NodeConfig::new("node-a", "world-restore-gap", NodeRole::Sequencer).expect("config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.committed_height = 9;
+    engine.network_committed_height = 10;
+    engine.next_height = 11;
+    engine.next_slot = 3;
+
+    let snapshot = super::pos_state_store::PosNodeStateSnapshot {
+        next_height: 6,
+        next_slot: 5,
+        last_observed_slot: 5,
+        missed_slot_count: 0,
+        last_observed_tick: 5,
+        missed_tick_count: 0,
+        committed_height: 5,
+        network_committed_height: 5,
+        last_broadcast_proposal_height: 0,
+        last_broadcast_local_attestation_height: 0,
+        last_broadcast_committed_height: 0,
+        last_committed_block_hash: Some("committed-5".to_string()),
+        last_execution_height: 3,
+        last_execution_block_hash: Some("exec-3".to_string()),
+        last_execution_state_root: Some("state-3".to_string()),
+    };
+
+    let err = engine
+        .restore_state_snapshot(snapshot, None)
+        .expect_err("sequencer snapshot must fail when committed head is ahead of execution");
+
+    assert!(
+        matches!(err, NodeError::Replication { reason } if reason.contains("committed_height=5") && reason.contains("last_execution_height=3"))
+    );
+    assert_eq!(engine.committed_height, 9);
+    assert_eq!(engine.network_committed_height, 10);
+    assert_eq!(engine.next_height, 11);
+    assert_eq!(engine.next_slot, 3);
+}
+
+#[test]
+fn restore_state_snapshot_clamps_future_clock_state_when_fixed_genesis_is_configured() {
+    let mut config = NodeConfig::new("node-a", "world-restore-clock-clamp", NodeRole::Sequencer)
+        .expect("config");
+    config.pos_config.slot_duration_ms = 100;
+    config.pos_config.ticks_per_slot = 10;
+    config.pos_config.slot_clock_genesis_unix_ms = Some(1_000);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let snapshot = super::pos_state_store::PosNodeStateSnapshot {
+        next_height: 4,
+        next_slot: 77,
+        last_observed_slot: 77,
+        missed_slot_count: 0,
+        last_observed_tick: 777,
+        missed_tick_count: 0,
+        committed_height: 3,
+        network_committed_height: 3,
+        last_broadcast_proposal_height: 3,
+        last_broadcast_local_attestation_height: 3,
+        last_broadcast_committed_height: 3,
+        last_committed_block_hash: Some("committed-3".to_string()),
+        last_execution_height: 3,
+        last_execution_block_hash: Some("exec-3".to_string()),
+        last_execution_state_root: Some("state-3".to_string()),
+    };
+
+    engine
+        .restore_state_snapshot(snapshot, Some(1_230))
+        .expect("fixed genesis restore should clamp future clock state");
+
+    assert_eq!(engine.next_height, 4);
+    assert_eq!(engine.committed_height, 3);
+    assert_eq!(engine.network_committed_height, 3);
+    assert_eq!(engine.next_slot, 2);
+    assert_eq!(engine.last_observed_slot, 2);
+    assert_eq!(engine.last_observed_tick, 23);
 }
 
 #[test]

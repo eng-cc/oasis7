@@ -65,6 +65,10 @@ else
   cmd+=(--reward-runtime-no-auto-redeem)
 fi
 
+if [[ -n "${POS_SLOT_CLOCK_GENESIS_UNIX_MS:-}" ]]; then
+  cmd+=(--pos-slot-clock-genesis-unix-ms "$POS_SLOT_CLOCK_GENESIS_UNIX_MS")
+fi
+
 if [[ -n "${NODE_AUTO_ATTEST_FLAG:-}" ]]; then
   cmd+=("$NODE_AUTO_ATTEST_FLAG")
 fi

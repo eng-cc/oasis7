@@ -1,3 +1,5 @@
+use crate::replication_state_reconcile::ReplicationCommitPayload;
+
 use super::node_engine_core::InboundSlotWindow;
 use super::*;
 
@@ -136,10 +138,60 @@ impl PosNodeEngine {
                 },
             );
         }
-        Ok(GapSyncHeightOutcome::Synced {
+        Ok(GapSyncHeightOutcome::Synced { payload })
+    }
+
+    pub(super) fn apply_synced_replication_commit(
+        &mut self,
+        world_id: &str,
+        payload: &ReplicationCommitPayload,
+        execution_hook: Option<&mut dyn NodeExecutionHook>,
+    ) -> Result<(), NodeError> {
+        if payload.execution_block_hash.is_some() != payload.execution_state_root.is_some() {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "synced replication height {} execution binding malformed",
+                    payload.height
+                ),
+            });
+        }
+        let decision = PosDecision {
+            height: payload.height,
+            slot: payload.slot,
+            epoch: payload.epoch,
+            status: PosConsensusStatus::Committed,
             block_hash: payload.block_hash.clone(),
-            committed_at_ms: payload.committed_at_ms,
-        })
+            action_root: payload.action_root.clone(),
+            committed_actions: payload.actions.clone(),
+            approved_stake: self.required_stake,
+            rejected_stake: 0,
+            required_stake: self.required_stake,
+            total_stake: self.total_stake,
+        };
+        let local_node_id = self.local_validator_id.clone();
+        self.apply_committed_execution(
+            local_node_id.as_str(),
+            world_id,
+            payload.committed_at_ms,
+            &decision,
+            execution_hook,
+        )?;
+        self.validate_peer_commit_execution_binding(
+            payload.height,
+            payload.execution_block_hash.as_deref(),
+            payload.execution_state_root.as_deref(),
+        )
+        .map_err(|err| NodeError::Replication {
+            reason: format!(
+                "synced replication height {} execution hash validation failed: {}",
+                payload.height, err
+            ),
+        })?;
+        self.record_synced_replication_height(
+            payload.height,
+            payload.block_hash.clone(),
+            payload.committed_at_ms,
+        )
     }
 
     pub(super) fn record_synced_replication_height(
@@ -154,6 +206,7 @@ impl PosNodeEngine {
         let next_synced_height =
             checked_replication_successor(height, "height", "recording synced replication height")?;
         self.committed_height = height;
+        self.network_committed_height = self.network_committed_height.max(height);
         self.last_committed_at_ms = Some(committed_at_ms);
         self.next_height = next_synced_height;
         self.last_committed_block_hash = Some(block_hash);

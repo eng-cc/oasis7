@@ -98,6 +98,83 @@ fn build_gap_sync_endpoint_with_policy(
 }
 
 #[test]
+fn successor_probe_at_genesis_syncs_height_one_before_local_proposal() {
+    let dir_remote = temp_dir("successor-probe-genesis-remote");
+    let dir_local = temp_dir("successor-probe-genesis-local");
+    let world_id = "world-successor-probe-genesis";
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let (mut engine, mut replication, endpoint, message) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        130,
+        131,
+        Arc::clone(&network),
+    );
+    let expected_hash = message.record.content_hash.clone();
+    let expected_blob = message.payload.clone();
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
+            Box::new({
+                let message = message.clone();
+                move |_payload| {
+                    serde_json::to_vec(&super::replication::FetchCommitResponse {
+                        found: true,
+                        message: Some(message.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch commit response failed: {err}"),
+                    })
+                }
+            }),
+        )
+        .expect("register fetch commit handler");
+    network
+        .register_handler(
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+            Box::new(move |payload| {
+                let request =
+                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                        .map_err(|err| WorldError::DistributedValidationFailed {
+                            reason: format!("decode fetch blob request failed: {err}"),
+                        })?;
+                serde_json::to_vec(&super::replication::FetchBlobResponse {
+                    found: request.content_hash == expected_hash,
+                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
+                })
+                .map_err(|err| WorldError::DistributedValidationFailed {
+                    reason: format!("encode fetch blob response failed: {err}"),
+                })
+            }),
+        )
+        .expect("register fetch blob handler");
+
+    assert_eq!(engine.committed_height, 0);
+    let hold = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            1_000,
+            Some(&mut replication),
+            None,
+        )
+        .expect("probe genesis successor");
+    assert!(
+        hold,
+        "genesis probe should hold proposals while syncing height 1"
+    );
+    assert_eq!(engine.committed_height, 1);
+    assert_eq!(engine.replication_persisted_height, 1);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
 fn runtime_network_replication_gap_sync_fetch_commit_success_cache_reuses_validated_response() {
     let dir_remote = temp_dir("gap-sync-fetch-commit-success-cache-remote");
     let dir_local = temp_dir("gap-sync-fetch-commit-success-cache-local");
@@ -254,15 +331,11 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
     let synced = engine
         .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
         .expect("sync height 1");
-    let GapSyncHeightOutcome::Synced {
-        block_hash,
-        committed_at_ms,
-    } = synced
-    else {
+    let GapSyncHeightOutcome::Synced { payload } = synced else {
         panic!("expected synced outcome for height 1");
     };
     engine
-        .record_synced_replication_height(1, block_hash, committed_at_ms)
+        .record_synced_replication_height(1, payload.block_hash, payload.committed_at_ms)
         .expect("record synced height 1");
     *request_count.lock().expect("lock request count") = 0;
 
@@ -273,6 +346,7 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
             world_id,
             1_000,
             Some(&mut replication),
+            None,
         )
         .expect("first successor probe");
     assert!(
@@ -288,6 +362,7 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
             world_id,
             1_200,
             Some(&mut replication),
+            None,
         )
         .expect("second successor probe");
     assert!(!second, "cooldown skip should keep proposal hold disabled");
@@ -304,6 +379,7 @@ fn successor_probe_cooldown_suppresses_same_height_not_found_retry() {
             world_id,
             2_100,
             Some(&mut replication),
+            None,
         )
         .expect("third successor probe");
     assert!(
@@ -390,15 +466,11 @@ fn successor_probe_cooldown_preserves_waitable_hold_decision() {
     let synced = engine
         .sync_replication_height_once(&endpoint, "node-b", world_id, &mut replication, 1)
         .expect("sync height 1");
-    let GapSyncHeightOutcome::Synced {
-        block_hash,
-        committed_at_ms,
-    } = synced
-    else {
+    let GapSyncHeightOutcome::Synced { payload } = synced else {
         panic!("expected synced outcome for height 1");
     };
     engine
-        .record_synced_replication_height(1, block_hash, committed_at_ms)
+        .record_synced_replication_height(1, payload.block_hash, payload.committed_at_ms)
         .expect("record synced height 1");
     *request_count.lock().expect("lock request count") = 0;
 
@@ -409,6 +481,7 @@ fn successor_probe_cooldown_preserves_waitable_hold_decision() {
             world_id,
             1_000,
             Some(&mut replication),
+            None,
         )
         .expect("first successor probe");
     assert!(first, "waitable connection-gap should hold proposals");
@@ -421,6 +494,7 @@ fn successor_probe_cooldown_preserves_waitable_hold_decision() {
             world_id,
             1_200,
             Some(&mut replication),
+            None,
         )
         .expect("second successor probe");
     assert!(

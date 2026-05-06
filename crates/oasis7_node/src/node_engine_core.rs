@@ -156,6 +156,7 @@ impl PosNodeEngine {
         queued_actions: Vec<NodeConsensusAction>,
         execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<NodeEngineTickResult, NodeError> {
+        let execution_hook_ptr = execution_hook_ptr(execution_hook);
         merge_pending_consensus_actions(
             &mut self.pending_consensus_actions,
             queued_actions,
@@ -185,12 +186,14 @@ impl PosNodeEngine {
                 node_id,
                 world_id,
                 replication.as_deref_mut(),
+                execution_hook_ptr,
             )?;
             self.sync_missing_replication_commits(
                 endpoint,
                 node_id,
                 world_id,
                 replication.as_deref_mut(),
+                execution_hook_ptr,
             )?;
         }
         let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
@@ -200,6 +203,7 @@ impl PosNodeEngine {
                 world_id,
                 now_ms,
                 replication.as_deref_mut(),
+                execution_hook_ptr,
             )?
         } else {
             false
@@ -233,7 +237,9 @@ impl PosNodeEngine {
         }
 
         let prev_committed_height = self.committed_height;
-        self.apply_committed_execution(node_id, world_id, now_ms, &decision, execution_hook)?;
+        self.apply_committed_execution(node_id, world_id, now_ms, &decision, unsafe {
+            reborrow_execution_hook_ptr(execution_hook_ptr)
+        })?;
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {
@@ -282,6 +288,7 @@ impl PosNodeEngine {
                 node_id,
                 world_id,
                 replication.as_deref_mut(),
+                execution_hook_ptr,
             )?;
         }
         let committed_action_batch = if matches!(decision.status, PosConsensusStatus::Committed)
@@ -438,6 +445,9 @@ impl PosNodeEngine {
             .ok_or_else(|| NodeError::Consensus {
                 reason: "no proposer available".to_string(),
             })?;
+        if proposer_id != node_id {
+            return self.idle_pending_decision();
+        }
         let parent_block_hash = self
             .last_committed_block_hash
             .as_deref()
@@ -568,7 +578,7 @@ impl PosNodeEngine {
         self.recent_finality_latency_ms.push_back(latency_ms.max(0));
     }
 
-    fn apply_committed_execution(
+    pub(super) fn apply_committed_execution(
         &mut self,
         node_id: &str,
         world_id: &str,
@@ -594,19 +604,26 @@ impl PosNodeEngine {
             return Ok(());
         };
 
-        let result = execution_hook
-            .on_commit(NodeExecutionCommitContext {
-                world_id: world_id.to_string(),
-                node_id: node_id.to_string(),
-                height: decision.height,
-                slot: decision.slot,
-                epoch: decision.epoch,
-                node_block_hash: decision.block_hash.clone(),
-                action_root: decision.action_root.clone(),
-                committed_actions: decision.committed_actions.clone(),
-                committed_at_unix_ms: now_ms,
-            })
-            .map_err(|reason| NodeError::Execution { reason })?;
+        let result = match execution_hook.on_commit(NodeExecutionCommitContext {
+            world_id: world_id.to_string(),
+            node_id: node_id.to_string(),
+            height: decision.height,
+            slot: decision.slot,
+            epoch: decision.epoch,
+            node_block_hash: decision.block_hash.clone(),
+            action_root: decision.action_root.clone(),
+            committed_actions: decision.committed_actions.clone(),
+            committed_at_unix_ms: now_ms,
+        }) {
+            Ok(result) => result,
+            Err(reason)
+                if execution_error_waits_for_gap_sync(reason.as_str())
+                    && !self.require_execution_on_commit =>
+            {
+                return Ok(());
+            }
+            Err(reason) => return Err(NodeError::Execution { reason }),
+        };
 
         if result.execution_height != decision.height {
             return Err(NodeError::Execution {
@@ -765,18 +782,20 @@ impl PosNodeEngine {
         &self,
         committed_height: u64,
     ) -> Result<(Option<&str>, Option<&str>), NodeError> {
-        let (execution_block_hash, execution_state_root) = self
-            .execution_binding_for_height(committed_height)
-            .map(|(block_hash, state_root)| (Some(block_hash), Some(state_root)))
-            .unwrap_or((None, None));
-        if execution_block_hash.is_some() != execution_state_root.is_some() {
+        if let Some((execution_block_hash, execution_state_root)) =
+            self.execution_binding_for_height(committed_height)
+        {
+            return Ok((Some(execution_block_hash), Some(execution_state_root)));
+        }
+        if self.require_execution_on_commit || self.require_peer_execution_hashes {
             return Err(NodeError::Consensus {
-                reason:
-                    "execution commit binding requires both execution_block_hash and execution_state_root"
-                        .to_string(),
+                reason: format!(
+                    "committed height {} missing execution binding while execution hashes are required",
+                    committed_height
+                ),
             });
         }
-        Ok((execution_block_hash, execution_state_root))
+        Ok((None, None))
     }
 
     pub(super) fn execution_binding_for_height(&self, height: u64) -> Option<(&str, &str)> {
@@ -862,6 +881,10 @@ impl PosNodeEngine {
     }
 }
 
+fn execution_error_waits_for_gap_sync(reason: &str) -> bool {
+    reason.contains("missing predecessor record for non-contiguous committed height")
+}
+
 fn total_action_payload_bytes<'a>(actions: impl Iterator<Item = &'a NodeConsensusAction>) -> usize {
     actions.map(|action| action.payload_cbor.len()).sum()
 }
@@ -904,5 +927,97 @@ fn summarize_finality_latency(latencies: impl Iterator<Item = i64>) -> NodeFinal
         max_latency_ms: samples.last().copied(),
         p50_latency_ms: percentile(50),
         p95_latency_ms: percentile(95),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct GapWaitingExecutionHook;
+
+    impl NodeExecutionHook for GapWaitingExecutionHook {
+        fn on_commit(
+            &mut self,
+            _context: NodeExecutionCommitContext,
+        ) -> Result<NodeExecutionCommitResult, String> {
+            Err(
+                "execution driver missing predecessor record for non-contiguous committed height: last_applied=0 incoming=8 predecessor=7"
+                    .to_string(),
+            )
+        }
+    }
+
+    #[test]
+    fn committed_execution_waits_for_gap_sync_when_predecessor_record_is_missing() {
+        let config = NodeConfig::new("node-b", "world-gap-sync-exec-wait", NodeRole::Observer)
+            .expect("config");
+        let mut engine = PosNodeEngine::new(&config).expect("engine");
+        let decision = PosDecision {
+            height: 8,
+            slot: 8,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: "block-8".to_string(),
+            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        let mut hook = GapWaitingExecutionHook;
+
+        engine
+            .apply_committed_execution(
+                &config.node_id,
+                &config.world_id,
+                8_000,
+                &decision,
+                Some(&mut hook),
+            )
+            .expect("defer gap execution");
+
+        assert_eq!(engine.last_execution_height, 0);
+        assert!(engine.last_execution_block_hash.is_none());
+        assert!(engine.last_execution_state_root.is_none());
+    }
+
+    #[test]
+    fn sequencer_committed_execution_does_not_wait_for_gap_sync() {
+        let config = NodeConfig::new("node-b", "world-gap-sync-exec-fail", NodeRole::Sequencer)
+            .expect("config");
+        let mut engine = PosNodeEngine::new(&config).expect("engine");
+        let decision = PosDecision {
+            height: 8,
+            slot: 8,
+            epoch: 0,
+            status: PosConsensusStatus::Committed,
+            block_hash: "block-8".to_string(),
+            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+            committed_actions: Vec::new(),
+            approved_stake: 100,
+            rejected_stake: 0,
+            required_stake: 67,
+            total_stake: 100,
+        };
+        let mut hook = GapWaitingExecutionHook;
+
+        let err = engine
+            .apply_committed_execution(
+                &config.node_id,
+                &config.world_id,
+                8_000,
+                &decision,
+                Some(&mut hook),
+            )
+            .expect_err("sequencer must fail when execution cannot bridge the predecessor gap");
+
+        assert!(
+            matches!(err, NodeError::Execution { reason } if reason.contains("missing predecessor record"))
+        );
+        assert_eq!(engine.last_execution_height, 0);
+        assert!(engine.last_execution_block_hash.is_none());
+        assert!(engine.last_execution_state_root.is_none());
     }
 }

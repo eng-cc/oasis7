@@ -134,6 +134,7 @@ impl PosNodeEngine {
     pub(super) fn restore_state_snapshot(
         &mut self,
         snapshot: PosNodeStateSnapshot,
+        now_ms: Option<i64>,
     ) -> Result<(), NodeError> {
         let PosNodeStateSnapshot {
             next_height: snapshot_next_height,
@@ -164,6 +165,34 @@ impl PosNodeEngine {
         let restored_next_height = snapshot_next_height.max(committed_successor).max(1);
         let restored_network_committed_height =
             snapshot_network_committed_height.max(committed_height);
+        if last_execution_block_hash.is_some() != last_execution_state_root.is_some() {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "restore node pos state invalid execution binding pair: height={} block_hash_present={} state_root_present={}",
+                    last_execution_height,
+                    last_execution_block_hash.is_some(),
+                    last_execution_state_root.is_some(),
+                ),
+            });
+        }
+        if last_execution_height > 0
+            && (last_execution_block_hash.is_none() || last_execution_state_root.is_none())
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "restore node pos state missing execution hashes for executed height {}",
+                    last_execution_height
+                ),
+            });
+        }
+        if self.require_execution_on_commit && committed_height > last_execution_height {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "restore node pos state invalid sequencer snapshot: committed_height={} exceeds last_execution_height={}",
+                    committed_height, last_execution_height
+                ),
+            });
+        }
         let restored_committed_hash = last_committed_block_hash.or_else(|| {
             if committed_height > 0 {
                 Some(format!("legacy-height-{}", committed_height))
@@ -172,19 +201,37 @@ impl PosNodeEngine {
             }
         });
 
+        let mut restored_next_slot = next_slot;
+        let mut restored_last_observed_slot = snapshot_last_observed_slot;
+        let mut restored_last_observed_tick = snapshot_last_observed_tick;
+        if let (Some(genesis_unix_ms), Some(now_ms)) = (self.slot_clock_genesis_unix_ms, now_ms) {
+            let elapsed_ms = if now_ms > genesis_unix_ms {
+                (now_ms - genesis_unix_ms) as u64
+            } else {
+                0
+            };
+            let wall_clock_tick = (((elapsed_ms as u128)
+                .saturating_mul(self.ticks_per_slot as u128))
+                / self.slot_duration_ms as u128) as u64;
+            let wall_clock_slot = wall_clock_tick / self.ticks_per_slot;
+            restored_next_slot = restored_next_slot.min(wall_clock_slot);
+            restored_last_observed_slot = restored_last_observed_slot.min(wall_clock_slot);
+            restored_last_observed_tick = restored_last_observed_tick.min(wall_clock_tick);
+        }
+
         self.pending = None;
         self.pending_consensus_actions.clear();
         self.committed_height = committed_height;
         self.network_committed_height = restored_network_committed_height;
         self.next_height = restored_next_height;
-        self.next_slot = next_slot;
+        self.next_slot = restored_next_slot;
         self.last_observed_slot = self
             .last_observed_slot
-            .max(snapshot_last_observed_slot.max(next_slot.saturating_sub(1)));
+            .max(restored_last_observed_slot.max(restored_next_slot.saturating_sub(1)));
         self.missed_slot_count = self.missed_slot_count.max(snapshot_missed_slot_count);
         self.last_observed_tick = self.last_observed_tick.max(
-            snapshot_last_observed_tick
-                .max(snapshot_last_observed_slot.saturating_mul(self.ticks_per_slot)),
+            restored_last_observed_tick
+                .max(restored_last_observed_slot.saturating_mul(self.ticks_per_slot)),
         );
         self.missed_tick_count = self.missed_tick_count.max(snapshot_missed_tick_count);
         self.last_broadcast_proposal_height = last_broadcast_proposal_height;
