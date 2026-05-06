@@ -1,6 +1,6 @@
 # testing PRD
 
-审计轮次: 8
+审计轮次: 9
 
 ## 目标
 - 建立 testing 模块设计主文档，统一需求边界、技术方案与验收标准。
@@ -43,6 +43,7 @@
   - SC-8: testing 模块具备一份正式的 `playability evidence stack` 专题，明确自动化、agent probe、遥测/实验、结构化真人试玩与受控外部信号的分层证明边界，禁止把“自动化已通过”误写为“游戏已被证明好玩”。
   - SC-9: testing 模块具备一份正式的 `playability subagent review system` 专题，明确标准角色 subagent 清单、输入输出 contract、触发矩阵和升级边界，让内部多角色评审可重复执行。
   - SC-10: testing 模块具备一份正式的 `simulated player persona panel` 专题，明确多个风格化玩家视角如何作为内部假设层接入标准角色 review，同时不新增正式 `player` 角色。
+  - SC-11: testing 模块明确把 `L4` 拆成 `L4A synthetic internal playability review` 与 `L4B structured human playtest`，避免把 agent 角色扮演和真人继续游玩意愿混写成同一层结论。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -71,6 +72,7 @@
   - PRD-TESTING-007: As a `producer_system_designer`, I want a canonical playability evidence stack, so that I can judge gameplay fun without conflating automation, world activity, and real player motivation.
   - PRD-TESTING-008: As a workflow owner, I want a designed system for role-based playability review subagents, so that internal multi-role review can run as a standard operating path instead of ad hoc coordination.
   - PRD-TESTING-009: As a playability reviewer, I want a designed panel of simulated player personas, so that internal review can compare multiple player mindsets without inventing a new formal role taxonomy.
+  - PRD-TESTING-010: As a stage owner, I want `L4A/L4B` split explicitly, so that synthetic and human playability claims stop collapsing into one undifferentiated `L4`.
 - Critical User Flows:
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
@@ -83,6 +85,7 @@
   9. Flow-TST-009: `按 evidence stack 标记当前只到 L1/L2/L3/L4/L5 哪一层 -> 明确缺口 -> 再决定是否能声称“值得继续玩”`
   10. Flow-TST-010: `组装 review packet -> 按 changed surface 拉起标准角色 subagent -> 回收 review card -> producer/qa 汇总内部结论`
   11. Flow-TST-011: `若体验争议来自玩家风格差异 -> 选择 simulated personas -> 生成 persona cards -> 回流标准角色 review`
+  12. Flow-TST-012: `若先做高强度内部模拟 -> 形成 L4A；若需要真人继续游玩结论 -> 升级到 L4B；再判断是否仍缺 L5`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -97,9 +100,10 @@
 | Windows 路径兼容校验 | tracked path、invalid segment、gate command、release runner | 在 required gate 早期扫描 git tracked paths，阻断 `windows-2022` 无法 checkout 的文件名进入 release/package-native | `scanned -> pass/block` | 默认按 git tracked path 全量扫描；发现 Windows 非法字符、保留名、尾随空格/点即直接 fail | QA / 发布维护者维护跨平台 release 可达性 |
 | Runtime gate 分片执行 | full-suite shard、sync check、runner capability、日志 artifact | 将 release runtime gate 拆成 core/support/sync 并行 job；聚合 gate 统一裁决是否放行 | `planned -> sharded -> aggregated` | 重型 `oasis7` full-tier 优先单独成 shard，其余 support / sync 独立并行；最终必须全部成功 | QA / 发布维护者维护 runtime 关键路径 |
 | Token 创世配置审计 | `bucket_id`、`ratio_bps`、`recipient`、`cliff_epochs`、`linear_unlock_epochs`、`genesis_liquid`、`founder_cap_bps`、`year1_external_release_cap_bps` | 逐项核对参数表与经济口径，输出 `pass/block` 审计结论 | `draft -> audited -> pass/block` | `sum=10000 bps`；项目战略控制 `5000 bps`；协议长期储备 `3500 bps`；`genesis_liquid=0`；个人上限 `<=1500 bps` | `qa_engineer` 独立出具结论，producer 决定是否冻结 |
-| 好玩性证据栈 | `evidence_layer`、`formal_surface`、`player_leverage_verdict`、`world_activity_only`、`human_playtest_verdict`、`external_signal_status` | 把玩法结论分层标记为 L1 自动化、L2 probe、L3 遥测/实验、L4 真人试玩、L5 外部信号，再输出 `go/watch/hold/block` | `collected -> layered -> decided` | 低层证据不能替代高层证据；自动化 pass 只能证明“没坏/可回归”，不能单独证明“好玩” | `producer_system_designer` 终判，`qa_engineer` 守门 |
+| 好玩性证据栈 | `evidence_layer`、`formal_surface`、`player_leverage_verdict`、`world_activity_only`、`synthetic_playability_verdict`、`human_playtest_verdict`、`external_signal_status` | 把玩法结论分层标记为 L1 自动化、L2 probe、L3 遥测/实验、L4A synthetic、L4B human、L5 外部信号，再输出 `go/watch/hold/block` | `collected -> layered -> decided` | 低层证据不能替代高层证据；`L4A` 不能自动等于 `L4B`；自动化 pass 只能证明“没坏/可回归”，不能单独证明“好玩” | `producer_system_designer` 终判，`qa_engineer` 守门 |
 | 好玩性 subagent 评审系统 | `review_packet`、`requested_roles`、`role_review_card`、`aggregated_review_summary` | 按 changed surface 拉起标准角色 subagent，收集 review card，并汇总成内部结论 | `packet_ready -> parallel_review -> aggregated -> escalated/closed` | 默认必开 `producer + qa`；其余按 surface 触发；缺 L5 时不得越权宣称真实外部验证完成 | `producer_system_designer` 编排，`qa_engineer` 守门 |
 | 模拟玩家 persona 面板 | `selected_personas`、`persona_card`、`persona_divergence_summary`、`handoff_recommended_to` | 按主观体验风险选择多个 simulated personas，生成风格化体验假设，再回流标准角色 review | `selected -> simulated -> handed_off -> absorbed` | 不新增正式 `player` 角色；persona 只能补内部假设，不能替代真人试玩或外部验证 | `producer_system_designer` 决定是否开启，命中的标准角色负责收口 |
+| L4 synthetic/human 分层 | `synthetic_playability_verdict`、`human_playtest_verdict`、`calibration_status` | 先区分当前结论属于 `L4A` 还是 `L4B`，再决定是否可以升级 claim | `synthetic_ready -> human_ready -> external_ready` | `L4A` 不得冒充 `L4B`；无 calibration 时不得宣称 synthetic 已替代 human | `producer_system_designer` 定义边界，`qa_engineer` 守门 |
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
   - AC-2: testing project 文档维护分层测试演进任务。
@@ -122,6 +126,7 @@
   - AC-16: `playability-evidence-stack-2026-05-06` 专题文档必须明确五层证据、组合规则、现有 oasis7 锚点映射，以及“自动化不能单独保证好玩”的正式结论。
   - AC-17: `playability-subagent-review-system-2026-05-06` 专题文档必须明确标准角色 subagent 清单、review packet / output card、trigger matrix、sequencing rules 和 stop conditions。
   - AC-18: `playability-simulated-player-persona-panel-2026-05-06` 专题文档必须明确固定 persona 清单、persona packet / card、与标准角色 review 的回流方式，以及“不是正式角色、不能替代真人验证”的边界。
+  - AC-19: `playability-l4-synthetic-human-split-2026-05-06` 专题文档必须明确 `L4A/L4B` 的定义、operator 入口、claim 边界与当前非替代承诺。
 - Non-Goals:
   - 不在本 PRD 中替代业务模块的功能设计。
   - 不承诺所有测试都进入 CI 默认路径。
@@ -139,6 +144,7 @@
   - `doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
   - `doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
   - `doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
+  - `doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
@@ -165,6 +171,7 @@
   - 流通口径漂移：若创世参数表未显式声明 `genesis_liquid=0` 或首年外部释放上限，视为配置不完整。
   - 自动化与真人试玩结论冲突：必须先记为“低层 pass / 高层 hold”，不能把高层体验问题降格成脚本未覆盖。
   - 模拟 persona 全部正面：只能说明内部假设面板没有发现高价值断点，不能替代真人试玩或外部 session。
+  - `L4A` 全正面、`L4B` 未执行：只能写 `synthetic_ready`，不能写 `human_ready`。
 - Non-Functional Requirements:
   - NFR-TST-1: required 套件变更前后执行时间波动 <= 20%。
   - NFR-TST-2: 发布证据包字段完整率 100%。
@@ -178,6 +185,7 @@
   - NFR-TST-10: 正式玩法结论必须能在 60 秒内回答“当前只证明到哪一层，还缺哪一层”。
   - NFR-TST-11: review orchestrator 必须能在 5 分钟内决定本次改动应开哪些标准角色 subagent。
   - NFR-TST-12: simulated persona panel 的使用者必须能在 5 分钟内决定该开哪几个 persona，以及它们的结论最终归谁收口。
+  - NFR-TST-13: 任何正式玩法结论都必须能在 30 秒内回答“这是 `L4A` 还是 `L4B`，以及为什么”。
 - Security & Privacy: 测试日志与产物需避免泄露凭据；外部 API 测试使用最小化数据并执行脱敏。
 
 ## 5. Risks & Roadmap
@@ -206,6 +214,7 @@
 | PRD-TESTING-007 | playability-evidence-stack-2026-05-06 | `test_tier_required` | 五层证据栈定义、现有锚点映射、模块入口互链与组合规则抽样检查 | 玩法质量 claim 与放行边界 |
 | PRD-TESTING-008 | playability-subagent-review-system-2026-05-06 | `test_tier_required` | 标准角色 subagent 定义、packet/card contract、trigger matrix 与 stop conditions 抽样检查 | 多角色内部评审系统设计 |
 | PRD-TESTING-009 | playability-simulated-player-persona-panel-2026-05-06 | `test_tier_required` | persona catalog、packet/card schema、回流规则与 L4/L5 边界抽样检查 | 多风格内部玩家视角治理 |
+| PRD-TESTING-010 | playability-l4-synthetic-human-split-2026-05-06 | `test_tier_required` | `L4A/L4B` 分层、manual 入口、claim 边界与根入口互链抽样检查 | synthetic/human 玩法证据治理 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -218,3 +227,4 @@
 | DEC-TST-007 | 为“是否好玩”建立五层 evidence stack，并明确自动化不能单独保证好玩 | 继续把自动化 pass、世界活跃和真实玩家继续动机混写 | 这三类信号的证明强度不同，混写会持续污染 release/stage 结论。 |
 | DEC-TST-008 | 进一步把多角色内部评审设计成标准角色 subagent 系统 | 继续临时决定这次要不要找哪些角色来看 | 临时协调很难规模化，也无法稳定复用 review 输出。 |
 | DEC-TST-009 | 用 simulated player persona panel 补多风格玩家视角，但不新增正式 `player` 角色 | 直接把 `player` 升格成新的标准角色 | 会破坏仓库角色治理，并混淆内部模拟与外部真人验证。 |
+| DEC-TST-010 | 把 `L4` 拆成 `L4A synthetic` 与 `L4B human` | 继续把 agent 角色扮演与真人继续游玩意愿共用一个 `L4` 标签 | 两者证明强度不同，混写会持续污染 stage/release 结论。 |
