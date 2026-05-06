@@ -650,15 +650,18 @@
     - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 4 --interval-secs 5 --out-dir .tmp/p2p_real_env_triad`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] world-registry-validator-truth-bootstrap (PRD-P2P-003/026) [test_tier_required]: 让 `oasis7_chain_runtime` 在 execution world 已存在 `governance_finality_signer_registry` 时，用 world-state registry 覆盖本地 PoS validator membership / signer binding，并把 replication remote writer allowlist 与 reward runtime node identity binding 统一切到这份 effective config；`--node-validator*` 退回为 bootstrap 或显式运维覆盖。 Trace: .pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.yaml
+- [x] world-registry-validator-truth-bootstrap (PRD-P2P-003/018/026) [test_tier_required]: 让 `oasis7_chain_runtime` 在 execution world 已存在 `governance_finality_signer_registry` 时，用 world-state registry 覆盖本地 PoS validator membership / signer binding，并把 replication remote writer allowlist 与 reward runtime node identity binding 统一切到这份 effective config；`--node-validator*` 退回为 bootstrap 或显式运维覆盖，同时补齐 validator / finality signer 的治理准入目标流程文档。 Trace: .pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
     - `crates/oasis7/src/bin/oasis7_chain_runtime/governance_registry.rs`
     - `doc/p2p/prd.md`
     - `doc/p2p/project.md`
+    - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
+    - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md`
     - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`
     - `.pm/tasks/task_d27fd4eafe4c41bdb046d3fe3765033f.execution.md`
   - 验收命令 (`test_tier_required`):
+    - `rg -n "approved_candidate|probation_ready|activation_epoch|formal validator admission|governance registry" doc/p2p/prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.design.md doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.project.md`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime governance_registry -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime`
     - `./scripts/doc-governance-check.sh`
