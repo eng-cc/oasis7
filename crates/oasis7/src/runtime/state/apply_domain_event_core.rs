@@ -17,7 +17,7 @@ impl WorldState {
             }
             DomainEvent::AgentMoved { agent_id, to, .. } => {
                 if let Some(cell) = self.agents.get_mut(agent_id) {
-                    cell.state.pos = *to;
+                    cell.state.pos = to.canonicalized();
                     cell.last_active = now;
                 }
             }

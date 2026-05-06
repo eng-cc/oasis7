@@ -318,7 +318,11 @@ pub fn build_world_model(
     initialize_chunk_index(&mut model, &config);
 
     if init.origin.enabled {
-        let pos = init.origin.pos.unwrap_or_else(|| center_pos(&config.space));
+        let pos = init
+            .origin
+            .pos
+            .unwrap_or_else(|| center_pos(&config.space))
+            .canonicalized();
         if !config.space.contains(pos) {
             return Err(WorldInitError::OriginOutOfBounds { pos });
         }
@@ -342,7 +346,8 @@ pub fn build_world_model(
         }
         let pos = location_seed
             .pos
-            .unwrap_or_else(|| center_pos(&config.space));
+            .unwrap_or_else(|| center_pos(&config.space))
+            .canonicalized();
         if !config.space.contains(pos) {
             return Err(WorldInitError::LocationOutOfBounds {
                 location_id: location_seed.location_id.clone(),

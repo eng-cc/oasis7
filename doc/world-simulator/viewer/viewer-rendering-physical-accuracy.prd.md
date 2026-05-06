@@ -48,6 +48,7 @@
 
 #### A1. 统一单位（强约束）
 - 渲染层固定 `1 world unit = 1 meter`。
+- 输入 `GeoPos` 虽仍以 `f64` 承载协议兼容，但世界状态真值要求坐标已 canonicalize 到整厘米；viewer 不得把 sub-cm 浮点残差当作额外语义。
 - 转换公式：
   - `pos_m = pos_cm / 100.0`
   - `radius_m = radius_cm / 100.0`
@@ -155,6 +156,7 @@ pub struct ViewerPhysicalRenderConfig {
 ### 数据字段约束
 - 输入源仍为 `WorldSnapshot` / `WorldEvent`，不改变协议主结构。
 - viewer 额外读取并消费：
+  - `GeoPos`（厘米语义；进入 viewer 前已 canonicalize 到整厘米）
   - `WorldConfig.space`（世界真实尺寸）
   - `WorldConfig.physics.time_step_s / power_unit_j`
   - `LocationProfile.material / radius_cm / radiation_emission_per_tick`
