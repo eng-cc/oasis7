@@ -20,19 +20,19 @@ fn harvest_radiation_available_decreases_with_distance() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "source".to_string(),
         name: "source".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: source_profile,
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "near-site".to_string(),
         name: "near-site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "far-site".to_string(),
         name: "far-site".to_string(),
-        pos: pos(200_000.0, 0.0),
+        pos: pos(200_000, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -83,7 +83,7 @@ fn harvest_radiation_amount_does_not_increase_when_overheated() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "site".to_string(),
         name: "site".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {

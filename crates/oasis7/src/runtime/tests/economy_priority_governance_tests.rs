@@ -5,7 +5,7 @@ fn industry_stage_progresses_from_bootstrap_to_scale_out_and_governance() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -117,7 +117,7 @@ fn industry_stage_downgrades_when_last_completed_factory_is_recycled() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "builder-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register builder");
 
@@ -214,7 +214,7 @@ fn govern_profile_requires_existing_approved_or_applied_manifest_proposal() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
 
@@ -263,7 +263,7 @@ fn govern_profile_actions_emit_events_and_update_profile_state() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
     let proposal_id = approved_manifest_proposal(&mut world, "operator-a");
@@ -399,7 +399,7 @@ fn govern_profile_actions_reject_invalid_profile_payloads() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "operator-a".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("register operator");
     let proposal_id = approved_manifest_proposal(&mut world, "operator-a");

@@ -215,13 +215,13 @@ fn setup_kernel_with_patrol_agent(agent_id: &str) -> WorldKernel {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 0.0),
+        pos: pos(1, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -240,11 +240,11 @@ fn setup_kernel_with_conflict_agents() -> WorldKernel {
         ..Default::default()
     };
     let mut kernel = WorldKernel::with_config(config);
-    for (id, x) in [("loc-1", 0.0), ("loc-2", 1.0), ("loc-3", 2.0)] {
+    for (id, x) in [("loc-1", 0), ("loc-2", 1), ("loc-3", 2)] {
         kernel.submit_action(Action::RegisterLocation {
             location_id: id.to_string(),
             name: id.to_string(),
-            pos: pos(x, 0.0),
+            pos: pos(x, 0),
             profile: LocationProfile::default(),
         });
     }
@@ -265,7 +265,7 @@ fn setup_kernel_with_wait_agent(agent_id: &str) -> WorldKernel {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -562,7 +562,7 @@ fn agent_runner_round_robin() {
         kernel.submit_action(Action::RegisterLocation {
             location_id: format!("loc-{idx}"),
             name: format!("loc-{idx}"),
-            pos: pos(idx as f64, 0.0),
+            pos: pos(idx as i64, 0),
             profile: LocationProfile::default(),
         });
         kernel.submit_action(Action::RegisterAgent {

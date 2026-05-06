@@ -274,7 +274,7 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-target".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server.world.step().expect("register claim target");
     server
@@ -362,13 +362,13 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-slot2-target-a".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server
         .world
         .submit_action(crate::runtime::Action::RegisterAgent {
             agent_id: "agent-claim-slot2-target-b".to_string(),
-            pos: crate::geometry::GeoPos::new(0.0, 0.0, 0.0),
+            pos: crate::geometry::GeoPos::new(0, 0, 0),
         });
     server.world.step().expect("register claim targets");
     server

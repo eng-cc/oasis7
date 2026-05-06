@@ -47,7 +47,7 @@ fn setup_kernel_with_agent(agent_id: &str) -> WorldKernel {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-home".to_string(),
         name: "home".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -284,7 +284,7 @@ fn module_lifecycle_install_to_location_infrastructure_rejects_not_colocated() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-remote".to_string(),
         name: "remote".to_string(),
-        pos: pos(10.0, 0.0),
+        pos: pos(10, 0),
         profile: LocationProfile::default(),
     });
     kernel.step().expect("register remote location");

@@ -199,13 +199,13 @@ fn setup_kernel_with_provider_agent(agent_id: &str) -> WorldKernel {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "neighbor".to_string(),
-        pos: pos(100.0, 0.0),
+        pos: pos(100, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {

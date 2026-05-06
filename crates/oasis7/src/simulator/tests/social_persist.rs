@@ -11,7 +11,7 @@ fn setup_social_kernel() -> WorldKernel {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-social".to_string(),
         name: "social-hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     for agent_id in ["agent-a", "agent-b", "agent-c"] {

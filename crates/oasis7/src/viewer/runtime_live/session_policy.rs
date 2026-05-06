@@ -251,10 +251,5 @@ pub(super) fn map_session_policy_error_code(message: &str) -> &'static str {
 }
 
 pub(super) fn location_id_for_pos(pos: GeoPos) -> String {
-    format!(
-        "runtime:{}:{}:{}",
-        pos.x_cm.round() as i64,
-        pos.y_cm.round() as i64,
-        pos.z_cm.round() as i64
-    )
+    format!("runtime:{}:{}:{}", pos.x_cm, pos.y_cm, pos.z_cm)
 }

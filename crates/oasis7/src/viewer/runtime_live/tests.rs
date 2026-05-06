@@ -833,7 +833,7 @@ fn runtime_simulator_action_mapping_equivalence_covers_core_gameplay_and_economy
         assert_eq!(mapped, expected);
     };
 
-    let move_target = GeoPos::new(10.0, 20.0, 30.0);
+    let move_target = GeoPos::new(10, 20, 30);
     assert_mapped(
         crate::simulator::Action::MoveAgent {
             agent_id: "agent-1".to_string(),
@@ -1040,12 +1040,12 @@ fn chain_linked_runtime_sync_advances_without_play() {
     let mut execution_world = crate::runtime::World::new_production_hardened();
     execution_world.submit_action(RuntimeAction::RegisterAgent {
         agent_id: "chain-agent".to_string(),
-        pos: crate::geometry::GeoPos::new(1.0, 2.0, 0.0),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
     });
     execution_world.step().expect("advance execution world");
     execution_world.submit_action(RuntimeAction::MoveAgent {
         agent_id: "chain-agent".to_string(),
-        to: crate::geometry::GeoPos::new(5.0, 2.0, 0.0),
+        to: crate::geometry::GeoPos::new(5, 2, 0),
     });
     execution_world
         .step()

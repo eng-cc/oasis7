@@ -153,7 +153,7 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
         .expect("bind test module signer");
     world.submit_action(RuntimeAction::RegisterAgent {
         agent_id: "agent-0".to_string(),
-        pos: oasis7::geometry::GeoPos::new(0.0, 0.0, 0.0),
+        pos: oasis7::geometry::GeoPos::new(0, 0, 0),
     });
     world.step().expect("register");
     world

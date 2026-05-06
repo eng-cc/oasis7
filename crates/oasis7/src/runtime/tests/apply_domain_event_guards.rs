@@ -4,7 +4,7 @@ use crate::models::AgentState;
 use crate::simulator::ResourceKind;
 
 fn test_agent_cell(agent_id: &str) -> AgentCell {
-    AgentCell::new(AgentState::new(agent_id, pos(0.0, 0.0)), 0)
+    AgentCell::new(AgentState::new(agent_id, pos(0, 0)), 0)
 }
 
 fn sample_contract(creator_agent_id: &str, counterparty_agent_id: &str) -> EconomicContractState {
@@ -138,7 +138,7 @@ fn claim_release_request_missing_claimer_returns_error_without_mutating_claim() 
 }
 
 #[test]
-fn apply_domain_event_agent_move_rounds_fractional_positions_to_centimeters() {
+fn apply_domain_event_agent_move_keeps_integer_centimeter_positions() {
     let mut state = WorldState::default();
     state
         .agents
@@ -148,16 +148,16 @@ fn apply_domain_event_agent_move_rounds_fractional_positions_to_centimeters() {
         .apply_domain_event(
             &DomainEvent::AgentMoved {
                 agent_id: "agent-1".to_string(),
-                from: pos(0.0, 0.0),
-                to: pos(10.4, 19.6),
+                from: pos(0, 0),
+                to: pos(10, 20),
             },
             1,
         )
         .expect("move should apply");
 
     let agent = state.agents.get("agent-1").expect("agent exists");
-    assert_eq!(agent.state.pos.x_cm, 10.0);
-    assert_eq!(agent.state.pos.y_cm, 20.0);
+    assert_eq!(agent.state.pos.x_cm, 10);
+    assert_eq!(agent.state.pos.y_cm, 20);
 }
 
 #[test]

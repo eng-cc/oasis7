@@ -24,11 +24,11 @@ const WASM_EXECUTOR_TEST_MODULE: &[u8] = &[
     0x75, 0x74, 0x70, 0x75, 0x74, 0x5f, 0x62, 0x79, 0x74, 0x65, 0x73, 0x00,
 ];
 
-fn pos(x: f64, y: f64) -> GeoPos {
+fn pos(x: i64, y: i64) -> GeoPos {
     GeoPos {
         x_cm: x,
         y_cm: y,
-        z_cm: 0.0,
+        z_cm: 0,
     }
 }
 
@@ -109,7 +109,7 @@ fn wasm_executor_runs_module_and_emits_event() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
 
     let mut sandbox =
@@ -138,7 +138,7 @@ fn wasm_executor_replay_preserves_module_emits() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
 
     let mut sandbox =

@@ -10,9 +10,9 @@ fn init_defaults_create_origin_and_agents() {
     let (model, report) = build_world_model(&config, &init).expect("init should succeed");
     let origin = model.locations.get("origin").expect("origin exists");
 
-    let center_x = config.space.width_cm as f64 / 2.0;
-    let center_y = config.space.depth_cm as f64 / 2.0;
-    let center_z = config.space.height_cm as f64 / 2.0;
+    let center_x = config.space.width_cm / 2;
+    let center_y = config.space.depth_cm / 2;
+    let center_z = config.space.height_cm / 2;
 
     assert_eq!(origin.pos.x_cm, center_x);
     assert_eq!(origin.pos.y_cm, center_y);
@@ -100,7 +100,7 @@ fn init_seeds_locations_and_resources() {
     let mut location_seed = LocationSeedConfig::default();
     location_seed.location_id = "base".to_string();
     location_seed.name = "Base".to_string();
-    location_seed.pos = Some(pos(10.0, 10.0));
+    location_seed.pos = Some(pos(10, 10));
     location_seed
         .resources
         .add(ResourceKind::Data, 3)
@@ -258,7 +258,7 @@ fn scenario_asteroid_fragment_min_spacing_overrides_world_config() {
             let dy = a.pos.y_cm - b.pos.y_cm;
             let dz = a.pos.z_cm - b.pos.z_cm;
             let min_dist = (a.profile.radius_cm + b.profile.radius_cm + spacing_cm) as f64;
-            assert!((dx * dx + dy * dy + dz * dz) >= (min_dist * min_dist));
+            assert!(((dx * dx + dy * dy + dz * dz) as f64) >= (min_dist * min_dist));
         }
     }
 }
@@ -683,9 +683,9 @@ fn world_model_chunk_states_roundtrip_json_keys() {
             source_chunk: ChunkCoord { x: 0, y: 0, z: 0 },
             source_fragment_id: "frag-0-0-0-0".to_string(),
             source_pos: GeoPos {
-                x_cm: 10.0,
-                y_cm: 20.0,
-                z_cm: 30.0,
+                x_cm: 10,
+                y_cm: 20,
+                z_cm: 30,
             },
             source_radius_cm: 100,
             min_spacing_cm: 500,
@@ -797,7 +797,7 @@ fn cross_chunk_generation_respects_spacing_with_neighbor_checks() {
             let dy = a.pos.y_cm - b.pos.y_cm;
             let dz = a.pos.z_cm - b.pos.z_cm;
             let min_dist = (a.profile.radius_cm + b.profile.radius_cm) as f64 + spacing_cm;
-            assert!((dx * dx + dy * dy + dz * dz) >= (min_dist * min_dist));
+            assert!(((dx * dx + dy * dy + dz * dz) as f64) >= (min_dist * min_dist));
         }
     }
 }

@@ -122,14 +122,14 @@ impl SpaceConfig {
     }
 
     pub fn contains(&self, pos: GeoPos) -> bool {
-        let max_x = self.width_cm as f64;
-        let max_y = self.depth_cm as f64;
-        let max_z = self.height_cm as f64;
-        pos.x_cm >= 0.0
+        let max_x = self.width_cm;
+        let max_y = self.depth_cm;
+        let max_z = self.height_cm;
+        pos.x_cm >= 0
             && pos.x_cm <= max_x
-            && pos.y_cm >= 0.0
+            && pos.y_cm >= 0
             && pos.y_cm <= max_y
-            && pos.z_cm >= 0.0
+            && pos.z_cm >= 0
             && pos.z_cm <= max_z
     }
 }

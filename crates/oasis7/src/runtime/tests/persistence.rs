@@ -69,7 +69,7 @@ fn persist_and_restore_world() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -175,7 +175,7 @@ fn persist_writes_distfs_sidecar_and_restores_without_json_files() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().unwrap();
 
@@ -576,7 +576,7 @@ fn persist_writes_sidecar_generation_index_and_pinset() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step");
 
@@ -646,7 +646,7 @@ fn persist_sidecar_generation_record_points_to_generation_local_payloads() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-local-payload".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("step");
 
@@ -699,7 +699,7 @@ fn persist_sidecar_generation_switch_keeps_latest_and_rollback_safe_only() {
     for step_index in 0..3 {
         world.submit_action(Action::RegisterAgent {
             agent_id: format!("agent-sidecar-keep-{step_index}"),
-            pos: pos(step_index as f64, step_index as f64),
+            pos: pos(step_index as i64, step_index as i64),
         });
         world.step().expect("step before save");
         world.save_to_dir(&dir).expect("save world");
@@ -754,7 +754,7 @@ fn persist_sidecar_generation_sweep_keeps_only_retained_blobs() {
     for step_index in 0..3 {
         world.submit_action(Action::RegisterAgent {
             agent_id: format!("agent-sidecar-sweep-{step_index}"),
-            pos: pos(step_index as f64, step_index as f64),
+            pos: pos(step_index as i64, step_index as i64),
         });
         world.step().expect("step before save");
         world.save_to_dir(&dir).expect("save world");
@@ -824,7 +824,7 @@ fn persist_sidecar_generation_gc_failure_preserves_latest_and_rollback_blobs() {
     for step_index in 0..2 {
         world.submit_action(Action::RegisterAgent {
             agent_id: format!("agent-sidecar-gc-failure-{step_index}"),
-            pos: pos(step_index as f64, step_index as f64),
+            pos: pos(step_index as i64, step_index as i64),
         });
         world.step().expect("step before save");
         world.save_to_dir(&dir).expect("save world");
@@ -850,7 +850,7 @@ fn persist_sidecar_generation_gc_failure_preserves_latest_and_rollback_blobs() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-gc-failure-2".to_string(),
-        pos: pos(2.0, 2.0),
+        pos: pos(2, 2),
     });
     world.step().expect("third step before save");
     world
@@ -925,7 +925,7 @@ fn persist_sidecar_generation_interrupted_save_rolls_back_and_retry_cleans_stagi
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-interrupt-0".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("first step");
 
@@ -951,7 +951,7 @@ fn persist_sidecar_generation_interrupted_save_rolls_back_and_retry_cleans_stagi
     .expect("install sidecar failpoint");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-interrupt-1".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     world.step().expect("second step");
     let err = world
@@ -1004,7 +1004,7 @@ fn persist_sidecar_generation_retry_cleans_partial_staging_and_orphan_blob() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-partial-0".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("first step");
 
@@ -1034,7 +1034,7 @@ fn persist_sidecar_generation_retry_cleans_partial_staging_and_orphan_blob() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-partial-1".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     world.step().expect("second step");
     world
@@ -1058,7 +1058,7 @@ fn persist_updates_sidecar_generation_index_with_rollback_safe_generation() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-2".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
     });
     world.step().expect("first step");
 
@@ -1078,7 +1078,7 @@ fn persist_updates_sidecar_generation_index_with_rollback_safe_generation() {
 
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-sidecar-3".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
     });
     world.step().expect("second step");
     world.save_to_dir(&dir).expect("second save");

@@ -9,7 +9,7 @@ fn kernel_snapshot_roundtrip() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -140,7 +140,7 @@ fn kernel_persist_and_restore() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -207,7 +207,7 @@ fn restore_rejects_mismatched_journal_len() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.step_until_empty();
@@ -282,7 +282,7 @@ fn snapshot_agent_kinematics_defaults_when_legacy_field_is_missing() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -410,9 +410,9 @@ fn replay_from_snapshot_rebuilds_and_validates_chunk_generated_events() {
         location_id: "loc-far".to_string(),
         name: "far".to_string(),
         pos: GeoPos {
-            x_cm: 100_000.0,
-            y_cm: 100_000.0,
-            z_cm: 0.0,
+            x_cm: 100_000,
+            y_cm: 100_000,
+            z_cm: 0,
         },
         profile: LocationProfile::default(),
     });
@@ -464,13 +464,13 @@ fn kernel_replay_from_snapshot() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-1".to_string(),
         name: "base".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(1.0, 1.0),
+        pos: pos(1, 1),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -506,7 +506,7 @@ fn replay_from_snapshot_applies_compound_refined_event() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-refine".to_string(),
         name: "refine".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile,
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -629,7 +629,7 @@ fn replay_from_snapshot_applies_debug_resource_granted_event() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-debug".to_string(),
         name: "debug".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -686,9 +686,9 @@ fn replay_with_budget_caps_keeps_chunk_generated_consistent() {
         location_id: "loc-budget".to_string(),
         name: "budget".to_string(),
         pos: GeoPos {
-            x_cm: 2_500_000.0,
-            y_cm: 2_500_000.0,
-            z_cm: 0.0,
+            x_cm: 2_500_000,
+            y_cm: 2_500_000,
+            z_cm: 0,
         },
         profile: LocationProfile::default(),
     });
@@ -745,9 +745,9 @@ fn replay_from_snapshot_applies_fragment_replenished_event() {
             location_id: format!("replay-replenish-loc-{i}"),
             name: format!("replay-replenish-loc-{i}"),
             pos: GeoPos {
-                x_cm: 10_000.0 + i as f64,
-                y_cm: 20_000.0 + i as f64,
-                z_cm: 30_000.0,
+                x_cm: 10_000 + i as i64,
+                y_cm: 20_000 + i as i64,
+                z_cm: 30_000,
             },
             profile: LocationProfile::default(),
         });

@@ -68,7 +68,7 @@ fn replay_from_snapshot_matches_power_orderbook_sequence() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "hub".to_string(),
         name: "hub".to_string(),
-        pos: pos(0.0, 0.0),
+        pos: pos(0, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
