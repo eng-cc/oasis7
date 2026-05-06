@@ -9,9 +9,9 @@ usage() {
 Usage: ./scripts/p2p-real-env-triad-snapshot.sh [options]
 
 Capture a P2PARCH-6 real-environment triad snapshot from:
-  - local observer node
-  - remote ECS sequencer node
-  - remote ECS storage node
+  - local triad node (historical service alias: observer_local)
+  - remote ECS node A (historical service alias: sequencer_ecs)
+  - remote ECS node B (historical service alias: storage_ecs)
 
 Options:
   --samples <n>                    number of status samples per node (default: 4)
@@ -59,6 +59,8 @@ Notes:
   - No secrets are written into the repository or the generated summary.
   - If the password env vars are unset, the script falls back to plain SSH and
     assumes key-based auth already works.
+  - Node labels in the artifact tree are placement aliases for continuity; the
+    runtime role truth is taken from each sampled `status.json`.
   - Artifacts are written to:
       <out-dir>/<timestamp>/{
         config.json,
@@ -491,6 +493,8 @@ jq -s \
         max_known_peer_heads: max_or_zero(values_for($label; ["consensus","known_peer_heads"]))
       }
     };
+  def all_roles_equal($label; $role):
+    (.nodes[$label].roles | length) > 0 and (.nodes[$label].roles | all(. == $role));
   . as $samples
   | {
       run_id: $run_id,
@@ -510,6 +514,17 @@ jq -s \
       samples: $samples
     }
   | .analysis = {
+      local_service_healthy: (
+        (.nodes.observer_local.healthz_all_ok == true)
+        and (.nodes.observer_local.status_fetch_all_ok == true)
+        and ((.nodes.observer_local.service_states | index("active")) != null)
+      ),
+      local_chain_visible: (.nodes.observer_local.heights.max_committed_height > 0),
+      local_runtime_role_observer: all_roles_equal("observer_local"; "observer"),
+      local_runtime_role_sequencer: all_roles_equal("observer_local"; "sequencer"),
+      local_peer_visibility_ok: (.nodes.observer_local.peers.max_known_peer_heads > 0),
+      local_network_commit_visible: (.nodes.observer_local.network.max_network_committed_height > 0),
+      local_committed_height_progressing: (.nodes.observer_local.heights.last_committed_height > .nodes.observer_local.heights.first_committed_height),
       cloud_pair_service_healthy: (
         (.nodes.sequencer_ecs.healthz_all_ok == true)
         and (.nodes.storage_ecs.healthz_all_ok == true)
@@ -520,6 +535,22 @@ jq -s \
       ),
       sequencer_chain_visible: (.nodes.sequencer_ecs.heights.max_committed_height > 0),
       storage_chain_visible: (.nodes.storage_ecs.heights.max_committed_height > 0),
+      triad_service_healthy: (
+        (.nodes.observer_local.healthz_all_ok == true)
+        and (.nodes.observer_local.status_fetch_all_ok == true)
+        and ((.nodes.observer_local.service_states | index("active")) != null)
+        and (.nodes.sequencer_ecs.healthz_all_ok == true)
+        and (.nodes.storage_ecs.healthz_all_ok == true)
+        and (.nodes.sequencer_ecs.status_fetch_all_ok == true)
+        and (.nodes.storage_ecs.status_fetch_all_ok == true)
+        and ((.nodes.sequencer_ecs.service_states | index("active")) != null)
+        and ((.nodes.storage_ecs.service_states | index("active")) != null)
+      ),
+      triad_chain_visible: (
+        (.nodes.observer_local.heights.max_committed_height > 0)
+        and (.nodes.sequencer_ecs.heights.max_committed_height > 0)
+        and (.nodes.storage_ecs.heights.max_committed_height > 0)
+      ),
       cloud_pair_chain_visible: (
         (.nodes.sequencer_ecs.heights.max_committed_height > 0)
         and (.nodes.storage_ecs.heights.max_committed_height > 0)
@@ -528,22 +559,35 @@ jq -s \
         (.nodes.sequencer_ecs.heights.last_committed_height > .nodes.sequencer_ecs.heights.first_committed_height)
         or (.nodes.storage_ecs.heights.last_committed_height > .nodes.storage_ecs.heights.first_committed_height)
       ),
+      triad_progress_signal_present: (
+        (.nodes.sequencer_ecs.heights.last_committed_height > .nodes.sequencer_ecs.heights.first_committed_height)
+        or (.nodes.storage_ecs.heights.last_committed_height > .nodes.storage_ecs.heights.first_committed_height)
+        or (.nodes.observer_local.heights.last_committed_height > .nodes.observer_local.heights.first_committed_height)
+      ),
       sequencer_execution_stale_height: (
         (.nodes.sequencer_ecs.last_errors | any(
           . != null and (. | test("execution driver received stale height"))
         ))
       ),
-      observer_service_healthy: (
-        (.nodes.observer_local.healthz_all_ok == true)
-        and (.nodes.observer_local.status_fetch_all_ok == true)
-        and ((.nodes.observer_local.service_states | index("active")) != null)
+      triad_all_validator_roles: (
+        all_roles_equal("observer_local"; "sequencer")
+        and all_roles_equal("sequencer_ecs"; "sequencer")
+        and all_roles_equal("storage_ecs"; "sequencer")
       ),
-      observer_peer_visibility_ok: (.nodes.observer_local.peers.max_known_peer_heads > 0),
-      observer_network_commit_visible: (.nodes.observer_local.network.max_network_committed_height > 0),
-      observer_committed_height_progressing: (.nodes.observer_local.heights.last_committed_height > .nodes.observer_local.heights.first_committed_height)
+      claim_mode: (
+        if (
+          all_roles_equal("observer_local"; "sequencer")
+          and all_roles_equal("sequencer_ecs"; "sequencer")
+          and all_roles_equal("storage_ecs"; "sequencer")
+        ) then "three_equal_validator"
+        elif all_roles_equal("observer_local"; "observer") then "observer_mixed_topology"
+        else "transitional"
+        end
+      )
     }
   | .failure_signatures = (
       []
+      + (if .analysis.local_service_healthy then [] else ["local_service_unhealthy"] end)
       + (if .analysis.cloud_pair_service_healthy then [] else ["cloud_pair_service_unhealthy"] end)
       + (
           if .analysis.cloud_pair_chain_visible then []
@@ -556,19 +600,44 @@ jq -s \
       + (if .analysis.storage_chain_visible then [] else ["storage_committed_height_zero"] end)
       + (if .analysis.cloud_pair_progress_signal_present then [] else ["cloud_pair_no_recent_progress_signal"] end)
       + (if .analysis.sequencer_execution_stale_height then ["sequencer_execution_stale_height"] else [] end)
-      + (if .analysis.observer_service_healthy then [] else ["observer_service_unhealthy"] end)
-      + (if .analysis.observer_peer_visibility_ok then [] else ["observer_known_peer_heads_zero"] end)
-      + (if .analysis.observer_network_commit_visible then [] else ["observer_network_committed_height_zero"] end)
-      + (if .analysis.observer_committed_height_progressing then [] else ["observer_committed_height_not_advancing"] end)
+      + (
+          if .analysis.claim_mode == "observer_mixed_topology" then
+            (if .analysis.local_peer_visibility_ok then [] else ["observer_known_peer_heads_zero"] end)
+            + (if .analysis.local_network_commit_visible then [] else ["observer_network_committed_height_zero"] end)
+            + (if .analysis.local_committed_height_progressing then [] else ["observer_committed_height_not_advancing"] end)
+          elif .analysis.claim_mode == "three_equal_validator" then
+            (if .analysis.local_chain_visible then [] else ["local_committed_height_zero"] end)
+            + (if .analysis.local_peer_visibility_ok then [] else ["local_known_peer_heads_zero"] end)
+            + (if .analysis.local_network_commit_visible then [] else ["local_network_committed_height_zero"] end)
+            + (if .analysis.local_committed_height_progressing then [] else ["local_no_recent_progress_signal"] end)
+          else
+            (if .analysis.local_runtime_role_sequencer or .analysis.local_runtime_role_observer then [] else ["local_runtime_role_transitional"] end)
+          end
+        )
+      + (if .analysis.triad_all_validator_roles or (.analysis.claim_mode != "three_equal_validator") then [] else ["triad_not_all_validator_roles"] end)
     )
   | .claim_status = (
-      if .analysis.cloud_pair_service_healthy
-         and .analysis.cloud_pair_chain_visible
-         and .analysis.cloud_pair_progress_signal_present
-         and .analysis.observer_service_healthy
-         and .analysis.observer_peer_visibility_ok
-         and .analysis.observer_network_commit_visible
-         and .analysis.observer_committed_height_progressing
+      if .analysis.claim_mode == "three_equal_validator" then
+        if .analysis.triad_service_healthy
+           and .analysis.triad_chain_visible
+           and .analysis.triad_all_validator_roles
+           and .analysis.local_peer_visibility_ok
+           and .analysis.local_network_commit_visible
+           and .analysis.local_committed_height_progressing
+        then "pass_candidate"
+        elif .analysis.cloud_pair_service_healthy
+             and .analysis.cloud_pair_chain_visible
+             and .analysis.triad_all_validator_roles
+        then "partial_with_local_validator_blocker"
+        else "blocked"
+        end
+      elif .analysis.cloud_pair_service_healthy
+           and .analysis.cloud_pair_chain_visible
+           and .analysis.cloud_pair_progress_signal_present
+           and .analysis.local_service_healthy
+           and .analysis.local_peer_visibility_ok
+           and .analysis.local_network_commit_visible
+           and .analysis.local_committed_height_progressing
       then "pass_candidate"
       elif .analysis.cloud_pair_service_healthy
            and .analysis.cloud_pair_chain_visible
@@ -587,6 +656,7 @@ jq -s \
   echo "- ended_at: \`$ended_at\`"
   echo "- world_id: \`$world_id\`"
   echo "- claim_status: \`$(jq -r '.claim_status' "$summary_json")\`"
+  echo "- claim_mode: \`$(jq -r '.analysis.claim_mode' "$summary_json")\`"
   echo "- failure_signatures: \`$(jq -r '.failure_signatures | if length == 0 then "(none)" else join(", ") end' "$summary_json")\`"
   echo
   echo "## Node Summary"

@@ -1,0 +1,22 @@
+task_uid: task_a9536ec4810d411da78d30a1522b5a5e
+title: "make live triad a three equal validator topology"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-triad-three-equal-validator-topology
+execution_log_path: .pm/tasks/task_a9536ec4810d411da78d30a1522b5a5e.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+  - doc/world-runtime/prd.md
+  - doc/world-runtime/project.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-017
+  - PRD-WORLD_RUNTIME-001
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-06T10:39:54+08:00
+last_started_at: 2026-04-29T21:04:06+08:00
+last_closed_at: 2026-05-06T10:39:54+08:00

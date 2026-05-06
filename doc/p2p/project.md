@@ -610,6 +610,17 @@
     - `bash scripts/p2p-real-env-observability-monitor.test.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] triad-three-equal-validator-topology (PRD-P2P-026) [test_tier_required]: 将当前本机 + 2 ECS real-env triad 从 role-separated `observer + sequencer + storage` 改成三节点等权 validator 拓扑，统一 validator set / signer bindings / bootstrap peers / same-window evidence，并明确历史 service label 不等于当前共识角色真值。 Trace: .pm/tasks/task_a9536ec4810d411da78d30a1522b5a5e.yaml
+  - 产物文件:
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `testing-manual.md`
+    - `doc/testing/evidence/p2p-real-env-triad-three-equal-validator-rollout-2026-04-29.md`
+    - `.pm/tasks/task_a9536ec4810d411da78d30a1522b5a5e.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 4 --interval-secs 5 --out-dir .tmp/p2p_real_env_triad`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] libp2p-hotpath-perf (PRD-P2P-002) [test_tier_required]: 收敛 `libp2p` 请求热路和 peer-manager active-set 刷新中的性能放大路径，移除请求选 peer 对 `debug_snapshot()` 的依赖，把 active peer 准入从“每候选一次全量重算”收敛为基于计数的增量判定，并将 replication 的 connection-gap 失败从 protocol 级短冷却继续推进到 peer-level transport cooldown；`unsupported` 与 `fetch_commit` 的 `ErrNotFound` 保持 protocol-scoped，同时把 protocol/transport cooldown 状态透出到 chain status 与 triad observability。后续已继续把 `oasis7_net` 生命周期事件面改成基于 peer/语义 key 的短窗去重，并在 `ConnectionEstablished` 后立即裁剪同一 peer 的冗余已建立连接，实测将 `sequencer_ecs` 的 `transport.connection_closed` 从四位数压回两位数、runtime CPU 从 `173.0%` 压到 `122.0%`。 Trace: .pm/tasks/task_e7f70a29287e4fe9a23467ba04ebf2ed.yaml
 - [x] TASK-P2P-048 (PRD-P2P-001/024) [test_tier_required]: 修复 2026-04-14 p2p provider-routing / discovery retry / remote error propagation / replication peer-selection 回归，确保 provider 子集请求不再越界 fallback、discovery 拨号失败后仍可重试、request-response 保留远端错误码，且 replication peer 选择优先避开已知 blocked peer。
   - 产物文件:

@@ -165,13 +165,24 @@ impl NodePosStatusAdapter for PosConsensusStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 enum GapSyncHeightOutcome {
     Synced {
-        block_hash: String,
-        committed_at_ms: i64,
+        payload: replication_state_reconcile::ReplicationCommitPayload,
     },
     NotFound,
+}
+
+fn execution_hook_ptr<'a>(
+    execution_hook: Option<&'a mut dyn NodeExecutionHook>,
+) -> Option<*mut (dyn NodeExecutionHook + 'a)> {
+    execution_hook.map(|hook| hook as *mut dyn NodeExecutionHook)
+}
+
+unsafe fn reborrow_execution_hook_ptr<'a>(
+    execution_hook: Option<*mut (dyn NodeExecutionHook + 'a)>,
+) -> Option<&'a mut dyn NodeExecutionHook> {
+    execution_hook.map(|hook| unsafe { &mut *hook })
 }
 
 pub struct NodeRuntime {
@@ -261,7 +272,7 @@ impl NodeRuntime {
         if let Some(store) = pos_state_store.as_ref() {
             match store.load() {
                 Ok(Some(snapshot)) => {
-                    if let Err(err) = engine.restore_state_snapshot(snapshot) {
+                    if let Err(err) = engine.restore_state_snapshot(snapshot, Some(now_unix_ms())) {
                         self.running.store(false, Ordering::SeqCst);
                         return Err(err);
                     }
@@ -297,11 +308,27 @@ impl NodeRuntime {
             None
         };
         if let Some(replication_runtime) = replication.as_ref() {
-            if let Err(err) = reconcile_engine_with_persisted_replication(
-                &mut engine,
-                replication_runtime,
-                self.config.world_id.as_str(),
-            ) {
+            let reconcile_result = if let Some(execution_hook) = self.execution_hook.as_ref() {
+                match execution_hook.lock() {
+                    Ok(mut hook) => reconcile_engine_with_persisted_replication(
+                        &mut engine,
+                        replication_runtime,
+                        self.config.world_id.as_str(),
+                        execution_hook_ptr(Some(hook.as_mut())),
+                    ),
+                    Err(_) => Err(NodeError::Execution {
+                        reason: "execution hook lock poisoned".to_string(),
+                    }),
+                }
+            } else {
+                reconcile_engine_with_persisted_replication(
+                    &mut engine,
+                    replication_runtime,
+                    self.config.world_id.as_str(),
+                    None,
+                )
+            };
+            if let Err(err) = reconcile_result {
                 self.running.store(false, Ordering::SeqCst);
                 return Err(err);
             }

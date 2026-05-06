@@ -591,8 +591,10 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `full` 档位必须额外包含 `coverage=proxy` 的 longrun case，并在 evidence 中明确它们是 sentry-loss / mixed-topology live recovery 的当前代理，而不是 dedicated sentry/NAT lab 真值；
   - `summary.json.evidence_contract.executable_boundary.required_exact_ready` 必须为 `true`；
   - 若要宣称 full-tier proxy drill 已真实执行，则 `summary.json.evidence_contract.executable_boundary.full_proxy_ready` 必须为 `true`；
-  - 若要把当前 `1` 本机 + `2` ECS real env 计入可审计 baseline，`summary.json.claim_status` 至少要达到 `partial_with_observer_blocker`，且样本必须明确写出真实 blocker；
-  - 若要宣称本机 observer mixed-topology 接入已打通，则 real-env summary 里不得再出现 `observer_known_peer_heads_zero`、`observer_network_committed_height_zero`、`observer_committed_height_not_advancing`；
+  - 若本轮 triad 仍是历史 mixed topology（本机 `observer` + 两台云端 validator），`summary.json.analysis.claim_mode` 应为 `observer_mixed_topology`，且若要把当前 `1` 本机 + `2` ECS real env 计入可审计 baseline，`summary.json.claim_status` 至少要达到 `partial_with_observer_blocker`，并明确写出真实 blocker；
+  - 若本轮 triad 已切到三节点等权 validator，`summary.json.analysis.claim_mode` 应为 `three_equal_validator`，且若要计入该 baseline，`summary.json.claim_status` 至少要达到 `partial_with_local_validator_blocker`；
+  - 若要宣称本机 mixed-topology observer 接入已打通，则 real-env summary 里不得再出现 `observer_known_peer_heads_zero`、`observer_network_committed_height_zero`、`observer_committed_height_not_advancing`；
+  - 若要宣称三节点等权 validator 拓扑已打通，则 real-env summary 里不得再出现 `local_committed_height_zero`、`local_known_peer_heads_zero`、`local_network_committed_height_zero`、`local_no_recent_progress_signal`、`triad_not_all_validator_roles`；
   - 若要继续给 shared-network lane 提供 uplift 输入，`summary.json.external_evidence.shared_window_evidence_refs` 必须明确列出 same-window refs，且 `summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers` 只能保留经审计接受的剩余 blocker；
   - 产物目录下必须同时有 `summary.json`、`summary.md`、`cases/<case_id>/command.txt`，live 执行还必须留下 `stdout.log/stderr.log`。
 - 当前 exact case 入口：
@@ -633,8 +635,9 @@ P2PARCH6_STORAGE_SSH_PASSWORD='***' \
   - `analysis.cloud_pair_service_healthy`
   - `analysis.cloud_pair_chain_visible`
   - `analysis.cloud_pair_progress_signal_present`
-  - `analysis.observer_peer_visibility_ok`
-  - `analysis.observer_network_commit_visible`
+  - `analysis.claim_mode`
+  - `analysis.local_peer_visibility_ok`
+  - `analysis.local_network_commit_visible`
 - complete observability summary 关键字段：
   - `overall.status`
   - `overall.alerts`

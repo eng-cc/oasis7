@@ -1,18 +1,19 @@
 use super::*;
 
 impl PosNodeEngine {
-    pub(super) fn maybe_hold_proposal_for_replication_successor_probe(
+    pub(super) fn maybe_hold_proposal_for_replication_successor_probe<'a>(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         now_ms: i64,
         mut replication: Option<&mut ReplicationRuntime>,
+        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
     ) -> Result<bool, NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(false);
         };
-        if self.committed_height == 0 || !self.peer_heads.is_empty() {
+        if !self.peer_heads.is_empty() {
             return Ok(false);
         }
 
@@ -36,16 +37,15 @@ impl PosNodeEngine {
             replication_runtime,
             probe_height,
         ) {
-            Ok(GapSyncHeightOutcome::Synced {
-                block_hash,
-                committed_at_ms,
-            }) => {
+            Ok(GapSyncHeightOutcome::Synced { payload }) => {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
                 self.last_replication_successor_probe_hold = None;
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
-                self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;
+                self.apply_synced_replication_commit(world_id, &payload, unsafe {
+                    reborrow_execution_hook_ptr(execution_hook_ptr)
+                })?;
                 Ok(true)
             }
             Ok(GapSyncHeightOutcome::NotFound) => {

@@ -2,6 +2,7 @@ use super::node_engine_storage_challenge::{
     evaluate_storage_challenge_sample, StorageChallengeSampleOutcome,
 };
 use super::*;
+use crate::replication_state_reconcile::ReplicationCommitPayload;
 
 impl PosNodeEngine {
     pub(super) fn broadcast_local_replication(
@@ -15,6 +16,17 @@ impl PosNodeEngine {
         replication: Option<&mut ReplicationRuntime>,
     ) -> Result<(), NodeError> {
         if !self.replicate_local_commits {
+            return Ok(());
+        }
+        if !matches!(decision.status, PosConsensusStatus::Committed) {
+            return Ok(());
+        }
+        if self
+            .expected_proposer(decision.slot)
+            .as_deref()
+            .map(|proposer_id| proposer_id != node_id)
+            .unwrap_or(false)
+        {
             return Ok(());
         }
         let Some(replication) = replication else {
@@ -181,12 +193,13 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    pub(super) fn ingest_network_replications(
+    pub(super) fn ingest_network_replications<'a>(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
+        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -206,6 +219,7 @@ impl PosNodeEngine {
                 "ingesting replication message",
             )?;
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
+            let payload_full = parse_replication_commit_payload(message.payload.as_slice());
             match replication_runtime
                 .validate_remote_message_for_observe(node_id, world_id, &message)
             {
@@ -260,10 +274,17 @@ impl PosNodeEngine {
                         if payload.height == committed_successor
                             && self.replication_persisted_height >= payload.height
                         {
-                            self.record_synced_replication_height(
-                                payload.height,
-                                payload.block_hash,
-                                payload.committed_at_ms,
+                            let full_payload =
+                                payload_full.clone().ok_or_else(|| NodeError::Replication {
+                                    reason: format!(
+                                        "replication message payload decode failed at height {}",
+                                        payload.height
+                                    ),
+                                })?;
+                            self.apply_synced_replication_commit(
+                                world_id,
+                                &full_payload,
+                                unsafe { reborrow_execution_hook_ptr(execution_hook_ptr) },
                             )?;
                         }
                     }
@@ -307,12 +328,13 @@ impl PosNodeEngine {
         );
     }
 
-    pub(super) fn sync_missing_replication_commits(
+    pub(super) fn sync_missing_replication_commits<'a>(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
+        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -328,7 +350,7 @@ impl PosNodeEngine {
             "starting replication gap sync",
         )?;
         while next_height <= self.network_committed_height {
-            let mut synced_commit: Option<(String, i64)> = None;
+            let mut synced_commit: Option<ReplicationCommitPayload> = None;
             let mut not_found = false;
             let mut last_error = None;
             for attempt in 1..=REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT {
@@ -339,11 +361,8 @@ impl PosNodeEngine {
                     replication_runtime,
                     next_height,
                 ) {
-                    Ok(GapSyncHeightOutcome::Synced {
-                        block_hash,
-                        committed_at_ms,
-                    }) => {
-                        synced_commit = Some((block_hash, committed_at_ms));
+                    Ok(GapSyncHeightOutcome::Synced { payload }) => {
+                        synced_commit = Some(payload);
                         break;
                     }
                     Ok(GapSyncHeightOutcome::NotFound) => {
@@ -361,10 +380,12 @@ impl PosNodeEngine {
                     }
                 }
             }
-            if let Some((block_hash, committed_at_ms)) = synced_commit {
+            if let Some(payload) = synced_commit {
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
+                self.apply_synced_replication_commit(world_id, &payload, unsafe {
+                    reborrow_execution_hook_ptr(execution_hook_ptr)
+                })?;
                 next_height = checked_replication_successor(
                     next_height,
                     "next_height",

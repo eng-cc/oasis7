@@ -193,6 +193,19 @@ fn validate_remote_message_for_observe_accepts_writer_in_allowlist() {
 }
 
 #[test]
+fn seeded_writer_epoch_from_millis_distinguishes_writers() {
+    let epoch_a = seeded_writer_epoch_from_millis(1_777_990_618_174, Some("writer-a"));
+    let epoch_b = seeded_writer_epoch_from_millis(1_777_990_618_174, Some("writer-b"));
+    let epoch_none = seeded_writer_epoch_from_millis(1_777_990_618_174, None);
+
+    assert_ne!(epoch_a, epoch_b);
+    assert_ne!(epoch_a, epoch_none);
+    assert_ne!(epoch_b, epoch_none);
+    assert!(epoch_a > 1_777_990_618_174);
+    assert!(epoch_b > 1_777_990_618_174);
+}
+
+#[test]
 fn build_fetch_commit_request_signs_with_runtime_signer() {
     let dir = temp_dir("fetch-commit-sign");
     let (local_private_hex, local_public_hex) = deterministic_keypair_hex(41);

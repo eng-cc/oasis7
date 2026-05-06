@@ -450,12 +450,31 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         }
         let next_expected_height = self.state.last_applied_committed_height.saturating_add(1);
         if context.height != next_expected_height {
-            eprintln!(
-                "execution driver detected non-contiguous committed heights: last_applied={} incoming={} (continuing with gap)",
-                self.state.last_applied_committed_height, context.height
-            );
-            self.state.last_applied_committed_height = context.height.saturating_sub(1);
-            self.state.last_node_block_hash = None;
+            let predecessor_height = context.height.saturating_sub(1);
+            if predecessor_height == 0 {
+                return Err(format!(
+                    "execution driver received non-contiguous committed height: last_applied={} incoming={}",
+                    self.state.last_applied_committed_height, context.height
+                ));
+            }
+            if !self
+                .restore_execution_head_from_record(context.world_id.as_str(), predecessor_height)?
+            {
+                return Err(format!(
+                    "execution driver missing predecessor record for non-contiguous committed height: last_applied={} incoming={} predecessor={}",
+                    self.state.last_applied_committed_height,
+                    context.height,
+                    predecessor_height
+                ));
+            }
+            let restored_next_expected_height =
+                self.state.last_applied_committed_height.saturating_add(1);
+            if context.height != restored_next_expected_height {
+                return Err(format!(
+                    "execution driver restore failed to close committed height gap: restored_head={} incoming={}",
+                    self.state.last_applied_committed_height, context.height
+                ));
+            }
         }
 
         let computed_action_root =

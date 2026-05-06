@@ -421,6 +421,7 @@ impl ReplicationRuntime {
         let guard = load_json_or_default::<SingleWriterReplicationGuard>(
             config.guard_state_path().as_path(),
         )?;
+        let signer = config.signing_keypair()?;
         let mut writer_state =
             load_json_or_default::<LocalWriterState>(config.writer_state_path(node_id).as_path())?;
         if writer_state.writer_epoch == 0 {
@@ -430,9 +431,9 @@ impl ReplicationRuntime {
             && writer_state.last_replicated_height == 0
             && writer_state.writer_epoch == DEFAULT_WRITER_EPOCH
         {
-            writer_state.writer_epoch = seeded_writer_epoch();
+            writer_state.writer_epoch =
+                seeded_writer_epoch(signer.as_ref().map(|signer| signer.public_key_hex.as_str()));
         }
-        let signer = config.signing_keypair()?;
 
         Ok(Self {
             config: config.clone(),
@@ -1027,13 +1028,27 @@ fn checked_replication_counter_increment(
         })
 }
 
-fn seeded_writer_epoch() -> u64 {
-    SystemTime::now()
+fn seeded_writer_epoch(writer_id: Option<&str>) -> u64 {
+    let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()
         .and_then(|duration| u64::try_from(duration.as_millis()).ok())
-        .unwrap_or(DEFAULT_WRITER_EPOCH)
-        .max(DEFAULT_WRITER_EPOCH)
+        .unwrap_or(DEFAULT_WRITER_EPOCH);
+    seeded_writer_epoch_from_millis(now_ms, writer_id)
+}
+
+fn seeded_writer_epoch_from_millis(now_ms: u64, writer_id: Option<&str>) -> u64 {
+    const WRITER_EPOCH_NONCE_BITS: u32 = 16;
+    let base = now_ms.max(DEFAULT_WRITER_EPOCH);
+    let writer_nonce = writer_id
+        .map(|writer_id| {
+            let hash_hex = blake3_hex(writer_id.as_bytes());
+            u64::from(u16::from_str_radix(&hash_hex[..4], 16).unwrap_or(0)) + 1
+        })
+        .unwrap_or(1);
+    base.checked_shl(WRITER_EPOCH_NONCE_BITS)
+        .and_then(|shifted| shifted.checked_add(writer_nonce))
+        .unwrap_or(base.max(DEFAULT_WRITER_EPOCH))
 }
 
 fn commit_height_from_payload(payload: &[u8]) -> Option<u64> {
