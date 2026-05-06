@@ -7,6 +7,15 @@ ENV_FILE="${ENV_FILE:-$APP_ROOT/config/node.env}"
 
 source "$ENV_FILE"
 
+ensure_integer() {
+  local flag=$1
+  local value=$2
+  if [[ ! "$value" =~ ^-?[0-9]+$ ]]; then
+    echo "invalid $flag: $value" >&2
+    exit 2
+  fi
+}
+
 RELEASE_LINK="${RELEASE_LINK:-$APP_ROOT/current}"
 BIN="${BIN:-$RELEASE_LINK/bin/oasis7_chain_runtime}"
 [[ -x "$BIN" ]] || { echo "missing runtime binary: $BIN" >&2; exit 1; }
@@ -66,6 +75,7 @@ else
 fi
 
 if [[ -n "${POS_SLOT_CLOCK_GENESIS_UNIX_MS:-}" ]]; then
+  ensure_integer "POS_SLOT_CLOCK_GENESIS_UNIX_MS" "$POS_SLOT_CLOCK_GENESIS_UNIX_MS"
   cmd+=(--pos-slot-clock-genesis-unix-ms "$POS_SLOT_CLOCK_GENESIS_UNIX_MS")
 fi
 

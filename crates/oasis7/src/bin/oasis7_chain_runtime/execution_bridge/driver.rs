@@ -16,7 +16,7 @@ use oasis7::simulator::{
 };
 use oasis7_node::{
     compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionCommitResult,
-    NodeExecutionHook, NodeSnapshot,
+    NodeExecutionHook, NodeSnapshot, EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE,
 };
 use oasis7_proto::storage_profile::StorageProfileConfig;
 use oasis7_wasm_abi::ModuleSandbox;
@@ -461,7 +461,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .restore_execution_head_from_record(context.world_id.as_str(), predecessor_height)?
             {
                 return Err(format!(
-                    "execution driver missing predecessor record for non-contiguous committed height: last_applied={} incoming={} predecessor={}",
+                    "{}: last_applied={} incoming={} predecessor={}",
+                    EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE,
                     self.state.last_applied_committed_height,
                     context.height,
                     predecessor_height

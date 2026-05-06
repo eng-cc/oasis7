@@ -193,13 +193,13 @@ impl PosNodeEngine {
         Ok(())
     }
 
-    pub(super) fn ingest_network_replications<'a>(
+    pub(super) fn ingest_network_replications(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
-        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
+        mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -219,7 +219,6 @@ impl PosNodeEngine {
                 "ingesting replication message",
             )?;
             let payload_view = parse_replication_commit_payload_view(message.payload.as_slice());
-            let payload_full = parse_replication_commit_payload(message.payload.as_slice());
             match replication_runtime
                 .validate_remote_message_for_observe(node_id, world_id, &message)
             {
@@ -275,17 +274,16 @@ impl PosNodeEngine {
                             && self.replication_persisted_height >= payload.height
                         {
                             let full_payload =
-                                payload_full.clone().ok_or_else(|| NodeError::Replication {
-                                    reason: format!(
-                                        "replication message payload decode failed at height {}",
-                                        payload.height
-                                    ),
-                                })?;
-                            self.apply_synced_replication_commit(
-                                world_id,
-                                &full_payload,
-                                unsafe { reborrow_execution_hook_ptr(execution_hook_ptr) },
-                            )?;
+                                parse_replication_commit_payload(message.payload.as_slice())
+                                    .ok_or_else(|| NodeError::Replication {
+                                        reason: format!(
+                                    "replication message payload decode failed at height {}",
+                                    payload.height
+                                ),
+                                    })?;
+                            with_execution_hook(&mut execution_hook, |hook| {
+                                self.apply_synced_replication_commit(world_id, &full_payload, hook)
+                            })?;
                         }
                     }
                 }
@@ -328,13 +326,13 @@ impl PosNodeEngine {
         );
     }
 
-    pub(super) fn sync_missing_replication_commits<'a>(
+    pub(super) fn sync_missing_replication_commits(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
         node_id: &str,
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
-        execution_hook_ptr: Option<*mut (dyn NodeExecutionHook + 'a)>,
+        mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -383,8 +381,8 @@ impl PosNodeEngine {
             if let Some(payload) = synced_commit {
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                self.apply_synced_replication_commit(world_id, &payload, unsafe {
-                    reborrow_execution_hook_ptr(execution_hook_ptr)
+                with_execution_hook(&mut execution_hook, |hook| {
+                    self.apply_synced_replication_commit(world_id, &payload, hook)
                 })?;
                 next_height = checked_replication_successor(
                     next_height,

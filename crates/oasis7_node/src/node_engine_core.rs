@@ -154,9 +154,8 @@ impl PosNodeEngine {
         replication_network: Option<&mut ReplicationNetworkEndpoint>,
         consensus_network: Option<&mut ConsensusNetworkEndpoint>,
         queued_actions: Vec<NodeConsensusAction>,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
+        mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<NodeEngineTickResult, NodeError> {
-        let execution_hook_ptr = execution_hook_ptr(execution_hook);
         merge_pending_consensus_actions(
             &mut self.pending_consensus_actions,
             queued_actions,
@@ -181,30 +180,36 @@ impl PosNodeEngine {
             self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
-            self.ingest_network_replications(
-                endpoint,
-                node_id,
-                world_id,
-                replication.as_deref_mut(),
-                execution_hook_ptr,
-            )?;
-            self.sync_missing_replication_commits(
-                endpoint,
-                node_id,
-                world_id,
-                replication.as_deref_mut(),
-                execution_hook_ptr,
-            )?;
+            with_execution_hook(&mut execution_hook, |hook| {
+                self.ingest_network_replications(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication.as_deref_mut(),
+                    hook,
+                )
+            })?;
+            with_execution_hook(&mut execution_hook, |hook| {
+                self.sync_missing_replication_commits(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication.as_deref_mut(),
+                    hook,
+                )
+            })?;
         }
         let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
-            self.maybe_hold_proposal_for_replication_successor_probe(
-                endpoint,
-                node_id,
-                world_id,
-                now_ms,
-                replication.as_deref_mut(),
-                execution_hook_ptr,
-            )?
+            with_execution_hook(&mut execution_hook, |hook| {
+                self.maybe_hold_proposal_for_replication_successor_probe(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    now_ms,
+                    replication.as_deref_mut(),
+                    hook,
+                )
+            })?
         } else {
             false
         };
@@ -237,8 +242,8 @@ impl PosNodeEngine {
         }
 
         let prev_committed_height = self.committed_height;
-        self.apply_committed_execution(node_id, world_id, now_ms, &decision, unsafe {
-            reborrow_execution_hook_ptr(execution_hook_ptr)
+        with_execution_hook(&mut execution_hook, |hook| {
+            self.apply_committed_execution(node_id, world_id, now_ms, &decision, hook)
         })?;
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
@@ -283,13 +288,15 @@ impl PosNodeEngine {
             self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
-            self.ingest_network_replications(
-                endpoint,
-                node_id,
-                world_id,
-                replication.as_deref_mut(),
-                execution_hook_ptr,
-            )?;
+            with_execution_hook(&mut execution_hook, |hook| {
+                self.ingest_network_replications(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    replication.as_deref_mut(),
+                    hook,
+                )
+            })?;
         }
         let committed_action_batch = if matches!(decision.status, PosConsensusStatus::Committed)
             && !decision.committed_actions.is_empty()
@@ -882,7 +889,7 @@ impl PosNodeEngine {
 }
 
 fn execution_error_waits_for_gap_sync(reason: &str) -> bool {
-    reason.contains("missing predecessor record for non-contiguous committed height")
+    reason.starts_with(EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE)
 }
 
 fn total_action_payload_bytes<'a>(actions: impl Iterator<Item = &'a NodeConsensusAction>) -> usize {
@@ -941,10 +948,10 @@ mod tests {
             &mut self,
             _context: NodeExecutionCommitContext,
         ) -> Result<NodeExecutionCommitResult, String> {
-            Err(
-                "execution driver missing predecessor record for non-contiguous committed height: last_applied=0 incoming=8 predecessor=7"
-                    .to_string(),
-            )
+            Err(format!(
+                "{}: last_applied=0 incoming=8 predecessor=7",
+                EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE
+            ))
         }
     }
 
