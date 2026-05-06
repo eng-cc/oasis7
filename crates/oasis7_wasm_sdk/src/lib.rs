@@ -60,8 +60,10 @@ pub fn dispatch_call<M: WasmModuleLifecycle>(input_ptr: i32, input_len: i32) -> 
 pub mod wire {
     use alloc::string::String;
     use alloc::vec::Vec;
+    use core::convert::TryFrom;
     use core::fmt;
-    use serde::{Deserialize, Serialize};
+    use serde::de::{self, Visitor};
+    use serde::{Deserialize, Deserializer, Serialize};
 
     #[derive(Debug, Clone, Deserialize)]
     pub struct ModuleCallInput {
@@ -94,6 +96,45 @@ pub mod wire {
         pub module_kind: Option<String>,
         #[serde(default)]
         pub module_role: Option<String>,
+    }
+
+    #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+    pub struct GeoPosCm {
+        pub x_cm: i64,
+        pub y_cm: i64,
+        pub z_cm: i64,
+    }
+
+    impl<'de> Deserialize<'de> for GeoPosCm {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            #[derive(Deserialize)]
+            struct RawGeoPosCm {
+                #[serde(deserialize_with = "deserialize_centimeter_i64_compat")]
+                x_cm: i64,
+                #[serde(deserialize_with = "deserialize_centimeter_i64_compat")]
+                y_cm: i64,
+                #[serde(deserialize_with = "deserialize_centimeter_i64_compat")]
+                z_cm: i64,
+            }
+
+            let raw = RawGeoPosCm::deserialize(deserializer)?;
+            Ok(Self {
+                x_cm: raw.x_cm,
+                y_cm: raw.y_cm,
+                z_cm: raw.z_cm,
+            })
+        }
+    }
+
+    pub fn parse_json_geo_pos_cm(value: &serde_json::Value) -> Option<GeoPosCm> {
+        Some(GeoPosCm {
+            x_cm: value.get("x_cm")?.as_i64()?,
+            y_cm: value.get("y_cm")?.as_i64()?,
+            z_cm: value.get("z_cm")?.as_i64()?,
+        })
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -181,6 +222,52 @@ pub mod wire {
         serde_cbor::from_slice(bytes)
             .map_err(|err| WireCodecError::new(format!("module action decode failed: {err}")))
     }
+
+    fn deserialize_centimeter_i64_compat<'de, D>(deserializer: D) -> Result<i64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CentimeterVisitor;
+
+        impl<'de> Visitor<'de> for CentimeterVisitor {
+            type Value = i64;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("an integer centimeter value")
+            }
+
+            fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
+                Ok(value)
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                i64::try_from(value).map_err(|_| E::custom("centimeter value exceeds i64 range"))
+            }
+
+            fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                if !value.is_finite() {
+                    return Err(E::custom("centimeter value must be finite"));
+                }
+                if value.fract() != 0.0 {
+                    return Err(E::custom(
+                        "centimeter value must not contain sub-cm precision",
+                    ));
+                }
+                if value < i64::MIN as f64 || value > i64::MAX as f64 {
+                    return Err(E::custom("centimeter value exceeds i64 range"));
+                }
+                Ok(value as i64)
+            }
+        }
+
+        deserializer.deserialize_any(CentimeterVisitor)
+    }
 }
 
 #[macro_export]
@@ -253,6 +340,35 @@ mod tests {
         fn on_call(&mut self, input_ptr: i32, input_len: i32) -> (i32, i32) {
             (input_ptr + 3, input_len + 4)
         }
+    }
+
+    #[cfg(feature = "wire")]
+    #[test]
+    fn parse_json_geo_pos_cm_rejects_fractional_values() {
+        let value = serde_json::json!({
+            "x_cm": 1.5,
+            "y_cm": 0,
+            "z_cm": 0
+        });
+
+        assert!(super::wire::parse_json_geo_pos_cm(&value).is_none());
+    }
+
+    #[cfg(feature = "wire")]
+    #[test]
+    fn geo_pos_cm_deserialize_accepts_legacy_integral_floats() {
+        let bytes = serde_cbor::to_vec(&serde_json::json!({
+            "x_cm": 100000.0,
+            "y_cm": 0.0,
+            "z_cm": 5.0
+        }))
+        .expect("encode legacy state");
+
+        let pos: super::wire::GeoPosCm =
+            serde_cbor::from_slice(&bytes).expect("decode legacy float-backed state");
+        assert_eq!(pos.x_cm, 100_000);
+        assert_eq!(pos.y_cm, 0);
+        assert_eq!(pos.z_cm, 5);
     }
 
     #[test]

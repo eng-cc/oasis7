@@ -99,6 +99,10 @@ pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, Stri
     let mut executor = WasmExecutor::new_with_metrics(
         WasmExecutorConfig {
             compiled_cache_dir: Some(cache_dir),
+            // Observe fixtures validate cold-start module behavior too, so keep
+            // a looser per-call budget than the runtime default to avoid false
+            // timeouts on the first compile+execute path.
+            max_call_ms: 10_000,
             ..WasmExecutorConfig::default()
         },
         metrics.clone(),

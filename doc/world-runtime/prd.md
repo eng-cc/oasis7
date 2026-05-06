@@ -56,6 +56,7 @@
   - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
 - SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
 - SC-25: 首个 agent `slot-1` claim 必须补齐 `submit request -> pending review -> approve/reject -> approved restricted grant -> ClaimAgent` 的链上闭环；`/v1/chain/agent-claim/**` 需要提供可直接调用的 request/review surface，玩家与运营都能从 runtime 真值读到同一条审批状态，且 `software_safe` 正式玩法摘要必须能直接展示该状态。
+- SC-26: builtin wasm 模块边界中的 `GeoPos` 与一切 `*_cm` 坐标字段必须维持整数厘米合同；持久化状态允许兼容读取旧的“整值浮点”厘米表示，但动作/事件/观测入口不得接受 fractional cm，也不得再输出 `0.0` 这类浮点厘米表象。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -163,6 +164,7 @@
   - AC-35: `oasis7_chain_runtime` 的 `/v1/chain/status` 必须新增 `wasm` section，显式输出 `metrics_available`、`observed_since_unix_ms`、`degraded_reason` 与 build/executor/router 的 machine-readable snapshot；这些字段不得进入 world state、event log 或 replay contract。
   - AC-36: 默认 WASM status payload 不得暴露 `trace_id`、原始 payload bytes 或无界 `module_id -> timing` map；若提供模块级热点明细，必须限制为 bounded top-N 或显式 allowlist，并在裁剪时输出可观测标记。
   - AC-37: `/v1/chain/status.traffic.libp2p_replication` 必须同时暴露 `totals`（应用 payload）、`wire_totals`（libp2p substream wire bytes）与 `control_plane.wire_bytes`（`wire_totals - totals.payload_bytes`）；`control_plane.wire_scope` 必须显式声明其只覆盖 substream 级非 payload bytes，且继续排除 transport handshake/framing 开销。
+  - AC-38: `crates/oasis7_builtin_wasm_modules/m1_*` 中消费 `GeoPos`/`*_cm` 坐标的 builtin wasm 模块必须把模块内部主表示收口到整数厘米，并对动作/事件 JSON 边界拒绝 fractional cm；升级后仍需兼容读取旧的整值浮点 module state，并把新的 state / observability sample 统一序列化为整数厘米。
 - Non-Goals:
   - 不在本 PRD 中展开每个阶段的实现代码细节。
   - 不替代 p2p 网络拓扑或 site 发布策略设计。

@@ -93,6 +93,7 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 **编码格式**
 - 使用 **Canonical CBOR**（键排序、确定性编码）。
 - 禁止 NaN；浮点仅在明确字段允许时使用（默认使用整数与字节串）。
+- `GeoPos` 与所有 `*_cm` 坐标/尺寸字段默认只允许整数厘米；模块持久化状态可兼容读取历史上的整值浮点厘米表示，但新的 action/event/observation 边界不得接受或输出 fractional cm。
 - `Bytes` 一律使用 CBOR byte string。
 - WasmExecutor 输出解码使用 Canonical CBOR（失败映射为 InvalidOutput）。
 

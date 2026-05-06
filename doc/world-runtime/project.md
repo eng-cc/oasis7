@@ -642,6 +642,33 @@
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_node --tests`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] builtin-wasm-integer-centimeter-contract (PRD-WORLD_RUNTIME-002) [test_tier_full]: 收紧 `m1_*` builtin wasm 的厘米坐标边界，统一以整数厘米作为模块内主表示；动作/事件 JSON 入口拒绝 fractional cm，旧的整值浮点 module state 仍可兼容读取并迁回整数序列化。 Trace: .pm/tasks/task_b14f4ccce06d4f179ed1de6c79b5b08e.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `doc/world-runtime/wasm/wasm-interface.md`
+    - `.pm/tasks/task_b14f4ccce06d4f179ed1de6c79b5b08e.yaml`
+    - `.pm/tasks/task_b14f4ccce06d4f179ed1de6c79b5b08e.execution.md`
+    - `crates/oasis7_wasm_sdk/src/lib.rs`
+    - `crates/oasis7/src/runtime/tests/agent_default_modules.rs`
+    - `crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.sha256`
+    - `crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules.identity.json`
+    - `crates/oasis7_builtin_wasm_modules/m1_mobility_basic/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_power_radiation_harvest/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_power_storage/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_move/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_transfer/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_rule_visibility/src/lib.rs`
+    - `crates/oasis7_builtin_wasm_modules/m1_sensor_basic/src/lib.rs`
+    - `tools/wasm_module_observe/src/lib.rs`
+  - 验收命令 (`test_tier_full`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_sdk --features wire -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_full scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test --manifest-path tools/wasm_module_observe/Cargo.toml observe_runner_executes_m1_rule_move_fixture -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo run --manifest-path tools/wasm_module_observe/Cargo.toml -- observe --spec crates/oasis7_builtin_wasm_modules/m1_rule_move/observability/module_observe.json --out-dir .tmp/wasm_module_observe_m1_integer_cm`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -660,6 +687,7 @@
 - 更新日期: 2026-04-18
 - 当前状态: in_progress（provider/runtime live traceability 子切片已完成；WASM Docker builder image 与 wrapper 已落地，`TASK-WORLD_RUNTIME-043` 已完成 build receipt / canonical token / identity / CI summary / receipt-aware release gate / node-side proof flow 子切片，并先将 GitHub-hosted gate 收敛为 Linux-only；本轮 runtime 技术债 tranche 中 `TASK-WORLD_RUNTIME-054~058` 已完成，当前仅剩 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。）
 - 下一任务: `TASK-WORLD_RUNTIME-043`
+- 最新完成: `builtin-wasm-integer-centimeter-contract`（已把 `m1_*` builtin wasm 的厘米坐标边界收紧到整数合同：模块内主表示改为整数厘米，动作/事件 JSON 入口拒绝 fractional cm，旧的整值浮点 module state 仍可兼容读取，并把新的 module state / observability sample 统一回写为整数厘米。）
 - 最新完成: `node-observability-system`（已为 `/v1/chain/status` 增加 `observability` 摘要与结构化 alerts，把 peer 连接数、peer health 分布、network lag、storage/reward degraded 收口为单一真值；`oasis7_web_launcher` 和 `oasis7_client_launcher` 现直接透传并显示节点观测卡片，repo-owned `scripts/oasis7-node-observability-report.sh` 可把 live status 与最近 traffic window 合成 operator 报告。）
 - 最新完成: `wasm-observability-timing-metrics`（专题三件套之外，首期 MVP 实现也已落地：`tools/wasm_build_suite` 现写出 build timing，`oasis7_wasm_executor` / `oasis7_wasm_router` 现维护 cumulative snapshot，`oasis7_chain_runtime` 已暴露 `/v1/chain/status.wasm`，repo-owned summary 入口也已补齐最小版本；顶层 `wasm.degraded_reason` 现可显式暴露 build 子段部分降级，避免把 build 真值缺口静默吞掉。）
 - 最新完成: `fetch-commit-retry-backoff`（已将 `libp2p_replication_network` 对 `fetch-commit` 的短时 peer cooldown 从“仅缺失 handler / 不支持协议签名的 `ErrUnsupported`”扩展到 `ErrNotFound`、`Timeout` 与连接缺口类失败；定向回归证明立即重试会被抑制，窗口过后仍可恢复请求，且 `ping` 等其他协议与泛化业务态 `ErrUnsupported` 不被误隔离。）

@@ -51,9 +51,9 @@
               "data": {
                 "agent_id": "agent-1",
                 "pos": {
-                  "x_cm": 0.0,
-                  "y_cm": 0.0,
-                  "z_cm": 0.0
+                  "x_cm": 0,
+                  "y_cm": 0,
+                  "z_cm": 0
                 }
               }
             }
@@ -71,9 +71,9 @@
         "state_json": {
           "agents": {
             "agent-1": {
-              "x_cm": 0.0,
-              "y_cm": 0.0,
-              "z_cm": 0.0
+              "x_cm": 0,
+              "y_cm": 0,
+              "z_cm": 0
             }
           }
         }
@@ -90,9 +90,9 @@
         "state_json": {
           "agents": {
             "agent-1": {
-              "x_cm": 0.0,
-              "y_cm": 0.0,
-              "z_cm": 0.0
+              "x_cm": 0,
+              "y_cm": 0,
+              "z_cm": 0
             }
           }
         },
@@ -103,9 +103,9 @@
             "data": {
               "agent_id": "agent-1",
               "to": {
-                "x_cm": 100000.0,
-                "y_cm": 0.0,
-                "z_cm": 0.0
+                "x_cm": 100000,
+                "y_cm": 0,
+                "z_cm": 0
               }
             }
           }
@@ -147,9 +147,9 @@
         "state_json": {
           "agents": {
             "agent-1": {
-              "x_cm": 0.0,
-              "y_cm": 0.0,
-              "z_cm": 0.0
+              "x_cm": 0,
+              "y_cm": 0,
+              "z_cm": 0
             }
           }
         },
@@ -160,9 +160,9 @@
             "data": {
               "agent_id": "agent-1",
               "to": {
-                "x_cm": 0.0,
-                "y_cm": 0.0,
-                "z_cm": 0.0
+                "x_cm": 0,
+                "y_cm": 0,
+                "z_cm": 0
               }
             }
           }

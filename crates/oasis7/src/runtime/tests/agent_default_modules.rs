@@ -574,7 +574,7 @@ fn scenario_modules_with_transfer_and_body_keep_wasm_closed_loop_consistent() {
             .and_then(|agents| agents.get("agent-1"))
             .and_then(|agent| agent.get("pos"))
             .and_then(|pos| pos.get("x_cm"))
-            .and_then(serde_json::Value::as_f64),
-        Some(100_000.0)
+            .and_then(serde_json::Value::as_i64),
+        Some(100_000)
     );
 }

@@ -3,8 +3,8 @@
 use oasis7_wasm_sdk::{
     export_wasm_module,
     wire::{
-        decode_action, decode_input, empty_output, encode_output, ModuleCallInput,
-        ModuleEffectIntent, ModuleEmit, ModuleOutput,
+        decode_action, decode_input, empty_output, encode_output, parse_json_geo_pos_cm, GeoPosCm,
+        ModuleCallInput, ModuleEffectIntent, ModuleEmit, ModuleOutput,
     },
     LifecycleStage, WasmModuleLifecycle,
 };
@@ -15,12 +15,7 @@ use std::collections::BTreeMap;
 const MODULE_ID: &str = "m1.power.radiation_harvest";
 const POWER_RADIATION_EMIT_KIND: &str = "power.radiation_harvest";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-struct GeoPos {
-    x_cm: f64,
-    y_cm: f64,
-    z_cm: f64,
-}
+type GeoPos = GeoPosCm;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct AgentPowerState {
@@ -60,11 +55,7 @@ fn action_envelope(input: &ModuleCallInput) -> Option<(u64, Value)> {
 }
 
 fn parse_geo_pos(value: &Value) -> Option<GeoPos> {
-    Some(GeoPos {
-        x_cm: value.get("x_cm")?.as_f64()?,
-        y_cm: value.get("y_cm")?.as_f64()?,
-        z_cm: value.get("z_cm")?.as_f64()?,
-    })
+    parse_json_geo_pos_cm(value)
 }
 
 fn decode_domain_event(event_bytes: &[u8]) -> Option<(String, Value)> {
@@ -87,9 +78,12 @@ fn radiation_harvest_per_tick(pos: GeoPos) -> i64 {
     if 1 <= 0 {
         return 0;
     }
-    let axis_sum_cm = pos.x_cm.abs() + pos.y_cm.abs() + pos.z_cm.abs();
-    let step = 800_000.max(1) as f64;
-    let bonus = (axis_sum_cm / step).floor() as i64;
+    let axis_sum_cm = pos
+        .x_cm
+        .saturating_abs()
+        .saturating_add(pos.y_cm.saturating_abs())
+        .saturating_add(pos.z_cm.saturating_abs());
+    let bonus = axis_sum_cm / 800_000.max(1);
     let bounded_bonus = bonus.clamp(0, 1.max(0));
     1_i64.saturating_add(bounded_bonus)
 }
