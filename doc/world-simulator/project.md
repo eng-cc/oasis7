@@ -1,4 +1,5 @@
 # world-simulator PRD Project（审计轮次: 7；任务拆解含 PRD-ID 映射）
+- [x] viewer-dual-view-render-profile-reuse (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 将 `oasis7_viewer` 的 2D/3D grid、label LOD 与 flow overlay 等 mode-specific display policy 收口到单一 render profile helper，保持 shared scene truth 与既有行为 envelope，不新增 3D-only 玩家承诺。 Trace: .pm/tasks/task_ad228902b41240aaa359aafbdd309ec2.yaml
 - [ ] first-agent-claim-approval-closure (PRD-WORLD_SIMULATOR-045) [test_tier_required]: 补齐首个 agent claim 的产品闭环，并同步落地 `PRD-WORLD_RUNTIME-040` 对应 runtime 治理接口、viewer snapshot 回流与 `software_safe` 正式摘要状态卡。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
 - [x] software-safe-primary-entry-diagnostics-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 execution lane/auth/session 诊断从 `software_safe` 主入口默认视口收进口径明确的折叠 diagnostics surface，并在空实体快照时把 blocker 与恢复指引提升为首屏主状态。 Trace: .pm/tasks/task_eef97592fc6145628348e8897d54c411.yaml
@@ -976,8 +977,7 @@
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-full-usability-remediation-2026-03-08.project.md`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08.{prd,project}.md`、`doc/world-simulator/launcher/game-client-launcher-web-console-gui-agent-interface-2026-03-08.{prd,project}.md`
-- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.project.md`
+- `doc/world-simulator/launcher/game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.{prd,project}.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.prd.md`
 - `doc/world-simulator/kernel/runtime-required-failing-tests-offline-2026-03-09.project.md`
 - `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md`

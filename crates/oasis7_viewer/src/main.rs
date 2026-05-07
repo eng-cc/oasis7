@@ -94,6 +94,7 @@ mod ui_text_claims;
 mod viewer_3d_config;
 mod viewer_automation;
 mod viewer_env;
+mod viewer_render_profile;
 #[cfg(target_arch = "wasm32")]
 mod wasm_egui_input_bridge;
 mod web_test_api;
@@ -160,6 +161,10 @@ use viewer_3d_config::{
 };
 use viewer_automation::{
     run_viewer_automation, viewer_automation_config_from_env, ViewerAutomationState,
+};
+pub(crate) use viewer_render_profile::{
+    flow_render_profile, grid_line_thickness, grid_lod_distance_factor, label_lod_profile,
+    FLOW_2D_PLANE_Y, FLOW_2D_THICKNESS_MAX, FLOW_THICKNESS_MAX, FLOW_THICKNESS_MIN,
 };
 #[cfg(target_arch = "wasm32")]
 use wasm_egui_input_bridge::{
@@ -612,15 +617,6 @@ impl OrbitCamera {
         let offset = rotation * Vec3::new(0.0, 0.0, self.radius);
         transform.translation = self.focus + offset;
         transform.look_at(self.focus, Vec3::Y);
-    }
-}
-
-fn grid_line_thickness(kind: GridLineKind, mode: ViewerCameraMode) -> f32 {
-    match (kind, mode) {
-        (GridLineKind::World, ViewerCameraMode::TwoD) => WORLD_GRID_LINE_THICKNESS_2D,
-        (GridLineKind::World, ViewerCameraMode::ThreeD) => WORLD_GRID_LINE_THICKNESS_3D,
-        (GridLineKind::Chunk, ViewerCameraMode::TwoD) => CHUNK_GRID_LINE_THICKNESS_2D,
-        (GridLineKind::Chunk, ViewerCameraMode::ThreeD) => CHUNK_GRID_LINE_THICKNESS_3D,
     }
 }
 

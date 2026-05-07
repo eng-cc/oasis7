@@ -4,7 +4,10 @@ use std::collections::HashMap;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
-use super::{SelectionKind, Viewer3dCamera, Viewer3dConfig, ViewerCameraMode, ViewerSelection};
+use super::{
+    label_lod_profile, SelectionKind, Viewer3dCamera, Viewer3dConfig, ViewerCameraMode,
+    ViewerSelection,
+};
 
 const LABEL_COLOR_R: f32 = 0.9;
 const LABEL_COLOR_G: f32 = 0.9;
@@ -67,8 +70,7 @@ pub(super) fn update_label_lod(
     let camera_right = camera_rotation * Vec3::X;
     let camera_up = camera_rotation * Vec3::Y;
 
-    let (fade_start, fade_end, max_visible_labels, occlusion_cell_span, occlusion_cap) =
-        label_lod_params_for_mode(*camera_mode, &config);
+    let label_profile = label_lod_profile(*camera_mode, &config);
     let selected = selection
         .current
         .as_ref()
@@ -89,7 +91,7 @@ pub(super) fn update_label_lod(
         }
 
         let distance = to_label.length();
-        let alpha = label_alpha(distance, fade_start, fade_end);
+        let alpha = label_alpha(distance, label_profile.fade_start, label_profile.fade_end);
         if alpha <= 0.0 {
             next_stats.hidden_by_distance += 1;
             continue;
@@ -98,8 +100,8 @@ pub(super) fn update_label_lod(
         let projected_x = to_label.dot(camera_right) / depth.max(0.001);
         let projected_y = to_label.dot(camera_up) / depth.max(0.001);
         let cell = (
-            (projected_x * occlusion_cell_span).round() as i32,
-            (projected_y * occlusion_cell_span).round() as i32,
+            (projected_x * label_profile.occlusion_cell_span).round() as i32,
+            (projected_y * label_profile.occlusion_cell_span).round() as i32,
         );
 
         let selection_bias = selected_label_bias(name.map(Name::as_str), selected);
@@ -126,12 +128,12 @@ pub(super) fn update_label_lod(
     for candidate in candidates {
         let occupancy = cell_occupancy.get(&candidate.cell).copied().unwrap_or(0);
 
-        if visible.len() >= max_visible_labels && candidate.selection_bias <= 0.0 {
+        if visible.len() >= label_profile.max_visible_labels && candidate.selection_bias <= 0.0 {
             next_stats.hidden_by_capacity += 1;
             continue;
         }
 
-        if occupancy >= occlusion_cap && candidate.selection_bias <= 0.0 {
+        if occupancy >= label_profile.occlusion_cap && candidate.selection_bias <= 0.0 {
             next_stats.hidden_by_occlusion += 1;
             continue;
         }
@@ -200,37 +202,6 @@ fn selected_label_bias(name: Option<&str>, selected: Option<(SelectionKind, &str
         SELECTED_LABEL_BIAS
     } else {
         0.0
-    }
-}
-
-fn label_lod_params_for_mode(
-    mode: ViewerCameraMode,
-    config: &Viewer3dConfig,
-) -> (f32, f32, usize, f32, usize) {
-    let base_fade_start = config.label_lod.fade_start_distance.max(0.0);
-    let base_fade_end = config
-        .label_lod
-        .fade_end_distance
-        .max(base_fade_start + f32::EPSILON);
-    let base_max_visible = config.label_lod.max_visible_labels.max(1);
-    let base_cell_span = config.label_lod.occlusion_cell_span.max(0.5);
-    let base_occlusion_cap = config.label_lod.occlusion_cap_per_cell.max(1);
-
-    match mode {
-        ViewerCameraMode::TwoD => (
-            base_fade_start * 1.15,
-            base_fade_end * 2.0,
-            (base_max_visible.saturating_mul(2)).min(220),
-            base_cell_span * 1.25,
-            (base_occlusion_cap + 1).min(8),
-        ),
-        ViewerCameraMode::ThreeD => (
-            base_fade_start,
-            base_fade_end,
-            base_max_visible,
-            base_cell_span,
-            base_occlusion_cap,
-        ),
     }
 }
 
@@ -366,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn label_lod_params_two_d_are_more_permissive() {
+    fn label_lod_profile_two_d_is_more_permissive() {
         let mut config = Viewer3dConfig::default();
         config.label_lod.fade_start_distance = 40.0;
         config.label_lod.fade_end_distance = 90.0;
@@ -374,14 +345,14 @@ mod tests {
         config.label_lod.occlusion_cell_span = 6.0;
         config.label_lod.occlusion_cap_per_cell = 2;
 
-        let three_d = label_lod_params_for_mode(ViewerCameraMode::ThreeD, &config);
-        let two_d = label_lod_params_for_mode(ViewerCameraMode::TwoD, &config);
+        let three_d = label_lod_profile(ViewerCameraMode::ThreeD, &config);
+        let two_d = label_lod_profile(ViewerCameraMode::TwoD, &config);
 
-        assert!(two_d.0 > three_d.0);
-        assert!(two_d.1 > three_d.1);
-        assert!(two_d.2 > three_d.2);
-        assert!(two_d.3 > three_d.3);
-        assert!(two_d.4 > three_d.4);
+        assert!(two_d.fade_start > three_d.fade_start);
+        assert!(two_d.fade_end > three_d.fade_end);
+        assert!(two_d.max_visible_labels > three_d.max_visible_labels);
+        assert!(two_d.occlusion_cell_span > three_d.occlusion_cell_span);
+        assert!(two_d.occlusion_cap > three_d.occlusion_cap);
     }
 
     fn spawn_label(world: &mut World, name: &str, position: Vec3) {
