@@ -163,7 +163,7 @@ curl -sS http://127.0.0.1:8765/v1/chain/agent-claim/submit \
 
 ## 关联入口
 
-- skill 分册：`.agents/skills/oasis7/references/governance-call-surfaces.md`
+- skill 分发入口：`site/skills/oasis7.md`
 - runtime API：`crates/oasis7/src/bin/oasis7_chain_runtime/agent_claim_api.rs`
 - 玩家快照：`crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs`
 - 模块主 PRD：`doc/world-simulator/prd.md`

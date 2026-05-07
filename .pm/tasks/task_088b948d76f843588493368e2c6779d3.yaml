@@ -8,7 +8,7 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/site/project.md
-  - .agents/skills/oasis7/SKILL.md
+  - site/skills/oasis7.md
 doc_refs: []
 related_prd:
   - PRD-SITE-002
