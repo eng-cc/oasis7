@@ -45,7 +45,7 @@
 - Success Criteria:
   - SC-1: 专题文档明确声明“没有单一自动化方案能够保证游戏好玩”。
   - SC-2: 至少定义 `automation baseline / agent probe / telemetry & experiments / L4A synthetic / L4B embodied agent / limited preview live signals`，并为每层列出可证明与不可证明边界。
-  - SC-3: `software_safe`、`pure_api`、`--no-llm observer/debug only`、`run-producer-playtest.sh`、playability card、`player leverage` rubric 和 limited preview 现有治理口径都被映射进同一套证据栈。
+  - SC-3: `software_safe`、`pure_api`、`--no-llm observer/debug only`、`run-producer-playtest.sh`、playability card、`player leverage` rubric，以及 limited preview 现有治理口径都被映射进同一套证据栈。
   - SC-4: 模块根入口 `doc/testing/prd.md` / `project.md` / `README.md` / `prd.index.md` 能把读者导向该专题。
   - SC-5: 专题文档明确声明“所有内部评审环节都可以优先由对应标准角色 subagent 补齐”，同时保留“这不等价于真实外部玩家验证”的硬边界。
   - SC-6: 专题文档明确声明 simulated player personas 与标准角色 subagents 属于 `L4A` 的核心输入，不新增正式角色，也不替代 `L4B` 或 `L5`。
