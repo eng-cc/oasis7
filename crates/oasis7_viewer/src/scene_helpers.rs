@@ -101,11 +101,11 @@ pub(super) struct ChunkMarker {
     pub pick_y: f32,
 }
 
-#[derive(Component)]
-pub(super) struct TwoDMapMarker;
-
-#[derive(Component)]
-pub(super) struct DetailZoomEntity;
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SceneZoomLayer {
+    TwoDOverviewMarker,
+    Detail,
+}
 
 pub(super) fn attach_to_scene_root(commands: &mut Commands, scene: &Viewer3dScene, entity: Entity) {
     if let Some(root) = scene.root_entity {
@@ -752,7 +752,7 @@ pub(super) fn spawn_agent_entity(
                 MeshMaterial3d(assets.agent_material.clone()),
                 Transform::from_scale(body_scale),
                 Name::new(format!("agent:body:{agent_id}")),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
             spawn_label(
                 parent,
@@ -783,7 +783,7 @@ pub(super) fn spawn_agent_entity(
                     MeshMaterial3d(assets.agent_module_marker_material.clone()),
                     Transform::from_translation(*marker_translation).with_scale(marker_world_scale),
                     Name::new(format!("agent:module_marker:{agent_id}:{marker_idx}")),
-                    DetailZoomEntity,
+                    SceneZoomLayer::Detail,
                 ));
             }
         });
@@ -809,7 +809,7 @@ pub(super) fn spawn_agent_entity(
             MeshMaterial3d(assets.agent_material.clone()),
             Transform::from_scale(body_scale),
             Name::new(format!("agent:body:{agent_id}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
         spawn_label(
             parent,
@@ -833,7 +833,7 @@ pub(super) fn spawn_agent_entity(
                 MeshMaterial3d(assets.agent_module_marker_material.clone()),
                 Transform::from_translation(*marker_translation).with_scale(marker_world_scale),
                 Name::new(format!("agent:module_marker:{agent_id}:{marker_idx}")),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
         }
     });

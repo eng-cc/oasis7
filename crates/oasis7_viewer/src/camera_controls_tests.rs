@@ -437,7 +437,7 @@ fn two_d_map_marker_visibility_follows_zoom_tier() {
 
     let marker = app
         .world_mut()
-        .spawn((TwoDMapMarker, Visibility::Hidden))
+        .spawn((SceneZoomLayer::TwoDOverviewMarker, Visibility::Hidden))
         .id();
 
     app.update();
@@ -489,7 +489,7 @@ fn two_d_map_marker_scale_boosts_in_overview_and_resets_in_detail() {
     let marker = app
         .world_mut()
         .spawn((
-            TwoDMapMarker,
+            SceneZoomLayer::TwoDOverviewMarker,
             BaseScale(base),
             Transform::from_scale(base),
             Visibility::Visible,
@@ -525,7 +525,7 @@ fn detail_zoom_visibility_hides_detail_entities_in_overview() {
 
     let detail_entity = app
         .world_mut()
-        .spawn((DetailZoomEntity, Visibility::Visible))
+        .spawn((SceneZoomLayer::Detail, Visibility::Visible))
         .id();
 
     app.update();

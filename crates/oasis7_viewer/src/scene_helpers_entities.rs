@@ -27,7 +27,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
         BaseScale(base_scale),
         Visibility::Visible,
         Name::new(format!("map2d:agent:plate:{agent_id}")),
-        TwoDMapMarker,
+        SceneZoomLayer::TwoDOverviewMarker,
     ));
 
     let module_ratio =
@@ -43,7 +43,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
             BaseScale(outer_scale),
             Visibility::Visible,
             Name::new(format!("map2d:agent:module_band:{agent_id}")),
-            TwoDMapMarker,
+            SceneZoomLayer::TwoDOverviewMarker,
         ));
     }
 
@@ -55,7 +55,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
         BaseScale(Vec3::splat(world_radius * 0.68)),
         Visibility::Visible,
         Name::new(format!("map2d:agent:center:{agent_id}")),
-        TwoDMapMarker,
+        SceneZoomLayer::TwoDOverviewMarker,
     ));
 }
 
@@ -218,7 +218,7 @@ pub(super) fn spawn_location_shell_details(
         Transform::from_scale(core_scale),
         BaseScale(core_scale),
         Name::new(format!("location:detail:core:{location_id}")),
-        DetailZoomEntity,
+        SceneZoomLayer::Detail,
     ));
 
     for ring_idx in 0..location_shell_ring_layers(config) {
@@ -231,7 +231,7 @@ pub(super) fn spawn_location_shell_details(
                 .with_scale(ring_scale),
             BaseScale(ring_scale),
             Name::new(format!("location:detail:ring:{location_id}:{ring_idx}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 
@@ -244,7 +244,7 @@ pub(super) fn spawn_location_shell_details(
                 Transform::from_scale(halo_scale),
                 BaseScale(halo_scale),
                 Name::new(format!("location:detail:halo:{location_id}:{halo_idx}")),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
         }
     }
@@ -264,7 +264,7 @@ pub(super) fn spawn_location_shell_details(
             Name::new(format!(
                 "location:detail:damage:{location_id}:{overlay_idx}"
             )),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 
@@ -284,7 +284,7 @@ pub(super) fn spawn_location_shell_details(
                 Name::new(format!(
                     "location:detail:carbon:grain:{location_id}:{grain_idx}"
                 )),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
         }
     }
@@ -310,7 +310,7 @@ pub(super) fn spawn_location_shell_details(
                 Name::new(format!(
                     "location:detail:composite:layer:{location_id}:{layer_idx}"
                 )),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
         }
     }
@@ -551,7 +551,7 @@ fn spawn_asset_visual_details(
                 Transform::from_translation(Vec3::new(0.0, -0.10, 0.0)).with_scale(type_scale),
                 BaseScale(type_scale),
                 Name::new(format!("asset:type_color:{asset_id}")),
-                DetailZoomEntity,
+                SceneZoomLayer::Detail,
             ));
         }
     }
@@ -567,7 +567,7 @@ fn spawn_asset_visual_details(
             Transform::from_translation(Vec3::new(0.0, 0.16, 0.0)).with_scale(quantity_scale),
             BaseScale(quantity_scale),
             Name::new(format!("asset:quantity:{asset_id}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 }
