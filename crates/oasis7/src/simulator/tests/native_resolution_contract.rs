@@ -17,6 +17,7 @@ fn native_resolution_registry_declares_expected_runtime_subsystems() {
             "movement-energy-cost",
             "power-transfer-distance",
             "location-site-actions",
+            "fragment-block-geometry",
         ]
     );
 }
@@ -129,7 +130,8 @@ fn location_site_actions_and_fragment_blocks_have_explicit_snapping_rules() {
     );
     assert_eq!(site.rounding_rule, RoundingRule::BindToDiscreteLocationId);
 
-    let block = fragment_block_native_resolution();
+    let block = native_resolution_by_subsystem("fragment-block-geometry")
+        .expect("fragment-block-geometry declared");
     assert_eq!(
         block.native_resolution_kind,
         NativeResolutionKind::FragmentBlock
@@ -143,4 +145,5 @@ fn location_site_actions_and_fragment_blocks_have_explicit_snapping_rules() {
         CmMappingRule::ClampBlockEdgesToAtLeastOneCentimeter
     );
     assert_eq!(block.rounding_rule, RoundingRule::ClampMinimumOneCentimeter);
+    assert_eq!(*block, fragment_block_native_resolution());
 }

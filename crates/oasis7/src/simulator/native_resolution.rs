@@ -130,7 +130,7 @@ const FRAGMENT_BLOCK_IMPL: &[&str] = &[
     "fragment_physics::FragmentBlock::sanitized",
 ];
 
-pub const RUNTIME_NATIVE_RESOLUTIONS: [NativeResolutionDeclaration; 7] = [
+pub const RUNTIME_NATIVE_RESOLUTIONS: [NativeResolutionDeclaration; 8] = [
     NativeResolutionDeclaration {
         subsystem_id: "canonical-physical-space",
         native_resolution_kind: NativeResolutionKind::CanonicalPhysicalScale,
@@ -209,6 +209,14 @@ pub const RUNTIME_NATIVE_RESOLUTIONS: [NativeResolutionDeclaration; 7] = [
         rounding_rule: RoundingRule::BindToDiscreteLocationId,
         implemented_by: LOCATION_SITE_IMPL,
     },
+    NativeResolutionDeclaration {
+        subsystem_id: "fragment-block-geometry",
+        native_resolution_kind: NativeResolutionKind::FragmentBlock,
+        native_resolution_value: NativeResolutionValue::FixedCentimeter { centimeters: 1 },
+        cm_mapping_rule: CmMappingRule::ClampBlockEdgesToAtLeastOneCentimeter,
+        rounding_rule: RoundingRule::ClampMinimumOneCentimeter,
+        implemented_by: FRAGMENT_BLOCK_IMPL,
+    },
 ];
 
 pub fn runtime_native_resolutions() -> &'static [NativeResolutionDeclaration] {
@@ -224,12 +232,6 @@ pub fn native_resolution_by_subsystem(
 }
 
 pub fn fragment_block_native_resolution() -> NativeResolutionDeclaration {
-    NativeResolutionDeclaration {
-        subsystem_id: "fragment-block-geometry",
-        native_resolution_kind: NativeResolutionKind::FragmentBlock,
-        native_resolution_value: NativeResolutionValue::FixedCentimeter { centimeters: 1 },
-        cm_mapping_rule: CmMappingRule::ClampBlockEdgesToAtLeastOneCentimeter,
-        rounding_rule: RoundingRule::ClampMinimumOneCentimeter,
-        implemented_by: FRAGMENT_BLOCK_IMPL,
-    }
+    *native_resolution_by_subsystem("fragment-block-geometry")
+        .expect("fragment-block-geometry declared")
 }
