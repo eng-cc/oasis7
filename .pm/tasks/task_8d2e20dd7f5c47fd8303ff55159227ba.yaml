@@ -1,0 +1,22 @@
+task_uid: task_8d2e20dd7f5c47fd8303ff55159227ba
+title: "fix launcher execution-world ready contract for trust-gate startup"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-launcher-execution-world-ready-contract
+execution_log_path: .pm/tasks/task_8d2e20dd7f5c47fd8303ff55159227ba.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/game/project.md
+  - doc/testing/evidence/gameplay-ten-minute-trust-gate-2026-04-09.md
+doc_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "run-game-test and active-LLM trust-gate startup no longer fail solely because reward-runtime-execution-world snapshot/journal are absent while chain runtime is otherwise healthy."
+  - "launcher or runtime surfaces a ready contract that matches current execution-world persistence behavior and has regression coverage."
+handoff_to: []
+updated_at: 2026-05-07T09:24:22+08:00
+last_started_at: 2026-05-07T09:03:24+08:00
+last_closed_at: 2026-05-07T09:24:22+08:00

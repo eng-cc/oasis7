@@ -175,10 +175,11 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-04
+- 更新日期: 2026-05-07
 - 当前状态: in_progress
-- 下一任务: 由 `producer_system_designer` 基于本轮 trust-gate 复验，先拆出一轮专门解释 `step accepted -> queued` 且 `logicalTime/eventSeq` 不推进的 runtime/viewer 修复切片；只有在 active-LLM `software_safe` trust floor 再次通过后，才允许重新进入正式 trust sample，再决定是否恢复后续 capability gate 复验。
+- 下一任务: 由 `qa_engineer` 在当前 `main` 上重新执行 active-LLM formal trust-gate 样本；`runtime_engineer` 已修复 launcher 在 fresh execution world 尚未落盘时提前退出的启动阻断，当前应先复核 trust gate 真值，再决定是否恢复后续 capability gate 复验。
 - 已登记待排任务: 当前 2026-04-15 shared active-LLM rerun 已证明 trust gate 再次回退到更前置的 first-step blocker，因此 capability gate 暂停；在该 blocker 修复前，不得把 active-LLM trust/capability gate 对外表述为 `continue_playing`。
+- 当前切片进展: `task_8d2e20dd7f5c47fd8303ff55159227ba` 已修复 launcher execution-world ready contract：fresh `run-game-test --json-ready` 现在会在 `NodeRuntimeExecutionDriver` 初始化时先为 execution world / simulator mirror 落盘 `snapshot.json` 与 `journal.json`，因此当前 `main` 不再因 `reward-runtime-execution-world` 缺少初始持久化文件而在 Viewer HTTP ready 前退出。该切片只清除 startup blocker，不单独改写 trust gate / capability gate verdict。
 - 当前切片进展: `task_1dbcc087ae374721aa0928de3cd240e2` 已在独立 validation worktree 复用 real-provider `config.toml`，并通过 shared active-LLM stack `20260415-223459` 进行 trust gate 复验；两次 `software_safe` floor probe（`20260415-224143` / `20260415-224312`）都命中同一签名：`step_request.accepted=true` 但长期停留 `stage=queued`，没有 terminal `lastControlFeedback`，且 `logicalTime=1` / `eventSeq=0` 不推进。因此本轮 trust gate 仍为 `hold`，后续 `first capability gate` 未进入。
 
 口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 已更新为 `trust gate = hold`、`capability gate = not_run`，因为 shared active-LLM rerun 已证明 trust floor 再次回退到更前置的 first-step blocker。
@@ -188,6 +189,7 @@
 - 当前切片进展: `task_ed2dd76639264739a61a25c0d89c3352` 已修复另一组 `post_onboarding` canonical truth regressions：`player_gameplay` 不再用任意工厂的首个 blocker 劫持主目标，而是优先跟随当前主线能力链；同时 `industry_progress.stage` 现在会在回收最后一座已完成产出的工厂后按现存工厂完成度重新计算，不再因为历史累计 `completed_recipe_jobs` 残留而继续把失效能力误报为 `choose_first_expansion_tradeoff` / `choose_midloop_path`。这次修复只收口“当前能力已失效却仍显示 ready”与“次级 blocked 产线劫持主目标”两类真值误判，不等于 active-LLM formal retention gate 已恢复。
 - 当前切片进展: 上述 runtime hardening 不等于任一 formal gate 已恢复。当前最新 `240s` active-LLM 对照样本未复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`；这说明 trust gate 的冻结放大器与 capability gate 的长期不推进仍是两类独立 blocker。
 - 最新完成: `issue-162-industrial-chain-legibility-closeout`（`producer_system_designer` 已把 `#162` 的收口条件写成独立 closeout evidence：工业链状态、停机分类、恢复提示与首个工业里程碑可视验证已满足 issue 边界；同时明确该 closeout 不等于 active-LLM trust/capability gate 已恢复。）
+- 最新完成: `task_8d2e20dd7f5c47fd8303ff55159227ba`（`runtime_engineer` 已把 fresh execution world 的初始 `snapshot.json/journal.json` 持久化前移到 execution driver 初始化阶段，并用当前 `main` 的 `run-game-test --json-ready` 复证 launcher stack 可稳定起到 Viewer ready URL；本轮只清除 startup blocker，下一步仍需由 `qa_engineer` 重新跑 active-LLM trust gate 样本。）
 - 最新完成: `task_1dbcc087ae374721aa0928de3cd240e2`（`qa_engineer` 已在 shared active-LLM stack 上完成本轮 trust gate 复验；当前不是“floor pass but capability hold”，而是更前置的 `software_safe` first-step trust floor 重新回退到 `step accepted -> queued` 且 `logicalTime/eventSeq` 不推进，因此 capability gate 未进入。）
 - 最新完成: `TASK-GAME-065`（`qa_engineer` 已在当前 retention slice 完成 `3` 条 active-LLM 10 分钟正式样本与 `3` 条 300 秒对照样本回写；当前结论不是 runtime timeout blocker，而是 `10-minute trust gate` 虽恢复 `software_safe` floor，但仍有 `2` 条样本会回退到 `first_session_loop.create_first_world_feedback / 0%` 并冻结世界时间，因此 producer verdict 已收口为 `hold`；`post_onboarding.establish_first_capability / 20%` 则改为独立 capability gate blocker。）
 - 最新完成: `TASK-GAME-064`（`viewer_engineer` 已收口首屏信息层级与玩家口吻反馈，把玩家身份、当前主目标、主阻塞、立即下一步以及奖励/恢复/阻塞语义抬到首层，并补齐对应 Viewer 测试。）

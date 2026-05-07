@@ -93,10 +93,10 @@
 
 ## 状态
 
-- 更新日期: 2026-04-15
+- 更新日期: 2026-05-07
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: 由 `producer_system_designer` 先按 `TASK-GAME-065` 的 `10-minute trust gate` 阻断签名继续拆 runtime/viewer 修复切片，再在 trust gate 稳定后单独重开 capability follow-up 复验。
+- 下一任务: 由 `qa_engineer` 基于当前 `main` 重新执行 active-LLM formal trust-gate 样本；`runtime_engineer` 已先清掉 launcher 在 fresh execution world 缺少初始 `snapshot.json/journal.json` 时提前退出的 startup blocker，因此下一轮 verdict 应回到正式 trust sample，而不是停在 bootstrap 失败。
 
 口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not_run`；原因不是 capability 已单独判失败，而是 trust floor 回退后当前 formal lane 尚未进入 capability gate。
 - 说明:
@@ -105,6 +105,7 @@
   - `TASK-GAMEPLAY-RR-001~004` 已完成并回写 `.pm`；其中 `TASK-GAMEPLAY-RR-002/003/004` 分别收口了控制门控与 ack 语义、工业中循环 canonical 包，以及首屏噪音/后果可见化。
   - runtime follow-up `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 formal lane 在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时被错误映射回 `first_session_loop` 的问题；这说明样本 B/C 里的“掉回新手态”至少有一部分是快照阶段机口径缺口，而不是完整的真实阶段回滚。
   - runtime follow-up `task_fb967ddaadde459786e286b484bc4b0c` 已补齐另一条独立 freeze path：formal lane 一旦在 prior progress 之后遇到瞬时 LLM access / decision failure，后台 `play` 过去会直接关闭 `session.playing`，把一次短暂 provider 抖动放大成 `logicalTime/eventSeq` 长时间不再前进；当前已改成有限预算重试，并用 runtime-live `auth_actions` 回归固定住“短暂失败可重试、预算耗尽仍停机”的边界。
+  - runtime follow-up `task_8d2e20dd7f5c47fd8303ff55159227ba` 已清除另一条更前置的 startup blocker：当前 `NodeRuntimeExecutionDriver` 会在 fresh execution world / simulator mirror 启动时立即落盘 `snapshot.json` 与 `journal.json`，因此 `run-game-test --json-ready` 不再因 `reward-runtime-execution-world` 缺少初始持久化文件而在 Viewer HTTP ready 前退出。该切片只恢复 trust sample 的启动前提，不单独改变 `trust gate` / `first capability gate` verdict。
   - runtime follow-up `task_319c1fc645b04dd185f3afb45dcd00ee` 已把当前 20% 长停的第三条独立签名钉住为 industrial schema drift，而且不是单点文案问题：`llm_agent` prompt/runtime helper 还在声明 assembler-only `factory_kind/recipe_id`，`recipe_coverage` 只跟踪 assembler 三条配方，而 shadow kernel `recipe_plan()` 甚至不会接受 `recipe.smelter.*`；但 `PostOnboarding` canonical 目标链与 `runtime_live` gameplay actions 已切到 smelter-first bootstrap。这样 formal lane 的 active LLM 即使持续推进 world time，也可能始终拿不到、或在 shadow decision path 里直接拒掉，`factory.smelter.mk1` / `recipe.smelter.*` 这些首条能力链动作，表现为一直停在 `post_onboarding.establish_first_capability / 20%`。当前已同步更新 LLM 工业提示、factory/recipe fallback、tracked recipe coverage、shadow kernel recipe support 与定向回归测试，用来消除这条“世界在动但能力链没法被决策命中”的 stall 来源。
   - viewer follow-up `task_a0173315eb4d44c9b83073dd55442f48` 已补齐上一条修复里仍残留的 advanced industrial recipe surface drift：`player_gameplay` 现在会显式暴露 runtime 已支持的 `scale_out` / `governance` 配方动作，active-LLM recipe truth 也扩到 runtime 已开放的 smelter / assembler 高阶配方，shadow kernel 决策面不再漏掉 `recipe.smelter.alloy_plate`、`recipe.assembler.gear`、`recipe.assembler.sensor_pack`、`recipe.assembler.module_rack`、`recipe.assembler.factory_core`。这条 follow-up 的目标是避免 canonical gameplay、LLM 提示与 shadow decision path 继续各说各话，把 runtime 明明可执行的工业能力链留在“支持但永远不会被选中”的灰区。
   - runtime follow-up `task_ed2dd76639264739a61a25c0d89c3352` 已收口当前 retention slice 的另一组 canonical truth regressions：`player_gameplay` 现在会优先跟随当前主线能力链，而不是被字典序更靠前的次级 blocked 工厂劫持；`industry_progress.stage` 也会在回收最后一座已完成产出的工厂后按现存工厂完成度重新回退，不再让历史累计完成数把失效能力误报成 `choose_first_expansion_tradeoff` 或 `choose_midloop_path`。该切片只修复真值误判，不替代新的 active-LLM formal retention 样本。

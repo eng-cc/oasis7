@@ -155,6 +155,7 @@
   - 在 trust gate 未恢复前，继续讨论 capability gate 或 `continue_playing` 都会污染正式结论。
 
 ## Required follow-up before re-open
+- `runtime_engineer` 已在 `task_8d2e20dd7f5c47fd8303ff55159227ba` 清除一条 2026-05-07 当前 `main` 的更前置 startup blocker：fresh `run-game-test --json-ready` 不再因 `reward-runtime-execution-world` 缺少初始 `snapshot.json/journal.json` 而在 Viewer HTTP ready 前退出。下一轮 trust-gate 复验应基于已恢复的 launcher ready contract，而不是复用本文件中的 2026-04-15 bootstrap failure 前提。
 - `producer_system_designer` 需要把当前对外口径更新为“active-LLM trust gate 仍 hold；capability gate 未进入”，停止任何 `continue_playing` 或“已恢复到 capability 检查”的延伸表述。
 - `runtime_engineer` / `viewer_engineer` 需要先解释并修复当前最前置 blocker，再重新申请正式 trust 复验：
   - shared active-LLM stack 下，`step_request.accepted=true` 但长期停留 `queued`，不给 terminal `lastControlFeedback`
