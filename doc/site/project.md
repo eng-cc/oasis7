@@ -3,6 +3,19 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] public-oasis7-skill (PRD-SITE-002/003/011) [test_tier_required]: 在公开站点新增 `oasis7` skill raw 入口：`site/skills/oasis7.md` 提供可直接抓取的 Markdown skill 内容，并从中英 docs hub 保证可达。 Trace: .pm/tasks/task_088b948d76f843588493368e2c6779d3.yaml
+  - 产物文件:
+    - `doc/site/prd.md`
+    - `doc/site/project.md`
+    - `doc/site/README.md`
+    - `site/doc/cn/index.html`
+    - `site/doc/en/index.html`
+    - `site/skills/oasis7.md`
+  - 验收命令 (`test_tier_required`):
+    - `rg -n "site/skills/oasis7.md|原始 Skill Markdown|Raw Skill Markdown|Local Provider / Skill" site/doc/cn/index.html site/doc/en/index.html`
+    - `cmp -s .agents/skills/oasis7/SKILL.md site/skills/oasis7.md`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] public-copy-tightening (PRD-SITE-001/004/009/010) [test_tier_required]: 继续收紧中英首页与 docs hub 的公开层分工：保留首页前半段的游戏感，把 builder/internal jargon 从访客主路径降到次级说明；同时把 docs hub 明确成首页之后的深读入口，并修复失效 `#demo` 锚点。 Trace: .pm/tasks/task_26f8dbd5b3b844a4a25624752def2abb.yaml
 - [x] homepage-genre-advantage-hook (PRD-SITE-001/004/009/010) [test_tier_required]: 在中英首页前半段补一段更抓人的“当前策略/模拟游戏范式为什么让人停不下来”文案，不点具体竞品名，把“从混乱到秩序、判断会一路改写后果”的爽点前置，同时保持技术预览与 claim boundary 不变。 Trace: .pm/tasks/task_475aa4b51fb9480bb0a7ff00db4dc2e6.yaml
 - [x] homepage-copy-polish-cn-en (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略/模拟游戏公开介绍，收紧中英首页首屏、30 秒说明与玩家角色解释区的话术，把突兀的内部机制表达改成“局势 + 玩家身份 + 持续后果”优先，同时保持技术预览与 claim boundary 不变。 Trace: .pm/tasks/task_a0e7f3310afb4a56b5be7aaf05baeb9c.yaml
@@ -110,6 +123,7 @@
 - 更新日期: 2026-05-07
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 最新完成: `public-oasis7-skill`（公开站点已新增 `site/skills/oasis7.md` 作为稳定 raw skill 直链；中英 docs hub 也已新增对应入口卡片，直接把执行者或自动化代理送到原始 Markdown，而不再额外维护人读 HTML 说明页。）
 - 最新完成: `public-copy-tightening`（中英首页后半段已把“给普通访客看的入口”与 builder/internal verification 语境继续拆开：主路径先讲这世界值不值得继续看、已经能证明什么、要不要下载预览构建；docs hub hero 与路径卡也已明确为首页之后的深读入口，并修复失效 `#demo` 锚点。）
 - 最新完成: `homepage-genre-advantage-hook`（中英首页前半段已补一段更抓人的“这类游戏为什么让人停不下来”文案，不点具体竞品名，直接把“从混乱到秩序、一个判断会一路改写后果”的爽点顶到访客更早能看到的位置，同时保持技术预览与 claim boundary 不变。）
 - 最新完成: `homepage-copy-polish-cn-en`（中英首页 hero、30 秒说明、玩家角色解释区与社媒摘要已参考同类策略/模拟游戏公开介绍改成“局势 + 身份 + 后果”优先的话术，去掉“你不直接点单位 / You are not micromanaging units”这类突兀开场，同时保持技术预览与 claim boundary 原样收紧。）
