@@ -62,7 +62,7 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) checkpoint_keep_latest: usize,
 }
 
-fn execution_world_persistence_repair_required(world_dir: &Path) -> bool {
+fn execution_world_persistence_files_missing(world_dir: &Path) -> bool {
     let snapshot_path = world_dir.join("snapshot.json");
     let journal_path = world_dir.join("journal.json");
     !snapshot_path.exists() || !journal_path.exists()
@@ -95,7 +95,7 @@ impl NodeRuntimeExecutionDriver {
         let release_security_policy =
             release_security_policy_for_storage_profile(storage_profile.profile);
         let execution_world_bootstrap_required =
-            execution_world_persistence_repair_required(world_dir.as_path());
+            execution_world_persistence_files_missing(world_dir.as_path());
         let execution_world =
             load_execution_world_with_policy(world_dir.as_path(), release_security_policy)?;
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
@@ -114,7 +114,7 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         let simulator_world_bootstrap_required =
-            execution_world_persistence_repair_required(driver.simulator_world_dir.as_path());
+            execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
         if execution_world_bootstrap_required {
