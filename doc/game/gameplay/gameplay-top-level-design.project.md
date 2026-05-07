@@ -72,8 +72,7 @@
 - [x] runtime-native-resolution-declaration (PRD-GAME-013) [test_tier_required]: `runtime_engineer` 已把 `simulator` 中现存 coarse-grained 子系统补成显式声明表，并用定向单测锁住厘米真值、km bucket 与 location-site snapping 规则。 Trace: .pm/tasks/task_303dedfe38b04036a198c256cc858e29.yaml
 - [x] viewer-scale-surface-truth-labeling (PRD-GAME-013) [test_tier_required]: `viewer_engineer` 已把 `software_safe` 正式 Web 主入口补成“物理真值 + 表现层解释”双轨表面，让玩家能直接读到 world bounds、地点半径和距离样本，并明确 marker/zoom 不等于真实几何尺寸。 Trace: .pm/tasks/task_103c448874b7494a8312418995889098.yaml
 - [x] agent-action-contract-boundary-alignment (PRD-GAME-013) [test_tier_required]: `agent_engineer` 已把 dual-mode / action contract 的现行动作面收口为低频间接控制白名单，并显式把 `jump / attack / use_item / block_editing` 回收到 future embodied candidate gate。 Trace: .pm/tasks/task_15890765ee3b4188a1e2766973f392fc.yaml
-- 后续 owner 切片见 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md`：
-  - `qa-scale-consistency-matrix`
+- [x] qa-scale-consistency-matrix (PRD-GAME-013) [test_tier_required]: `qa_engineer` 已完成四层尺度合同一致性矩阵，确认 runtime/viewer/agent 口径一致，并把 blocker 签名归档到 `doc/testing/evidence/gameplay-scale-consistency-matrix-2026-05-07.md`。 Trace: .pm/tasks/task_8205baa6d2fb46388b11c1eed340fdf5.yaml
 
 ## 依赖
 
