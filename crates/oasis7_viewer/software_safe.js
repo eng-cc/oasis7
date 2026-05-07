@@ -966,8 +966,23 @@ function normalizeU64Display(value) {
   return /^\d+$/.test(text) ? text : `invalid_u64(${text})`;
 }
 function normalizeFiniteNumber(value) {
+  if (value == null) {
+    return null;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+function finitePositionComponents(pos) {
+  if (!pos || typeof pos !== "object") {
+    return null;
+  }
+  const x = normalizeFiniteNumber(pos.x_cm);
+  const y = normalizeFiniteNumber(pos.y_cm);
+  const z = normalizeFiniteNumber(pos.z_cm);
+  if (x == null || y == null || z == null) {
+    return null;
+  }
+  return { x, y, z };
 }
 function trimFixed(value, digits) {
   if (!Number.isFinite(value)) {
@@ -1010,15 +1025,14 @@ function formatWorldPositionCm(pos, locale = state.uiLocale) {
   return `x=${x} · y=${y} · z=${z}`;
 }
 function distanceCmBetweenPositions(a, b) {
-  if (!a || !b) {
+  const left = finitePositionComponents(a);
+  const right = finitePositionComponents(b);
+  if (!left || !right) {
     return null;
   }
-  const dx = normalizeFiniteNumber(a.x_cm) - normalizeFiniteNumber(b.x_cm);
-  const dy = normalizeFiniteNumber(a.y_cm) - normalizeFiniteNumber(b.y_cm);
-  const dz = normalizeFiniteNumber(a.z_cm) - normalizeFiniteNumber(b.z_cm);
-  if (![dx, dy, dz].every(Number.isFinite)) {
-    return null;
-  }
+  const dx = left.x - right.x;
+  const dy = left.y - right.y;
+  const dz = left.z - right.z;
   return Math.max(0, Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)));
 }
 function locationRadiusCm(location) {

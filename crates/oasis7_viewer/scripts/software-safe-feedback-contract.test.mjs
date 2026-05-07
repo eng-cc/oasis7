@@ -230,6 +230,13 @@ const core = await import("../software_safe_src/legacy_core.js");
           profile: { radius_cm: 10_000, radiation_emission_per_tick: 0, material: "silicate" },
           resources: {},
         },
+        "loc-bad": {
+          id: "loc-bad",
+          name: "Broken Location",
+          pos: { x_cm: null, y_cm: 0, z_cm: 0 },
+          profile: { radius_cm: 5_000, radiation_emission_per_tick: 0, material: "silicate" },
+          resources: {},
+        },
       },
     },
     player_gameplay: {
@@ -286,6 +293,10 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(worldScale.physicalTruth.anchor.radiusLabel, "250 m");
   assert.equal(worldScale.physicalTruth.nearestLocations[0].id, "loc-1");
   assert.equal(worldScale.physicalTruth.nearestLocations[0].distanceLabel, "1 km");
+  assert.equal(
+    worldScale.physicalTruth.nearestLocations.some((location) => location.id === "loc-bad"),
+    false,
+  );
   assert.match(worldScale.presentationScale.markerTruthNote, /do not read on-screen diameter/i);
   assert.match(worldScale.presentationScale.zoomTruthNote, /zoom tiers/i);
   const pendingDisplay = core.describeFirstAgentClaimApprovalRequest(
