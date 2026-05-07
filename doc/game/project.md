@@ -161,11 +161,16 @@
 - [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式写回主文档：当前只允许按“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业状态/停机修复可读 -> 间接控制因果与下一步”推进；在这些 early-retention blocker 清空前，不扩大战争/治理/元进度在首局中的曝光，也不允许把 debug/probe lane 结果包装成正式留存进展。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
 - [x] agent-claim-slot-1-onboarding-flow (PRD-GAME-011) [test_tier_required]: `viewer_engineer` 已为新账号首个 `slot-1` 认领补齐专用 onboarding 流：当 canonical `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，PostOnboarding HUD 会展示 claim CTA，要求玩家先选中未认领目标，再执行 `Prepare -> Confirm` 显式确认；链路复用 canonical quote / blocker，并通过 `actor_agent_id` 把 claimer actor 与 claim target 正确分离。 Trace: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
 
+### T9 物理尺度与间接控制对齐（2026-05-07）
+- [x] gameplay-physical-scale-contract-freeze (PRD-GAME-013) [test_tier_required]: `producer_system_designer` 已新增“物理尺度与间接控制对齐”专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载；当前正式主路线继续保持“间接控制的文明模拟”，不把 `1cm` 写成 Minecraft 式逐块直接操作承诺。 Trace: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.yaml
+- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 冻结为待建任务：`runtime-native-resolution-declaration`、`viewer-scale-surface-truth-labeling`、`agent-action-contract-boundary-alignment`、`qa-scale-consistency-matrix`。
+
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
 - doc/game/prd.index.md
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+- `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
 - `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md`
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`

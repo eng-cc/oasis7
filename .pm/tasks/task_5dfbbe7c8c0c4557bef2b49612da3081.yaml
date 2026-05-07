@@ -1,0 +1,24 @@
+task_uid: task_5dfbbe7c8c0c4557bef2b49612da3081
+title: "gameplay physical scale indirect control alignment"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-game-gameplay-physical-scale-indirect-control-2026-05-07
+execution_log_path: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/prd.md
+  - doc/game/project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/game/gameplay/gameplay-top-level-design.project.md
+related_prd:
+  - PRD-GAME-001
+  - PRD-GAME-002
+  - PRD-GAME-012
+acceptance:
+  - "formalize physical-scale contract boundary for indirect-control gameplay"
+  - "define executable runtime viewer agent tasks for physical-scale follow-up"
+handoff_to: []
+updated_at: 2026-05-07T11:29:07+08:00
+last_started_at: 2026-05-07T11:29:07+08:00
