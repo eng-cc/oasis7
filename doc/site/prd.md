@@ -42,6 +42,7 @@
   - SC-9: 首页必须显式区分“公开访客入口”“builder/developer 验证路径”“未来平台化方向”三层，不允许把当前公开能力、诊断命令和未来模块平台目标混写成同一层承诺。
   - SC-10: 中英首页必须共享同一组首页 claim gate，至少锁定可玩状态、默认公开访问面、下载边界、正式公告状态与未来平台仍未开放这五类关键口径。
   - SC-11: 移动端首页在脚本失效时仍保留可达导航入口，且键盘用户进入页面后可直接跳过顶栏进入正文。
+  - SC-12: `site/doc/{cn,en}/index.html` 必须明确定位为首页之后的次级深读入口，不得继续充当第一次对外介绍项目的主宣传面，也不得指向缺失的首页锚点。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -71,6 +72,7 @@
   4. Flow-SITE-004: `确认真实可玩状态 -> 回写首页/文档入口口径 -> 复核中英一致性 -> 发布`
   5. Flow-SITE-005: `陌生访客访问首页 -> 在首屏理解游戏类型/玩家角色/当前开放状态 -> 决定继续看玩法、技术预览或文档`
   6. Flow-SITE-006: `陌生访客访问首页 -> 区分当前可做的事/开发者验证/未来目标态 -> 选择继续看证据、下载预览或回到文档`
+  7. Flow-SITE-007: `访客先通过首页理解产品与公开边界 -> 再进入 docs hub 深读完整总览/玩法/验证文档`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -92,6 +94,7 @@
   - AC-10: 首页必须以访客能理解的语言拆开“当前公开可做的事”“builder/developer 验证路径”“未来模块平台方向”，并明确当前未开放 creator-facing module/platform。
   - AC-11: `site/index.html` 与 `site/en/index.html` 都必须通过统一的 homepage claim/parity check，覆盖可玩状态、下载边界、正式公告状态、公开访问面与未来平台边界。
   - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。
+  - AC-13: `site/doc/cn/index.html` 与 `site/doc/en/index.html` 的 hero、primary CTA 与入口卡片必须明确说明“首页优先、docs hub 次级深读”，并且不允许继续链接到缺失的首页锚点。
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
@@ -143,16 +146,16 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-SITE-001 | TASK-SITE-001/002/005 | `test_tier_required` | 首页结构与导航检查 | 用户首次访问体验 |
+| PRD-SITE-001 | TASK-SITE-001/002/005 + public-copy-tightening | `test_tier_required` | 首页与 docs hub 入口结构检查 | 用户首次访问体验 |
 | PRD-SITE-002 | TASK-SITE-002/003/005/006/020 | `test_tier_required` | 下载与文档链接巡检、手册镜像语义对齐校验 | 安装与文档可用性 |
 | PRD-SITE-003 | TASK-SITE-003/004/005/007/020 | `test_tier_required` + `test_tier_full` | 发布门禁与回归节奏复核、项目状态回写核对 | 发布稳定性与回滚能力 |
-| PRD-SITE-004 | TASK-SITE-008/009 | `test_tier_required` | 中英文首页与文档入口页状态文案一致性核验 | 对外信任与信息准确性 |
+| PRD-SITE-004 | TASK-SITE-008/009 + public-copy-tightening | `test_tier_required` | 中英文首页与文档入口页状态文案一致性核验 | 对外信任与信息准确性 |
 | PRD-SITE-005 | TASK-SITE-010 | `test_tier_required` | 首页/下载区已区分构建说明与正式公告 | 公开站点状态理解 |
 | PRD-SITE-006 | TASK-SITE-010 | `test_tier_required` | 站点存在统一“公开说明准备态”占位 | 发布沟通入口一致性 |
 | PRD-SITE-007 | TASK-SITE-010 | `test_tier_required` | 技术预览主口径与新占位并存且无冲突 | 对外承诺边界控制 |
 | PRD-SITE-008 | TASK-SITE-015/016/017/018 | `test_tier_required` | `site/**`、GitHub Release 下载入口、release workflow 当前路径/包名与 `doc/site/github-pages/**` 历史专题标题全部切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径 | 对外品牌一致性、下载链路稳定性 |
-| PRD-SITE-009 | homepage-game-explainer | `test_tier_required` | 中英首页首屏信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
-| PRD-SITE-010 | homepage-entry-claim-boundary-hardening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
+| PRD-SITE-009 | homepage-game-explainer + public-copy-tightening | `test_tier_required` | 中英首页首屏与 docs hub 首段信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
+| PRD-SITE-010 | homepage-entry-claim-boundary-hardening + public-copy-tightening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、docs hub 角色定位检查、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -165,3 +168,4 @@
 | DEC-SITE-007 | 首页优先讲清“游戏是什么、玩家像什么、现在能做什么”，技术验证与下载说明下沉到后续版块 | 继续让首屏以技术预览、命令链路和工程状态为主 | 对陌生访客来说，先理解产品语义，再判断是否深入技术细节，才是更低摩擦的公开入口。 |
 | DEC-SITE-008 | 首页公开入口按“访客理解 -> builder 验证 -> 未来方向”三层分流，并显式把 `software_safe` 设为默认 formal Web 入口 | 继续把访问面 taxonomy、开发命令和未来平台目标混写在同一层 | 可同时降低误导风险、减少陌生访客理解负担，并保持 runtime 真值可审计。 |
 | DEC-SITE-009 | Pages 发布前新增 homepage claim/parity gate 与基础无脚本/a11y 约束 | 继续只依赖链接/手册/下载静态检查 | 首页承担最高风险的对外承诺，需要单独门禁而不是把口径漂移留给人工发现。 |
+| DEC-SITE-010 | docs hub 公开层只承担“深读/验证导航”，第一次对外介绍仍以首页为主 | 让 docs hub 与首页并列承担首次产品介绍 | docs hub 混入太多协作/验证语境时，陌生访客会更快把站点误读成工程入口而不是游戏公开面。 |
