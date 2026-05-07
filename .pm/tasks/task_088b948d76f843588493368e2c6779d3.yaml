@@ -3,7 +3,7 @@ title: "Publish oasis7 skill on public site"
 owner_role: viewer_engineer
 worktree_hint: /home/scc/worktrees/oasis7-site-public-oasis7-skill
 execution_log_path: .pm/tasks/task_088b948d76f843588493368e2c6779d3.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
@@ -15,5 +15,6 @@ related_prd:
   - PRD-SITE-003
 acceptance: []
 handoff_to: []
-updated_at: 2026-05-07T21:34:14+08:00
+updated_at: 2026-05-07T22:22:00+08:00
 last_started_at: 2026-05-07T21:34:14+08:00
+last_closed_at: 2026-05-07T22:21:59+08:00
