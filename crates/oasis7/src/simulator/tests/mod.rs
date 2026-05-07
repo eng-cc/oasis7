@@ -69,6 +69,7 @@ mod memory;
 mod module_lifecycle;
 mod module_visual;
 mod monotonicity;
+mod native_resolution_contract;
 mod persist;
 mod physics_parameters;
 mod power;

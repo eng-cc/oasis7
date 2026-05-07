@@ -142,6 +142,20 @@
 - 初始化顺序：`seed_positions -> bootstrap_chunks -> agent_spawn_positions`。
 - 分块尺寸固定：`20km × 20km × 10km`（常量 `CHUNK_SIZE_X/Y/Z_CM`），场景不可覆盖。
 
+### 原生分辨率声明（2026-05-07 对齐）
+- `chunk-grid`
+  - native resolution: 固定 `20km × 20km × 10km`
+  - cm mapping: `GeoPos` 以 cm 真值进入 chunk 除法
+  - rounding: floor 到 chunk index；当位置恰好落在世界上边界时 clamp 到最后一个合法 chunk
+- `asteroid-fragment-voxel`
+  - native resolution: `AsteroidFragmentConfig.voxel_size_km`，默认 `10km`，sanitize 后最小 `1km`
+  - cm mapping: voxel bounds 先转为 chunk 局部 cm 空间，再随机生成碎片中心
+  - rounding: 候选中心坐标 round 到最近整数 cm 后再写入 `Location.pos`
+- `fragment-block-geometry`
+  - native resolution: block 仍使用 cm 几何，但不是“任意小数厘米”
+  - cm mapping: `origin_cm/size_cm` 都直接落在 cm 真值
+  - rounding: 任意 `<1cm` 边长一律 clamp 到 `1cm`
+
 ### 运行时触发契约（与 observe/act 集成）
 - `observe` 触发：当 Agent 进行观测时，先对“自身所在坐标 chunk”执行 `ensure_chunk_generated`，再构建 observation。
 - `move` 触发：校验移动动作前，必须保证 `from_chunk` 与 `to_chunk` 已生成。

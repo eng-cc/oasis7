@@ -69,8 +69,8 @@
 
 ### T9 物理尺度与间接控制对齐（2026-05-07）
 - [x] gameplay-physical-scale-contract-freeze (PRD-GAME-013) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-013` 专题 PRD / design / project，正式冻结“厘米真值 / coarse-grained 子系统 / 玩家动作粒度 / 表现层夸张”四层尺度合同，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载。 Trace: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.yaml
+- [x] runtime-native-resolution-declaration (PRD-GAME-013) [test_tier_required]: `runtime_engineer` 已把 `simulator` 中现存 coarse-grained 子系统补成显式声明表，并用定向单测锁住厘米真值、km bucket 与 location-site snapping 规则。 Trace: .pm/tasks/task_303dedfe38b04036a198c256cc858e29.yaml
 - 后续 owner 切片见 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md`：
-  - `runtime-native-resolution-declaration`
   - `viewer-scale-surface-truth-labeling`
   - `agent-action-contract-boundary-alignment`
   - `qa-scale-consistency-matrix`

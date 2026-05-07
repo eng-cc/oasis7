@@ -121,6 +121,7 @@
 - 生成过程使用 `WorldConfig` 的 `space/asteroid_fragment/power` 配置。
 - 任意初始化入口写入 `WorldModel` 时，位置坐标都必须已经满足 `SPACE_UNIT_CM=1` 的整数厘米合同；不接受也不持久化 sub-cm 坐标。
 - 生成顺序：origin → custom locations → asteroid fragments → agents → facilities（确保依赖对象已存在）。
+- `LocationSeedConfig` / `PowerPlantSeedConfig` / 后续 `Factory` 站点绑定继续使用 `location_id` 作为离散原生分辨率；其物理真值由对应 `Location.pos` 与 `Location.profile.radius_cm` 提供，不支持初始化阶段写入 sub-location offset。
 - 场景模板通过 `WorldInitConfig::from_scenario(scenario, config)` 生成初始化配置。
 - 场景文件由 `WorldScenario` 加载并转换为 `WorldInitConfig`。
 

@@ -163,7 +163,8 @@
 
 ### T9 物理尺度与间接控制对齐（2026-05-07）
 - [x] gameplay-physical-scale-contract-freeze (PRD-GAME-013) [test_tier_required]: `producer_system_designer` 已新增“物理尺度与间接控制对齐”专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载；当前正式主路线继续保持“间接控制的文明模拟”，不把 `1cm` 写成 Minecraft 式逐块直接操作承诺。 Trace: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.yaml
-- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 冻结为待建任务：`runtime-native-resolution-declaration`、`viewer-scale-surface-truth-labeling`、`agent-action-contract-boundary-alignment`、`qa-scale-consistency-matrix`。
+- [x] runtime-native-resolution-declaration (PRD-GAME-013) [test_tier_required]: `runtime_engineer` 已把现有 coarse-grained runtime 子系统正式写成可 grep 的原生分辨率声明表，覆盖 `chunk-grid`、`asteroid-fragment-voxel`、`asteroid-fragment-spacing`、`movement-energy-cost`、`power-transfer-distance`、`location-site-actions` 与 `fragment-block-geometry`，并补齐厘米映射 / rounding / snapping 定向测试。 Trace: .pm/tasks/task_303dedfe38b04036a198c256cc858e29.yaml
+- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 收口为待建任务：`viewer-scale-surface-truth-labeling`、`agent-action-contract-boundary-alignment`、`qa-scale-consistency-matrix`。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`

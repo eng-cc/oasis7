@@ -24,6 +24,7 @@ mod llm_agent;
 mod llm_defaults;
 mod memory;
 mod module_visual;
+mod native_resolution;
 pub(crate) mod persist;
 mod power;
 #[cfg(not(target_arch = "wasm32"))]
@@ -98,6 +99,11 @@ pub use memory::{
     AgentMemory, LongTermMemory, LongTermMemoryEntry, MemoryEntry, MemoryEntryKind, ShortTermMemory,
 };
 pub use module_visual::{ModuleVisualAnchor, ModuleVisualEntity};
+pub use native_resolution::{
+    fragment_block_native_resolution, native_resolution_by_subsystem, runtime_native_resolutions,
+    CmMappingRule, NativeResolutionDeclaration, NativeResolutionKind, NativeResolutionValue,
+    RoundingRule, RUNTIME_NATIVE_RESOLUTIONS,
+};
 pub use persist::{
     PersistError, PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot,
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayGoalKind,
