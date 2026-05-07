@@ -234,6 +234,39 @@
 - `--no-llm`、operator-only、Prompt Ops 或其他 debug/probe lane 只能用于排障，不得作为“当前 focus order 已完成”的放行依据。
 - 当前 producer 正式口径继续保持：`trust gate = hold`、`first capability gate = not_run`；在这两个门恢复前，不得把“更宽的宏系统可见度”当作首局问题的替代解法。
 
+## 2.8 物理世界尺度与玩家交互尺度
+
+oasis7 的世界不是无尺度表格。
+
+当前正式口径必须同时成立两件事：
+
+1. 世界物理真值有尺度，而且当前 canonical 空间坐标、距离与尺寸继续以厘米整数合同落地。
+2. 玩家当前默认玩的不是 Minecraft 式第一人称逐块编辑，而是“通过目标、动作链和组织能力间接改变一个有物理尺度的世界”。
+
+因此需要区分四层尺度语义：
+
+1. `canonical physical scale`
+   - 用来回答“世界真实存的是什么”。
+   - 包括位置、距离、半径、尺寸等厘米真值。
+2. `subsystem native resolution`
+   - 用来回答“某个子系统实际按什么粒度工作”。
+   - 例如 chunk / voxel / location / facility 可以比厘米更粗，但必须声明映射规则。
+3. `player interaction scale`
+   - 用来回答“玩家当前默认改世界，是通过什么粒度的动作”。
+   - 当前正式主路线仍是 `agent/location/facility/recipe/governance` 这类间接控制动作，而不是 block placement / digging / local terraforming。
+4. `presentation scale`
+   - 用来回答“Viewer 为了可读性放大了什么”。
+   - 视觉夸张允许存在，但不能冒充物理真值。
+
+这意味着：
+
+- `1cm` 是世界真值合同，不自动等于“玩家已经拥有 1cm 级直接操作主玩法”。
+- coarse-grained 子系统不是违背尺度设计，而是需要被正式声明和审计。
+- Viewer 的 marker 放大、semantic map、2D 抽象不等于世界尺寸改变。
+- 未来如果要引入 embodied / block-editing 候选能力，必须先证明它强化的是当前间接控制文明模拟主路线，而不是把产品切成第二套游戏。
+
+专题口径见 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`。
+
 补充口径：
 - `10-minute trust gate` 负责回答“是否已经值得继续玩”。
 - `first capability gate` 负责回答“首个持续能力是否已经闭环”，并继续与 `PostOnboarding` 的 `15~45` 分钟里程碑口径对齐。

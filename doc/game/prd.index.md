@@ -1,7 +1,7 @@
 # game PRD 文件级索引
-审计轮次: 11
+审计轮次: 12
 
-更新时间：2026-04-10
+更新时间：2026-05-07
 
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
@@ -14,13 +14,14 @@
 - 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+- 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-04-10）
-- `doc/game/`：77 份文件
-- `doc/game/gameplay/`：72 份文件
-- `doc/game/gameplay/` 正式专题三件套：54 份文件
+## 密度快照（2026-05-07）
+- `doc/game/`：80 份文件
+- `doc/game/gameplay/`：75 份文件
+- `doc/game/gameplay/` 正式专题三件套：57 份文件
 - `doc/game/gameplay/` 补充材料：18 份文件
 - 模块根入口：5 份文件
 
@@ -34,6 +35,7 @@
 ## 活跃补充文档
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
+- `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`：物理尺度真值、间接控制动作粒度与表现层夸张边界主入口。
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`：试玩执行边界与继续/暂停决策主入口。
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`：closed beta 放行条件与候选级门禁主入口。
 - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`：近期高频经济规则与 token 成本边界主入口。
@@ -58,6 +60,7 @@
 | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.design.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md` |
 | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.design.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md` |
 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.design.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
+| `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.design.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` |
 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.design.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.project.md` |
 | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.design.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md` |
 | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.design.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md` |
