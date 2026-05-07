@@ -360,14 +360,12 @@
     - `doc/world-simulator/project.md`
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
-    - `.agents/skills/oasis7/SKILL.md`
-    - `.agents/skills/oasis7/references/real-play-config.md`
-    - `.agents/skills/oasis7/references/failure-signatures.md`
-    - `.agents/skills/oasis7/scripts/oasis7-run.sh`
-    - `.agents/skills/oasis7/scripts/oasis7-run-bootstrap-test.sh`
+    - `site/skills/oasis7.md`
+    - `scripts/setup-provider-oasis7-runtime.sh`
+    - `scripts/provider-parity-p0.sh`
     - `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
   - 验收命令 (`test_tier_required`):
-    - `bash .agents/skills/oasis7/scripts/oasis7-run-bootstrap-test.sh`
+    - `rg -n "oasis7_provider_agent|OASIS7_PROVIDER_RUNTIME_" site/skills/oasis7.md scripts/setup-provider-oasis7-runtime.sh`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 local_session_id_from_session_key_hashes_invalid_chars -- --nocapture`
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
     - `./scripts/doc-governance-check.sh`
@@ -415,10 +413,8 @@
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
     - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
     - `scripts/provider-parity-p0.sh`
-    - `.agents/skills/oasis7/SKILL.md`
-    - `.agents/skills/oasis7/references/real-play-config.md`
-    - `.agents/skills/oasis7/references/failure-signatures.md`
-    - `.agents/skills/oasis7/scripts/oasis7-run.sh`
+    - `site/skills/oasis7.md`
+    - `scripts/provider-parity-p0.sh`
     - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
     - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
     - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
@@ -445,14 +441,13 @@
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
     - `scripts/setup-provider-oasis7-runtime.sh`
-    - `.agents/skills/oasis7/SKILL.md`
-    - `.agents/skills/oasis7/references/real-play-config.md`
-    - `.agents/skills/oasis7/scripts/oasis7-run.sh`
+    - `site/skills/oasis7.md`
+    - `scripts/setup-provider-oasis7-runtime.sh`
     - `tools/provider/oasis7_provider_workspace/*`
   - 验收命令 (`test_tier_required`):
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
-    - `bash .agents/skills/oasis7/scripts/oasis7-run-bootstrap-test.sh`
+    - `rg -n "setup-provider-oasis7-runtime\\.sh|oasis7_provider_workspace|oasis7_provider_agent" site/skills/oasis7.md scripts/setup-provider-oasis7-runtime.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_SIMULATOR-185 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 将 `oasis7_distfs` / `oasis7_consensus` 回归中的临时目录默认前缀切到 `oasis7_*`，收口存储复制/挑战/成员关系/共识测试产物里残留的旧 `oasis7` / `oasis7` 内部命名。

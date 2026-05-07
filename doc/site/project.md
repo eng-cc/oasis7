@@ -13,7 +13,7 @@
     - `site/skills/oasis7.md`
   - 验收命令 (`test_tier_required`):
     - `rg -n "site/skills/oasis7.md|原始 Skill Markdown|Raw Skill Markdown|Local Provider / Skill" site/doc/cn/index.html site/doc/en/index.html`
-    - `cmp -s .agents/skills/oasis7/SKILL.md site/skills/oasis7.md`
+    - `rg -n "setup-provider-oasis7-runtime\\.sh|provider-parity-p0\\.sh|oasis7_game_launcher|oasis7_provider_local_bridge" site/skills/oasis7.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] public-copy-tightening (PRD-SITE-001/004/009/010) [test_tier_required]: 继续收紧中英首页与 docs hub 的公开层分工：保留首页前半段的游戏感，把 builder/internal jargon 从访客主路径降到次级说明；同时把 docs hub 明确成首页之后的深读入口，并修复失效 `#demo` 锚点。 Trace: .pm/tasks/task_26f8dbd5b3b844a4a25624752def2abb.yaml

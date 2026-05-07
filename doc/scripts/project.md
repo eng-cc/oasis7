@@ -53,7 +53,7 @@
     - `git diff --check`
 - [x] TASK-SCRIPTS-011 (PRD-SCRIPTS-001) [test_tier_required]: 收口 repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径，统一使用 `oasis7` / `crates/oasis7*` 口径。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "cargo run -p oasis7|crates/oasis7/src/bin/" .agents/skills/oasis7/SKILL.md .agents/skills/oasis7/references/real-play-config.md .agents/skills/oasis7/scripts/oasis7-run.sh`
+    - `rg -n "cargo run -p oasis7|crates/oasis7/src/bin/" site/skills/oasis7.md scripts/setup-provider-oasis7-runtime.sh scripts/provider-parity-p0.sh`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-012 (PRD-SCRIPTS-001/003) [test_tier_required]: 收口 `doc/scripts/viewer-tools/**` 活跃 texture-inspector 专题中遗漏的当前 viewer crate、环境变量与运行命令口径，统一到 `oasis7_viewer` / `OASIS7_VIEWER_*`。

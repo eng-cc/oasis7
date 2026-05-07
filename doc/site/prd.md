@@ -116,7 +116,7 @@
   - `doc/site/github-pages/`
   - `doc/site/manual/`
   - `doc/readme/prd.md`
-  - `.agents/skills/oasis7/SKILL.md`
+  - `site/skills/oasis7.md`
 - Edge Cases & Error Handling:
   - 断链：发现下载或文档断链时阻断发布并进入修复流程。
   - 空页面：关键页面内容缺失时展示维护提示并记录异常。
@@ -127,7 +127,7 @@
   - 状态漂移：若产品尚不可玩但页面出现“已可玩/赛季进行中”表述，发布流程必须阻断并回写文案。
   - 入口漂移：若首页把 builder 命令、未来平台目标或诊断入口写成当前公开主入口，发布流程必须阻断并回写文案。
   - 无脚本访问：若移动端脚本失效导致导航入口不可达，发布流程必须阻断并回写实现。
-  - skill 漂移：若 `site/skills/oasis7.md` 与 `.agents/skills/oasis7/SKILL.md` 的关键流程或边界不一致，发布流程必须阻断并回写镜像内容。
+  - skill 漂移：若 `site/skills/oasis7.md` 与当前 repo-native Local Provider 启动命令、桥接命令或公开边界不一致，发布流程必须阻断并回写公开 skill 内容。
 - Non-Functional Requirements:
   - NFR-SITE-1: 发布后关键链接可用率 100%。
   - NFR-SITE-2: 核心页面性能与可访问性指标达到门禁阈值。
@@ -137,7 +137,7 @@
   - NFR-SITE-6: “可玩状态口径一致性”检查在发布前必须完成且误报率 <= 5%（按月统计）。
   - NFR-SITE-7: 首页 claim/parity gate 必须覆盖 CN/EN 双首页，并在 Pages workflow 中执行，避免关键对外承诺静默漂移。
   - NFR-SITE-8: 首页主要导航在移动端不依赖脚本才能可达；键盘访问路径需具备可见 skip link。
-  - NFR-SITE-9: 公开 skill Markdown URL 必须稳定、可直接访问，且其内容在同一次发布中与 repo-local `oasis7` skill 保持语义一致。
+  - NFR-SITE-9: 公开 skill Markdown URL 必须稳定、可直接访问，且其内容在同一次发布中与当前 repo-native Local Provider 工作流保持语义一致。
 - Security & Privacy: 站点不得暴露内部凭据与敏感配置；下载链路需具备来源可验证性。
 
 ## 5. Risks & Roadmap
@@ -164,7 +164,7 @@
 | PRD-SITE-008 | TASK-SITE-015/016/017/018 | `test_tier_required` | `site/**`、GitHub Release 下载入口、release workflow 当前路径/包名与 `doc/site/github-pages/**` 历史专题标题全部切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径 | 对外品牌一致性、下载链路稳定性 |
 | PRD-SITE-009 | homepage-game-explainer + public-copy-tightening | `test_tier_required` | 中英首页首屏与 docs hub 首段信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
 | PRD-SITE-010 | homepage-entry-claim-boundary-hardening + public-copy-tightening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、docs hub 角色定位检查、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
-| PRD-SITE-011 | public-oasis7-skill | `test_tier_required` | 中英 docs hub raw skill 入口核对、`site/skills/oasis7.md` 与 `.agents/skills/oasis7/SKILL.md` 逐字一致性检查 | 对外 skill 可获取性、自动化抓取稳定性 |
+| PRD-SITE-011 | public-oasis7-skill | `test_tier_required` | 中英 docs hub raw skill 入口核对、`site/skills/oasis7.md` 对 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh` 与 `oasis7_game_launcher` 当前公开命令的语义一致性检查 | 对外 skill 可获取性、自动化抓取稳定性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

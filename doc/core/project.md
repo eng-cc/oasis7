@@ -298,7 +298,7 @@
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `testing-manual.md`
-    - `.agents/skills/oasis7/SKILL.md`
+    - `site/skills/oasis7.md`
     - `scripts/{provider-parity-p0.sh,setup-provider-oasis7-runtime.sh}`
     - `tools/provider/oasis7_provider_workspace/IDENTITY.md`
     - `crates/oasis7/src/simulator/{mod.rs,provider_loopback_adapter.rs,provider_loopback_http.rs}`

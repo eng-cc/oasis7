@@ -28,7 +28,7 @@
     - `crates/oasis7_viewer/software_safe_src/main.jsx`
     - `crates/oasis7_viewer/software_safe.js`
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-    - `.agents/skills/oasis7/references/governance-call-surfaces.md`
+    - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
     - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::agent_claims:: -- --nocapture`
@@ -385,7 +385,7 @@
     - `env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
     - `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_provider_local_bridge --bin oasis7_viewer_live --bin oasis7_game_launcher --bin oasis7_chain_runtime`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime gameplay_submit -- --nocapture`
-    - `.agents/skills/oasis7/scripts/oasis7-run.sh play --repo-root <task-worktree> --execution-mode player_parity --reuse-bridge --skip-agent-setup --no-open-browser`
+    - `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- --scenario llm_bootstrap --with-llm --agent-provider-mode provider_loopback_http --agent-provider-url http://127.0.0.1:5841 --agent-provider-connect-timeout-ms 15000 --agent-provider-profile oasis7_p0_low_freq_npc --agent-execution-lane player_parity`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] wasm-executor-real-compiled-cache (PRD-WORLD_RUNTIME-002) [test_tier_required]: 将 `oasis7_wasm_executor` 的磁盘 compiled cache 从“原始 `.wasm` 回盘 + 再次 `Module::new(...)`”修正为“序列化 compiled artifact 回盘 + `Module::deserialize_file(...)` 命中”，并补齐 serialized artifact round-trip / 损坏恢复回归，以及 executor perf probe 的测试编译裂缝。 Trace: .pm/tasks/task_c7a8defc7c0f4f4c8f86660b50df08a5.yaml

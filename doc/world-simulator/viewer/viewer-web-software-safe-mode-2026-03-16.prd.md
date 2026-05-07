@@ -36,7 +36,7 @@
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
   - `crates/oasis7_viewer/**` 或新增轻量 Web viewer frontend 目录
   - `scripts/run-game-test-ab.sh`
-  - `.agents/skills/oasis7/scripts/oasis7-run.sh`
+  - `site/skills/oasis7.md`
   - `testing-manual.md`
   - `doc/world-simulator/viewer/viewer-manual.md`
 - Web Viewer 新增三种 render mode：

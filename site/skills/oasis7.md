@@ -1,48 +1,44 @@
 ---
 name: oasis7
-description: Local Provider real-play and parity workflow for oasis7. Use when the user wants to configure, start, validate, or debug a real local Local Provider gameplay path, including downloading a GitHub Release installer-backed bundle, installing the lightweight runtime agent, starting the local bridge, launching `oasis7_game_launcher`, probing `provider_loopback_http`, or running parity smoke for Local Provider NPC behavior.
+description: Public raw Markdown for the oasis7 Local Provider real-play workflow. Use it when you need the current repo-backed commands for downloading a release bundle, starting the local provider bridge, launching gameplay, or running parity smoke without relying on the deleted repo-local skill wrapper.
 ---
 
 # Oasis7
 
 ## Overview
 
-`oasis7` is the repo-local workflow for running a real Local Provider-backed oasis7 NPC.
-Use it for “能不能真跑起来”, “怎么配 Local Provider 试玩”, “起 bridge / launcher / parity”, and first-line debugging of the local `provider_loopback_http` path.
+`oasis7` is the public raw workflow for running a real Local Provider-backed oasis7 session.
+Use it for bundle-first试玩、repo-backed bridge/bootstrap、`player_parity` vs `headless_agent` execution lanes, and first-line debugging of the local `provider_loopback_http` path.
 
-默认推荐 `bundle-first`：先下载 GitHub Release 的平台安装器并解出 bundle，再把 provider 配到该 bundle 的 `run-game.sh`，避免把试玩路径绑死在 repo 内的相对目录结构上。
-当 bundle 已就绪且本地 bridge 已在运行时，`play --bundle-dir ... --reuse-bridge --skip-agent-setup` 是一条一等公民的无 `cargo` real-play 路径；`doctor` 也会把这条路径与 repo-backed bridge/bootstrap readiness 分开报告。
-停止 `oasis7-run.sh play` 时，wrapper 现在会一并终止它启动的 launcher 子树，避免残留 `oasis7_game_launcher` / `oasis7_chain_runtime` / `oasis7_viewer_live`。
-同时要注意：当前 `run-game.sh` / `oasis7_game_launcher` 默认会启动 `oasis7_chain_runtime`，因此所选 `chain storage profile` 下的 node private key 属于重要资产；`oasis7` 文档只描述管理规则，不会输出或托管真实私钥。
+This public copy is intentionally self-contained.
+It does not depend on any private repo-local skill bundle, and all commands below are repo-native commands that remain valid after that internal helper surface is removed.
 
 ## When To Use
 
 Use this skill when the task involves any of these:
 
 - Configure a real Local Provider gameplay run instead of mock provider tests
-- Download a playable oasis7 installer-backed bundle from GitHub Release
+- Download a playable oasis7 release bundle
 - Install or refresh the lightweight Local Provider runtime agent
 - Start or debug `oasis7_provider_local_bridge`
-- Launch the product path with `oasis7_game_launcher` in `provider_loopback_http` mode
-- Run `P0-001` parity smoke or inspect Local Provider latency / wait-only failures
-- Explain which Local Provider settings are required for a real local试玩
-- Explain or operate the current chain-runtime governance / first-agent-claim call surfaces
+- Launch `oasis7_game_launcher` in `provider_loopback_http` mode
+- Run `P0-001` parity smoke and inspect Local Provider failures
+- Explain current Local Provider execution-lane or chain-runtime safety boundaries
 
 Do not use this skill for:
 
 - Generic LLM provider work unrelated to Local Provider
-- Editing Local Provider third-party source under `third_party/`
-- Viewer-only UI styling tasks with no Local Provider runtime involvement
+- Editing third-party Local Provider source under `third_party/`
+- Viewer-only styling work with no Local Provider runtime involvement
 
 ## Execution Lanes
 
 Read `oasis7` with one product rule in mind: Local Provider real-play can run without a Viewer.
 
-- `headless_agent`: default for smoke, CI, servers, low-spec machines, and “does the agent still complete the loop” checks
-- `player_parity`: use when a producer/QA/operator wants to judge “does this feel like a player-facing run”
+- `headless_agent`: default for smoke, CI, servers, low-spec machines, and no-UI regression
+- `player_parity`: use when producer/QA wants a player-feel run
 
 The Viewer is optional and is not the authority execution path.
-If you need `debug_viewer`, `software_safe`, or other UI/observer guidance, read `references/viewer-ui-lanes.md`.
 
 ## Core Workflow
 
@@ -50,46 +46,40 @@ If you need `debug_viewer`, `software_safe`, or other UI/observer guidance, read
 
 Check these first:
 
-- provider CLI configured by `OASIS7_PROVIDER_CLI_BIN` is callable
-  - set `OASIS7_PROVIDER_CLI_BIN` explicitly when you want to override the repo default
-  - if unset, use `oasis7-run.sh resolve-provider-cli` to inspect the helper's current fallback resolution
+- the provider CLI configured by `OASIS7_PROVIDER_CLI_BIN` is callable
 - Local Provider Gateway is live on `127.0.0.1:18789`
-- oasis7 bridge is or can be made available on `127.0.0.1:5841`
-- `cargo` is only required for repo-backed runtime-agent bootstrap, auto bridge startup, source-tree launch, and smoke
-- Cargo commands use `env -u RUSTC_WRAPPER cargo ...`
+- the oasis7 bridge is or can be made available on `127.0.0.1:5841`
+- `cargo` is required for repo-backed bridge startup, source-tree launch, and direct smoke
+- cargo commands use `env -u RUSTC_WRAPPER cargo ...`
 
 Useful probes:
 
 ```bash
-provider_cli_bin="$(.agents/skills/oasis7/scripts/oasis7-run.sh resolve-provider-cli)"
+provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-provider}"
 "$provider_cli_bin" --version
 curl -sS http://127.0.0.1:18789/health
 ```
-
-For exact field values and launch examples, read `references/real-play-config.md`.
-For Viewer / `software_safe` / observer-only UI boundaries, read `references/viewer-ui-lanes.md`.
-For governance review / approval / claim direct-call endpoints and snapshot readback, read `references/governance-call-surfaces.md`.
 
 ### 2. Download a playable release bundle
 
 Use the release bundle as the default operator entry:
 
 ```bash
-bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
-printf '%s\n' "$bundle_dir"
+release_tag="${OASIS7_RELEASE_TAG:-latest}"
+platform="${OASIS7_RELEASE_PLATFORM:-linux-x64}"
+download_dir="${OASIS7_RELEASE_DIR:-$HOME/.cache/oasis7/releases/$release_tag/$platform}"
+mkdir -p "$download_dir"
+echo "Download the ${platform} installer asset for tag ${release_tag} from:"
+echo "https://github.com/eng-cc/oasis7/releases"
+echo "Then extract/install it so you have a bundle directory containing run-game.sh."
+echo "Recommended bundle dir: $download_dir/bundle"
 ```
 
-By default it downloads the latest platform installer asset from `eng-cc/oasis7` GitHub Releases, verifies `oasis7-checksums.txt` when available, extracts the installed bundle payload, and returns a directory that contains `run-game.sh`.
-Current-user `~` in `--download-dir` is expanded before use, and the returned `bundle_dir` is an absolute path.
+Current public distribution truth:
 
-Useful overrides:
-
-```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh download \
-  --release-platform linux-x64 \
-  --release-tag latest \
-  --download-dir ~/.cache/oasis7/releases
-```
+- release assets come from `eng-cc/oasis7` GitHub Releases
+- the usable bundle must contain `run-game.sh`
+- bundle-first is the preferred operator path when you do not want repo-local bootstrap logic
 
 ### 3. Install the lightweight runtime agent
 
@@ -104,8 +94,6 @@ Defaults:
 - agent id: `oasis7_provider_agent`
 - workspace: `tools/provider/oasis7_provider_workspace`
 - model: `custom-right-codes/gpt-5.4`
-
-The runtime workspace is intentionally slim and is not meant for daily chat.
 
 ### 4. Start the bridge
 
@@ -139,7 +127,8 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
   --agent-provider-mode provider_loopback_http \
   --agent-provider-url http://127.0.0.1:5841 \
   --agent-provider-connect-timeout-ms 15000 \
-  --agent-provider-profile oasis7_p0_low_freq_npc
+  --agent-provider-profile oasis7_p0_low_freq_npc \
+  --agent-execution-lane player_parity
 ```
 
 Release bundle path:
@@ -151,7 +140,8 @@ Release bundle path:
   --agent-provider-mode provider_loopback_http \
   --agent-provider-url http://127.0.0.1:5841 \
   --agent-provider-connect-timeout-ms 15000 \
-  --agent-provider-profile oasis7_p0_low_freq_npc
+  --agent-provider-profile oasis7_p0_low_freq_npc \
+  --agent-execution-lane player_parity
 ```
 
 Required real-play settings:
@@ -163,49 +153,41 @@ Required real-play settings:
 
 ### 5.1 Choose execution lane
 
-Default no-UI / regression lane:
+Default no-UI regression lane:
 
 ```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh smoke \
+bash scripts/provider-parity-p0.sh \
+  --provider-only \
+  --samples 1 \
+  --ticks 4 \
+  --timeout-ms 15000 \
+  --agent-provider-url http://127.0.0.1:5841 \
+  --agent-provider-connect-timeout-ms 15000 \
+  --agent-provider-profile oasis7_p0_low_freq_npc \
   --execution-mode headless_agent
 ```
 
-Real play without depending on a browser:
+Player-feel / producer / QA run from source tree:
 
 ```bash
-bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
-.agents/skills/oasis7/scripts/oasis7-run.sh play \
-  --bundle-dir "$bundle_dir" \
-  --execution-mode headless_agent \
-  --reuse-bridge \
-  --skip-agent-setup \
-  --no-open-browser
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
+  --scenario llm_bootstrap \
+  --with-llm \
+  --agent-provider-mode provider_loopback_http \
+  --agent-provider-url http://127.0.0.1:5841 \
+  --agent-provider-connect-timeout-ms 15000 \
+  --agent-provider-profile oasis7_p0_low_freq_npc \
+  --agent-execution-lane player_parity
 ```
-
-Player-feel / producer / QA run:
-
-```bash
-bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
-.agents/skills/oasis7/scripts/oasis7-run.sh play \
-  --bundle-dir "$bundle_dir" \
-  --execution-mode player_parity \
-  --reuse-bridge \
-  --skip-agent-setup
-```
-
-UI is optional here.
-If you need Viewer / `software_safe` behavior, fallback rules, or current observer-only boundaries, read `references/viewer-ui-lanes.md`.
-If you need the direct governance review / approval / claim chain, read `references/governance-call-surfaces.md`.
 
 ### 5.2 Chain Key Safety
 
-`oasis7` 的 Local Provider real-play 只是替换 agent provider；当前产品默认启动链路仍会拉起 `oasis7_chain_runtime`，除非你显式传 `--chain-disable`。这意味着：
+Current Local Provider real-play still uses the product default chain startup path unless you explicitly pass `--chain-disable`.
+That means:
 
-- node private key 是高敏资产，绝不能写进 git、issue、devlog、截图、共享 shell 历史或 CI 日志
-- node public key 不是秘密，但仍属于节点身份资产，应按环境（local temp / persistent / release / soak）标注来源
-- 本地临时试玩优先使用一次性/可丢弃的 `chain storage profile`，避免把持久节点身份混进录屏、直播或共享机器
-- 若需要复用持久 `chain storage profile`，先确认操作者知道该 profile 下会继续使用同一 node key material
-- `oasis7` / release bundle 不应导出、回显或要求粘贴真实 node private key；只允许说明如何保护它
+- node private key is sensitive and must never be written to git, issues, devlogs, screenshots, shared shell history, or CI logs
+- node public key is not secret, but it is still environment identity material and should be labeled by environment
+- local trial runs should prefer disposable `chain storage profile` state
 
 ### 6. Run parity smoke
 
@@ -219,7 +201,8 @@ bash scripts/provider-parity-p0.sh \
   --timeout-ms 15000 \
   --agent-provider-url http://127.0.0.1:5841 \
   --agent-provider-connect-timeout-ms 15000 \
-  --agent-provider-profile oasis7_p0_low_freq_npc
+  --agent-provider-profile oasis7_p0_low_freq_npc \
+  --execution-mode headless_agent
 ```
 
 Primary success target today:
@@ -229,55 +212,6 @@ Primary success target today:
 - `goal_completed=true`
 - `invalid_action_count=0`
 
-## One-Command Helpers
-
-Use the bundled wrapper when you want the skill to do the repetitive setup for you.
-
-### Download
-
-```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh download
-```
-
-### Real play from release bundle
-
-```bash
-bundle_dir="$(.agents/skills/oasis7/scripts/oasis7-run.sh download)"
-.agents/skills/oasis7/scripts/oasis7-run.sh play \
-  --bundle-dir "$bundle_dir" \
-  --reuse-bridge \
-  --skip-agent-setup \
-  --no-open-browser
-```
-
-### Real play from source tree
-
-```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh play --repo-root /path/to/oasis7 --no-open-browser
-```
-
-### Smoke
-
-```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh smoke --repo-root /path/to/oasis7
-```
-
-### Doctor
-
-```bash
-.agents/skills/oasis7/scripts/oasis7-run.sh doctor
-.agents/skills/oasis7/scripts/oasis7-run.sh doctor --json
-.agents/skills/oasis7/scripts/oasis7-run.sh resolve-provider-cli
-```
-
-What it does:
-
-- `download`: downloads and extracts the GitHub Release bundle, then prints the usable bundle directory
-- `doctor`: checks command availability, Gateway health, bridge health, provider info, runtime agent presence, and optional `--bundle-dir` validity; add `--json` for machine-readable output
-- `resolve-provider-cli`: prints the resolved provider CLI command that the helper will invoke after applying `OASIS7_PROVIDER_CLI_BIN` override / fallback resolution
-- `play`: bootstrap `oasis7_provider_agent` unless you disable it, verify Gateway health, start the local bridge unless you pass `--reuse-bridge`, then run launcher from the bundle or source tree
-- `smoke`: remains repo-backed because the parity harness lives under `scripts/provider-parity-p0.sh`
-
 ## Debug Checklist
 
 If the run fails, inspect in this order:
@@ -286,37 +220,34 @@ If the run fails, inspect in this order:
 2. Bridge health: `http://127.0.0.1:5841/v1/provider/health`
 3. Wrong provider mode or missing profile
 4. Bundle missing `run-game.sh` or wrong extracted directory
-5. Bridge not started with the lightweight agent
+5. Runtime agent not installed with `bash scripts/setup-provider-oasis7-runtime.sh`
 6. Parity artifacts under `output/provider_parity/*`
-
-For common failure strings and what to check next, read `references/failure-signatures.md`. Run `doctor` first when you need a fast local diagnosis summary.
 
 Current known reality:
 
-- Correctness is largely working for `P0-001`
-- builtin/Local Provider parity 的默认启用门槛仍未通过；当前正式口径是 `behavior_parity_pass / latency_class B / keep experimental`
-- `headless_agent` is the default execution/regression lane; `player_parity` is the player-feel lane
-- `software_safe` is the weak-graphics observer/debug fallback, not the main player-experience mode
-- `agent_chat` and `prompt_control` are still unsupported as end-to-end player authority in current Local Provider mode
+- correctness is largely working for `P0-001`
+- builtin/Local Provider parity is still not the final fully-passed public claim boundary
+- `headless_agent` is the regression lane; `player_parity` is the player-feel lane
+- `agent_chat` and `prompt_control` are still not end-to-end player-authority paths in current Local Provider mode
 
 ## Repo Anchors
 
 Use these files as the source of truth:
 
-- Bridge entry: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
-- Launcher entry: `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-- Runtime workspace installer: `scripts/setup-provider-oasis7-runtime.sh`
-- Runtime workspace policy: `tools/provider/oasis7_provider_workspace/AGENTS.md`
-- Module tracker: `doc/world-simulator/project.md`
-- Dual-mode verdict: `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
-- Parity rollout verdict: `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`
+- bridge entry: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
+- launcher entry: `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+- runtime workspace installer: `scripts/setup-provider-oasis7-runtime.sh`
+- parity harness: `scripts/provider-parity-p0.sh`
+- runtime workspace policy: `tools/provider/oasis7_provider_workspace/AGENTS.md`
+- module tracker: `doc/world-simulator/project.md`
+- dual-mode verdict: `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+- parity rollout verdict: `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`
 
 ## Output Expectations
 
 When using this skill:
 
-- Prefer exact commands over abstract advice
-- State which process provides `127.0.0.1:18789` and which provides `127.0.0.1:5841`
-- Distinguish “runtime agent workspace/profile” from Codex repo skills
-- Distinguish “downloaded release bundle” from “repo-backed bridge/smoke tooling”
-- If you changed behavior or tooling, update `doc/world-simulator/project.md` and `doc/devlog/YYYY-MM-DD.md`
+- prefer exact commands over abstract advice
+- state which process provides `127.0.0.1:18789` and which provides `127.0.0.1:5841`
+- distinguish runtime agent workspace/profile from repo documentation surfaces
+- distinguish downloaded release bundle from repo-backed bridge/smoke tooling

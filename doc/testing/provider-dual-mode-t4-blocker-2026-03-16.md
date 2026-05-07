@@ -16,10 +16,10 @@
 ### 2.1 环境准备
 - `provider --version` 返回 `Local Provider 2026.3.13 (61d171a)`。
 - `curl -sS http://127.0.0.1:18789/health` 返回 `{"ok":true,"status":"live"}`。
-- `.agents/skills/oasis7/scripts/oasis7-run.sh doctor --json` 初次检查显示 Gateway 正常，但 `http://127.0.0.1:5841` bridge 未启动。
+- 历史 `oasis7-run.sh doctor --json` 初次检查显示 Gateway 正常，但 `http://127.0.0.1:5841` bridge 未启动。
 
 ### 2.2 headless_agent 真实 smoke
-- 历史执行：`.agents/skills/oasis7/scripts/oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000`
+- 历史执行：repo-local `oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000`
 - 历史结果：自动拉起 bridge 后，`provider_loopback_http` smoke 通过。
 - 历史产物：
   - `output/provider_parity/provider_parity_20260316_235632/summary/P0-001.provider_loopback_http.json`
@@ -34,8 +34,8 @@
   - `trace_completeness_ratio_ppm=1000000`
 
 ### 2.3 2026-03-17 双模式复验
-- headless 执行：`.agents/skills/oasis7/scripts/oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000 --execution-mode headless_agent`
-- player parity 执行：`.agents/skills/oasis7/scripts/oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000 --execution-mode player_parity`
+- headless 执行：repo-local `oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000 --execution-mode headless_agent`
+- player parity 执行：repo-local `oasis7-run.sh smoke --samples 1 --ticks 4 --timeout-ms 15000 --execution-mode player_parity`
 - headless 产物：
   - `output/provider_parity/provider_parity_20260317_002147/summary/P0-001.provider_loopback_http.json`
   - `output/provider_parity/provider_parity_20260317_002147/samples/provider_loopback_http/sample_1/summary/P0-001.provider_loopback_http.json`
@@ -56,7 +56,7 @@
 - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`：通过 `OASIS7_AGENT_PROVIDER_EXECUTION_MODE` 解析并透传 runtime live Local Provider execution mode。
 - `crates/oasis7/src/bin/oasis7_game_launcher.rs`：新增 `--agent-execution-lane`，把 execution mode 透传给 `oasis7_viewer_live`。
 - `crates/oasis7/src/bin/oasis7_provider_parity_bench.rs`：新增 `--execution-mode`，真实 Local Provider parity bench 不再固定为 `headless_agent`。
-- `scripts/provider-parity-p0.sh` 与 `.agents/skills/oasis7/scripts/oasis7-run.sh`：新增 execution mode 参数并贯通 smoke / play 操作路径。
+- `scripts/provider-parity-p0.sh` 与历史 repo-local `oasis7-run.sh`：新增 execution mode 参数并贯通 smoke / play 操作路径。
 
 ### 3.2 对 T4 的当前影响
 - “缺少真实 `player_parity` lane”这一代码阻断已经解除。
