@@ -75,7 +75,7 @@
 | `player_parity` 模式 | `mode=player_parity`、有限视野、附近实体、当前任务与可交互对象 | Agent 仅通过标准动作集操作 | `idle -> observing -> acting -> resolved` | 以接近玩家的受约束信息为准，不得泄露隐藏真值 | 默认可用于制作人/QA 对照 |
 | `headless_agent` 模式 | `mode=headless_agent`、结构化局部状态、碰撞/平台拓扑、最近事件、任务上下文 | Agent 使用同一动作集，不依赖 GUI | `idle -> observing -> acting -> resolved` | 优先保证稳定性、复现性与可回放性 | CI / 服务器默认模式 |
 | `debug_viewer` 调试旁路 | `mode_label`、观测版本、动作版本、replay id、最近事件/反馈 | 打开/关闭 Viewer 不影响 Agent 主流程 | `detached -> subscribed -> detached` | 仅订阅 runtime 权威状态，不参与决策 | 只读、不可直接改世界状态 |
-| 统一动作接口 | `move/jump/attack/interact/use_item/...` | 所有模式共享动作语义 | `proposed -> validated -> applied/rejected` | 以 runtime 权威校验结果为准 | 禁止模式专属作弊动作 |
+| 统一动作接口 | `wait / wait_ticks / move_agent / speak_to_nearby / inspect_target / simple_interact` | 所有模式共享同一低频间接控制动作语义 | `proposed -> validated -> applied/rejected` | 以 runtime 权威校验结果为准；未来 embodied 动作需单独升版并通过 `PRD-GAME-013` gate | 禁止模式专属作弊动作 |
 | 统一观测版本 | `observation_schema_version`、`action_schema_version` | 模式切换必须显式暴露版本 | `draft -> frozen -> audited` | 回放与 benchmark 必须记录 schema 版本 | 仅 owner / 联审可升级 |
 | 模式降级与失败签名 | `fallback_reason`、`blocked_by`、`environment_class` | 环境失败时给出显式降级/阻断 | `normal -> degraded -> recovered/blocked` | 优先区分玩法失败与图形失败 | QA / producer 可审阅 |
 
@@ -89,12 +89,13 @@
   - AC-6: 若 `player_parity` 未通过而 `headless_agent` 通过，系统仍不得宣称“玩家体验等价”；两条口径必须分开汇报。
   - AC-6.1: 本专题恢复 `completed` 只表示 dual-mode contract / reachability / audit remediation 已收口；是否允许默认启用或扩大覆盖范围，仍必须单独满足 `PRD-WORLD_SIMULATOR-038` 的 `behavior_parity_pass + latency_class` 门禁。
 - Non-Goals:
-  - 本专题不追求像素级视觉智能 benchmark，也不要求 Local Provider 首期仅靠屏幕像素完成全部感知。
-  - 本专题不允许为 `headless_agent` 提供绕过 runtime 的直接状态改写能力。
-  - 本专题不把 Viewer 做成 Agent 的必需输入源。
-  - 本专题不把 `player_parity` / `headless_agent` / `debug_viewer` 升格成新的玩家访问模式。
-  - 本专题不单独授予 Local Provider 默认启用资格；默认启用与扩面仍由 `PRD-WORLD_SIMULATOR-038` 决定。
-  - 本专题不在此轮解决全部多 Agent 并发策略，只先定义模式与契约边界。
+- 本专题不追求像素级视觉智能 benchmark，也不要求 Local Provider 首期仅靠屏幕像素完成全部感知。
+- 本专题不允许为 `headless_agent` 提供绕过 runtime 的直接状态改写能力。
+- 本专题不把 Viewer 做成 Agent 的必需输入源。
+- 本专题不把 `player_parity` / `headless_agent` / `debug_viewer` 升格成新的玩家访问模式。
+- 本专题不把 `jump / attack / use_item / block_editing` 之类 embodied 动作写成当前正式 contract；若未来需要，必须作为独立 candidate lane 审核。
+- 本专题不单独授予 Local Provider 默认启用资格；默认启用与扩面仍由 `PRD-WORLD_SIMULATOR-038` 决定。
+- 本专题不在此轮解决全部多 Agent 并发策略，只先定义模式与契约边界。
 
 ## 3. AI System Requirements
 - Tool Requirements:

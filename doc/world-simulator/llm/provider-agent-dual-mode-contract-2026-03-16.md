@@ -134,6 +134,8 @@
 - `inspect_target`
 - `simple_interact`
 
+这些动作代表当前正式的间接控制 contract；`jump`、`attack`、`use_item`、`block_editing` 等具身/逐块动作若要进入产品面，必须先升级 schema，并通过独立 gameplay gate，而不是沿用本文件直接宣称为现行能力。
+
 ### 5.3 统一动作语义
 - `wait`: 当前无低风险有效动作时让出一轮
 - `wait_ticks`: 在明确等待外部变化时做有界等待
