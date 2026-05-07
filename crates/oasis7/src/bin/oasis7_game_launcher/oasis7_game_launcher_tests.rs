@@ -886,10 +886,28 @@ fn resolve_viewer_auth_bootstrap_from_path_reads_node_keypair() {
     .expect("write config");
 
     let auth =
-        resolve_viewer_auth_bootstrap_from_path(config_path.as_path()).expect("resolve auth");
+        resolve_viewer_auth_bootstrap_from_path(config_path.as_path(), None).expect("resolve auth");
     assert_eq!(auth.public_key, "public-key-hex");
     assert_eq!(auth.private_key, "private-key-hex");
     assert!(!auth.player_id.trim().is_empty());
+    let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn resolve_viewer_auth_bootstrap_from_path_uses_chain_node_id_fallback() {
+    let temp_dir = make_temp_dir("viewer_auth_bootstrap_chain_player");
+    let config_path = temp_dir.join("config.toml");
+    fs::write(
+        &config_path,
+        "[node]\nprivate_key = \"private-key-hex\"\npublic_key = \"public-key-hex\"\n",
+    )
+    .expect("write config");
+
+    let auth = resolve_viewer_auth_bootstrap_from_path(config_path.as_path(), Some("chain-a"))
+        .expect("resolve auth");
+    assert_eq!(auth.player_id, "chain-a");
+    assert_eq!(auth.public_key, "public-key-hex");
+    assert_eq!(auth.private_key, "private-key-hex");
     let _ = fs::remove_dir_all(temp_dir);
 }
 
@@ -905,8 +923,10 @@ fn hosted_public_join_disables_viewer_auth_bootstrap_resolution() {
 
     let old_cwd = env::current_dir().expect("cwd");
     env::set_current_dir(&temp_dir).expect("chdir");
-    let auth =
-        resolve_viewer_auth_bootstrap_for_embedded_server(super::DeploymentMode::HostedPublicJoin);
+    let auth = resolve_viewer_auth_bootstrap_for_embedded_server(
+        super::DeploymentMode::HostedPublicJoin,
+        Some("chain-a"),
+    );
     env::set_current_dir(old_cwd).expect("restore cwd");
 
     assert!(auth.is_none());

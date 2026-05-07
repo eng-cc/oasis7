@@ -2,7 +2,7 @@
 
 ## Purpose
 - Use this packet as the canonical input bundle for one complete `L4` review run.
-- Keep `L4A synthetic` and `L4B human` evidence in the same packet, but do not collapse their verdicts.
+- Keep `L4A synthetic` and `L4B embodied-agent` evidence in the same packet, and record any internal human corroboration only as optional `L4B` calibration evidence.
 
 ## Required Fields
 - `change_scope`:
@@ -22,9 +22,11 @@
 - `limited_preview_context`:
 - `outside_scope`:
 - `persona_panel_request`:
+- `internal_human_corroboration_plan`:
 - `open_questions`:
 
 ## Packet Notes
 - Explicitly distinguish `player leverage` evidence from `world activity only` evidence.
 - If a formal surface is blocked, say so here before asking roles or personas to infer higher-level conclusions.
 - If the run only reached `L4A`, mark `L4B` as missing instead of leaving it implicit.
+- If you ran an internal human spot-check, record it as corroboration or contradiction for `L4B`, not as a third formal layer.

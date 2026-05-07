@@ -14,7 +14,7 @@
   - L2 Agent/fixture probe
   - L3 遥测与实验
   - L4A synthetic internal playability review
-  - L4B structured human playtest
+  - L4B embodied agent playtest
   - L5 受控外部信号
 - 组合层:
   - `block / hold / watch / go`
@@ -27,16 +27,17 @@
 - 模块根入口: `doc/testing/prd.md`、`doc/testing/project.md`
 - 操作手册入口: `testing-manual.md`
 - repo-local `L4` scaffold 入口: `scripts/prepare-playability-l4-review.sh`
-- 真人试玩 / 玩法结果入口: `doc/playability_test_result/*`
+- agent / 真人试玩 / 玩法结果入口: `doc/playability_test_result/*`
 
 ## 4. 约束与边界
 - 不新增 SDK、服务端遥测管线或实验平台实现。
 - 不重写现有 trust gate / capability gate 证据，只统一它们在更大证据栈中的位置。
 - 不允许低层证据替代高层证据作出更强 claim。
-- 不允许 `L4A` synthetic 结论直接冒充 `L4B` human 结论。
+- 不允许 `L4A` synthetic 结论直接冒充 `L4B` agentic 结论。
+- 不允许把 `L4B` 的可选内部真人校准误写成独立正式层或 `L5` 结论。
 
 ## 5. 设计演进计划
 - 先建立专题和根入口互链。
 - 再把正式 evidence packet 的分层结论逐步补齐。
 - 后续若引入真实实验/遥测系统，也只作为 L3 能力扩展，不改变 `L4B/L5` 的必要性。
-- 若未来建立 synthetic-to-human calibration，再评估是否上调 `L4A` 的决策权重。
+- 若未来建立 calibration，再评估是否上调 `L4A` 或 `L4B` 的决策权重。
