@@ -18,11 +18,6 @@ const HEAT_BASE_HEIGHT: f32 = 0.25;
 const HEAT_MAX_HEIGHT: f32 = 1.8;
 const HEAT_OFFSET_Y: f32 = 0.2;
 const FLOW_OFFSET_Y: f32 = 0.18;
-const FLOW_MIN_THICKNESS: f32 = 0.03;
-const FLOW_MAX_THICKNESS: f32 = 0.12;
-const FLOW_2D_PLANE_Y: f32 = 0.3;
-const FLOW_2D_THICKNESS_MULTIPLIER: f32 = 1.65;
-const FLOW_2D_THICKNESS_MAX: f32 = 0.24;
 const FLOW_ARROW_LENGTH_FACTOR: f32 = 3.4;
 const FLOW_ARROW_WIDTH_FACTOR: f32 = 1.85;
 const FLOW_ARROW_MIN_LENGTH: f32 = 0.08;
@@ -389,7 +384,7 @@ pub(super) fn update_world_overlays_3d(
 
         for segment in flow_segments.drain(..) {
             let ratio = (segment.amount.abs() as f32 / max_amount as f32).clamp(0.0, 1.0);
-            let thickness = FLOW_MIN_THICKNESS + ratio * (FLOW_MAX_THICKNESS - FLOW_MIN_THICKNESS);
+            let thickness = FLOW_THICKNESS_MIN + ratio * (FLOW_THICKNESS_MAX - FLOW_THICKNESS_MIN);
             let (from, to, thickness) =
                 flow_render_profile(*camera_mode, segment.from, segment.to, thickness);
             if from.distance(to) <= 0.00001 {
@@ -791,23 +786,6 @@ fn stage_material(stage: IndustryStage, assets: &Viewer3dAssets) -> Handle<Stand
     }
 }
 
-fn flow_render_profile(
-    mode: ViewerCameraMode,
-    from: Vec3,
-    to: Vec3,
-    thickness: f32,
-) -> (Vec3, Vec3, f32) {
-    match mode {
-        ViewerCameraMode::TwoD => (
-            Vec3::new(from.x, FLOW_2D_PLANE_Y, from.z),
-            Vec3::new(to.x, FLOW_2D_PLANE_Y, to.z),
-            (thickness * FLOW_2D_THICKNESS_MULTIPLIER)
-                .clamp(FLOW_MIN_THICKNESS, FLOW_2D_THICKNESS_MAX),
-        ),
-        ViewerCameraMode::ThreeD => (from, to, thickness),
-    }
-}
-
 fn line_transform(from: Vec3, to: Vec3, thickness: f32) -> Transform {
     let delta = to - from;
     let length = delta.length().max(0.0001);
@@ -828,7 +806,7 @@ fn flow_arrow_transform(from: Vec3, to: Vec3, thickness: f32) -> Transform {
     let arrow_length =
         (thickness * FLOW_ARROW_LENGTH_FACTOR).clamp(FLOW_ARROW_MIN_LENGTH, max_arrow_length);
     let arrow_width =
-        (thickness * FLOW_ARROW_WIDTH_FACTOR).clamp(FLOW_MIN_THICKNESS, FLOW_2D_THICKNESS_MAX);
+        (thickness * FLOW_ARROW_WIDTH_FACTOR).clamp(FLOW_THICKNESS_MIN, FLOW_2D_THICKNESS_MAX);
     let rotation = Quat::from_rotation_arc(Vec3::Y, direction);
     let translation = to - direction * (arrow_length * 0.5);
     Transform {

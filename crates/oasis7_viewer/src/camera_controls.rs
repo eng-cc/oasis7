@@ -6,12 +6,12 @@ use bevy::window::PrimaryWindow;
 use bevy_egui::EguiContexts;
 
 use super::{
-    grid_line_scale, grid_line_thickness, AutoFocusState, BaseScale, DetailZoomEntity,
-    GridLineVisual, OrbitCamera, RightPanelWidthState, TwoDMapMarker, Viewer3dCamera,
-    Viewer3dConfig, ViewerCameraMode, WorldBoundsSurface, WorldFloorSurface, WorldOverlayConfig,
-    DEFAULT_2D_CAMERA_RADIUS, DEFAULT_3D_CAMERA_RADIUS, ORBIT_MAX_RADIUS, ORBIT_MIN_RADIUS,
-    ORBIT_PAN_SENSITIVITY, ORBIT_ROTATE_SENSITIVITY, ORBIT_ZOOM_SENSITIVITY, ORTHO_MAX_SCALE,
-    ORTHO_MIN_SCALE, UI_PANEL_WIDTH,
+    grid_line_scale, grid_line_thickness, grid_lod_distance_factor, AutoFocusState, BaseScale,
+    DetailZoomEntity, GridLineVisual, OrbitCamera, RightPanelWidthState, TwoDMapMarker,
+    Viewer3dCamera, Viewer3dConfig, ViewerCameraMode, WorldBoundsSurface, WorldFloorSurface,
+    WorldOverlayConfig, DEFAULT_2D_CAMERA_RADIUS, DEFAULT_3D_CAMERA_RADIUS, ORBIT_MAX_RADIUS,
+    ORBIT_MIN_RADIUS, ORBIT_PAN_SENSITIVITY, ORBIT_ROTATE_SENSITIVITY, ORBIT_ZOOM_SENSITIVITY,
+    ORTHO_MAX_SCALE, ORTHO_MIN_SCALE, UI_PANEL_WIDTH,
 };
 
 const TWO_D_DEFAULT_DETAIL_RADIUS_RATIO: f32 = 0.0035;
@@ -499,11 +499,7 @@ pub(super) fn update_grid_line_lod_visibility(
     }
     *last_camera_position = Some(camera_position);
 
-    let mode_factor = match *camera_mode {
-        ViewerCameraMode::TwoD => 1.35,
-        ViewerCameraMode::ThreeD => 1.0,
-    };
-    let chunk_cutoff = lod_distance * mode_factor;
+    let chunk_cutoff = lod_distance * grid_lod_distance_factor(*camera_mode);
 
     for (visual, line_transform, mut visibility) in &mut grid_lines {
         if visual.kind == crate::GridLineKind::World {
