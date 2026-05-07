@@ -227,6 +227,8 @@ pub mod wire {
     where
         D: Deserializer<'de>,
     {
+        const MAX_EXACT_F64_INTEGER: f64 = 9_007_199_254_740_992.0;
+
         struct CentimeterVisitor;
 
         impl<'de> Visitor<'de> for CentimeterVisitor {
@@ -261,6 +263,11 @@ pub mod wire {
                 }
                 if value < i64::MIN as f64 || value > i64::MAX as f64 {
                     return Err(E::custom("centimeter value exceeds i64 range"));
+                }
+                if value.abs() > MAX_EXACT_F64_INTEGER {
+                    return Err(E::custom(
+                        "legacy float centimeter value exceeds exact integer range",
+                    ));
                 }
                 Ok(value as i64)
             }
@@ -369,6 +376,21 @@ mod tests {
         assert_eq!(pos.x_cm, 100_000);
         assert_eq!(pos.y_cm, 0);
         assert_eq!(pos.z_cm, 5);
+    }
+
+    #[cfg(feature = "wire")]
+    #[test]
+    fn geo_pos_cm_deserialize_rejects_large_legacy_integral_floats() {
+        let bytes = serde_cbor::to_vec(&serde_json::json!({
+            "x_cm": 9_007_199_254_740_994.0,
+            "y_cm": 0.0,
+            "z_cm": 0.0
+        }))
+        .expect("encode legacy state");
+
+        let err = serde_cbor::from_slice::<super::wire::GeoPosCm>(&bytes)
+            .expect_err("large legacy integral floats must be rejected");
+        assert!(err.to_string().contains("exceeds exact integer range"));
     }
 
     #[test]
