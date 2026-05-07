@@ -313,7 +313,9 @@ function TargetsPanel() {
                 >
                   <div class="list-item__title">{location.name || location.id}</div>
                   <div class="list-item__meta">
-                    {`id=${location.id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`}
+                    {`id=${location.id} · ${tr(locale(), "半径", "radius")}=${
+                      core.formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"
+                    } · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`}
                   </div>
                 </button>
               )}
@@ -1198,6 +1200,7 @@ function InteractionPanel() {
 function DetailsPanel() {
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const worldScaleSurface = () => core.buildWorldScaleSurface(locale());
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
@@ -1253,13 +1256,94 @@ function DetailsPanel() {
           <Badge>{`promptProfiles=${snapshotCounts().promptProfiles}`}</Badge>
           <Badge>{`debugContexts=${snapshotCounts().executionDebugContexts}`}</Badge>
         </div>
-        <EmptyState style="margin-top:10px;">
-          {tr(
-            locale(),
-            "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。",
-            "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.",
-          )}
-        </EmptyState>
+        <div class="stack" style="margin-top:10px;">
+          <MetricCard
+            label={tr(locale(), "物理真值单位", "Canonical Physical Unit")}
+            value={worldScaleSurface().physicalTruth.canonicalUnitLabel || "-"}
+          >
+            <Badge>{tr(locale(), "整数厘米", "integer centimeters")}</Badge>
+          </MetricCard>
+          <div class="feedback-detail">{worldScaleSurface().physicalTruth.canonicalUnitDetail}</div>
+          <MetricCard
+            label={tr(locale(), "世界边界", "World Bounds")}
+            value={worldScaleSurface().physicalTruth.worldBoundsLabel || tr(locale(), "未发布", "not published")}
+          >
+            <Badge>{tr(locale(), "snapshot.config.space", "snapshot.config.space")}</Badge>
+          </MetricCard>
+          <div class="feedback-detail">{worldScaleSurface().physicalTruth.worldBoundsDetail}</div>
+          <Show when={worldScaleSurface().physicalTruth.anchor}>
+            {(anchor) => (
+              <EventCard
+                title={anchor().label}
+                badge={anchor().kind}
+                badgeClass="badge badge--accent"
+                meta={`id=${anchor().id}${anchor().locationId ? ` · location=${anchor().locationId}` : ""}`}
+              >
+                <div class="feedback-summary">
+                  {anchor().positionLabel || tr(locale(), "缺少可读坐标。", "Missing readable coordinates.")}
+                </div>
+                <Show when={anchor().radiusLabel}>
+                  <div class="feedback-detail">
+                    {tr(locale(), "地点半径真值", "Location radius truth")}={anchor().radiusLabel}
+                  </div>
+                </Show>
+              </EventCard>
+            )}
+          </Show>
+          <div>
+            <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "最近距离样本", "Nearest Distance Samples")}</div>
+            <div class="event-list">
+              <Show
+                when={worldScaleSurface().physicalTruth.nearestLocations.length > 0}
+                fallback={
+                  <EmptyState>
+                    {tr(
+                      locale(),
+                      "当前没有足够的地点数据来给出距离样本。",
+                      "The current snapshot does not expose enough locations to show distance samples.",
+                    )}
+                  </EmptyState>
+                }
+              >
+                <For each={worldScaleSurface().physicalTruth.nearestLocations}>
+                  {(location) => (
+                    <EventCard
+                      title={location.name}
+                      badge={location.distanceLabel || "-"}
+                      badgeClass="badge badge--good"
+                      meta={`id=${location.id}`}
+                    >
+                      <div class="feedback-detail">
+                        {tr(locale(), "真实距离", "Physical distance")}={location.distanceLabel || "-"}
+                      </div>
+                      <Show when={location.radiusLabel}>
+                        <div class="feedback-detail">
+                          {tr(locale(), "地点半径", "Location radius")}={location.radiusLabel}
+                        </div>
+                      </Show>
+                    </EventCard>
+                  )}
+                </For>
+              </Show>
+            </div>
+          </div>
+          <EventCard
+            title={tr(locale(), "表现层说明", "Presentation Notes")}
+            badge={tr(locale(), "不要误读 marker", "Do not trust marker size")}
+            badgeClass="badge badge--warn"
+          >
+            <div class="feedback-summary">{worldScaleSurface().presentationScale.markerTruthNote}</div>
+            <div class="feedback-detail">{worldScaleSurface().presentationScale.zoomTruthNote}</div>
+            <div class="feedback-detail">{worldScaleSurface().presentationScale.softwareSafeNote}</div>
+          </EventCard>
+          <EmptyState>
+            {tr(
+              locale(),
+              "主状态已经在中间的“世界摘要”里展示；这里现在专门保留“厘米真值 vs 表现层夸张”的读图锚点，原始快照仍按需展开。",
+              "The main runtime state already lives in World Summary; this section now reserves the reading anchors for centimeter truth vs presentation exaggeration, while raw snapshots stay collapsible.",
+            )}
+          </EmptyState>
+        </div>
         <Show when={hasSnapshotDiagnostics()}>
           <DiagnosticDetails
             locale={locale()}

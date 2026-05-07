@@ -164,7 +164,8 @@
 ### T9 物理尺度与间接控制对齐（2026-05-07）
 - [x] gameplay-physical-scale-contract-freeze (PRD-GAME-013) [test_tier_required]: `producer_system_designer` 已新增“物理尺度与间接控制对齐”专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载；当前正式主路线继续保持“间接控制的文明模拟”，不把 `1cm` 写成 Minecraft 式逐块直接操作承诺。 Trace: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.yaml
 - [x] runtime-native-resolution-declaration (PRD-GAME-013) [test_tier_required]: `runtime_engineer` 已把现有 coarse-grained runtime 子系统正式写成可 grep 的原生分辨率声明表，覆盖 `chunk-grid`、`asteroid-fragment-voxel`、`asteroid-fragment-spacing`、`movement-energy-cost`、`power-transfer-distance`、`location-site-actions` 与 `fragment-block-geometry`，并补齐厘米映射 / rounding / snapping 定向测试。 Trace: .pm/tasks/task_303dedfe38b04036a198c256cc858e29.yaml
-- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 收口为待建任务：`viewer-scale-surface-truth-labeling`、`agent-action-contract-boundary-alignment`、`qa-scale-consistency-matrix`。
+- [x] viewer-scale-surface-truth-labeling (PRD-GAME-013) [test_tier_required]: `viewer_engineer` 已把 formal Web entry 的 `World Scale` 面板和地点列表补成玩家可读的尺度真值表面，正式显示 canonical `1cm`、world bounds、选中锚点坐标/半径、最近地点真实距离，并明确 marker/zoom 只服务可读性，不可当作真实几何尺寸。 Trace: .pm/tasks/task_103c448874b7494a8312418995889098.yaml
+- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 收口为待建任务：`agent-action-contract-boundary-alignment`、`qa-scale-consistency-matrix`。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`

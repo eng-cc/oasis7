@@ -288,6 +288,177 @@ function normalizeU64Display(value) {
   return /^\d+$/.test(text) ? text : `invalid_u64(${text})`;
 }
 
+function normalizeFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function trimFixed(value, digits) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  const fixed = value.toFixed(digits);
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+}
+
+function formatPhysicalDistanceCm(value, locale = state.uiLocale) {
+  const numeric = normalizeFiniteNumber(value);
+  if (numeric == null) {
+    return null;
+  }
+  const absolute = Math.abs(numeric);
+  if (absolute >= 100_000) {
+    const km = numeric / 100_000;
+    const label = trimFixed(km, Math.abs(km) >= 100 ? 0 : Math.abs(km) >= 10 ? 1 : 2);
+    return `${label} km`;
+  }
+  if (absolute >= 100) {
+    const meters = numeric / 100;
+    const label = trimFixed(
+      meters,
+      Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2,
+    );
+    return `${label} m`;
+  }
+  return `${trimFixed(numeric, 0)} cm`;
+}
+
+function formatWorldPositionCm(pos, locale = state.uiLocale) {
+  if (!pos || typeof pos !== "object") {
+    return null;
+  }
+  const x = formatPhysicalDistanceCm(pos.x_cm, locale);
+  const y = formatPhysicalDistanceCm(pos.y_cm, locale);
+  const z = formatPhysicalDistanceCm(pos.z_cm, locale);
+  if (!x || !y || !z) {
+    return null;
+  }
+  return `x=${x} · y=${y} · z=${z}`;
+}
+
+function distanceCmBetweenPositions(a, b) {
+  if (!a || !b) {
+    return null;
+  }
+  const dx = normalizeFiniteNumber(a.x_cm) - normalizeFiniteNumber(b.x_cm);
+  const dy = normalizeFiniteNumber(a.y_cm) - normalizeFiniteNumber(b.y_cm);
+  const dz = normalizeFiniteNumber(a.z_cm) - normalizeFiniteNumber(b.z_cm);
+  if (![dx, dy, dz].every(Number.isFinite)) {
+    return null;
+  }
+  return Math.max(0, Math.round(Math.sqrt((dx * dx) + (dy * dy) + (dz * dz))));
+}
+
+function locationRadiusCm(location) {
+  return normalizeFiniteNumber(location?.profile?.radius_cm);
+}
+
+function snapshotSpaceConfig() {
+  const space = state.snapshot?.config?.space;
+  return space && typeof space === "object" ? space : null;
+}
+
+function selectedWorldAnchor() {
+  const selected = state.selectedObject;
+  if (selected && selected.pos) {
+    return {
+      kind: state.selectedKind || "location",
+      id: state.selectedId || selected.id || selected.name || "selected",
+      pos: selected.pos,
+      radiusCm: locationRadiusCm(selected),
+      locationId: selected.location_id || selected.id || null,
+    };
+  }
+
+  const locations = Object.values(state.snapshot?.model?.locations || {});
+  const fallback = locations.find((location) => location?.pos);
+  if (!fallback) {
+    return null;
+  }
+  return {
+    kind: "location",
+    id: fallback.id || fallback.name || "location",
+    pos: fallback.pos,
+    radiusCm: locationRadiusCm(fallback),
+    locationId: fallback.id || null,
+  };
+}
+
+function buildWorldScaleSurface(locale = state.uiLocale) {
+  const isZh = isLocaleZh(locale);
+  const space = snapshotSpaceConfig();
+  const anchor = selectedWorldAnchor();
+  const locations = Object.values(state.snapshot?.model?.locations || {})
+    .filter((location) => location?.id && location?.pos);
+
+  const nearestLocations = anchor
+    ? locations
+      .filter((location) => location.id !== anchor.locationId)
+      .map((location) => {
+        const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
+        return {
+          id: location.id,
+          name: location.name || location.id,
+          distanceCm,
+          distanceLabel: formatPhysicalDistanceCm(distanceCm, locale),
+          radiusCm: locationRadiusCm(location),
+          radiusLabel: formatPhysicalDistanceCm(locationRadiusCm(location), locale),
+        };
+      })
+      .filter((location) => location.distanceCm != null)
+      .sort((left, right) => left.distanceCm - right.distanceCm)
+      .slice(0, 3)
+    : [];
+
+  const physicalTruth = {
+    canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
+    canonicalUnitDetail: isZh
+      ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。"
+      : "World positions, distances, radii, and sizes are stored as integer centimeters.",
+    worldBoundsLabel: space
+      ? `${formatPhysicalDistanceCm(space.width_cm, locale)} × ${formatPhysicalDistanceCm(space.depth_cm, locale)} × ${formatPhysicalDistanceCm(space.height_cm, locale)}`
+      : null,
+    worldBoundsDetail: space
+      ? isZh
+        ? "来自 snapshot.config.space 的真实世界边界。"
+        : "Physical world bounds derived from snapshot.config.space."
+      : isZh
+        ? "当前快照没有发布 world bounds。"
+        : "The current snapshot does not publish world bounds yet.",
+    anchor: anchor
+      ? {
+          kind: anchor.kind,
+          id: anchor.id,
+          label: anchor.kind === "agent"
+            ? (isZh ? "当前选中 Agent 锚点" : "Selected agent anchor")
+            : (isZh ? "当前选中地点锚点" : "Selected location anchor"),
+          positionLabel: formatWorldPositionCm(anchor.pos, locale),
+          radiusCm: anchor.radiusCm,
+          radiusLabel: anchor.radiusCm == null ? null : formatPhysicalDistanceCm(anchor.radiusCm, locale),
+          locationId: anchor.locationId,
+        }
+      : null,
+    nearestLocations,
+  };
+
+  const presentationScale = {
+    markerTruthNote: isZh
+      ? "3D marker、2D overview map 和 halo 允许为了可读性被放大；请把距离/半径标签当成真值，不要把屏幕上的直径当成真实几何尺寸。"
+      : "3D markers, the 2D overview map, and halos may be enlarged for readability. Treat the distance/radius labels as truth; do not read on-screen diameter as real geometry size.",
+    zoomTruthNote: isZh
+      ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。"
+      : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
+    softwareSafeNote: isZh
+      ? "software_safe 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。"
+      : "The software_safe entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here.",
+  };
+
+  return {
+    physicalTruth,
+    presentationScale,
+  };
+}
+
 function detectRendererMeta() {
   const params = getSearchParams();
   const reasonFromQuery = params.get("software_safe_reason");
@@ -4273,6 +4444,7 @@ export {
   buildGameplaySummary,
   buildHostedActionMatrixView,
   buildHostedRecoveryHint,
+  buildWorldScaleSurface,
   clone,
   connectionBadgeClass,
   describeFirstAgentClaimApprovalRequest,
@@ -4282,6 +4454,8 @@ export {
   entityCollections,
   feedbackBadgeClass,
   fillControlExample,
+  formatPhysicalDistanceCm,
+  formatWorldPositionCm,
   focus,
   getState,
   handleControlCompletionAck,

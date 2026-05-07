@@ -965,6 +965,135 @@ function normalizeU64Display(value) {
   }
   return /^\d+$/.test(text) ? text : `invalid_u64(${text})`;
 }
+function normalizeFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+function trimFixed(value, digits) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  const fixed = value.toFixed(digits);
+  return fixed.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+}
+function formatPhysicalDistanceCm(value, locale = state.uiLocale) {
+  const numeric = normalizeFiniteNumber(value);
+  if (numeric == null) {
+    return null;
+  }
+  const absolute = Math.abs(numeric);
+  if (absolute >= 1e5) {
+    const km = numeric / 1e5;
+    const label = trimFixed(km, Math.abs(km) >= 100 ? 0 : Math.abs(km) >= 10 ? 1 : 2);
+    return `${label} km`;
+  }
+  if (absolute >= 100) {
+    const meters = numeric / 100;
+    const label = trimFixed(
+      meters,
+      Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2
+    );
+    return `${label} m`;
+  }
+  return `${trimFixed(numeric, 0)} cm`;
+}
+function formatWorldPositionCm(pos, locale = state.uiLocale) {
+  if (!pos || typeof pos !== "object") {
+    return null;
+  }
+  const x = formatPhysicalDistanceCm(pos.x_cm, locale);
+  const y = formatPhysicalDistanceCm(pos.y_cm, locale);
+  const z = formatPhysicalDistanceCm(pos.z_cm, locale);
+  if (!x || !y || !z) {
+    return null;
+  }
+  return `x=${x} · y=${y} · z=${z}`;
+}
+function distanceCmBetweenPositions(a, b) {
+  if (!a || !b) {
+    return null;
+  }
+  const dx = normalizeFiniteNumber(a.x_cm) - normalizeFiniteNumber(b.x_cm);
+  const dy = normalizeFiniteNumber(a.y_cm) - normalizeFiniteNumber(b.y_cm);
+  const dz = normalizeFiniteNumber(a.z_cm) - normalizeFiniteNumber(b.z_cm);
+  if (![dx, dy, dz].every(Number.isFinite)) {
+    return null;
+  }
+  return Math.max(0, Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)));
+}
+function locationRadiusCm(location) {
+  return normalizeFiniteNumber(location?.profile?.radius_cm);
+}
+function snapshotSpaceConfig() {
+  const space = state.snapshot?.config?.space;
+  return space && typeof space === "object" ? space : null;
+}
+function selectedWorldAnchor() {
+  const selected = state.selectedObject;
+  if (selected && selected.pos) {
+    return {
+      kind: state.selectedKind || "location",
+      id: state.selectedId || selected.id || selected.name || "selected",
+      pos: selected.pos,
+      radiusCm: locationRadiusCm(selected),
+      locationId: selected.location_id || selected.id || null
+    };
+  }
+  const locations = Object.values(state.snapshot?.model?.locations || {});
+  const fallback = locations.find((location) => location?.pos);
+  if (!fallback) {
+    return null;
+  }
+  return {
+    kind: "location",
+    id: fallback.id || fallback.name || "location",
+    pos: fallback.pos,
+    radiusCm: locationRadiusCm(fallback),
+    locationId: fallback.id || null
+  };
+}
+function buildWorldScaleSurface(locale = state.uiLocale) {
+  const isZh = isLocaleZh(locale);
+  const space = snapshotSpaceConfig();
+  const anchor = selectedWorldAnchor();
+  const locations = Object.values(state.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos);
+  const nearestLocations = anchor ? locations.filter((location) => location.id !== anchor.locationId).map((location) => {
+    const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
+    return {
+      id: location.id,
+      name: location.name || location.id,
+      distanceCm,
+      distanceLabel: formatPhysicalDistanceCm(distanceCm, locale),
+      radiusCm: locationRadiusCm(location),
+      radiusLabel: formatPhysicalDistanceCm(locationRadiusCm(location), locale)
+    };
+  }).filter((location) => location.distanceCm != null).sort((left, right) => left.distanceCm - right.distanceCm).slice(0, 3) : [];
+  const physicalTruth = {
+    canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
+    canonicalUnitDetail: isZh ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。" : "World positions, distances, radii, and sizes are stored as integer centimeters.",
+    worldBoundsLabel: space ? `${formatPhysicalDistanceCm(space.width_cm, locale)} × ${formatPhysicalDistanceCm(space.depth_cm, locale)} × ${formatPhysicalDistanceCm(space.height_cm, locale)}` : null,
+    worldBoundsDetail: space ? isZh ? "来自 snapshot.config.space 的真实世界边界。" : "Physical world bounds derived from snapshot.config.space." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
+    anchor: anchor ? {
+      kind: anchor.kind,
+      id: anchor.id,
+      label: anchor.kind === "agent" ? isZh ? "当前选中 Agent 锚点" : "Selected agent anchor" : isZh ? "当前选中地点锚点" : "Selected location anchor",
+      positionLabel: formatWorldPositionCm(anchor.pos, locale),
+      radiusCm: anchor.radiusCm,
+      radiusLabel: anchor.radiusCm == null ? null : formatPhysicalDistanceCm(anchor.radiusCm, locale),
+      locationId: anchor.locationId
+    } : null,
+    nearestLocations
+  };
+  const presentationScale = {
+    markerTruthNote: isZh ? "3D marker、2D overview map 和 halo 允许为了可读性被放大；请把距离/半径标签当成真值，不要把屏幕上的直径当成真实几何尺寸。" : "3D markers, the 2D overview map, and halos may be enlarged for readability. Treat the distance/radius labels as truth; do not read on-screen diameter as real geometry size.",
+    zoomTruthNote: isZh ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。" : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
+    softwareSafeNote: isZh ? "software_safe 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。" : "The software_safe entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here."
+  };
+  return {
+    physicalTruth,
+    presentationScale
+  };
+}
 function detectRendererMeta() {
   const params = getSearchParams();
   const reasonFromQuery = params.get("software_safe_reason");
@@ -3903,7 +4032,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$13 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=toolbar><button data-entry=standard-viewer-current-locale></button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$15 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$16 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><details class="panel diagnostic-surface"><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row>`), _tmpl$36 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$3 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$5 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class=stack style=margin-top:10px>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$7 = /* @__PURE__ */ template(`<div class=badge-row style=margin-top:8px>`), _tmpl$8 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span>`), _tmpl$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"style=background:rgba(255,255,255,0.02)><div class=panel__header><div class=panel__title></div></div><div class="panel__body stack">`), _tmpl$10 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$13 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class=panel__title style=margin-bottom:10px></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=toolbar><button data-entry=standard-viewer-current-locale></button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$14 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list></div></div><div><div class=panel__title style=margin-bottom:10px></div><div class=list>`), _tmpl$15 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$16 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=retry-issue>`), _tmpl$18 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=summary-grid></div><details class="panel diagnostic-surface"><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=summary-grid></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$22 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$29 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$30 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$31 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$32 = /* @__PURE__ */ template(`<div class=toolbar><div class=field style=margin:0;min-width:180px;flex:1><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div class=badge-row>`), _tmpl$34 = /* @__PURE__ */ template(`<div><div class=panel__title style=margin-bottom:10px;color:var(--bad)></div><pre class=json>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class=panel__title style=margin-bottom:10px></div><div class=badge-row></div><div class=stack style=margin-top:10px><div class=feedback-detail></div><div class=feedback-detail></div><div><div class=panel__title style=margin-bottom:10px></div><div class=event-list>`), _tmpl$36 = /* @__PURE__ */ template(`<div class=feedback-detail>=`), _tmpl$37 = /* @__PURE__ */ template(`<section class=panel><div class=panel__header><div class=panel__title></div></div><div class=panel__body>`);
 function uiLocale() {
   return state.uiLocale;
 }
@@ -4276,7 +4405,7 @@ function TargetsPanel() {
               id: location.id
             });
             insert(_el$58, () => location.name || location.id);
-            insert(_el$59, () => `id=${location.id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`);
+            insert(_el$59, () => `id=${location.id} · ${tr(locale(), "半径", "radius")}=${formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`);
             createRenderEffect((_p$) => {
               var _v$5 = location.id, _v$6 = state.selectedKind === "location" && state.selectedId === location.id;
               _v$5 !== _p$.e && setAttribute(_el$57, "data-select-id", _p$.e = _v$5);
@@ -5843,6 +5972,7 @@ function InteractionPanel() {
 function DetailsPanel() {
   const locale = () => uiLocale();
   const gameplaySummary = () => buildGameplaySummary(locale());
+  const worldScaleSurface = () => buildWorldScaleSurface(locale());
   const selectedLabel = () => state.selectedKind && state.selectedId ? `${state.selectedKind}:${state.selectedId}` : tr(locale(), "未选择", "nothing selected");
   const snapshotSummary = () => ({
     config: state.snapshot?.config || null,
@@ -5863,7 +5993,7 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$158 = _tmpl$35(), _el$159 = _el$158.firstChild, _el$160 = _el$159.nextSibling, _el$161 = _el$160.firstChild, _el$162 = _el$161.nextSibling;
+    var _el$158 = _tmpl$35(), _el$159 = _el$158.firstChild, _el$160 = _el$159.nextSibling, _el$161 = _el$160.firstChild, _el$162 = _el$161.nextSibling, _el$163 = _el$162.nextSibling, _el$164 = _el$163.firstChild, _el$165 = _el$164.nextSibling, _el$166 = _el$165.nextSibling, _el$167 = _el$166.firstChild, _el$168 = _el$167.nextSibling;
     insert(_el$159, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
@@ -5924,10 +6054,149 @@ function DetailsPanel() {
         return `debugContexts=${snapshotCounts().executionDebugContexts}`;
       }
     }), null);
-    insert(_el$160, createComponent(EmptyState, {
-      style: "margin-top:10px;",
+    insert(_el$163, createComponent(MetricCard, {
+      get label() {
+        return tr(locale(), "物理真值单位", "Canonical Physical Unit");
+      },
+      get value() {
+        return worldScaleSurface().physicalTruth.canonicalUnitLabel || "-";
+      },
       get children() {
-        return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里默认只保留规模信息，原始快照改为按需展开。", "The main runtime state already lives in World Summary; this panel now keeps only world scale by default and leaves raw snapshot data collapsed.");
+        return createComponent(Badge, {
+          get children() {
+            return tr(locale(), "整数厘米", "integer centimeters");
+          }
+        });
+      }
+    }), _el$164);
+    insert(_el$164, () => worldScaleSurface().physicalTruth.canonicalUnitDetail);
+    insert(_el$163, createComponent(MetricCard, {
+      get label() {
+        return tr(locale(), "世界边界", "World Bounds");
+      },
+      get value() {
+        return worldScaleSurface().physicalTruth.worldBoundsLabel || tr(locale(), "未发布", "not published");
+      },
+      get children() {
+        return createComponent(Badge, {
+          get children() {
+            return tr(locale(), "snapshot.config.space", "snapshot.config.space");
+          }
+        });
+      }
+    }), _el$165);
+    insert(_el$165, () => worldScaleSurface().physicalTruth.worldBoundsDetail);
+    insert(_el$163, createComponent(Show, {
+      get when() {
+        return worldScaleSurface().physicalTruth.anchor;
+      },
+      children: (anchor) => createComponent(EventCard, {
+        get title() {
+          return anchor().label;
+        },
+        get badge() {
+          return anchor().kind;
+        },
+        badgeClass: "badge badge--accent",
+        get meta() {
+          return `id=${anchor().id}${anchor().locationId ? ` · location=${anchor().locationId}` : ""}`;
+        },
+        get children() {
+          return [(() => {
+            var _el$175 = _tmpl$11();
+            insert(_el$175, () => anchor().positionLabel || tr(locale(), "缺少可读坐标。", "Missing readable coordinates."));
+            return _el$175;
+          })(), createComponent(Show, {
+            get when() {
+              return anchor().radiusLabel;
+            },
+            get children() {
+              var _el$176 = _tmpl$36(), _el$177 = _el$176.firstChild;
+              insert(_el$176, () => tr(locale(), "地点半径真值", "Location radius truth"), _el$177);
+              insert(_el$176, () => anchor().radiusLabel, null);
+              return _el$176;
+            }
+          })];
+        }
+      })
+    }), _el$166);
+    insert(_el$167, () => tr(locale(), "最近距离样本", "Nearest Distance Samples"));
+    insert(_el$168, createComponent(Show, {
+      get when() {
+        return worldScaleSurface().physicalTruth.nearestLocations.length > 0;
+      },
+      get fallback() {
+        return createComponent(EmptyState, {
+          get children() {
+            return tr(locale(), "当前没有足够的地点数据来给出距离样本。", "The current snapshot does not expose enough locations to show distance samples.");
+          }
+        });
+      },
+      get children() {
+        return createComponent(For, {
+          get each() {
+            return worldScaleSurface().physicalTruth.nearestLocations;
+          },
+          children: (location) => createComponent(EventCard, {
+            get title() {
+              return location.name;
+            },
+            get badge() {
+              return location.distanceLabel || "-";
+            },
+            badgeClass: "badge badge--good",
+            get meta() {
+              return `id=${location.id}`;
+            },
+            get children() {
+              return [(() => {
+                var _el$178 = _tmpl$36(), _el$179 = _el$178.firstChild;
+                insert(_el$178, () => tr(locale(), "真实距离", "Physical distance"), _el$179);
+                insert(_el$178, () => location.distanceLabel || "-", null);
+                return _el$178;
+              })(), createComponent(Show, {
+                get when() {
+                  return location.radiusLabel;
+                },
+                get children() {
+                  var _el$180 = _tmpl$36(), _el$181 = _el$180.firstChild;
+                  insert(_el$180, () => tr(locale(), "地点半径", "Location radius"), _el$181);
+                  insert(_el$180, () => location.radiusLabel, null);
+                  return _el$180;
+                }
+              })];
+            }
+          })
+        });
+      }
+    }));
+    insert(_el$163, createComponent(EventCard, {
+      get title() {
+        return tr(locale(), "表现层说明", "Presentation Notes");
+      },
+      get badge() {
+        return tr(locale(), "不要误读 marker", "Do not trust marker size");
+      },
+      badgeClass: "badge badge--warn",
+      get children() {
+        return [(() => {
+          var _el$169 = _tmpl$11();
+          insert(_el$169, () => worldScaleSurface().presentationScale.markerTruthNote);
+          return _el$169;
+        })(), (() => {
+          var _el$170 = _tmpl$4();
+          insert(_el$170, () => worldScaleSurface().presentationScale.zoomTruthNote);
+          return _el$170;
+        })(), (() => {
+          var _el$171 = _tmpl$4();
+          insert(_el$171, () => worldScaleSurface().presentationScale.softwareSafeNote);
+          return _el$171;
+        })()];
+      }
+    }), null);
+    insert(_el$163, createComponent(EmptyState, {
+      get children() {
+        return tr(locale(), "主状态已经在中间的“世界摘要”里展示；这里现在专门保留“厘米真值 vs 表现层夸张”的读图锚点，原始快照仍按需展开。", "The main runtime state already lives in World Summary; this section now reserves the reading anchors for centimeter truth vs presentation exaggeration, while raw snapshots stay collapsible.");
       }
     }), null);
     insert(_el$160, createComponent(Show, {
@@ -5954,10 +6223,10 @@ function DetailsPanel() {
         return state.lastError;
       },
       get children() {
-        var _el$163 = _tmpl$34(), _el$164 = _el$163.firstChild, _el$165 = _el$164.nextSibling;
-        insert(_el$164, () => tr(locale(), "最近错误", "Last Error"));
-        insert(_el$165, () => state.lastError);
-        return _el$163;
+        var _el$172 = _tmpl$34(), _el$173 = _el$172.firstChild, _el$174 = _el$173.nextSibling;
+        insert(_el$173, () => tr(locale(), "最近错误", "Last Error"));
+        insert(_el$174, () => state.lastError);
+        return _el$172;
       }
     }), null);
     return _el$158;
@@ -5966,21 +6235,21 @@ function DetailsPanel() {
 function AppShell() {
   const locale = () => uiLocale();
   return [(() => {
-    var _el$166 = _tmpl$36(), _el$167 = _el$166.firstChild, _el$168 = _el$167.firstChild, _el$169 = _el$167.nextSibling;
-    insert(_el$168, () => tr(locale(), "目标", "Targets"));
-    insert(_el$169, createComponent(TargetsPanel, {}));
-    return _el$166;
+    var _el$182 = _tmpl$37(), _el$183 = _el$182.firstChild, _el$184 = _el$183.firstChild, _el$185 = _el$183.nextSibling;
+    insert(_el$184, () => tr(locale(), "目标", "Targets"));
+    insert(_el$185, createComponent(TargetsPanel, {}));
+    return _el$182;
   })(), (() => {
-    var _el$170 = _tmpl$36(), _el$171 = _el$170.firstChild, _el$172 = _el$171.firstChild, _el$173 = _el$171.nextSibling;
-    insert(_el$172, () => tr(locale(), "世界摘要", "World Summary"));
-    insert(_el$171, createComponent(ViewerEntryMenu, {}), null);
-    insert(_el$173, createComponent(WorldSummaryPanel, {}));
-    return _el$170;
+    var _el$186 = _tmpl$37(), _el$187 = _el$186.firstChild, _el$188 = _el$187.firstChild, _el$189 = _el$187.nextSibling;
+    insert(_el$188, () => tr(locale(), "世界摘要", "World Summary"));
+    insert(_el$187, createComponent(ViewerEntryMenu, {}), null);
+    insert(_el$189, createComponent(WorldSummaryPanel, {}));
+    return _el$186;
   })(), (() => {
-    var _el$174 = _tmpl$36(), _el$175 = _el$174.firstChild, _el$176 = _el$175.firstChild, _el$177 = _el$175.nextSibling;
-    insert(_el$176, () => tr(locale(), "明细", "Details"));
-    insert(_el$177, createComponent(DetailsPanel, {}));
-    return _el$174;
+    var _el$190 = _tmpl$37(), _el$191 = _el$190.firstChild, _el$192 = _el$191.firstChild, _el$193 = _el$191.nextSibling;
+    insert(_el$192, () => tr(locale(), "明细", "Details"));
+    insert(_el$193, createComponent(DetailsPanel, {}));
+    return _el$190;
   })()];
 }
 const app = document.getElementById("app");
