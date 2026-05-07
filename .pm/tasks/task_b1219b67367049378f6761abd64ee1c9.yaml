@@ -1,0 +1,24 @@
+task_uid: task_b1219b67367049378f6761abd64ee1c9
+title: "viewer dual-view marker layer reduction"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-dual-view-marker-layer-reduction
+execution_log_path: .pm/tasks/task_b1219b67367049378f6761abd64ee1c9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/project.md
+  - crates/oasis7_viewer/src/viewer_render_profile.rs
+  - crates/oasis7_viewer/src/scene_helpers_entities.rs
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-002
+  - PRD-WORLD_SIMULATOR-003
+acceptance:
+  - "Viewer reviews and reduces avoidable 2D-only marker-layer divergence while keeping existing user-visible behavior and shared scene truth."
+  - "Any remaining TwoDMapMarker or DetailZoomEntity split is justified in code and covered by targeted tests."
+  - "No new 3D-only user-facing feature is introduced."
+handoff_to: []
+updated_at: 2026-05-07T23:10:40+08:00
+last_started_at: 2026-05-07T22:56:46+08:00
+last_closed_at: 2026-05-07T23:10:40+08:00

@@ -219,7 +219,7 @@ pub(super) fn spawn_agent_motion_feedback(
                     indicator_length,
                 )),
             Name::new(format!("agent:direction_indicator:{agent_id}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 
@@ -235,7 +235,7 @@ pub(super) fn spawn_agent_motion_feedback(
             Transform::from_translation(Vec3::new(0.0, body_scale.y * 0.22, 0.0))
                 .with_scale(Vec3::new(speed_radius, speed_thickness, speed_radius)),
             Name::new(format!("agent:speed_effect:{agent_id}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 
@@ -252,7 +252,7 @@ pub(super) fn spawn_agent_motion_feedback(
                 .with_rotation(indicator_rotation)
                 .with_scale(Vec3::new(trail_width, trail_thickness, trail_length)),
             Name::new(format!("agent:trail:{agent_id}")),
-            DetailZoomEntity,
+            SceneZoomLayer::Detail,
         ));
     }
 }
