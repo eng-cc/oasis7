@@ -229,45 +229,45 @@
       <section id="today" class="section" data-reveal>
         <h2>What You Can Do Right Now</h2>
         <p class="section-intro">
-          This page is the public entry point. Start by deciding whether you want to understand the game, watch one event chain, or try the current preview build yourself.
+          This page should help you answer three things first: whether this is a game world you want to keep tracking, how much of it can already be proven, and whether you want to install a preview build yourself.
         </p>
         <div class="grid cards-2">
           <article class="card">
-            <h3>Understand The Vision</h3>
-            <p>Use the docs hub, world rules, and gameplay docs to decide whether this direction is worth following.</p>
+            <h3>First Decide Whether The World Hooks You</h3>
+            <p>If you are still deciding whether oasis7 is worth following, go back to the gameplay framing, the player role, and the persistent-consequence loop first.</p>
             <div class="cta-row">
-              <a class="button secondary" href="../doc/en/index.html">Open Docs Hub</a>
+              <a class="button secondary" href="#what">Revisit The Core Loop</a>
             </div>
           </article>
           <article class="card">
-            <h3>Start With The Default Web Entry</h3>
-            <p>The current formal web-facing verification path is `software_safe`. `standard_3d` is an opt-in visual surface, and `pure_api` is the programmatic surface.</p>
+            <h3>Then Look At A Real Situation Slice</h3>
+            <p>If your real question is “does any of this already exist beyond the pitch,” start with one inspectable event chain instead of access-mode terminology.</p>
             <div class="cta-row">
               <a class="button secondary" href="#proof">See Proof Chain</a>
             </div>
           </article>
           <article class="card">
             <h3>Decide Whether To Download Preview Builds</h3>
-            <p>Public downloads are still preview-validation assets. They are not positioned as a normal player launch or a hosted join flow.</p>
+            <p>Public downloads are still preview builds. They fit people willing to test the install path, report friction, and help tighten the experience, not a normal player launch.</p>
             <div class="cta-row">
               <a class="button secondary" href="#download">See Preview Builds</a>
             </div>
           </article>
           <article class="card">
-            <h3>If You Just Want To Follow Along</h3>
-            <p>If you are not ready to install or validate anything yet, follow the roadmap, release evolution, and public signals first and decide whether this world is worth tracking.</p>
+            <h3>If You Want To Go Deeper</h3>
+            <p>Once you already know you want more detail, move into the docs hub for the full overview, gameplay docs, and validation manuals. That hub is for deep reading, not first contact.</p>
             <div class="cta-row">
-              <a class="button secondary" href="#roadmap">See Roadmap</a>
+              <a class="button secondary" href="../doc/en/index.html">Open Docs Hub</a>
             </div>
           </article>
         </div>
         <details class="developer-details card">
           <summary>If you want to validate it yourself, expand the builder path</summary>
           <div class="developer-details-body">
-            <p data-homepage-claim="builder-feedback">If you are already here as a builder, the most useful feedback right now is blockers, confusing edges, and validation friction. Full commands and troubleshooting stay in the docs hub.</p>
+            <p data-homepage-claim="builder-feedback">If you are already here as a builder, the most useful builder feedback right now is blockers, confusing edges, and validation friction. Full commands and troubleshooting stay in the docs hub.</p>
             <ol class="steps">
               <li>First confirm that you want builder validation, not a normal-player join flow.</li>
-              <li>Prioritize the `software_safe` formal web path; keep full commands, replay steps, and troubleshooting details in the docs hub.</li>
+              <li>Start with the default web validation path shown on this homepage; `software_safe` is the internal name of that formal Web entry, while the full commands and troubleshooting live in the docs hub.</li>
               <li>`--no-llm` stays diagnostic-only and is no longer shown as a homepage primary path.</li>
             </ol>
             <div class="cta-row">
@@ -285,10 +285,10 @@
           <p class="proof-switcher-label">Switch Evidence Scenario</p>
           <div class="proof-switcher-controls" role="group" aria-label="Switch evidence scenario" data-proof-controls>
             <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
-              minimal
+              single-front
             </button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">dual-region</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">three-party</button>
           </div>
         </div>
 
@@ -320,11 +320,11 @@
 
         <div class="proof-strip">
           <span class="proof-chip">Coverage: replay + live runtime + audit trace</span>
-          <span class="proof-chip">Public surfaces: software_safe / standard_3d / pure_api</span>
-          <span class="proof-chip">Primary entry today: software_safe</span>
+          <span class="proof-chip">What you see here is the default public web validation entry</span>
+          <span class="proof-chip">Deeper visual and programmatic paths live in the docs hub</span>
           <span class="proof-chip is-highlight">Status: testable, not playable</span>
         </div>
-        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">Default web verification entry: software_safe</span>. For deeper validation, the formal web-facing verification path defaults to `software_safe`. `standard_3d` is an opt-in visual surface, and `pure_api` is the programmatic surface.</p>
+        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">Default web verification entry: software_safe</span>. That is the internal name of the homepage's default web validation path; if you want the lower-level visual or programmatic entry points, the docs hub is where those details belong.</p>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
@@ -607,21 +607,19 @@
           </article>
           <article class="card">
             <h3>Three Ways To Keep Following</h3>
-            <p>If you are not here to open a PR immediately, you still have clear next steps: inspect proof, report builder feedback, or track release evolution.</p>
+            <p>If you are not ready to install anything yet, the next steps are still clear: inspect proof, track release evolution, or dive into the docs hub.</p>
             <ul class="doc-links">
               <li><a href="#proof">Go back to proof chain</a></li>
-              <li><a href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer">Report blocker / builder feedback</a></li>
               <li><a href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer">Track release evolution</a></li>
+              <li><a href="../doc/en/index.html">Open Docs Hub</a></li>
             </ul>
             <div class="cta-row">
-              <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
-                >Open Issue</a
-              >
               <a class="button ghost" href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer"
                 >See Releases</a
               >
-              <a class="button primary" href="https://github.com/eng-cc/oasis7/pulls" target="_blank" rel="noreferrer"
-                >Open PR</a
+              <a class="button secondary" href="../doc/en/index.html">Open Docs Hub</a>
+              <a class="button primary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
+                >Send Feedback</a
               >
             </div>
           </article>

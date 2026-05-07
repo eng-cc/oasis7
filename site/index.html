@@ -227,45 +227,45 @@
       <section id="today" class="section" data-reveal>
         <h2>现在你能做什么</h2>
         <p class="section-intro">
-          这页是公开入口。你可以先判断自己是想理解玩法、看一局事件链，还是亲手试试当前的开发预览。
+          这页先帮你判断三件事：这是不是你会想继续盯下去的游戏，它已经能证明到哪一步，以及你要不要亲手装一个预览构建。
         </p>
         <div class="grid cards-2">
           <article class="card">
-            <h3>先理解玩法</h3>
-            <p>如果你想先判断这条路值不值得继续看，先看玩法总纲、世界规则和玩家边界。</p>
+            <h3>先判断这世界抓不抓你</h3>
+            <p>如果你还在判断值不值得继续看，先回到玩法、玩家位置和那条会留下后果的持续世界主线。</p>
             <div class="cta-row">
-              <a class="button secondary" href="doc/cn/index.html">看文档入口</a>
+              <a class="button secondary" href="#what">回看玩法说明</a>
             </div>
           </article>
           <article class="card">
-            <h3>先看默认网页验证面</h3>
-            <p>当前默认 formal Web 入口看的是 `software_safe`。`standard_3d` 是 opt-in 可视化访问面，`pure_api` 是程序化访问面。</p>
+            <h3>再看一段它已经跑出来的局面</h3>
+            <p>如果你更在意“它到底是不是停在概念上”，就先看一段可回放、可追因果的事件链，而不是先看访问面术语。</p>
             <div class="cta-row">
               <a class="button secondary" href="#proof">看证据链</a>
             </div>
           </article>
           <article class="card">
             <h3>再决定要不要下载</h3>
-            <p>当前公开下载仍是开发预览构建，适合技术预览验证和 builder 反馈，不是面向普通玩家的正式发售。</p>
+            <p>当前公开下载仍是开发预览构建，更适合愿意试装、报问题和帮我们校准摩擦的人，不是面向普通玩家的正式发售。</p>
             <div class="cta-row">
               <a class="button secondary" href="#download">看开发预览</a>
             </div>
           </article>
           <article class="card">
-            <h3>如果你想继续跟进</h3>
-            <p>如果你现在还不打算折腾安装和验证，就先看路线、版本演进和后续公开信号，判断这世界值不值得继续跟。</p>
+            <h3>如果你想继续深挖</h3>
+            <p>等你已经知道自己想继续看，再去文档中心读完整总览、玩法文档和验证手册；那里是深读入口，不是第一次认识它的地方。</p>
             <div class="cta-row">
-              <a class="button secondary" href="#roadmap">看路线</a>
+              <a class="button secondary" href="doc/cn/index.html">进入文档中心</a>
             </div>
           </article>
         </div>
         <details class="developer-details card">
           <summary>如果你要自己验证，再展开开发者路径</summary>
           <div class="developer-details-body">
-            <p data-homepage-claim="builder-feedback">如果你本来就是 builder，现在最有价值的是报 blocker、指出哪里难懂、补真实验证反馈。完整命令和排障路径都在文档中心。</p>
+            <p data-homepage-claim="builder-feedback">如果你本来就是 builder，现在最有价值的是报 blocker、指出哪里难懂、补真实的 builder 反馈。完整命令和排障路径都在文档中心。</p>
             <ol class="steps">
               <li>先确认你要的是 builder 验证，而不是普通玩家直接加入。</li>
-              <li>优先按 `software_safe` 的 formal Web 路径看在线验证；完整命令、回放与诊断约束都去文档中心看。</li>
+              <li>先走首页默认展示的网页验证面；`software_safe` 是这条 formal Web 路径的内部名称，完整命令、回放与诊断约束都去文档中心看。</li>
               <li>`--no-llm` 只保留在排障/诊断语境，不再作为首页 primary path 展示。</li>
             </ol>
             <div class="cta-row">
@@ -283,10 +283,10 @@
           <p class="proof-switcher-label">切换证据场景</p>
           <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
             <button class="proof-switch-btn is-active" type="button" data-proof-tab="minimal" aria-pressed="true">
-              minimal
+              单点波动
             </button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">twin_region</button>
-            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">triad_region</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="twin" aria-pressed="false">双区协作</button>
+            <button class="proof-switch-btn" type="button" data-proof-tab="triad" aria-pressed="false">三方治理</button>
           </div>
         </div>
 
@@ -318,11 +318,11 @@
 
         <div class="proof-strip">
           <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
-          <span class="proof-chip">公开访问面：software_safe / standard_3d / pure_api</span>
-          <span class="proof-chip">当前主入口：software_safe</span>
+          <span class="proof-chip">你现在在首页看到的是默认网页验证入口</span>
+          <span class="proof-chip">更深入的可视化 / 程序化入口放在文档中心</span>
           <span class="proof-chip is-highlight">现状：能验证，还不能玩</span>
         </div>
-        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：software_safe</span>。如果你要继续深挖，这里的正式网页验证面默认看 `software_safe`；`standard_3d` 只是 opt-in 可视化访问面，`pure_api` 是程序化访问面。</p>
+        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：software_safe</span>。也就是首页默认展示的这条网页验证面；如果你要继续深挖，更底层的可视化和程序化访问方式都放在文档中心说明。</p>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">
@@ -605,21 +605,19 @@
           </article>
           <article class="card">
             <h3>继续跟进的三条路</h3>
-            <p>如果你不是直接来提 PR，也还有明确入口：先看证据、报 builder 反馈、跟进 release 演化。</p>
+            <p>如果你现在还不打算装包，也还有清楚的下一步：回看证据、跟进版本演化，或者再进文档中心深读。</p>
             <ul class="doc-links">
               <li><a href="#proof">先回看证据链</a></li>
-              <li><a href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer">提交 blocker / builder feedback</a></li>
               <li><a href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer">跟进 release 演化</a></li>
+              <li><a href="doc/cn/index.html">进入文档中心</a></li>
             </ul>
             <div class="cta-row">
-              <a class="button secondary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
-                >提交 Issue</a
-              >
-              <a class="button ghost" href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer"
+              <a class="button secondary" href="https://github.com/eng-cc/oasis7/releases/latest" target="_blank" rel="noreferrer"
                 >看 Release</a
               >
-              <a class="button primary" href="https://github.com/eng-cc/oasis7/pulls" target="_blank" rel="noreferrer"
-                >提交 PR</a
+              <a class="button ghost" href="doc/cn/index.html">看文档中心</a>
+              <a class="button primary" href="https://github.com/eng-cc/oasis7/issues" target="_blank" rel="noreferrer"
+                >给反馈</a
               >
             </div>
           </article>

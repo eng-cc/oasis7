@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] public-copy-tightening (PRD-SITE-001/004/009/010) [test_tier_required]: 继续收紧中英首页与 docs hub 的公开层分工：保留首页前半段的游戏感，把 builder/internal jargon 从访客主路径降到次级说明；同时把 docs hub 明确成首页之后的深读入口，并修复失效 `#demo` 锚点。 Trace: .pm/tasks/task_26f8dbd5b3b844a4a25624752def2abb.yaml
 - [x] homepage-genre-advantage-hook (PRD-SITE-001/004/009/010) [test_tier_required]: 在中英首页前半段补一段更抓人的“当前策略/模拟游戏范式为什么让人停不下来”文案，不点具体竞品名，把“从混乱到秩序、判断会一路改写后果”的爽点前置，同时保持技术预览与 claim boundary 不变。 Trace: .pm/tasks/task_475aa4b51fb9480bb0a7ff00db4dc2e6.yaml
 - [x] homepage-copy-polish-cn-en (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略/模拟游戏公开介绍，收紧中英首页首屏、30 秒说明与玩家角色解释区的话术，把突兀的内部机制表达改成“局势 + 玩家身份 + 持续后果”优先，同时保持技术预览与 claim boundary 不变。 Trace: .pm/tasks/task_a0e7f3310afb4a56b5be7aaf05baeb9c.yaml
 - [x] homepage-player-first-hook-follow-up (PRD-SITE-001/004/009/010) [test_tier_required]: 根据普通用户首访 review 再收紧一轮首页：首屏移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成“资源紧张 -> 联盟松动 -> 战争留痕”的局面描述，builder 反馈文案退回折叠开发者路径。 Trace: .pm/tasks/task_cad1e68ecbd544ce8692e0a8a63e52f9.yaml
@@ -106,9 +107,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-06
+- 更新日期: 2026-05-07
 - 当前状态: active
 - 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 最新完成: `public-copy-tightening`（中英首页后半段已把“给普通访客看的入口”与 builder/internal verification 语境继续拆开：主路径先讲这世界值不值得继续看、已经能证明什么、要不要下载预览构建；docs hub hero 与路径卡也已明确为首页之后的深读入口，并修复失效 `#demo` 锚点。）
 - 最新完成: `homepage-genre-advantage-hook`（中英首页前半段已补一段更抓人的“这类游戏为什么让人停不下来”文案，不点具体竞品名，直接把“从混乱到秩序、一个判断会一路改写后果”的爽点顶到访客更早能看到的位置，同时保持技术预览与 claim boundary 不变。）
 - 最新完成: `homepage-copy-polish-cn-en`（中英首页 hero、30 秒说明、玩家角色解释区与社媒摘要已参考同类策略/模拟游戏公开介绍改成“局势 + 身份 + 后果”优先的话术，去掉“你不直接点单位 / You are not micromanaging units”这类突兀开场，同时保持技术预览与 claim boundary 原样收紧。）
 - 最新完成: `homepage-player-first-hook-follow-up`（首屏已移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成资源紧张/联盟松动/战争留痕的局面化描述，builder 文案已退回折叠开发者路径；英文页同步做了一轮去术语化与更游戏化表达。）
