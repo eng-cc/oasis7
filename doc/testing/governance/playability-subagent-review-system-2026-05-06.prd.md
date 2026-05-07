@@ -62,7 +62,7 @@
   1. `识别当前变更的玩家 surface / 风险面 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 review packet -> 选择默认 + 按需 subagent`
   2. `若需要补多风格玩家假设 -> 先运行 simulated persona panel -> 回流 persona cards`
   3. `并行执行角色 subagent review -> 回收统一输出卡 -> 标记 blocker / watch / claim drift`
-  4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5``
+  4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5`，以及是否需要补可选内部真人校准`
 
 ## 3. Functional Specification Matrix
 | subagent | 默认/按需 | 主要输入 | 必答问题 | 输出 | 不得越权 |
@@ -108,7 +108,7 @@
     - `l4-summary.md`
     - `commands.sh`
     - `manifest.json`
-  - 该脚本只负责产物预置、路径冻结和 `L4A/L4B` 命令推荐；不会自动替代各角色做 verdict。
+  - 该脚本只负责产物预置、路径冻结和 `L4A/L4B` 命令推荐，并预留可选内部真人校准 notes；不会自动替代各角色做 verdict。
 
 ## 5. Trigger Matrix
 - Always-open:
@@ -148,7 +148,8 @@
   - `runtime` / `wasm` 指出当前体验结论建立在不稳定 contract 上
 - 永远不能被内部 subagent 跳过的 stop line:
   - 缺真实外部信号时，不得把结论写成“已被真实玩家验证”
-  - 缺 `L4B` 真人试玩时，不得把 `L4A` synthetic 结论写成“真人已经想继续玩”
+  - 缺 `L4B` agent 实玩时，不得把 `L4A` synthetic 结论写成“agent 已经真实玩过且想继续玩”
+  - 缺 `L5` 真实人类 / 线上样本时，不得把 `L4B` 结论写成“真实玩家已经想继续玩”
 
 ## 8. Acceptance Criteria
 - AC-1: 新专题定义七类标准角色 subagent。

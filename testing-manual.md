@@ -149,17 +149,20 @@
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
 
-### L4B 结构化真人试玩层
-- 目标：验证真实人类在有时间、耐心和机会成本约束下，是否看得懂、是否感到有杠杆、是否想继续玩。
-- 默认：制作人试玩 / 发布前人工验收优先使用 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`）；其默认 bundle 根目录也会落到当前 worktree 自己的 `output/harness/<worktree_id>/bundle/` 下。脚本退出后，必须继续填写 `doc/playability_test_result/playability_test_card.md` 或等价正式卡片；只有脚本执行而没有人类主观反馈，不算 `L4B` 完成。
-- 与 `L4A` 的衔接：`./scripts/prepare-playability-l4-review.sh` 会在同一 artifact 目录里复制 `l4b-playability-test-card.md`，并生成可直接执行的 `commands.sh`。若目标是完整 `L4`，应在同一 scaffold 目录同时收口 `L4A` packet / cards、`L4B` 人测卡和最终 `l4-summary.md`。
-- 最低完成定义：脚本实际跑过、真人实际游玩过、`l4b-playability-test-card.md`（或等价正式卡片）已回填，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有人类主观反馈或 summary，不算完整 `L4B`。
-- 结论边界：这一层可以回答“真人是否真的想继续玩”，但仍不自动等价于外部市场验证。
+### L4B 具身 agent 试玩层
+- 目标：验证 agent 实际进入 formal player surface、执行真实操作链路后，是否表现出可持续继续游玩的行为与可解释的玩家杠杆判断；这一层的设计目标是尽可能逼近真人评审“还想不想继续玩”的判断效果。
+- 默认：agent 试玩优先使用 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`。它会通过 `./scripts/run-producer-playtest.sh --open-headed` 拉起真实游玩入口、在同一浏览器 session 内执行最小真实操作链路（至少包含一步推进与一次玩法动作提交）、并把状态快照、截图、启动日志路径与 `L4B` summary 落到当前 artifact；只有启动脚本、没有实际 agent play session 与 summary/card 产物，不算 `L4B` 完成。
+- 与 `L4A` 的衔接：`./scripts/prepare-playability-l4-review.sh` 会在同一 artifact 目录里复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`、`manifest.json` 和可直接执行的 `commands.sh`；`commands.sh` 默认调用 `run-playability-l4b-agent.sh` 收口 `L4B` evidence。默认完整 `L4` 至少收口 `L4A` packet / cards、`L4B` agent 卡和最终 `l4-summary.md`；若还需要内部人类校准，只能作为 `L4B` 的可选佐证附录，不新增正式层。
+- 最低完成定义：脚本实际跑过、agent 实际游玩过、`evidence/l4b-agent-*/l4b-agent-summary.json` 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有 agent 主动操作或 summary，不算完整 `L4B`。
+- 结论边界：这一层可以回答“agent 在真实操作链路里是否表现出继续玩的倾向”，并应尽量逼近真人评审效果，但仍不能自动等价于 `L5` 真实人类或外部市场验证。
+- 可选内部真人佐证：制作人试玩 / QA headed rerun 仍可沿用 `./scripts/run-producer-playtest.sh`；如执行，必须把结果写入 `optional-internal-human-corroboration.md` 或等价正式卡片，并在 `l4-summary.md` 里明确它是 `L4B` corroboration / contradiction，而不是新层级。只有人类试玩而没有对 `L4B` 的对照说明，不算合格佐证。
 - source-tree `oasis7-run.sh play` 与 `run-game-test.sh` 的 Viewer Web 开发态入口都必须走 freshness gate；当 `crates/oasis7_viewer/index.html`、`software_safe.html`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
 
-### L5 长稳与压力层
-- 目标：验证在长时运行/高事件量下系统退化策略和稳定性。
-- 入口：`viewer-owr4-stress.sh`、`llm-longrun-stress.sh`。
+### L5 真实人类 / 受控线上验证层
+- 目标：验证真实人类或受控外部玩家在真实时间、注意力和机会成本约束下，是否仍愿意继续玩；这是 `L4B` 之上的正式验证层。
+- 入口：limited preview、liveops 反馈回流、真实玩家 session、受控人工试玩样本。
+- 结论边界：只有到这一层，才能正式回答“真实人类/真实环境里是否仍想继续玩”；内部真人 spot-check 仍只算 `L4B` 的可选校准，不单列新层。
+- 说明：长稳、压力和 soak 仍属于测试套件层（如 S8/S10），不是这里的 playability `L5`。
 
 ## 测试套件目录（S0~S10）
 
@@ -380,14 +383,14 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
   - `renderMode=software_safe`：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
   - `renderMode!=software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
-- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B human`，优先直接执行 `./scripts/run-producer-playtest.sh`（需要自动打开浏览器时加 `--open-headed`，脚本退出时会自动关闭该浏览器会话），并补齐正式 playability 卡。仅执行脚本不填卡，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
+- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
 - agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。
 - 防误用约束：
   - `scripts/run-game-test-ab.sh` 仅用于自动化回归哨兵（TTFC/命中率/无进展窗口）；推荐与 `--bundle-dir <bundle>` 搭配做产物态 smoke，但仍不等价于“真实玩家长玩评测”。
 - `run-game-test-ab.sh --headless` 若命中 `SwiftShader` / software renderer，应先确认页面是否已自动切到 `software_safe`；只有未切入 safe-mode 时才按环境阻断处理，不得把 `connectionStatus=connecting` 误判为 fresh Web 构建或玩法回归；Viewer Web 默认继续使用 headed 模式。
-  - 发布前结论仍需补充 `L4B` 手动长玩与卡片填写（按 `doc/playability_test_result/game-test.prd.md` 执行）。
+  - 发布前若只要求 agent 可执行闭环，至少补齐 `L4B` agent 试玩与卡片填写；若要对“真实人类是否想继续玩”下结论，必须进入 `L5` 的真人 / 受控线上样本，内部真人试玩只能作为 `L4B` 的可选校准。
 - 若改动影响前期工业引导（`首个制成品 / 停机恢复 / 首座工厂单元`），必须补跑 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 中对应卡片，并把结论回写正式 playability 卡。
   - 对外样张链路需使用 strict 语义门禁，不得以 `off` / `soft` 结果作为发布判定证据。
 - 若需要为 `#46 PostOnboarding` 补无 UI / 非浏览器验证，执行 `./scripts/viewer-post-onboarding-headless-smoke.sh`。

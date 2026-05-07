@@ -274,6 +274,11 @@ fn run_launcher(options: &CliOptions) -> Result<(), String> {
         options.viewer_host.as_str(),
         options.viewer_port,
         viewer_static_dir.as_path(),
+        if options.chain_enabled {
+            Some(options.chain_node_id.as_str())
+        } else {
+            None
+        },
     ) {
         Ok(server) => server,
         Err(err) => {
@@ -450,6 +455,7 @@ fn start_static_http_server(
     host: &str,
     port: u16,
     root_dir: &Path,
+    default_viewer_player_id: Option<&str>,
 ) -> Result<StaticHttpServer, String> {
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind static HTTP server at {host}:{port}: {err}"))?;
@@ -462,6 +468,7 @@ fn start_static_http_server(
     let stop_requested = Arc::new(AtomicBool::new(false));
     let root_dir = Arc::new(root_dir.to_path_buf());
     let live_bind = Arc::new(live_bind.to_string());
+    let default_viewer_player_id = Arc::new(default_viewer_player_id.map(ToOwned::to_owned));
     let hosted_session_issuer = Arc::new(Mutex::new(HostedPlayerSessionIssuer::default()));
     let runtime_presence_join_handle = if deployment_mode == DeploymentMode::HostedPublicJoin {
         let stop_requested = Arc::clone(&stop_requested);
@@ -479,6 +486,7 @@ fn start_static_http_server(
             deployment_mode,
             root_dir,
             live_bind,
+            default_viewer_player_id,
             hosted_session_issuer,
             stop_rx,
         ) {
@@ -500,6 +508,7 @@ fn run_static_http_loop(
     deployment_mode: DeploymentMode,
     root_dir: Arc<PathBuf>,
     live_bind: Arc<String>,
+    default_viewer_player_id: Arc<Option<String>>,
     hosted_session_issuer: Arc<Mutex<HostedPlayerSessionIssuer>>,
     stop_rx: Receiver<()>,
 ) -> Result<(), String> {
@@ -513,6 +522,7 @@ fn run_static_http_loop(
             Ok((stream, _addr)) => {
                 let root_dir = Arc::clone(&root_dir);
                 let live_bind = Arc::clone(&live_bind);
+                let default_viewer_player_id = Arc::clone(&default_viewer_player_id);
                 let deployment_mode = deployment_mode;
                 let hosted_session_issuer = Arc::clone(&hosted_session_issuer);
                 thread::spawn(move || {
@@ -520,6 +530,7 @@ fn run_static_http_loop(
                         stream,
                         root_dir.as_path(),
                         live_bind.as_str(),
+                        default_viewer_player_id.as_deref(),
                         deployment_mode,
                         &hosted_session_issuer,
                     ) {
@@ -537,10 +548,19 @@ fn run_static_http_loop(
     }
 }
 
-fn resolve_viewer_player_id_override(value: Option<String>) -> String {
+fn resolve_viewer_player_id_override(
+    value: Option<String>,
+    fallback_player_id: Option<&str>,
+) -> String {
     value
         .map(|raw| raw.trim().to_string())
         .filter(|value| !value.is_empty())
+        .or_else(|| {
+            fallback_player_id
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
         .unwrap_or_else(|| DEFAULT_VIEWER_PLAYER_ID.to_string())
 }
 

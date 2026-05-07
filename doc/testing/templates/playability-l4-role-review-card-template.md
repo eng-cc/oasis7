@@ -13,4 +13,4 @@
 - What does this role believe the player can currently do?
 - Where does this role think the player will likely drop off?
 - Which conclusion in this card is direct evidence, and which is only inference?
-- What still requires `L4B` or `L5` before the claim can be upgraded?
+- What still requires `L4B` or `L5` before the claim can be upgraded, and is optional internal human corroboration worth requesting?

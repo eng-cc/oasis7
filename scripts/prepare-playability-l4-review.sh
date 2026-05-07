@@ -15,8 +15,9 @@ Create a worktree-local artifact scaffold for a complete L4 review run:
 - role review cards
 - persona cards
 - L4 summary
-- copied L4B playability card
-- exact commands for L4A harness and L4B producer playtest
+- copied L4B embodied-agent playability card
+- optional internal human corroboration notes
+- exact commands for L4A harness, repo-local L4B agent evidence capture, and optional internal human corroboration
 
 Options:
   --output-dir <path>         Override output directory
@@ -24,14 +25,15 @@ Options:
   --run-id <id>               Override run id suffix (default: YYYYMMDD-HHMMSS)
   --change-scope <text>       Prefill packet `change_scope`
   --target-claim <text>       Prefill packet `target_experience_claim`
-  --target-l4-lane <lane>     L4A_only | L4A_then_L4B (default: L4A_then_L4B)
+  --target-l4-lane <lane>     L4A_only | L4A_then_L4B
+                              (default: L4A_then_L4B)
   --formal-surface <name>     Repeatable; defaults to `software_safe` + `pure_api`
   --role <role_name>          Repeatable; defaults to all standard review roles
   --persona <persona_id>      Repeatable; defaults to all fixed personas
   --question <text>           Repeatable packet question
   --known-blocker <text>      Repeatable packet blocker
   --artifact-path <path>      Repeatable packet artifact path
-  --bundle-dir <path>         Bundle dir to embed into recommended L4B command
+  --bundle-dir <path>         Bundle dir to embed into recommended L4B commands
   --with-l4a-stack            Boot `./scripts/worktree-harness.sh up` before writing artifacts
                               (requires the same active LLM provider config as formal gameplay)
   --json                      Print manifest JSON path summary
@@ -259,7 +261,8 @@ PACKET_PATH="$OUTPUT_DIR/l4-review-packet.md"
 SUMMARY_PATH="$OUTPUT_DIR/l4-summary.md"
 COMMANDS_PATH="$OUTPUT_DIR/commands.sh"
 MANIFEST_PATH="$OUTPUT_DIR/manifest.json"
-L4B_CARD_PATH="$OUTPUT_DIR/l4b-playability-test-card.md"
+L4B_AGENT_CARD_PATH="$OUTPUT_DIR/l4b-agent-playtest-card.md"
+OPTIONAL_HUMAN_NOTES_PATH="$OUTPUT_DIR/optional-internal-human-corroboration.md"
 EVIDENCE_README_PATH="$OUTPUT_DIR/evidence/README.md"
 
 if [[ "$WITH_L4A_STACK" == "1" ]]; then
@@ -331,7 +334,8 @@ fi
   printf '# L4 Validation Summary\n\n'
   printf -- '- Run ID: `%s`\n' "$RUN_ID"
   printf -- '- Packet: `%s`\n' "$PACKET_PATH"
-  printf -- '- L4B card copy: `%s`\n' "$L4B_CARD_PATH"
+  printf -- '- L4B agent card copy: `%s`\n' "$L4B_AGENT_CARD_PATH"
+  printf -- '- Optional internal human corroboration notes: `%s`\n' "$OPTIONAL_HUMAN_NOTES_PATH"
   printf -- '- Commands: `%s`\n' "$COMMANDS_PATH"
   printf '\n'
   append_template_body "$ROOT_DIR/doc/testing/templates/playability-l4-summary-template.md"
@@ -362,11 +366,23 @@ for persona_id in "${SELECTED_PERSONAS[@]}"; do
   } >"$OUTPUT_DIR/persona-cards/${persona_id}.md"
 done
 
-cp "$ROOT_DIR/doc/playability_test_result/playability_test_card.md" "$L4B_CARD_PATH"
+cp "$ROOT_DIR/doc/playability_test_result/playability_test_card.md" "$L4B_AGENT_CARD_PATH"
+{
+  printf '# Optional Internal Human Corroboration\n\n'
+  printf 'Use this only as optional calibration evidence for `L4B`.\n\n'
+  printf -- '- Reviewer:\n'
+  printf -- '- Session / surface:\n'
+  printf -- '- Relation to `L4B`: `corroborates_l4b` / `mixed` / `contradicts_l4b`\n'
+  printf -- '- What the human actually did:\n'
+  printf -- '- Whether the human wanted to continue, and why:\n'
+  printf -- '- Key divergence from `L4B` (if any):\n'
+  printf -- '- Evidence paths:\n'
+  printf -- '- Claim boundary note: this is still internal corroboration, not formal `L5`.\n'
+} >"$OPTIONAL_HUMAN_NOTES_PATH"
 
-L4B_COMMAND=(./scripts/run-producer-playtest.sh --open-headed)
+PLAYTEST_COMMAND=(./scripts/run-producer-playtest.sh --open-headed)
 if [[ -n "$BUNDLE_DIR" ]]; then
-  L4B_COMMAND+=(--bundle-dir "$BUNDLE_DIR")
+  PLAYTEST_COMMAND+=(--bundle-dir "$BUNDLE_DIR")
 fi
 
 {
@@ -378,14 +394,21 @@ fi
   printf './scripts/worktree-harness.sh status --json > %q\n' "$OUTPUT_DIR/evidence/l4a-harness-state.json"
   printf './scripts/worktree-harness.sh url > %q\n' "$OUTPUT_DIR/evidence/l4a-viewer-url.txt"
   printf '\n'
-  printf '# Launch the L4B human playtest path.\n'
-  printf '%q' "${L4B_COMMAND[0]}"
-  command_arg=
-  for command_arg in "${L4B_COMMAND[@]:1}"; do
+  printf '# Launch the L4B embodied-agent playtest path and capture stable evidence.\n'
+  printf './scripts/run-playability-l4b-agent.sh --l4-manifest %q' "$MANIFEST_PATH"
+  if [[ -n "$BUNDLE_DIR" ]]; then
+    printf ' --bundle-dir %q' "$BUNDLE_DIR"
+  fi
+  printf '\n'
+  printf '# After the agent playtest, review %q, then tighten %q and %q if needed.\n' "$OUTPUT_DIR/evidence" "$L4B_AGENT_CARD_PATH" "$SUMMARY_PATH"
+  printf '\n'
+  printf '# Optional: rerun the same entry with an internal human for L4B calibration.\n'
+  printf '%q' "${PLAYTEST_COMMAND[0]}"
+  for command_arg in "${PLAYTEST_COMMAND[@]:1}"; do
     printf ' %q' "$command_arg"
   done
   printf '\n'
-  printf '# After the human playtest, complete %q and reflect the L4B verdict in %q.\n' "$L4B_CARD_PATH" "$SUMMARY_PATH"
+  printf '# After the human pass, complete %q and reflect the corroboration status in %q.\n' "$OPTIONAL_HUMAN_NOTES_PATH" "$SUMMARY_PATH"
 } >"$COMMANDS_PATH"
 chmod +x "$COMMANDS_PATH"
 
@@ -396,11 +419,12 @@ chmod +x "$COMMANDS_PATH"
   printf -- '- `l4a-harness-state.json`: current harness snapshot after `worktree-harness.sh status --json`\n'
   printf -- '- `l4a-viewer-url.txt`: current L4A viewer URL\n'
   printf -- '- screenshots / recordings from L4A Web closure\n'
-  printf -- '- launcher startup logs and bundle notes from L4B\n'
+  printf -- '- launcher startup logs, state snapshots, screenshots, and run summaries from L4B playtests\n'
+  printf -- '- optional internal human corroboration notes or canonical playability card references\n'
   printf -- '- any copied `session.meta`, console snippets, or external issue references\n'
 } >"$EVIDENCE_README_PATH"
 
-python3 - "$MANIFEST_PATH" "$RUN_ID" "$OUTPUT_DIR" "$PACKET_PATH" "$SUMMARY_PATH" "$L4B_CARD_PATH" "$COMMANDS_PATH" "$HARNESS_ROOT" "$WORKTREE_ID" "$STATE_FILE" "$(git rev-parse --abbrev-ref HEAD)" "$(git rev-parse HEAD)" "$(json_array "${FORMAL_SURFACES[@]}")" "$(json_array "${REQUESTED_ROLES[@]}")" "$(json_array "${SELECTED_PERSONAS[@]}")" "$(json_array "${QUESTIONS_TO_PROBE[@]}")" "$(json_array "${KNOWN_BLOCKERS[@]}")" "$(json_array "${ARTIFACT_PATHS[@]}")" "$TARGET_L4_LANE" "$L4A_VIEWER_URL" <<'PY'
+python3 - "$MANIFEST_PATH" "$RUN_ID" "$OUTPUT_DIR" "$PACKET_PATH" "$SUMMARY_PATH" "$L4B_AGENT_CARD_PATH" "$OPTIONAL_HUMAN_NOTES_PATH" "$COMMANDS_PATH" "$HARNESS_ROOT" "$WORKTREE_ID" "$STATE_FILE" "$(git rev-parse --abbrev-ref HEAD)" "$(git rev-parse HEAD)" "$(json_array "${FORMAL_SURFACES[@]}")" "$(json_array "${REQUESTED_ROLES[@]}")" "$(json_array "${SELECTED_PERSONAS[@]}")" "$(json_array "${QUESTIONS_TO_PROBE[@]}")" "$(json_array "${KNOWN_BLOCKERS[@]}")" "$(json_array "${ARTIFACT_PATHS[@]}")" "$TARGET_L4_LANE" "$L4A_VIEWER_URL" <<'PY'
 from __future__ import annotations
 
 import json
@@ -413,7 +437,8 @@ import sys
     output_dir,
     packet_path,
     summary_path,
-    l4b_card_path,
+    l4b_agent_card_path,
+    optional_human_notes_path,
     commands_path,
     harness_root,
     worktree_id,
@@ -435,7 +460,8 @@ payload = {
     "output_dir": output_dir,
     "packet_path": packet_path,
     "summary_path": summary_path,
-    "l4b_card_path": l4b_card_path,
+    "l4b_agent_card_path": l4b_agent_card_path,
+    "optional_internal_human_corroboration_path": optional_human_notes_path,
     "commands_path": commands_path,
     "harness_root": harness_root,
     "worktree_id": worktree_id,
@@ -459,16 +485,18 @@ PY
   printf -- '- Run ID: `%s`\n' "$RUN_ID"
   printf -- '- Packet: `%s`\n' "$PACKET_PATH"
   printf -- '- Summary: `%s`\n' "$SUMMARY_PATH"
-  printf -- '- L4B card copy: `%s`\n' "$L4B_CARD_PATH"
+  printf -- '- L4B agent card copy: `%s`\n' "$L4B_AGENT_CARD_PATH"
+  printf -- '- Optional internal human corroboration notes: `%s`\n' "$OPTIONAL_HUMAN_NOTES_PATH"
   printf -- '- Commands: `%s`\n' "$COMMANDS_PATH"
   printf -- '- Manifest: `%s`\n' "$MANIFEST_PATH"
   printf '\n## Next Steps\n'
   printf '1. Fill `l4-review-packet.md` with this change scope, target claim, known blockers, and artifact paths.\n'
-  printf '2. Run `commands.sh` or the individual commands to refresh `L4A` evidence and launch `L4B` producer playtest.\n'
+  printf '2. Run `commands.sh` or the individual commands to refresh `L4A` evidence and execute the repo-local `L4B` embodied agent runner.\n'
   printf '3. Complete every role card and persona card that applies to this run.\n'
-  printf '4. After the human playtest, complete `l4b-playability-test-card.md` and record the `L4B` verdict.\n'
-  printf '5. Copy concrete screenshots / logs into `evidence/` and reference them from the packet, `l4b-playability-test-card.md`, and summary.\n'
-  printf '6. Summarize `L4A`, `L4B`, and combined `go/watch/hold/block` in `l4-summary.md`.\n'
+  printf '4. Review the auto-filled `L4B` evidence/card output, then tighten `l4b-agent-playtest-card.md` and record the final `L4B` verdict.\n'
+  printf '5. If needed, add optional internal human corroboration in `optional-internal-human-corroboration.md` as calibration for `L4B`.\n'
+  printf '6. Copy concrete screenshots / logs into `evidence/` and reference them from the packet, `L4B` card, corroboration notes, and summary.\n'
+  printf '7. Summarize `L4A`, `L4B`, optional corroboration, and combined `go/watch/hold/block` in `l4-summary.md`.\n'
 } >"$OUTPUT_DIR/README.md"
 
 if [[ "$PRINT_JSON" == "1" ]]; then
@@ -490,7 +518,8 @@ Prepared complete L4 scaffold.
 - output_dir: $OUTPUT_DIR
 - packet: $PACKET_PATH
 - summary: $SUMMARY_PATH
-- l4b_card: $L4B_CARD_PATH
+- l4b_agent_card: $L4B_AGENT_CARD_PATH
+- optional_internal_human_corroboration: $OPTIONAL_HUMAN_NOTES_PATH
 - commands: $COMMANDS_PATH
 - manifest: $MANIFEST_PATH
 EOF

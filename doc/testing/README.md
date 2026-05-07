@@ -5,8 +5,8 @@
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
 - 想先回答“自动化测试能不能证明游戏好玩、还缺哪层证据”：`doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
-- 想先回答“为什么 `L4` 需要拆成 `L4A synthetic` 和 `L4B human`，以及 agent 为什么还不能直接冒充真人试玩”：`doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
-- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先读 `testing-manual.md` 的 `L4A/L4B` 章节，再执行 `./scripts/prepare-playability-l4-review.sh`
+- 想先回答“为什么 `L4` 现在只保留 `L4A synthetic`、`L4B embodied-agent` 两个正式内部层，并把内部真人试玩降为 `L4B` 可选佐证”：`doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
+- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先读 `testing-manual.md` 的 `L4A/L4B/L5` 章节，再执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
 - 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
 - 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`

@@ -3,7 +3,7 @@
 审计轮次: 9
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] playability-governance-stack-2026-05-06 (PRD-TESTING-007/008/009/010) [test_tier_required]: 本页将“好玩性证据栈 / subagent 评审系统 / 模拟玩家 persona 面板 / L4 synthetic-human 分层”四个 2026-05-06 专题收口为单个 bundle 入口，便于浏览；当前同批 follow-up 已补 repo-local `L4` scaffold/wrapper，使同一 worktree 内可以直接准备 packet、role/persona cards、summary 与 `L4B` 卡片副本。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
+- [x] playability-governance-stack-2026-05-06 (PRD-TESTING-007/008/009/010) [test_tier_required]: 本页将“好玩性证据栈 / subagent 评审系统 / 模拟玩家 persona 面板 / L4 synthetic-agent 分层”四个 2026-05-06 专题收口为单个 bundle 入口，便于浏览；当前同批 follow-up 已补 repo-local `L4` scaffold/wrapper + `L4B` runner，使同一 worktree 内可以直接准备 packet、role/persona cards、summary、`L4B` agent 卡，并执行一次会自动落 summary/state/screenshot 的 embodied-agent run，以及可选内部真人佐证 notes。 Trace: .pm/tasks/task_efe1a5f949e84160a1237302c9064168.yaml
   - Bundle includes: `playability-subagent-review-system-2026-05-06`、`playability-simulated-player-persona-panel-2026-05-06`、`playability-l4-synthetic-human-split-2026-05-06`
   - Related traces: `.pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.yaml`、`.pm/tasks/task_a9d3c884a3074ab2b0f3b10dab7bb86e.yaml`、`.pm/tasks/task_a68decb0a2c8460aa7d989df7370c901.yaml`
 - [x] shared-player-gameplay-contract-parity (PRD-TESTING-003) [test_tier_required]: 收口 `software_safe` / `pure_api` 共享 `snapshot.player_gameplay` 的玩家可读语义 contract，补 active-LLM scope、旧 no-LLM 口径退役说明，以及 pure API parity smoke 对“同一组玩家问题”的显式摘要。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
@@ -336,7 +336,7 @@
 ## 状态
 - 更新日期: 2026-05-06
 - 当前状态: active
-- 当前窗口摘要: `playability-governance-stack-2026-05-06` 已把“自动化不能单独保证好玩”的治理结论、标准角色 subagent 评审系统、模拟玩家 persona panel，以及 `L4A synthetic` / `L4B human` 分层收口为单个 bundle 视图；同批 follow-up 已补 `scripts/prepare-playability-l4-review.sh` 与 `playability-l4-*` 模板，让单个 worktree 内可以直接准备完整 `L4` 执行包。`--with-l4a-stack` 入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 `blocked`，这属于环境前置而不是 scaffold 缺项。
+- 当前窗口摘要: `playability-governance-stack-2026-05-06` 已把“自动化不能单独保证好玩”的治理结论、标准角色 subagent 评审系统、模拟玩家 persona panel，以及 `L4A synthetic` / `L4B embodied-agent` / `L5` 真实人类与线上验证边界收口为单个 bundle 视图；同批 follow-up 已补 `scripts/prepare-playability-l4-review.sh`、`scripts/run-playability-l4b-agent.sh` 与 `playability-l4-*` 模板，让单个 worktree 内可以直接准备完整 `L4A + L4B` 执行包，并把内部真人试玩降为 `L4B` 可选校准附录。`--with-l4a-stack` 入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 `blocked`，这属于环境前置而不是 scaffold 缺项。
 - 当前窗口摘要: `playability-player-leverage-evidence-rubric` 已为 trust/playability 证据补单独的 `player leverage` 审查层，避免再用 world activity 代替玩家有效参与。
 - 下一任务: 等待 `producer_system_designer` / `runtime_engineer` 提供真实创世账户表后，用 `token-genesis-allocation-audit-template-2026-03-22` 执行首轮正式审计。
 - 当前窗口摘要: `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 `transactions` / `recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` live contract 证据。

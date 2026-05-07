@@ -62,7 +62,7 @@
   1. `识别是否存在显著主观体验风险 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 persona review packet -> 选择默认或定制 persona 子集`
   2. `并行执行多个 persona 模拟 -> 回收 persona cards -> 标记共性断点 / 风格分歧`
   3. `qa_engineer` / `producer_system_designer` / 命中的工程角色读取 persona cards -> 回写正式 role review card`
-  4. `若需要更高信度 -> 从 `L4A` 升级到 `L4B structured human playtest` 或 L5 受控外部信号`
+  4. `若需要更高信度 -> 从 `L4A` 升级到 `L4B embodied agent playtest`；若仍需真实人类 / 真实环境结论，再升级到 L5 受控外部信号；内部真人试玩只作为 `L4B` 可选校准`
 
 ## 3. Persona Catalog
 | persona_id | 核心风格 | 高敏感项 | 低容忍项 | 最关注的问题 | 默认使用场景 |
@@ -126,7 +126,7 @@
 - `producer_system_designer`:
   - 读取 persona panel 的共性断点和风格分歧，决定是否影响 `target_claim`。
 - `qa_engineer`:
-  - 判断 persona panel 是不是只提出假设，还是已经指出必须升级到真人试玩的高风险断点。
+  - 判断 persona panel 是不是只提出假设，还是已经指出必须升级到 `L4B` agent 实玩或 `L5` 真实人类 / 线上验证的高风险断点。
 - `viewer_engineer`:
   - 吸收 `new_player_confused` / `impatient_action_player` / `narrative_curiosity_player` 的可读性和反馈问题。
 - `agent_engineer`:
@@ -146,7 +146,7 @@
   - persona 之间对同一节点出现明显风格分歧
 - 永远不能越过的边界:
   - persona panel 只能输出内部体验假设与风险线索，不能写成“玩家已经验证喜欢”
-  - persona panel 不能单独替代 `L4B structured human playtest` 或 L5 外部信号
+  - persona panel 不能单独替代 `L4B embodied agent playtest` 或 L5 外部信号
 
 ## 8. Acceptance Criteria
 - AC-1: 专题定义至少 5 类固定 persona，并写清各自偏好与低容忍项。
@@ -173,7 +173,8 @@
 - Edge Cases:
   - 若 persona card 没有一手证据，只是转述 role review：必须标 `secondary_review_only`。
   - 若 selected personas 未覆盖本次改动最关键风险面：必须记为 `panel_incomplete`。
-  - 若 persona panel 全正面，但没有任何真人试玩：仍只能记为 `L4A` 完成，不能宣称 `L4B` 已完成。
+  - 若 persona panel 全正面，但没有任何 agent 实玩：仍只能记为 `L4A` 完成，不能宣称 `L4B` 已完成。
+  - 若 `L4B` 已完成，但没有任何 `L5` 样本：仍不能宣称真实人类验证已完成。
   - 若 scaffold 已生成，但 persona cards 仍为空白模板：只能记为 panel scaffold 完成，不能记为 persona panel 已执行。
 - Non-Functional Requirements:
   - NFR-SPP-1: 新读者应在 5 分钟内知道何时需要开 persona panel。

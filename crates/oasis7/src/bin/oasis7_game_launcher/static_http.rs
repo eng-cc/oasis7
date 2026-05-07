@@ -22,6 +22,7 @@ pub(super) fn handle_http_connection(
     mut stream: TcpStream,
     root_dir: &Path,
     live_bind: &str,
+    default_viewer_player_id: Option<&str>,
     deployment_mode: DeploymentMode,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
 ) -> Result<(), String> {
@@ -147,8 +148,10 @@ pub(super) fn handle_http_connection(
             let body = fs::read(&path).map_err(|err| {
                 format!("failed to read static asset `{}`: {err}", path.display())
             })?;
-            let viewer_auth_bootstrap =
-                resolve_viewer_auth_bootstrap_for_embedded_server(deployment_mode);
+            let viewer_auth_bootstrap = resolve_viewer_auth_bootstrap_for_embedded_server(
+                deployment_mode,
+                default_viewer_player_id,
+            );
             let body = sanitize_index_html_for_embedded_server(
                 path.as_path(),
                 body.as_slice(),
@@ -489,6 +492,7 @@ fn write_http_response(
 
 pub(super) fn resolve_viewer_auth_bootstrap_from_path(
     path: &Path,
+    default_viewer_player_id: Option<&str>,
 ) -> Result<ViewerAuthBootstrap, String> {
     let content =
         fs::read_to_string(path).map_err(|err| format!("read {} failed: {err}", path.display()))?;
@@ -501,7 +505,10 @@ pub(super) fn resolve_viewer_auth_bootstrap_from_path(
     let private_key =
         resolve_required_toml_string(node, NODE_PRIVATE_KEY_FIELD, "node.private_key")?;
     let public_key = resolve_required_toml_string(node, NODE_PUBLIC_KEY_FIELD, "node.public_key")?;
-    let player_id = resolve_viewer_player_id_override(env::var(VIEWER_PLAYER_ID_ENV).ok());
+    let player_id = resolve_viewer_player_id_override(
+        env::var(VIEWER_PLAYER_ID_ENV).ok(),
+        default_viewer_player_id,
+    );
     Ok(ViewerAuthBootstrap {
         player_id,
         public_key,
@@ -511,10 +518,15 @@ pub(super) fn resolve_viewer_auth_bootstrap_from_path(
 
 pub(super) fn resolve_viewer_auth_bootstrap_for_embedded_server(
     deployment_mode: DeploymentMode,
+    default_viewer_player_id: Option<&str>,
 ) -> Option<ViewerAuthBootstrap> {
     if deployment_mode.disables_browser_signer_bootstrap() {
         None
     } else {
-        resolve_viewer_auth_bootstrap_from_path(Path::new(NODE_CONFIG_FILE_NAME)).ok()
+        resolve_viewer_auth_bootstrap_from_path(
+            Path::new(NODE_CONFIG_FILE_NAME),
+            default_viewer_player_id,
+        )
+        .ok()
     }
 }
