@@ -1,0 +1,43 @@
+version: 1
+role: viewer_engineer
+status: committed
+tasks:
+  - task_uid: task_41236b37e7a0493fa4f20424cc465eeb
+    title: "Switch GitHub Release downloads to direct installers"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/site/prd.md
+    acceptance:
+      - "GitHub Release publishes platform-native installer assets directly as .deb, .dmg, and .exe instead of .tar.gz/.zip wrappers."
+      - "Public site download cards and checksums references point to the direct installer asset names and no longer advertise archive downloads."
+      - "Release workflow verification fails if the expected direct installer assets are missing from the publish stage."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_41236b37e7a0493fa4f20424cc465eeb.yaml
+  - task_uid: task_4dac4415a1ce4870ad1b9a07a65fe28b
+    title: "Close platform-native release installer entrypoints"
+    priority: P1
+    source_signal: null
+    related_prd:
+      - doc/world-simulator/prd.md
+    acceptance:
+      - "Each release asset maps to a platform-native runnable/installable entrypoint instead of only shipping shell-based bundle wrappers."
+      - "macOS release packaging exposes an app-style entrypoint inside the DMG and Windows release packaging exposes a native launcher entrypoint without requiring users to discover shell scripts."
+      - "Release workflow and bundle validation fail when platform-native entrypoints are missing from packaged assets."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_4dac4415a1ce4870ad1b9a07a65fe28b.yaml
+  - task_uid: task_d02fe08db044492d9f0bfbcf645a4ccc
+    title: "first slot-1 claim onboarding flow"
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-GAME-011
+    acceptance:
+      - "New accounts with no owned agent claims see a dedicated slot-1 claim onboarding CTA instead of relying on raw detail text."
+      - "The onboarding CTA uses canonical claim quote data, keeps explicit confirmation before claim, and surfaces blocked reasons when starter balance is unavailable."
+      - "Viewer regression tests cover the new onboarding state and existing claim detail behavior remains intact."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_d02fe08db044492d9f0bfbcf645a4ccc.yaml
