@@ -1,0 +1,21 @@
+task_uid: task_103c448874b7494a8312418995889098
+title: "separate physical truth from presentation exaggeration in player surfaces"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-gameplay-physical-scale-indirect-control-2026-05-07
+execution_log_path: .pm/tasks/task_103c448874b7494a8312418995889098.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md
+related_prd:
+  - PRD-GAME-013
+acceptance:
+  - "surface physical truth vs presentation exaggeration in viewer entry surfaces"
+  - "add regression evidence for distance and scale labeling"
+handoff_to: []
+updated_at: 2026-05-07T16:08:22+08:00
+last_started_at: 2026-05-07T15:54:39+08:00
+last_closed_at: 2026-05-07T16:08:21+08:00

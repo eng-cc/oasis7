@@ -14,7 +14,7 @@
 | topic slug | owner role | status | 目标 |
 | --- | --- | --- | --- |
 | `runtime-native-resolution-declaration` | `runtime_engineer` | `done` | 盘点并声明现有 coarse-grained 子系统的 native resolution（如 chunk / voxel / location / facility），补齐到厘米真值的映射与定向测试。 |
-| `viewer-scale-surface-truth-labeling` | `viewer_engineer` | `planned` | 收口主入口距离/尺寸/marker/zoom 语义，明确哪些是物理真值、哪些是视觉夸张，并补齐主界面/语义地图的玩家可读锚点。 |
+| `viewer-scale-surface-truth-labeling` | `viewer_engineer` | `done` | 收口主入口距离/尺寸/marker/zoom 语义，明确哪些是物理真值、哪些是视觉夸张，并补齐主界面/语义地图的玩家可读锚点。 |
 | `agent-action-contract-boundary-alignment` | `agent_engineer` | `planned` | 对齐 dual-mode / action schema 文档，明确当前正式动作面仍是间接控制，不把 embodied / block-editing 写成现行 contract。 |
 | `qa-scale-consistency-matrix` | `qa_engineer` | `planned` | 建立尺度一致性矩阵，验证“厘米真值 / coarse native resolution / 表现层夸张 / 动作边界”四项合同没有漂移。 |
 
@@ -34,6 +34,16 @@
 | `power-transfer-distance` | `1km` 传输桶 | 真实 `distance_cm` 先转 km 再判断损耗/上限 | 任意正距离按 km 向上取整 | `power_transfer_distance_km` |
 | `location-site-actions` | `LocationId` 离散站点锚点 | 动作先解析到 `Location.pos` / `radius_cm` 再落到物理世界 | 不支持 sub-location offset；靠 `location_id` 绑定 | `MoveAgent` / `BuildFactory` / `MineCompound` / `ensure_colocated` |
 | `fragment-block-geometry` | `1cm` 最小 block edge | block 几何仍以 cm 表示 | 任意 `<1cm` 边长 clamp 到 `1cm` | `CuboidSizeCm::sanitized` |
+
+- [x] viewer-scale-surface-truth-labeling (PRD-GAME-013) [test_tier_required]: `viewer_engineer` 已在 `crates/oasis7_viewer/software_safe_src/{legacy_core.js,main.jsx}` 补齐 formal Web entry 的尺度真值表面，把 `1cm` 真值、world bounds、选中锚点坐标/半径、最近地点距离样本，以及“marker/zoom 只服务可读性、不可误读为真实几何尺寸”的说明挂到 `software_safe` 主入口，并新增前端回归锁定该 contract。 Trace: .pm/tasks/task_103c448874b7494a8312418995889098.yaml
+
+### viewer-scale-surface-truth-labeling / formal Web entry 语义
+
+| surface | 物理真值 | 表现层夸张说明 | repo truth |
+| --- | --- | --- | --- |
+| `software_safe / world scale` | 显示 `1cm` canonical unit、`snapshot.config.space` world bounds、选中锚点坐标、地点半径、最近地点真实距离 | 文案明确要求玩家以数值标签为准，不要把屏幕上的 marker 直径读成真实尺寸 | `software_safe_src/legacy_core.js::buildWorldScaleSurface` |
+| `software_safe / locations list` | 地点列表直接显示 `radius` 真值标签 | 列表只补真值，不把资源条目或卡片权重包装成空间尺度本身 | `software_safe_src/main.jsx::TargetsPanel` |
+| `standard viewer / overview zoom` | 继续以 runtime cm 真值为底层真值 | 文案明确 `overview/detail zoom tiers` 只切换表现语义，不改写世界尺度 | `software_safe_src/legacy_core.js::presentationScale.zoomTruthNote` + `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md` |
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -68,7 +78,8 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 native_resolution_ -- --nocapture`
 - `viewer-scale-surface-truth-labeling` / viewer 表达对齐
   - `rg -n "cm_to_unit|world_units_per_meter|visual|marker|radius" crates/oasis7_viewer/src`
-  - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer -- --nocapture`
+  - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+  - `cd crates/oasis7_viewer && npm run build:software-safe`
   - headed Web/UI 或 semantic surface 人工复核：确认真实距离/量级锚点与视觉夸张说明可见
 - `agent-action-contract-boundary-alignment` / agent contract 对齐
   - `rg -n "move/jump/attack/interact/use_item|headless_agent|player_parity|debug_viewer" doc/world-simulator/llm doc/world-simulator/viewer crates/oasis7/src/simulator`
@@ -88,8 +99,8 @@
   - [x] 现有 coarse-grained 子系统均有 native resolution 与厘米映射说明
   - [x] 定向测试能证明厘米真值合同仍成立
 - `viewer-scale-surface-truth-labeling`
-  - [ ] Viewer 主入口能区分物理真值与视觉夸张
-  - [ ] 玩家能读到真实距离/量级锚点
+  - [x] Viewer 主入口能区分物理真值与视觉夸张
+  - [x] 玩家能读到真实距离/量级锚点
 - `agent-action-contract-boundary-alignment`
   - [ ] current action surface 与 deferred embodied capabilities 已分离
   - [ ] dual-mode 文档不再把 future embodied 动作写成现行正式能力
@@ -113,8 +124,8 @@
 
 - 更新日期: 2026-05-07
 - 当前状态: in_progress
-- 当前 owner: `runtime_engineer`
-- 下一任务: `viewer-scale-surface-truth-labeling`，由 `viewer_engineer` 继续把主入口的真实距离/量级锚点与视觉夸张说明收口成玩家可读表达。
+- 当前 owner: `viewer_engineer`
+- 下一任务: `agent-action-contract-boundary-alignment`，由 `agent_engineer` 把 dual-mode / action schema 中 current vs deferred embodied capability 的口径彻底拆开。
 - 说明:
   - 本专题不改变当前 `PRD-GAME-012` 的 trust/capability 主优先级，只是补齐其背后的尺度边界，避免继续因为“1cm 是否等于逐块玩法”产生路线误读。
   - 本专题不会重开 3D active delivery，也不会提前承诺 embodied / block-editing 主玩法。

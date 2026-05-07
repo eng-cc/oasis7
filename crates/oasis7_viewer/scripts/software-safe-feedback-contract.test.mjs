@@ -206,9 +206,31 @@ const core = await import("../software_safe_src/legacy_core.js");
 {
   const injectedState = core.injectSnapshot({
     time: 12,
+    config: {
+      space: {
+        width_cm: 10_000_000,
+        depth_cm: 5_000_000,
+        height_cm: 1_000_000,
+      },
+    },
     model: {
       agents: { "agent-0": { id: "agent-0", location_id: "loc-0", resources: {} } },
-      locations: { "loc-0": { id: "loc-0", name: "Loc 0", resources: {} } },
+      locations: {
+        "loc-0": {
+          id: "loc-0",
+          name: "Loc 0",
+          pos: { x_cm: 0, y_cm: 0, z_cm: 0 },
+          profile: { radius_cm: 25_000, radiation_emission_per_tick: 0, material: "silicate" },
+          resources: {},
+        },
+        "loc-1": {
+          id: "loc-1",
+          name: "Loc 1",
+          pos: { x_cm: 100_000, y_cm: 0, z_cm: 0 },
+          profile: { radius_cm: 10_000, radiation_emission_per_tick: 0, material: "silicate" },
+          resources: {},
+        },
+      },
     },
     player_gameplay: {
       stage_id: "first_session_loop",
@@ -256,6 +278,16 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.status, "pending");
   assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestId, "7");
   assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestedTotalUpfrontAmount, "325");
+  core.select({ kind: "location", id: "loc-0" });
+  const worldScale = core.buildWorldScaleSurface();
+  assert.equal(worldScale.physicalTruth.canonicalUnitLabel, "1 cm");
+  assert.match(worldScale.physicalTruth.worldBoundsLabel, /100 km × 50 km × 10 km/);
+  assert.equal(worldScale.physicalTruth.anchor.id, "loc-0");
+  assert.equal(worldScale.physicalTruth.anchor.radiusLabel, "250 m");
+  assert.equal(worldScale.physicalTruth.nearestLocations[0].id, "loc-1");
+  assert.equal(worldScale.physicalTruth.nearestLocations[0].distanceLabel, "1 km");
+  assert.match(worldScale.presentationScale.markerTruthNote, /do not read on-screen diameter/i);
+  assert.match(worldScale.presentationScale.zoomTruthNote, /zoom tiers/i);
   const pendingDisplay = core.describeFirstAgentClaimApprovalRequest(
     injectedState.gameplaySummary.firstAgentClaimApprovalRequest,
   );
