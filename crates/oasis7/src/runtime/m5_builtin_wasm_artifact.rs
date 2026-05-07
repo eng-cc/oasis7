@@ -50,6 +50,12 @@ fn hash_manifest_for_module(module_id: &str) -> Option<Vec<&'static str>> {
     None
 }
 
+#[cfg(test)]
+pub(crate) fn m5_builtin_manifest_hash_tokens(module_id: &str) -> Option<Vec<String>> {
+    hash_manifest_for_module(module_id)
+        .map(|tokens| tokens.into_iter().map(str::to_string).collect())
+}
+
 pub(crate) fn m5_builtin_wasm_module_artifact_bytes(
     module_id: &str,
 ) -> Result<Vec<u8>, WorldError> {
