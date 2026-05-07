@@ -65,6 +65,7 @@
 - PRD-SITE-008: As a 新访问者, I want the public site and release downloads to use the canonical `oasis7` repo path and asset names, so that branding, links, and downloaded files stay consistent.
 - PRD-SITE-009: As a 新访问者, I want the homepage to explain the game genre, player role, and current availability before technical validation details, so that I can decide within the first screen whether oasis7 is worth following.
 - PRD-SITE-010: As a 新访问者, I want the homepage to separate current public entry, builder verification, and future platform direction, so that I do not mistake preview validation or roadmap language for a live player promise.
+- PRD-SITE-011: As a 技术用户或自动化代理, I want a stable public `oasis7` skill Markdown URL, so that I can fetch the Local Provider workflow without cloning the repo first.
 - Critical User Flows:
   1. Flow-SITE-001: `访问首页 -> 理解价值与入口 -> 跳转安装/文档`
   2. Flow-SITE-002: `发布前执行链接检查 -> 处理断链 -> 复测通过`
@@ -73,6 +74,7 @@
   5. Flow-SITE-005: `陌生访客访问首页 -> 在首屏理解游戏类型/玩家角色/当前开放状态 -> 决定继续看玩法、技术预览或文档`
   6. Flow-SITE-006: `陌生访客访问首页 -> 区分当前可做的事/开发者验证/未来目标态 -> 选择继续看证据、下载预览或回到文档`
   7. Flow-SITE-007: `访客先通过首页理解产品与公开边界 -> 再进入 docs hub 深读完整总览/玩法/验证文档`
+  8. Flow-SITE-008: `执行者或代理进入 docs hub -> 直接打开公开 oasis7 skill Markdown -> 按 skill 中的命令启动 Local Provider real-play`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -81,6 +83,7 @@
 | 质量门禁巡检 | 链接状态、性能指标、可访问性结果 | 巡检失败阻断发布 | `checking -> passed/blocked` | 严重问题优先修复 | 维护者可解阻断（需说明） |
 | 对外状态口径 | 产品状态（playable / preview）、禁用词列表、状态标识文案 | 发布前校验首页与文档入口文案是否匹配真实状态 | `draft -> aligned -> published` | 真实状态字段优先于营销文案 | 模块维护者可改，发布责任人复核 |
 | 首页入口分层与 claim gate | 首屏定位、默认公开访问面、builder 验证入口、未来方向、下载边界、中英镜像 claim | 发布前校验首页是否把当前公开能力/开发者路径/未来平台目标分层表达，并校验关键 claim 中英一致 | `draft -> aligned -> published -> gated` | 先公开访客入口，再 builder 验证，再 future roadmap；诊断路径不得进入 primary CTA | 模块维护者可改，发布责任人复核 |
+| 公开 skill 镜像 | skill 名称、摘要、raw Markdown 链接 | docs hub 直跳 raw skill Markdown；raw URL 可直接抓取 | `draft -> mirrored -> published -> refreshed` | 只保留 raw Markdown 分发入口；内容必须与 repo-local skill 真值一致 | 模块维护者可改，发布责任人复核 |
 - Acceptance Criteria:
   - AC-1: site PRD 定义页面层级、内容同步和发布链路。
   - AC-2: site project 文档任务映射 PRD-SITE-ID。
@@ -95,6 +98,7 @@
   - AC-11: `site/index.html` 与 `site/en/index.html` 都必须通过统一的 homepage claim/parity check，覆盖可玩状态、下载边界、正式公告状态、公开访问面与未来平台边界。
   - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。
   - AC-13: `site/doc/cn/index.html` 与 `site/doc/en/index.html` 的 hero、primary CTA 与入口卡片必须明确说明“首页优先、docs hub 次级深读”，并且不允许继续链接到缺失的首页锚点。
+  - AC-14: 公开站点必须新增可直接抓取的 `site/skills/oasis7.md`；docs hub 中英页都要能直接跳达这个 raw skill 入口。
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
@@ -108,9 +112,11 @@
 - Integration Points:
   - `site/`
   - `site/doc/`
+  - `site/skills/`
   - `doc/site/github-pages/`
   - `doc/site/manual/`
   - `doc/readme/prd.md`
+  - `.agents/skills/oasis7/SKILL.md`
 - Edge Cases & Error Handling:
   - 断链：发现下载或文档断链时阻断发布并进入修复流程。
   - 空页面：关键页面内容缺失时展示维护提示并记录异常。
@@ -121,6 +127,7 @@
   - 状态漂移：若产品尚不可玩但页面出现“已可玩/赛季进行中”表述，发布流程必须阻断并回写文案。
   - 入口漂移：若首页把 builder 命令、未来平台目标或诊断入口写成当前公开主入口，发布流程必须阻断并回写文案。
   - 无脚本访问：若移动端脚本失效导致导航入口不可达，发布流程必须阻断并回写实现。
+  - skill 漂移：若 `site/skills/oasis7.md` 与 `.agents/skills/oasis7/SKILL.md` 的关键流程或边界不一致，发布流程必须阻断并回写镜像内容。
 - Non-Functional Requirements:
   - NFR-SITE-1: 发布后关键链接可用率 100%。
   - NFR-SITE-2: 核心页面性能与可访问性指标达到门禁阈值。
@@ -130,6 +137,7 @@
   - NFR-SITE-6: “可玩状态口径一致性”检查在发布前必须完成且误报率 <= 5%（按月统计）。
   - NFR-SITE-7: 首页 claim/parity gate 必须覆盖 CN/EN 双首页，并在 Pages workflow 中执行，避免关键对外承诺静默漂移。
   - NFR-SITE-8: 首页主要导航在移动端不依赖脚本才能可达；键盘访问路径需具备可见 skip link。
+  - NFR-SITE-9: 公开 skill Markdown URL 必须稳定、可直接访问，且其内容在同一次发布中与 repo-local `oasis7` skill 保持语义一致。
 - Security & Privacy: 站点不得暴露内部凭据与敏感配置；下载链路需具备来源可验证性。
 
 ## 5. Risks & Roadmap
@@ -156,6 +164,7 @@
 | PRD-SITE-008 | TASK-SITE-015/016/017/018 | `test_tier_required` | `site/**`、GitHub Release 下载入口、release workflow 当前路径/包名与 `doc/site/github-pages/**` 历史专题标题全部切换到 `oasis7` 品牌与 `eng-cc/oasis7` 路径 | 对外品牌一致性、下载链路稳定性 |
 | PRD-SITE-009 | homepage-game-explainer + public-copy-tightening | `test_tier_required` | 中英首页首屏与 docs hub 首段信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
 | PRD-SITE-010 | homepage-entry-claim-boundary-hardening + public-copy-tightening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、docs hub 角色定位检查、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
+| PRD-SITE-011 | public-oasis7-skill | `test_tier_required` | 中英 docs hub raw skill 入口核对、`site/skills/oasis7.md` 与 `.agents/skills/oasis7/SKILL.md` 逐字一致性检查 | 对外 skill 可获取性、自动化抓取稳定性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -169,3 +178,4 @@
 | DEC-SITE-008 | 首页公开入口按“访客理解 -> builder 验证 -> 未来方向”三层分流，并显式把 `software_safe` 设为默认 formal Web 入口 | 继续把访问面 taxonomy、开发命令和未来平台目标混写在同一层 | 可同时降低误导风险、减少陌生访客理解负担，并保持 runtime 真值可审计。 |
 | DEC-SITE-009 | Pages 发布前新增 homepage claim/parity gate 与基础无脚本/a11y 约束 | 继续只依赖链接/手册/下载静态检查 | 首页承担最高风险的对外承诺，需要单独门禁而不是把口径漂移留给人工发现。 |
 | DEC-SITE-010 | docs hub 公开层只承担“深读/验证导航”，第一次对外介绍仍以首页为主 | 让 docs hub 与首页并列承担首次产品介绍 | docs hub 混入太多协作/验证语境时，陌生访客会更快把站点误读成工程入口而不是游戏公开面。 |
+| DEC-SITE-011 | 对外 `oasis7` skill 只保留站内 raw Markdown 直链，并在 docs hub 暴露入口 | 新增独立 HTML 说明页或只暴露 GitHub blob 路径 | 用户目标是直接获取 skill 内容；单一 raw 入口更短、更稳定，也减少公开镜像维护面。 |
