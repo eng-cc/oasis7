@@ -166,7 +166,8 @@
 - [x] runtime-native-resolution-declaration (PRD-GAME-013) [test_tier_required]: `runtime_engineer` 已把现有 coarse-grained runtime 子系统正式写成可 grep 的原生分辨率声明表，覆盖 `chunk-grid`、`asteroid-fragment-voxel`、`asteroid-fragment-spacing`、`movement-energy-cost`、`power-transfer-distance`、`location-site-actions` 与 `fragment-block-geometry`，并补齐厘米映射 / rounding / snapping 定向测试。 Trace: .pm/tasks/task_303dedfe38b04036a198c256cc858e29.yaml
 - [x] viewer-scale-surface-truth-labeling (PRD-GAME-013) [test_tier_required]: `viewer_engineer` 已把 formal Web entry 的 `World Scale` 面板和地点列表补成玩家可读的尺度真值表面，正式显示 canonical `1cm`、world bounds、选中锚点坐标/半径、最近地点真实距离，并明确 marker/zoom 只服务可读性，不可当作真实几何尺寸。 Trace: .pm/tasks/task_103c448874b7494a8312418995889098.yaml
 - [x] agent-action-contract-boundary-alignment (PRD-GAME-013) [test_tier_required]: `agent_engineer` 已把 dual-mode / action contract 的现行动作面收口为低频间接控制白名单，并显式把 `jump / attack / use_item / block_editing` 回收到 future embodied candidate gate。 Trace: .pm/tasks/task_15890765ee3b4188a1e2766973f392fc.yaml
-- 后续 owner 切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 收口为待建任务：`qa-scale-consistency-matrix`。
+- [x] qa-scale-consistency-matrix (PRD-GAME-013) [test_tier_required]: `qa_engineer` 已在 `doc/testing/evidence/gameplay-scale-consistency-matrix-2026-05-07.md` 完成最终矩阵复核，确认四层尺度合同在 runtime/viewer/agent 三侧一致，并补齐 blocker 签名归档。 Trace: .pm/tasks/task_8205baa6d2fb46388b11c1eed340fdf5.yaml
+- `PRD-GAME-013` 当前规划切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 全部收口；该专题完成不等于 `PRD-GAME-012` trust/capability gate 已恢复。
 
 ## 依赖
 - 模块设计总览：`doc/game/design.md`

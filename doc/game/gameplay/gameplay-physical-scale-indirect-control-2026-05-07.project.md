@@ -16,7 +16,7 @@
 | `runtime-native-resolution-declaration` | `runtime_engineer` | `done` | 盘点并声明现有 coarse-grained 子系统的 native resolution（如 chunk / voxel / location / facility），补齐到厘米真值的映射与定向测试。 |
 | `viewer-scale-surface-truth-labeling` | `viewer_engineer` | `done` | 收口主入口距离/尺寸/marker/zoom 语义，明确哪些是物理真值、哪些是视觉夸张，并补齐主界面/语义地图的玩家可读锚点。 |
 | `agent-action-contract-boundary-alignment` | `agent_engineer` | `done` | 对齐 dual-mode / action schema 文档，明确当前正式动作面仍是间接控制，不把 embodied / block-editing 写成现行 contract。 |
-| `qa-scale-consistency-matrix` | `qa_engineer` | `planned` | 建立尺度一致性矩阵，验证“厘米真值 / coarse native resolution / 表现层夸张 / 动作边界”四项合同没有漂移。 |
+| `qa-scale-consistency-matrix` | `qa_engineer` | `done` | 已建立尺度一致性矩阵，验证“厘米真值 / coarse native resolution / 表现层夸张 / 动作边界”四项合同没有漂移。 |
 
 ## 已完成切片
 
@@ -38,6 +38,8 @@
 - [x] viewer-scale-surface-truth-labeling (PRD-GAME-013) [test_tier_required]: `viewer_engineer` 已在 `crates/oasis7_viewer/software_safe_src/{legacy_core.js,main.jsx}` 补齐 formal Web entry 的尺度真值表面，把 `1cm` 真值、world bounds、选中锚点坐标/半径、最近地点距离样本，以及“marker/zoom 只服务可读性、不可误读为真实几何尺寸”的说明挂到 `software_safe` 主入口，并新增前端回归锁定该 contract。 Trace: .pm/tasks/task_103c448874b7494a8312418995889098.yaml
 
 - [x] agent-action-contract-boundary-alignment (PRD-GAME-013) [test_tier_required]: `agent_engineer` 已对齐 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md` 与 supporting contract，把当前正式动作面明确冻结为 `wait / wait_ticks / move_agent / speak_to_nearby / inspect_target / simple_interact`，并把 `jump / attack / use_item / block_editing` 改回 future embodied candidate，而不是现行正式能力。 Trace: .pm/tasks/task_15890765ee3b4188a1e2766973f392fc.yaml
+
+- [x] qa-scale-consistency-matrix (PRD-GAME-013) [test_tier_required]: `qa_engineer` 已在 `doc/testing/evidence/gameplay-scale-consistency-matrix-2026-05-07.md` 建立正式矩阵，复核 runtime/viewer/agent 三侧的一致性，并记录四层合同的 pass/blocker 签名；当前结论为 `pass`，且明确不把该结论扩写成 `PRD-GAME-012` trust/capability gate 恢复。 Trace: .pm/tasks/task_8205baa6d2fb46388b11c1eed340fdf5.yaml
 
 ### viewer-scale-surface-truth-labeling / formal Web entry 语义
 
@@ -107,8 +109,8 @@
   - [x] current action surface 与 deferred embodied capabilities 已分离
   - [x] dual-mode 文档不再把 future embodied 动作写成现行正式能力
 - `qa-scale-consistency-matrix`
-  - [ ] QA 尺度一致性矩阵已建立
-  - [ ] blocker 签名可稳定复现并回写
+  - [x] QA 尺度一致性矩阵已建立
+  - [x] blocker 签名可稳定复现并回写
 
 ## 依赖
 
@@ -125,9 +127,9 @@
 ## 状态
 
 - 更新日期: 2026-05-07
-- 当前状态: in_progress
-- 当前 owner: `agent_engineer`
-- 下一任务: `qa-scale-consistency-matrix`，由 `qa_engineer` 复核“厘米真值 / coarse native resolution / 表现层夸张 / 动作边界”四层合同是否一致。
+- 当前状态: completed
+- 当前 owner: `qa_engineer`
+- 下一任务: 无；`PRD-GAME-013` 当前规划切片已全部完成。
 - 说明:
   - 本专题不改变当前 `PRD-GAME-012` 的 trust/capability 主优先级，只是补齐其背后的尺度边界，避免继续因为“1cm 是否等于逐块玩法”产生路线误读。
   - 本专题不会重开 3D active delivery，也不会提前承诺 embodied / block-editing 主玩法。
