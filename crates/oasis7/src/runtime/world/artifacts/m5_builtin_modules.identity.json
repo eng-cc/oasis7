@@ -22,7 +22,7 @@
     {
       "module_id": "m5.gameplay.crisis.cycle",
       "hash_tokens": [
-        "linux-x86_64=7aa7b63759a277320fd8fbb70014bff3fb408310f81dd54ffea2f7dd637b2597"
+        "linux-x86_64=a5e8d664800d9ab4b4842dd0d1b8150401c0804779d0107a4fa19209e15abaec"
       ],
       "source_hash": "a91542dda90d5b2ae822ae3a7ae4ee202d164966bbd0f9778838b7f4dc54b6d4",
       "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
@@ -31,7 +31,7 @@
     {
       "module_id": "m5.gameplay.economic.overlay",
       "hash_tokens": [
-        "linux-x86_64=fa27987985dfc6357466465d647448048e3cb360ee18c4f9d07c9945a2420d13"
+        "linux-x86_64=4f9bac664869b6e37d23a6a0e8a5091bd90d3d3820d0233cde0b57585e2263a6"
       ],
       "source_hash": "beda4dc16c5783e554764c6fe83162e2b74040fa99ee596f1f72a4f5d3312836",
       "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
@@ -40,7 +40,7 @@
     {
       "module_id": "m5.gameplay.governance.council",
       "hash_tokens": [
-        "linux-x86_64=cd531dbc324b8208879980937670bf481638aa6b21d85b38ac7d21d58a7aedec"
+        "linux-x86_64=196b44cacf082a0961eae22017b4db512de49ed7ba577cd60d61d2da23ef6aa3"
       ],
       "source_hash": "a0ade514daa00776d3d4d72204541e2f636241f2f08848813acca5b290057f80",
       "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
@@ -49,7 +49,7 @@
     {
       "module_id": "m5.gameplay.meta.progression",
       "hash_tokens": [
-        "linux-x86_64=f55b98715985abb05a62f84b4f6843b6dfcd4517afb8004eb49bf3a22644adde"
+        "linux-x86_64=4619ab3c796d019ddc1e8c9faa6b15bf89da385cd4b9ffaaf4aa51dc157c1b3d"
       ],
       "source_hash": "48a452c4d28b1d3ab1708101df0c8f49de39b382c6396d8ee0eb4249e8ca98fb",
       "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
@@ -58,7 +58,7 @@
     {
       "module_id": "m5.gameplay.war.core",
       "hash_tokens": [
-        "linux-x86_64=bb76a393b8c3d6f815d29baf55d8ea957776aa15299d16be0a84f72d29e5ca4b"
+        "linux-x86_64=2d728add6390d407b5494d69c1d1d51d518237578e13d2e27f0ed6be0c2f1a03"
       ],
       "source_hash": "6348e87fdec29fff7cc3b04a460a93a94a0dc0b4f1580bf78339017c1303ce28",
       "build_manifest_hash": "60a5c3364a3e1f412ff7a8e7c3e4835a25023c5b72271ceecb68f2b950b3e563",
