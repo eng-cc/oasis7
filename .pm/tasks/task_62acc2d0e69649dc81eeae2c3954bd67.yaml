@@ -1,0 +1,22 @@
+task_uid: task_62acc2d0e69649dc81eeae2c3954bd67
+title: "remove node20 deprecation warnings from release workflow"
+owner_role: qa_engineer
+worktree_hint: /home/scc/worktrees/oasis7-testing-release-node24-actions
+execution_log_path: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/testing/project.md
+  - .github/workflows/release-packages.yml
+doc_refs: []
+related_prd:
+  - PRD-TESTING-002
+  - PRD-TESTING-003
+acceptance:
+  - "Release Packages workflow no longer emits Node.js 20 deprecation warnings from first-party GitHub Actions"
+  - "Workflow remains schema-valid and release artifact flow unchanged"
+handoff_to: []
+updated_at: 2026-05-07T16:42:08+08:00
+last_started_at: 2026-05-07T16:38:28+08:00
+last_closed_at: 2026-05-07T16:42:08+08:00

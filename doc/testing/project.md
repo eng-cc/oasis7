@@ -247,6 +247,15 @@
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo build --target wasm32-unknown-unknown --manifest-path crates/oasis7_client_launcher/Cargo.toml --release --bin oasis7_client_launcher`
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
+- [x] release-node24-actions (PRD-TESTING-002/003) [test_tier_required]: 升级 `Release Packages` workflow 中触发 Node.js 20 deprecation warning 的 GitHub Actions runtime，确保 `release-gate-*` / `build-web-dist` / `package-native` 产物上传不再依赖 Node 20，并保持 release 资产链路语义不变。 Trace: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
+  - 产物文件:
+    - `.github/workflows/release-packages.yml`
+    - `doc/testing/project.md`
+    - `.pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `python -c "import pathlib, yaml; yaml.safe_load(pathlib.Path('.github/workflows/release-packages.yml').read_text())"`
+    - `rg -n "actions/setup-node@v6|actions/upload-artifact@v7|actions/download-artifact@v5" .github/workflows/release-packages.yml`
+    - `git diff --check`
 - [x] required-gate-ondemand-launcher-web-build (PRD-TESTING-002/003) [test_tier_required]: 为 PR `required-gate` 补 launcher Web `trunk build` 的 changed-path 按需覆盖，在保持 stable check context 的前提下，仅对 launcher/shared runtime 相关路径安装 `trunk` 并执行 `oasis7_client_launcher` Web dist 构建，避免 release `build-web-dist` 才暴露编译错误。 Trace: .pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml
   - 产物文件:
     - `scripts/plan-rust-required-scope.sh`

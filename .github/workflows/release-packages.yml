@@ -46,7 +46,7 @@ jobs:
           ./scripts/ci-tests.sh full-core | tee .tmp/release_gate_runtime_core/ci-tests-full-core.log
       - name: Upload runtime core gate summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-gate-runtime-core-summary
           path: .tmp/release_gate_runtime_core
@@ -76,7 +76,7 @@ jobs:
           ./scripts/ci-tests.sh full-support | tee .tmp/release_gate_runtime_support/ci-tests-full-support.log
       - name: Upload runtime support gate summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-gate-runtime-support-summary
           path: .tmp/release_gate_runtime_support
@@ -116,7 +116,7 @@ jobs:
           } | tee .tmp/release_gate_runtime_sync/runtime-sync-checks.log
       - name: Upload runtime sync gate summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-gate-runtime-sync-summary
           path: .tmp/release_gate_runtime_sync
@@ -127,7 +127,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
       - name: Install pinned Rust toolchain
@@ -170,7 +170,7 @@ jobs:
             --web-headed
       - name: Upload web gate summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-gate-web-summary
           path: .tmp/release_gate_web
@@ -216,7 +216,7 @@ jobs:
             --skip-web-strict
       - name: Upload soak gate summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-gate-soak-summary
           path: .tmp/release_gate_soak
@@ -284,7 +284,7 @@ jobs:
             env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist
           )
       - name: Upload web dist artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-web-dists
           path: |
@@ -425,14 +425,14 @@ jobs:
             --asset-name "oasis7-linux-x64.deb" \
             --version "${{ steps.release_version.outputs.value }}"
       - name: Upload platform asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-asset-${{ matrix.platform }}
           path: output/release/assets/${{ matrix.asset_name }}
           if-no-files-found: error
       - name: Upload secondary Linux .deb
         if: matrix.platform == 'linux-x64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-asset-linux-x64-deb-secondary
           path: output/release/assets/oasis7-linux-x64.deb
