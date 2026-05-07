@@ -59,10 +59,10 @@
   - PRD-TESTING-PERSONA-004: As an implementation owner, I want a trigger matrix for when persona simulation is worth running, so that this panel does not become cargo-cult overhead.
   - PRD-TESTING-PERSONA-005: As a workflow owner, I want persona panel outputs to plug into role-based subagent review, so that internal review still closes through standard roles.
 - Critical User Flows:
-  1. `识别是否存在显著主观体验风险 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 persona review packet -> 选择默认或定制 persona 子集`
+  1. 识别是否存在显著主观体验风险 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 persona review packet -> 选择默认或定制 persona 子集
   2. `并行执行多个 persona 模拟 -> 回收 persona cards -> 标记共性断点 / 风格分歧`
   3. `qa_engineer` / `producer_system_designer` / 命中的工程角色读取 persona cards -> 回写正式 role review card`
-  4. `若需要更高信度 -> 从 `L4A` 升级到 `L4B embodied agent playtest`；若仍需真实人类 / 真实环境结论，再升级到 L5 受控外部信号；内部真人试玩只作为 `L4B` 可选校准`
+  4. 若需要更高信度 -> 从 `L4A` 升级到 `L4B embodied agent playtest`；若仍需真实人类 / 真实环境结论，再升级到 `L5` 受控外部信号；内部真人试玩只作为 `L4B` 可选校准
 
 ## 3. Persona Catalog
 | persona_id | 核心风格 | 高敏感项 | 低容忍项 | 最关注的问题 | 默认使用场景 |

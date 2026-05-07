@@ -277,6 +277,79 @@ fn snapshot_version_validation_accepts_legacy_and_defaults_chunk_schema() {
 }
 
 #[test]
+fn snapshot_loads_legacy_float_geo_positions() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-legacy".to_string(),
+        name: "legacy".to_string(),
+        pos: GeoPos::new(10, 20, 30),
+        profile: LocationProfile::default(),
+    });
+    kernel.step_until_empty();
+
+    let mut value: serde_json::Value =
+        serde_json::from_str(&kernel.snapshot().to_json().expect("snapshot to json"))
+            .expect("parse snapshot json");
+
+    let pos = value
+        .get_mut("model")
+        .and_then(|model| model.get_mut("locations"))
+        .and_then(|locations| locations.get_mut("loc-legacy"))
+        .and_then(|location| location.get_mut("pos"))
+        .and_then(|pos| pos.as_object_mut())
+        .expect("legacy location position");
+    pos.insert("x_cm".to_string(), serde_json::json!(10.0));
+    pos.insert("y_cm".to_string(), serde_json::json!(20.0));
+    pos.insert("z_cm".to_string(), serde_json::json!(30.0));
+
+    let migrated = WorldSnapshot::from_json(
+        &serde_json::to_string(&value).expect("serialize migrated snapshot"),
+    )
+    .expect("load legacy float snapshot");
+
+    let location = migrated
+        .model
+        .locations
+        .get("loc-legacy")
+        .expect("restored legacy location");
+    assert_eq!(location.pos, GeoPos::new(10, 20, 30));
+}
+
+#[test]
+fn snapshot_rejects_non_integral_legacy_float_geo_positions() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-invalid".to_string(),
+        name: "invalid".to_string(),
+        pos: GeoPos::new(10, 20, 30),
+        profile: LocationProfile::default(),
+    });
+    kernel.step_until_empty();
+
+    let mut value: serde_json::Value =
+        serde_json::from_str(&kernel.snapshot().to_json().expect("snapshot to json"))
+            .expect("parse snapshot json");
+
+    let pos = value
+        .get_mut("model")
+        .and_then(|model| model.get_mut("locations"))
+        .and_then(|locations| locations.get_mut("loc-invalid"))
+        .and_then(|location| location.get_mut("pos"))
+        .and_then(|pos| pos.as_object_mut())
+        .expect("invalid location position");
+    pos.insert("x_cm".to_string(), serde_json::json!(10.5));
+
+    let err = WorldSnapshot::from_json(
+        &serde_json::to_string(&value).expect("serialize migrated snapshot"),
+    )
+    .expect_err("non-integral legacy float snapshot should fail");
+
+    assert!(
+        matches!(err, PersistError::Serde(message) if message.contains("integer centimeter value"))
+    );
+}
+
+#[test]
 fn snapshot_agent_kinematics_defaults_when_legacy_field_is_missing() {
     let mut kernel = WorldKernel::new();
     kernel.submit_action(Action::RegisterLocation {

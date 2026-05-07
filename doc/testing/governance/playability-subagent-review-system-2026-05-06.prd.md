@@ -59,10 +59,10 @@
   - PRD-TESTING-SUBAGENT-003: As an implementation owner, I want a changed-surface trigger matrix, so that I only run the necessary role subagents.
   - PRD-TESTING-SUBAGENT-004: As a stage owner, I want explicit escalation and stop conditions, so that review conflicts or missing external evidence are not hidden.
 - Critical User Flows:
-  1. `识别当前变更的玩家 surface / 风险面 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 review packet -> 选择默认 + 按需 subagent`
+  1. 识别当前变更的玩家 surface / 风险面 -> 运行 `prepare-playability-l4-review.sh` 或按同一 contract 组装 review packet -> 选择默认 + 按需 subagent
   2. `若需要补多风格玩家假设 -> 先运行 simulated persona panel -> 回流 persona cards`
   3. `并行执行角色 subagent review -> 回收统一输出卡 -> 标记 blocker / watch / claim drift`
-  4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5`，以及是否需要补可选内部真人校准`
+  4. `producer_system_designer` 汇总各卡 -> 输出 `L4A synthetic` 内部阶段结论 -> 判断是否仍缺 `L4B/L5`，以及是否需要补可选内部真人校准
 
 ## 3. Functional Specification Matrix
 | subagent | 默认/按需 | 主要输入 | 必答问题 | 输出 | 不得越权 |
