@@ -28,6 +28,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
         Visibility::Visible,
         Name::new(format!("map2d:agent:plate:{agent_id}")),
         SceneZoomLayer::TwoDOverviewMarker,
+        TwoDOverviewMarkerTag,
     ));
 
     let module_ratio =
@@ -44,6 +45,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
             Visibility::Visible,
             Name::new(format!("map2d:agent:module_band:{agent_id}")),
             SceneZoomLayer::TwoDOverviewMarker,
+            TwoDOverviewMarkerTag,
         ));
     }
 
@@ -56,6 +58,7 @@ pub(super) fn spawn_agent_two_d_map_marker(
         Visibility::Visible,
         Name::new(format!("map2d:agent:center:{agent_id}")),
         SceneZoomLayer::TwoDOverviewMarker,
+        TwoDOverviewMarkerTag,
     ));
 }
 

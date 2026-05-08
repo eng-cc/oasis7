@@ -431,7 +431,7 @@ fn two_d_zoom_tier_switches_with_hysteresis() {
 #[test]
 fn two_d_map_marker_visibility_follows_zoom_tier() {
     let mut app = App::new();
-    app.add_systems(Update, sync_two_d_map_marker_visibility);
+    app.add_systems(Update, sync_scene_zoom_layer_visibility);
     app.insert_resource(ViewerCameraMode::TwoD);
     app.insert_resource(TwoDZoomTier::Detail);
 
@@ -490,6 +490,7 @@ fn two_d_map_marker_scale_boosts_in_overview_and_resets_in_detail() {
         .world_mut()
         .spawn((
             SceneZoomLayer::TwoDOverviewMarker,
+            TwoDOverviewMarkerTag,
             BaseScale(base),
             Transform::from_scale(base),
             Visibility::Visible,
@@ -519,7 +520,7 @@ fn two_d_map_marker_scale_boosts_in_overview_and_resets_in_detail() {
 #[test]
 fn detail_zoom_visibility_hides_detail_entities_in_overview() {
     let mut app = App::new();
-    app.add_systems(Update, sync_detail_zoom_visibility);
+    app.add_systems(Update, sync_scene_zoom_layer_visibility);
     app.insert_resource(ViewerCameraMode::TwoD);
     app.insert_resource(TwoDZoomTier::Detail);
 

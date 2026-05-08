@@ -305,19 +305,6 @@ tasks:
     handoff_to: []
     status: done
     task_path: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
-  - task_uid: task_62acc2d0e69649dc81eeae2c3954bd67
-    title: "remove node20 deprecation warnings from release workflow"
-    priority: P2
-    source_signal: null
-    related_prd:
-      - PRD-TESTING-002
-      - PRD-TESTING-003
-    acceptance:
-      - "Release Packages workflow no longer emits Node.js 20 deprecation warnings from first-party GitHub Actions"
-      - "Workflow remains schema-valid and release artifact flow unchanged"
-    handoff_to: []
-    status: done
-    task_path: .pm/tasks/task_62acc2d0e69649dc81eeae2c3954bd67.yaml
   - task_uid: task_8205baa6d2fb46388b11c1eed340fdf5
     title: "Build gameplay scale consistency matrix and blocker signatures"
     priority: P2
