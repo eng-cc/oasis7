@@ -107,6 +107,14 @@ impl BridgeServiceError {
         }
     }
 
+    fn service_unavailable(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status_code: 503,
+            code,
+            message: message.into(),
+        }
+    }
+
     fn internal(message: impl Into<String>) -> Self {
         Self {
             status_code: 500,
@@ -422,7 +430,7 @@ impl BridgeService {
                         return Err(BridgeServiceError::bad_request(
                             "invalid_resolution",
                             format!(
-                                "unsupported resolution `{other}`; expected `mark_resolved` or `close`"
+                                "unsupported resolution `{other}`; expected `mark_resolved`, `resolve`, or `close`"
                             ),
                         ))
                     }
@@ -450,8 +458,9 @@ impl BridgeService {
 
     fn chain_client(&self) -> Result<ChainExplorerClient, BridgeServiceError> {
         let Some(base_url) = self.config.chain_base_url.as_deref() else {
-            return Err(BridgeServiceError::internal(
-                "chain explorer base URL is not configured",
+            return Err(BridgeServiceError::service_unavailable(
+                "chain_explorer_not_configured",
+                "bridge reconcile requires operator flag `--chain-base-url`",
             ));
         };
         ChainExplorerClient::new(base_url, self.config.chain_timeout_ms)
@@ -460,8 +469,9 @@ impl BridgeService {
 
     fn credit_adapter(&self) -> Result<NewApiCreditAdapter, BridgeServiceError> {
         let Some(endpoint_url) = self.config.credit_adapter_url.as_deref() else {
-            return Err(BridgeServiceError::internal(
-                "credit adapter URL is not configured",
+            return Err(BridgeServiceError::service_unavailable(
+                "credit_adapter_not_configured",
+                "bridge auto credit requires operator flag `--credit-adapter-url`",
             ));
         };
         NewApiCreditAdapter::new(
@@ -489,7 +499,7 @@ impl BridgeService {
                 if let Some(existing) = state
                     .ledger
                     .iter_mut()
-                    .find(|entry| entry.chain_tx_id == transfer.tx_hash)
+                    .find(|entry| ledger_matches_transfer(entry, route, transfer))
                 {
                     let confirmations =
                         compute_confirmations(committed_height, transfer.block_height);
@@ -609,8 +619,11 @@ impl BridgeService {
 
                 let bridge_deposit_id = format!("bridge-deposit-{:06}", state.next_deposit_seq);
                 state.next_deposit_seq = state.next_deposit_seq.saturating_add(1);
-                let idempotency_key =
-                    build_idempotency_key(route.route_id.as_str(), transfer.tx_hash.as_str());
+                let idempotency_key = build_idempotency_key(
+                    route.route_id.as_str(),
+                    transfer.tx_hash.as_str(),
+                    transfer.action_id,
+                );
                 state.ledger.push(BridgeLedgerEntry {
                     bridge_deposit_id,
                     route_id: route.route_id.clone(),
@@ -664,14 +677,21 @@ impl BridgeService {
                         continue;
                     }
                     let confirmations = compute_confirmations(committed_height, entry.block_height);
+                    let mut changed = false;
                     if confirmations != entry.confirmations {
                         entry.confirmations = confirmations;
                         entry.updated_at_unix_ms = now_unix_ms;
-                        updated += 1;
+                        changed = true;
                     }
-                    if confirmations >= entry.required_confirmations {
+                    if confirmations >= entry.required_confirmations
+                        && entry.state != BridgeLedgerState::Confirmed
+                    {
                         entry.state = BridgeLedgerState::Confirmed;
                         entry.updated_at_unix_ms = now_unix_ms;
+                        changed = true;
+                    }
+                    if changed {
+                        updated += 1;
                     }
                 }
                 Ok(updated)
@@ -960,6 +980,19 @@ fn compute_confirmations(committed_height: u64, block_height: Option<u64>) -> u6
         .saturating_add(1)
 }
 
-fn build_idempotency_key(route_id: &str, chain_tx_id: &str) -> String {
-    format!("bridge-credit:{route_id}:{chain_tx_id}")
+fn ledger_matches_transfer(
+    entry: &BridgeLedgerEntry,
+    route: &DepositRoute,
+    transfer: &ObservedChainTransfer,
+) -> bool {
+    entry.route_id == route.route_id
+        && entry.chain_tx_id == transfer.tx_hash
+        && match entry.chain_action_id {
+            Some(chain_action_id) => chain_action_id == transfer.action_id,
+            None => true,
+        }
+}
+
+fn build_idempotency_key(route_id: &str, chain_tx_id: &str, chain_action_id: u64) -> String {
+    format!("bridge-credit:{route_id}:{chain_tx_id}:{chain_action_id}")
 }
