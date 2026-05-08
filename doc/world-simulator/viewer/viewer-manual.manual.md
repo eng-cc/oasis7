@@ -28,12 +28,8 @@ env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstr
 ```
 `oasis7_viewer_live` 当前默认走 LLM 模式，且正式 gameplay 要求已配置且可连通的 LLM provider。
 
-```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011
-```
-
 `oasis7_viewer_live` 现已统一为 runtime/world 链路（协议兼容输出 `WorldSnapshot/WorldEvent`），不再提供 simulator fallback 启动分支。
-传 `--llm` 可进入正式 gameplay、prompt/chat 鉴权与控制闭环；`--no-llm` 仅用于观战/调试，`gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 则会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。
+传 `--llm` 可进入正式 gameplay、prompt/chat 鉴权与控制闭环。
 
 ### 2）启动 viewer
 ```bash
@@ -570,6 +566,7 @@ agent-browser close
 - 看不到细节：先用 `F` 或 `--auto-focus-target` 聚焦，并优先保持 2D / Web 主链路；只有在 hold-only 3D 排查时才显式切到 3D。
 - 自动聚焦无效：确认 target 存在，或先使用 `first_fragment` 排除 ID 输入问题。
 - 连接失败：检查 `oasis7_viewer_live` 是否运行、端口与 viewer 地址是否一致。
+- 如果你只是要做 observer/debug 诊断，可显式运行 `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011`；此路径不计入 formal gameplay evidence，且 `gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。
 
 ## 参考文档
 - `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md`

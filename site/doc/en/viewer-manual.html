@@ -66,9 +66,6 @@
         <h3>1) Start live server (recommended)</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
         <p>`oasis7_viewer_live` now defaults to LLM mode; formal gameplay requires a configured, reachable LLM provider.</p>
-        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>`--no-llm` is observer/debug only; `gameplay_action/prompt/chat` returns `llm_mode_required` or `llm_init_failed`, while `step/play` returns `ControlCompletionAck` with `Blocked + error_code/error_message`.</p>
-
         <h3>2) Start viewer</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
@@ -251,6 +248,7 @@ window.__AW_TEST__.getState();</code></pre>
           <li>Cannot see detail: switch to 3D, zoom and move camera, or use `F` focus.</li>
           <li>Auto focus not working: verify target existence, start from `first_fragment`.</li>
           <li>Connection failure: check `oasis7_viewer_live` process and endpoint port match.</li>
+          <li>If you only need observer/debug diagnostics, explicitly run `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011`; this path does not count as formal gameplay evidence, and `gameplay_action/prompt/chat` returns `llm_mode_required` or `llm_init_failed` while `step/play` returns `ControlCompletionAck` with `Blocked + error_code/error_message`.</li>
         </ul>
       </section>
 
