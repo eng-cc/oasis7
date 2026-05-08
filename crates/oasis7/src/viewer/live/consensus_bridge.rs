@@ -76,9 +76,14 @@ impl LiveConsensusBridge {
                     }
                     Ok(ConsensusActionPayloadBody::RuntimeAction { .. }) => {}
                     Err(err) => {
-                        eprintln!(
-                            "viewer live consensus bridge: skip undecodable payload action_id={} err={}",
-                            committed.action_id, err
+                        crate::observability::emit_stderr_or_event(
+                            tracing::Level::WARN,
+                            format!(
+                                "viewer live consensus bridge: skip undecodable payload action_id={} err={}",
+                                committed.action_id, err
+                            )
+                            .as_str(),
+                            "viewer live consensus bridge skipped undecodable payload",
                         );
                     }
                 }

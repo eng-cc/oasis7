@@ -7,6 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::geometry::GeoPos;
+use crate::observability::emit_stderr_or_event;
 use crate::runtime::{
     blake3_hex, Action as RuntimeAction, DomainEvent as RuntimeDomainEvent,
     Journal as RuntimeJournal, ReleaseSecurityPolicy, Snapshot as RuntimeSnapshot,
@@ -19,6 +20,7 @@ use crate::simulator::{
     WorldInitConfig, WorldScenario, WorldSnapshot, CHUNK_GENERATION_SCHEMA_VERSION,
     SNAPSHOT_VERSION,
 };
+use tracing::Level;
 
 use super::auth::verify_session_register_auth_proof;
 use super::live::ViewerLiveDecisionMode;
@@ -240,7 +242,11 @@ impl ViewerRuntimeLiveServer {
             let shared = Arc::clone(&shared);
             thread::spawn(move || {
                 if let Err(err) = Self::serve_shared_stream(shared, stream) {
-                    eprintln!("viewer runtime live server error: {err:?}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("viewer runtime live server error: {err:?}").as_str(),
+                        "viewer runtime live server error",
+                    );
                 }
             });
         }
@@ -355,7 +361,11 @@ impl ViewerRuntimeLiveServer {
                     &mut session,
                     &mut writer,
                 ) {
-                    eprintln!("viewer runtime live: chain sync skipped: {err:?}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                        "viewer runtime live chain sync skipped",
+                    );
                 }
             }
 
@@ -400,7 +410,11 @@ impl ViewerRuntimeLiveServer {
                 && session.should_poll_chain(self.config.chain_poll_interval)
             {
                 if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
-                    eprintln!("viewer runtime live: chain sync skipped: {err:?}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                        "viewer runtime live chain sync skipped",
+                    );
                 }
             }
 
@@ -606,8 +620,13 @@ impl ViewerRuntimeLiveServer {
                 session.playing = false;
                 session.next_play_step_at = None;
                 session.transient_play_failures = 0;
-                eprintln!(
-                    "viewer runtime live: ignore seek control in live mode (target_tick={tick})"
+                emit_stderr_or_event(
+                    Level::INFO,
+                    format!(
+                        "viewer runtime live: ignore seek control in live mode (target_tick={tick})"
+                    )
+                    .as_str(),
+                    "viewer runtime live ignored seek control in live mode",
                 );
             }
         }
@@ -1123,7 +1142,12 @@ impl ViewerRuntimeLiveServer {
         emit_snapshot: bool,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let (error_code, error_message, hint) = runtime_control_error_details(&error);
-        eprintln!("viewer runtime live: control {action} failed: {error_message} ({error:?})");
+        emit_stderr_or_event(
+            Level::WARN,
+            format!("viewer runtime live: control {action} failed: {error_message} ({error:?})")
+                .as_str(),
+            "viewer runtime live control failed",
+        );
         session.playing = false;
         session.next_play_step_at = None;
         self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {

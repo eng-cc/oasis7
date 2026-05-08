@@ -1,4 +1,5 @@
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
+use oasis7::observability::init_tracing;
 use oasis7_launcher_ui::launcher_ui_fields_for_web;
 use oasis7_proto::storage_profile::StorageProfile;
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
+use tracing::{error, info};
 #[path = "oasis7_web_launcher/control_plane.rs"]
 mod control_plane;
 #[path = "oasis7_web_launcher/gui_agent_api.rs"]
@@ -526,6 +528,7 @@ impl ChainFeedbackSubmitResponse {
 }
 
 fn main() {
+    init_tracing("oasis7_web_launcher");
     let raw_args: Vec<String> = env::args().skip(1).collect();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
@@ -535,14 +538,24 @@ fn main() {
     let options = match parse_options(raw_args.iter().map(String::as_str)) {
         Ok(options) => options,
         Err(err) => {
-            eprintln!("{err}");
+            error!(error = %err, "failed to parse web launcher options");
             print_help();
             process::exit(1);
         }
     };
 
+    info!(
+        listen_bind = %options.listen_bind,
+        launcher_bin = %options.launcher_bin,
+        chain_runtime_bin = %options.chain_runtime_bin,
+        console_static_dir = %options.console_static_dir.display(),
+        deployment_mode = %options.initial_config.deployment_mode,
+        scenario = %options.initial_config.scenario,
+        "starting web launcher"
+    );
+
     if let Err(err) = run_server(options) {
-        eprintln!("oasis7_web_launcher failed: {err}");
+        error!(error = %err, "oasis7_web_launcher failed");
         process::exit(1);
     }
 }

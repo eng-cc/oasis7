@@ -2,11 +2,13 @@ use std::env;
 use std::process;
 use std::thread;
 
+use oasis7::observability::init_tracing;
 use oasis7::simulator::WorldScenario;
 use oasis7::viewer::{
     ViewerLiveDecisionMode, ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig,
     ViewerWebBridge, ViewerWebBridgeConfig,
 };
+use tracing::{error, info, warn};
 
 const DEFAULT_SCENARIO: &str = "llm_bootstrap";
 const DEFAULT_BIND: &str = "127.0.0.1:5023";
@@ -41,6 +43,7 @@ impl Default for CliOptions {
 }
 
 fn main() {
+    init_tracing("oasis7_viewer_live");
     let raw_args: Vec<String> = env::args().skip(1).collect();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
@@ -50,19 +53,28 @@ fn main() {
     let options = match parse_options(raw_args.iter().map(|arg| arg.as_str())) {
         Ok(options) => options,
         Err(err) => {
-            eprintln!("{err}");
+            error!(error = %err, "failed to parse viewer live options");
             print_help();
             process::exit(1);
         }
     };
 
     if let Err(err) = run_viewer(options) {
-        eprintln!("oasis7_viewer_live failed: {err}");
+        error!(error = %err, "oasis7_viewer_live failed");
         process::exit(1);
     }
 }
 
 fn run_viewer(options: CliOptions) -> Result<(), String> {
+    info!(
+        bind_addr = %options.bind_addr,
+        web_bind_addr = ?options.web_bind_addr,
+        llm_mode = options.llm_mode,
+        deployment_mode = %options.deployment_mode,
+        chain_status_bind = ?options.chain_status_bind,
+        scenario = %options.scenario.as_str(),
+        "starting viewer live runtime"
+    );
     if let Some(web_bind_addr) = options.web_bind_addr.clone() {
         let upstream_addr = options.bind_addr.clone();
         thread::spawn(move || {
@@ -71,7 +83,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
                 upstream_addr,
             ));
             if let Err(err) = bridge.run() {
-                eprintln!("viewer web bridge failed on {web_bind_addr}: {err:?}");
+                warn!(bind_addr = %web_bind_addr, error = ?err, "viewer web bridge exited with error");
             }
         });
     }

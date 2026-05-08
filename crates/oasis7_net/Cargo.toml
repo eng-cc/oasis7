@@ -21,6 +21,7 @@ oasis7_wasm_abi = { path = "../oasis7_wasm_abi" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
 hex = "0.4"
+tracing = "0.1"
 futures = { version = "0.3", optional = true }
 async-std = { version = "1", optional = true }
 libp2p = { version = "0.53", optional = true, default-features = false, features = ["async-std", "autonat", "cbor", "dcutr", "dns", "gossipsub", "kad", "macros", "noise", "quic", "relay", "rendezvous", "request-response", "tcp", "yamux"] }

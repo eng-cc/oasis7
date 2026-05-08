@@ -4,10 +4,13 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
+use tracing::Level;
 use tungstenite::error::ProtocolError;
 use tungstenite::handshake::HandshakeError;
 use tungstenite::protocol::Message;
 use tungstenite::{accept, Error as WsError};
+
+use crate::observability::emit_stderr_or_event;
 
 #[derive(Debug, Clone)]
 pub struct ViewerWebBridgeConfig {
@@ -57,7 +60,12 @@ impl ViewerWebBridge {
             let stream = match incoming {
                 Ok(stream) => stream,
                 Err(err) => {
-                    eprintln!("viewer web bridge accept error: {err:?}");
+                    let stderr_message = format!("viewer web bridge accept error: {err:?}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        stderr_message.as_str(),
+                        "viewer web bridge accept failed",
+                    );
                     continue;
                 }
             };
@@ -66,7 +74,12 @@ impl ViewerWebBridge {
                 let bridge = ViewerWebBridge::new(config);
                 if let Err(err) = bridge.serve_stream(stream) {
                     if !is_expected_bridge_disconnect(&err) {
-                        eprintln!("viewer web bridge error: {err:?}");
+                        let stderr_message = format!("viewer web bridge error: {err:?}");
+                        emit_stderr_or_event(
+                            Level::WARN,
+                            stderr_message.as_str(),
+                            "viewer web bridge session failed",
+                        );
                     }
                 }
             });

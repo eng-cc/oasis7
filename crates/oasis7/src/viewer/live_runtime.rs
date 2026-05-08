@@ -7,7 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::observability::emit_stderr_or_event;
 use oasis7_node::{NodeCommittedActionBatchesHandle, NodeRuntime};
+use tracing::Level;
 
 use crate::geometry::space_distance_cm;
 use crate::simulator::{
@@ -201,7 +203,12 @@ impl ViewerLiveServer {
         for incoming in listener.incoming() {
             let stream = incoming?;
             if let Err(err) = self.serve_stream(stream) {
-                eprintln!("viewer live server error: {err:?}");
+                let stderr_message = format!("viewer live server error: {err:?}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    stderr_message.as_str(),
+                    "viewer live server session failed",
+                );
             }
         }
         Ok(())
@@ -398,17 +405,22 @@ impl ViewerLiveServer {
         drop(loop_tx);
         let backpressure_snapshot = backpressure.snapshot();
         if backpressure_snapshot.has_activity() {
-            eprintln!(
-                "viewer live backpressure merged={{llm_decision:{}, consensus_committed:{}, consensus_drive:{}, non_consensus_drive:{}}} dropped={{llm_decision:{}, consensus_committed:{}, consensus_drive:{}, non_consensus_drive:{}}} signals=[{}]",
-                backpressure_snapshot.merged_llm_decision_requested,
-                backpressure_snapshot.merged_consensus_committed,
-                backpressure_snapshot.merged_consensus_drive_requested,
-                backpressure_snapshot.merged_non_consensus_drive_requested,
-                backpressure_snapshot.dropped_llm_decision_requested,
-                backpressure_snapshot.dropped_consensus_committed,
-                backpressure_snapshot.dropped_consensus_drive_requested,
-                backpressure_snapshot.dropped_non_consensus_drive_requested,
-                format_live_loop_signal_stats(&backpressure_snapshot),
+            emit_stderr_or_event(
+                Level::INFO,
+                format!(
+                    "viewer live backpressure merged={{llm_decision:{}, consensus_committed:{}, consensus_drive:{}, non_consensus_drive:{}}} dropped={{llm_decision:{}, consensus_committed:{}, consensus_drive:{}, non_consensus_drive:{}}} signals=[{}]",
+                    backpressure_snapshot.merged_llm_decision_requested,
+                    backpressure_snapshot.merged_consensus_committed,
+                    backpressure_snapshot.merged_consensus_drive_requested,
+                    backpressure_snapshot.merged_non_consensus_drive_requested,
+                    backpressure_snapshot.dropped_llm_decision_requested,
+                    backpressure_snapshot.dropped_consensus_committed,
+                    backpressure_snapshot.dropped_consensus_drive_requested,
+                    backpressure_snapshot.dropped_non_consensus_drive_requested,
+                    format_live_loop_signal_stats(&backpressure_snapshot),
+                )
+                .as_str(),
+                "viewer live backpressure summary",
             );
         }
         result

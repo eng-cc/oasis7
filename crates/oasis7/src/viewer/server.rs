@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 
+use tracing::Level;
+
+use crate::observability::emit_stderr_or_event;
 use crate::simulator::{
     PersistError, RunnerMetrics, WorldEvent, WorldJournal, WorldSnapshot, WorldTime,
 };
@@ -100,7 +103,12 @@ impl ViewerServer {
         for incoming in listener.incoming() {
             let stream = incoming?;
             if let Err(err) = self.serve_stream(stream) {
-                eprintln!("viewer server error: {err:?}");
+                let stderr_message = format!("viewer server error: {err:?}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    stderr_message.as_str(),
+                    "viewer server session failed",
+                );
             }
         }
         Ok(())

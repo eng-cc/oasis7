@@ -23,17 +23,6 @@ mod transport_paths;
 mod utils;
 mod wire_bytes;
 
-use futures::channel::mpsc;
-use futures::{FutureExt, StreamExt};
-use libp2p::gossipsub::{self, TopicHash};
-use libp2p::identity::Keypair;
-use libp2p::kad::{self};
-use libp2p::relay;
-use libp2p::rendezvous;
-use libp2p::request_response::{self};
-use libp2p::swarm::SwarmEvent;
-use libp2p::{Multiaddr, PeerId};
-
 use crate::{error::WorldError, util::to_canonical_cbor};
 pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
@@ -55,7 +44,17 @@ use discovery::{
     PendingPeerRecordRequest,
 };
 use error_mapping::error_response_from_world_error;
+use futures::channel::mpsc;
+use futures::{FutureExt, StreamExt};
 use kad_queries::{handle_dht_progress, DhtProgressAction, PendingDhtQuery};
+use libp2p::gossipsub::{self, TopicHash};
+use libp2p::identity::Keypair;
+use libp2p::kad::{self};
+use libp2p::relay;
+use libp2p::rendezvous;
+use libp2p::request_response::{self};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{Multiaddr, PeerId};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
@@ -111,6 +110,7 @@ const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
 const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
 const LIFECYCLE_EVENT_ERROR_COOLDOWN_MS: i64 = 5_000;
+
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,
@@ -468,7 +468,14 @@ impl Libp2pNetwork {
                                             }
                                         }
                                         request_response::Event::InboundFailure { peer, error, .. } => {
-                                            eprintln!("libp2p inbound failure from {peer:?}: {error:?}");
+                                            let stderr_message = format!(
+                                                "libp2p inbound failure from {peer:?}: {error:?}"
+                                            );
+                                            utils::emit_stderr_or_event(
+                                                tracing::Level::WARN,
+                                                stderr_message.as_str(),
+                                                "libp2p inbound failure",
+                                            );
                                         }
                                         request_response::Event::ResponseSent { .. } => {}
                                     }

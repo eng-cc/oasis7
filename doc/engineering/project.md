@@ -155,6 +155,7 @@
 - [x] lightweight-web-ui-automation-smoke (PRD-ENGINEERING-021) [test_tier_required]: 为当前 workflow friction burn-down 补一条 repo-owned 轻量 Web/UI automation smoke，用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh`，在不启动完整 runtime 栈的前提下先验证 S6 tooling 与 summary/state 产物契约。 Trace: .pm/tasks/task_08478a657e554c5f9b0031f0b86bed2f.yaml
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-021/025) [test_tier_required]: 执行 `scripts/doc-inventory-report.sh` 季度复核，固定当前 `doc/` 体量快照，并把工程治理“下一任务”从泛化的季度复核 placeholder 改判为 near-limit active project docs 拆分优先，避免继续悬空停留在 review-only 状态。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 - [x] workflow-helper-review-followup (PRD-ENGINEERING-021) [test_tier_required]: 收口当前 workflow friction burn-down PR `#145` 的 review comments，补齐 workflow helpers 的 shell quoting、回归测试、临时文件传递与 rebase helper trap 作用域修复，并把当前 PR 的 review-thread closeout 从“列评论”推进到“可验证的代码修复 + resolve 预备态”。 Trace: .pm/tasks/task_c8c2d3e2eb75489abdc764c9ac9f5979.yaml
+- [x] tracing-baseline (PRD-ENGINEERING-001/003) [test_tier_required]: 为 `oasis7` native runtime 入口建立最小结构化 tracing 基线，新增共享初始化 helper，并在 `viewer_live / viewer_server / chain_runtime / web_launcher` 与关键 viewer/libp2p 热路径接入统一日志入口。 Trace: .pm/tasks/task_83306ab3aa274d06b1402a8ddcea7af3.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`

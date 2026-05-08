@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use futures::channel::mpsc;
+use tracing::Level;
 
 use crate::error::WorldError;
 use crate::util::unix_now_ms_i64;
@@ -50,6 +51,20 @@ pub(super) fn push_bounded_clone<T: Clone>(
 ) {
     let mut guard = values.lock().expect(lock_label);
     push_bounded_vec(&mut guard, value, max_len);
+}
+
+pub(super) fn emit_stderr_or_event(level: Level, stderr_message: &str, event_message: &str) {
+    if tracing::dispatcher::has_been_set() {
+        match level {
+            Level::ERROR => tracing::error!(message = %stderr_message, "{event_message}"),
+            Level::WARN => tracing::warn!(message = %stderr_message, "{event_message}"),
+            Level::INFO => tracing::info!(message = %stderr_message, "{event_message}"),
+            Level::DEBUG => tracing::debug!(message = %stderr_message, "{event_message}"),
+            Level::TRACE => tracing::trace!(message = %stderr_message, "{event_message}"),
+        }
+    } else {
+        eprintln!("{stderr_message}");
+    }
 }
 
 #[cfg(test)]
