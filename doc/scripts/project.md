@@ -86,7 +86,7 @@
     - `./scripts/worktree-harness.sh --help`
     - `./scripts/run-game-test.sh --help`
     - `./scripts/run-producer-playtest.sh --help`
-    - `./scripts/worktree-harness.sh up --no-llm --smoke-timeout 30`
+    - `./scripts/worktree-harness.sh up --smoke-timeout 30`
     - `./scripts/worktree-harness.sh status --json`
     - `./scripts/worktree-harness.sh down`
     - `./scripts/doc-governance-check.sh`
@@ -248,6 +248,7 @@
     - `./scripts/land-task-worktree.sh --help`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [ ] worktree-harness-llm-path-alignment (PRD-SCRIPTS-004/006) [test_tier_required]: 修正 `new-task-worktree.sh --with-harness` 仍预热 `worktree-harness.sh up --no-llm` 的实现/文档漂移，统一为 formal gameplay 默认 LLM path，并把 `--no-llm` 收回 direct `oasis7_viewer_live` diagnostics 语境。 Trace: .pm/tasks/task_61ca6b9c39214cb394522fa99b355502.yaml
 - [x] worktree-lifecycle-report (PRD-SCRIPTS-008) [test_tier_required]: 新增只读 `worktree` 生命周期盘点入口 `scripts/worktree-gc-report.sh`，统一汇总 prunable worktree、已 closed `.pm` task 对应的 clean worktree 与建议 cleanup 命令，减少已完成 task worktree 长期滞留。 Trace: .pm/tasks/task_58bd1608d4ea4703a6dbc10febed36b2.yaml
   - 产物文件:
     - `scripts/worktree-gc-report.sh`

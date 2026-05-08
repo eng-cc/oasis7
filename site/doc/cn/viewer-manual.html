@@ -66,9 +66,6 @@
         <h3>1) 启动 live server（推荐）</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
         <p>`oasis7_viewer_live` 当前默认走 LLM 模式；正式 gameplay 需要已配置且可连通的 LLM provider。</p>
-        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>`--no-llm` 仅用于观战/调试；`gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 则会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。</p>
-
         <h3>2) 启动 viewer</h3>
         <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
 
@@ -251,6 +248,7 @@ window.__AW_TEST__.getState();</code></pre>
           <li>看不到细节：切换 3D，放大并移动视角，或按 `F` 聚焦。</li>
           <li>自动聚焦无效：先用 `first_fragment` 排除目标 ID 输入问题。</li>
           <li>连接失败：检查 `oasis7_viewer_live` 运行状态与端口一致性。</li>
+          <li>如果你只是要做 observer/debug 诊断，可显式运行 `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011`；此路径不计入 formal gameplay evidence，且 `gameplay_action/prompt/chat` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，`step/play` 会返回带 `Blocked + error_code/error_message` 的 `ControlCompletionAck`。</li>
         </ul>
       </section>
 

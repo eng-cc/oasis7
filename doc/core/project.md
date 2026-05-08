@@ -291,6 +291,7 @@
 - [x] TASK-CORE-053 (PRD-CORE-009) [test_tier_required]: 按最新产品设定重写三模式总契约，把 `software_safe` 升格为主要正式 Web 入口、把 `standard_3d` 收口为 opt-in visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 定位；同步回写 core/world-simulator 相关 topic project 状态，但不提前改写仍描述“当前实现”的 public entry 文案。
 - [ ] TASK-CORE-054 (PRD-CORE-009) [test_tier_required]: 在 `software_safe` 默认主入口实现与 QA 证据完成后，再统一更新 README/testing/manual/current-entry 文案，避免设计目标与已上线行为混写。
 - [x] TASK-CORE-055 (PRD-CORE-009) [test_tier_required]: 继续清理旧 provider branding 在活跃结构层的残留，把 canonical implementation 收口为 `provider_loopback_http`，并将 bridge/parity/script/workspace 的默认 operator 路径切到 generic provider 命名，不再把退役 alias 或旧 backend brand 作为当前真值。
+- [ ] no-llm-wording-cleanup (PRD-CORE-009) [test_tier_required]: 收口当前入口里的 `--no-llm` 暴露层级，修正 `--with-harness` 仍预热 no-LLM 的实现/文档漂移，并把 active docs / 手册统一回写为“formal gameplay requires active LLM；`--no-llm` 仅限 direct viewer diagnostics”。 Trace: .pm/tasks/task_61ca6b9c39214cb394522fa99b355502.yaml
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/project.md`

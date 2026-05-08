@@ -25,7 +25,7 @@ Options:
   --worktrees-root <dir>  Override default worktrees root
   --allow-dirty-source    Allow creating from a dirty source worktree
   --init-docs             Inspect module PRD/project in the new worktree
-  --with-harness          Asynchronously prewarm ./scripts/worktree-harness.sh up --no-llm in the new worktree
+  --with-harness          Asynchronously prewarm ./scripts/worktree-harness.sh up in the new worktree
   --pm-owner-role <role>  Create the .pm task inside the target worktree, move it to committed,
                           and record workflow start with this owner role
   --pm-title <title>      Required when using --pm-owner-role
@@ -381,7 +381,7 @@ if [[ "$WITH_HARNESS" == "1" ]]; then
   mkdir -p "$(dirname "$HARNESS_BOOTSTRAP_LOG")"
   (
     cd "$TARGET_PATH"
-    nohup ./scripts/worktree-harness.sh up --no-llm >"$HARNESS_BOOTSTRAP_LOG" 2>&1 < /dev/null &
+    nohup ./scripts/worktree-harness.sh up >"$HARNESS_BOOTSTRAP_LOG" 2>&1 < /dev/null &
   )
   for _ in $(seq 1 5); do
     [[ -f "$HARNESS_STATE_FILE" ]] && break

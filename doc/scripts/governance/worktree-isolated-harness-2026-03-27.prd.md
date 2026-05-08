@@ -39,7 +39,7 @@
 | 端口组分配 | `viewer_port`、`web_bind`、`live_bind`、`chain_status_bind` | `up` 时一次性分配并回写状态 | `unassigned -> reserved -> released` | 优先 loopback；单次写入同一状态文件 | harness owner 可维护 |
 | 隔离目录 | `bundle_dir`、`runtime_dir`、`artifacts_dir`、`browser_dir` | `up` 时创建，`down` 时保留证据 | `missing -> provisioned -> archived` | 固定在 `output/harness/<worktree_id>/` 下 | 执行者可读 |
 | ready payload | `viewer_url`、`launcher_pid`、`launch_mode`、`meta_file` | 底层 stack ready 后写入 JSON | `booting -> ready` | 上层通过 JSON 读取，不依赖 grep stdout | agent / QA 可读 |
-| smoke 入口 | `smoke_timeout`、`session_name`、`open_headed` | 复用当前 stack 执行最小 smoke | `ready -> verifying -> pass/fail` | 默认 no-llm smoke 优先 | QA / agent 可触发 |
+| smoke 入口 | `smoke_timeout`、`session_name`、`open_headed` | 复用当前 stack 执行最小 smoke | `ready -> verifying -> pass/fail` | 默认优先复用 formal gameplay 的 active LLM stack；`--no-llm` 只保留给 direct viewer diagnostics | QA / agent 可触发 |
 - Acceptance Criteria:
   - AC-1: `scripts/worktree-harness.sh --help` 明确列出 `up/down/status/url/logs/smoke`。
   - AC-2: `scripts/run-game-test.sh` 支持 `--output-dir`、`--run-id`、`--meta-file` 与 `--json-ready`。

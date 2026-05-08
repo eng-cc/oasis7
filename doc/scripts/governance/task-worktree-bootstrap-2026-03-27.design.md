@@ -15,7 +15,7 @@
 - 授权层：只接受用户显式授权“复用当前 worktree / 就在这里改 / 不要切新 worktree”这类明确指令；其余模糊表述一律按“仍需新开 worktree”处理。
 - 执行层：调用 `git worktree add` 创建新 branch 或附着已有 branch。
 - 文档层：`--init-docs` 时检查 `doc/<module>/prd.md`、`doc/<module>/project.md` 与当日 `doc/devlog/YYYY-MM-DD.md`。
-- harness 层：`--with-harness` 时在新 worktree 中后台触发 `./scripts/worktree-harness.sh up --no-llm`，并把 bootstrap 日志与状态文件路径回传给上层。
+- harness 层：`--with-harness` 时在新 worktree 中后台触发 `./scripts/worktree-harness.sh up`，并把 bootstrap 日志与状态文件路径回传给上层；该路径继承 formal gameplay 的 active LLM preflight。
 - 输出层：打印下一步命令；需要自动化时输出 JSON 摘要，并保证 JSON 模式下 stdout 纯净。
 
 ## 3. 关键接口 / 入口
@@ -32,7 +32,7 @@
 - 若开工后才发现切错 worktree，必须立即说明并切走；“已经开始改了几行”不是例外。
 - `--json` 模式只输出单个 JSON 对象，方便脚本消费。
 - `--init-docs` 仅做存在性检查和下一步提示，不自动创建缺失文档。
-- `--with-harness` 默认走 `--no-llm`，且采用异步预热；人类输出写 bootstrap 日志，不污染 JSON stdout。
+- `--with-harness` 默认走当前 formal gameplay 的 LLM-required launcher path，且采用异步预热；人类输出写 bootstrap 日志，不污染 JSON stdout。
 
 ## 5. 设计演进计划
 - 先落地标准入口与围栏。
