@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="oasis7 HTML 路演 Deck：用固定 slide 顺序讲清项目定位、玩法差异、技术底座、当前阶段与下一步。"
+    />
+    <meta property="og:title" content="oasis7 | HTML 路演 Deck" />
+    <meta
+      property="og:description"
+      content="一个站内可直接访问的 HTML deck，用顺序化叙事讲清 oasis7 是什么、为什么不是普通 AI Demo、当前做到哪一步。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://eng-cc.github.io/oasis7/deck/" />
+    <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="theme-color" content="#081019" />
+    <title>oasis7 | HTML 路演 Deck</title>
+    <link rel="canonical" href="https://eng-cc.github.io/oasis7/deck/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/deck/" />
+    <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/deck/en/" />
+    <link rel="icon" type="image/svg+xml" href="../assets/images/favicon.svg" />
+    <link rel="stylesheet" href="../vendor/reveal.js/dist/reset.css" />
+    <link rel="stylesheet" href="../vendor/reveal.js/dist/reveal.css" />
+    <link rel="stylesheet" href="deck.css" />
+  </head>
+  <body>
+    <div class="deck-chrome">
+      <a class="deck-brand" href="../index.html">
+        <span class="deck-brand-mark"></span>
+        <span>oasis7</span>
+      </a>
+      <div class="deck-actions">
+        <a href="../index.html">首页</a>
+        <a href="../doc/cn/index.html">文档中心</a>
+        <a href="../doc/cn/project-overview.html">项目总览</a>
+      </div>
+    </div>
+
+    <div class="deck-status">
+      <span class="deck-status-chip is-live">HTML Deck</span>
+      <span class="deck-status-chip">技术预览 / 尚不可玩</span>
+      <span class="deck-status-chip">键盘方向键或空格翻页</span>
+    </div>
+
+    <div class="reveal">
+      <div class="slides">
+        <section class="slide cover-slide" data-background-gradient="linear-gradient(140deg, #07111a 0%, #081f27 52%, #05161d 100%)">
+          <div class="slide-shell">
+            <p class="slide-kicker">oasis7 / Roadshow Deck</p>
+            <h1>一个会自己推进历史的 AI Agent 文明模拟游戏</h1>
+            <p class="slide-lead">
+              世界发生在破碎小行星带里。玩家不直接接管单位，而是站在文明外部设定目标、约束和治理边界，
+              然后看 Agent 在资源压力下把扩张、生产、交易、联盟和战争一路推下去。
+            </p>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <strong>题材</strong>
+                <span>持续文明模拟，不是一次性 AI Demo</span>
+              </article>
+              <article class="metric-card">
+                <strong>玩家位置</strong>
+                <span>文明外部战略指挥者，不做逐单位微操</span>
+              </article>
+              <article class="metric-card">
+                <strong>当前阶段</strong>
+                <span>公开技术预览，已能讲清与验证，尚不可误读成大众可玩版</span>
+              </article>
+            </div>
+            <div class="footer-note">
+              这份 deck 负责顺序化讲述项目，不替代首页公开边界，也不替代 PRD / 项目文档真值。
+            </div>
+          </div>
+        </section>
+
+        <section class="slide agenda-slide">
+          <div class="slide-shell">
+            <div class="eyebrow-row">
+              <p class="slide-kicker">01 / Agenda</p>
+              <span class="mini-note">为什么值得继续看</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <h2>这套叙事会按 5 个问题往前走</h2>
+                <ol class="agenda-list">
+                  <li>它到底是什么游戏，而不是什么 AI 包装壳？</li>
+                  <li>为什么这类世界有机会比普通 demo 更容易留住人？</li>
+                  <li>玩家、Agent 和世界规则的分工到底怎么成立？</li>
+                  <li>现在已经做到哪一步，哪些还没做到？</li>
+                  <li>下一阶段要把什么先做实？</li>
+                </ol>
+              </div>
+              <aside class="highlight-panel">
+                <p class="panel-tag">Deck Boundary</p>
+                <h3>这里先解决顺序，不解决全部细节</h3>
+                <p>
+                  官网和白皮书更适合自由浏览；deck 的价值在于，它能把问题、世界、产品边界和阶段判断按一条线讲清楚。
+                </p>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide problem-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">02 / Problem</p>
+            <h2>很多 AI 游戏 Demo 的问题，不是模型不够强，而是世界不够硬</h2>
+            <div class="grid-3">
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">A</span>
+                <h3>会说话，但不承担后果</h3>
+                <p>角色很会聊，但行为不受资源、时间、制度和真实状态约束，所以一离开脚本就塌。</p>
+              </article>
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">B</span>
+                <h3>看起来像世界，实际上像演示脚本</h3>
+                <p>没有持续运行的时间线，也没有能被记录、检查、回放的状态变化。</p>
+              </article>
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">C</span>
+                <h3>玩家像在拉木偶线</h3>
+                <p>玩家直接替系统做决策，世界本身没有自治性，于是长期策略乐趣也站不住。</p>
+              </article>
+            </div>
+            <div class="footer-note">
+              `oasis7` 不是先追问“怎样让角色更会聊天”，而是先追问“怎样把世界做结实”。
+            </div>
+          </div>
+        </section>
+
+        <section class="slide thesis-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">03 / Thesis</p>
+            <h2>`oasis7` 的产品主张：先做世界，再让文明自己长出来</h2>
+            <div class="grid-3 compact-grid">
+              <article class="value-card">
+                <p class="value-label">World-first</p>
+                <strong>所有有效行为都要经过世界规则验证</strong>
+                <span>不能跳过 runtime，不能靠后台改表把结果写死。</span>
+              </article>
+              <article class="value-card">
+                <p class="value-label">Persistent</p>
+                <strong>世界持续运行，历史不会因为玩家离线而归零</strong>
+                <span>组织、产线、联盟、冲突都在同一个时间轴上留下后果。</span>
+              </article>
+              <article class="value-card">
+                <p class="value-label">Emergence-first</p>
+                <strong>不预设完整剧情，更关注规则会催生什么</strong>
+                <span>组织、市场、协议和战争结果尽量从世界内行为里长出来。</span>
+              </article>
+            </div>
+            <blockquote class="pull-quote">
+              目标不是做“更聪明一点的 NPC”，而是做一个能自己积累历史的世界。
+            </blockquote>
+          </div>
+        </section>
+
+        <section class="slide role-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">04 / Player Role</p>
+            <h2>玩家决定文明方向，但不接管每个单位</h2>
+            <div class="timeline-grid">
+              <article class="timeline-step">
+                <span>01</span>
+                <h3>你先定战略</h3>
+                <p>是扩张矿带、守成囤资源，还是去争治理权和协议解释权。</p>
+              </article>
+              <article class="timeline-step">
+                <span>02</span>
+                <h3>你给边界</h3>
+                <p>你给的是目标、约束和治理规则，不是手动指定每一步操作。</p>
+              </article>
+              <article class="timeline-step">
+                <span>03</span>
+                <h3>Agent 自己执行</h3>
+                <p>它们在资源、时间和制度限制下自己生产、交易、结盟、冲突。</p>
+              </article>
+              <article class="timeline-step">
+                <span>04</span>
+                <h3>世界把后果留下</h3>
+                <p>价格、联盟、物流和治理提案会把你的输入变成可回看的后果链。</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide feel-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">05 / Why It Hooks</p>
+            <h2>这类游戏真正让人停不下来的，不是按钮，而是“局势会自己变脸”</h2>
+            <div class="grid-2">
+              <div class="scene-stack">
+                <article class="scene-card">
+                  <h3>资源先紧起来</h3>
+                  <p>某条矿线一断，价格会抬头，生产会失衡，原本还能忍的邻居会突然开始抢矿、囤货和封锁航线。</p>
+                </article>
+                <article class="scene-card">
+                  <h3>联盟会先谈，再翻脸</h3>
+                  <p>局势一开始可能只是交易和短期协定，但压力积累后，谈判会变成背叛和重新站队。</p>
+                </article>
+                <article class="scene-card">
+                  <h3>战争留下后劲</h3>
+                  <p>战争不是播完动画就结束。航线会被切断，政策会被改写，回来时还能看到完整后果链。</p>
+                </article>
+              </div>
+              <aside class="highlight-panel tall-panel">
+                <p class="panel-tag">Core Feeling</p>
+                <h3>从混乱长成秩序</h3>
+                <p>
+                  这不是“我点了多少次操作”的快感，而是“我做的一次判断，把后面的扩张、风险和节奏全部改写了”的快感。
+                </p>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide stack-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">06 / Stack</p>
+            <h2>技术底座不是炫技，而是为了让世界状态真的站住</h2>
+            <div class="stack-layers">
+              <div class="stack-layer">LLM Agents</div>
+              <div class="stack-layer">WASM Modules</div>
+              <div class="stack-layer">World Runtime</div>
+              <div class="stack-layer">Consensus Layer</div>
+              <div class="stack-layer">Distributed Storage &amp; Networking</div>
+            </div>
+            <div class="grid-3 compact-grid">
+              <article class="mini-card">
+                <strong>LLM 负责决策空间</strong>
+                <span>但不直接充当世界真值。</span>
+              </article>
+              <article class="mini-card">
+                <strong>WASM 承接高阶能力</strong>
+                <span>把制度、产业、玩法规则做成可部署的模块。</span>
+              </article>
+              <article class="mini-card">
+                <strong>Runtime + 共识负责真值</strong>
+                <span>保证状态变化能被验证，而不是只停留在单机幻觉里。</span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide proof-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">07 / What Exists Today</p>
+            <h2>现在已经能研究、能验证，但还不能包装成公开可玩版</h2>
+            <div class="proof-columns">
+              <article class="proof-column is-done">
+                <p class="proof-head">已经有</p>
+                <ul>
+                  <li>官网首页与白皮书式总览，能把项目定位讲清楚</li>
+                  <li>文档中心、Viewer 手册、测试手册与公开 skill 入口</li>
+                  <li>runtime / viewer / testing 的技术预览验证链路</li>
+                  <li>GitHub Pages 静态发布与站点质量门禁</li>
+                </ul>
+              </article>
+              <article class="proof-column is-boundary">
+                <p class="proof-head">当前边界</p>
+                <ul>
+                  <li>尚不可误读成普通玩家可直接进入的成熟产品</li>
+                  <li>当前更像可研究、可验证、可对齐的技术预览</li>
+                  <li>deck 负责讲清现状，不负责把阶段边界包装掉</li>
+                </ul>
+              </article>
+            </div>
+            <div class="footer-note">
+              公开口径必须继续保持：`technical preview / not playable yet`。
+            </div>
+          </div>
+        </section>
+
+        <section class="slide roadmap-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">08 / Path</p>
+            <h2>产品路径分两段：先把一个世界做扎实，再把它做成底盘</h2>
+            <div class="grid-2">
+              <article class="phase-card">
+                <p class="phase-label">Phase 1</p>
+                <h3>开放世界沙盒游戏</h3>
+                <p>先把参与感、探索感和成就感做实，让玩家愿意在同一个持续世界里待下来。</p>
+                <ul>
+                  <li>玩法闭环与玩家动机先站住</li>
+                  <li>世界后果链与可读性先站住</li>
+                  <li>技术预览向有限体验逐步收口</li>
+                </ul>
+              </article>
+              <article class="phase-card is-future">
+                <p class="phase-label">Phase 2</p>
+                <h3>开放世界游戏平台</h3>
+                <p>再演进到可承载不同规则集、不同模块生态和不同参与角色的底盘。</p>
+                <ul>
+                  <li>让创作者不只是消费者</li>
+                  <li>让规则与玩法可以继续演化</li>
+                  <li>但这一步还不是当前公开承诺</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide ask-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">09 / Next Focus</p>
+            <h2>下一阶段最重要的，不是再堆一层概念，而是把可体验闭环继续压实</h2>
+            <div class="grid-3">
+              <article class="mini-card">
+                <strong>玩法闭环</strong>
+                <span>让“资源压力 -> 联盟变化 -> 战争后果”更稳定地变成玩家能反复感知的循环。</span>
+              </article>
+              <article class="mini-card">
+                <strong>体验入口</strong>
+                <span>把技术预览入口继续往“更易理解、更易验证、更不误导”收紧。</span>
+              </article>
+              <article class="mini-card">
+                <strong>证据链</strong>
+                <span>继续让公开叙事和 repo 真值对齐，避免一边宣传、一边靠文档补洞。</span>
+              </article>
+            </div>
+            <blockquote class="pull-quote">
+              这个阶段最值钱的，不是把话说得更满，而是把“这个世界已经真的在动”证明得更硬。
+            </blockquote>
+          </div>
+        </section>
+
+        <section class="slide end-slide" data-background-gradient="linear-gradient(135deg, #061117 0%, #08232a 44%, #061218 100%)">
+          <div class="slide-shell end-shell">
+            <p class="slide-kicker">10 / Close</p>
+            <h2>一句话收口</h2>
+            <p class="end-summary">
+              `oasis7` 想做的不是“会聊天的角色集合”，而是一个在资源、时间、制度和共识约束下，真的会自己推进文明历史的世界。
+            </p>
+            <div class="cta-matrix">
+              <a class="deck-link-card" href="../index.html">
+                <strong>回首页</strong>
+                <span>看公开入口、阶段边界和当前能做什么</span>
+              </a>
+              <a class="deck-link-card" href="../doc/cn/project-overview.html">
+                <strong>看项目总览</strong>
+                <span>读白皮书式长说明，补齐细节背景</span>
+              </a>
+              <a class="deck-link-card" href="../doc/cn/index.html">
+                <strong>进文档中心</strong>
+                <span>继续深读玩法、测试、Viewer 和 skill 入口</span>
+              </a>
+            </div>
+            <div class="footer-note">
+              当前状态不变：公开技术预览，尚不可玩。
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="../vendor/reveal.js/dist/reveal.js"></script>
+    <script>
+      const deck = new Reveal({
+        controls: true,
+        progress: true,
+        center: false,
+        hash: true,
+        slideNumber: "c/t",
+        transition: "slide",
+        backgroundTransition: "fade",
+        width: 1440,
+        height: 810,
+        margin: 0.04,
+        touch: true,
+        embedded: false,
+      });
+
+      deck.initialize();
+    </script>
+  </body>
+</html>

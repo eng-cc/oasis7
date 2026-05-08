@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="oasis7 HTML roadshow deck: a fixed-sequence presentation page for the project's thesis, gameplay distinction, technical stack, current boundary, and next phase."
+    />
+    <meta property="og:title" content="oasis7 | HTML Roadshow Deck" />
+    <meta
+      property="og:description"
+      content="A site-native HTML deck that explains what oasis7 is, why it is not a typical AI demo, what already exists today, and what comes next."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://eng-cc.github.io/oasis7/deck/en/" />
+    <meta property="og:image" content="https://eng-cc.github.io/oasis7/assets/images/og-cover.png" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="theme-color" content="#081019" />
+    <title>oasis7 | HTML Roadshow Deck</title>
+    <link rel="canonical" href="https://eng-cc.github.io/oasis7/deck/en/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://eng-cc.github.io/oasis7/deck/" />
+    <link rel="alternate" hreflang="en" href="https://eng-cc.github.io/oasis7/deck/en/" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/images/favicon.svg" />
+    <link rel="stylesheet" href="../../vendor/reveal.js/dist/reset.css" />
+    <link rel="stylesheet" href="../../vendor/reveal.js/dist/reveal.css" />
+    <link rel="stylesheet" href="../deck.css" />
+  </head>
+  <body>
+    <div class="deck-chrome">
+      <a class="deck-brand" href="../../en/index.html">
+        <span class="deck-brand-mark"></span>
+        <span>oasis7</span>
+      </a>
+      <div class="deck-actions">
+        <a href="../../en/index.html">Homepage</a>
+        <a href="../../doc/en/index.html">Docs Hub</a>
+        <a href="../../doc/en/project-overview.html">Project Overview</a>
+        <a href="../index.html">中文 Deck</a>
+      </div>
+    </div>
+
+    <div class="deck-status">
+      <span class="deck-status-chip is-live">HTML Deck</span>
+      <span class="deck-status-chip">Technical preview / not playable yet</span>
+      <span class="deck-status-chip">Use arrow keys or space to advance</span>
+    </div>
+
+    <div class="reveal">
+      <div class="slides">
+        <section class="slide cover-slide" data-background-gradient="linear-gradient(140deg, #07111a 0%, #081f27 52%, #05161d 100%)">
+          <div class="slide-shell">
+            <p class="slide-kicker">oasis7 / Roadshow Deck</p>
+            <h1>An AI-agent civilization sim where history keeps moving after you leave</h1>
+            <p class="slide-lead">
+              The world lives in a fractured asteroid belt. The player does not take over units directly. Instead,
+              you operate from outside the civilization, set goals and constraints, and watch agents push expansion,
+              production, trade, alliances, and war forward under real pressure.
+            </p>
+            <div class="metric-grid">
+              <article class="metric-card">
+                <strong>Genre</strong>
+                <span>Persistent civilization sim, not a one-shot AI demo</span>
+              </article>
+              <article class="metric-card">
+                <strong>Player position</strong>
+                <span>Outside-the-world strategist, not a unit-by-unit micromanager</span>
+              </article>
+              <article class="metric-card">
+                <strong>Current stage</strong>
+                <span>Public technical preview: explainable and testable, but not a mass-play release</span>
+              </article>
+            </div>
+            <div class="footer-note">
+              This deck is the sequenced presentation layer. It does not replace the homepage boundary or the PRD source of truth.
+            </div>
+          </div>
+        </section>
+
+        <section class="slide agenda-slide">
+          <div class="slide-shell">
+            <div class="eyebrow-row">
+              <p class="slide-kicker">01 / Agenda</p>
+              <span class="mini-note">Why this is worth another look</span>
+            </div>
+            <div class="grid-2">
+              <div>
+                <h2>This story moves through 5 questions</h2>
+                <ol class="agenda-list">
+                  <li>What kind of game is this, beyond AI wrapping?</li>
+                  <li>Why could this kind of world hold attention longer than a normal demo?</li>
+                  <li>How do the player, agents, and world rules divide responsibility?</li>
+                  <li>What already exists today, and what still does not?</li>
+                  <li>What has to be made solid next?</li>
+                </ol>
+              </div>
+              <aside class="highlight-panel">
+                <p class="panel-tag">Deck Boundary</p>
+                <h3>This solves sequence, not total detail</h3>
+                <p>
+                  The homepage and the long overview are better for free browsing. The value of a deck is that it can
+                  carry the problem, world, product boundary, and stage judgment in one controlled order.
+                </p>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide problem-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">02 / Problem</p>
+            <h2>Many AI game demos fail not because the model is weak, but because the world is soft</h2>
+            <div class="grid-3">
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">A</span>
+                <h3>They can talk, but they do not pay consequences</h3>
+                <p>Characters sound smart, but their behavior is not bound by resources, time, law, or state truth.</p>
+              </article>
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">B</span>
+                <h3>They look like worlds, but behave like scripts</h3>
+                <p>There is no continuously running timeline and no reliable state change that can be replayed or audited.</p>
+              </article>
+              <article class="pillar-card fragment fade-up">
+                <span class="pillar-index">C</span>
+                <h3>The player ends up pulling puppet strings</h3>
+                <p>If the player makes every real decision directly, the world itself never becomes autonomous enough to matter.</p>
+              </article>
+            </div>
+            <div class="footer-note">
+              `oasis7` starts from a different question: how do you make the world itself strong enough to hold history?
+            </div>
+          </div>
+        </section>
+
+        <section class="slide thesis-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">03 / Thesis</p>
+            <h2>The core product thesis: build the world first, then let civilization grow out of it</h2>
+            <div class="grid-3 compact-grid">
+              <article class="value-card">
+                <p class="value-label">World-first</p>
+                <strong>All valid behavior goes through world rules</strong>
+                <span>No skipping runtime, no silently writing outcomes into the table.</span>
+              </article>
+              <article class="value-card">
+                <p class="value-label">Persistent</p>
+                <strong>The world keeps running and history does not reset on logout</strong>
+                <span>Organizations, production lines, alliances, and conflicts all stay on the same timeline.</span>
+              </article>
+              <article class="value-card">
+                <p class="value-label">Emergence-first</p>
+                <strong>The project cares more about what rules produce than about pre-written plot</strong>
+                <span>Markets, protocols, organizations, and war outcomes should grow from in-world behavior.</span>
+              </article>
+            </div>
+            <blockquote class="pull-quote">
+              The target is not “slightly smarter NPCs.” The target is a world that can accumulate history.
+            </blockquote>
+          </div>
+        </section>
+
+        <section class="slide role-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">04 / Player Role</p>
+            <h2>You set civilization direction, but you do not take over every unit</h2>
+            <div class="timeline-grid">
+              <article class="timeline-step">
+                <span>01</span>
+                <h3>You set strategy</h3>
+                <p>Expand through the belt, stockpile and fortify, or push for governance and protocol power.</p>
+              </article>
+              <article class="timeline-step">
+                <span>02</span>
+                <h3>You set boundaries</h3>
+                <p>You provide goals, constraints, and governance rules instead of prescribing every move.</p>
+              </article>
+              <article class="timeline-step">
+                <span>03</span>
+                <h3>Agents execute</h3>
+                <p>They produce, trade, ally, and fight under resource, time, and legality pressure.</p>
+              </article>
+              <article class="timeline-step">
+                <span>04</span>
+                <h3>The world records consequences</h3>
+                <p>Prices, logistics, alliances, and governance proposals turn your inputs into inspectable history.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide feel-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">05 / Why It Hooks</p>
+            <h2>What makes this compelling is not clicking buttons. It is watching the situation change shape on its own.</h2>
+            <div class="grid-2">
+              <div class="scene-stack">
+                <article class="scene-card">
+                  <h3>Resources tighten first</h3>
+                  <p>One broken mining line can lift prices, destabilize production, and turn neighbors into hoarders or blockers.</p>
+                </article>
+                <article class="scene-card">
+                  <h3>Alliances negotiate before they break</h3>
+                  <p>Pressure often starts as trade, bluffing, and temporary deals before it turns into defection and re-alignment.</p>
+                </article>
+                <article class="scene-card">
+                  <h3>War leaves a long tail</h3>
+                  <p>Conflict is not a single animation. Routes stay broken, policy shifts persist, and the same world remembers.</p>
+                </article>
+              </div>
+              <aside class="highlight-panel tall-panel">
+                <p class="panel-tag">Core Feeling</p>
+                <h3>Watching disorder harden into order</h3>
+                <p>
+                  The real payoff is not “I clicked a lot.” It is “one judgment I made kept rewriting the expansion,
+                  risk, and tempo that came afterward.”
+                </p>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide stack-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">06 / Stack</p>
+            <h2>The stack is not there to impress. It is there to make world state hold.</h2>
+            <div class="stack-layers">
+              <div class="stack-layer">LLM Agents</div>
+              <div class="stack-layer">WASM Modules</div>
+              <div class="stack-layer">World Runtime</div>
+              <div class="stack-layer">Consensus Layer</div>
+              <div class="stack-layer">Distributed Storage &amp; Networking</div>
+            </div>
+            <div class="grid-3 compact-grid">
+              <article class="mini-card">
+                <strong>LLM handles decision space</strong>
+                <span>But it does not directly become world truth.</span>
+              </article>
+              <article class="mini-card">
+                <strong>WASM carries higher-order capability</strong>
+                <span>Institutional, industrial, and gameplay logic can ship as modules.</span>
+              </article>
+              <article class="mini-card">
+                <strong>Runtime + consensus carry truth</strong>
+                <span>State change needs verification, not just a convincing single-machine story.</span>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide proof-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">07 / What Exists Today</p>
+            <h2>Today it is explainable and testable, but it should not be packaged as a public-play release</h2>
+            <div class="proof-columns">
+              <article class="proof-column is-done">
+                <p class="proof-head">Already exists</p>
+                <ul>
+                  <li>A public homepage and long-form overview that explain the project clearly</li>
+                  <li>A docs hub, viewer manual, testing manual, and public skill entry</li>
+                  <li>Technical-preview validation paths across runtime, viewer, and testing</li>
+                  <li>Static GitHub Pages publishing with site quality gates</li>
+                </ul>
+              </article>
+              <article class="proof-column is-boundary">
+                <p class="proof-head">Current boundary</p>
+                <ul>
+                  <li>It is still not a mainstream player-ready product</li>
+                  <li>It is better described as researchable, testable, and alignable technical preview work</li>
+                  <li>The deck is here to explain that boundary, not to polish it away</li>
+                </ul>
+              </article>
+            </div>
+            <div class="footer-note">
+              Public claim stays the same: `technical preview / not playable yet`.
+            </div>
+          </div>
+        </section>
+
+        <section class="slide roadmap-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">08 / Path</p>
+            <h2>The path comes in two phases: make one world solid first, then make it into a broader substrate</h2>
+            <div class="grid-2">
+              <article class="phase-card">
+                <p class="phase-label">Phase 1</p>
+                <h3>Open-world sandbox game</h3>
+                <p>First make the feeling of participation, exploration, and consequence worth staying for in one persistent world.</p>
+                <ul>
+                  <li>Make the gameplay loop stand up</li>
+                  <li>Make world-side consequence chains legible</li>
+                  <li>Compress technical preview into a tighter bounded experience</li>
+                </ul>
+              </article>
+              <article class="phase-card is-future">
+                <p class="phase-label">Phase 2</p>
+                <h3>Open-world platform</h3>
+                <p>Then evolve it into a substrate that can hold different rule sets, module ecosystems, and participant roles.</p>
+                <ul>
+                  <li>Creators become more than consumers</li>
+                  <li>Rules and play styles continue to evolve</li>
+                  <li>But that is not the current public promise</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="slide ask-slide">
+          <div class="slide-shell">
+            <p class="slide-kicker">09 / Next Focus</p>
+            <h2>The next stage is not about piling on more concept. It is about making the experience loop more solid.</h2>
+            <div class="grid-3">
+              <article class="mini-card">
+                <strong>Gameplay loop</strong>
+                <span>Make the chain from resource pressure to alliance shift to war consequence more reliably felt by the player.</span>
+              </article>
+              <article class="mini-card">
+                <strong>Experience entry</strong>
+                <span>Keep tightening the preview entry so it is easier to understand, easier to verify, and harder to misread.</span>
+              </article>
+              <article class="mini-card">
+                <strong>Proof chain</strong>
+                <span>Keep public narrative aligned with repo truth instead of letting docs patch over over-claims.</span>
+              </article>
+            </div>
+            <blockquote class="pull-quote">
+              At this stage, the most valuable thing is not stronger language. It is stronger proof that the world is already moving.
+            </blockquote>
+          </div>
+        </section>
+
+        <section class="slide end-slide" data-background-gradient="linear-gradient(135deg, #061117 0%, #08232a 44%, #061218 100%)">
+          <div class="slide-shell end-shell">
+            <p class="slide-kicker">10 / Close</p>
+            <h2>One-line close</h2>
+            <p class="end-summary">
+              `oasis7` is not trying to be a pile of talkative characters. It is trying to become a world where civilization history keeps advancing under resource, time, law, and consensus constraints.
+            </p>
+            <div class="cta-matrix">
+              <a class="deck-link-card" href="../../en/index.html">
+                <strong>Back To Homepage</strong>
+                <span>Review the public entry, current boundary, and what can be done today</span>
+              </a>
+              <a class="deck-link-card" href="../../doc/en/project-overview.html">
+                <strong>Open Project Overview</strong>
+                <span>Read the long-form whitepaper-style explanation for more context</span>
+              </a>
+              <a class="deck-link-card" href="../../doc/en/index.html">
+                <strong>Open Docs Hub</strong>
+                <span>Continue into gameplay, testing, viewer, and public skill entry points</span>
+              </a>
+            </div>
+            <div class="footer-note">
+              Current state remains unchanged: public technical preview, not playable yet.
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="../../vendor/reveal.js/dist/reveal.js"></script>
+    <script>
+      const deck = new Reveal({
+        controls: true,
+        progress: true,
+        center: false,
+        hash: true,
+        slideNumber: "c/t",
+        transition: "slide",
+        backgroundTransition: "fade",
+        width: 1440,
+        height: 810,
+        margin: 0.04,
+        touch: true,
+        embedded: false,
+      });
+
+      deck.initialize();
+    </script>
+  </body>
+</html>

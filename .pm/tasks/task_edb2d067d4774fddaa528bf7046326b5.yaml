@@ -1,0 +1,24 @@
+task_uid: task_edb2d067d4774fddaa528bf7046326b5
+title: "site html roadshow deck"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-site-html-roadshow-deck
+execution_log_path: .pm/tasks/task_edb2d067d4774fddaa528bf7046326b5.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/site/project.md
+  - doc/site/prd.md
+doc_refs: []
+related_prd:
+  - PRD-SITE-001
+  - PRD-SITE-003
+  - PRD-SITE-012
+acceptance:
+  - "site contains a public HTML deck entry that can be opened directly from GitHub Pages"
+  - "deck implementation fits the existing static-site publishing path without introducing a required JS build step"
+  - "site homepage or docs hub links to the deck entry"
+handoff_to: []
+updated_at: 2026-05-08T10:05:12+08:00
+last_started_at: 2026-05-08T09:38:19+08:00
+last_closed_at: 2026-05-08T10:05:12+08:00
