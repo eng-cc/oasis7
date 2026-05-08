@@ -19,14 +19,17 @@ pub const TRACE_SESSION_ID_ENV: &str = "OASIS7_TRACE_SESSION_ID";
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing(service_name: &str) {
     TRACING_INIT.call_once(|| {
+        if tracing::dispatcher::has_been_set() {
+            return;
+        }
         let filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(format!("{service_name}=info,oasis7=info,warn")));
-        tracing_subscriber::fmt()
+        let _ = tracing_subscriber::fmt()
             .with_env_filter(filter)
             .with_target(true)
             .with_thread_names(true)
             .compact()
-            .init();
+            .try_init();
     });
 }
 
