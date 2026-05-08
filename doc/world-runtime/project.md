@@ -29,7 +29,6 @@
     - `crates/oasis7_viewer/software_safe.js`
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
-    - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::agent_claims:: -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_api_tests:: -- --nocapture`
