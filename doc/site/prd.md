@@ -66,6 +66,7 @@
 - PRD-SITE-009: As a 新访问者, I want the homepage to explain the game genre, player role, and current availability before technical validation details, so that I can decide within the first screen whether oasis7 is worth following.
 - PRD-SITE-010: As a 新访问者, I want the homepage to separate current public entry, builder verification, and future platform direction, so that I do not mistake preview validation or roadmap language for a live player promise.
 - PRD-SITE-011: As a 技术用户或自动化代理, I want a stable public `oasis7` skill Markdown URL, so that I can fetch the Local Provider workflow without cloning the repo first.
+- PRD-SITE-012: As a `producer_system_designer` or external collaborator, I want a public HTML roadshow deck inside the site, so that I can present the project in a controlled sequence without rebuilding the public homepage into a slide script.
 - Critical User Flows:
   1. Flow-SITE-001: `访问首页 -> 理解价值与入口 -> 跳转安装/文档`
   2. Flow-SITE-002: `发布前执行链接检查 -> 处理断链 -> 复测通过`
@@ -75,6 +76,7 @@
   6. Flow-SITE-006: `陌生访客访问首页 -> 区分当前可做的事/开发者验证/未来目标态 -> 选择继续看证据、下载预览或回到文档`
   7. Flow-SITE-007: `访客先通过首页理解产品与公开边界 -> 再进入 docs hub 深读完整总览/玩法/验证文档`
   8. Flow-SITE-008: `执行者或代理进入 docs hub -> 直接打开公开 oasis7 skill Markdown -> 按 skill 中的命令启动 Local Provider real-play`
+  9. Flow-SITE-009: `访客或对外沟通者进入 docs hub / 直接打开 deck -> 按固定顺序浏览项目定位、玩法差异、当前证据与阶段边界 -> 决定是否继续深读或跟进`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -84,6 +86,7 @@
 | 对外状态口径 | 产品状态（playable / preview）、禁用词列表、状态标识文案 | 发布前校验首页与文档入口文案是否匹配真实状态 | `draft -> aligned -> published` | 真实状态字段优先于营销文案 | 模块维护者可改，发布责任人复核 |
 | 首页入口分层与 claim gate | 首屏定位、默认公开访问面、builder 验证入口、未来方向、下载边界、中英镜像 claim | 发布前校验首页是否把当前公开能力/开发者路径/未来平台目标分层表达，并校验关键 claim 中英一致 | `draft -> aligned -> published -> gated` | 先公开访客入口，再 builder 验证，再 future roadmap；诊断路径不得进入 primary CTA | 模块维护者可改，发布责任人复核 |
 | 公开 skill 镜像 | skill 名称、摘要、raw Markdown 链接 | docs hub 直跳 raw skill Markdown；raw URL 可直接抓取 | `draft -> mirrored -> published -> refreshed` | 只保留 raw Markdown 分发入口；内容必须与 repo-local skill 真值一致 | 模块维护者可改，发布责任人复核 |
+| HTML 路演 Deck | deck 入口 URL、页面语言、固定 slide 顺序、当前状态提示、回链入口 | docs hub / 公开入口直跳 deck；键盘、触摸与 URL hash 导航可用 | `draft -> linked -> published -> revised` | deck 负责顺序化讲述项目，不替代首页公开边界，也不替代 PRD 真值 | 模块维护者可改，发布责任人复核 |
 - Acceptance Criteria:
   - AC-1: site PRD 定义页面层级、内容同步和发布链路。
   - AC-2: site project 文档任务映射 PRD-SITE-ID。
@@ -99,6 +102,9 @@
   - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。
   - AC-13: `site/doc/cn/index.html` 与 `site/doc/en/index.html` 的 hero、primary CTA 与入口卡片必须明确说明“首页优先、docs hub 次级深读”，并且不允许继续链接到缺失的首页锚点。
   - AC-14: 公开站点必须新增可直接抓取的 `site/skills/oasis7.md`；docs hub 中英页都要能直接跳达这个 raw skill 入口。
+  - AC-15: 公开站点必须新增一个可直接访问的 HTML deck 页面，用固定 slide 顺序说明项目定位、玩法差异、当前阶段与后续路径，且不把首页改造成演示文稿模式。
+  - AC-16: deck 实现必须适配当前 `site/**` 静态发布链路；允许引入浏览器端演示库，但不得要求新增 Node/Vite/SPA 构建步骤才能发布到 Pages。
+  - AC-17: docs hub 或首页必须存在清晰 deck 入口；deck 页面本身必须保留回到首页 / docs hub 的导航，并显式标注当前仍为技术预览（尚不可玩 / not playable yet）。
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
@@ -112,6 +118,7 @@
 - Integration Points:
   - `site/`
   - `site/doc/`
+  - `site/deck/`
   - `site/skills/`
   - `doc/site/github-pages/`
   - `doc/site/manual/`
@@ -165,6 +172,7 @@
 | PRD-SITE-009 | homepage-game-explainer + public-copy-tightening | `test_tier_required` | 中英首页首屏与 docs hub 首段信息架构核对、文档治理检查、静态站点可视回归 | 新访客首访理解效率、公开定位清晰度 |
 | PRD-SITE-010 | homepage-entry-claim-boundary-hardening + public-copy-tightening | `test_tier_required` | 首页 claim/parity gate、CN/EN 首页分层文案核对、docs hub 角色定位检查、移动端导航/a11y 检查 | 首页入口真值、builder 路径边界、未来平台口径控制 |
 | PRD-SITE-011 | public-oasis7-skill | `test_tier_required` | 中英 docs hub raw skill 入口核对、`site/skills/oasis7.md` 对 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh` 与 `oasis7_game_launcher` 当前公开命令的语义一致性检查 | 对外 skill 可获取性、自动化抓取稳定性 |
+| PRD-SITE-012 | html-roadshow-deck | `test_tier_required` | docs hub / deck 入口核对、静态链接检查、deck 页面导航与当前状态文案核对 | 对外顺序化讲述能力、静态发布兼容性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -179,3 +187,4 @@
 | DEC-SITE-009 | Pages 发布前新增 homepage claim/parity gate 与基础无脚本/a11y 约束 | 继续只依赖链接/手册/下载静态检查 | 首页承担最高风险的对外承诺，需要单独门禁而不是把口径漂移留给人工发现。 |
 | DEC-SITE-010 | docs hub 公开层只承担“深读/验证导航”，第一次对外介绍仍以首页为主 | 让 docs hub 与首页并列承担首次产品介绍 | docs hub 混入太多协作/验证语境时，陌生访客会更快把站点误读成工程入口而不是游戏公开面。 |
 | DEC-SITE-011 | 对外 `oasis7` skill 只保留站内 raw Markdown 直链，并在 docs hub 暴露入口 | 新增独立 HTML 说明页或只暴露 GitHub blob 路径 | 用户目标是直接获取 skill 内容；单一 raw 入口更短、更稳定，也减少公开镜像维护面。 |
+| DEC-SITE-012 | 路演材料以站内 HTML deck 形式挂在 `site/` 下，并复用静态 Pages 链路 | 继续只靠首页/长文档承担路演，或为 deck 单独引入 SPA 构建工程 | deck 需要的是顺序化讲述，不是新的前端系统；保持静态站发布可减少维护面并保留直接访问能力。 |

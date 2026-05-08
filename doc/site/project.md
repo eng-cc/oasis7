@@ -3,6 +3,22 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] html-roadshow-deck (PRD-SITE-001/003/012) [test_tier_required]: 在公开站点新增 HTML 路演 deck，使用适配静态 Pages 的演示库承载固定 slide 叙事，不把首页改成 PPT，也不引入必需的 SPA 构建链；同时从 docs hub 暴露清晰入口，并保留回到首页/文档中心的导航。 Trace: .pm/tasks/task_edb2d067d4774fddaa528bf7046326b5.yaml
+  - 产物文件:
+    - `doc/site/prd.md`
+    - `doc/site/project.md`
+    - `site/deck/index.html`
+    - `site/deck/en/index.html`
+    - `site/deck/deck.css`
+    - `site/doc/cn/index.html`
+    - `site/doc/en/index.html`
+    - `site/index.html`
+    - `site/en/index.html`
+    - `site/vendor/reveal.js/**`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-link-check.sh`
+    - `rg -n "Deck|路演|roadshow|pitch" site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html site/deck/index.html site/deck/en/index.html`
+    - `git diff --check`
 - [x] public-oasis7-skill (PRD-SITE-002/003/011) [test_tier_required]: 在公开站点新增 `oasis7` skill raw 入口：`site/skills/oasis7.md` 提供可直接抓取的 Markdown skill 内容，并从中英 docs hub 保证可达。 Trace: .pm/tasks/task_088b948d76f843588493368e2c6779d3.yaml
   - 产物文件:
     - `doc/site/prd.md`
@@ -120,9 +136,10 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-05-07
+- 更新日期: 2026-05-08
 - 当前状态: active
-- 下一任务: `待定（等待下一轮站点首页/发布口径审计）`
+- 下一任务: `待定（等待下一轮站点公开叙事 / 对外材料收口）`
+- 最新完成: `html-roadshow-deck`（公开站点已新增中英文 HTML 路演 deck，使用 vendored `reveal.js` 保持静态 Pages 发布路径不变；中英文 docs hub 与首页深挖入口也已接入 deck，形成“首页公开入口 -> deck 顺序化讲述 -> docs hub 深读”的分工。）
 - 最新完成: `public-oasis7-skill`（公开站点已新增 `site/skills/oasis7.md` 作为稳定 raw skill 直链；中英 docs hub 也已新增对应入口卡片，直接把执行者或自动化代理送到原始 Markdown，而不再额外维护人读 HTML 说明页。）
 - 最新完成: `public-copy-tightening`（中英首页后半段已把“给普通访客看的入口”与 builder/internal verification 语境继续拆开：主路径先讲这世界值不值得继续看、已经能证明什么、要不要下载预览构建；docs hub hero 与路径卡也已明确为首页之后的深读入口，并修复失效 `#demo` 锚点。）
 - 最新完成: `homepage-genre-advantage-hook`（中英首页前半段已补一段更抓人的“这类游戏为什么让人停不下来”文案，不点具体竞品名，直接把“从混乱到秩序、一个判断会一路改写后果”的爽点顶到访客更早能看到的位置，同时保持技术预览与 claim boundary 不变。）
