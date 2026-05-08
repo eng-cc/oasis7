@@ -55,7 +55,7 @@ Check these first:
 Useful probes:
 
 ```bash
-provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-provider}"
+provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-openclaw}"
 "$provider_cli_bin" --version
 curl -sS http://127.0.0.1:18789/health
 ```

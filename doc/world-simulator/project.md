@@ -359,7 +359,6 @@
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
-    - `scripts/setup-provider-oasis7-runtime.sh`
     - `site/skills/oasis7.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
     - `scripts/provider-parity-p0.sh`
@@ -412,7 +411,6 @@
     - `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md`
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
     - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
-    - `scripts/provider-parity-p0.sh`
     - `site/skills/oasis7.md`
     - `scripts/provider-parity-p0.sh`
     - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
@@ -440,12 +438,10 @@
     - `doc/world-simulator/project.md`
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
-    - `scripts/setup-provider-oasis7-runtime.sh`
     - `site/skills/oasis7.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
     - `tools/provider/oasis7_provider_workspace/*`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/setup-provider-oasis7-runtime.sh`
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
     - `rg -n "setup-provider-oasis7-runtime\\.sh|oasis7_provider_workspace|oasis7_provider_agent" site/skills/oasis7.md scripts/setup-provider-oasis7-runtime.sh`
     - `./scripts/doc-governance-check.sh`
