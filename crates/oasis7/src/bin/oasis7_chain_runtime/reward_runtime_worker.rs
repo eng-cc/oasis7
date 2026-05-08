@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use oasis7::observability::emit_stderr_or_event;
 use oasis7::runtime::{
     measure_directory_storage_bytes, Action as RuntimeAction, BlobStore, LocalCasStore,
     NodePointsConfig, NodePointsRuntimeCollector, NodePointsRuntimeCollectorSnapshot,
@@ -15,6 +16,7 @@ use oasis7::runtime::{
 use oasis7_distfs::StorageChallengeProbeCursorState;
 use oasis7_node::{NodeRole, NodeRuntime, PosConsensusStatus};
 use serde::Serialize;
+use tracing::Level;
 
 use super::distfs_probe_runtime::{
     collect_distfs_challenge_report_with_config, load_reward_runtime_distfs_probe_state,
@@ -223,7 +225,11 @@ fn reward_runtime_loop(
             NodePointsRuntimeHeuristics::default(),
         ),
         Err(err) => {
-            eprintln!("reward runtime load collector state failed: {err}");
+            emit_stderr_or_event(
+                Level::WARN,
+                format!("reward runtime load collector state failed: {err}").as_str(),
+                "reward runtime collector state load failed",
+            );
             NodePointsRuntimeCollector::new(points_config, NodePointsRuntimeHeuristics::default())
         }
     };
@@ -231,7 +237,11 @@ fn reward_runtime_loop(
         match load_reward_runtime_distfs_probe_state(config.distfs_probe_state_path.as_path()) {
             Ok(state) => state,
             Err(err) => {
-                eprintln!("reward runtime load distfs probe state failed: {err}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("reward runtime load distfs probe state failed: {err}").as_str(),
+                    "reward runtime distfs probe state load failed",
+                );
                 StorageChallengeProbeCursorState::default()
             }
         };
@@ -252,9 +262,14 @@ fn reward_runtime_loop(
     for (node_id, public_key_hex) in &config.reward_runtime_node_identity_bindings {
         if let Err(err) = reward_world.bind_node_identity(node_id.as_str(), public_key_hex.as_str())
         {
-            eprintln!(
-                "reward runtime bind node identity failed node={} err={:?}",
-                node_id, err
+            emit_stderr_or_event(
+                Level::WARN,
+                format!(
+                    "reward runtime bind node identity failed node={} err={:?}",
+                    node_id, err
+                )
+                .as_str(),
+                "reward runtime node identity binding failed",
             );
         }
     }

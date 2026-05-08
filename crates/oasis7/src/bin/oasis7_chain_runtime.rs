@@ -217,7 +217,9 @@ fn main() {
 }
 
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
+    let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_chain_runtime");
     info!(
+        trace_session_id = %trace_session_id,
         node_id = %options.node_id,
         world_id = %options.world_id,
         node_role = ?options.node_role,

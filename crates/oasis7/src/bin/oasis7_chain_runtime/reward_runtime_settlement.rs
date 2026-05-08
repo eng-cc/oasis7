@@ -1,8 +1,10 @@
 use oasis7::geometry::GeoPos;
+use oasis7::observability::emit_stderr_or_event;
 use oasis7::runtime::{
     reward_redeem_signature_v1, Action as RuntimeAction, EpochSettlementReport,
     NodeRewardMintRecord, World as RuntimeWorld, WorldError,
 };
+use tracing::Level;
 
 pub(super) fn build_reward_settlement_mint_records(
     reward_world: &RuntimeWorld,
@@ -27,9 +29,14 @@ pub(super) fn auto_redeem_runtime_rewards(
     let signer_public_key = match reward_world.node_identity_public_key(signer_node_id) {
         Some(key) => key.to_string(),
         None => {
-            eprintln!(
-                "reward runtime auto-redeem skipped: signer identity not bound: {}",
-                signer_node_id
+            emit_stderr_or_event(
+                Level::WARN,
+                format!(
+                    "reward runtime auto-redeem skipped: signer identity not bound: {}",
+                    signer_node_id
+                )
+                .as_str(),
+                "reward runtime auto-redeem signer binding missing",
             );
             return;
         }
@@ -43,7 +50,11 @@ pub(super) fn auto_redeem_runtime_rewards(
                 pos: GeoPos::new(0, 0, 0),
             });
             if let Err(err) = reward_world.step() {
-                eprintln!("reward runtime register auto-redeem agent failed: {err:?}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("reward runtime register auto-redeem agent failed: {err:?}").as_str(),
+                    "reward runtime auto-redeem agent registration failed",
+                );
                 continue;
             }
         }
@@ -67,9 +78,14 @@ pub(super) fn auto_redeem_runtime_rewards(
         ) {
             Ok(signature) => signature,
             Err(err) => {
-                eprintln!(
-                    "reward runtime auto-redeem skipped for {}: sign failed: {}",
-                    node_id, err
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!(
+                        "reward runtime auto-redeem skipped for {}: sign failed: {}",
+                        node_id, err
+                    )
+                    .as_str(),
+                    "reward runtime auto-redeem signing failed",
                 );
                 continue;
             }
@@ -83,7 +99,11 @@ pub(super) fn auto_redeem_runtime_rewards(
             signature,
         });
         if let Err(err) = reward_world.step() {
-            eprintln!("reward runtime auto-redeem failed: {err:?}");
+            emit_stderr_or_event(
+                Level::WARN,
+                format!("reward runtime auto-redeem failed: {err:?}").as_str(),
+                "reward runtime auto-redeem apply failed",
+            );
         }
     }
 }

@@ -1,4 +1,7 @@
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_vec;
+use oasis7::observability::{
+    emit_stderr_or_event, init_tracing, resolve_trace_session_id, TRACE_SESSION_ID_ENV,
+};
 use oasis7::simulator::ProviderExecutionMode;
 use oasis7_proto::storage_profile::StorageProfile;
 use std::collections::BTreeSet;
@@ -12,6 +15,7 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tracing::{error, info, Level};
 #[path = "oasis7_game_launcher/cli.rs"]
 mod cli;
 #[path = "../hosted_access.rs"]
@@ -106,6 +110,7 @@ const NODE_CONFIG_FILE_NAME: &str = "config.toml";
 const NODE_TABLE_KEY: &str = "node";
 const NODE_PRIVATE_KEY_FIELD: &str = "private_key";
 const NODE_PUBLIC_KEY_FIELD: &str = "public_key";
+const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_game_launcher";
 static TERMINATION_REQUESTED: AtomicBool = AtomicBool::new(false);
 static SIGNAL_HANDLER_INSTALL: OnceLock<Result<(), String>> = OnceLock::new();
 
@@ -215,6 +220,8 @@ struct StaticHttpServer {
 }
 
 fn main() {
+    init_tracing(TRACE_SESSION_PROCESS_LABEL);
+    let trace_session_id = resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL);
     let raw_args: Vec<String> = env::args().skip(1).collect();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
@@ -224,21 +231,30 @@ fn main() {
     let options = match parse_options(raw_args.iter().map(|arg| arg.as_str())) {
         Ok(options) => options,
         Err(err) => {
-            eprintln!("{err}");
+            error!(trace_session_id = %trace_session_id, error = %err, "failed to parse game launcher options");
             print_help();
             process::exit(1);
         }
     };
 
-    if let Err(err) = run_launcher(&options) {
-        eprintln!("launcher failed: {err}");
+    if let Err(err) = run_launcher(&options, trace_session_id.as_str()) {
+        error!(trace_session_id = %trace_session_id, error = %err, "oasis7_game_launcher failed");
         process::exit(1);
     }
 }
 
-fn run_launcher(options: &CliOptions) -> Result<(), String> {
+fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), String> {
     install_signal_handler()?;
     TERMINATION_REQUESTED.store(false, Ordering::SeqCst);
+    info!(
+        trace_session_id = %trace_session_id,
+        scenario = %options.scenario,
+        live_bind = %options.live_bind,
+        web_bind = %options.web_bind,
+        deployment_mode = %options.deployment_mode,
+        chain_enabled = options.chain_enabled,
+        "starting game launcher"
+    );
     if !options.with_llm {
         return Err(
             "oasis7 gameplay requires --with-llm; no-LLM launch is no longer a playable entry path"
@@ -255,19 +271,24 @@ fn run_launcher(options: &CliOptions) -> Result<(), String> {
     let viewer_static_dir = resolve_viewer_static_dir(options.viewer_static_dir.as_str())?;
 
     let mut chain_child = if let Some(chain_bin) = oasis7_chain_runtime_bin.as_ref() {
-        Some(spawn_oasis7_chain_runtime(chain_bin.as_path(), options)?)
+        Some(spawn_oasis7_chain_runtime(
+            chain_bin.as_path(),
+            options,
+            trace_session_id,
+        )?)
     } else {
         None
     };
-    let mut world_child = match spawn_oasis7_viewer_live(&oasis7_viewer_live_bin, options) {
-        Ok(child) => child,
-        Err(err) => {
-            if let Some(child) = chain_child.as_mut() {
-                terminate_child(child);
+    let mut world_child =
+        match spawn_oasis7_viewer_live(&oasis7_viewer_live_bin, options, trace_session_id) {
+            Ok(child) => child,
+            Err(err) => {
+                if let Some(child) = chain_child.as_mut() {
+                    terminate_child(child);
+                }
+                return Err(err);
             }
-            return Err(err);
-        }
-    };
+        };
     let mut server = match start_static_http_server(
         deployment_mode_from_options(options),
         options.live_bind.as_str(),
@@ -301,6 +322,15 @@ fn run_launcher(options: &CliOptions) -> Result<(), String> {
     }
 
     let game_url = build_game_url(options);
+    info!(
+        trace_session_id = %trace_session_id,
+        game_url = %game_url,
+        viewer_live_pid = world_child.id(),
+        chain_runtime_pid = chain_child.as_ref().map(Child::id),
+        chain_status_bind = %options.chain_status_bind,
+        viewer_static_dir = %viewer_static_dir.display(),
+        "launcher stack is ready"
+    );
     println!("Launcher stack is ready.");
     println!("- URL: {game_url}");
     println!("- oasis7_viewer_live pid: {}", world_child.id());
@@ -318,8 +348,18 @@ fn run_launcher(options: &CliOptions) -> Result<(), String> {
 
     if options.open_browser {
         if let Err(err) = open_browser(&game_url) {
-            eprintln!("warning: failed to open browser automatically: {err}");
-            eprintln!("open this URL manually: {game_url}");
+            let stderr_message = format!("warning: failed to open browser automatically: {err}");
+            emit_stderr_or_event(
+                Level::WARN,
+                stderr_message.as_str(),
+                "game launcher failed to open browser automatically",
+            );
+            let browser_fallback_message = format!("open this URL manually: {game_url}");
+            emit_stderr_or_event(
+                Level::INFO,
+                browser_fallback_message.as_str(),
+                "game launcher browser fallback url",
+            );
         }
     }
 
@@ -344,7 +384,11 @@ fn install_signal_handler() -> Result<(), String> {
         .clone()
 }
 
-fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, String> {
+fn spawn_oasis7_viewer_live(
+    path: &Path,
+    options: &CliOptions,
+    trace_session_id: &str,
+) -> Result<Child, String> {
     let parent_has_llm_timeout_ms = env::var_os(LLM_TIMEOUT_MS_ENV).is_some();
     let repo_has_node_config_file = Path::new(NODE_CONFIG_FILE_NAME).is_file();
     let mut command = build_oasis7_viewer_live_command(
@@ -353,6 +397,7 @@ fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, 
         parent_has_llm_timeout_ms,
         repo_has_node_config_file,
     );
+    command.env(TRACE_SESSION_ID_ENV, trace_session_id);
     command.spawn().map_err(|err| {
         format!(
             "failed to start oasis7_viewer_live from `{}`: {err}",
@@ -361,9 +406,14 @@ fn spawn_oasis7_viewer_live(path: &Path, options: &CliOptions) -> Result<Child, 
     })
 }
 
-fn spawn_oasis7_chain_runtime(path: &Path, options: &CliOptions) -> Result<Child, String> {
+fn spawn_oasis7_chain_runtime(
+    path: &Path,
+    options: &CliOptions,
+    trace_session_id: &str,
+) -> Result<Child, String> {
     let mut command = Command::new(path);
     command.args(build_oasis7_chain_runtime_args(options));
+    command.env(TRACE_SESSION_ID_ENV, trace_session_id);
     command.spawn().map_err(|err| {
         format!(
             "failed to start oasis7_chain_runtime from `{}`: {err}",
@@ -534,7 +584,13 @@ fn run_static_http_loop(
                         deployment_mode,
                         &hosted_session_issuer,
                     ) {
-                        eprintln!("warning: static HTTP connection failed: {err}");
+                        let stderr_message =
+                            format!("warning: static HTTP connection failed: {err}");
+                        emit_stderr_or_event(
+                            Level::WARN,
+                            stderr_message.as_str(),
+                            "game launcher static http connection failed",
+                        );
                     }
                 });
             }

@@ -1,4 +1,5 @@
 use super::*;
+use tracing::Level;
 
 fn encode_query_value(value: &str) -> String {
     let mut encoded = String::with_capacity(value.len());
@@ -169,6 +170,10 @@ pub(super) fn spawn_child_process(
 ) -> Result<RunningProcess, String> {
     let mut child = Command::new(bin)
         .args(args)
+        .env(
+            oasis7::observability::TRACE_SESSION_ID_ENV,
+            oasis7::observability::resolve_trace_session_id("oasis7_web_launcher"),
+        )
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -217,7 +222,11 @@ pub(super) fn stop_child_process(child: &mut Child) -> Result<(), String> {
     }
 
     if let Err(err) = send_interrupt_signal(child) {
-        eprintln!("warning: failed to request graceful process stop: {err}");
+        oasis7::observability::emit_stderr_or_event(
+            Level::WARN,
+            format!("warning: failed to request graceful process stop: {err}").as_str(),
+            "web launcher graceful child stop request failed",
+        );
     } else {
         let deadline = Instant::now() + Duration::from_millis(GRACEFUL_STOP_TIMEOUT_MS);
         while Instant::now() < deadline {

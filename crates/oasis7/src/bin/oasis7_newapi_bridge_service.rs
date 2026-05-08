@@ -5,8 +5,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use serde::Serialize;
 use serde_json::json;
+use tracing::{error, info, Level};
 
 #[path = "oasis7_newapi_bridge_service/api.rs"]
 mod api;
@@ -29,6 +31,7 @@ const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5852";
 const DEFAULT_STATE_PATH: &str = "output/newapi-bridge/bridge-state.json";
 const DEFAULT_ROUTE_TTL_SECONDS: u64 = 15 * 60;
 const DEFAULT_DEPOSIT_ACCOUNT_PREFIX: &str = "oc:bridge:";
+const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_newapi_bridge_service";
 
 #[derive(Debug, Clone)]
 struct CliOptions {
@@ -56,8 +59,10 @@ struct EncodedResponse {
 }
 
 fn main() {
+    init_tracing(TRACE_SESSION_PROCESS_LABEL);
+    let trace_session_id = resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL);
     if let Err(err) = run() {
-        eprintln!("error: {err}");
+        error!(trace_session_id = %trace_session_id, error = %err, "oasis7_newapi_bridge_service failed");
         std::process::exit(1);
     }
 }
@@ -74,6 +79,15 @@ fn run() -> Result<(), String> {
     ));
     let listener = TcpListener::bind(options.bind_addr.as_str())
         .map_err(|err| format!("bind {} failed: {err}", options.bind_addr))?;
+    let trace_session_id = resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL);
+    info!(
+        trace_session_id = %trace_session_id,
+        bind_addr = %options.bind_addr,
+        state_path = %options.state_path.display(),
+        route_ttl_seconds = options.route_ttl_seconds,
+        deposit_account_prefix = %options.deposit_account_prefix,
+        "newapi bridge service listening"
+    );
     println!(
         "oasis7_newapi_bridge_service listening on {} with state {}",
         options.bind_addr,
@@ -85,7 +99,13 @@ fn run() -> Result<(), String> {
                 let service = Arc::clone(&service);
                 thread::spawn(move || {
                     if let Err(err) = handle_connection(stream, service.as_ref()) {
-                        eprintln!("warning: bridge-service connection failed: {err}");
+                        let stderr_message =
+                            format!("warning: bridge-service connection failed: {err}");
+                        emit_stderr_or_event(
+                            Level::WARN,
+                            stderr_message.as_str(),
+                            "newapi bridge service connection failed",
+                        );
                     }
                 });
             }
