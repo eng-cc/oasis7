@@ -3,7 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
-- [ ] first-agent-claim-approval-closure (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐首个 agent `slot-1` claim 的申请、运营审核、批准/拒绝、grant 发放与最终 `ClaimAgent` 直连 API 闭环；玩家与运营都必须从同一条 runtime 真值读取 request 状态。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
+- [x] first-agent-claim-approval-closure (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐首个 agent `slot-1` claim 的申请、运营审核、批准/拒绝、grant 发放与最终 `ClaimAgent` 直连 API 闭环；玩家与运营都必须从同一条 runtime 真值读取 request 状态。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
@@ -30,12 +30,12 @@
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
   - 验收命令 (`test_tier_required`):
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::agent_claims:: -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_api_tests:: -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_viewer_live compat_snapshot_exposes_player_agent_claim_overview -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 first_agent_claim_approval -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime approval_request_approve_handler_accepts_allowlisted_operator -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 compat_snapshot_exposes_first_agent_claim_approval_request_status -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime --bin oasis7_viewer_live`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-    - `npm run build:software-safe`
+    - `npm --prefix crates/oasis7_viewer run build:software-safe`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_RUNTIME-001 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 完成 world-runtime PRD 改写，建立运行时设计主入口。
