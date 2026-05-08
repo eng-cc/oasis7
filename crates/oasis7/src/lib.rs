@@ -4,6 +4,8 @@ pub mod geometry;
 pub mod launcher_bootstrap_peers;
 pub mod models;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod observability;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod runtime;
 pub mod simulator;
 pub mod viewer;

@@ -11,6 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::SigningKey;
+use oasis7::observability::{emit_stderr_or_event, init_tracing};
 use oasis7::runtime::{
     NodeAssetBalance, NodeRewardMintRecord, ReleaseSecurityPolicy, RewardAssetConfig,
 };
@@ -24,6 +25,7 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use runtime_status_util::now_unix_ms;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tracing::{error, info, Level};
 #[path = "oasis7_chain_runtime/agent_claim_api.rs"]
 mod agent_claim_api;
 #[path = "oasis7_chain_runtime/balances_api.rs"]
@@ -192,6 +194,7 @@ struct RuntimePaths {
 }
 
 fn main() {
+    init_tracing("oasis7_chain_runtime");
     let raw_args: Vec<String> = env::args().skip(1).collect();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
@@ -201,19 +204,29 @@ fn main() {
     let options = match parse_options(raw_args.iter().map(|arg| arg.as_str())) {
         Ok(options) => options,
         Err(err) => {
-            eprintln!("{err}");
+            error!(error = %err, "failed to parse chain runtime options");
             print_help();
             process::exit(1);
         }
     };
 
     if let Err(err) = run_chain_runtime(options) {
-        eprintln!("oasis7_chain_runtime failed: {err}");
+        error!(error = %err, "oasis7_chain_runtime failed");
         process::exit(1);
     }
 }
 
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
+    info!(
+        node_id = %options.node_id,
+        world_id = %options.world_id,
+        node_role = ?options.node_role,
+        status_bind = %options.status_bind,
+        storage_profile = %options.storage_profile.as_str(),
+        traffic_profile = %options.traffic_profile.as_str(),
+        reward_runtime_enabled = options.reward_runtime_enabled,
+        "starting chain runtime"
+    );
     let paths = resolve_runtime_paths(&options);
     let keypair = node_keypair_config::ensure_node_keypair_in_config(Path::new(
         options.config_path.as_str(),
@@ -364,7 +377,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.storage_profile,
         None,
     ) {
-        eprintln!("warning: initial storage metrics refresh failed: {err}");
+        emit_stderr_or_event(
+            Level::WARN,
+            format!("warning: initial storage metrics refresh failed: {err}").as_str(),
+            "initial storage metrics refresh failed",
+        );
     }
     let mut reward_runtime_worker = start_reward_runtime_worker(
         Arc::clone(&runtime),
@@ -423,7 +440,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             current_degraded_reason = snapshot.last_error.clone();
             if let Some(err) = snapshot.last_error {
                 if err != last_error {
-                    eprintln!("node runtime reported error: {err}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        format!("node runtime reported error: {err}").as_str(),
+                        "node runtime reported error",
+                    );
                     last_error = err;
                 }
             }
@@ -435,7 +456,11 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
                 options.storage_profile,
                 current_degraded_reason.clone(),
             ) {
-                eprintln!("warning: storage metrics refresh failed: {err}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("warning: storage metrics refresh failed: {err}").as_str(),
+                    "storage metrics refresh failed",
+                );
             }
             last_storage_metrics_refresh = Instant::now();
         }
@@ -481,12 +506,20 @@ fn stop_runtime(runtime: &Arc<Mutex<NodeRuntime>>) {
     let mut locked = match runtime.lock() {
         Ok(locked) => locked,
         Err(_) => {
-            eprintln!("failed to stop node runtime: lock poisoned");
+            emit_stderr_or_event(
+                Level::ERROR,
+                "failed to stop node runtime: lock poisoned",
+                "failed to stop node runtime: lock poisoned",
+            );
             return;
         }
     };
     if let Err(err) = locked.stop() {
-        eprintln!("failed to stop node runtime: {err:?}");
+        emit_stderr_or_event(
+            Level::ERROR,
+            format!("failed to stop node runtime: {err:?}").as_str(),
+            "failed to stop node runtime",
+        );
     }
 }
 

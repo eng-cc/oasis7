@@ -346,9 +346,14 @@ pub(super) fn sync_llm_runner_long_term_memory(
         };
         let entries = agent.behavior.export_long_term_memory_entries();
         if let Err(message) = kernel.set_agent_long_term_memory(agent_id.as_str(), entries) {
-            eprintln!(
-                "viewer runtime live: skip long-term memory sync for {}: {}",
-                agent_id, message
+            crate::observability::emit_stderr_or_event(
+                tracing::Level::WARN,
+                format!(
+                    "viewer runtime live: skip long-term memory sync for {}: {}",
+                    agent_id, message
+                )
+                .as_str(),
+                "viewer runtime live skipped long-term memory sync",
             );
         }
     }

@@ -5806,6 +5806,8 @@ dependencies = [
  "sha2",
  "tokio",
  "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
  "tungstenite",
 ]
 
@@ -5880,6 +5882,7 @@ dependencies = [
  "pin-project",
  "serde",
  "serde_cbor",
+ "tracing",
 ]
 
 [[package]]
