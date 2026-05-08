@@ -7,11 +7,11 @@ use bevy_egui::EguiContexts;
 
 use super::{
     grid_line_scale, grid_line_thickness, grid_lod_distance_factor, AutoFocusState, BaseScale,
-    GridLineVisual, OrbitCamera, RightPanelWidthState, SceneZoomLayer, Viewer3dCamera,
-    Viewer3dConfig, ViewerCameraMode, WorldBoundsSurface, WorldFloorSurface, WorldOverlayConfig,
-    DEFAULT_2D_CAMERA_RADIUS, DEFAULT_3D_CAMERA_RADIUS, ORBIT_MAX_RADIUS, ORBIT_MIN_RADIUS,
-    ORBIT_PAN_SENSITIVITY, ORBIT_ROTATE_SENSITIVITY, ORBIT_ZOOM_SENSITIVITY, ORTHO_MAX_SCALE,
-    ORTHO_MIN_SCALE, UI_PANEL_WIDTH,
+    GridLineVisual, OrbitCamera, RightPanelWidthState, SceneZoomLayer, TwoDOverviewMarkerTag,
+    Viewer3dCamera, Viewer3dConfig, ViewerCameraMode, WorldBoundsSurface, WorldFloorSurface,
+    WorldOverlayConfig, DEFAULT_2D_CAMERA_RADIUS, DEFAULT_3D_CAMERA_RADIUS, ORBIT_MAX_RADIUS,
+    ORBIT_MIN_RADIUS, ORBIT_PAN_SENSITIVITY, ORBIT_ROTATE_SENSITIVITY, ORBIT_ZOOM_SENSITIVITY,
+    ORTHO_MAX_SCALE, ORTHO_MIN_SCALE, UI_PANEL_WIDTH,
 };
 
 const TWO_D_DEFAULT_DETAIL_RADIUS_RATIO: f32 = 0.0035;
@@ -535,19 +535,32 @@ pub(super) fn sync_world_background_visibility(
     }
 }
 
-pub(super) fn sync_two_d_map_marker_visibility(
+pub(super) fn sync_scene_zoom_layer_visibility(
     camera_mode: Res<ViewerCameraMode>,
     zoom_tier: Res<TwoDZoomTier>,
     mut query: Query<(&SceneZoomLayer, &mut Visibility)>,
 ) {
-    let next_visibility = match (*camera_mode, *zoom_tier) {
-        (ViewerCameraMode::TwoD, TwoDZoomTier::Overview) => Visibility::Visible,
-        _ => Visibility::Hidden,
-    };
     for (layer, mut visibility) in &mut query {
-        if *layer == SceneZoomLayer::TwoDOverviewMarker {
-            *visibility = next_visibility;
-        }
+        *visibility = match *layer {
+            SceneZoomLayer::TwoDOverviewMarker
+                if matches!(
+                    (*camera_mode, *zoom_tier),
+                    (ViewerCameraMode::TwoD, TwoDZoomTier::Overview)
+                ) =>
+            {
+                Visibility::Visible
+            }
+            SceneZoomLayer::TwoDOverviewMarker => Visibility::Hidden,
+            SceneZoomLayer::Detail
+                if matches!(
+                    (*camera_mode, *zoom_tier),
+                    (ViewerCameraMode::TwoD, TwoDZoomTier::Overview)
+                ) =>
+            {
+                Visibility::Hidden
+            }
+            SceneZoomLayer::Detail => Visibility::Visible,
+        };
     }
 }
 
@@ -556,7 +569,7 @@ pub(super) fn sync_two_d_map_marker_scale(
     zoom_tier: Res<TwoDZoomTier>,
     config: Res<Viewer3dConfig>,
     cameras: Query<&OrbitCamera, With<Viewer3dCamera>>,
-    mut query: Query<(&SceneZoomLayer, &mut Transform, &BaseScale)>,
+    mut query: Query<(&mut Transform, &BaseScale), With<TwoDOverviewMarkerTag>>,
 ) {
     let cm_to_unit = config.effective_cm_to_unit();
     let boost = if matches!(
@@ -575,31 +588,8 @@ pub(super) fn sync_two_d_map_marker_scale(
         1.0
     };
 
-    for (layer, mut transform, base_scale) in &mut query {
-        if *layer == SceneZoomLayer::TwoDOverviewMarker {
-            transform.scale = base_scale.0 * boost;
-        }
-    }
-}
-
-pub(super) fn sync_detail_zoom_visibility(
-    camera_mode: Res<ViewerCameraMode>,
-    zoom_tier: Res<TwoDZoomTier>,
-    mut query: Query<(&SceneZoomLayer, &mut Visibility)>,
-) {
-    let detail_visible = !matches!(
-        (*camera_mode, *zoom_tier),
-        (ViewerCameraMode::TwoD, TwoDZoomTier::Overview)
-    );
-    let next_visibility = if detail_visible {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for (layer, mut visibility) in &mut query {
-        if *layer == SceneZoomLayer::Detail {
-            *visibility = next_visibility;
-        }
+    for (mut transform, base_scale) in &mut query {
+        transform.scale = base_scale.0 * boost;
     }
 }
 

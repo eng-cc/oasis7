@@ -107,6 +107,9 @@ pub(super) enum SceneZoomLayer {
     Detail,
 }
 
+#[derive(Component)]
+pub(super) struct TwoDOverviewMarkerTag;
+
 pub(super) fn attach_to_scene_root(commands: &mut Commands, scene: &Viewer3dScene, entity: Entity) {
     if let Some(root) = scene.root_entity {
         commands.entity(root).add_child(entity);

@@ -167,12 +167,10 @@ pub(super) fn run_ui(addr: String, offline: bool) {
                 camera_controls::sync_two_d_zoom_tier
                     .after(sync_camera_mode)
                     .after(orbit_camera_controls),
-                camera_controls::sync_two_d_map_marker_visibility
+                camera_controls::sync_scene_zoom_layer_visibility
                     .after(camera_controls::sync_two_d_zoom_tier),
                 camera_controls::sync_two_d_map_marker_scale
-                    .after(camera_controls::sync_two_d_map_marker_visibility),
-                camera_controls::sync_detail_zoom_visibility
-                    .after(camera_controls::sync_two_d_zoom_tier),
+                    .after(camera_controls::sync_scene_zoom_layer_visibility),
                 update_grid_line_lod_visibility.after(sync_camera_mode),
                 sync_world_background_visibility.after(sync_camera_mode),
                 update_floating_origin.after(orbit_camera_controls),
