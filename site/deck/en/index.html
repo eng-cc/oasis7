@@ -43,7 +43,6 @@
     <div class="deck-status">
       <span class="deck-status-chip is-live">HTML Deck</span>
       <span class="deck-status-chip">Technical preview / not playable yet</span>
-      <span class="deck-status-chip">Use arrow keys or space to advance</span>
     </div>
 
     <div class="reveal">
@@ -53,9 +52,9 @@
             <p class="slide-kicker">oasis7 / Roadshow Deck</p>
             <h1>An AI-agent civilization sim where history keeps moving after you leave</h1>
             <p class="slide-lead">
-              The world lives in a fractured asteroid belt. The player does not take over units directly. Instead,
-              you operate from outside the civilization, set goals and constraints, and watch agents push expansion,
-              production, trade, alliances, and war forward under real pressure.
+              The world lives in a fractured asteroid belt. You do not micromanage units. In controlled preview scenarios,
+              you operate from outside the civilization, set goals and constraints, and watch agents turn resource pressure,
+              trade, alliances, and conflict into consequences that persist.
             </p>
             <div class="metric-grid">
               <article class="metric-card">
@@ -68,11 +67,36 @@
               </article>
               <article class="metric-card">
                 <strong>Current stage</strong>
-                <span>Public technical preview: explainable and testable, but not a mass-play release</span>
+                <span>Public technical preview: consequence chains are testable, but this is not a mass-play release</span>
               </article>
             </div>
-            <div class="footer-note">
-              This deck is the sequenced presentation layer. It does not replace the homepage boundary or the PRD source of truth.
+            <p class="footer-note">This deck is the sequenced presentation layer. It does not replace the homepage boundary or the formal spec truth.</p>
+          </div>
+        </section>
+
+        <section class="slide opportunity-slide">
+          <div class="slide-shell">
+            <div class="eyebrow-row">
+              <p class="slide-kicker">01 / Why This Category Matters</p>
+              <span class="mini-note">Why this is more than a research artifact</span>
+            </div>
+            <div class="grid-2">
+              <aside class="highlight-panel">
+                <p class="panel-tag">Opportunity</p>
+                <h3>The opportunity is not better AI dialogue. It is worlds that can finally keep history.</h3>
+                <p>
+                  If AI only produces clever one-off reactions, it stays a demo. If AI can absorb resource pressure,
+                  institutions, and time inside a persistent world, it starts to look like a durable game category.
+                </p>
+              </aside>
+              <div>
+                <h2>Three reasons this deserves serious attention now</h2>
+                <ol class="agenda-list">
+                  <li>Current models and tooling finally make autonomous worlds plus long-lived consequence chains testable.</li>
+                  <li>This is not an NPC upgrade. It is war, economy, and governance inside the same persistent system.</li>
+                  <li>If it works, the result is closer to a new game substrate than to a short-lived AI showcase wave.</li>
+                </ol>
+              </div>
             </div>
           </div>
         </section>
@@ -80,35 +104,25 @@
         <section class="slide agenda-slide">
           <div class="slide-shell">
             <div class="eyebrow-row">
-              <p class="slide-kicker">01 / Agenda</p>
-              <span class="mini-note">Why this is worth another look</span>
+              <p class="slide-kicker">02 / Agenda</p>
+              <span class="mini-note">This version only answers the 5 questions that matter most</span>
             </div>
-            <div class="grid-2">
-              <div>
-                <h2>This story moves through 5 questions</h2>
-                <ol class="agenda-list">
-                  <li>What kind of game is this, beyond AI wrapping?</li>
-                  <li>Why could this kind of world hold attention longer than a normal demo?</li>
-                  <li>How do the player, agents, and world rules divide responsibility?</li>
-                  <li>What already exists today, and what still does not?</li>
-                  <li>What has to be made solid next?</li>
-                </ol>
-              </div>
-              <aside class="highlight-panel">
-                <p class="panel-tag">Deck Boundary</p>
-                <h3>This solves sequence, not total detail</h3>
-                <p>
-                  The homepage and the long overview are better for free browsing. The value of a deck is that it can
-                  carry the problem, world, product boundary, and stage judgment in one controlled order.
-                </p>
-              </aside>
+            <div class="single-panel">
+              <h2>The deck is here to do five jobs</h2>
+              <ol class="agenda-list compact-list">
+                <li>Name the game category clearly, not as AI wrapping.</li>
+                <li>Show the repeat decision cadence the player actually comes back for.</li>
+                <li>Explain why this diverges from classic 4X, colony sim, or grand strategy feel.</li>
+                <li>Separate what is already proven from what is still unproven.</li>
+                <li>Reduce the next phase to one proof point instead of a broad promise.</li>
+              </ol>
             </div>
           </div>
         </section>
 
         <section class="slide problem-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">02 / Problem</p>
+            <p class="slide-kicker">03 / Problem</p>
             <h2>Many AI game demos fail not because the model is weak, but because the world is soft</h2>
             <div class="grid-3">
               <article class="pillar-card fragment fade-up">
@@ -135,8 +149,8 @@
 
         <section class="slide thesis-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">03 / Thesis</p>
-            <h2>The core product thesis: build the world first, then let civilization grow out of it</h2>
+            <p class="slide-kicker">04 / Thesis</p>
+            <h2>You are not optimizing build queues. You are shifting incentives, boundaries, and the political shape of a civilization.</h2>
             <div class="grid-3 compact-grid">
               <article class="value-card">
                 <p class="value-label">World-first</p>
@@ -149,81 +163,83 @@
                 <span>Organizations, production lines, alliances, and conflicts all stay on the same timeline.</span>
               </article>
               <article class="value-card">
-                <p class="value-label">Emergence-first</p>
-                <strong>The project cares more about what rules produce than about pre-written plot</strong>
-                <span>Markets, protocols, organizations, and war outcomes should grow from in-world behavior.</span>
+                <p class="value-label">Player Leverage</p>
+                <strong>The player changes incentives, boundaries, and alliance structure instead of micromanaging units</strong>
+                <span>That is where the feel starts to split away from standard 4X, management sims, and grand strategy.</span>
               </article>
             </div>
             <blockquote class="pull-quote">
-              The target is not “slightly smarter NPCs.” The target is a world that can accumulate history.
+              The target is not slightly smarter NPCs. The target is a world that amplifies player judgment into civilization-scale consequences.
             </blockquote>
           </div>
         </section>
 
         <section class="slide role-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">04 / Player Role</p>
-            <h2>You set civilization direction, but you do not take over every unit</h2>
-            <div class="timeline-grid">
+            <p class="slide-kicker">05 / Player Loop</p>
+            <h2>The repeatable play loop is a high-leverage decision window</h2>
+            <div class="timeline-grid decision-grid">
               <article class="timeline-step">
                 <span>01</span>
-                <h3>You set strategy</h3>
-                <p>Expand through the belt, stockpile and fortify, or push for governance and protocol power.</p>
+                <h3>Expand</h3>
+                <p>Take new ore belts, extend routes, and buy more growth at the price of more exposure.</p>
               </article>
               <article class="timeline-step">
                 <span>02</span>
-                <h3>You set boundaries</h3>
-                <p>You provide goals, constraints, and governance rules instead of prescribing every move.</p>
+                <h3>Hold Supply</h3>
+                <p>Protect your current lines and keep the system from cracking, even if that costs initiative.</p>
               </article>
               <article class="timeline-step">
                 <span>03</span>
-                <h3>Agents execute</h3>
-                <p>They produce, trade, ally, and fight under resource, time, and legality pressure.</p>
+                <h3>Ally Or Defect</h3>
+                <p>Preserve treaties, trade margin, or political trust, or break them to seize a short-term edge.</p>
               </article>
               <article class="timeline-step">
                 <span>04</span>
-                <h3>The world records consequences</h3>
-                <p>Prices, logistics, alliances, and governance proposals turn your inputs into inspectable history.</p>
+                <h3>Rewrite Governance</h3>
+                <p>Change rules and protocols so the next round of agent behavior tilts in your favor.</p>
               </article>
             </div>
+            <p class="footer-note">Short term you feel prices and logistics. Mid term you feel alliance drift and military spillover. Long term you feel institutions locking in the next state of play.</p>
           </div>
         </section>
 
         <section class="slide feel-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">05 / Why It Hooks</p>
-            <h2>What makes this compelling is not clicking buttons. It is watching the situation change shape on its own.</h2>
+            <p class="slide-kicker">06 / Why It Hooks</p>
+            <h2>The hook is the same decision returning in harsher forms: protect the present, or buy the future.</h2>
             <div class="grid-2">
-              <div class="scene-stack">
-                <article class="scene-card">
-                  <h3>Resources tighten first</h3>
-                  <p>One broken mining line can lift prices, destabilize production, and turn neighbors into hoarders or blockers.</p>
-                </article>
-                <article class="scene-card">
-                  <h3>Alliances negotiate before they break</h3>
-                  <p>Pressure often starts as trade, bluffing, and temporary deals before it turns into defection and re-alignment.</p>
-                </article>
-                <article class="scene-card">
-                  <h3>War leaves a long tail</h3>
-                  <p>Conflict is not a single animation. Routes stay broken, policy shifts persist, and the same world remembers.</p>
-                </article>
-              </div>
               <aside class="highlight-panel tall-panel">
-                <p class="panel-tag">Core Feeling</p>
-                <h3>Watching disorder harden into order</h3>
+                <p class="panel-tag">Representative Dilemma</p>
+                <h3>When an ore lane breaks, do you protect margin now or preserve political leverage later?</h3>
                 <p>
-                  The real payoff is not “I clicked a lot.” It is “one judgment I made kept rewriting the expansion,
-                  risk, and tempo that came afterward.”
+                  Breaking a pact can save your production lines immediately. Absorbing short-term pain to keep treaty
+                  credibility may buy the stronger governance hand one cycle later. The satisfaction is not in the click.
+                  It is in knowing that one judgment keeps reshaping expansion, tempo, and downstream risk.
                 </p>
               </aside>
+              <div class="scene-stack">
+                <article class="scene-card">
+                  <h3>Short-term feedback</h3>
+                  <p>Prices, routes, and line stability react quickly enough that the world answers your judgment back.</p>
+                </article>
+                <article class="scene-card">
+                  <h3>Mid-term spillover</h3>
+                  <p>A few cycles later, alliances, bargaining position, and military posture start bending around that choice.</p>
+                </article>
+                <article class="scene-card">
+                  <h3>Long-term lock-in</h3>
+                  <p>Governance shifts and war aftermath do not reset on cue. They alter what the next decision window even is.</p>
+                </article>
+              </div>
             </div>
           </div>
         </section>
 
         <section class="slide stack-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">06 / Stack</p>
-            <h2>The stack is not there to impress. It is there to make world state hold.</h2>
+            <p class="slide-kicker">07 / Stack</p>
+            <h2>The technical stack only matters if it makes consequence chains hold under pressure.</h2>
             <div class="stack-layers">
               <div class="stack-layer">LLM Agents</div>
               <div class="stack-layer">WASM Modules</div>
@@ -250,56 +266,55 @@
 
         <section class="slide proof-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">07 / What Exists Today</p>
-            <h2>Today it is explainable and testable, but it should not be packaged as a public-play release</h2>
+            <p class="slide-kicker">08 / What Exists Today</p>
+            <h2>What has already been de-risked is not the narrative. It is the fact that consequence chains can now be tested.</h2>
             <div class="proof-columns">
               <article class="proof-column is-done">
-                <p class="proof-head">Already exists</p>
+                <p class="proof-head">Already shown</p>
                 <ul>
-                  <li>A public homepage and long-form overview that explain the project clearly</li>
-                  <li>A docs hub, viewer manual, testing manual, and public skill entry</li>
-                  <li>Technical-preview validation paths across runtime, viewer, and testing</li>
-                  <li>Static GitHub Pages publishing with site quality gates</li>
+                  <li>World state progresses instead of collapsing back into a hand-held demo script</li>
+                  <li>In controlled validation scenarios, player input can bend prices, logistics, alliance posture, or governance outcomes</li>
+                  <li>Those outcomes can already be replayed, observed live, and traced through auditable state</li>
+                  <li>The public preview surface, docs, and validation path are coherent enough to support explanation and inspection</li>
                 </ul>
               </article>
               <article class="proof-column is-boundary">
                 <p class="proof-head">Current boundary</p>
                 <ul>
-                  <li>It is still not a mainstream player-ready product</li>
-                  <li>It is better described as researchable, testable, and alignable technical preview work</li>
-                  <li>The deck is here to explain that boundary, not to polish it away</li>
+                  <li>This is still not a player-ready product for the mainstream market</li>
+                  <li>The honest label remains researchable, testable, alignable technical preview work</li>
+                  <li>The job of this deck is to explain the stage accurately, not to sell past it</li>
                 </ul>
               </article>
             </div>
-            <div class="footer-note">
-              Public claim stays the same: `technical preview / not playable yet`.
-            </div>
+            <p class="footer-note">The `minimal / twin_region / triad_region` slices are excerpts from controlled validation scenario replays, not named public game modes.</p>
+            <div class="footer-note">Public claim stays the same: `technical preview / not playable yet`.</div>
           </div>
         </section>
 
         <section class="slide roadmap-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">08 / Path</p>
-            <h2>The path comes in two phases: make one world solid first, then make it into a broader substrate</h2>
+            <p class="slide-kicker">09 / Path</p>
+            <h2>The path should be read front to back: make one world worth staying in first, then earn the right to broaden the substrate.</h2>
             <div class="grid-2">
               <article class="phase-card">
                 <p class="phase-label">Phase 1</p>
                 <h3>Open-world sandbox game</h3>
-                <p>First make the feeling of participation, exploration, and consequence worth staying for in one persistent world.</p>
+                <p>First make one persistent world compelling enough that players want to stay for the next decision window.</p>
                 <ul>
-                  <li>Make the gameplay loop stand up</li>
-                  <li>Make world-side consequence chains legible</li>
+                  <li>Make the repeat player loop stand up</li>
+                  <li>Make consequence chains readable without hand-holding</li>
                   <li>Compress technical preview into a tighter bounded experience</li>
                 </ul>
               </article>
               <article class="phase-card is-future">
                 <p class="phase-label">Phase 2</p>
-                <h3>Open-world platform</h3>
-                <p>Then evolve it into a substrate that can hold different rule sets, module ecosystems, and participant roles.</p>
+                <h3>Broader substrate, later</h3>
+                <p>Only after phase one is proven does it make sense to widen the rule sets, module ecology, and participant roles.</p>
                 <ul>
-                  <li>Creators become more than consumers</li>
-                  <li>Rules and play styles continue to evolve</li>
-                  <li>But that is not the current public promise</li>
+                  <li>More creator-like participation can emerge later</li>
+                  <li>Rule sets can evolve beyond one world</li>
+                  <li>But that is not the current fundable proof point</li>
                 </ul>
               </article>
             </div>
@@ -308,31 +323,31 @@
 
         <section class="slide ask-slide">
           <div class="slide-shell">
-            <p class="slide-kicker">09 / Next Focus</p>
-            <h2>The next stage is not about piling on more concept. It is about making the experience loop more solid.</h2>
+            <p class="slide-kicker">10 / Next Proof Point</p>
+            <h2>The next phase should be judged by one question: can one repeated player judgment reliably bend the next state of the world?</h2>
             <div class="grid-3">
               <article class="mini-card">
-                <strong>Gameplay loop</strong>
-                <span>Make the chain from resource pressure to alliance shift to war consequence more reliably felt by the player.</span>
+                <strong>Single proof point</strong>
+                <span>Show one live preview loop where a supply, alliance, or governance judgment creates a felt consequence and a reason to make the next judgment.</span>
               </article>
               <article class="mini-card">
-                <strong>Experience entry</strong>
-                <span>Keep tightening the preview entry so it is easier to understand, easier to verify, and harder to misread.</span>
+                <strong>Near-term de-risking</strong>
+                <span>Shorten entry friction, make replay and audit evidence clearer, and stabilize the resource-to-politics-to-conflict loop.</span>
               </article>
               <article class="mini-card">
-                <strong>Proof chain</strong>
-                <span>Keep public narrative aligned with repo truth instead of letting docs patch over over-claims.</span>
+                <strong>Risk boundary</strong>
+                <span>If the loop only works in guided scenarios, or if players still feel like spectators, the thesis is not proven yet.</span>
               </article>
             </div>
             <blockquote class="pull-quote">
-              At this stage, the most valuable thing is not stronger language. It is stronger proof that the world is already moving.
+              What matters now is not a larger vision statement. It is one harder, repeatable experience proof.
             </blockquote>
           </div>
         </section>
 
         <section class="slide end-slide" data-background-gradient="linear-gradient(135deg, #061117 0%, #08232a 44%, #061218 100%)">
           <div class="slide-shell end-shell">
-            <p class="slide-kicker">10 / Close</p>
+            <p class="slide-kicker">11 / Close</p>
             <h2>One-line close</h2>
             <p class="end-summary">
               `oasis7` is not trying to be a pile of talkative characters. It is trying to become a world where civilization history keeps advancing under resource, time, law, and consensus constraints.
