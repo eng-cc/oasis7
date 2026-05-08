@@ -13,7 +13,7 @@
   --deck-accent: #52f2bf;
   --deck-accent-2: #dffb75;
   --deck-alert: #ffb578;
-  --deck-shadow: 0 32px 80px rgba(0, 0, 0, 0.34);
+  --deck-shadow: 0 20px 48px rgba(0, 0, 0, 0.24);
   --deck-radius-xl: 28px;
   --deck-radius-lg: 20px;
   --deck-radius-md: 14px;
@@ -63,24 +63,24 @@ body::after {
   display: flex;
   align-items: center;
   gap: 0.72rem;
-  padding: 0.78rem 1rem;
+  padding: 0.54rem 0.82rem;
   border: 1px solid var(--deck-line);
-  background: rgba(7, 17, 25, 0.78);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+  background: rgba(6, 16, 23, 0.62);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .deck-chrome {
-  top: 1rem;
-  left: 1rem;
-  right: 1rem;
+  top: 0.85rem;
+  left: 0.85rem;
+  right: 0.85rem;
   justify-content: space-between;
   border-radius: 999px;
 }
 
 .deck-status {
-  left: 1rem;
-  bottom: 1rem;
+  left: 0.85rem;
+  bottom: 0.85rem;
   border-radius: 999px;
   flex-wrap: wrap;
 }
@@ -119,8 +119,8 @@ body::after {
 
 .deck-actions a {
   color: var(--deck-text-soft);
-  font-size: 0.84rem;
-  padding: 0.42rem 0.74rem;
+  font-size: 0.8rem;
+  padding: 0.34rem 0.62rem;
   border-radius: 999px;
   border: 1px solid transparent;
   transition: 160ms ease;
@@ -134,10 +134,10 @@ body::after {
 
 .deck-status-chip {
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   letter-spacing: 0.04em;
   color: var(--deck-text-soft);
-  padding: 0.34rem 0.62rem;
+  padding: 0.28rem 0.54rem;
   border-radius: 999px;
   border: 1px solid rgba(143, 215, 227, 0.18);
   background: rgba(11, 26, 34, 0.78);
@@ -171,11 +171,11 @@ body::after {
 
 .slide-shell {
   min-height: 100%;
-  padding: 6rem 5rem 5rem;
+  padding: 5.4rem 4.2rem 4.2rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 1.3rem;
+  gap: 1.05rem;
 }
 
 .cover-slide .slide-shell,
@@ -220,29 +220,29 @@ body::after {
 
 .reveal h1 {
   max-width: 1100px;
-  font-size: 3.9rem;
+  font-size: 3.5rem;
 }
 
 .reveal h2 {
   max-width: 1080px;
-  font-size: 2.82rem;
+  font-size: 2.56rem;
 }
 
 .reveal h3 {
-  font-size: 1.34rem;
+  font-size: 1.24rem;
 }
 
 .slide-lead,
 .reveal p,
 .reveal li {
-  font-size: 1.08rem;
-  line-height: 1.66;
+  font-size: 1.02rem;
+  line-height: 1.58;
   color: var(--deck-text-soft);
 }
 
 .slide-lead {
   max-width: 980px;
-  font-size: 1.28rem;
+  font-size: 1.2rem;
 }
 
 .grid-2,
@@ -251,9 +251,10 @@ body::after {
 .proof-columns,
 .timeline-grid,
 .stack-layers,
-.cta-matrix {
+.cta-matrix,
+.decision-grid {
   display: grid;
-  gap: 1rem;
+  gap: 0.88rem;
 }
 
 .grid-2 {
@@ -273,6 +274,10 @@ body::after {
 .proof-columns,
 .timeline-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.decision-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .stack-layers {
@@ -308,7 +313,7 @@ body::after {
 .mini-card,
 .phase-card,
 .proof-column {
-  padding: 1.25rem 1.25rem 1.15rem;
+  padding: 1rem 1rem 0.95rem;
 }
 
 .metric-card strong,
@@ -328,9 +333,18 @@ body::after {
 }
 
 .highlight-panel {
-  padding: 1.5rem;
+  padding: 1.2rem 1.25rem;
   position: relative;
   overflow: hidden;
+}
+
+.single-panel {
+  max-width: 1080px;
+  padding: 1.2rem 1.25rem 1rem;
+  border: 1px solid var(--deck-line);
+  border-radius: var(--deck-radius-lg);
+  background: linear-gradient(180deg, rgba(8, 23, 31, 0.88) 0%, rgba(6, 16, 24, 0.94) 100%);
+  box-shadow: var(--deck-shadow);
 }
 
 .highlight-panel::after {
@@ -355,6 +369,10 @@ body::after {
   color: var(--deck-text);
 }
 
+.compact-list li {
+  margin-bottom: 0.56rem;
+}
+
 .pillar-card,
 .value-card,
 .proof-column {
@@ -371,12 +389,12 @@ body::after {
 
 .pull-quote {
   margin: 0;
-  padding: 1.15rem 1.35rem;
+  padding: 0.95rem 1.1rem;
   border-left: 3px solid var(--deck-accent);
   background: rgba(10, 24, 33, 0.72);
   color: var(--deck-text);
-  font-size: 1.14rem;
-  line-height: 1.58;
+  font-size: 1.06rem;
+  line-height: 1.54;
 }
 
 .timeline-step span {
@@ -394,7 +412,7 @@ body::after {
 
 .scene-stack {
   display: grid;
-  gap: 0.95rem;
+  gap: 0.8rem;
 }
 
 .stack-layer {
@@ -451,10 +469,12 @@ body::after {
 
 .phase-card.is-future {
   border-color: rgba(223, 251, 117, 0.24);
+  opacity: 0.86;
 }
 
 .footer-note {
-  font-size: 0.92rem;
+  max-width: 980px;
+  font-size: 0.86rem;
   color: var(--deck-text-dim);
 }
 
@@ -519,17 +539,21 @@ body::after {
   }
 
   .reveal h1 {
-    font-size: 3.18rem;
+    font-size: 3rem;
   }
 
   .reveal h2 {
-    font-size: 2.4rem;
+    font-size: 2.24rem;
   }
 
   .grid-3,
   .metric-grid,
   .stack-layers,
   .cta-matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .decision-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -546,12 +570,13 @@ body::after {
   .proof-columns,
   .timeline-grid,
   .stack-layers,
-  .cta-matrix {
+  .cta-matrix,
+  .decision-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .slide-shell {
-    padding: 7rem 1.4rem 5rem;
+    padding: 6.8rem 1.3rem 4.6rem;
   }
 
   .reveal h1 {
