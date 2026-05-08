@@ -102,6 +102,8 @@ pub(super) fn write_http_response(
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
         500 => "Internal Server Error",
         _ => "Error",
     };

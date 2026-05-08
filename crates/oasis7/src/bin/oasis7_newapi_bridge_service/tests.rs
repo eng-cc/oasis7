@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process;
@@ -206,6 +206,7 @@ fn reconcile_promotes_confirmed_deposit_into_reconciled_credit() {
         .service
         .reconcile_once(7_000)
         .expect("second reconcile");
+    assert_eq!(second.updated_deposit_count, 1);
     assert_eq!(second.reconciled_credit_count, 1);
 
     let snapshot = test_service.service.snapshot();
@@ -353,6 +354,70 @@ fn reconcile_retries_credit_adapter_with_stable_idempotency_key() {
 }
 
 #[test]
+fn reconcile_tracks_same_tx_hash_actions_as_distinct_ledger_rows() {
+    let chain_server = MockChainServer::spawn();
+    let credit_server = MockCreditServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-multi-action",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(credit_server.base_url.clone()),
+        1,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![
+            MockChainTx {
+                tx_hash: "tx-shared".to_string(),
+                action_id: 31,
+                from_account_id: "oc:pk:sender-1".to_string(),
+                to_account_id: deposit_account_id.clone(),
+                amount: 100,
+                submitted_at_unix_ms: 5_000,
+                updated_at_unix_ms: 5_100,
+                block_height: Some(10),
+            },
+            MockChainTx {
+                tx_hash: "tx-shared".to_string(),
+                action_id: 32,
+                from_account_id: "oc:pk:sender-1".to_string(),
+                to_account_id: deposit_account_id,
+                amount: 100,
+                submitted_at_unix_ms: 5_200,
+                updated_at_unix_ms: 5_300,
+                block_height: Some(10),
+            },
+        ],
+    });
+
+    let reconcile = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("reconcile");
+    assert_eq!(reconcile.observed_new_deposit_count, 2);
+    assert_eq!(reconcile.reconciled_credit_count, 1);
+    assert_eq!(reconcile.manual_review_count, 1);
+
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(snapshot.ledger.len(), 2);
+    assert_eq!(
+        snapshot.ledger[0].chain_tx_id,
+        snapshot.ledger[1].chain_tx_id
+    );
+    assert_ne!(
+        snapshot.ledger[0].chain_action_id,
+        snapshot.ledger[1].chain_action_id
+    );
+    assert_ne!(
+        snapshot.ledger[0].idempotency_key,
+        snapshot.ledger[1].idempotency_key
+    );
+    assert_eq!(credit_server.recorded_requests().len(), 1);
+}
+
+#[test]
 fn operator_review_can_close_manual_review_row() {
     let chain_server = MockChainServer::spawn();
     let credit_server = MockCreditServer::spawn();
@@ -363,27 +428,7 @@ fn operator_review_can_close_manual_review_row() {
         Some(credit_server.base_url.clone()),
         1,
     );
-    let binding = test_service
-        .service
-        .bind_user(
-            BindBridgeUserRequest {
-                newapi_user_ref: "user-1".to_string(),
-                oasis_sender_account_id: "oc:pk:sender-1".to_string(),
-            },
-            1_000,
-        )
-        .expect("binding");
-    let route = test_service
-        .service
-        .create_deposit_route(
-            CreateDepositRouteRequest {
-                bridge_user_id: binding.bridge_user_id,
-                pricing_version: Some("pv-1".to_string()),
-                topup_plan_id: None,
-            },
-            2_000,
-        )
-        .expect("route");
+    let deposit_account_id = issue_default_route(&test_service);
 
     chain_server.set_state(MockChainState {
         committed_height: 10,
@@ -392,7 +437,7 @@ fn operator_review_can_close_manual_review_row() {
                 tx_hash: "tx-a".to_string(),
                 action_id: 21,
                 from_account_id: "oc:pk:sender-1".to_string(),
-                to_account_id: route.deposit_account_id.clone(),
+                to_account_id: deposit_account_id.clone(),
                 amount: 100,
                 submitted_at_unix_ms: 5_000,
                 updated_at_unix_ms: 5_100,
@@ -402,7 +447,7 @@ fn operator_review_can_close_manual_review_row() {
                 tx_hash: "tx-b".to_string(),
                 action_id: 22,
                 from_account_id: "oc:pk:sender-1".to_string(),
-                to_account_id: route.deposit_account_id,
+                to_account_id: deposit_account_id,
                 amount: 100,
                 submitted_at_unix_ms: 5_200,
                 updated_at_unix_ms: 5_300,
@@ -435,6 +480,63 @@ fn operator_review_can_close_manual_review_row() {
         )
         .expect("apply review");
     assert_eq!(response.state, BridgeLedgerState::Closed);
+}
+
+#[test]
+fn operator_review_invalid_resolution_lists_resolve_alias() {
+    let chain_server = MockChainServer::spawn();
+    let credit_server = MockCreditServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "operator-review-invalid-resolution",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(credit_server.base_url.clone()),
+        1,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-invalid-resolution".to_string(),
+            action_id: 33,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id,
+            amount: 99,
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+    test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("reconcile");
+    let manual_review_id = test_service
+        .service
+        .snapshot()
+        .ledger
+        .iter()
+        .find(|entry| entry.state == BridgeLedgerState::ManualReview)
+        .map(|entry| entry.bridge_deposit_id.clone())
+        .expect("manual review entry");
+
+    let err = test_service
+        .service
+        .apply_operator_review(
+            manual_review_id.as_str(),
+            OperatorReviewRequest {
+                resolution: "invalid".to_string(),
+                operator_note: None,
+            },
+            7_000,
+        )
+        .expect_err("invalid resolution");
+    assert_eq!(err.status_code, 400);
+    assert_eq!(err.code, "invalid_resolution");
+    assert!(err.message.contains("mark_resolved"));
+    assert!(err.message.contains("resolve"));
+    assert!(err.message.contains("close"));
 }
 
 #[test]
@@ -672,6 +774,60 @@ fn parse_cli_options_accepts_bridge_automation_flags() {
     assert_eq!(options.reconcile_interval_seconds, 15);
 }
 
+#[test]
+fn reconcile_requires_chain_base_url_configuration() {
+    let test_service = test_service("chain-config-missing", 900);
+    issue_default_route(&test_service);
+
+    let err = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect_err("missing chain config");
+    assert_eq!(err.status_code, 503);
+    assert_eq!(err.code, "chain_explorer_not_configured");
+    assert!(err.message.contains("--chain-base-url"));
+}
+
+#[test]
+fn reconcile_requires_credit_adapter_url_configuration() {
+    let chain_server = MockChainServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "credit-config-missing",
+        900,
+        Some(chain_server.base_url.clone()),
+        None,
+        1,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-credit-config".to_string(),
+            action_id: 34,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id,
+            amount: 100,
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+
+    let err = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect_err("missing credit adapter config");
+    assert_eq!(err.status_code, 503);
+    assert_eq!(err.code, "credit_adapter_not_configured");
+    assert!(err.message.contains("--credit-adapter-url"));
+}
+
+#[test]
+fn write_http_response_uses_upstream_status_texts() {
+    assert_http_status_line(502, "HTTP/1.1 502 Bad Gateway\r\n");
+    assert_http_status_line(503, "HTTP/1.1 503 Service Unavailable\r\n");
+}
+
 struct TestBridgeService {
     service: BridgeService,
     state_path: PathBuf,
@@ -715,6 +871,31 @@ fn test_service_with_endpoints(
         ),
         state_path,
     }
+}
+
+fn issue_default_route(test_service: &TestBridgeService) -> String {
+    let binding = test_service
+        .service
+        .bind_user(
+            BindBridgeUserRequest {
+                newapi_user_ref: "user-1".to_string(),
+                oasis_sender_account_id: "oc:pk:sender-1".to_string(),
+            },
+            1_000,
+        )
+        .expect("binding");
+    test_service
+        .service
+        .create_deposit_route(
+            CreateDepositRouteRequest {
+                bridge_user_id: binding.bridge_user_id,
+                pricing_version: Some("pv-1".to_string()),
+                topup_plan_id: None,
+            },
+            2_000,
+        )
+        .expect("route")
+        .deposit_account_id
 }
 
 fn temp_state_path(name: &str) -> PathBuf {
@@ -972,4 +1153,29 @@ fn query_param(path: &str, key: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn assert_http_status_line(status_code: u16, expected_prefix: &str) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind status line listener");
+    let addr = listener.local_addr().expect("status line listener addr");
+    let expected_body = format!("status-{status_code}");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept status line connection");
+        write_http_response(
+            &mut stream,
+            status_code,
+            "text/plain; charset=utf-8",
+            expected_body.as_bytes(),
+            false,
+        )
+        .expect("write status line response");
+    });
+
+    let mut client = TcpStream::connect(addr).expect("connect status line client");
+    let mut raw_response = String::new();
+    client
+        .read_to_string(&mut raw_response)
+        .expect("read status line response");
+    server.join().expect("join status line thread");
+    assert!(raw_response.starts_with(expected_prefix));
 }
