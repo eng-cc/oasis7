@@ -723,7 +723,8 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-14
+- 更新日期: 2026-05-08
+- 最新完成: `newapi-auto-credit-closure`（已把 `oasis7_newapi_bridge_service` 从 `bind + deposit_route` 最小壳体收口到最小自动 credit 闭环：新增持久化 `bridge_ledger`、explorer poll watcher、block-height confirmation、exact-match `--pricing-rule` 折算、generic HTTP `New API` credit adapter、`POST /v1/bridge/reconcile` / `POST /v1/bridge/operator/review/{bridge_deposit_id}` 与 retry/manual-review 状态机；当前 `topup_plan_id` / underpay / overpay / duplicate route deposit 仍按设计进入 `manual_review`，不做隐式折算。）
 - 当前状态: active（ROUND-027）
 - 下一任务: 优先推进 `TASK-P2P-043` 对应的 `P2PARCH-1~3`，把 identity / transport / role policy 收成统一 substrate；在此之前，不再把“本机无公网 IP 连不上”归类为单点部署细节。
 - 最新完成: `bridge-binding-and-route-contract`（已新增独立 `oasis7_newapi_bridge_service` 最小实现，提供 `/v1/bridge/bind`、`/v1/bridge/deposit-route`、repo-owned `bridge-state.json`、活跃 route 复用/过期和 binding 冲突错误语义；链上 watcher、确认窗口、`bridge_ledger` 与 `New API` adapter 仍待后续任务接入。）

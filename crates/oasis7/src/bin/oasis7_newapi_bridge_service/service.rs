@@ -1,18 +1,64 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use super::chain_client::{ChainExplorerClient, ObservedChainTransfer};
+use super::credit_adapter::{CreditApplyRequest, NewApiCreditAdapter};
 use super::model::{
     BindBridgeUserRequest, BindBridgeUserResponse, BridgeBinding, BridgeBindingStatus,
-    BridgeHealthResponse, CreateDepositRouteRequest, CreateDepositRouteResponse, DepositRoute,
-    DepositRouteStatus,
+    BridgeHealthResponse, BridgeLedgerEntry, BridgeLedgerState, BridgeReconcileResponse,
+    CreateDepositRouteRequest, CreateDepositRouteResponse, DepositRoute, DepositRouteStatus,
+    OperatorReviewRequest, OperatorReviewResponse,
 };
 use super::store::{BridgeStateStore, StoreMutateError};
 
 const ROUTE_TYPE_OPERATOR_ASSIGNED_ACCOUNT: &str = "operator_assigned_account";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum CreditTargetType {
+    Quota,
+    RedeemCredit,
+}
+
+impl CreditTargetType {
+    pub(super) fn parse(raw: &str) -> Result<Self, String> {
+        match raw.trim() {
+            "quota" => Ok(Self::Quota),
+            "redeem_credit" => Ok(Self::RedeemCredit),
+            other => Err(format!(
+                "invalid credit target type `{other}`; expected `quota` or `redeem_credit`"
+            )),
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Quota => "quota",
+            Self::RedeemCredit => "redeem_credit",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct BridgePricingRuleConfig {
+    pub(super) pricing_version: String,
+    pub(super) oc_amount: u64,
+    pub(super) credit_units: u64,
+    pub(super) bonus_units: u64,
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct BridgeServiceConfig {
     pub(super) route_ttl_seconds: u64,
     pub(super) deposit_account_prefix: String,
+    pub(super) chain_base_url: Option<String>,
+    pub(super) chain_timeout_ms: u64,
+    pub(super) chain_confirmations_required: u64,
+    pub(super) pricing_rules: Vec<BridgePricingRuleConfig>,
+    pub(super) credit_adapter_url: Option<String>,
+    pub(super) credit_adapter_auth_token: Option<String>,
+    pub(super) credit_adapter_timeout_ms: u64,
+    pub(super) credit_target_type: CreditTargetType,
+    pub(super) max_credit_attempts: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -48,6 +94,14 @@ impl BridgeServiceError {
     fn conflict(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status_code: 409,
+            code,
+            message: message.into(),
+        }
+    }
+
+    fn bad_gateway(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status_code: 502,
             code,
             message: message.into(),
         }
@@ -89,6 +143,27 @@ impl BridgeService {
             active_binding_count,
             route_count: snapshot.routes.len(),
             active_route_count,
+            ledger_count: snapshot.ledger.len(),
+            pending_confirmation_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::PendingConfirmations)
+                .count(),
+            manual_review_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::ManualReview)
+                .count(),
+            failed_credit_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::Failed)
+                .count(),
+            reconciled_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::Reconciled)
+                .count(),
         }
     }
 
@@ -239,9 +314,509 @@ impl BridgeService {
             .map_err(|err| map_store_error(err, "persist deposit route failed"))
     }
 
+    pub(super) fn reconcile_once(
+        &self,
+        now_unix_ms: i64,
+    ) -> Result<BridgeReconcileResponse, BridgeServiceError> {
+        self.store
+            .mutate(|state| {
+                expire_routes(state.routes.as_mut_slice(), now_unix_ms);
+                Ok(())
+            })
+            .map_err(|err| map_store_error(err, "persist route expiry before reconcile failed"))?;
+
+        let chain_client = self.chain_client()?;
+        let committed_height = chain_client
+            .fetch_committed_height()
+            .map_err(|err| BridgeServiceError::bad_gateway("chain_explorer_unavailable", err))?;
+
+        let routes = self
+            .store
+            .snapshot()
+            .routes
+            .into_iter()
+            .filter(|route| route.status != DepositRouteStatus::Disabled)
+            .collect::<Vec<_>>();
+
+        let mut observed_new_deposit_count = 0usize;
+        let mut updated_deposit_count = 0usize;
+        for route in &routes {
+            let transfers = chain_client
+                .fetch_confirmed_account_txs(route.deposit_account_id.as_str())
+                .map_err(|err| {
+                    BridgeServiceError::bad_gateway("chain_explorer_unavailable", err)
+                })?;
+            for transfer in transfers
+                .into_iter()
+                .filter(|tx| tx.to_account_id == route.deposit_account_id)
+            {
+                let outcome =
+                    self.observe_chain_transfer(route, &transfer, committed_height, now_unix_ms)?;
+                observed_new_deposit_count += outcome.new_entries;
+                updated_deposit_count += outcome.updated_entries;
+            }
+        }
+
+        updated_deposit_count +=
+            self.promote_pending_confirmations(committed_height, now_unix_ms)?;
+        let reconciled_credit_count = self.process_credit_ready_entries(now_unix_ms)?;
+
+        let snapshot = self.store.snapshot();
+        Ok(BridgeReconcileResponse {
+            ok: true,
+            observed_at_unix_ms: now_unix_ms,
+            latest_committed_height: Some(committed_height),
+            scanned_route_count: routes.len(),
+            observed_new_deposit_count,
+            updated_deposit_count,
+            reconciled_credit_count,
+            manual_review_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::ManualReview)
+                .count(),
+            failed_credit_count: snapshot
+                .ledger
+                .iter()
+                .filter(|entry| entry.state == BridgeLedgerState::Failed)
+                .count(),
+        })
+    }
+
+    pub(super) fn apply_operator_review(
+        &self,
+        bridge_deposit_id: &str,
+        request: OperatorReviewRequest,
+        now_unix_ms: i64,
+    ) -> Result<OperatorReviewResponse, BridgeServiceError> {
+        let bridge_deposit_id = normalize_required("bridge_deposit_id", bridge_deposit_id)?;
+        let resolution = normalize_required("resolution", request.resolution.as_str())?;
+        let operator_note = normalize_optional(request.operator_note.as_deref());
+        self.store
+            .mutate(|state| {
+                let Some(entry) = state
+                    .ledger
+                    .iter_mut()
+                    .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
+                else {
+                    return Err(BridgeServiceError::not_found(
+                        "bridge_deposit_not_found",
+                        format!("bridge deposit `{bridge_deposit_id}` does not exist"),
+                    ));
+                };
+                let previous_state = entry.state.clone();
+                if entry.state != BridgeLedgerState::ManualReview {
+                    return Err(BridgeServiceError::conflict(
+                        "invalid_review_state",
+                        format!(
+                            "bridge deposit `{bridge_deposit_id}` is in state {:?}, expected manual_review",
+                            entry.state
+                        ),
+                    ));
+                }
+
+                let next_state = match resolution.as_str() {
+                    "mark_resolved" | "resolve" => BridgeLedgerState::Resolved,
+                    "close" => BridgeLedgerState::Closed,
+                    other => {
+                        return Err(BridgeServiceError::bad_request(
+                            "invalid_resolution",
+                            format!(
+                                "unsupported resolution `{other}`; expected `mark_resolved` or `close`"
+                            ),
+                        ))
+                    }
+                };
+                entry.state = next_state.clone();
+                entry.review_resolution = Some(resolution.clone());
+                entry.operator_note = operator_note.clone();
+                entry.updated_at_unix_ms = now_unix_ms;
+                Ok(OperatorReviewResponse {
+                    ok: true,
+                    bridge_deposit_id,
+                    previous_state,
+                    state: next_state,
+                    resolution,
+                    operator_note,
+                })
+            })
+            .map_err(|err| map_store_error(err, "persist operator review failed"))
+    }
+
     #[cfg(test)]
     pub(super) fn snapshot(&self) -> super::model::PersistedBridgeState {
         self.store.snapshot()
+    }
+
+    fn chain_client(&self) -> Result<ChainExplorerClient, BridgeServiceError> {
+        let Some(base_url) = self.config.chain_base_url.as_deref() else {
+            return Err(BridgeServiceError::internal(
+                "chain explorer base URL is not configured",
+            ));
+        };
+        ChainExplorerClient::new(base_url, self.config.chain_timeout_ms)
+            .map_err(BridgeServiceError::internal)
+    }
+
+    fn credit_adapter(&self) -> Result<NewApiCreditAdapter, BridgeServiceError> {
+        let Some(endpoint_url) = self.config.credit_adapter_url.as_deref() else {
+            return Err(BridgeServiceError::internal(
+                "credit adapter URL is not configured",
+            ));
+        };
+        NewApiCreditAdapter::new(
+            endpoint_url,
+            self.config.credit_adapter_auth_token.as_deref(),
+            self.config.credit_adapter_timeout_ms,
+        )
+        .map_err(BridgeServiceError::internal)
+    }
+
+    fn observe_chain_transfer(
+        &self,
+        route: &DepositRoute,
+        transfer: &ObservedChainTransfer,
+        committed_height: u64,
+        now_unix_ms: i64,
+    ) -> Result<ObserveOutcome, BridgeServiceError> {
+        let pricing_rules = self.pricing_rules_by_version();
+        let target_type = self.config.credit_target_type.as_str().to_string();
+        let required_confirmations = self.config.chain_confirmations_required.max(1);
+        self.store
+            .mutate(|state| {
+                expire_routes(state.routes.as_mut_slice(), now_unix_ms);
+
+                if let Some(existing) = state
+                    .ledger
+                    .iter_mut()
+                    .find(|entry| entry.chain_tx_id == transfer.tx_hash)
+                {
+                    let confirmations =
+                        compute_confirmations(committed_height, transfer.block_height);
+                    existing.chain_action_id = Some(transfer.action_id);
+                    existing.block_height = transfer.block_height;
+                    existing.confirmations = confirmations;
+                    existing.updated_at_unix_ms = now_unix_ms;
+                    if existing.state == BridgeLedgerState::PendingConfirmations
+                        && confirmations >= existing.required_confirmations
+                    {
+                        existing.state = BridgeLedgerState::Confirmed;
+                    }
+                    return Ok(ObserveOutcome {
+                        new_entries: 0,
+                        updated_entries: 1,
+                    });
+                }
+
+                let Some(route_position) = state
+                    .routes
+                    .iter()
+                    .position(|candidate| candidate.route_id == route.route_id)
+                else {
+                    return Err(BridgeServiceError::not_found(
+                        "route_not_found",
+                        format!("deposit route `{}` does not exist", route.route_id),
+                    ));
+                };
+                let route_state = state.routes[route_position].status.clone();
+                let duplicate_route_deposit = state
+                    .ledger
+                    .iter()
+                    .any(|entry| entry.route_id == route.route_id);
+                let confirmations = compute_confirmations(committed_height, transfer.block_height);
+                let pricing_evaluation = evaluate_pricing(
+                    route.pricing_version.as_deref(),
+                    route.topup_plan_id.as_deref(),
+                    transfer.amount,
+                    &pricing_rules,
+                );
+                let (
+                    expected_amount_oc,
+                    credit_units,
+                    bonus_units,
+                    total_credit_units,
+                    state_name,
+                    review_reason,
+                ) = match pricing_evaluation {
+                    PricingEvaluation::Matched {
+                        expected_amount_oc,
+                        credit_units,
+                        bonus_units,
+                        total_credit_units,
+                    } => {
+                        if matches!(route_state, DepositRouteStatus::Expired) {
+                            (
+                                Some(expected_amount_oc),
+                                credit_units,
+                                bonus_units,
+                                total_credit_units,
+                                BridgeLedgerState::ManualReview,
+                                Some("expired_route_deposit".to_string()),
+                            )
+                        } else if duplicate_route_deposit {
+                            (
+                                Some(expected_amount_oc),
+                                credit_units,
+                                bonus_units,
+                                total_credit_units,
+                                BridgeLedgerState::ManualReview,
+                                Some("duplicate_route_deposit".to_string()),
+                            )
+                        } else if transfer.block_height.is_none() {
+                            (
+                                Some(expected_amount_oc),
+                                credit_units,
+                                bonus_units,
+                                total_credit_units,
+                                BridgeLedgerState::ManualReview,
+                                Some("missing_block_height".to_string()),
+                            )
+                        } else if confirmations >= required_confirmations {
+                            (
+                                Some(expected_amount_oc),
+                                credit_units,
+                                bonus_units,
+                                total_credit_units,
+                                BridgeLedgerState::Confirmed,
+                                None,
+                            )
+                        } else {
+                            (
+                                Some(expected_amount_oc),
+                                credit_units,
+                                bonus_units,
+                                total_credit_units,
+                                BridgeLedgerState::PendingConfirmations,
+                                None,
+                            )
+                        }
+                    }
+                    PricingEvaluation::ManualReview {
+                        expected_amount_oc,
+                        reason,
+                    } => (
+                        expected_amount_oc,
+                        0,
+                        0,
+                        0,
+                        BridgeLedgerState::ManualReview,
+                        Some(reason.to_string()),
+                    ),
+                };
+
+                state.routes[route_position].status = DepositRouteStatus::Settled;
+                state.routes[route_position].updated_at_unix_ms = now_unix_ms;
+
+                let bridge_deposit_id = format!("bridge-deposit-{:06}", state.next_deposit_seq);
+                state.next_deposit_seq = state.next_deposit_seq.saturating_add(1);
+                let idempotency_key =
+                    build_idempotency_key(route.route_id.as_str(), transfer.tx_hash.as_str());
+                state.ledger.push(BridgeLedgerEntry {
+                    bridge_deposit_id,
+                    route_id: route.route_id.clone(),
+                    bridge_user_id: route.bridge_user_id.clone(),
+                    beneficiary_ref: route.beneficiary_ref.clone(),
+                    deposit_account_id: route.deposit_account_id.clone(),
+                    chain_tx_id: transfer.tx_hash.clone(),
+                    chain_action_id: Some(transfer.action_id),
+                    from_account_id: transfer.from_account_id.clone(),
+                    amount_oc: transfer.amount,
+                    expected_amount_oc,
+                    pricing_version: route.pricing_version.clone(),
+                    topup_plan_id: route.topup_plan_id.clone(),
+                    credit_units,
+                    bonus_units,
+                    total_credit_units,
+                    confirmations,
+                    required_confirmations,
+                    block_height: transfer.block_height,
+                    target_type,
+                    idempotency_key,
+                    state: state_name,
+                    credit_attempt_count: 0,
+                    review_reason,
+                    review_resolution: None,
+                    operator_note: None,
+                    adapter_receipt: None,
+                    last_error_code: None,
+                    last_error: None,
+                    observed_at_unix_ms: now_unix_ms,
+                    updated_at_unix_ms: now_unix_ms,
+                });
+                Ok(ObserveOutcome {
+                    new_entries: 1,
+                    updated_entries: 0,
+                })
+            })
+            .map_err(|err| map_store_error(err, "persist observed chain transfer failed"))
+    }
+
+    fn promote_pending_confirmations(
+        &self,
+        committed_height: u64,
+        now_unix_ms: i64,
+    ) -> Result<usize, BridgeServiceError> {
+        self.store
+            .mutate(|state| {
+                let mut updated = 0usize;
+                for entry in &mut state.ledger {
+                    if entry.state != BridgeLedgerState::PendingConfirmations {
+                        continue;
+                    }
+                    let confirmations = compute_confirmations(committed_height, entry.block_height);
+                    if confirmations != entry.confirmations {
+                        entry.confirmations = confirmations;
+                        entry.updated_at_unix_ms = now_unix_ms;
+                        updated += 1;
+                    }
+                    if confirmations >= entry.required_confirmations {
+                        entry.state = BridgeLedgerState::Confirmed;
+                        entry.updated_at_unix_ms = now_unix_ms;
+                    }
+                }
+                Ok(updated)
+            })
+            .map_err(|err| map_store_error(err, "persist confirmation promotion failed"))
+    }
+
+    fn process_credit_ready_entries(&self, now_unix_ms: i64) -> Result<usize, BridgeServiceError> {
+        let ready_entries = self
+            .store
+            .snapshot()
+            .ledger
+            .into_iter()
+            .filter(|entry| {
+                entry.state == BridgeLedgerState::Confirmed
+                    || (entry.state == BridgeLedgerState::Failed
+                        && entry.credit_attempt_count < self.config.max_credit_attempts.max(1))
+            })
+            .collect::<Vec<_>>();
+        if ready_entries.is_empty() {
+            return Ok(0);
+        }
+        let adapter = self.credit_adapter()?;
+        let mut reconciled = 0usize;
+        for entry in ready_entries {
+            if self.try_apply_credit(&adapter, entry.bridge_deposit_id.as_str(), now_unix_ms)? {
+                reconciled += 1;
+            }
+        }
+        Ok(reconciled)
+    }
+
+    fn try_apply_credit(
+        &self,
+        adapter: &NewApiCreditAdapter,
+        bridge_deposit_id: &str,
+        now_unix_ms: i64,
+    ) -> Result<bool, BridgeServiceError> {
+        let bridge_deposit_id = bridge_deposit_id.to_string();
+        let ledger_entry = self
+            .store
+            .mutate(|state| {
+                let Some(entry) = state
+                    .ledger
+                    .iter_mut()
+                    .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
+                else {
+                    return Err(BridgeServiceError::not_found(
+                        "bridge_deposit_not_found",
+                        format!("bridge deposit `{bridge_deposit_id}` does not exist"),
+                    ));
+                };
+                if entry.state != BridgeLedgerState::Confirmed
+                    && entry.state != BridgeLedgerState::Failed
+                {
+                    return Ok(None);
+                }
+                entry.state = BridgeLedgerState::Crediting;
+                entry.updated_at_unix_ms = now_unix_ms;
+                Ok(Some(entry.clone()))
+            })
+            .map_err(|err| map_store_error(err, "persist crediting state failed"))?;
+
+        let Some(ledger_entry) = ledger_entry else {
+            return Ok(false);
+        };
+
+        let request = CreditApplyRequest {
+            bridge_deposit_id: ledger_entry.bridge_deposit_id.clone(),
+            beneficiary_ref: ledger_entry.beneficiary_ref.clone(),
+            pricing_version: ledger_entry.pricing_version.clone(),
+            topup_plan_id: ledger_entry.topup_plan_id.clone(),
+            amount_oc: ledger_entry.amount_oc,
+            credit_units: ledger_entry.credit_units,
+            bonus_units: ledger_entry.bonus_units,
+            total_credit_units: ledger_entry.total_credit_units,
+            target_type: ledger_entry.target_type.clone(),
+            chain_tx_id: ledger_entry.chain_tx_id.clone(),
+            chain_action_id: ledger_entry.chain_action_id,
+            idempotency_key: ledger_entry.idempotency_key.clone(),
+        };
+
+        match adapter.apply_credit(&request) {
+            Ok(receipt) => {
+                self.store
+                    .mutate(|state| {
+                        let Some(entry) = state
+                            .ledger
+                            .iter_mut()
+                            .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
+                        else {
+                            return Err(BridgeServiceError::not_found(
+                                "bridge_deposit_not_found",
+                                format!("bridge deposit `{bridge_deposit_id}` does not exist"),
+                            ));
+                        };
+                        entry.state = BridgeLedgerState::Reconciled;
+                        entry.adapter_receipt = Some(receipt.clone());
+                        entry.last_error_code = None;
+                        entry.last_error = None;
+                        entry.review_reason = None;
+                        entry.updated_at_unix_ms = now_unix_ms;
+                        Ok(())
+                    })
+                    .map_err(|err| map_store_error(err, "persist reconciled credit failed"))?;
+                Ok(true)
+            }
+            Err(err) => {
+                self.store
+                    .mutate(|state| {
+                        let Some(entry) = state
+                            .ledger
+                            .iter_mut()
+                            .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
+                        else {
+                            return Err(BridgeServiceError::not_found(
+                                "bridge_deposit_not_found",
+                                format!("bridge deposit `{bridge_deposit_id}` does not exist"),
+                            ));
+                        };
+                        entry.credit_attempt_count = entry.credit_attempt_count.saturating_add(1);
+                        entry.last_error_code = Some("credit_adapter_request_failed".to_string());
+                        entry.last_error = Some(err.clone());
+                        entry.updated_at_unix_ms = now_unix_ms;
+                        if entry.credit_attempt_count >= self.config.max_credit_attempts.max(1) {
+                            entry.state = BridgeLedgerState::ManualReview;
+                            entry.review_reason = Some("credit_adapter_request_failed".to_string());
+                        } else {
+                            entry.state = BridgeLedgerState::Failed;
+                        }
+                        Ok(())
+                    })
+                    .map_err(|err| map_store_error(err, "persist failed credit failed"))?;
+                Ok(false)
+            }
+        }
+    }
+
+    fn pricing_rules_by_version(&self) -> BTreeMap<String, BridgePricingRuleConfig> {
+        self.config
+            .pricing_rules
+            .iter()
+            .cloned()
+            .map(|rule| (rule.pricing_version.clone(), rule))
+            .collect()
     }
 }
 
@@ -306,4 +881,85 @@ fn map_store_error(err: StoreMutateError<BridgeServiceError>, context: &str) -> 
         StoreMutateError::Domain(err) => err,
         StoreMutateError::Persist(err) => BridgeServiceError::internal(format!("{context}: {err}")),
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ObserveOutcome {
+    new_entries: usize,
+    updated_entries: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PricingEvaluation<'a> {
+    Matched {
+        expected_amount_oc: u64,
+        credit_units: u64,
+        bonus_units: u64,
+        total_credit_units: u64,
+    },
+    ManualReview {
+        expected_amount_oc: Option<u64>,
+        reason: &'a str,
+    },
+}
+
+fn evaluate_pricing<'a>(
+    pricing_version: Option<&str>,
+    topup_plan_id: Option<&str>,
+    amount_oc: u64,
+    pricing_rules: &'a BTreeMap<String, BridgePricingRuleConfig>,
+) -> PricingEvaluation<'a> {
+    let Some(pricing_version) = pricing_version else {
+        return if topup_plan_id.is_some() {
+            PricingEvaluation::ManualReview {
+                expected_amount_oc: None,
+                reason: "topup_plan_auto_credit_not_supported",
+            }
+        } else {
+            PricingEvaluation::ManualReview {
+                expected_amount_oc: None,
+                reason: "missing_pricing_rule",
+            }
+        };
+    };
+    let Some(rule) = pricing_rules.get(pricing_version) else {
+        return PricingEvaluation::ManualReview {
+            expected_amount_oc: None,
+            reason: "pricing_rule_missing",
+        };
+    };
+    if amount_oc < rule.oc_amount {
+        return PricingEvaluation::ManualReview {
+            expected_amount_oc: Some(rule.oc_amount),
+            reason: "underpay",
+        };
+    }
+    if amount_oc > rule.oc_amount {
+        return PricingEvaluation::ManualReview {
+            expected_amount_oc: Some(rule.oc_amount),
+            reason: "overpay",
+        };
+    }
+    PricingEvaluation::Matched {
+        expected_amount_oc: rule.oc_amount,
+        credit_units: rule.credit_units,
+        bonus_units: rule.bonus_units,
+        total_credit_units: rule.credit_units.saturating_add(rule.bonus_units),
+    }
+}
+
+fn compute_confirmations(committed_height: u64, block_height: Option<u64>) -> u64 {
+    let Some(block_height) = block_height else {
+        return 0;
+    };
+    if committed_height < block_height {
+        return 0;
+    }
+    committed_height
+        .saturating_sub(block_height)
+        .saturating_add(1)
+}
+
+fn build_idempotency_key(route_id: &str, chain_tx_id: &str) -> String {
+    format!("bridge-credit:{route_id}:{chain_tx_id}")
 }

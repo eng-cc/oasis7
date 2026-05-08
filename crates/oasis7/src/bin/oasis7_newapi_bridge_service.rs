@@ -12,6 +12,10 @@ use tracing::{error, info, Level};
 
 #[path = "oasis7_newapi_bridge_service/api.rs"]
 mod api;
+#[path = "oasis7_newapi_bridge_service/chain_client.rs"]
+mod chain_client;
+#[path = "oasis7_newapi_bridge_service/credit_adapter.rs"]
+mod credit_adapter;
 #[path = "oasis7_newapi_bridge_service/model.rs"]
 mod model;
 #[path = "oasis7_newapi_bridge_service/service.rs"]
@@ -23,8 +27,11 @@ mod store;
 mod tests;
 
 use api::{read_http_request, write_http_response, HttpRequest};
-use model::{BindBridgeUserRequest, CreateDepositRouteRequest};
-use service::{BridgeService, BridgeServiceConfig, BridgeServiceError};
+use model::{BindBridgeUserRequest, CreateDepositRouteRequest, OperatorReviewRequest};
+use service::{
+    BridgePricingRuleConfig, BridgeService, BridgeServiceConfig, BridgeServiceError,
+    CreditTargetType,
+};
 use store::BridgeStateStore;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5852";
@@ -32,6 +39,10 @@ const DEFAULT_STATE_PATH: &str = "output/newapi-bridge/bridge-state.json";
 const DEFAULT_ROUTE_TTL_SECONDS: u64 = 15 * 60;
 const DEFAULT_DEPOSIT_ACCOUNT_PREFIX: &str = "oc:bridge:";
 const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_newapi_bridge_service";
+const DEFAULT_CHAIN_TIMEOUT_MS: u64 = 5_000;
+const DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED: u64 = 1;
+const DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS: u64 = 5_000;
+const DEFAULT_MAX_CREDIT_ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone)]
 struct CliOptions {
@@ -39,6 +50,16 @@ struct CliOptions {
     state_path: PathBuf,
     route_ttl_seconds: u64,
     deposit_account_prefix: String,
+    chain_base_url: Option<String>,
+    chain_timeout_ms: u64,
+    chain_confirmations_required: u64,
+    pricing_rules: Vec<BridgePricingRuleConfig>,
+    credit_adapter_url: Option<String>,
+    credit_adapter_auth_token: Option<String>,
+    credit_adapter_timeout_ms: u64,
+    credit_target_type: CreditTargetType,
+    max_credit_attempts: u32,
+    reconcile_interval_seconds: u64,
 }
 
 impl Default for CliOptions {
@@ -48,6 +69,16 @@ impl Default for CliOptions {
             state_path: PathBuf::from(DEFAULT_STATE_PATH),
             route_ttl_seconds: DEFAULT_ROUTE_TTL_SECONDS,
             deposit_account_prefix: DEFAULT_DEPOSIT_ACCOUNT_PREFIX.to_string(),
+            chain_base_url: None,
+            chain_timeout_ms: DEFAULT_CHAIN_TIMEOUT_MS,
+            chain_confirmations_required: DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED,
+            pricing_rules: Vec::new(),
+            credit_adapter_url: None,
+            credit_adapter_auth_token: None,
+            credit_adapter_timeout_ms: DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS,
+            credit_target_type: CreditTargetType::Quota,
+            max_credit_attempts: DEFAULT_MAX_CREDIT_ATTEMPTS,
+            reconcile_interval_seconds: 0,
         }
     }
 }
@@ -75,8 +106,30 @@ fn run() -> Result<(), String> {
         BridgeServiceConfig {
             route_ttl_seconds: options.route_ttl_seconds,
             deposit_account_prefix: options.deposit_account_prefix.clone(),
+            chain_base_url: options.chain_base_url.clone(),
+            chain_timeout_ms: options.chain_timeout_ms,
+            chain_confirmations_required: options.chain_confirmations_required,
+            pricing_rules: options.pricing_rules.clone(),
+            credit_adapter_url: options.credit_adapter_url.clone(),
+            credit_adapter_auth_token: options.credit_adapter_auth_token.clone(),
+            credit_adapter_timeout_ms: options.credit_adapter_timeout_ms,
+            credit_target_type: options.credit_target_type.clone(),
+            max_credit_attempts: options.max_credit_attempts,
         },
     ));
+    if options.reconcile_interval_seconds > 0 {
+        let service = Arc::clone(&service);
+        let interval = options.reconcile_interval_seconds;
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_secs(interval));
+            if let Err(err) = service.reconcile_once(now_unix_ms()) {
+                eprintln!(
+                    "warning: bridge-service reconcile loop failed: {}",
+                    err.message
+                );
+            }
+        });
+    }
     let listener = TcpListener::bind(options.bind_addr.as_str())
         .map_err(|err| format!("bind {} failed: {err}", options.bind_addr))?;
     let trace_session_id = resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL);
@@ -153,6 +206,86 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
                 options.deposit_account_prefix = value.trim().to_string();
                 index += 2;
             }
+            "--chain-base-url" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--chain-base-url requires a value".to_string())?;
+                options.chain_base_url = Some(value.trim().to_string());
+                index += 2;
+            }
+            "--chain-timeout-ms" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--chain-timeout-ms requires a value".to_string())?;
+                options.chain_timeout_ms = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid --chain-timeout-ms value `{value}`"))?;
+                index += 2;
+            }
+            "--chain-confirmations-required" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--chain-confirmations-required requires a value".to_string())?;
+                options.chain_confirmations_required = value.parse::<u64>().map_err(|_| {
+                    format!("invalid --chain-confirmations-required value `{value}`")
+                })?;
+                index += 2;
+            }
+            "--pricing-rule" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--pricing-rule requires a value".to_string())?;
+                options.pricing_rules.push(parse_pricing_rule(value)?);
+                index += 2;
+            }
+            "--credit-adapter-url" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--credit-adapter-url requires a value".to_string())?;
+                options.credit_adapter_url = Some(value.trim().to_string());
+                index += 2;
+            }
+            "--credit-adapter-auth-token" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--credit-adapter-auth-token requires a value".to_string())?;
+                options.credit_adapter_auth_token = Some(value.to_string());
+                index += 2;
+            }
+            "--credit-adapter-timeout-ms" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--credit-adapter-timeout-ms requires a value".to_string())?;
+                options.credit_adapter_timeout_ms = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid --credit-adapter-timeout-ms value `{value}`"))?;
+                index += 2;
+            }
+            "--credit-target-type" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--credit-target-type requires a value".to_string())?;
+                options.credit_target_type = CreditTargetType::parse(value)?;
+                index += 2;
+            }
+            "--max-credit-attempts" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--max-credit-attempts requires a value".to_string())?;
+                options.max_credit_attempts = value
+                    .parse::<u32>()
+                    .map_err(|_| format!("invalid --max-credit-attempts value `{value}`"))?;
+                index += 2;
+            }
+            "--reconcile-interval-seconds" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--reconcile-interval-seconds requires a value".to_string())?;
+                options.reconcile_interval_seconds = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid --reconcile-interval-seconds value `{value}`"))?;
+                index += 2;
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -172,6 +305,18 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
     if options.deposit_account_prefix.trim().is_empty() {
         return Err("--deposit-account-prefix must not be empty".to_string());
     }
+    if options.chain_timeout_ms == 0 {
+        return Err("--chain-timeout-ms must be greater than 0".to_string());
+    }
+    if options.chain_confirmations_required == 0 {
+        return Err("--chain-confirmations-required must be greater than 0".to_string());
+    }
+    if options.credit_adapter_timeout_ms == 0 {
+        return Err("--credit-adapter-timeout-ms must be greater than 0".to_string());
+    }
+    if options.max_credit_attempts == 0 {
+        return Err("--max-credit-attempts must be greater than 0".to_string());
+    }
     Ok(options)
 }
 
@@ -181,6 +326,18 @@ fn print_help() {
     println!("  --state-path <path>                  default: {DEFAULT_STATE_PATH}");
     println!("  --route-ttl-seconds <seconds>        default: {DEFAULT_ROUTE_TTL_SECONDS}");
     println!("  --deposit-account-prefix <prefix>    default: {DEFAULT_DEPOSIT_ACCOUNT_PREFIX}");
+    println!("  --chain-base-url <url>               optional chain explorer base URL");
+    println!("  --chain-timeout-ms <ms>              default: {DEFAULT_CHAIN_TIMEOUT_MS}");
+    println!(
+        "  --chain-confirmations-required <n>   default: {DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED}"
+    );
+    println!("  --pricing-rule <version:oc:credit[:bonus]>  repeatable exact-match pricing rule");
+    println!("  --credit-adapter-url <url>           optional New API credit endpoint");
+    println!("  --credit-adapter-auth-token <token>  optional bearer token for credit adapter");
+    println!("  --credit-adapter-timeout-ms <ms>     default: {DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS}");
+    println!("  --credit-target-type <quota|redeem_credit>   default: quota");
+    println!("  --max-credit-attempts <n>            default: {DEFAULT_MAX_CREDIT_ATTEMPTS}");
+    println!("  --reconcile-interval-seconds <n>     default: disabled");
 }
 
 fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(), String> {
@@ -269,7 +426,40 @@ fn dispatch_request(
                 Err(err) => json_error_response(&err),
             }
         }
-        (_, "/v1/bridge/bind") | (_, "/v1/bridge/deposit-route") => json_response(
+        ("POST", "/v1/bridge/reconcile") => match service.reconcile_once(now_unix_ms()) {
+            Ok(response) => json_response(200, &response),
+            Err(err) => json_error_response(&err),
+        },
+        ("POST", _) if path.starts_with("/v1/bridge/operator/review/") => {
+            let bridge_deposit_id = path
+                .trim_start_matches("/v1/bridge/operator/review/")
+                .trim();
+            let payload: OperatorReviewRequest = match serde_json::from_slice(
+                request.body.as_slice(),
+            ) {
+                Ok(payload) => payload,
+                Err(err) => {
+                    return json_response(
+                        400,
+                        &json!({
+                            "ok": false,
+                            "error": {
+                                "code": "invalid_json",
+                                "message": format!("decode operator review request failed: {err}"),
+                            }
+                        }),
+                    );
+                }
+            };
+            match service.apply_operator_review(bridge_deposit_id, payload, now_unix_ms()) {
+                Ok(response) => json_response(200, &response),
+                Err(err) => json_error_response(&err),
+            }
+        }
+        (_, "/v1/bridge/bind")
+        | (_, "/v1/bridge/deposit-route")
+        | (_, "/v1/bridge/reconcile")
+        | (_, "/v1/bridge/operator/review") => json_response(
             405,
             &json!({
                 "ok": false,
@@ -326,4 +516,39 @@ fn validate_route_ttl_seconds(route_ttl_seconds: u64) -> Result<(), String> {
         return Err("--route-ttl-seconds exceeds the supported millisecond range".to_string());
     }
     Ok(())
+}
+
+fn parse_pricing_rule(raw: &str) -> Result<BridgePricingRuleConfig, String> {
+    let parts = raw.split(':').collect::<Vec<_>>();
+    if parts.len() < 3 || parts.len() > 4 {
+        return Err(format!(
+            "invalid --pricing-rule `{raw}`; expected version:oc_amount:credit_units[:bonus_units]"
+        ));
+    }
+    let pricing_version = parts[0].trim();
+    if pricing_version.is_empty() {
+        return Err("pricing rule version must not be empty".to_string());
+    }
+    let oc_amount = parts[1]
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| format!("invalid pricing rule OC amount in `{raw}`"))?;
+    let credit_units = parts[2]
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| format!("invalid pricing rule credit units in `{raw}`"))?;
+    let bonus_units = if let Some(raw_bonus) = parts.get(3) {
+        raw_bonus
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| format!("invalid pricing rule bonus units in `{raw}`"))?
+    } else {
+        0
+    };
+    Ok(BridgePricingRuleConfig {
+        pricing_version: pricing_version.to_string(),
+        oc_amount,
+        credit_units,
+        bonus_units,
+    })
 }

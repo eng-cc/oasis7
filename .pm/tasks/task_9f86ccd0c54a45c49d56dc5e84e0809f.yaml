@@ -1,0 +1,24 @@
+task_uid: task_9f86ccd0c54a45c49d56dc5e84e0809f
+title: "newapi bridge automatic credit closure"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-newapi-auto-credit-closure
+execution_log_path: .pm/tasks/task_9f86ccd0c54a45c49d56dc5e84e0809f.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/project.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-TBRIDGE-002
+  - PRD-P2P-TBRIDGE-003
+  - PRD-P2P-TBRIDGE-004
+acceptance:
+  - "bridge-service persists ledger rows for observed deposits with confirmation state and idempotency key"
+  - "confirmed deposits can drive one-way New API credit issuance through a configured adapter without double credit"
+  - "anomaly cases fall into manual review with operator-auditable state"
+handoff_to: []
+updated_at: 2026-05-08T22:00:51+08:00
+last_started_at: 2026-05-08T21:16:37+08:00
+last_closed_at: 2026-05-08T22:00:51+08:00
