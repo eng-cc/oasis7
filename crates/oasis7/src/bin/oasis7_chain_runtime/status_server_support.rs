@@ -1,4 +1,5 @@
 use super::*;
+use tracing::Level;
 
 #[derive(Debug)]
 pub(super) struct ChainStatusServer {
@@ -145,7 +146,13 @@ fn run_chain_status_server_loop(
                         storage_metrics,
                         &feedback_submit_signer,
                     ) {
-                        eprintln!("warning: chain status connection failed: {err}");
+                        let stderr_message =
+                            format!("warning: chain status connection failed: {err}");
+                        oasis7::observability::emit_stderr_or_event(
+                            Level::WARN,
+                            stderr_message.as_str(),
+                            "chain status connection failed",
+                        );
                     }
                 });
             }

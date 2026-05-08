@@ -1,5 +1,7 @@
 #[cfg(not(target_arch = "wasm32"))]
-use std::sync::Once;
+use std::sync::{Once, OnceLock};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(not(target_arch = "wasm32"))]
 use tracing::Level;
@@ -8,6 +10,11 @@ use tracing_subscriber::EnvFilter;
 
 #[cfg(not(target_arch = "wasm32"))]
 static TRACING_INIT: Once = Once::new();
+#[cfg(not(target_arch = "wasm32"))]
+static TRACE_SESSION_ID: OnceLock<String> = OnceLock::new();
+
+#[cfg(not(target_arch = "wasm32"))]
+pub const TRACE_SESSION_ID_ENV: &str = "OASIS7_TRACE_SESSION_ID";
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing(service_name: &str) {
@@ -38,9 +45,28 @@ pub fn emit_stderr_or_event(level: Level, stderr_message: &str, event_message: &
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub fn resolve_trace_session_id(process_label: &str) -> String {
+    TRACE_SESSION_ID
+        .get_or_init(|| {
+            std::env::var(TRACE_SESSION_ID_ENV)
+                .ok()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| {
+                    let now_ms = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis();
+                    format!("{process_label}-{}-{now_ms}", std::process::id())
+                })
+        })
+        .clone()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{emit_stderr_or_event, init_tracing};
+    use super::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
     use tracing::Level;
 
     #[test]
@@ -53,5 +79,13 @@ mod tests {
     fn emit_stderr_or_event_allows_tracing_path_after_init() {
         init_tracing("oasis7_test");
         emit_stderr_or_event(Level::WARN, "stderr warning", "structured warning");
+    }
+
+    #[test]
+    fn resolve_trace_session_id_is_stable_within_process() {
+        let first = resolve_trace_session_id("oasis7_test");
+        let second = resolve_trace_session_id("oasis7_test");
+        assert_eq!(first, second);
+        assert!(!first.trim().is_empty());
     }
 }

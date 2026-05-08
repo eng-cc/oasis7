@@ -66,7 +66,9 @@ fn main() {
 }
 
 fn run_viewer(options: CliOptions) -> Result<(), String> {
+    let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_viewer_live");
     info!(
+        trace_session_id = %trace_session_id,
         bind_addr = %options.bind_addr,
         web_bind_addr = ?options.web_bind_addr,
         llm_mode = options.llm_mode,

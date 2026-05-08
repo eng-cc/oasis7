@@ -1,0 +1,24 @@
+task_uid: task_6ff11b8818bb47e8ae063658d321ba8d
+title: "extend tracing to end-to-end product runtime chain"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-tracing-baseline
+execution_log_path: .pm/tasks/task_6ff11b8818bb47e8ae063658d321ba8d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - crates/oasis7/src/bin/oasis7_game_launcher.rs
+  - crates/oasis7/src/bin/oasis7_web_launcher.rs
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-001
+  - PRD-ENGINEERING-003
+acceptance:
+  - "Extend tracing from baseline runtime entrypoints to the current end-to-end product runtime chain: game_launcher, web_launcher, viewer_live, chain_runtime, provider_local_bridge, and newapi_bridge_service."
+  - "Propagate a stable trace_session_id from parent launcher processes to spawned runtime children without changing gameplay behavior."
+  - "Route remaining high-signal runtime warnings/errors in chain status, execution bridge retention, reward runtime, and launcher child-management paths through structured tracing with stderr fallback."
+handoff_to: []
+updated_at: 2026-05-08T21:10:54+08:00
+last_started_at: 2026-05-08T20:37:16+08:00
+last_closed_at: 2026-05-08T21:10:54+08:00

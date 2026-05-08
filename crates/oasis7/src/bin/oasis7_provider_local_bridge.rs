@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use oasis7::simulator::{
     Action, DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderDecision,
     ProviderDiagnostics, ProviderErrorEnvelope, ProviderHealth, ProviderInfo, ProviderTokenUsage,
@@ -18,6 +19,7 @@ use oasis7::simulator::{
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tracing::{error, info, Level};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
 const DEFAULT_PROVIDER_AGENT_ID: &str = "main";
@@ -26,6 +28,7 @@ const DEFAULT_PROVIDER_ID: &str = "provider_local_bridge";
 const DEFAULT_PROTOCOL_VERSION: &str = "world-simulator-provider-loopback-http-v1";
 const MAX_RECENT_FEEDBACK: usize = 8;
 const DEFAULT_PROVIDER_AGENT_PROFILE: &str = "oasis7_p0_low_freq_npc";
+const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_provider_local_bridge";
 
 fn default_provider_cli_bin() -> String {
     env::var("OASIS7_PROVIDER_CLI_BIN")
@@ -424,6 +427,10 @@ fn invoke_gateway_agent(invocation: AgentInvocation) -> Result<AgentInvocationOu
         .arg(rpc_timeout_ms.to_string())
         .arg("--params")
         .arg(params)
+        .env(
+            oasis7::observability::TRACE_SESSION_ID_ENV,
+            resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
+        )
         .output()
         .map_err(|err| format!("spawn provider gateway call agent failed: {err}"))?;
     if !output.status.success() {
@@ -462,6 +469,10 @@ fn invoke_local_agent(
         .arg("--timeout")
         .arg(invocation.timeout_seconds.to_string())
         .arg("--json")
+        .env(
+            oasis7::observability::TRACE_SESSION_ID_ENV,
+            resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL),
+        )
         .output()
         .map_err(|err| format!("spawn provider local agent failed: {err}"))?;
     if !output.status.success() {
@@ -489,11 +500,13 @@ fn invoke_local_agent(
 }
 
 fn main() {
+    init_tracing(TRACE_SESSION_PROCESS_LABEL);
+    let trace_session_id = resolve_trace_session_id(TRACE_SESSION_PROCESS_LABEL);
     let args: Vec<String> = env::args().collect();
     let options = match parse_options(args.iter().skip(1).map(String::as_str)) {
         Ok(options) => options,
         Err(err) => {
-            eprintln!("{err}");
+            error!(trace_session_id = %trace_session_id, error = %err, "failed to parse provider local bridge options");
             print_help();
             std::process::exit(1);
         }
@@ -501,12 +514,19 @@ fn main() {
     let state = match ProviderState::new(options.clone()) {
         Ok(state) => state,
         Err(err) => {
-            eprintln!("{err}");
+            error!(trace_session_id = %trace_session_id, error = %err, "failed to initialize provider local bridge state");
             std::process::exit(1);
         }
     };
     let listener = TcpListener::bind(options.bind_addr.as_str())
         .unwrap_or_else(|err| panic!("bind {} failed: {err}", options.bind_addr));
+    info!(
+        trace_session_id = %trace_session_id,
+        bind_addr = %options.bind_addr,
+        provider_agent_id = %options.provider_agent_id,
+        gateway_health_url = %options.gateway_health_url,
+        "provider local bridge listening"
+    );
     println!(
         "oasis7_provider_local_bridge listening on http://{} (agent={}, gateway_health={})",
         options.bind_addr, options.provider_agent_id, options.gateway_health_url
@@ -518,7 +538,13 @@ fn main() {
         let invoker = invoker.clone();
         std::thread::spawn(move || {
             if let Err(err) = handle_connection(&mut stream, &state, invoker.as_ref()) {
-                eprintln!("oasis7_provider_local_bridge connection error: {err}");
+                let stderr_message =
+                    format!("oasis7_provider_local_bridge connection error: {err}");
+                emit_stderr_or_event(
+                    Level::WARN,
+                    stderr_message.as_str(),
+                    "provider local bridge connection failed",
+                );
             }
         });
     }

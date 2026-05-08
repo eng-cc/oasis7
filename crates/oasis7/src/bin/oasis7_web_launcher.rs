@@ -529,6 +529,7 @@ impl ChainFeedbackSubmitResponse {
 
 fn main() {
     init_tracing("oasis7_web_launcher");
+    let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_web_launcher");
     let raw_args: Vec<String> = env::args().skip(1).collect();
     if raw_args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help();
@@ -545,6 +546,7 @@ fn main() {
     };
 
     info!(
+        trace_session_id = %trace_session_id,
         listen_bind = %options.listen_bind,
         launcher_bin = %options.launcher_bin,
         chain_runtime_bin = %options.chain_runtime_bin,

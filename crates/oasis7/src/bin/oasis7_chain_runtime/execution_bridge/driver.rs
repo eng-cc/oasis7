@@ -618,9 +618,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             &self.execution_store,
             self.hot_window_heights,
         ) {
-            eprintln!(
-                "execution driver retention pin-set sync failed at height {}: {}",
-                context.height, err
+            oasis7::observability::emit_stderr_or_event(
+                tracing::Level::WARN,
+                format!(
+                    "execution driver retention pin-set sync failed at height {}: {}",
+                    context.height, err
+                )
+                .as_str(),
+                "execution bridge retention maintenance failed",
             );
         }
 
@@ -912,9 +917,14 @@ fn bridge_committed_heights_with_policy(
             execution_store,
             hot_window_heights,
         ) {
-            eprintln!(
-                "execution bridge retention pin-set sync failed after height {}: {}",
-                target_height, err
+            oasis7::observability::emit_stderr_or_event(
+                tracing::Level::WARN,
+                format!(
+                    "execution bridge retention pin-set sync failed after height {}: {}",
+                    target_height, err
+                )
+                .as_str(),
+                "execution bridge retention maintenance failed after replay",
             );
         }
     }

@@ -3,6 +3,7 @@ use serde::Serialize;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
+use tracing::{info, Level};
 
 #[derive(Debug, Serialize)]
 struct PlaneErrorResponse {
@@ -35,6 +36,7 @@ pub(super) fn run_server(options: CliOptions) -> Result<(), String> {
         options.console_static_dir,
         options.initial_config,
     )));
+    let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_web_launcher");
 
     println!("oasis7_web_launcher started");
     println!(
@@ -48,6 +50,13 @@ pub(super) fn run_server(options: CliOptions) -> Result<(), String> {
         lock_state(&state).console_static_dir.display()
     );
     println!("Press Ctrl+C to stop.");
+    info!(
+        trace_session_id = %trace_session_id,
+        listen_host = %listen_host,
+        listen_port,
+        console_static_dir = %lock_state(&state).console_static_dir.display(),
+        "web launcher control plane server started"
+    );
 
     loop {
         if TERMINATION_REQUESTED.load(Ordering::SeqCst) {
@@ -59,7 +68,13 @@ pub(super) fn run_server(options: CliOptions) -> Result<(), String> {
                 let shared = Arc::clone(&state);
                 thread::spawn(move || {
                     if let Err(err) = handle_connection(stream, Some(peer_addr), shared) {
-                        eprintln!("warning: oasis7_web_launcher request failed: {err}");
+                        let stderr_message =
+                            format!("warning: oasis7_web_launcher request failed: {err}");
+                        oasis7::observability::emit_stderr_or_event(
+                            Level::WARN,
+                            stderr_message.as_str(),
+                            "web launcher request handling failed",
+                        );
                     }
                 });
             }

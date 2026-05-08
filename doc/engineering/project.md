@@ -156,6 +156,7 @@
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-021/025) [test_tier_required]: 执行 `scripts/doc-inventory-report.sh` 季度复核，固定当前 `doc/` 体量快照，并把工程治理“下一任务”从泛化的季度复核 placeholder 改判为 near-limit active project docs 拆分优先，避免继续悬空停留在 review-only 状态。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 - [x] workflow-helper-review-followup (PRD-ENGINEERING-021) [test_tier_required]: 收口当前 workflow friction burn-down PR `#145` 的 review comments，补齐 workflow helpers 的 shell quoting、回归测试、临时文件传递与 rebase helper trap 作用域修复，并把当前 PR 的 review-thread closeout 从“列评论”推进到“可验证的代码修复 + resolve 预备态”。 Trace: .pm/tasks/task_c8c2d3e2eb75489abdc764c9ac9f5979.yaml
 - [x] tracing-baseline (PRD-ENGINEERING-001/003) [test_tier_required]: 为 `oasis7` native runtime 入口建立最小结构化 tracing 基线，新增共享初始化 helper，并在 `viewer_live / viewer_server / chain_runtime / web_launcher` 与关键 viewer/libp2p 热路径接入统一日志入口。 Trace: .pm/tasks/task_83306ab3aa274d06b1402a8ddcea7af3.yaml
+- [x] end-to-end-product-runtime-tracing (PRD-ENGINEERING-001/003) [test_tier_required]: 在当前 tracing baseline 之上，把 `game_launcher / web_launcher / viewer_live / chain_runtime / provider_local_bridge / newapi_bridge_service` 这一条主产品运行链补齐为可传播的结构化 tracing，会话级 `trace_session_id` 需能从父进程传递到子进程，并将关键连接/回收/奖励 runtime 热路径的 stderr 告警统一接入 fallback helper。 Trace: .pm/tasks/task_6ff11b8818bb47e8ae063658d321ba8d.yaml
 
 ## 依赖
 - 模块设计总览：`doc/engineering/design.md`
