@@ -129,6 +129,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -258,6 +260,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
