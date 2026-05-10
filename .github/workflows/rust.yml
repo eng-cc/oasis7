@@ -71,6 +71,9 @@ jobs:
         if: ${{ steps.scope.outputs.needs_node == 'true' }}
         with:
           node-version: '22'
+      - name: Install viewer web dependencies
+        if: ${{ steps.scope.outputs.needs_node == 'true' }}
+        run: npm ci --prefix crates/oasis7_viewer
       - uses: Swatinem/rust-cache@v2
         if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
         with:
@@ -109,6 +112,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+      - name: Install viewer web dependencies
+        run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt
