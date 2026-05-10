@@ -14,7 +14,7 @@ Purpose:
   Run release gate closure for external publish:
   - ci full tier
   - builtin wasm sync checks (m1/m4/m5)
-  - software-safe web strict loop
+  - primary-entry + software-safe web strict loop
   - S9/S10 longrun gate
 
 Options:
@@ -371,7 +371,7 @@ for step in "${selected_steps[@]}"; do
       cmd=(./scripts/sync-m5-builtin-wasm-artifacts.sh --check)
       ;;
     web_strict)
-      cmd=(./scripts/viewer-software-safe-step-regression.sh --scenario "$web_scenario" --out-dir "$run_dir/web_strict")
+      cmd=(./scripts/release-gate-web-strict.sh --scenario "$web_scenario" --out-dir "$run_dir/web_strict")
       if [[ "$web_headed" -eq 1 ]]; then
         cmd+=(--headed)
       fi

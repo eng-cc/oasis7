@@ -43,7 +43,7 @@
   - `workflow_dispatch`
 - Release gate 拓扑：
   - `release-gate-runtime`：执行 `ci_full + sync_m1/m4/m5`
-  - `release-gate-web`：在 `xvfb` 下以 `--web-headed` 执行 `web_strict`，显式预装 `node + trunk`，并由 QA loop 自行预热 `oasis7_viewer_live + oasis7_chain_runtime`
+- `release-gate-web`：在 `xvfb` 下以 `--web-headed` 执行 `web_strict`，显式预装 `node + trunk`，并先验证公开默认 `/` / `render_mode=auto` 入口落到 `software_safe`，再验证 `software_safe` realtime 交互闭环。
   - `release-gate-soak`：执行 `S9 + S10` soak
   - `release-gate`：聚合三个子门结果，作为 `build-web-dist` 的唯一前置依赖
 - 打包 runner 与目标三元组（release workflow）：
