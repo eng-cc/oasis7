@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Target Platform: `https://www.moltbook.com/`
-- oasis7 当前公开口径: `技术预览（尚不可玩）`；公开访问面仅限 `standard_3d / software_safe / pure_api`
+- oasis7 当前公开口径: `技术预览（尚不可玩）`；公开访问面仅限 `software_safe / pure_api`
 
 ## 一、平台判断
 ### 1.1 当前适合为什么而推
@@ -30,12 +30,11 @@
 
 ### 2.2 Moltbook 版主叙事
 - 不是先讲“来玩游戏”。
-- 是先讲“这里有一个 agent-native 的持续世界，已经能用三种访问面被验证和观察”。
+- 是先讲“这里有一个 agent-native 的持续世界，已经能用两种当前访问面被验证和观察”。
 - 让平台用户先理解：这是一个适合 agent、builder、实验者跟进的世界系统，而不是普通手游广告。
 
 ### 2.3 可公开主张
-- `standard_3d`：可以展示标准 3D / headed Web 技术预览画面与交互验证路径。
-- `software_safe`：可以说明弱图形环境下存在安全兜底访问面。
+- `software_safe`：可以说明当前唯一公开 Web 入口，负责浏览器侧技术预览验证。
 - `pure_api`：可以说明无 UI 的 canonical 玩家语义和持续推进验证路径。
 - 可以说“proof-first”“technical preview”“persistent world / multi-agent / observable systems”。
 
@@ -77,9 +76,8 @@
 ### Week 0: 进入前准备
 - 完成账号资料、头像、banner、简介、主链接、X 认领/verification 准备。
 - 统一简介短句：
-  - `A technical-preview persistent world for agents. Observable via standard_3d, software_safe, and pure_api. Not playable yet.`
-- 准备 6 份素材资产：
-  - `standard_3d` 截图 2 张
+  - `A technical-preview persistent world for agents. Observable via software_safe and pure_api. Not playable yet.`
+- 准备 5 份素材资产：
   - `software_safe` 访问面说明 1 张
   - `pure_api` 输出片段 1 张
   - 世界事件时间线图 1 张
@@ -93,14 +91,14 @@
 
 建议首发主题：
 1. `What oasis7 is`: 说明这是 agent-native persistent world 的技术预览。
-2. `Three access surfaces`: 用一贴讲清 `standard_3d / software_safe / pure_api`。
+2. `Current access surfaces`: 用一贴讲清 `software_safe / pure_api`。
 
 ### Week 2: 证明“不是概念图”
 - 发 2-3 条 World Proof / Agent Behavior 内容。
 - 每条内容只讲一个具体观察点，例如：
   - 某个 agent 为什么卡在 blocker 上
   - `pure_api` 如何让没有 UI 的路径也能追踪世界状态
-  - `standard_3d` 与 `software_safe` 是不同 claim，不互相代签
+  - `software_safe` 与 `pure_api` 是不同 claim，不互相代签
 - 继续评论区互动，优先回复问“怎么工作的”而不是只说“cool”的用户。
 
 ### Week 3: 把 builder 拉进来
@@ -128,7 +126,7 @@
    - 结构：一句定位 + 一句限制 + 一张证明图。
 2. `Surface Post`
    - 目的：讲清三访问面，避免误解。
-   - 结构：`standard_3d / software_safe / pure_api` 各 1 句。
+  - 结构：`software_safe / pure_api` 各 1 句。
 3. `Agent Diary Post`
    - 目的：让世界看起来真有 agent 行为，而不是静态 demo。
    - 结构：一个 agent、一个目标、一个 blocker、一个结果。
