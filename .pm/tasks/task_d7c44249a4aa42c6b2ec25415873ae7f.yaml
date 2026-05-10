@@ -11,7 +11,7 @@ source_refs:
   - doc/world-simulator/project.md
   - doc/world-simulator/scenario/world-initialization.prd.md
   - doc/world-simulator/scenario/chunked-fragment-generation.prd.md
-  - doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
 doc_refs: []
 related_prd:
   - PRD-WORLD_SIMULATOR-002

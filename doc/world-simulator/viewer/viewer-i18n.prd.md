@@ -110,7 +110,7 @@
 - 问题：UI 默认字体 `DejaVuSans.ttf` 不包含完整 CJK 字形，中文文案会显示为方块字（tofu）。
 - 方案：在 viewer 资产目录引入 `ms-yahei.ttf`，并统一将 UI/3D 标签字体切换为 `fonts/ms-yahei.ttf`。
 - 约束：保持“仅界面切换语言，不新增命令行参数”的既有策略不变。
-- 验收：通过截图闭环脚本 `./scripts/capture-viewer-frame.sh --scenario llm_bootstrap --addr 127.0.0.1:5052 --viewer-wait 8`，确认中文文本可读。
+- 验收：通过 `software_safe` Web 闭环确认中文文本可读，并在状态、日志与截图中留证。
 
 ## 6. Validation & Decision Record
 - 追溯: 对应同名 `.project.md`，保持原文约束语义不变。

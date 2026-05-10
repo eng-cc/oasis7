@@ -19,7 +19,7 @@
 - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
 - `crates/oasis7_client_launcher/src/main.rs`
 - `scripts/run-game-test.sh`
-- `scripts/viewer-release-qa-loop.sh`
+- 历史已删除：`scripts/viewer-release-qa-loop.sh`
 - `scripts/s10-five-node-game-soak.sh`
 - `scripts/p2p-longrun-soak.sh`
 - `doc/testing/prd.md`

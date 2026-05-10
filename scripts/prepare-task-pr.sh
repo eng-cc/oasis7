@@ -287,14 +287,10 @@ if [[ -x "./scripts/plan-rust-required-scope.sh" ]]; then
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=${RUST_SCOPE_PLAN[run_oasis7_required_tests]:-false} \
 OASIS7_CI_RUN_CONSENSUS_TESTS=${RUST_SCOPE_PLAN[run_consensus_tests]:-false} \
 OASIS7_CI_RUN_DISTFS_TESTS=${RUST_SCOPE_PLAN[run_distfs_tests]:-false} \
-OASIS7_CI_RUN_VIEWER_TESTS=${RUST_SCOPE_PLAN[run_viewer_tests]:-false} \
 OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=${RUST_SCOPE_PLAN[run_viewer_contract_tests]:-false} \
 OASIS7_CI_RUN_VIEWER_WASM_CHECK=${RUST_SCOPE_PLAN[run_viewer_wasm_check]:-false} \
 OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=${RUST_SCOPE_PLAN[run_launcher_web_build]:-false} \
 ./scripts/ci-tests.sh required"
-    fi
-    if [[ "${RUST_SCOPE_PLAN[run_viewer_visual_baseline]:-false}" == "true" ]]; then
-      LOCAL_REQUIRED_EXTRA_COMMANDS+=("./scripts/viewer-visual-baseline.sh")
     fi
   fi
 fi

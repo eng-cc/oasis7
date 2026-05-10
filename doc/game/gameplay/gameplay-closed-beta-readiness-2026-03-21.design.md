@@ -41,7 +41,7 @@
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
 - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
-- `doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
 
 ## 风险控制

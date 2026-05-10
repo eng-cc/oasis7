@@ -25,7 +25,7 @@
 - `testing-manual.md`
 - `doc/world-simulator/prd.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
 - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
@@ -33,7 +33,7 @@
 ## 验证
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
-- `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+- `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `rg -n "主要正式 Web 入口|formal Web gameplay|visual QA|一等公民" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/core/{prd,project}.md doc/world-simulator/{prd,project}.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design,project}.md`
 - `rg -n "main_token_transfer|handoff|专门动作|not_exposed" doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.{prd,design,project}.md`
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime_gameplay_action_script_mode_requires_llm_mode -- --nocapture`

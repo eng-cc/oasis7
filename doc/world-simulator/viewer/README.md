@@ -7,8 +7,7 @@
 - 想确认正式浏览器主入口、`software_safe` 边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
-- 想确认 gameplay release / visual QA / commercial polish：先读 `viewer-gameplay-release-experience-overhaul.prd.md`
-- 想确认 3D 当前是否在做、是否暂停：先读 `viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+- 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -63,23 +62,12 @@
   - 聊天入口、右侧面板、Prompt profile 现在怎样组织
   - 输入法、回车发送、预设编辑这些问题该去哪里看
 
-### 5. release / visual QA / 体验收口
+### 5. release / 体验收口
 - 首读入口:
   - `viewer-gameplay-release-experience-overhaul.prd.md`
-  - `viewer-release-full-coverage-gate.prd.md`
-  - `viewer-visual-release-readiness-hardening-2026-03-01.prd.md`
 - 适合问题:
-  - 首局体验、release readiness、visual QA 的主文档是什么
+  - 首局体验、release readiness、software_safe 主体验的主文档是什么
   - 哪些沉浸阶段已经物理合并，哪些不再是独立首读入口
-
-### 6. 3D / 2D / visual-only 模式
-- 首读入口:
-  - `viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
-  - `viewer-visualization-3d.prd.md`
-  - `viewer-2d-3d-clarity-improvement.prd.md`
-- 适合问题:
-  - 3D 当前是暂停、继续还是只保留 QA/视觉用途
-  - 2D/3D 表现、清晰度和 visual review 的当前边界是什么
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。

@@ -8,8 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/world-simulator/project.md
-  - doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md
-  - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - doc/world-simulator/prd.md
 doc_refs: []
 related_prd:
   - PRD-WORLD_SIMULATOR-002

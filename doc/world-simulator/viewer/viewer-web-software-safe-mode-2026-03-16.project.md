@@ -3,71 +3,21 @@
 - 对应设计文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.design.md`
 - 对应需求文档: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 
-审计轮次: 2
+审计轮次: 3
+
 ## 任务拆解（含 PRD-ID 映射）
-- [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将 `software_safe` formal summary 中的 canonical `available_actions` 从只读状态卡恢复为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
-- [x] shared-player-gameplay-contract-parity (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `runtime_engineer` 固定 `software_safe` / `pure_api` 共用 `snapshot.player_gameplay` 回答同一组玩家问题的 contract，补 active-LLM scope，并收口 pure API parity smoke / evidence 的现行口径。 Trace: .pm/tasks/task_ebf98fe337b44bd8b10e7574316dee67.yaml
-- [x] software-safe-primary-entry-diagnostics-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 execution lane/auth/session 诊断收进折叠 diagnostics surface，把 blocker 与 handoff 拆开表达，并在空实体快照时为右栏 Details 提供恢复指引而不是继续提示“先选 Agent”。 Trace: .pm/tasks/task_eef97592fc6145628348e8897d54c411.yaml
-- [x] T0 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 完成“Viewer Web Software-Safe Mode”PRD / Design / Project 建模，并回写模块主文档、索引与 devlog。
-- [x] T1 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `oasis7_game_launcher` / Web 静态入口增加 bootstrap shell 与 `render_mode=standard|auto|software_safe` 选路契约。
-- [x] T2 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 落地 `software_safe` MVP 前端，覆盖连接状态、目标列表、对象详情、`play/pause/step` 与最近事件/反馈。
-- [x] T3 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `__AW_TEST__` / 自动化脚本补齐 `renderMode`、`rendererClass`、`softwareSafeReason` 等模式可观测字段。
-- [x] T4 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 打通 `oasis7`、`run-game-test-ab.sh`、`testing-manual.md`、`viewer-manual.md` 的 software-safe 执行口径。
-- [x] T5 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 在 software renderer / SwiftShader 环境复验“加载 -> 选择目标 -> step -> 新反馈”最小闭环，并据此判断 `#39` 是否收口。
-- [x] T6 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `software_safe` 补选中 Agent 的 `prompt/chat` MVP（含 auth bootstrap 签名、ack/error 可观测性与自动化接口），并复验一次真实交互。
-- [x] T7 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 `software_safe` 补 prompt rollback 与 chat history/message flow，确保 rollback 后能刷新 prompt 状态，且玩家出站消息与事件侧消息都能汇入统一消息流并被脚本读取。
-- [x] T8 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` 为 `software_safe` 补 prompt/chat/rollback/message-flow 回归方案与专用 agent-browser 脚本，沉淀 `agent_spoke` 缺失的失败签名。
-- [x] T9 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `runtime_engineer` / `viewer_engineer` 补齐 `agent_chat -> AgentSpoke` 的测试态稳定触发链路，并修正 software-safe 对 runtime 事件形状的兼容解析。
-- [x] T10 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 为 source-tree Viewer Web 入口补齐 dist freshness gate，确保 `oasis7-run.sh play` / Web 闭环在 `index.html`、`software_safe.*` 或静态资源漂移时优先重建 fresh dist，而不是继续消费 stale `crates/oasis7_viewer/dist`。
-- [x] T11 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 重构 `oasis7` operator 口径，明确 `headless_agent` 是 Local Provider 主执行/回归 lane，Viewer 仅承担 `player_parity` / `debug_viewer` / `software_safe` 的体验、观战与弱图形观察职责，并写清当前 Local Provider real-play 下 `prompt/chat` 的 observer-only 边界。
-- [x] T12 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 将 `oasis7` 主入口中的 UI/observer 细节拆到独立 reference，保持主 skill 聚焦执行闭环，仅保留最小 UI 结论与跳转关系。
-- [x] T13 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复标准模式 bootstrap loading overlay 在 wasm 已启动后仍残留并压缩左侧视口的问题，补齐 cleanup 生命周期与最小回归验证。
-- [x] T14 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` UI 渲染层迁到 SolidJS 组件架构，保留既有 `software_safe.js` 产物/协议契约，并把 freshness gate 扩到 Solid 构建输入。
-- [x] T15 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 将 `software_safe` SolidJS 构建改为“临时 bundle 输出 + finalize 回写 `software_safe.js`”正式流程，消除当前 Vite `outDir` 警告，并把 finalize 脚本纳入 freshness source scope。
-- [x] T16 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 新增 repo-owned `software_safe` 最小浏览器回归脚本，稳定验证“加载 -> 连接 -> 选择目标 -> `step` -> DOM/`lastControlFeedback` 反馈”闭环，并把入口写回 testing/manual。
-- [x] T17 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 收口 `software_safe` prompt/chat/rollback/control 反馈可读性，明确 rollback 版本语义、将 raw diagnostics 折叠展示，并为 `llm_init_failed` 等配置失败补产品级摘要与 contract test；随后把该 contract test 纳入 repo-owned required automation，固定 canonical entry 为 `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`。
-- [x] T18 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 按最新产品设定重写本专题 PRD / design / project，把 `software_safe` 从弱图形 fallback 重定位为低保真但正式可玩的主要 Web 入口，并把 `standard` 收口为 visual QA surface。
-- [x] T19 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 将默认 Web 产品入口切到 `software_safe`，并把 `render_mode` / launcher / bootstrap 的默认语义改成“formal Web 主入口优先 software_safe，standard 仅在显式 visual intent 下进入”。
-- [x] T20 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 补齐 `software_safe` 作为主要正式 Web 入口所需的 canonical 玩家语义摘要、blocked/handoff surface，以及缺失动作的显式交接口径。
-- [x] T21 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` / `producer_system_designer` 按新的主入口 contract 重跑 formal Web vs visual QA 证据，确认 `/` 与 `render_mode=auto` -> `software_safe` PASS、显式 `render_mode=standard` visual QA PASS，并记录 `software_safe` formal gameplay 当前因缺少 `OASIS7_LLM_MODEL` 环境配置而处于 `blocked`；产物见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 与 `output/playwright/viewer-{primary-web-entry,software-safe-step}/...`。
-- [x] T22 (PRD-WORLD_SIMULATOR-039/040) [test_tier_required]: 由 `viewer_engineer` / `runtime_engineer` 在 software-safe 的 Local Provider observer/debug surface 上，把 execution lane 期望 metadata 与 provider 实际 readiness check 分开展示，新增 `provider_check_status/source/fallback_reason/capabilities/supported_action_sets/error` 语义，并以 repo-owned contract/test/documentation 固定该区别。
-- [x] software-safe-bilingual-viewer-entry (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 为 `software_safe` 补齐 `zh/en` 语言切换、为标准 Viewer 补 URL locale 初始化，并把本地试玩链路与 software-safe 页面里的显式 bilingual Viewer 入口一起收口。 Trace: .pm/tasks/task_cc8b4bf31e2648b0a8ffa22ed023d962.yaml
-- [x] software-safe-realtime-auto-progress (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `qa_engineer` 将 `software_safe` 最小浏览器回归改为纯实时契约：不再手动调用 `step`，改为等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 gameplay blocker 卡住，则要求页面显式暴露 blocker，并继续禁止回放控件回归。 Trace: .pm/tasks/task_8cfd276ef87c4d729fcfd6ccbafa78df.yaml
-- [x] software-safe-realtime-only (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `software_safe` 页面收口为纯实时模式，移除页面内回放/步进/tick jump 控件，并过滤 canonical gameplay summary 里的 `live_control.play|step` 动作，只保留正式实时观察与语义交互入口。 Trace: .pm/tasks/task_3b03fd02dbca4de7aae0503749fd7832.yaml
-- [x] software-safe-prompt-settings-hidden-by-default (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `Prompt Overrides` 收为显式高级设置，默认不展示，但保留 `prompt_control` / `__AW_TEST__` 契约与 chat regression 可脚本化展开路径。 Trace: .pm/tasks/task_704dcd11742241688028e4518f774752.yaml
-- [x] software-safe-details-snapshot-summary-declutter (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将右侧 `Details` 面板中的大块 `Snapshot Summary` JSON 收口为紧凑世界规模信息，并把原始快照降为按需展开 diagnostics，避免主玩法右栏长期被低价值摘要占位。 Trace: .pm/tasks/task_7ba3b436c9e046dd8016a09cfc3fe619.yaml
-- [x] software-safe-language-entry-header-menu (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 由 `viewer_engineer` 将 `Language and Viewer Entry` 从主屏内容卡片收口为世界摘要面板右上角菜单，只保留语言切换与标准 Viewer 跳转，避免设置项继续占据主玩法首屏。 Trace: .pm/tasks/task_470ff8b20dce418c936995cc34743043.yaml
+- [x] software-safe-single-web-entry-contract (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 完成 `software_safe` 单一 Web 入口 PRD / Design / Project 收口，并将默认 Web 产品入口固定为 `software_safe`。 Trace: .pm/tasks/task_a2a5c83cb80f4a6f9deb3dfcb5ca8377.yaml
+- [x] software-safe-canonical-gameplay-and-regression (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 保留 `software_safe` canonical gameplay summary / blocked-handoff / prompt-chat 契约，并补齐 freshness gate 与 repo-owned browser regression。 Trace: .pm/tasks/task_5eddd21920854c20a769915ac37df977.yaml
+- [x] software-safe-single-entry-doc-surface-cleanup (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 删除标准 Viewer 跳转及其当前文档口径，并同步 Viewer 手册、testing 手册、evidence 与站点镜像到单入口真值。 Trace: .pm/tasks/task_3c457e5583984f7da7c81620e4297009.yaml
 
 ## 依赖
-- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.design.md`
-- `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md`
 - `testing-manual.md`
-- `oasis7` / `run-game-test-ab` 现有脚本与 Web 闭环证据路径
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
+- `scripts/run-viewer-web.sh`
+- `scripts/viewer-primary-web-entry-regression.sh`
 
 ## 状态
-- 当前阶段：T0~T10 已完成，software-safe 已具备 prompt/chat、rollback、消息流、QA 回归、稳定 `agent_spoke` 触发闭环，以及 source-tree Viewer dist freshness gate。
-- 当前阶段：T0~T11 已完成，software-safe 已具备 prompt/chat、rollback、消息流、QA 回归、稳定 `agent_spoke` 触发闭环，以及面向 `oasis7` 的 observer/debug/operator 口径收口。
-- 当前阶段：T0~T12 已完成，`oasis7` 主入口已回到执行主链路，UI/observer 细节改由独立 reference 承接。
-- 当前阶段：T0~T13 已完成，标准模式 bootstrap loading overlay 已改为一次性覆盖层并在 wasm Viewer 启动后自动 cleanup，不再持续压缩左侧视口。
-- 当前阶段：T0~T14 已完成，`software_safe` 已迁到 SolidJS 组件化渲染层，同时保留既有 product contract，并把 source-tree freshness gate 扩到框架构建输入。
-- 当前阶段：T0~T15 已完成，`software_safe` 构建链已收口为无 warning 的临时 bundle + finalize 流程，最终产物路径仍保持 `software_safe.js`，且 freshness gate 覆盖到了构建 finalize 脚本。
-- 当前阶段：T0~T16 已完成，repo 已具备 `software_safe` 最小浏览器回归；最新 QA follow-up 已把该脚本收口为 realtime-only 契约，默认验证连接、选中目标、自然实时推进，或在 gameplay blocked 时验证 blocker 可见性。
-- 当前阶段：T0~T17 已完成，`software_safe` feedback UX 已收口为 summary/detail + diagnostics，且对应 deterministic contract regression 已进入 repo-owned required automation。
-- 当前阶段：T18~T22 已完成，默认 Web 入口、launcher URL 与 `software_safe` canonical gameplay summary / blocked-handoff surface 已落地，且新 contract 的 QA 证据与 Local Provider readiness truth 表达都已补齐：primary Web entry PASS、`standard` visual QA PASS、software-safe 已区分 lane metadata 与 actual provider check，且 `software_safe` formal gameplay 已在 LLM-enabled 环境中补跑 PASS。
-- 联动状态：已承接 `PRD-WORLD_SIMULATOR-040 T3/T4.6`，在 software-safe 页面补齐 `debug_viewer` 旁路订阅标识、选中 Agent 的 execution lane 元数据、actual provider check 真值，以及 OpenClaw runtime live 下的 observer-only 提示。
-- 最近更新：2026-04-08（完成 `T22` 后继续补跑 LLM-enabled formal gameplay：针对 `https://api.letai.run/v1` 修复 `Responses API` stream/list-input/output-item 聚合兼容层，随后以 `output/playwright/viewer-software-safe-step/20260408-133532/` 取得 formal Web gameplay PASS；详见 `doc/testing/evidence/software-safe-primary-web-entry-evidence-2026-04-07.md` 的 2026-04-08 addendum。）
-- 最近更新：2026-04-16（新增 `T23`：software-safe 中英切换 + 标准 Viewer locale URL 初始化 + 本地试玩显式 bilingual Viewer 入口。）
-- 最近更新：2026-04-16（新增 QA realtime auto-progress follow-up：`viewer-software-safe-step-regression.sh` 不再手动 `step`，改为等待自然实时推进或显式 blocker。）
-- 最近更新：2026-04-16（新增 realtime-only 收口：software-safe 页面已移除回放/步进/tick jump 控件，canonical gameplay summary 不再暴露 `live_control.play|step`。）
-- 最近更新：2026-04-19（新增 prompt settings follow-up：`Prompt Overrides` 改为本地持久化的显式高级设置，默认收起；`__AW_TEST__.setPromptOverridesVisible(true)` 与 `viewer-software-safe-chat-regression.sh` 保持可脚本化展开与回归。）
-- 最近更新：2026-04-24（按最新试玩反馈收口右侧 `Details` 面板：移除默认展开的大块 `Snapshot Summary` JSON，改为紧凑世界规模 badge + 折叠式原始诊断，避免低价值快照占据主玩法右栏。）
-- 最近更新：2026-04-24（继续收口主屏设置项：将 `Language and Viewer Entry` 改为 `World Summary` 右上角紧凑菜单，不再占据独立主内容卡片。）
-- 最近更新：2026-04-28（新增 playability unblock follow-up：formal summary 重新暴露 canonical 可执行动作，并为 gameplay summary + 空实体快照并存场景补显式 blocker。）
-- 最近更新：2026-04-28（新增 diagnostics declutter follow-up：将 execution lane/auth/session/hosted matrix 收入口径明确的折叠 diagnostics surface，首屏 blocker 与右栏恢复提示改为优先表达空实体快照恢复语义。）
-- 阻塞项：本专题主入口 contract 与 formal gameplay PASS 证据均已完成；当前剩余事项已转为 README / current-entry / release claim 口径同步，以及 `PRD-WORLD_SIMULATOR-037/038` parity/latency experimental follow-up，不能再把本专题记成“缺 provider 配置导致 blocked”。
-
-## 备注
-- 本专题的目标不是让 `software_safe` 与标准模式“视觉等价”，而是让它成为低保真但正式可玩的主要 Web 入口。
-- `standard` 仍然是视觉与交互质量签收口径；`software_safe` 现在承接正式 Web 主玩法口径。
-- `pure_api` 继续是一等公民，但主要承担无 UI、自动化、长稳与集成场景，不被本专题替代。
+- 更新日期: 2026-05-10
+- 当前状态: active
+- 下一任务: `T6`
+- 最新完成: `T5`（已把 `software_safe` 收口为唯一 Web Viewer 入口，并开始清理活跃文档/脚本残留。）

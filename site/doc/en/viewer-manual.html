@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="oasis7 Viewer manual: startup, interactions, auto focus, automation steps, web loop, and troubleshooting." />
+    <meta name="description" content="oasis7 Viewer manual for the software_safe web entry, browser regression flows, and troubleshooting." />
     <meta property="og:title" content="Viewer User Manual | oasis7" />
-    <meta property="og:description" content="Covers live server setup, web viewer loop, agent-browser capture, detail panels, and troubleshooting paths." />
+    <meta property="og:description" content="The repository now keeps only the software_safe Viewer web surface." />
     <meta property="og:type" content="article" />
     <meta property="og:image" content="../../assets/images/og-cover.png" />
     <meta property="og:locale" content="en_US" />
@@ -26,7 +26,6 @@
       <nav class="nav" data-menu data-section-nav>
         <a href="#quickstart">Quick Start</a>
         <a href="#web-loop">Web Loop</a>
-        <a href="#panels">Panels</a>
         <a href="#troubleshooting">Troubleshooting</a>
       </nav>
       <button class="menu-button" type="button" aria-label="Toggle menu" data-menu-toggle>☰</button>
@@ -53,235 +52,61 @@
       <section class="section docs-hero" data-reveal>
         <p class="eyebrow">Viewer Manual</p>
         <h1>oasis7 Viewer User Manual</h1>
-        <p class="subtitle">Covers startup modes, controls, auto-focus, automation steps, web closure debugging, and common issue diagnosis for `oasis7_viewer` workflows.</p>
-        <div class="cta-row">
-          <a class="button primary" href="#quickstart">Start Running</a>
-          <a class="button secondary" href="#web-loop">Go to Web Loop</a>
-          <a class="button ghost" href="index.html">Back to Catalog</a>
-        </div>
+        <p class="subtitle">This repository now keeps only the <code>software_safe</code> Viewer web surface.</p>
       </section>
 
       <section id="quickstart" class="section" data-reveal>
         <h2>Quick Start</h2>
-        <h3>1) Start live server (recommended)</h3>
-        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>`oasis7_viewer_live` now defaults to LLM mode; formal gameplay requires a configured, reachable LLM provider.</p>
-        <h3>2) Start viewer</h3>
-        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7_viewer -- 127.0.0.1:5023</code></pre>
+        <h3>1) Start the live server</h3>
+        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
+        <p>Formal gameplay requires a reachable LLM provider. If you switch to <code>--no-llm</code>, the route is observer/debug only.</p>
 
-        <h3>3) Offline mode (no server connection)</h3>
-        <pre><code>OASIS7_VIEWER_OFFLINE=1 env -u RUSTC_WRAPPER cargo run -p oasis7_viewer</code></pre>
-
-        <h3>4) Browser mode (Bevy + wasm)</h3>
+        <h3>2) Start the web viewer</h3>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
-        <p>Open: `http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011`.</p>
-
-        <h3>5) Release mode (P2P recommended)</h3>
-        <p>`oasis7_viewer_live` is now a pure viewer live service and no longer accepts `--release-config`, `--runtime-world`, or `--node-*` control-plane flags.</p>
-        <p>For P2P release flows, lock chain parameters through `oasis7_chain_runtime` (typically managed by `oasis7_game_launcher` / `oasis7_web_launcher` / `oasis7_client_launcher`). Viewer keeps only `--bind`, `--web-bind`, and `--llm/--no-llm`; `--no-llm` remains observer/debug only.</p>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Common Interaction</h2>
-        <ul>
-          <li>Mouse drag: rotate/pan camera.</li>
-          <li>Mouse wheel: zoom.</li>
-          <li>`W/A/S/D`: move camera focus (works in 2D/3D when pointer is in viewport and no text field is active).</li>
-          <li>`2D/3D`: switch view mode from the top controls.</li>
-          <li>Controls (Observe mode): defaults to a single `Play/Pause` toggle; click `Advanced Debug` to expand `Step` and `Seek 0`.</li>
-          <li>`F`: focus current selection.</li>
-          <li>Main right panel: inspect controls, status, events, chunk overlays, and diagnostics modules.</li>
-          <li>Rightmost Chat panel: dedicated Agent Chat surface, no longer mixed with the main right panel; shown only in Observe mode with expanded top area.</li>
-          <li>Chat input: with focus in the input box, press `Enter` to send and `Shift+Enter` to insert a newline.</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Auto Focus</h2>
-        <p>Use environment variables to focus a target at startup:</p>
-        <ul>
-          <li>`OASIS7_VIEWER_AUTO_FOCUS=1`</li>
-          <li>`OASIS7_VIEWER_AUTO_FOCUS_TARGET=&lt;target&gt;`</li>
-          <li>`OASIS7_VIEWER_AUTO_FOCUS_FORCE_3D=1|0` (default `1`)</li>
-          <li>`OASIS7_VIEWER_AUTO_FOCUS_RADIUS=&lt;number&gt;` (optional)</li>
-        </ul>
-        <p>Supported syntax: `first_fragment`, `first_location`, `first_agent`, `location:&lt;id&gt;`, and `agent:&lt;id&gt;` (with shorthand aliases `fragment/location/agent`).</p>
-        <p>Auto focus targets are limited to Agent / Location / Fragment.</p>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Auto Select / Automation Steps</h2>
-        <ul>
-          <li>`--auto-select-target`: auto-select a target after startup (recommended `first_agent`, legacy `first:agent` remains supported).</li>
-          <li>`--automation-steps`: execute a step sequence (for example `mode=3d;focus=first_agent;zoom=0.8;select=asset:asset-0`).</li>
-        </ul>
-        <pre><code>./scripts/capture-viewer-frame.sh \
-  --scenario llm_bootstrap \
-  --addr 127.0.0.1:5131 \
-  --auto-select-target first_agent \
-  --automation-steps "mode=3d;focus=first_agent;zoom=0.8;select=fragment:frag-0"</code></pre>
+        <p>Open: <code>http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011</code></p>
+        <p>The repo now ships only the <code>software_safe</code> web surface and no other Viewer entry.</p>
       </section>
 
       <section id="web-loop" class="section" data-reveal>
-        <h2>Web Closure Loop (default recommendation)</h2>
-        <h3>Prerequisites</h3>
+        <h2>Web Loop</h2>
+        <p>Use the repo-owned regressions when possible:</p>
         <ul>
-          <li>Node.js 20+ (`npx` available)</li>
-          <li>`trunk` (`cargo install trunk`)</li>
-          <li>`wasm32-unknown-unknown` (`rustup target add wasm32-unknown-unknown`)</li>
+          <li><code>./scripts/viewer-primary-web-entry-regression.sh --headed</code></li>
+          <li><code>./scripts/viewer-software-safe-step-regression.sh --headed</code></li>
+          <li><code>./scripts/viewer-software-safe-chat-regression.sh --headed</code></li>
         </ul>
-
-        <h3>Standard Flow</h3>
-        <p>Terminal A: start live server.</p>
-        <pre><code>env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011</code></pre>
-        <p>The default path assumes active LLM access; if you explicitly switch to `--no-llm`, this Web route is observer/debug only and does not count as formal gameplay evidence.</p>
-        <p>Terminal B: start web viewer.</p>
-        <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
-        <p>Terminal C: run the agent-browser capture loop.</p>
+        <p>For a manual capture pass:</p>
         <pre><code>command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 mkdir -p output/playwright/viewer
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&test_api=1"
+agent-browser close-all || true
+agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=software_safe&amp;test_api=1"
 agent-browser wait --load networkidle
 agent-browser snapshot -i
 agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
 agent-browser console | tee output/playwright/viewer/console.log
 agent-browser screenshot output/playwright/viewer/viewer-web.png
 agent-browser close</code></pre>
-        <p>Note: the artifact directory currently keeps the legacy path <code>output/playwright/viewer/</code> for compatibility. `render_mode` defaults to <code>auto</code>: use the standard Viewer when hardware WebGL is available, and automatically switch to <code>software_safe</code> when SwiftShader / software renderer / no WebGL is detected. Append <code>&amp;render_mode=software_safe</code> to force the safe mode explicitly.</p>
-
-        <h3>`sendControl(\"step\")` semantic check</h3>
-        <p>Run the following in browser console or agent-browser evaluate to verify step-by-step control:</p>
-        <pre><code>window.__AW_TEST__.sendControl("step");
-window.__AW_TEST__.sendControl("step", { count: 3 });
-window.__AW_TEST__.sendPromptControl("preview", { agentId: "agent-0", shortTermGoal: "software-safe preview" });
-window.__AW_TEST__.sendPromptControl("apply", { agentId: "agent-0", shortTermGoal: "software-safe apply" });
-window.__AW_TEST__.sendAgentChat("agent-0", "hello from software_safe");
-window.__AW_TEST__.getState();</code></pre>
-        <p>When the page is served by <code>oasis7_game_launcher</code> with viewer auth bootstrap injected, <code>software_safe</code> also exposes a minimal selected-agent prompt/chat surface. The matching automation methods are <code>sendPromptControl(mode, payload)</code> and <code>sendAgentChat(agentId, message)</code>.</p>
-        <p><code>Prompt Overrides</code> now lives behind the default-collapsed “Advanced Prompt Settings” item. The <code>preview/apply/rollback</code> form appears only after you select an agent and expand that setting. The toggle remembers its last browser-local state and does not affect <code>__AW_TEST__.sendPromptControl(...)</code>.</p>
-
-        <h3>Outputs and Minimum Acceptance</h3>
-        <ul>
-          <li>Outputs: `output/playwright/viewer/*.png`, `output/playwright/viewer/console.log` (or equivalent redirected log).</li>
-          <li>Acceptance: page loads successfully and `window.__AW_TEST__.getState().renderMode` is explicitly `standard` or `software_safe`; at least one screenshot artifact exists and `step` advances tick.</li>
-          <li>When `rendererClass=software`, `software_safe` is an acceptable minimal-closure result; `canvas` is no longer required in that path.</li>
-        </ul>
-
-        <h3>Native fallback (only when web path cannot reproduce)</h3>
-        <pre><code>./scripts/capture-viewer-frame.sh --scenario asteroid_fragment_detail_bootstrap --addr 127.0.0.1:5131 --viewer-wait 12 --auto-focus-target first_fragment --auto-focus-radius 18</code></pre>
-        <p>Common advanced flags: `--capture-max-wait`, `--no-prewarm`, `--keep-tmp`, `--auto-focus-keep-2d`.</p>
-      </section>
-
-      <section id="panels" class="section" data-reveal>
-        <h2>Main Right Panel and Chat Panel</h2>
-        <h3>Module visibility and local persistence</h3>
-        <ul>
-          <li>Each module can be toggled independently: Controls, Overview, Overlays, Diagnostics, Event Routing, Timeline, Status Details.</li>
-          <li>The `Chat` toggle controls a dedicated rightmost Chat panel; when disabled, the chat panel is not rendered and takes no right-side width.</li>
-          <li>Chat content is no longer rendered inside the main right panel.</li>
-          <li>Toggle states are persisted and restored on restart.</li>
-          <li>Default file: `$HOME/.oasis7_viewer/right_panel_modules.json`.</li>
-          <li>Override path with: `OASIS7_VIEWER_MODULE_VISIBILITY_PATH`.</li>
-        </ul>
-
-        <h3>Selection details panel</h3>
-        <ul>
-          <li>Supports: Agent, Location, Asset, PowerPlant, Chunk.</li>
-          <li>In LLM scenarios, the latest decision I/O summary is available.</li>
-        </ul>
-
-        <h3>Quick locate agent</h3>
-        <ul>
-          <li>Entry: `Locate Agent` button in `Event Routing` area.</li>
-          <li>Priority: current selected agent first, otherwise the lexicographically first agent.</li>
-        </ul>
+        <p>Minimum pass criteria: the page loads, <code>__AW_TEST__</code> is available, <code>renderMode=software_safe</code>, and screenshot/log artifacts are produced.</p>
       </section>
 
       <section class="section" data-reveal>
-        <h2>Overview Zoom Mode Switch (2D)</h2>
+        <h2>Current Scope</h2>
         <ul>
-          <li>2D view auto-switches between detail mode and overview-map mode based on zoom tier.</li>
-          <li>Default starts in detail mode; once crossing threshold, viewer enters overview-map mode with simplified layers.</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Copyable Text Panel</h2>
-        <ul>
-          <li>Open text panel to copy state, events, diagnostics, and selection detail text.</li>
-          <li>Use OS shortcut to copy (macOS `Cmd+C` / Windows/Linux `Ctrl+C`).</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>UI Language Switch</h2>
-        <ul>
-          <li>Viewer UI supports Chinese and English.</li>
-          <li>Switch via top language control with immediate effect.</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Recommended Debug Scenarios</h2>
-        <ul>
-          <li>`asteroid_fragment_detail_bootstrap`: inspect fine-grained location rendering.</li>
-          <li>`llm_bootstrap`: routine online integration.</li>
-          <li>`twin_region_bootstrap`: compare two-region coordination behavior.</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Fragment Depletion Visualization</h2>
-        <ul>
-          <li>When a location has `fragment_budget`, visual size scales by remaining mass ratio.</li>
-          <li>Lower remaining budget yields smaller rendered radius, with a minimum visibility clamp.</li>
-          <li>Details panel shows: `Fragment Depletion: mined=&lt;x&gt;% remaining=&lt;a&gt;/&lt;b&gt;`.</li>
+          <li>Supports bilingual UI, realtime observation, formal gameplay summary, and minimal prompt/chat controls.</li>
+          <li>No more standard Viewer jump.</li>
+          <li>No more native 3D capture, theme-pack, texture-inspector, or visual QA tools.</li>
         </ul>
       </section>
 
       <section id="troubleshooting" class="section" data-reveal>
         <h2>Troubleshooting</h2>
         <ul>
-          <li>Blank web page: wait for first `trunk` build and verify port/URL consistency.</li>
-          <li>`agent-browser` startup failure: check `agent-browser --version` and local browser dependencies.</li>
-          <li>Wasm errors in console: fix runtime initialization errors before debugging visuals.</li>
-          <li>Cannot see detail: switch to 3D, zoom and move camera, or use `F` focus.</li>
-          <li>Auto focus not working: verify target existence, start from `first_fragment`.</li>
-          <li>Connection failure: check `oasis7_viewer_live` process and endpoint port match.</li>
-          <li>If you only need observer/debug diagnostics, explicitly run `env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_viewer_live -- llm_bootstrap --no-llm --bind 127.0.0.1:5023 --web-bind 127.0.0.1:5011`; this path does not count as formal gameplay evidence. Explicit `--no-llm` enters script mode, so `gameplay_action/prompt/chat` returns `llm_mode_required`, while `step/play` returns `ControlCompletionAck` with `Blocked + error_code/error_message`. `llm_init_failed` is reserved for `--llm` runs where the provider is misconfigured or unreachable.</li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>References</h2>
-        <ul class="doc-links">
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md" target="_blank" rel="noreferrer">viewer-location-fine-grained-rendering.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md" target="_blank" rel="noreferrer">viewer-auto-focus-capture.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md" target="_blank" rel="noreferrer">viewer-web-closure-testing-policy.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-selection-details.prd.md" target="_blank" rel="noreferrer">viewer-selection-details.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md" target="_blank" rel="noreferrer">viewer-right-panel-module-visibility.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md" target="_blank" rel="noreferrer">viewer-overview-map-zoom.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md" target="_blank" rel="noreferrer">viewer-agent-quick-locate.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-copyable-text.prd.md" target="_blank" rel="noreferrer">viewer-copyable-text.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-generic-focus-targets.prd.md" target="_blank" rel="noreferrer">viewer-generic-focus-targets.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.prd.md" target="_blank" rel="noreferrer">viewer-web-test-api-step-control-2026-02-24.prd.md</a></li>
-          <li><a href="https://github.com/eng-cc/oasis7/blob/main/doc/scripts/viewer-tools/capture-viewer-frame.prd.md" target="_blank" rel="noreferrer">capture-viewer-frame.prd.md</a></li>
-        </ul>
-      </section>
-
-      <section class="section" data-reveal>
-        <h2>Fragment Element Chunk Rendering (default enabled)</h2>
-        <ul>
-          <li>Goal: render location fragment chunks by default, colorized by dominant element.</li>
-          <li>Behavior: outer location geometry and labels are hidden; logical anchors remain while fragment chunks always render.</li>
-          <li>Selection: clicking a fragment shows owning `location` ID/name in the details panel.</li>
-          <li>Configuration: fragment visibility toggle and related env vars have been removed.</li>
+          <li>Blank page: verify that <code>run-viewer-web.sh</code> finished building and is serving the target port.</li>
+          <li>Connection failure: verify <code>oasis7_viewer_live</code> is running and the <code>ws</code> parameter matches <code>--web-bind</code>.</li>
+          <li>No formal gameplay: check the LLM provider setup; explicit <code>--no-llm</code> is observer/debug only.</li>
+          <li><code>agent-browser</code> failure: verify the local CLI and browser dependencies first.</li>
         </ul>
       </section>
     </main>
-
-    <footer class="footer">
-      <p>© <span data-year></span> oasis7 docs · Built for static hosting</p>
-    </footer>
   </body>
 </html>

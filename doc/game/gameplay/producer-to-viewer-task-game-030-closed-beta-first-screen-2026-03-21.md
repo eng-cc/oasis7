@@ -21,7 +21,7 @@
 - 代码 / 文档入口：`doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`、`doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
 - 已完成内容：`#46` 已关闭，Mission HUD / PostOnboarding 已切到 canonical 玩家语义
 - 已知约束：本轮先做最小产品化包，不扩写完整商业化 UI
-- 依赖前置项：`doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md`
+- 依赖前置项：`doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 
 ## Expected Output
 - 接收方交付物 1：首屏主目标优先、无无关高显著噪音的实现与证据

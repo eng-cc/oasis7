@@ -162,14 +162,10 @@
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `doc/world-simulator/viewer/viewer-manual.md`
-    - `crates/oasis7_viewer/src/app_bootstrap.rs`
-    - `crates/oasis7_viewer/index.html`
     - `crates/oasis7_viewer/software_safe.html`
-    - `scripts/capture-viewer-frame.sh`
+    - 历史已删除：`crates/oasis7_viewer/src/app_bootstrap.rs`、`crates/oasis7_viewer/index.html`、`scripts/capture-viewer-frame.sh`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7 Viewer|oasis7 Viewer" doc/world-simulator/viewer/viewer-manual.md crates/oasis7_viewer/src/app_bootstrap.rs crates/oasis7_viewer/index.html crates/oasis7_viewer/software_safe.html scripts/capture-viewer-frame.sh`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer primary_window_config_sets_title_and_resolution -- --nocapture`
-    - `bash -n scripts/capture-viewer-frame.sh`
+    - 历史验收记录：曾检查 `doc/world-simulator/viewer/viewer-manual.md`、`crates/oasis7_viewer/src/app_bootstrap.rs`、`crates/oasis7_viewer/index.html`、`crates/oasis7_viewer/software_safe.html`、`scripts/capture-viewer-frame.sh` 的品牌一致性；其中 native 入口与抓帧脚本现已删除。
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_SIMULATOR-166 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 对 `doc/world-simulator/**` 仍可读历史专题执行 title-only cleanup，将首行 `oasis7*` 标题统一切到 `oasis7*`，并明确旧标题仅允许出现在正文历史上下文中，不改动内部实现兼容名与历史证据正文。
@@ -292,15 +288,9 @@
   - 产物文件:
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
-    - `scripts/capture-viewer-frame.sh`
-    - `scripts/viewer-texture-inspector-lib.sh`
-    - `scripts/viewer-texture-inspector.sh`
-    - `scripts/viewer-owr4-stress.sh`
+    - 历史已删除：`scripts/capture-viewer-frame.sh`、`scripts/viewer-texture-inspector-lib.sh`、`scripts/viewer-texture-inspector.sh`、`scripts/viewer-owr4-stress.sh`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/viewer-texture-inspector-lib.sh`
-    - `bash -n scripts/viewer-texture-inspector.sh`
-    - `bash -n scripts/capture-viewer-frame.sh`
-    - `bash -n scripts/viewer-owr4-stress.sh`
+    - 历史验收记录：相关脚本语法当时已验证；脚本现已删除，不再作为当前门禁。
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_SIMULATOR-175 (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 将 simulator LLM 配置与 longrun stress 脚本的默认 env key 优先切到 `OASIS7_LLM_*`，并保留旧品牌 LLM fallback，继续收口 agent/LLM 配置链路的低风险内部标识迁移。
@@ -855,13 +845,10 @@
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `scripts/setup-provider-oasis7-runtime.sh`
-    - `scripts/viewer-texture-inspector-lib.sh`
-    - `scripts/viewer-texture-inspector.sh`
-    - `scripts/capture-viewer-frame.sh`
+    - 历史已删除：旧 3D Viewer 调试脚本
   - 验收命令 (`test_tier_required`):
     - `bash -n scripts/setup-provider-oasis7-runtime.sh`
-    - `bash -n scripts/viewer-texture-inspector-lib.sh`
-    - `bash -n scripts/capture-viewer-frame.sh`
+    - 历史验收记录：旧 3D Viewer 调试脚本语法已在当时校验；脚本现已删除
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-WORLD_SIMULATOR-162 (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 修复标准模式 bootstrap `Loading standard viewer...` overlay 在 wasm 已启动后仍残留并压缩左侧视口的问题，补齐 cleanup 生命周期与最小回归验证。
@@ -950,7 +937,6 @@
 - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
 - `doc/world-simulator/prd/acceptance/unified-checklist.md`
 - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
-- `doc/world-simulator/prd/acceptance/visual-review-score-card.md`
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
 - `doc/world-simulator/prd/launcher/blockchain-transfer.md`
 - `doc/world-simulator/launcher/game-client-launcher-web-console-2026-03-04.prd.md`
@@ -979,7 +965,7 @@
 - `doc/world-simulator/llm/llm-provider-agent-experience-parity-2026-03-12.project.md`
 - `doc/world-simulator/llm/{llm-provider-agent-dual-mode-2026-03-16.{prd,project}.md,provider-agent-dual-mode-contract-2026-03-16.md}`
 - `doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc-2026-03-13.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`、`doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`、`doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd.md`、`doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.{prd,design,project}.md`
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
@@ -987,5 +973,5 @@
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`
 - `crates/oasis7_launcher_ui/src/lib.rs`
 - `crates/oasis7_client_launcher/src/{main.rs,main_app_shell.rs,app_process.rs,app_process_web.rs,explorer_window.rs,explorer_window_view.rs}`
-- `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`、`crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`、`crates/oasis7_viewer/{Cargo.toml,src/main.rs}`、`scripts/{build-game-launcher-bundle.sh,capture-viewer-frame.sh}`、`testing-manual.md`
-## 状态: 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-24 / active / 待下一个模块任务明确 / `task_241f25085f754d868313462b879e4d01` 已修复 launcher “打开游戏页”URL 与 `oasis7_game_launcher` 自动打开入口不一致的问题，`task_552222a529fa48489eab10deb789ed54` 已完成 launcher explorer 主链级重构，`task_ee3cc0c5d2d741658b404100843f93d8` 已补齐 `/api/state` `chain_replication_status` 透传，并在启动器 `节点观测` 摘要卡展示 peer 健康概览，同时提供可单独打开的 peer 明细窗口展示本地 peer id 与已连接 peer 明细；当前优先任务回到模块后续排队项 / 当前无新 blocker，已知环境限制仅剩 source stack formal 启动前仍要求配置 `OASIS7_LLM_MODEL`，本轮 URL 修复不影响 formal gameplay/LLM 预检边界 / OpenClaw provider-backed 单 NPC 闭环试点与 latency 扩面继续并行；3D 可视化方向保持暂停，并继续仅作为 visual QA/screenshot surface 维护。
+- `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`、`crates/oasis7/src/runtime/tests/{agent_default_modules.rs,power_bootstrap.rs}`、`scripts/build-game-launcher-bundle.sh`、`testing-manual.md`
+## 状态: 更新日期 / 当前状态 / 下一任务 / 最新完成 / 当前优先任务 / 当前阻断说明 / 并行待办: 2026-04-24 / active / 待下一个模块任务明确 / `task_241f25085f754d868313462b879e4d01` 已修复 launcher “打开游戏页”URL 与 `oasis7_game_launcher` 自动打开入口不一致的问题，`task_552222a529fa48489eab10deb789ed54` 已完成 launcher explorer 主链级重构，`task_ee3cc0c5d2d741658b404100843f93d8` 已补齐 `/api/state` `chain_replication_status` 透传，并在启动器 `节点观测` 摘要卡展示 peer 健康概览，同时提供可单独打开的 peer 明细窗口展示本地 peer id 与已连接 peer 明细；当前优先任务回到模块后续排队项 / 当前无新 blocker，已知环境限制仅剩 source stack formal 启动前仍要求配置 `OASIS7_LLM_MODEL`，本轮 URL 修复不影响 formal gameplay/LLM 预检边界 / OpenClaw provider-backed 单 NPC 闭环试点与 latency 扩面继续并行；`standard_3d` 相关代码、脚本与活跃文档已移除，当前仅保留 `software_safe` Web 主入口。

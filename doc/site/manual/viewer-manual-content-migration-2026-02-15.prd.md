@@ -12,9 +12,9 @@
 - 对应标准执行入口: `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md`
 
 ## 目标
-- 将分散在 `doc/world-simulator/viewer/viewer-*` 与 `doc/scripts/viewer-tools/capture-viewer-frame.prd.md` 的“用户可操作内容”并入 Viewer 使用手册。
+- 将分散在 `doc/world-simulator/viewer/viewer-*` 中与当前 `software_safe` Web 主入口相关的“用户可操作内容”并入 Viewer 使用手册。
 - 形成单一入口：`doc/world-simulator/viewer/viewer-manual.manual.md`（中文基线）与 `site/doc/cn|en/viewer-manual.html`（站点发布版）。
-- 保持现有“Web 默认、native fallback”的闭环策略不变。
+- 保持现有“Web 默认、`software_safe` 单入口”的闭环策略不变。
 
 ## 范围
 - 范围内
@@ -26,7 +26,7 @@
     - 2D 全览图缩放分层
     - 文本可选中/复制面板
     - UI 语言切换
-    - native fallback 高级参数
+    - 当前 Web 主入口相关的排障说明
   - 同步 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `site/doc/cn|en/viewer-manual.html`。
 - 范围外
   - 迁移 `.project.md`、`devlog`、runtime 架构设计文档。
@@ -35,8 +35,7 @@
 ## 接口/数据
 - 输入文档
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
-  - `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
-  - `doc/world-simulator/viewer/viewer-auto-select-capture.prd.md`
+  - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
   - `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md`
   - `doc/world-simulator/viewer/viewer-selection-details.prd.md`
   - `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md`

@@ -41,8 +41,8 @@
 - `crates/oasis7_viewer/src/main.rs`
 - `doc/world-simulator/viewer/viewer-manual.md`
 - `AGENTS.md`
-- `doc/world-simulator/viewer/viewer-bevy-web-runtime.prd.md`
-- `doc/world-simulator/viewer/viewer-bevy-web-runtime.project.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
 - `doc/world-simulator.project.md`
 
 ## 状态

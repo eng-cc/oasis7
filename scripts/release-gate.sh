@@ -14,13 +14,13 @@ Purpose:
   Run release gate closure for external publish:
   - ci full tier
   - builtin wasm sync checks (m1/m4/m5)
-  - web strict loop
+  - software-safe web strict loop
   - S9/S10 longrun gate
 
 Options:
   --out-dir <path>               Output root (default: .tmp/release_gate)
   --candidate-bundle <path>      Validate one release candidate bundle before running gate
-  --quick                        Quick profile: shorter S9/S10 durations + skip web visual baseline
+  --quick                        Quick profile: shorter S9/S10 durations
   --dry-run                      Print and record commands only (no execution)
   --dry-run-fail-step <step>     Simulate a failure step in dry-run mode for hint validation
   --skip-ci-full                 Skip `./scripts/ci-tests.sh full`
@@ -30,7 +30,6 @@ Options:
   --skip-s10                     Skip S10 soak gate
   --web-scenario <name>          Scenario for web strict loop (default: llm_bootstrap)
   --web-headed                   Run web loop in headed mode
-  --web-skip-visual-baseline     Pass --skip-visual-baseline to web strict loop
   --s9-duration-secs <n>         S9 release gate duration (default: 300)
   --s9-out-dir <path>            S9 output root (default: .tmp/release_gate_p2p)
   --s9-dry-run                   Pass --dry-run to S9 script
@@ -98,8 +97,6 @@ skip_s10=0
 
 web_scenario="llm_bootstrap"
 web_headed=0
-web_skip_visual_baseline=0
-web_skip_visual_baseline_user_set=0
 
 s9_duration_secs=300
 s9_duration_user_set=0
@@ -161,11 +158,6 @@ while [[ $# -gt 0 ]]; do
       web_headed=1
       shift
       ;;
-    --web-skip-visual-baseline)
-      web_skip_visual_baseline=1
-      web_skip_visual_baseline_user_set=1
-      shift
-      ;;
     --s9-duration-secs)
       s9_duration_secs=${2:-}
       s9_duration_user_set=1
@@ -210,9 +202,6 @@ if [[ "$quick" -eq 1 ]]; then
   fi
   if [[ "$s10_duration_user_set" -eq 0 ]]; then
     s10_duration_secs=60
-  fi
-  if [[ "$web_skip_visual_baseline_user_set" -eq 0 ]]; then
-    web_skip_visual_baseline=1
   fi
 fi
 
@@ -382,12 +371,9 @@ for step in "${selected_steps[@]}"; do
       cmd=(./scripts/sync-m5-builtin-wasm-artifacts.sh --check)
       ;;
     web_strict)
-      cmd=(./scripts/viewer-release-qa-loop.sh --scenario "$web_scenario" --out-dir "$run_dir/web_strict")
+      cmd=(./scripts/viewer-software-safe-step-regression.sh --scenario "$web_scenario" --out-dir "$run_dir/web_strict")
       if [[ "$web_headed" -eq 1 ]]; then
         cmd+=(--headed)
-      fi
-      if [[ "$web_skip_visual_baseline" -eq 1 ]]; then
-        cmd+=(--skip-visual-baseline)
       fi
       ;;
     s9)

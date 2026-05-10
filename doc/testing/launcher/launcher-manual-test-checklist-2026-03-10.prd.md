@@ -72,7 +72,7 @@
   - `scripts/run-producer-playtest.sh`
   - `scripts/build-game-launcher-bundle.sh`
   - `scripts/run-game-test.sh`（开发回归 bootstrap，支持 `--bundle-dir` 复用 bundle）
-  - `scripts/viewer-release-qa-loop.sh`
+  - 历史已删除：`scripts/viewer-release-qa-loop.sh`
 - Edge Cases & Error Handling:
   - 首次启动缺少必要配置：必须出现可操作的引导，不得只显示裸错误。
   - 端口占用或依赖缺失：必须 fail-fast，且日志可定位。

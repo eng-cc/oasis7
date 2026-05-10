@@ -56,10 +56,9 @@
   - 删除 `thread::sleep` 轮询，改为 socket 超时读 + 事件转发。
 - 活跃入口与文档已清理旧 `--tick-ms` 示例：
   - `site/index.html`、`site/en/index.html`
-  - `doc/world-simulator/viewer/viewer-visualization.prd.md`
+  - 历史 visualization 专题已删除，当前 Web 入口以 `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md` 为准
   - `doc/world-simulator/viewer/viewer-i18n.prd.md`
-  - `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.prd.md`
-  - `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.stress-report.template.md`
+  - 历史 open-world readiness 专题与 stress report 模板已删除；当前 operator 回归统一收口到 repo-owned Web regression 与 evidence 文档
   - `doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`
 - 删除 legacy `--tick-ms` 拒绝断言测试，避免保留旧参数语义噪音：
   - `crates/oasis7/src/bin/oasis7_viewer_live.rs（`#[cfg(test)]`）`
@@ -155,13 +154,12 @@
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
 - `crates/oasis7/src/bin/oasis7_viewer_live.rs（`#[cfg(test)]`）`
 - `crates/oasis7/tests/viewer_live_integration.rs`
-- `scripts/capture-viewer-frame.sh`
-- `scripts/viewer-theme-pack-preview.sh`
 - `scripts/run-game-test.sh`
 - `scripts/p2p-longrun-soak.sh`
 - `scripts/viewer-owr4-stress.sh`
-- `scripts/viewer-release-qa-loop.sh`
-- `scripts/viewer-texture-inspector.sh`
+- `scripts/viewer-primary-web-entry-regression.sh`
+- `scripts/viewer-software-safe-step-regression.sh`
+- `scripts/viewer-software-safe-chat-regression.sh`
 - 活跃手册文档（testing/manual 与 viewer/manual 相关）
 
 不在范围内：
@@ -195,9 +193,8 @@
   - 移除 `--tick-ms` CLI 参数与 `CliOptions.tick_ms`。
   - reward runtime 轮询改为复用 `--node-tick-ms`（仅 poll/fallback 语义；PoS 节拍由 `--pos-slot-duration-ms/--pos-ticks-per-slot` 锚定）。
 - viewer live 外围脚本已全部移除 `--tick-ms` 参数链路：
-  - `capture-viewer-frame` / `viewer-theme-pack-preview` / `run-game-test` /
-    `p2p-longrun-soak` / `viewer-owr4-stress` / `viewer-release-qa-loop` /
-    `viewer-texture-inspector`。
+  - `run-game-test` / `p2p-longrun-soak` / `viewer-primary-web-entry-regression` /
+    `viewer-software-safe-step-regression` / `viewer-software-safe-chat-regression`。
 - 活跃手册和静态站 viewer manual 示例已同步更新为无 `--tick-ms` 版本。
 - 修复事件驱动链路下的 live server 退出阻塞：
   - 主循环改为 `recv_timeout + loop_running`，客户端断开后可退出。

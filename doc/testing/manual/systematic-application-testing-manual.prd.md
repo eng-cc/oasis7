@@ -63,8 +63,9 @@
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `scripts/ci-tests.sh`
-  - `scripts/viewer-release-qa-loop.sh`
-  - `scripts/viewer-release-full-coverage.sh`
+  - `scripts/viewer-primary-web-entry-regression.sh`
+  - `scripts/viewer-software-safe-step-regression.sh`
+  - `scripts/viewer-software-safe-chat-regression.sh`
 - Edge Cases & Error Handling:
   - 文档与脚本不同步：以主手册为准，变更同批次修复引用。
   - 套件入口分散：强制通过主手册索引归并，避免重复入口。

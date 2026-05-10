@@ -91,9 +91,9 @@
 - [ ] 本地回归 `./scripts/sync-m5-builtin-wasm-artifacts.sh --check`，并通过新 tag 继续观察 `Release Packages` 是否终于越过 `release-gate`。
 
 ### T3K Release gate agent-browser CLI fallback 热修
-- [x] 复盘 `Release Packages` run `23059581794`，确认 `v0.0.10` 已越过 `ci_full/sync_m1/sync_m4/sync_m5`，但在 `web_strict` 触发 `./scripts/viewer-release-qa-loop.sh` 时，GitHub runner 缺少全局 `agent-browser` 命令，直接导致 `missing required command: agent-browser`。
-- [x] 调整 `scripts/agent-browser-lib.sh`：优先使用本机 `agent-browser`，当 CLI 不存在时自动回退到 `npx --yes agent-browser`；保持 `AGENT_BROWSER_SESSION` 透传，避免 CI 因为“没全局安装”而把 Web 严格闭环整段跳红。
-- [x] 本地回归脚本级 fallback：在无 `agent-browser`、仅有伪造 `npx` 的 PATH 下，执行 `source scripts/agent-browser-lib.sh && ab_require && ab_cmd fallback-session get url`，确认实际走到 `--yes agent-browser get url`。
+完成内容：复盘 `Release Packages` run `23059581794`，确认 `v0.0.10` 已越过 `ci_full/sync_m1/sync_m4/sync_m5`，但当时 `web_strict` 仍通过已删除的 `./scripts/viewer-release-qa-loop.sh` 执行，GitHub runner 缺少全局 `agent-browser` 命令，直接导致 `missing required command: agent-browser`。
+完成内容：调整 `scripts/agent-browser-lib.sh`，优先使用本机 `agent-browser`，当 CLI 不存在时自动回退到 `npx --yes agent-browser`；保持 `AGENT_BROWSER_SESSION` 透传，避免 CI 因为“没全局安装”而把 Web 严格闭环整段跳红。
+完成内容：本地回归脚本级 fallback：在无 `agent-browser`、仅有伪造 `npx` 的 PATH 下，执行 `source scripts/agent-browser-lib.sh && ab_require && ab_cmd fallback-session get url`，确认实际走到 `--yes agent-browser get url`。
 
 ### T3L Release gate trunk-missing dist fallback 热修
 - [x] 复盘 `Release Packages` run `23078512672`，确认 `v0.0.11` 已经真正越过 `agent-browser` CLI 入口，但 `web_strict` 在解析 Viewer 静态资源目录时，因为 runner 没有安装 `trunk` 而退出；失败签名为 `error: missing required command: trunk`。
@@ -150,21 +150,21 @@
   - `./scripts/package-native-installer.sh --platform linux-x64 --bundle-dir <tmp>/bundle --out-dir <tmp>/out --asset-name oasis7-linux-x64.deb --version 0.0.0 --dry-run`
 
 ### T3O Release gate web sibling binary 预热回补（2026-03-14）
-- [x] 复盘 `Release Packages` run `23080255868`，确认 `release-gate-web` 已越过 `trunk` 安装，但 `web_strict` 在 `oasis7_game_launcher` 启动阶段因独立 job 缺少 `target/debug/oasis7_viewer_live` 而失败；失败签名为 `failed to locate \`oasis7_viewer_live\` binary; build it first or set OASIS7_VIEWER_LIVE_BIN`。
-- [x] 调整 `scripts/viewer-release-qa-loop.sh`：在启动 `oasis7_game_launcher` 前显式执行 `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime`，把原先依赖其他步骤隐式生成 sibling binaries 的前置条件收回到脚本内部。
-- [x] 本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，并确认预热命令已位于 `cargo run -p oasis7 --bin oasis7_game_launcher` 之前。
+完成内容：复盘 `Release Packages` run `23080255868`，确认 `release-gate-web` 已越过 `trunk` 安装，但 `web_strict` 在 `oasis7_game_launcher` 启动阶段因独立 job 缺少 `target/debug/oasis7_viewer_live` 而失败；失败签名为 `failed to locate \`oasis7_viewer_live\` binary; build it first or set OASIS7_VIEWER_LIVE_BIN`。
+历史记录：当时调整 `scripts/viewer-release-qa-loop.sh`，在启动 `oasis7_game_launcher` 前显式执行 `env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime`，把原先依赖其他步骤隐式生成 sibling binaries 的前置条件收回到脚本内部。
+历史记录：本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，并确认预热命令已位于 `cargo run -p oasis7 --bin oasis7_game_launcher` 之前；脚本现已删除。
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否越过 launcher 启动阶段，并进一步验证 aggregate `release_gate` 与后续打包链路。
 
 ### T3P Release gate web test API 冷启动窗口放宽（2026-03-14）
-- [x] 复盘 `Release Packages` run `23080686951`，确认 `release-gate-web` 已越过 sibling binary 缺失，但页面在 GH runner 上打开后 20 秒内仍未暴露 `window.__AW_TEST__`，导致 `web_strict` 以 `__AW_TEST__ is unavailable` 退出；launcher 与 bridge 已正常就绪，说明问题落在 Web 端冷启动窗口而非服务拉起。
-- [x] 调整 `scripts/viewer-release-qa-loop.sh`：将 `wait_for_api` 从 20s 提升到 60s、将初始 `wait_for_connected` 从 15s 提升到 30s，并在 `__AW_TEST__` 超时前自动抓取 `console` / `errors` 日志，便于下一轮若仍失败时直接定位浏览器端异常。
-- [x] 本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，确认等待窗口与失败诊断输出语法正确。
+完成内容：复盘 `Release Packages` run `23080686951`，确认 `release-gate-web` 已越过 sibling binary 缺失，但页面在 GH runner 上打开后 20 秒内仍未暴露 `window.__AW_TEST__`，导致 `web_strict` 以 `__AW_TEST__ is unavailable` 退出；launcher 与 bridge 已正常就绪，说明问题落在 Web 端冷启动窗口而非服务拉起。
+历史记录：当时调整 `scripts/viewer-release-qa-loop.sh`，将 `wait_for_api` 从 20s 提升到 60s、将初始 `wait_for_connected` 从 15s 提升到 30s，并在 `__AW_TEST__` 超时前自动抓取 `console` / `errors` 日志。
+历史记录：本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，确认等待窗口与失败诊断输出语法正确；脚本现已删除。
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否终于越过 Web Test API 初始化阶段。
 
 ### T3Q Release gate web test API readiness 兼容修复（2026-03-14）
-- [x] 复盘 `Release Packages` run `23081035902` 与既往 `2026-03-10` Web QA 记录，确认 `wait_for_api` 不是单纯超时，而是会把 `agent-browser eval` 返回的 `"ready"` 误判为未就绪；当前 CI 日志中页面已打开、launcher stack 已 ready、console/errors 为空，与这一旧签名一致。
-- [x] 调整 `scripts/viewer-release-qa-loop.sh`：新增 `normalize_eval_token`，将 `wait_for_api` 改为评估 `typeof window.__AW_TEST__ === "object" ? "ready" : "missing"`，并兼容 `ready/"ready"/true` 三种返回形态，避免被 agent-browser 的字符串化输出误伤。
-- [x] 本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，确认 readiness 兼容逻辑与现有超时/console 采集分支可同时生效。
+完成内容：复盘 `Release Packages` run `23081035902` 与既往 `2026-03-10` Web QA 记录，确认 `wait_for_api` 不是单纯超时，而是会把 `agent-browser eval` 返回的 `"ready"` 误判为未就绪；当前 CI 日志中页面已打开、launcher stack 已 ready、console/errors 为空，与这一旧签名一致。
+历史记录：当时调整 `scripts/viewer-release-qa-loop.sh`，新增 `normalize_eval_token`，将 `wait_for_api` 改为评估 `typeof window.__AW_TEST__ === "object" ? "ready" : "missing"`，并兼容 `ready/"ready"/true` 三种返回形态。
+历史记录：本地回归 `bash -n scripts/viewer-release-qa-loop.sh`，确认 readiness 兼容逻辑与现有超时/console 采集分支可同时生效；脚本现已删除。
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否终于越过 Web Test API readiness 检查并进入语义交互断言。
 
 ### T3R Release gate web headed Xvfb 执行链回补（2026-03-14）
@@ -174,9 +174,9 @@
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否终于完成 Viewer Web 初始化并进入后续断言。
 
 ### T3S Release gate web screenshot artifact 路径兼容修复（2026-03-14）
-- [x] 复盘 `Release Packages` run `23081885506`，确认 `release-gate-web` 在 `xvfb-run + --web-headed` 下已越过 Web 初始化，并通过 semantic / zoom gate；新的唯一阻断点是截图产物未落到脚本期望路径，而是被 `agent-browser` 保存到自身 tmp 目录，导致 `Screenshot artifact: failed`。
-- [x] 调整 `scripts/agent-browser-lib.sh` 与 `scripts/viewer-release-qa-loop.sh`：新增 `ab_screenshot`，在 `agent-browser screenshot <target>` 成功但目标文件不存在时，自动从 CLI 输出解析真实落盘路径并回拷到请求路径；Viewer release QA loop 的主截图与 zoom 截图统一改走该 helper。
-- [x] 本地回归 `bash -n scripts/agent-browser-lib.sh`、`bash -n scripts/viewer-release-qa-loop.sh`，确认 helper 与调用点语法通过。
+完成内容：复盘 `Release Packages` run `23081885506`，确认 `release-gate-web` 在 `xvfb-run + --web-headed` 下已越过 Web 初始化，并通过 semantic / zoom gate；新的唯一阻断点是截图产物未落到脚本期望路径，而是被 `agent-browser` 保存到自身 tmp 目录，导致 `Screenshot artifact: failed`。
+历史记录：当时调整 `scripts/agent-browser-lib.sh` 与 `scripts/viewer-release-qa-loop.sh`，新增 `ab_screenshot`，在 `agent-browser screenshot <target>` 成功但目标文件不存在时自动从 CLI 输出解析真实落盘路径并回拷到请求路径。
+历史记录：本地回归 `bash -n scripts/agent-browser-lib.sh`、`bash -n scripts/viewer-release-qa-loop.sh`，确认 helper 与调用点语法通过；其中 QA loop 脚本现已删除。
 - [ ] 推送修复并打新 tag，继续观察 `release-gate-web` 是否终于全绿并让 aggregate `release_gate` 进入后续打包链路。
 
 ### T3T Release gate runtime agent chat env 串味修复（2026-03-14）

@@ -90,7 +90,7 @@
 
 场景说明补充：
 - `asteroid_fragment_detail_bootstrap` 设计用于 viewer 细粒度 location 渲染回归，默认关闭 origin 与 agents，避免干扰观察。
-- 建议在截图闭环中配合 `scripts/capture-viewer-frame.sh --scenario asteroid_fragment_detail_bootstrap` 使用。
+- 建议在 Web 闭环中配合主入口或 `software_safe` 回归脚本使用对应场景。
 
 ## 物流瓶颈验证口径（2026-02-14）
 

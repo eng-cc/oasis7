@@ -17,8 +17,9 @@
 - `testing-manual.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
 - `scripts/ci-tests.sh`
-- `scripts/viewer-release-qa-loop.sh`
-- `scripts/viewer-release-full-coverage.sh`
+- `scripts/viewer-primary-web-entry-regression.sh`
+- `scripts/viewer-software-safe-step-regression.sh`
+- `scripts/viewer-software-safe-chat-regression.sh`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
 

@@ -33,7 +33,7 @@
 - `crates/oasis7_viewer/src/camera_controls.rs`
 - `crates/oasis7_viewer/src/label_lod.rs`
 - `crates/oasis7_viewer/src/tests_scene_entities.rs`
-- `doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 
 ## 状态
 - 当前阶段：V2D0~V2D3 已完成。

@@ -8,12 +8,12 @@
 
 ## 1. Executive Summary
 - Problem Statement: Web UI 验收若缺少统一启动、采样、门禁与故障分级，且未区分 Viewer 页面与 launcher 控制面的驱动优先级，容易出现“看起来可用但证据不可复现”的假通过。
-- Proposed Solution: 保留 agent-browser 作为 Viewer 页面默认闭环方案，但把“逐步执行命令与证据采样”下沉到 `web-ui-agent-browser-closure-manual.manual.md`；本 PRD 只维护边界、成功标准与发布/阻断口径。同时显式规定 `oasis7_web_launcher` / launcher Web 控制面先用 GUI Agent 驱动产品动作，再用页面做状态与字段校验，并统一接入发布脚本与 fail-fast 处置；Viewer Web 默认通过 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件 WebGL 路径，若 headed 仍落到 software renderer 则继续按环境阻断。
+- Proposed Solution: 保留 agent-browser 作为 Viewer 页面默认闭环方案，但把“逐步执行命令与证据采样”下沉到 `web-ui-agent-browser-closure-manual.manual.md`；本 PRD 只维护边界、成功标准与发布/阻断口径。同时显式规定 `oasis7_web_launcher` / launcher Web 控制面先用 GUI Agent 驱动产品动作，再用页面做状态与字段校验，并统一接入当前 repo-owned Web 回归脚本与 fail-fast 处置。
 - Success Criteria:
   - SC-1: S6 Web 闭环流程可由手册命令一键复现，并明确区分 Viewer 与 launcher 控制面两类 surface。
   - SC-2: 验收口径强制 `open ... --headed`，并默认附带 `--use-angle=gl,--ignore-gpu-blocklist`；若仍命中 `SwiftShader/software rendering` 继续阻断。
   - SC-3: 至少输出 `snapshot + console + screenshot + state` 证据。
-  - SC-4: 发布验收脚本（`viewer-release-qa-loop/full-coverage`）可直接复用手册约束。
+  - SC-4: 当前 repo-owned Web 回归脚本可直接复用手册约束。
   - SC-5: 文档迁移后统一 `.prd.md/.project.md` 命名并通过治理检查。
   - SC-6: `oasis7_web_launcher` 的产品动作路径默认走 GUI Agent，不再把 canvas 直点或纯 agent-browser 动作作为首选执行链路。
   - SC-7: 当 Viewer 进入 `renderMode=software_safe` 且 auth bootstrap 可用时，QA 可通过专用脚本稳定复验 prompt apply/rollback、chat ack 与消息流采样，并将 `agent_spoke` 缺失分级为可追溯失败签名。
@@ -28,8 +28,7 @@
 - User Scenarios & Frequency:
   - 每次 Viewer Web 相关改动后执行 S6 smoke。
   - 每次 launcher Web 控制面或 GUI Agent 接口改动后，先执行 GUI Agent 动作闭环，再做页面状态核验。
-  - 每次候选发布前执行 `viewer-release-qa-loop.sh`。
-  - 关键版本执行 `viewer-release-full-coverage.sh`（含玩法与视觉）。
+  - 每次候选发布前执行主入口与 `software_safe` Web 回归脚本。
   - 连接失败或渲染崩溃时按 F1~F4 处置并归档证据。
 - User Stories:
   - PRD-TESTING-WEB-001: As a Web 闭环执行者, I want deterministic startup and sampling commands, so that I can reproduce browser behavior reliably.
@@ -52,7 +51,7 @@
 | agent-browser 采样 | `snapshot`、`eval`、`console`、`screenshot`、`getState` | 基于 `__AW_TEST__` 执行语义步骤 | `sampling -> evidence` | 至少 1 张截图 + state 字段完整 | 执行者产出，发布者审阅 |
 | launcher 控制面驱动 | `/api/gui-agent/capabilities`、`/api/gui-agent/state`、`/api/gui-agent/action`、页面字段快照 | 先通过 GUI Agent 执行动作，再用浏览器页面校验结果 | `action_requested -> applied -> verified` | launcher 控制面默认优先，不得被 canvas 直点替代 | 执行者与发布负责人共同审阅 |
 | 会话防抖 | `close-all`、fail-fast 预检查 | 每轮清理残留会话并快速失败 | `cleanup -> opened -> stable` | 先清会话后 open，减少残留干扰 | 执行者维护 |
-| 发行验收脚本 | `viewer-release-qa-loop.sh`、`viewer-release-full-coverage.sh`、`--quick` | 一键执行发布门禁并输出总结 | `running -> summarized` | 先 QA loop，再 full coverage | 发布负责人触发 |
+| 发行验收脚本 | `viewer-primary-web-entry-regression.sh`、`viewer-software-safe-step-regression.sh`、`viewer-software-safe-chat-regression.sh` | 一键执行当前 Web 门禁并输出总结 | `running -> summarized` | 先主入口，再 gameplay/blocker，再 prompt/chat | 发布负责人触发 |
 | software_safe prompt/chat 回归 | `scripts/viewer-software-safe-chat-regression.sh`、`chatHistory`、`lastPromptFeedback`、`lastChatFeedback` | 强制进入 `software_safe` 并执行 apply/rollback/chat smoke | `bootstrapped -> acked -> evidenced` | 先验 apply/rollback/chat ack，再看 `agent_spoke` 是否在时限内出现 | QA/Viewer owner 共审 |
 | 故障分级 | F1~F4 签名、处置动作、证据清单 | 识别错误并匹配处置流程 | `detected -> triaged -> archived` | 连接问题优先于可玩性判定 | 值守与维护者执行 |
 - Acceptance Criteria:
@@ -80,8 +79,9 @@
   - `testing-manual.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
   - `scripts/run-viewer-web.sh`
-  - `scripts/viewer-release-qa-loop.sh`
-  - `scripts/viewer-release-full-coverage.sh`
+  - `scripts/viewer-primary-web-entry-regression.sh`
+  - `scripts/viewer-software-safe-step-regression.sh`
+  - `scripts/viewer-software-safe-chat-regression.sh`
   - `agent-browser` CLI（通过 `PATH` 调用）
   - `oasis7_web_launcher` GUI Agent 接口（`/api/gui-agent/*`）
   - `window.__AW_TEST__`（`runSteps/setMode/focus/select/sendControl/getState`）

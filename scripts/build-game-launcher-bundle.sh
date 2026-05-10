@@ -273,30 +273,21 @@ replace_file "$LIVE_SRC" "$BUNDLE_BIN_DIR/$LIVE_BIN_NAME"
 replace_file "$CHAIN_SRC" "$BUNDLE_BIN_DIR/$CHAIN_BIN_NAME"
 replace_file "$CLIENT_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$CLIENT_LAUNCHER_BIN_NAME"
 
-# 2) Prepare viewer web dist (trunk build by default).
+# 2) Prepare viewer web dist (software_safe static bundle by default).
 if [[ -n "$WEB_DIST_SOURCE" ]]; then
   run rm -rf "$BUNDLE_WEB_DIR"
   run mkdir -p "$BUNDLE_WEB_DIR"
   run cp -R "$WEB_DIST_SOURCE/." "$BUNDLE_WEB_DIR/"
 else
-  ensure_command trunk
-  if [[ "$DRY_RUN" == "1" ]]; then
-    echo "+ rustup target list --installed | rg -x 'wasm32-unknown-unknown'"
-  else
-    if ! rustup target list --installed | rg -x "wasm32-unknown-unknown" >/dev/null 2>&1; then
-      echo "error: rust target wasm32-unknown-unknown is not installed" >&2
-      echo "hint: rustup target add wasm32-unknown-unknown" >&2
-      exit 1
-    fi
-  fi
-
+  ensure_command npm
   run rm -rf "$BUNDLE_WEB_DIR"
   run mkdir -p "$BUNDLE_WEB_DIR"
-  if [[ "$PROFILE" == "release" ]]; then
-    run bash -lc "cd '$ROOT_DIR/crates/oasis7_viewer' && env -u NO_COLOR trunk build --release --dist '$BUNDLE_WEB_DIR'"
-  else
-    run bash -lc "cd '$ROOT_DIR/crates/oasis7_viewer' && env -u NO_COLOR trunk build --dist '$BUNDLE_WEB_DIR'"
-  fi
+  run bash -lc "cd '$ROOT_DIR' && npm --prefix crates/oasis7_viewer run build:software-safe"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/index.html"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.html" "$BUNDLE_WEB_DIR/software_safe.html"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/software_safe.js"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" "$BUNDLE_WEB_DIR/software_safe_first_agent_claim_evidence.html"
+  run cp "$ROOT_DIR/crates/oasis7_viewer/favicon.ico" "$BUNDLE_WEB_DIR/favicon.ico"
 fi
 
 # 3) Prepare launcher web dist (prebuilt artifact preferred; trunk build fallback).

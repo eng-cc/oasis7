@@ -16,7 +16,7 @@
 
 ## Why Now
 - `scripts` 模块主项目还没有把高频脚本层级显式化；如果不先做这一步，后续参数契约和趋势统计会继续建立在漂移入口上。
-- 如果不做，`capture-viewer-frame.sh` 等诊断脚本仍可能被误当成常规链路主入口。
+- 如果不做，已删除的旧 3D 诊断脚本仍可能被误当成常规链路主入口。
 
 ## Inputs
 - 代码 / 文档入口：`doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`、`doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
@@ -41,7 +41,7 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|capture-viewer-frame.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.project.md doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`
+- 建议验证命令：`rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.project.md doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`
 
 ## Notes
 - 接收方确认范围：`已接收 scripts 主入口 / fallback 分层结果，后续 testing 文档优先引用主入口脚本`

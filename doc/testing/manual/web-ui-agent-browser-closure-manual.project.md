@@ -22,8 +22,9 @@
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`
 - `testing-manual.md`
 - `scripts/run-viewer-web.sh`
-- `scripts/viewer-release-qa-loop.sh`
-- `scripts/viewer-release-full-coverage.sh`
+- `scripts/viewer-primary-web-entry-regression.sh`
+- `scripts/viewer-software-safe-step-regression.sh`
+- `scripts/viewer-software-safe-chat-regression.sh`
 - `scripts/viewer-software-safe-chat-regression.sh`
 - `agent-browser` CLI（二进制命令；默认直接通过 `PATH` 调用）
 - `scripts/agent-browser-lib.sh`

@@ -13,7 +13,6 @@ members = [
     "crates/oasis7_wasm_sdk",
     "crates/oasis7_wasm_router",
     "crates/oasis7_wasm_store",
-    "crates/oasis7_viewer",
 ]
 resolver = "2"
 

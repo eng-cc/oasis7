@@ -9,9 +9,9 @@ source_signal: null
 source_refs:
   - doc/engineering/prd.md
   - doc/engineering/project.md
-  - crates/oasis7_viewer/src/egui_right_panel_player_guide/mod.rs
-  - crates/oasis7_viewer/src/app_bootstrap.rs
-  - crates/oasis7_viewer/src/web_test_api/mod.rs
+  - crates/oasis7_viewer/software_safe_src/main.jsx
+  - crates/oasis7_viewer/software_safe_src/legacy_core.js
+  - crates/oasis7_viewer/software_safe.js
 doc_refs:
   - doc/engineering/prd.md
   - doc/engineering/project.md

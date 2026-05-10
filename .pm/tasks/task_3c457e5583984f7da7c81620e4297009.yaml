@@ -1,0 +1,26 @@
+task_uid: task_3c457e5583984f7da7c81620e4297009
+title: "remove standard_3d mode and related surfaces"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-standard-3d-purge
+execution_log_path: .pm/tasks/task_3c457e5583984f7da7c81620e4297009.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/core/project.md
+  - doc/world-simulator/project.md
+doc_refs:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+related_prd:
+  - PRD-CORE-009
+  - PRD-WORLD_SIMULATOR-039
+  - PRD-WORLD_SIMULATOR-041
+acceptance:
+  - "remove standard_3d code paths, docs, and scripts from active repo surfaces"
+  - "keep software_safe as the only Web viewer mode"
+  - "update docs/tests/scripts so no active surface references render_mode=standard or standard_3d"
+handoff_to: []
+updated_at: 2026-05-10T15:17:59+08:00
+last_started_at: 2026-05-10T11:58:10+08:00
+last_closed_at: 2026-05-10T15:17:59+08:00

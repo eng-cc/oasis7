@@ -289,15 +289,15 @@
     - `cd crates/oasis7_client_launcher && env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist`
 - [x] release-web-semantic-gate-drift (PRD-TESTING-002/003) [test_tier_required]: 修复 `release-gate-web` 对 `software_safe` live-control 旧语义的误判，改为接受 `play/pause` 的 `queued` 契约，并以后续 `step -> completed_advanced` + 正向 world delta 作为 formal progress gate。 Trace: .pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.yaml
   - 产物文件:
-    - `scripts/viewer-release-qa-loop.sh`
+    - 历史已删除：`scripts/viewer-release-qa-loop.sh`
     - `doc/testing/prd.md`
     - `doc/testing/project.md`
     - `.pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.yaml`
     - `.pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `bash -n scripts/viewer-release-qa-loop.sh`
+    - 历史验收记录：`bash -n scripts/viewer-release-qa-loop.sh`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-    - `./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`
+    - 历史验收记录：`./scripts/viewer-release-qa-loop.sh --scenario llm_bootstrap --out-dir .tmp/release_gate_web_fix --headed`
 - [x] shared-network-ecs-triad-chain-status-metrics-rollout (PRD-TESTING-002/003) [test_tier_required]: 归档三节点链状态指标部署与采样证据，冻结 `8e605366` release/sha256、same-window triad snapshot、最近 `10` 分钟 traffic window，以及新增 `/v1/chain/status` `transactions` / `consensus.recent_finality_latency` / `pending_proposal` / `pending_consensus_actions` contract 的 live 三节点证据。 Trace: .pm/tasks/task_c2def8d52baa4fe5a1b1df64e19a6305.yaml
   - 产物文件:
     - `doc/testing/evidence/shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`

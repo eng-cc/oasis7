@@ -8,13 +8,12 @@
 - 责任角色: `qa_engineer`
 - 协作角色: `producer_system_designer`
 - 当前结论: `pass`
-- 目标: 按新的主入口 contract 重跑 `software_safe` formal Web gameplay 与 `standard` visual QA 证据，确认默认 `/` 与 `render_mode=auto` 是否落到 `software_safe`，并把 release/current-entry claim 继续绑定到真实采证结果。
+- 目标: 按新的主入口 contract 重跑 `software_safe` formal Web gameplay 证据，确认默认 `/` 与 `render_mode=auto` 是否落到 `software_safe`，并把 release/current-entry claim 继续绑定到真实采证结果。
 
 ## 最终结论
 - primary Web 入口 contract 已拿到新的 browser 证据:
   - 默认 `/` 会重定向到 `software_safe.html`
   - `?render_mode=auto` 会重定向到 `software_safe.html`
-  - 显式 `?render_mode=standard` 仍停留在标准 Viewer surface，能完成最小 visual QA 取样
 - `software_safe` 页面上的 canonical 文案已符合当前产品口径:
   - body 中可见 `Formal Gameplay Summary`
   - body 中可见 `Missing Action Handoff`
@@ -25,7 +24,6 @@
   - 对 `crates/oasis7/src/simulator/llm_agent/openai_payload.rs` 与 `crates/oasis7/src/simulator/llm_agent.rs` 补齐 stream/output-item 聚合后，再次复采已通过
 - 因此当前可确认的真实状态是:
   - `software_safe` 已是低保真但正式可玩的主要 Web 入口的正确目标 surface
-  - `standard` 继续是显式 visual QA surface
   - `software_safe` formal gameplay 已取得 release-grade PASS 证据；后续剩余工作主要是同步 README/current-entry/release claim 口径，而不是继续补主入口或 LLM provider 可达性
 
 ## 执行命令
@@ -44,17 +42,13 @@
   - Overall: `pass`
   - Formal gameplay entry (`/`): `software_safe`
   - Auto entry (`?render_mode=auto`): `software_safe`
-  - Explicit visual QA entry (`?render_mode=standard`): `standard`
 - 默认 `/` 最终 URL:
   - `http://127.0.0.1:4273/software_safe.html?...&render_mode=software_safe&software_safe_reason=primary_web_entry`
 - `render_mode=auto` 最终 URL:
   - `http://127.0.0.1:4273/software_safe.html?...&render_mode=software_safe&software_safe_reason=auto_primary_web_entry`
-- `render_mode=standard` 最终 URL:
-  - `http://127.0.0.1:4273/?...&render_mode=standard`
 - 对应截图:
   - `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000/default-entry.png`
   - `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000/auto-entry.png`
-  - `output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260407-235000/standard-entry.png`
 
 ### 2. software_safe formal gameplay BLOCKED
 - artifact: `output/playwright/viewer-software-safe-step/20260407-232845`

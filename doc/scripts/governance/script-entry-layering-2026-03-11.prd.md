@@ -6,11 +6,11 @@
 审计轮次: 4
 
 ## 1. Executive Summary
-- Problem Statement: `scripts/` 目录已经覆盖构建、测试、发布、站点、Viewer 和 runtime 诊断等多类脚本，但模块主文档尚未给出“哪些是主入口、哪些只在故障或受限环境下作为 fallback 使用”的一览。结果是开发者和 CI 很容易绕过稳定主入口，直接调用低层脚本，造成用法漂移。
-- Proposed Solution: 建立脚本分层专题，按 `开发主入口 / CI 发布 / 站点治理 / 长跑回归 / 受控 fallback` 五层给出脚本清单，并为高频入口显式标注推荐主入口与 fallback 入口。
+- Problem Statement: `scripts/` 目录已经覆盖构建、测试、发布、站点、Viewer 和 runtime 诊断等多类脚本，但模块主文档尚未给出“哪些是主入口、哪些是 software-safe Web 当前真值”的一览。结果是开发者和 CI 很容易绕过稳定主入口，直接调用失效或历史脚本，造成用法漂移。
+- Proposed Solution: 建立脚本分层专题，按 `开发主入口 / CI 发布 / 站点治理 / 长跑回归 / software-safe Web 回归` 五层给出脚本清单，并为高频入口显式标注推荐主入口。
 - Success Criteria:
   - SC-1: 至少覆盖当前根 `scripts/` 目录中的高频脚本，并按层归类。
-  - SC-2: `capture-viewer-frame.sh` 被明确标注为 fallback，不再与 Web-first 主链路并列。
+  - SC-2: Viewer Web 当前清单只保留 `run-viewer-web.sh` 与 `viewer-primary-web-entry-regression.sh` / `viewer-software-safe-*` 回归脚本。
   - SC-3: `doc/scripts/project.md` 能直接引用本专题完成 `TASK-SCRIPTS-002`。
   - SC-4: 任意常见需求（本地测试、发布门禁、站点巡检、Viewer 诊断）都能反查到一个主入口。
 
@@ -25,12 +25,12 @@
   - UI / runtime 故障复现失败：仅在常规 Web-first 链路不能复现时发生。
 - User Stories:
   - PRD-SCRIPTS-LAYER-001: As a 开发者, I want a script layering map, so that I can pick the canonical entry point first.
-  - PRD-SCRIPTS-LAYER-002: As a `qa_engineer`, I want fallback tools explicitly fenced, so that diagnosis scripts do not replace required test flows.
+  - PRD-SCRIPTS-LAYER-002: As a `qa_engineer`, I want outdated Viewer tools removed from the active entry map, so that deleted surfaces do not leak back into required test flows.
   - PRD-SCRIPTS-LAYER-003: As a CI maintainer, I want release/test/packaging scripts grouped by responsibility, so that pipeline ownership stays stable.
 - Critical User Flows:
   1. `识别需求类型 -> 查分层表 -> 先调用主入口脚本 -> 如失败再判断是否允许 fallback`
   2. `CI / 发布调用脚本 -> 依据脚本层级回溯 owner 与输入输出语义`
-  3. `常规链路无法复现图形问题 -> 读取 fallback 条件 -> 才允许调用受控诊断脚本`
+  3. `执行 Viewer Web 验证 -> 先跑主入口 contract -> 再跑 software-safe gameplay/prompt-chat 回归`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -39,9 +39,9 @@
 | fallback 围栏 | 触发条件、限制、产物要求 | 满足条件才允许调用 fallback | `normal -> fallback_allowed` | fallback 永远排在主入口之后 | 仅诊断/受限环境允许 |
 - Acceptance Criteria:
   - AC-1: 专题文档明确列出脚本分层和主入口/ fallback 规则。
-  - AC-2: 至少覆盖 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`capture-viewer-frame.sh`、`site-link-check.sh` 等高频脚本。
+  - AC-2: 至少覆盖 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`viewer-primary-web-entry-regression.sh`、`viewer-software-safe-step-regression.sh`、`site-link-check.sh` 等高频脚本。
   - AC-3: `doc/scripts/prd.index.md` 与 `doc/scripts/project.md` 回写本专题引用。
-  - AC-4: fallback 条件与 `AGENTS.md` 的 Web-first 口径一致。
+  - AC-4: Viewer Web 入口清单与 `AGENTS.md`、`testing-manual.md` 的 software-safe 单入口口径一致。
 - Non-Goals:
   - 不在本轮为每个脚本补全参数契约细节。
   - 不修改脚本实现或返回码语义。
@@ -59,13 +59,15 @@
   - `scripts/release-prepare-bundle.sh`
   - `scripts/build-game-launcher-bundle.sh`
   - `scripts/run-viewer-web.sh`
-  - `scripts/capture-viewer-frame.sh`
+  - `scripts/viewer-primary-web-entry-regression.sh`
+  - `scripts/viewer-software-safe-step-regression.sh`
+  - `scripts/viewer-software-safe-chat-regression.sh`
   - `scripts/site-link-check.sh`
   - `scripts/site-download-check.sh`
   - `AGENTS.md`
 - Edge Cases & Error Handling:
   - 一类需求存在多个候选脚本：文档必须只选一个主入口，其余列为辅助或 fallback。
-  - 图形链路不可用：可升级到 `capture-viewer-frame.sh`，但必须先说明 Web-first 不可复现。
+  - 历史手册仍引用已删脚本：必须回写活跃文档，不能把已删脚本继续登记为 fallback。
   - 历史脚本仍被旧文档引用：先在分层表中登记为“兼容入口 / 待收敛”，不擅自删除。
 - Non-Functional Requirements:
   - NFR-SL-1: 分层表必须可被 grep 快速检索。
@@ -87,11 +89,11 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-SCRIPTS-LAYER-001 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 抽样检查分层表与高频脚本覆盖 | 开发/CI 找入口效率 |
-| PRD-SCRIPTS-LAYER-002 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查 `capture-viewer-frame.sh` fallback 围栏表述 | Web-first 与诊断链路边界 |
+| PRD-SCRIPTS-LAYER-002 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查活跃入口不再引用已删 Viewer 工具 | software-safe Web 当前真值边界 |
 | PRD-SCRIPTS-LAYER-003 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查 project/index 互链与任务回写 | scripts 模块治理入口一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | `DEC-SL-001` | 先定义入口层级，再补参数契约 | 直接逐脚本补 help 文档 | 没有入口分层时，参数文档也会继续漂移。 |
-| `DEC-SL-002` | `capture-viewer-frame.sh` 只作为 fallback | 与 Web-first 链路并列推荐 | 已有工程约束明确 Web-first 优先。 |
+| `DEC-SL-002` | 已删 Viewer 工具不再出现在活跃入口表 | 继续把历史 3D/抓帧脚本登记为 fallback | 仓库内已无对应实现，继续保留只会制造假入口。 |
 | `DEC-SL-003` | 对高频需求只选一个主入口 | 保留多个同级主入口 | 可减少误用与维护分叉。 |

@@ -7,7 +7,7 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - crates/oasis7_viewer/src/viewer_automation/mod.rs
+  - crates/oasis7_viewer/software_safe.js
 doc_refs:
   - doc/world-simulator/project.md
 related_prd:

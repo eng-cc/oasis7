@@ -13,7 +13,7 @@
   - SC-1: `WorldModel`、`WorldInitConfig`、`WorldScenarioSpec` 不再包含 `power_storages` 字段。
   - SC-2: simulator 不再暴露 `RegisterPowerStorage` / `StorePower` / `DrawPower` 动作与 `PowerStorage*` 事件。
   - SC-3: viewer 不再存在 `SelectionKind::PowerStorage` 及其 3D 资产/实体/UI 详情链路。
-  - SC-4: 主题包校验、贴图巡检、视觉评审模板不再要求 `power_storage` 资源与截图项。
+- SC-4: 当时仍在维护的主题包校验、贴图巡检与视觉评审模板不再要求 `power_storage` 资源与截图项；当前这批 3D/视觉 QA 工具已从仓库移除。
   - SC-5: `env -u RUSTC_WRAPPER cargo check`（`oasis7`、`oasis7_viewer`）与 targeted tests 可通过或给出可追踪的已知阻塞说明。
 
 ## 2. User Experience & Functionality
@@ -24,8 +24,8 @@
 
 ### User Scenarios & Frequency
 - 开发者每日多次运行 `llm_bootstrap` / `power_bootstrap` 场景进行回归。
-- QA 在发布前执行主题包校验与 texture inspector。
-- UI 评审在每轮视觉基线时按卡片打分。
+- 历史上 QA 会在发布前执行主题包校验与 texture inspector。
+- 历史上 UI 评审会在每轮视觉基线时按卡片打分。
 
 ### User Stories
 - 作为 simulator 开发者，我希望系统中不再有储能设施动作和事件，以便电力语义与当前设计一致。
@@ -43,14 +43,14 @@
 | 场景与初始化 | 删除 `power_storages` | 解析未知字段时报错（`deny_unknown_fields`） | `spec_loaded -> init_built` | 设施冲突仅比较 `power_plants/factories/mines` | 本地开发配置 |
 | simulator 动作/事件 | 删除储能相关 action/event | 提交已删除动作在编译期不可构造 | `action_submitted -> event_emitted` | 电力仅按 plant owner 入账 | kernel 规则统一 |
 | viewer 实体与选中 | 删除 `SelectionKind::PowerStorage` | 不渲染储能 mesh/material，不提供选中详情 | `snapshot_received -> scene_synced` | entity count 不再含 storage | 只读观测 |
-| 脚本与评审模板 | 删除 `power_storage` inspect 项 | 参数校验拒绝 `power_storage` | `script_start -> artifacts_ready` | 截图集合固定为有效实体集合 | 本地脚本执行 |
+| 脚本与评审模板 | 删除 `power_storage` inspect 项 | 旧工具链存在时参数校验拒绝 `power_storage` | `script_start -> artifacts_ready` | 截图集合固定为有效实体集合 | 本地脚本执行 |
 
 ### Acceptance Criteria
 - AC-1: `rg "power_storages"` 在 `crates/oasis7/src/simulator` 中不再命中运行时代码（历史注释/日志除外）。
 - AC-2: `rg "SelectionKind::PowerStorage|power_storage_entities"` 在 `crates/oasis7_viewer/src` 中不再命中。
 - AC-3: `power_bootstrap.json` 不包含 `power_storages` 字段并可被场景解析。
-- AC-4: `scripts/validate-viewer-theme-pack.py`、`scripts/viewer-texture-inspector*.sh` 不再声明 `power_storage` inspect 维度。
-- AC-5: 视觉评审模板与首张评审卡删除 storage 三张截图项，保持总项与实体集合一致。
+- AC-4: 历史上的 `scripts/validate-viewer-theme-pack.py`、`scripts/viewer-texture-inspector*.sh` 已不再声明 `power_storage` inspect 维度；当前这些脚本已从仓库移除。
+- AC-5: 历史视觉评审模板与首张评审卡已删除 storage 截图项；当前视觉评审模板文件已从活跃文档树移除。
 
 ### Non-Goals
 - 不移除 `PowerPlant` 及辐射电厂建造链路。
@@ -70,25 +70,25 @@
   - 删除 storage 资产槽位、实体 marker、selection kind、UI 文本、自动化目标、状态抓取字段。
   - 删除 profile/env 对 storage mesh/material/texture 的配置入口。
 - Scripts/Docs:
-  - 删除 texture inspector / theme pack / release baseline 中 storage 选项与预设。
-  - 更新视觉评审模板与 UI 评审卡示例。
+  - 在旧 3D/视觉 QA 工具仍存在时，删除 texture inspector / theme pack / release baseline 中 storage 选项与预设。
+  - 更新当时仍存在的视觉评审模板与 UI 评审卡示例；当前这些 3D/视觉 QA 文档已整体退场。
 
 ### Integration Points
 - `crates/oasis7/src/simulator/*`
 - `crates/oasis7_viewer/src/*`
-- `scripts/validate-viewer-theme-pack.py`
-- `scripts/viewer-texture-inspector*.sh`
-- `doc/world-simulator/prd/acceptance/visual-review-score-card.md`
+- 历史上的 `scripts/validate-viewer-theme-pack.py`
+- 历史上的 `scripts/viewer-texture-inspector*.sh`
+- 历史上的 `historical removed standard_3d viewer doc set: visual-review-score-card`
 - `doc/ui_review_result/*.md`
 
 ### Edge Cases & Error Handling
 - 旧场景 JSON 若仍含 `power_storages`，应在解析阶段直接失败并提示未知字段。
 - 回放历史事件若包含旧储能事件，按“当前版本不兼容旧储能回放”处理并记录拒绝原因。
-- 自动化脚本收到 `--inspect power_storage` 时返回明确错误并给出支持列表。
+- 历史自动化脚本收到 `--inspect power_storage` 时返回明确错误并给出支持列表。
 
 ### Non-Functional Requirements
 - NFR-1: 删除后 `cargo check -p oasis7` 与 `cargo check -p oasis7_viewer` 不得新增 unrelated 警告爆炸。
-- NFR-2: viewer 自动化与 texture inspector 必须保持 `test_tier_required` 可运行路径。
+- NFR-2: 本任务完成当时，viewer 自动化与 texture inspector 的定向回归需保持可验证；当前 texture inspector 已从仓库移除。
 - NFR-3: 文档树中所有活跃 PRD/手册不再声明 storage 为必检实体。
 
 ### Security & Privacy
@@ -111,7 +111,7 @@
 - PSR-001（M1）-> 文档建档/索引接入 -> 文档审查（`test_tier_required`）。
 - PSR-002（M2）-> simulator 删除与回归 -> `env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required`（允许记录既有 unrelated 失败）。
 - PSR-003（M3）-> viewer 删除与回归 -> `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer --features test_tier_required`。
-- PSR-004（M4）-> 脚本/视觉模板更新 -> `python3 scripts/validate-viewer-theme-pack.py ...` + `./scripts/viewer-texture-inspector.sh ...` smoke。
+- PSR-004（M4）-> 脚本/视觉模板更新 -> 当时通过 `python3 scripts/validate-viewer-theme-pack.py ...` 与 `./scripts/viewer-texture-inspector.sh ...` 进行 smoke；当前相关脚本已从仓库移除。
 
 ### Decision Log
 - 选型: 采用“全链路硬删除”，而非继续保留空壳字段兼容。

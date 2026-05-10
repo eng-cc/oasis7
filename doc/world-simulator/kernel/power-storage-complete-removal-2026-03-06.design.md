@@ -17,8 +17,7 @@
 - `Action::{RegisterPowerStorage, StorePower, DrawPower}`
 - `PowerEvent::{PowerStorageRegistered, PowerStored, PowerDischarged}`
 - `SelectionKind::PowerStorage`
-- `scripts/validate-viewer-theme-pack.py`
-- `scripts/viewer-texture-inspector*.sh`
+- 历史上的旧 3D 主题/贴图校验脚本（现已删除）
 
 ## 4. 约束与边界
 - 旧场景若仍携带 `power_storages`，必须在解析阶段直接报错，不能静默忽略。

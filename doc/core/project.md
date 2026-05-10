@@ -172,14 +172,11 @@
     - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
     - `doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`
     - `doc/world-simulator/viewer/viewer-manual.md`
-    - `crates/oasis7_viewer/src/app_bootstrap.rs`
-    - `crates/oasis7_viewer/index.html`
     - `crates/oasis7_viewer/software_safe.html`
-    - `scripts/capture-viewer-frame.sh`
+    - 历史已删除：`crates/oasis7_viewer/src/app_bootstrap.rs`、`crates/oasis7_viewer/index.html`、旧 3D 调试脚本
   - 验收命令 (`test_tier_required`):
-    - `rg -n "^# oasis7|oasis7 Viewer|internal compatibility naming" doc/core/*.md doc/core/*.prd.md doc/core/*.design.md doc/core/*.project.md doc/world-simulator/viewer/viewer-manual.md crates/oasis7_viewer/src/app_bootstrap.rs crates/oasis7_viewer/index.html crates/oasis7_viewer/software_safe.html scripts/capture-viewer-frame.sh`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer primary_window_config_sets_title_and_resolution -- --nocapture`
-    - `bash -n scripts/capture-viewer-frame.sh`
+    - `rg -n "^# oasis7|oasis7 Viewer|internal compatibility naming" doc/core/*.md doc/core/*.prd.md doc/core/*.design.md doc/core/*.project.md doc/world-simulator/viewer/viewer-manual.md crates/oasis7_viewer/software_safe.html`
+    - 历史验收记录：native 入口标题与旧 3D 调试脚本语法曾在当时校验；相关文件现已删除
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-031 (PRD-CORE-008) [test_tier_required]: 收口 `engineering`、`scripts`、`world-runtime` 的历史专题标题品牌，将仍可读的治理/运行时专题统一切到 `oasis7`，同时保留内部实现命名不变。
@@ -261,10 +258,10 @@
     - `doc/core/project.md`
     - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+    - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
     - `.pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md historical removed standard_3d viewer doc set: viewer-3d-pause-user-interaction-hold-2026-04-01.prd`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-052 (PRD-CORE-009) [test_tier_required]: 将 `agent_direct_connect/provider_loopback_http` 从用户主配置模型降为兼容 alias，把 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，并同步回写 core/world-simulator/testing 文档与 launcher/client launcher 透传口径。
@@ -330,7 +327,7 @@
 - 当前状态: active
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 最新完成: `TASK-CORE-053`（已将 `software_safe` 重写为主要正式 Web 入口，将 `standard_3d` 收口为 visual QA 模式，并保留 `pure_api` 的一等公民 no-UI 角色。）
+- 最新完成: `TASK-CORE-053`（已将 `software_safe` 重写为主要正式 Web 入口，并保留 `pure_api` 的一等公民 no-UI 角色。）
 - 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
 - 最新完成: `TASK-CORE-055`（已将活跃结构层的旧 provider branding 继续收口到 `provider_loopback_http` / `oasis7_provider_*` / `oasis7_provider_agent`，退役 alias 不再作为当前 operator-facing 真值。）
 - 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
@@ -350,7 +347,7 @@
 - 最新完成: `TASK-CORE-025`（已清理 core 主项目中的串位产物块，恢复任务区结构一致性）。
 - 最新完成: `TASK-CORE-026`（已同步 core 模块目录索引并补齐活跃专题入口）。
 - 最新完成: `TASK-CORE-027`（已清理工程总入口兼容跳转重复条目）。
-- 最新完成: `TASK-CORE-028`（已冻结 `standard_3d / software_safe / pure_api` 三模式总契约，并明确 mode / execution lane 分层口径）。
+- 最新完成: `TASK-CORE-028`（已冻结 `software_safe / pure_api` 双模式总契约，并明确 mode / execution lane 分层口径。）
 - 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，收口三模式与 execution lane 的跨模块口径）。
 - 最新完成: `TASK-CORE-030`（已完成 core / viewer 活跃入口与实际窗口标题的 `oasis7` 品牌收口）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts`、`world-runtime` 的活跃专题品牌收口）。

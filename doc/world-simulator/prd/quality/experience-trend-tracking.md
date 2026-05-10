@@ -19,7 +19,7 @@
 
 | 维度 | 指标 | 目标/阈值 | 数据来源 |
 | --- | --- | --- | --- |
-| 启动可用性 | `web_launch_success_rate` | 最近 7 次 >= 99% | `viewer-release-qa-loop` 摘要 |
+| 启动可用性 | `web_launch_success_rate` | 最近 7 次 >= 99% | `viewer-primary-web-entry-regression` 摘要 |
 | 闭环稳定性 | `web_console_error_count` | 每次 S6 必须为 0 | `output/playwright/viewer/console.log` |
 | 交互有效性 | `semantic_step_pass_rate` | 最近 7 次 >= 95% | `output/playwright/viewer/release-qa-summary-*.md` |
 | LLM 稳定性 | `llm_metric_gate_pass_rate` | 最近 7 次 >= 95% | `.tmp/llm_stress/*/summary.txt` |
@@ -33,7 +33,8 @@
 
 ## 采集命令基线
 - Web-first（S6）：
-  - `./scripts/viewer-release-qa-loop.sh`
+  - `./scripts/viewer-primary-web-entry-regression.sh`
+  - `./scripts/viewer-software-safe-step-regression.sh`
 - LLM（S8）：
   - `./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --release-gate --release-gate-profile hybrid`
 

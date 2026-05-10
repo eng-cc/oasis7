@@ -40,7 +40,7 @@
 ## 依赖（增量）
 - `crates/oasis7_viewer/assets/fonts/ms-yahei.ttf`
 - `crates/oasis7_viewer/src/main.rs`
-- `./scripts/capture-viewer-frame.sh`
+- `software_safe` Web 手册与站点镜像
 
 ## 状态（增量）
 - 当前阶段：I18N12 完成（中文字体渲染问题已修复）

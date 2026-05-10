@@ -8,8 +8,8 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/world-simulator/project.md
-  - crates/oasis7_viewer/src/viewer_render_profile.rs
-  - crates/oasis7_viewer/src/scene_helpers_entities.rs
+  - crates/oasis7_viewer/software_safe_src/main.jsx
+  - crates/oasis7_viewer/software_safe_src/legacy_core.js
 doc_refs: []
 related_prd:
   - PRD-WORLD_SIMULATOR-002
