@@ -221,7 +221,7 @@
   - 下午 1 次
   - 晚间 1 次
 - 回复目标：
-  - 优先回答 `standard_3d / software_safe / pure_api` 的边界问题
+  - 优先回答 `software_safe / pure_api` 的边界问题
   - 把“同一世界，不同 proof boundary”说清楚
 - 记录重点：
   - 哪个 surface 最引发兴趣

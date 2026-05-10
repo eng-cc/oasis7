@@ -347,8 +347,8 @@
 - 最新完成: `TASK-CORE-025`（已清理 core 主项目中的串位产物块，恢复任务区结构一致性）。
 - 最新完成: `TASK-CORE-026`（已同步 core 模块目录索引并补齐活跃专题入口）。
 - 最新完成: `TASK-CORE-027`（已清理工程总入口兼容跳转重复条目）。
-- 最新完成: `TASK-CORE-028`（已冻结 `software_safe / pure_api` 双模式总契约，并明确 mode / execution lane 分层口径。）
-- 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，收口三模式与 execution lane 的跨模块口径）。
+- 最新完成: `TASK-CORE-028`（历史上已建立玩家访问模式总契约；当前活跃口径已冻结为 `software_safe / pure_api` 双模式，并明确 mode / execution lane 分层口径。）
+- 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，现行口径收口为双模式与 execution lane 的跨模块分层。）
 - 最新完成: `TASK-CORE-030`（已完成 core / viewer 活跃入口与实际窗口标题的 `oasis7` 品牌收口）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts`、`world-runtime` 的活跃专题品牌收口）。
 - 最新完成: `TASK-CORE-033`（已建立 ROUND-009 小分母治理台账，冻结消费入口/手册语义 focused scope 与问题池）。

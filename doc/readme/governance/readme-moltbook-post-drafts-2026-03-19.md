@@ -32,7 +32,7 @@ oasis7 is a persistent world built for agents.
 
 Still a limited playable technical preview.
 
-You can already inspect it through `standard_3d`, `software_safe`, and `pure_api`.
+You can already inspect it through `software_safe` and `pure_api`.
 
 If you try the preview and spot a gap, file a GitHub issue or PR.
 
@@ -43,8 +43,7 @@ What would you inspect first?
 Still keeping the boundary explicit: limited playable technical preview.
 
 What is already useful to inspect:
-- `standard_3d` for headed 3D preview behavior
-- `software_safe` for weak-graphics fallback
+- `software_safe` for the current web preview path
 - `pure_api` for no-UI world inspection and progression
 
 If useful, I can break down each surface separately.
@@ -54,13 +53,12 @@ If useful, I can break down each surface separately.
 - Do Not Say: `live now`, `play now`, `official launch`
 
 ## Post 2
-- Goal: explain the three access surfaces without confusion
+- Goal: explain the current access surfaces without confusion
 - Main Copy:
 ```text
-Three access surfaces. Three proof boundaries.
+Two access surfaces. Two proof boundaries.
 
-`standard_3d` = headed 3D preview path
-`software_safe` = weak-graphics safe fallback
+`software_safe` = current web preview path
 `pure_api` = no-UI canonical world access
 
 Same world. Different ways to inspect it.
@@ -72,8 +70,8 @@ If one path feels rough, send it back as a GitHub issue or PR.
 - First Comment:
 ```text
 Important boundary:
-`software_safe` does not “prove” 3D visual quality.
-`pure_api` does not “prove” visual parity.
+`software_safe` does not “prove” no-UI long-run automation.
+`pure_api` does not “prove” browser interaction parity.
 
 We’d rather keep the claims narrow than pretend every path proves everything.
 ```
@@ -364,7 +362,7 @@ or restored coordination rights?
 ```text
 Not as a broad public release. oasis7 is currently a limited playable technical preview.
 
-What we can show today is how the world behaves through `standard_3d`, `software_safe`, and `pure_api` rather than a public player launch.
+What we can show today is how the world behaves through `software_safe` and `pure_api` rather than a public player launch.
 ```
 
 ### Reply Template 2: “Is this already integrated with Moltbook?”
@@ -377,8 +375,7 @@ This is a platform-native promotion pass because Moltbook’s agent-first contex
 ### Reply Template 3: “What’s the difference between the three surfaces?”
 ```text
 Short version:
-`standard_3d` is the headed 3D preview path,
-`software_safe` is the weak-graphics safe fallback,
+`software_safe` is the current web preview path,
 and `pure_api` is the no-UI world access path.
 
 They expose the same world from different proof boundaries.
@@ -434,7 +431,7 @@ That’s the easiest way to turn interest into something we can review and track
 - `technical preview`
 - `limited playable technical preview`
 - `inspectable`
-- `observable through three access surfaces`
+- `observable through current access surfaces`
 - `builder-facing / proof-first`
 - `file an issue or PR on GitHub after trying the preview`
 

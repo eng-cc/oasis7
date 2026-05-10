@@ -159,7 +159,7 @@
 - 最新完成: `TASK-SITE-016`（已完成 `doc/site/github-pages/**` 历史专题首行标题的 title-only cleanup，旧 `oasis7*` 公开标题已统一切到 `oasis7*`）。
 - 最新完成: `TASK-SITE-011`（site 模块 README 目录索引同步）。
 - 最新完成: `TASK-SITE-012`（site 模块 completed 状态摘要补齐）。
-- 最新完成: `TASK-SITE-013`（中英首页已对齐三模式技术预览访问面口径，消除旧“运行模式/LLM 默认模式”歧义）。
+- 最新完成: `TASK-SITE-013`（中英首页已对齐当前双模式技术预览访问面口径，消除旧“运行模式/LLM 默认模式”歧义；现行公开访问面只保留 `software_safe / pure_api`。）
 - 最新完成: `TASK-SITE-014`（site manual sync gate 已追平 `test_api=1` viewer 命令基线，解除 Pages 假失败）。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-002 进展: manual 子簇主从化已完成（`site-manual-static-docs` 主入口，`viewer-manual-content-migration-2026-02-15` 增量维护）。

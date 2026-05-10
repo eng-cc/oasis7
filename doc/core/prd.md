@@ -241,7 +241,7 @@
 | PRD-CORE-006 | TASK-CORE-022 | `test_tier_required` | 正式版本候选 go/no-go 记录、风险附注与角色交接抽样核验 | 版本候选正式裁决一致性 |
 | PRD-CORE-007 | TASK-CORE-023 | `test_tier_required` | `doc/README.md` 含根 README / site 阅读入口 | 全局导航准确性 |
 | PRD-CORE-008 | TASK-CORE-023 | `test_tier_required` | 更新时间与新阅读顺序存在 | 公开口径同步性 |
-| PRD-CORE-009 | TASK-CORE-028/049/050/051/052/053/055 | `test_tier_required` | 三模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `software_safe` 主 Web 入口定位、`pure_api` LLM-required/first-class no-UI 定位、provider-backed mode/lane 分层、结构化 provider taxonomy 收口与 `provider_loopback_http` / provider workspace 命名清理 | 项目级模式 taxonomy、claim 边界与 formal gameplay 分工一致性 |
+| PRD-CORE-009 | TASK-CORE-028/049/050/051/052/053/055 | `test_tier_required` | 玩家访问模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `software_safe` 主 Web 入口定位、`pure_api` LLM-required/first-class no-UI 定位、provider-backed mode/lane 分层、结构化 provider taxonomy 收口与 `provider_loopback_http` / provider workspace 命名清理 | 项目级模式 taxonomy、claim 边界与 formal gameplay 分工一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

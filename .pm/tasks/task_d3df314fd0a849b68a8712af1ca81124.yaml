@@ -1,0 +1,27 @@
+task_uid: task_d3df314fd0a849b68a8712af1ca81124
+title: "purge remaining standard_3d active documentation references"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-standard-3d-doc-residual-purge
+execution_log_path: .pm/tasks/task_d3df314fd0a849b68a8712af1ca81124.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+  - testing-manual.md
+  - doc/world-simulator/prd.md
+  - doc/site/prd.md
+  - doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md
+doc_refs: []
+related_prd:
+  - PRD-CORE-009
+  - PRD-WORLD_SIMULATOR-039
+  - PRD-WORLD_SIMULATOR-041
+acceptance:
+  - "Active docs no longer describe standard_3d as a current player access mode or public surface"
+  - "Historical audit and archival records remain intact when they explicitly describe removed history"
+  - "Published site manual pages align with the post-purge viewer documentation truth"
+handoff_to: []
+updated_at: 2026-05-10T23:58:08+08:00
+last_started_at: 2026-05-10T23:36:08+08:00
+last_closed_at: 2026-05-10T23:58:08+08:00
