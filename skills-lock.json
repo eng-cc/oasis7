@@ -6,6 +6,12 @@
       "sourceType": "github",
       "computedHash": "012ed09d491de22ef3d2697e7f268597353711b8c17d72ce013c4a6e396df970"
     },
+    "gpt-image-2": {
+      "source": "agentspace-so/agent-skills",
+      "sourceType": "github",
+      "skillPath": "gpt-image-2/SKILL.md",
+      "computedHash": "4e49c56fc639ba8273f6cc30e011bc2c1f26c2667a1c6e57641679a78a31c987"
+    },
     "humanizer-zh": {
       "source": "op7418/humanizer-zh",
       "sourceType": "github",
