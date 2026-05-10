@@ -359,18 +359,18 @@
 | `doc/scripts/precommit/precommit-remediation-playbook.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/scripts/precommit/precommit-remediation-playbook.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/scripts/project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/capture-viewer-frame.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/capture-viewer-frame.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: capture-viewer-frame.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: capture-viewer-frame.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/site/README.md` | `readme` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 导航/索引文档，未发现越权承载需求/设计/项目权威内容 |
@@ -685,7 +685,7 @@
 | `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/m4/material-multi-ledger-logistics.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/prd/acceptance/unified-checklist.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
-| `doc/world-simulator/prd/acceptance/visual-review-score-card.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
+| `historical removed standard_3d viewer doc set: visual-review-score-card` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/world-simulator/prd/launcher/blockchain-transfer.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/world-simulator/prd/quality/experience-trend-tracking.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
@@ -712,28 +712,28 @@
 | `doc/world-simulator/scenario/scenario-seed-locations.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/scenario/world-initialization.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/scenario/world-initialization.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-3d-commercial-polish.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-3d-commercial-polish.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-3d-polish-performance.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-3d-polish-performance.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-agent-module-rendering.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-agent-module-rendering.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-auto-focus-capture.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-auto-select-capture.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-auto-select-capture.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-bevy-web-runtime.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-bevy-web-runtime.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-auto-select-capture.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-auto-select-capture.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
@@ -754,22 +754,22 @@
 | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
@@ -782,8 +782,8 @@
 | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-copyable-text.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-dual-view-2d-3d.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
@@ -814,8 +814,8 @@
 | `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-i18n.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-i18n.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-industrial-visual-closure.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-industrial-visual-closure.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-live-disable-seek-p2p-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
@@ -838,10 +838,10 @@
 | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-location-depletion-visualization.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-location-depletion-visualization.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-manual.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-minimal-system.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
@@ -849,45 +849,45 @@
 | `doc/world-simulator/viewer/viewer-module-visual-entities.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-observability-visual-optimization.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-observability-visual-optimization.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.stress-report.template.md` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
+| `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.stress-report.template` | `legacy_misc` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | 补充文档/台账类，未发现本轮关注的职责边界高信号问题 |
 | `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-overview-map-zoom.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-release-full-coverage-gate.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-right-panel-module-visibility.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-selection-details.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-selection-details.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-texture-inspector.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-texture-inspector.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visual-upgrade.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visual-upgrade.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visualization-3d.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visualization-3d.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visualization.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-visualization.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-wasd-camera-navigation.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-wasd-camera-navigation.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-texture-inspector.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-texture-inspector.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visual-upgrade.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visual-upgrade.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visualization-3d.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visualization-3d.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visualization.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-visualization.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-web-closure-testing-policy.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-playability-unblock-2026-02-26.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
@@ -898,8 +898,8 @@
 | `doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
-| `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
-| `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.prd` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
+| `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.project` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |
 | `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md` | `project` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | Project 执行闭环边界复核通过 |
 | `doc/world-simulator.prd.md` | `prd` | `pass` | `none` | `keep` | `n/a` | `n/a` | `producer_system_designer` | `done` | PRD 目标态边界复核通过 |

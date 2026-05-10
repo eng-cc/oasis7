@@ -32,7 +32,7 @@
 - Critical User Flows:
   1. Flow-REVIEW-001: `启动 oasis7_game_launcher -> ready 探针通过 -> Web 主页可访问 -> Viewer 状态可读`
   2. Flow-REVIEW-002: `执行 agent-browser 语义动作 -> 采集 snapshot/console/screenshot/state -> 形成闭环证据`
-  3. Flow-REVIEW-003: `执行 run-game-test/viewer-release-qa-loop -> 验证迁移后脚本参数与产物路径`
+  3. Flow-REVIEW-003: `执行 run-game-test/历史 viewer-release-qa-loop -> 验证迁移后脚本参数与产物路径`
   4. Flow-REVIEW-004: `执行 longrun 旧入口脚本 -> 命中阻断文案 -> 输出迁移方向`
   5. Flow-REVIEW-005: `汇总结果 -> 给出可用性 verdict（pass/conditional/fail）`
 - Functional Specification Matrix:
@@ -40,7 +40,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 启动器基础可用性 | `--scenario`、`--live-bind`、`--web-bind`、ready 日志 | 启动并检查端口与主页可达 | `booting -> ready/failed` | 先进程存活，再 ready，再页面 | 执行者可运行 |
 | Web 闭环验收 | agent-browser `snapshot/eval/console/screenshot` | 以语义动作操作 Viewer 并采样 | `sampling -> evidenced` | 至少包含 screenshot + state + console | 执行者产出，发布者审阅 |
-| 脚本迁移验证 | `run-game-test.sh`、`viewer-release-qa-loop.sh` | 运行标准入口并确认行为一致 | `legacy-migrated -> verified` | 先 smoke 再 QA loop | 脚本维护者可复核 |
+| 脚本迁移验证 | `run-game-test.sh`、历史 `viewer-release-qa-loop.sh` | 运行标准入口并确认行为一致 | `legacy-migrated -> verified` | 先 smoke 再 QA loop | 脚本维护者可复核 |
 | 阻断路径验证 | `s10-five-node-game-soak.sh`、`p2p-longrun-soak.sh` | 触发旧路径失败并检查提示 | `legacy-call -> blocked-with-guidance` | fail-fast 优先于后续步骤 | 维护者定义文案 |
 | 结论分级 | verdict、失败签名、影响范围 | 输出 pass/conditional/fail 与后续动作 | `raw-results -> triaged -> closed` | 先高风险失败，再中低风险 | 发布负责人确认 |
 - Acceptance Criteria:
@@ -55,7 +55,7 @@
   - 不在本任务中改写 testing 分层模型本身。
 
 ## 3. AI System Requirements (If Applicable)
-- Tool Requirements: `agent-browser` CLI 用于真实浏览器操作；仓库脚本 `run-game-test.sh`、`viewer-release-qa-loop.sh`、`s10-five-node-game-soak.sh`、`p2p-longrun-soak.sh`。
+- Tool Requirements: `agent-browser` CLI 用于真实浏览器操作；仓库脚本 `run-game-test.sh`、`s10-five-node-game-soak.sh`、`p2p-longrun-soak.sh`。历史审查曾使用 `viewer-release-qa-loop.sh`，该脚本现已删除。
 - Evaluation Strategy: 通过闭环动作成功率、脚本返回码、启动器就绪判定、故障签名可定位性评估审查质量。
 
 ## 4. Technical Specifications
@@ -65,7 +65,7 @@
   - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
   - `crates/oasis7_client_launcher/src/main.rs`
   - `scripts/run-game-test.sh`
-  - `scripts/viewer-release-qa-loop.sh`
+  - 历史已删除：`scripts/viewer-release-qa-loop.sh`
   - `scripts/s10-five-node-game-soak.sh`
   - `scripts/p2p-longrun-soak.sh`
   - `testing-manual.md`

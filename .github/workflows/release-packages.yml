@@ -60,7 +60,6 @@ jobs:
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
-          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           rustup default "${RUST_TOOLCHAIN}"
       - name: Install Linux system dependencies
         run: |
@@ -157,8 +156,6 @@ jobs:
         with:
           shared-key: release-packages-web-wasm-v2
           cache-on-failure: true
-      - name: Install trunk
-        run: env -u RUSTC_WRAPPER cargo install trunk --locked
       - name: Run web strict release gate
         run: |
           xvfb-run -a ./scripts/release-gate.sh \
@@ -270,14 +267,16 @@ jobs:
         with:
           shared-key: release-packages-web-wasm-v2
           cache-on-failure: true
-      - name: Install trunk
-        run: env -u RUSTC_WRAPPER cargo install trunk --locked
       - name: Build web dists
         run: |
           mkdir -p output/release/web-dist output/release/web-launcher-dist
           (
-            cd crates/oasis7_viewer
-            env -u NO_COLOR trunk build --release --dist ../../output/release/web-dist
+            npm --prefix crates/oasis7_viewer run build:software-safe
+            cp crates/oasis7_viewer/software_safe.html output/release/web-dist/index.html
+            cp crates/oasis7_viewer/software_safe.html output/release/web-dist/software_safe.html
+            cp crates/oasis7_viewer/software_safe.js output/release/web-dist/software_safe.js
+            cp crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html output/release/web-dist/software_safe_first_agent_claim_evidence.html
+            cp crates/oasis7_viewer/favicon.ico output/release/web-dist/favicon.ico
           )
           (
             cd crates/oasis7_client_launcher

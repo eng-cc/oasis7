@@ -17,7 +17,7 @@
 ## 范围
 - 覆盖当前 provider-backed Local Provider 组合的执行 lane 目标态、模式边界、统一动作语义、观测口径与验收标准。
 - 覆盖 headless 回归、玩家视角对照与 Viewer 旁路调试三类使用场景。
-- 覆盖与 `standard_3d` / `software_safe` / `pure_api` 三种玩家访问模式的衔接约束，但不重定义玩家访问模式 taxonomy。
+- 覆盖与 `software_safe` / `pure_api` 两种现行玩家访问模式的衔接约束，但不重定义玩家访问模式 taxonomy。
 - 不覆盖本轮具体 runtime/adapter/viewer 实现细节与逐行代码方案。
 
 ## 接口 / 数据
@@ -54,7 +54,7 @@
   - 制作人体验验收 / 玩家感知评估：使用 `player_parity`。
   - 线上事故复盘 / 本地调试 / 演示：按需打开 `debug_viewer` 旁路观战。
   - 低配开发机 / 无 GPU 服务器：只运行 `headless_agent`，不要求图形界面。
-  - 若对外描述玩家入口，必须先标明当前对应的玩家访问模式（通常为 `software_safe` 或 `standard_3d`），再附加本专题 lane。
+  - 若对外描述玩家入口，必须先标明当前对应的玩家访问模式（通常为 `software_safe`），再附加本专题 lane。
 - User Stories:
   - PRD-WORLD_SIMULATOR-040: As a 玩家 / 制作人, I want provider-backed Local Provider agents to support both player-parity and headless execution lanes, so that we can separately judge “does it feel like playing” and “can it run stably at scale”.
   - PRD-WORLD_SIMULATOR-040A: As a `qa_engineer`, I want Local Provider gameplay regression to stay runnable without GUI dependencies, so that graphics environment failures do not block gameplay validation.

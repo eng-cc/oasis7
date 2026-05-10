@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - .github/workflows/release-packages.yml
   - scripts/release-gate.sh
-  - scripts/viewer-release-qa-loop.sh
+  - scripts/viewer-primary-web-entry-regression.sh
   - scripts/p2p-longrun-soak.sh
 doc_refs:
   - doc/testing/project.md

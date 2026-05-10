@@ -35,7 +35,7 @@
 
 ## 活跃补充文档
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`：下一轮跨模块优先级主入口，适合快速判断“接下来只做什么”。
-- `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`standard_3d / software_safe / pure_api` 与 execution lane 的正式 cross-module 契约。
+- `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`software_safe / pure_api` 与 execution lane 的正式 cross-module 契约。
 - `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md`：版本候选 readiness 正式入口。
 - `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`：版本候选 go/no-go 正式入口。
 - `doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md`：仓库 docs hub 与公共阅读路径同步入口。

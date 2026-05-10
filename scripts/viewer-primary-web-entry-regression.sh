@@ -12,7 +12,6 @@ Usage: ./scripts/viewer-primary-web-entry-regression.sh [options]
 Run a browser QA regression for the formal Web entry contract:
 - default browser entry (`/`) must land in `software_safe`
 - `render_mode=auto` must still land in `software_safe`
-- explicit `render_mode=standard` must stay on the standard viewer surface
 
 Options:
   --scenario <name>          oasis7_game_launcher scenario (default: llm_bootstrap)
@@ -31,8 +30,6 @@ Artifacts:
   <out-dir>/<run-id>/launcher.log
   <out-dir>/<run-id>/default_state.json
   <out-dir>/<run-id>/auto_state.json
-  <out-dir>/<run-id>/standard_initial_state.json
-  <out-dir>/<run-id>/standard_final_state.json
   <out-dir>/<run-id>/*.png
   <out-dir>/<run-id>/summary.json
   <out-dir>/<run-id>/summary.md
@@ -290,11 +287,8 @@ mkdir -p "$out_dir"
 launcher_log="$out_dir/launcher.log"
 default_state_path="$out_dir/default_state.json"
 auto_state_path="$out_dir/auto_state.json"
-standard_initial_state_path="$out_dir/standard_initial_state.json"
-standard_final_state_path="$out_dir/standard_final_state.json"
 default_body_path="$out_dir/default_body.txt"
 auto_body_path="$out_dir/auto_body.txt"
-standard_body_path="$out_dir/standard_body.txt"
 summary_json_path="$out_dir/summary.json"
 summary_md_path="$out_dir/summary.md"
 
@@ -324,7 +318,6 @@ cleanup() {
   fi
   ab_cmd "${run_id}-default" close >/dev/null 2>&1 || true
   ab_cmd "${run_id}-auto" close >/dev/null 2>&1 || true
-  ab_cmd "${run_id}-standard" close >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -341,11 +334,8 @@ wait_for_http "http://${viewer_host}:${viewer_port}/" 240 || { echo "error: view
 base_query="ws=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "ws://${web_bind}")&test_api=1"
 default_url="http://${viewer_host}:${viewer_port}/?${base_query}"
 auto_url="http://${viewer_host}:${viewer_port}/?${base_query}&render_mode=auto"
-standard_url="http://${viewer_host}:${viewer_port}/?${base_query}&render_mode=standard"
-
 default_session="${run_id}-default"
 auto_session="${run_id}-auto"
-standard_session="${run_id}-standard"
 
 ab_open "$default_session" "$headed" "$default_url" >/dev/null
 ab_cmd "$default_session" wait --load networkidle >/dev/null 2>&1 || true
@@ -375,25 +365,7 @@ auto_url_final=$(normalize_eval_token "$(ab_cmd "$auto_session" get url)")
 [[ "$(state_reason "$auto_state")" == "auto_primary_web_entry" ]] || { echo "error: auto route reason mismatch: $(state_reason "$auto_state")" >&2; exit 1; }
 [[ "$auto_url_final" == *"software_safe.html"* ]] || { echo "error: auto route did not redirect to software_safe.html" >&2; exit 1; }
 
-ab_open "$standard_session" "$headed" "$standard_url" >/dev/null
-ab_cmd "$standard_session" wait --load networkidle >/dev/null 2>&1 || true
-wait_for_api "$standard_session" 60000 || { echo "error: standard route missing __AW_TEST__" >&2; exit 1; }
-standard_initial_state=$(wait_for_connected "$standard_session" 30000) || { echo "error: standard route did not connect" >&2; exit 1; }
-json_to_file "$standard_initial_state" "$standard_initial_state_path"
-standard_url_final=$(normalize_eval_token "$(ab_cmd "$standard_session" get url)")
-ab_eval "$standard_session" 'window.__AW_TEST__?.runSteps?.("mode=3d;focus=first_location;zoom=0.85;select=first_agent;wait=0.3") ?? null' >/dev/null
-standard_final_state=$(wait_for_selected_kind "$standard_session" "agent" 10000) || { echo "error: standard route did not select an agent after runSteps" >&2; exit 1; }
-json_to_file "$standard_final_state" "$standard_final_state_path"
-ab_cmd "$standard_session" get text body >"$standard_body_path" || true
-ab_screenshot "$standard_session" "$out_dir/standard-entry.png" >/dev/null
-
-[[ "$(state_render_mode "$standard_initial_state")" == "standard" ]] || { echo "error: standard route did not stay in standard mode" >&2; exit 1; }
-[[ -z "$(state_reason "$standard_initial_state")" ]] || { echo "error: standard route unexpectedly reported softwareSafeReason=$(state_reason "$standard_initial_state")" >&2; exit 1; }
-[[ "$standard_url_final" != *"software_safe.html"* ]] || { echo "error: standard route redirected to software_safe.html" >&2; exit 1; }
-[[ -z "$(state_last_error "$standard_final_state")" ]] || { echo "error: standard route reported lastError=$(state_last_error "$standard_final_state")" >&2; exit 1; }
-assert_eval_true "$standard_session" 'Boolean(document.querySelector("canvas"))' 10000 || { echo "error: standard route never rendered a canvas" >&2; exit 1; }
-
-python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$standard_initial_state_path" "$standard_final_state_path" "$default_url_final" "$auto_url_final" "$standard_url_final" "$out_dir/default-entry.png" "$out_dir/auto-entry.png" "$out_dir/standard-entry.png"
+python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$default_url_final" "$auto_url_final" "$out_dir/default-entry.png" "$out_dir/auto-entry.png"
 import json
 import pathlib
 import sys
@@ -404,20 +376,14 @@ def load(path):
 summary = {
     "ok": True,
     "default_entry": {
-        "final_url": sys.argv[6],
+        "final_url": sys.argv[4],
         "state": load(sys.argv[2]),
-        "screenshot": sys.argv[9],
+        "screenshot": sys.argv[6],
     },
     "auto_entry": {
-        "final_url": sys.argv[7],
+        "final_url": sys.argv[5],
         "state": load(sys.argv[3]),
-        "screenshot": sys.argv[10],
-    },
-    "standard_entry": {
-        "final_url": sys.argv[8],
-        "initial_state": load(sys.argv[4]),
-        "final_state": load(sys.argv[5]),
-        "screenshot": sys.argv[11],
+        "screenshot": sys.argv[7],
     },
 }
 pathlib.Path(sys.argv[1]).write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -431,8 +397,6 @@ import sys
 summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 default_state = summary["default_entry"]["state"]
 auto_state = summary["auto_entry"]["state"]
-standard_initial = summary["standard_entry"]["initial_state"]
-standard_final = summary["standard_entry"]["final_state"]
 lines = [
     "# Viewer primary Web entry regression summary",
     "",
@@ -440,7 +404,6 @@ lines = [
     "- Overall: `pass`",
     "- Formal gameplay entry (`/`): `software_safe`",
     "- Auto entry (`?render_mode=auto`): `software_safe`",
-    "- Explicit visual QA entry (`?render_mode=standard`): `standard`",
     "",
     "## Default entry",
     f"- Final URL: `{summary['default_entry']['final_url']}`",
@@ -453,12 +416,6 @@ lines = [
     f"- Render mode: `{auto_state.get('renderMode')}`",
     f"- Entry reason: `{auto_state.get('softwareSafeReason')}`",
     f"- Screenshot: `{summary['auto_entry']['screenshot']}`",
-    "",
-    "## Standard visual QA entry",
-    f"- Final URL: `{summary['standard_entry']['final_url']}`",
-    f"- Initial render mode: `{standard_initial.get('renderMode')}`",
-    f"- Final selected kind: `{standard_final.get('selectedKind')}`",
-    f"- Screenshot: `{summary['standard_entry']['screenshot']}`",
 ]
 pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY

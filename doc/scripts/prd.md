@@ -36,7 +36,7 @@
   - SC-4: 脚本任务 100% 映射到 PRD-SCRIPTS-ID。
   - SC-5: scripts 治理专题标题统一使用 `oasis7` 品牌，不再在脚本治理入口中混用 `oasis7` 标题。
   - SC-6: `doc/scripts/precommit/**` 等活跃脚本手册中的当前 crate 命令、依赖说明与 CI 帮助文案必须统一使用 `oasis7*` 口径；旧品牌包名仅允许保留在历史记录或外部原文引用中。
-  - SC-7: `doc/scripts/viewer-tools/capture-viewer-frame.{prd,project}.md` 中当前 native fallback viewer 调试说明必须统一使用 `oasis7_viewer` / `OASIS7_VIEWER_*` 口径；旧品牌 viewer 包名与前缀仅允许保留在历史记录或外部原文引用中。
+  - SC-7: Viewer Web 相关脚本文档只允许围绕 `software_safe` 静态入口、freshness gate 与 browser automation 维护当前真值；已移除的 native fallback / 贴图质检 / 视觉基线工具不得继续作为活跃脚本入口保留。
   - SC-8: repo-owned provider real-play helper 文档与脚本（公开 `site/skills/oasis7.md` 以及 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh`）中的当前 cargo 运行命令与入口路径必须统一使用 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
   - SC-9: `run-game-test.sh`、`run-producer-playtest.sh` 与新的 worktree harness 主入口必须支持“每个 git worktree 一套独立端口、独立 bundle、独立日志 / 产物目录、独立浏览器 session”的隔离执行，不再默认复用全局端口与全局 bundle 目录。
   - SC-10: 仓库必须提供标准化 `git worktree` 创建入口，让每个新需求都能按统一命名、统一路径和统一失败语义落到独立 worktree，而不是依赖人工手写 `git worktree add`。
@@ -106,10 +106,10 @@
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
   - AC-2: scripts project 文档维护脚本治理任务。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 口径一致。
-  - AC-4: `capture-viewer-frame.sh` 被明确为 fallback 链路使用。
+  - AC-4: `run-viewer-web.sh`、`viewer-software-safe-step-regression.sh` 与相关 freshness/browser automation 脚本被明确为当前 Viewer Web 主链路。
   - AC-5: `doc/scripts/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧标题仅允许出现在正文历史上下文中。
   - AC-6: `doc/scripts/precommit/pre-commit.{prd,project}.md` 中当前 viewer wasm 编译门禁、依赖说明与 CI 帮助文案必须写为 `oasis7_viewer` / `cargo check -p oasis7_viewer`；旧品牌 viewer 包名仅允许保留在历史记录或外部原文引用中。
-  - AC-7: `doc/scripts/viewer-tools/capture-viewer-frame.{prd,project}.md` 中当前 native fallback viewer 调试说明必须写为 `oasis7_viewer` / `OASIS7_VIEWER_*`；旧品牌 viewer 包名与前缀仅允许保留在历史记录或外部原文引用中。
+  - AC-7: scripts 模块不得继续维护已删除的 `capture-viewer-frame`、texture inspector、theme preview 等 Viewer 3D/视觉 QA 工具专题。
   - AC-8: `site/skills/oasis7.md`、`scripts/setup-provider-oasis7-runtime.sh` 与 `scripts/provider-parity-p0.sh` 关联的当前 `cargo run -p` 命令和入口路径必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
   - AC-9: 新增 `scripts/worktree-harness.sh` 作为 worktree 级主入口，至少提供 `up/down/status/url/logs/smoke` 六个动作，并把当前 worktree 的运行状态写入稳定 `state.json`。
   - AC-10: `scripts/run-game-test.sh` 必须支持把 `run-id`、`output-dir`、`meta-file` 与 ready payload 交给上层 harness 注入，避免上层通过 grep stdout 猜测 URL/日志路径。

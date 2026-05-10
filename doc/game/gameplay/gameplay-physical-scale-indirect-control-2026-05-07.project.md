@@ -120,7 +120,7 @@
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - `doc/world-simulator/scenario/world-initialization.prd.md`
-- `doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
 - `testing-manual.md`
 

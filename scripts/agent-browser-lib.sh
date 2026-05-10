@@ -215,19 +215,15 @@ from pathlib import Path
 repo_root = Path(sys.argv[1]).resolve()
 scope = [
     "Cargo.lock",
-    "crates/oasis7_viewer/Cargo.toml",
-    "crates/oasis7_viewer/Trunk.toml",
-    "crates/oasis7_viewer/index.html",
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/software_safe.js",
+    "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/package.json",
     "crates/oasis7_viewer/package-lock.json",
     "crates/oasis7_viewer/vite.software-safe.config.mjs",
     "crates/oasis7_viewer/scripts",
     "crates/oasis7_viewer/software_safe_src",
     "crates/oasis7_viewer/favicon.ico",
-    "crates/oasis7_viewer/src",
-    "crates/oasis7_viewer/assets",
     "crates/oasis7_proto/Cargo.toml",
     "crates/oasis7_proto/src",
 ]
@@ -255,23 +251,29 @@ PY
     return 0
   fi
 
-  if ! command -v trunk >/dev/null 2>&1; then
+  if ! command -v npm >/dev/null 2>&1; then
     if [[ -f "$dist_index" ]]; then
-      echo "warning: trunk missing; falling back to committed viewer dist: $dist_dir" >&2
+      echo "warning: npm missing; falling back to committed viewer dist: $dist_dir" >&2
       printf '%s
 ' "$dist_dir"
       return 0
     fi
-    echo "error: missing required command: trunk" >&2
+    echo "error: missing required command: npm" >&2
     return 1
   fi
 
   mkdir -p "$rebuilt_dir"
-  echo "+ env -u NO_COLOR trunk build --dist $rebuilt_dir" >&2
+  echo "+ npm --prefix $repo_root/crates/oasis7_viewer run build:software-safe" >&2
   (
-    cd "$repo_root/crates/oasis7_viewer"
-    env -u NO_COLOR trunk build --dist "$rebuilt_dir"
+    cd "$repo_root"
+    npm --prefix crates/oasis7_viewer run build:software-safe
   ) >&2
+  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
+  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
+  cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
+  cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
+    "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
+  cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
   printf '%s
 ' "$rebuilt_dir"
 }

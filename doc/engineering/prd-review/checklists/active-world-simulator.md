@@ -121,28 +121,14 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-minimal-system.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-module-visual-entities.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-module-visual-entities.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-rendering-physical-accuracy.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-2d-visual-polish.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-3d-commercial-polish.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-3d-commercial-polish.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-3d-polish-performance.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-3d-polish-performance.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-module-rendering.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-module-rendering.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.prd | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.project | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: early 2D/3D clarity and rendering polish topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-quick-locate.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-agent-size-inspection.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-auto-focus-capture.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-auto-select-capture.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-auto-select-capture.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-bevy-web-runtime.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-bevy-web-runtime.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: capture automation and bevy-web runtime topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
@@ -163,22 +149,7 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: commercial release asset, material, texture, theme-pack topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
@@ -191,8 +162,7 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-copyable-text.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-copyable-text.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-dual-view-2d-3d.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: dual-view 2D/3D topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-egui-right-panel.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-egui-right-panel.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
@@ -223,8 +193,7 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-generic-focus-targets.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-i18n.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-i18n.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-industrial-visual-closure.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-industrial-visual-closure.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: industrial visual closure topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-live-disable-seek-p2p-2026-02-27.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
@@ -239,44 +208,23 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-location-depletion-visualization.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-location-depletion-visualization.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-location-fine-grained-rendering.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: location visualization and fine-grained rendering topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-observability-visual-optimization.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-observability-visual-optimization.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: observability visual optimization and open-world sandbox readiness topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-overview-map-zoom.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-release-full-coverage-gate.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-release-qa-iteration-loop.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-release-qa-iteration-loop.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: release coverage and release QA topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-right-panel-module-visibility.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-selection-details.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-selection-details.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-texture-inspector.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-texture-inspector.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visual-upgrade.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visual-upgrade.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-wasd-camera-navigation.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-wasd-camera-navigation.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-closure-testing-policy.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: texture inspector and visual upgrade topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
+- [x] 2026-05-10 00:00:00 CST | historical removed standard_3d viewer doc set: camera, web-build pruning, and old web-closure topics | 代码一致性: 标记为已移除 | 重复性: 不再适用 | 上下游对齐: 已改为历史说明 | 处理动作: `standard_3d` 清理后压缩为历史归档说明
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-playability-unblock-2026-02-26.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
@@ -287,11 +235,11 @@
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.prd | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.project | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
 - [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visualization-3d.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visualization-3d.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visualization.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
-- [x] 2026-03-04 00:18:15 CST | doc/world-simulator/viewer/viewer-visualization.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-visualization-3d.prd | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-visualization-3d.project | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-visualization.prd | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验
+- [x] 2026-03-04 00:18:15 CST | historical removed standard_3d viewer doc set: viewer-visualization.project | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验

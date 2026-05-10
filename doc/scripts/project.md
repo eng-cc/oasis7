@@ -11,7 +11,7 @@
     - `doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
     - `doc/scripts/governance/runtime-to-qa-task-scripts-002-entry-layering-2026-03-11.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|capture-viewer-frame.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.prd.md doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
+    - `rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.prd.md doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SCRIPTS-003 (PRD-SCRIPTS-002/003) [test_tier_required]: 补齐高频脚本参数契约与失败语义说明。
   - 产物文件:
@@ -48,7 +48,7 @@
     - `git diff --check`
 - [x] TASK-SCRIPTS-010 (PRD-SCRIPTS-003) [test_tier_required]: 收口 `doc/scripts/viewer-tools/capture-viewer-frame.{prd,project}.md` 中当前 native fallback viewer 调试说明的 crate 与环境变量命名，统一使用 `oasis7_viewer` / `OASIS7_VIEWER_*` 口径。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_viewer|OASIS7_VIEWER_" doc/scripts/viewer-tools/capture-viewer-frame.prd.md doc/scripts/viewer-tools/capture-viewer-frame.project.md`
+    - 历史验收记录：曾检查 `capture-viewer-frame` viewer-tools 专题中的 `oasis7_viewer` / `OASIS7_VIEWER_*` 口径；当前相关专题已从仓库移除。
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-011 (PRD-SCRIPTS-001) [test_tier_required]: 收口 repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径，统一使用 `oasis7` / `crates/oasis7*` 口径。
@@ -58,7 +58,7 @@
     - `git diff --check`
 - [x] TASK-SCRIPTS-012 (PRD-SCRIPTS-001/003) [test_tier_required]: 收口 `doc/scripts/viewer-tools/**` 活跃 texture-inspector 专题中遗漏的当前 viewer crate、环境变量与运行命令口径，统一到 `oasis7_viewer` / `OASIS7_VIEWER_*`。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_viewer|OASIS7_VIEWER_" doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd.md doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project.md doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.prd.md doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.project.md doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.prd.md doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.project.md doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.project.md`
+    - 历史验收记录：曾检查 texture-inspector viewer-tools 专题中的 `oasis7_viewer` / `OASIS7_VIEWER_*` 口径；当前相关专题已从仓库移除。
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SCRIPTS-013 (PRD-SCRIPTS-001/002) [test_tier_required]: 补齐 `doc/scripts/wasm/**` 活跃手册中遗漏的 builtin wasm artifact 当前路径口径，统一到 `crates/oasis7/...`。
@@ -415,15 +415,15 @@
 - 最新完成: `TASK-SCRIPTS-015`（新增标准化 task worktree bootstrap 入口，统一新需求的 branch/path 命名、脏源 worktree 围栏与机器可读摘要输出。）
 - 最新完成: `TASK-SCRIPTS-014`（新增 worktree-isolated harness 主入口，收口 `run-game-test.sh` / `run-producer-playtest.sh` 的 worktree 隔离契约，并同步 scripts/testing 文档。）
 - 最新完成: `TASK-SCRIPTS-013`（`doc/scripts/wasm/**` 活跃手册中遗漏的 builtin wasm artifact 当前路径已统一切到 `crates/oasis7/...`。）
-- 最新完成: `TASK-SCRIPTS-012`（texture-inspector 活跃专题中遗漏的 viewer crate、环境变量与运行命令口径已统一切到 `oasis7_viewer` / `OASIS7_VIEWER_*`。）
+- 最新完成: `TASK-SCRIPTS-012`（历史 texture-inspector 专题中的 viewer crate、环境变量与运行命令口径已完成收口；当前相关专题已从仓库移除。）
 - 最新完成: `TASK-SCRIPTS-011`（repo-owned provider real-play helper 文档与脚本中的当前 cargo 运行命令和入口路径已统一切到 `oasis7` / `crates/oasis7*` 当前口径。）
-- 最新完成: `TASK-SCRIPTS-010`（`capture-viewer-frame` 活跃 fallback 文档中的 viewer crate 与环境变量命名已统一切到 `oasis7_viewer` / `OASIS7_VIEWER_*` 当前口径）。
+- 最新完成: `TASK-SCRIPTS-010`（历史 `capture-viewer-frame` fallback 文档中的 viewer crate 与环境变量命名已完成收口；当前相关专题已从仓库移除。）
 - 最新完成: `TASK-SCRIPTS-009`（pre-commit 活跃文档中的 viewer wasm 编译门禁与依赖说明已统一切到 `oasis7_viewer` 当前口径）。
 - 最新完成: `TASK-SCRIPTS-006`（scripts 模块 README 入口索引同步）。
 - 最新完成: `TASK-SCRIPTS-007`（scripts 文件级索引表格格式修正）。
 - 最新完成: `TASK-SCRIPTS-008`（scripts 治理专题标题统一切到 `oasis7` 品牌）。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 模块进展补充（2026-03-11）: 已新增 scripts 分层专题，明确 `ci-tests.sh`、`release-gate.sh`、`run-viewer-web.sh` 等主入口，以及 `capture-viewer-frame.sh` 的 fallback 围栏。
+- 模块进展补充（2026-03-11）: 已新增 scripts 分层专题，明确 `ci-tests.sh`、`release-gate.sh`、`run-viewer-web.sh` 等主入口；旧 `capture-viewer-frame.sh` fallback 围栏已随仓库清退移除。
 - 模块进展补充（2026-03-11 / contracts）: 已新增高频脚本参数契约专题，冻结 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`site-link-check.sh` 的最小调用、默认值与失败语义。
 - 模块进展补充（2026-03-11 / trend）: 已新增 scripts 稳定性趋势专题与 baseline，建立主入口覆盖率、参数契约覆盖率、fallback 围栏覆盖率、治理修复时长四项指标。
 - 说明: 本文档仅维护 scripts 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。

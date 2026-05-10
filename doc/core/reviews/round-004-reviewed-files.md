@@ -298,18 +298,18 @@
 - `doc/scripts/precommit/pre-commit.project.md`
 - `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
 - `doc/scripts/precommit/precommit-remediation-playbook.project.md`
-- `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`
-- `doc/scripts/viewer-tools/capture-viewer-frame.project.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.prd.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.project.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.prd.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.project.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.prd.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.project.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.prd.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.project.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd.md`
-- `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project.md`
+- `historical removed viewer-tools doc set: capture-viewer-frame.prd`
+- `historical removed viewer-tools doc set: capture-viewer-frame.project`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.project`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.prd`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.project`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.prd`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.project`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd`
+- `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project`
 - `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
 - `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md`
 - `doc/site/README.md`
@@ -606,28 +606,28 @@
 - `doc/world-simulator/scenario/scenario-seed-locations.project.md`
 - `doc/world-simulator/scenario/world-initialization.prd.md`
 - `doc/world-simulator/scenario/world-initialization.project.md`
-- `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.prd.md`
-- `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.project.md`
+- `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.prd`
+- `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.project`
 - `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md`
 - `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md`
-- `doc/world-simulator/viewer/viewer-3d-commercial-polish.prd.md`
-- `doc/world-simulator/viewer/viewer-3d-commercial-polish.project.md`
-- `doc/world-simulator/viewer/viewer-3d-polish-performance.prd.md`
-- `doc/world-simulator/viewer/viewer-3d-polish-performance.project.md`
-- `doc/world-simulator/viewer/viewer-agent-module-rendering.prd.md`
-- `doc/world-simulator/viewer/viewer-agent-module-rendering.project.md`
+- `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.prd`
+- `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.project`
+- `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.prd`
+- `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.project`
+- `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.prd`
+- `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.project`
 - `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md`
 - `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md`
 - `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md`
 - `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md`
-- `doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd.md`
-- `doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.project.md`
-- `doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md`
-- `doc/world-simulator/viewer/viewer-auto-focus-capture.project.md`
-- `doc/world-simulator/viewer/viewer-auto-select-capture.prd.md`
-- `doc/world-simulator/viewer/viewer-auto-select-capture.project.md`
-- `doc/world-simulator/viewer/viewer-bevy-web-runtime.prd.md`
-- `doc/world-simulator/viewer/viewer-bevy-web-runtime.project.md`
+- `historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd`
+- `historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.project`
+- `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.prd`
+- `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.project`
+- `historical removed standard_3d viewer doc set: viewer-auto-select-capture.prd`
+- `historical removed standard_3d viewer doc set: viewer-auto-select-capture.project`
+- `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.prd`
+- `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.project`
 - `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md`
 - `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.project.md`
 - `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md`
@@ -648,22 +648,22 @@
 - `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md`
 - `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md`
 - `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.project.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd.md`
-- `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project.md`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.project`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd`
+- `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project`
 - `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md`
 - `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md`
 - `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md`
@@ -676,8 +676,8 @@
 - `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md`
 - `doc/world-simulator/viewer/viewer-copyable-text.prd.md`
 - `doc/world-simulator/viewer/viewer-copyable-text.project.md`
-- `doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md`
-- `doc/world-simulator/viewer/viewer-dual-view-2d-3d.project.md`
+- `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.prd`
+- `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.project`
 - `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md`
 - `doc/world-simulator/viewer/viewer-egui-right-panel.project.md`
 - `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md`
@@ -708,8 +708,8 @@
 - `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md`
 - `doc/world-simulator/viewer/viewer-i18n.prd.md`
 - `doc/world-simulator/viewer/viewer-i18n.project.md`
-- `doc/world-simulator/viewer/viewer-industrial-visual-closure.prd.md`
-- `doc/world-simulator/viewer/viewer-industrial-visual-closure.project.md`
+- `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.prd`
+- `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.project`
 - `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md`
 - `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md`
 - `doc/world-simulator/viewer/viewer-live-disable-seek-p2p-2026-02-27.prd.md`
@@ -732,10 +732,10 @@
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md`
 - `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md`
 - `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md`
-- `doc/world-simulator/viewer/viewer-location-depletion-visualization.prd.md`
-- `doc/world-simulator/viewer/viewer-location-depletion-visualization.project.md`
-- `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md`
-- `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.project.md`
+- `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.prd`
+- `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project`
+- `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.prd`
+- `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.project`
 - `doc/world-simulator/viewer/viewer-manual.md`
 - `doc/world-simulator/viewer/viewer-minimal-system.prd.md`
 - `doc/world-simulator/viewer/viewer-minimal-system.project.md`
@@ -743,45 +743,45 @@
 - `doc/world-simulator/viewer/viewer-module-visual-entities.project.md`
 - `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.prd.md`
 - `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md`
-- `doc/world-simulator/viewer/viewer-observability-visual-optimization.prd.md`
-- `doc/world-simulator/viewer/viewer-observability-visual-optimization.project.md`
-- `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.prd.md`
-- `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.project.md`
-- `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.stress-report.template.md`
+- `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.prd`
+- `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.project`
+- `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.prd`
+- `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.project`
+- `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.stress-report.template`
 - `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md`
 - `doc/world-simulator/viewer/viewer-overview-map-zoom.project.md`
 - `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.prd.md`
 - `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.project.md`
-- `doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md`
-- `doc/world-simulator/viewer/viewer-release-full-coverage-gate.project.md`
-- `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.prd.md`
-- `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.project.md`
-- `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md`
-- `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.project.md`
+- `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.prd`
+- `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.project`
+- `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.prd`
+- `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.project`
+- `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.prd`
+- `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.project`
 - `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md`
 - `doc/world-simulator/viewer/viewer-right-panel-module-visibility.project.md`
 - `doc/world-simulator/viewer/viewer-selection-details.prd.md`
 - `doc/world-simulator/viewer/viewer-selection-details.project.md`
 - `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.prd.md`
 - `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.project.md`
-- `doc/world-simulator/viewer/viewer-texture-inspector.prd.md`
-- `doc/world-simulator/viewer/viewer-texture-inspector.project.md`
-- `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.prd.md`
-- `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.project.md`
-- `doc/world-simulator/viewer/viewer-visual-upgrade.prd.md`
-- `doc/world-simulator/viewer/viewer-visual-upgrade.project.md`
-- `doc/world-simulator/viewer/viewer-visualization-3d.prd.md`
-- `doc/world-simulator/viewer/viewer-visualization-3d.project.md`
-- `doc/world-simulator/viewer/viewer-visualization.prd.md`
-- `doc/world-simulator/viewer/viewer-visualization.project.md`
-- `doc/world-simulator/viewer/viewer-wasd-camera-navigation.prd.md`
-- `doc/world-simulator/viewer/viewer-wasd-camera-navigation.project.md`
+- `historical removed standard_3d viewer doc set: viewer-texture-inspector.prd`
+- `historical removed standard_3d viewer doc set: viewer-texture-inspector.project`
+- `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.prd`
+- `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.project`
+- `historical removed standard_3d viewer doc set: viewer-visual-upgrade.prd`
+- `historical removed standard_3d viewer doc set: viewer-visual-upgrade.project`
+- `historical removed standard_3d viewer doc set: viewer-visualization-3d.prd`
+- `historical removed standard_3d viewer doc set: viewer-visualization-3d.project`
+- `historical removed standard_3d viewer doc set: viewer-visualization.prd`
+- `historical removed standard_3d viewer doc set: viewer-visualization.project`
+- `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.prd`
+- `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.project`
 - `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.prd.md`
 - `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md`
 - `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.prd.md`
 - `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.project.md`
-- `doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md`
-- `doc/world-simulator/viewer/viewer-web-closure-testing-policy.project.md`
+- `historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.prd`
+- `historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.project`
 - `doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.prd.md`
 - `doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.project.md`
 - `doc/world-simulator/viewer/viewer-web-playability-unblock-2026-02-26.prd.md`
@@ -792,7 +792,7 @@
 - `doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.project.md`
 - `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md`
 - `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.project.md`
-- `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.prd.md`
-- `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.project.md`
+- `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.prd`
+- `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.project`
 - `doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md`
 - `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md`

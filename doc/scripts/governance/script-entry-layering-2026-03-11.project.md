@@ -18,7 +18,7 @@
 | commit baseline / required 套件 | `scripts/ci-tests.sh` | `scripts/pre-commit.sh` | 无 | 日常本地提交默认走 `./scripts/ci-tests.sh commit`（由 `scripts/pre-commit.sh` 调用）；需要补跑较重 runtime/simulator shard 或进入 PR/CI required gate 时，再显式执行 `./scripts/ci-tests.sh required`。 |
 | 站点文档治理 | `scripts/doc-governance-check.sh` | `scripts/site-manual-sync-check.sh` | 无 | 先检查文档治理，再做站点专项。 |
 | 本地游戏验证 | `scripts/worktree-harness.sh` | `scripts/run-game-test.sh` | 无 | worktree harness 负责隔离端口、bundle、日志与浏览器 session；`run-game-test.sh` 降为底层 bootstrap。 |
-| Viewer Web 验证 | `scripts/run-viewer-web.sh` | `scripts/viewer-release-qa-loop.sh` | `scripts/capture-viewer-frame.sh` | Web-first 为默认链路；原生抓帧只在 Web 无法复现或 native 图形问题时使用。 |
+| Viewer Web 验证 | `scripts/run-viewer-web.sh` | `scripts/viewer-primary-web-entry-regression.sh` / `scripts/viewer-software-safe-step-regression.sh` / `scripts/viewer-software-safe-chat-regression.sh` | 无 | 当前仓库只保留 software-safe Web 链路。 |
 
 ### 2. 发布 / 打包主入口
 | 需求类型 | 推荐主入口 | 辅助入口 | fallback | 说明 |
@@ -40,12 +40,12 @@
 | 站点断链检查 | `scripts/site-link-check.sh` | `scripts/site-download-check.sh` | 无 | 下载校验作为断链后的专项补充。 |
 | 手册镜像同步 | `scripts/site-manual-sync-check.sh` | `scripts/doc-governance-check.sh` | 无 | 先检查镜像语义，再回总门禁。 |
 
-### 5. 受控 fallback / 专项诊断
-| 脚本 | 触发条件 | 不可替代的主入口 | 产物要求 |
+### 5. 当前 Viewer Web 回归
+| 脚本 | 触发条件 | 作用 | 产物要求 |
 | --- | --- | --- | --- |
-| `scripts/capture-viewer-frame.sh` | Web-first 链路无法复现，或 native 图形链路故障 | `scripts/run-viewer-web.sh` | 必须回写截图/帧文件与故障上下文 |
-| `scripts/viewer-texture-inspector.sh` | 仅在材质/纹理专项排障时使用 | `scripts/run-viewer-web.sh` / `scripts/viewer-release-qa-loop.sh` | 需附材质包与对比说明 |
-| `scripts/fix-precommit.sh` | precommit 失败后的修复辅助 | `scripts/pre-commit.sh` | 需先记录原失败签名 |
+| `scripts/viewer-primary-web-entry-regression.sh` | 核对 Web 主入口 contract | 校验 `/` 与 `render_mode=auto` 均进入 `software_safe` | 状态快照、截图、summary |
+| `scripts/viewer-software-safe-step-regression.sh` | 核对实时推进或 blocker | 校验连接、选中 Agent、实时推进或显式 blocker | state/summary/browser log |
+| `scripts/viewer-software-safe-chat-regression.sh` | 核对 prompt/chat/rollback | 校验 apply/rollback/chat ack 与消息流 | state/summary/browser log |
 
 ## 依赖
 - `scripts/`

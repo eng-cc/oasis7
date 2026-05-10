@@ -16,10 +16,8 @@ run_full=0
 run_oasis7_required_tests=0
 run_consensus_tests=0
 run_distfs_tests=0
-run_viewer_tests=0
 run_viewer_contract_tests=0
 run_viewer_wasm_check=0
-run_viewer_visual_baseline=0
 run_launcher_web_build=0
 
 usage() {
@@ -58,10 +56,8 @@ mark_full() {
   run_oasis7_required_tests=1
   run_consensus_tests=1
   run_distfs_tests=1
-  run_viewer_tests=1
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
-  run_viewer_visual_baseline=1
   run_launcher_web_build=1
   append_reason "$1"
 }
@@ -82,10 +78,8 @@ mark_distfs() {
 }
 
 mark_viewer() {
-  run_viewer_tests=1
   run_viewer_contract_tests=1
   run_viewer_wasm_check=1
-  run_viewer_visual_baseline=1
   append_reason "$1"
 }
 
@@ -160,8 +154,7 @@ classify_changed_path() {
     scripts/plan-rust-required-scope.sh|\
     scripts/pre-commit.sh|\
     scripts/doc-governance-check.sh|\
-    scripts/check-rust-file-size.sh|\
-    scripts/viewer-visual-baseline.sh)
+    scripts/check-rust-file-size.sh)
       mark_full "shared_required_gate:${path}"
       ;;
     crates/oasis7|crates/oasis7/*|crates/oasis7/**/*)
@@ -259,11 +252,9 @@ elif [[ \
   "$run_oasis7_required_tests" -eq 1 || \
   "$run_consensus_tests" -eq 1 || \
   "$run_distfs_tests" -eq 1 || \
-  "$run_viewer_tests" -eq 1 || \
   "$run_viewer_contract_tests" -eq 1 || \
   "$run_viewer_wasm_check" -eq 1 || \
-  "$run_launcher_web_build" -eq 1 || \
-  "$run_viewer_visual_baseline" -eq 1 \
+  "$run_launcher_web_build" -eq 1 \
   ]]; then
   scope="targeted"
 else
@@ -272,13 +263,9 @@ fi
 
 reason_summary="$(printf '%s\n' "${reasons[@]-}" | paste -sd ';' -)"
 changed_paths_summary="$(printf '%s\n' "${changed_paths[@]-}" | paste -sd ';' -)"
-needs_system_deps="$([[ \
-  "$run_full" -eq 1 || \
-  "$run_viewer_tests" -eq 1 || \
-  "$run_viewer_contract_tests" -eq 1 || \
-  "$run_viewer_visual_baseline" -eq 1 \
-  ]] && echo true || echo false)"
-needs_wasm_target="$([[ "$run_viewer_wasm_check" -eq 1 || "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
+needs_system_deps=false
+needs_wasm_target="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
+needs_node=true
 needs_trunk="$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
 
 emit_output() {
@@ -288,11 +275,10 @@ emit_output() {
     echo "run_oasis7_required_tests=$([[ "$run_oasis7_required_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_consensus_tests=$([[ "$run_consensus_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_distfs_tests=$([[ "$run_distfs_tests" -eq 1 ]] && echo true || echo false)"
-    echo "run_viewer_tests=$([[ "$run_viewer_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)"
     echo "run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)"
     echo "run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)"
-    echo "run_viewer_visual_baseline=$([[ "$run_viewer_visual_baseline" -eq 1 ]] && echo true || echo false)"
+    echo "needs_node=$needs_node"
     echo "needs_system_deps=$needs_system_deps"
     echo "needs_wasm_target=$needs_wasm_target"
     echo "needs_trunk=$needs_trunk"
@@ -310,11 +296,10 @@ scope=$scope
 run_oasis7_required_tests=$([[ "$run_oasis7_required_tests" -eq 1 ]] && echo true || echo false)
 run_consensus_tests=$([[ "$run_consensus_tests" -eq 1 ]] && echo true || echo false)
 run_distfs_tests=$([[ "$run_distfs_tests" -eq 1 ]] && echo true || echo false)
-run_viewer_tests=$([[ "$run_viewer_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_contract_tests=$([[ "$run_viewer_contract_tests" -eq 1 ]] && echo true || echo false)
 run_viewer_wasm_check=$([[ "$run_viewer_wasm_check" -eq 1 ]] && echo true || echo false)
 run_launcher_web_build=$([[ "$run_launcher_web_build" -eq 1 ]] && echo true || echo false)
-run_viewer_visual_baseline=$([[ "$run_viewer_visual_baseline" -eq 1 ]] && echo true || echo false)
+needs_node=$needs_node
 needs_system_deps=$needs_system_deps
 needs_wasm_target=$needs_wasm_target
 needs_trunk=$needs_trunk

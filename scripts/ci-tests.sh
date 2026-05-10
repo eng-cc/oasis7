@@ -120,16 +120,12 @@ run_oasis7_llm_baseline_fixture_smoke() {
   run ./scripts/llm-baseline-fixture-smoke.sh
 }
 
-run_oasis7_viewer_tests() {
-  run_cargo test -p oasis7_viewer
-}
-
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs
 }
 
-run_oasis7_viewer_wasm_check() {
-  run_cargo check -p oasis7_viewer --target wasm32-unknown-unknown
+run_oasis7_viewer_software_safe_build() {
+  run npm --prefix crates/oasis7_viewer run build:software-safe
 }
 
 run_oasis7_client_launcher_web_build() {
@@ -166,9 +162,8 @@ run_full_support_tier_tests() {
   run_oasis7_net_tests
   run_oasis7_net_libp2p_tests
   run_oasis7_llm_baseline_fixture_smoke
-  run_oasis7_viewer_tests
   run_oasis7_viewer_software_safe_feedback_contract_tests
-  run_oasis7_viewer_wasm_check
+  run_oasis7_viewer_software_safe_build
   run_cargo test -p oasis7 --features wasmtime --lib --bins
 }
 
@@ -182,9 +177,8 @@ case "$tier" in
     run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" run_oasis7_required_tier_tests
     run_required_component "oasis7_consensus tests" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" run_oasis7_consensus_tests
     run_required_component "oasis7_distfs tests" "${OASIS7_CI_RUN_DISTFS_TESTS:-}" run_oasis7_distfs_tests
-    run_required_component "oasis7_viewer tests" "${OASIS7_CI_RUN_VIEWER_TESTS:-}" run_oasis7_viewer_tests
     run_required_component "viewer software-safe contract" "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS:-}" run_oasis7_viewer_software_safe_feedback_contract_tests
-    run_required_component "viewer wasm check" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" run_oasis7_viewer_wasm_check
+    run_required_component "viewer software-safe build" "${OASIS7_CI_RUN_VIEWER_WASM_CHECK:-}" run_oasis7_viewer_software_safe_build
     run_required_component "launcher web build" "${OASIS7_CI_RUN_LAUNCHER_WEB_BUILD:-false}" run_oasis7_client_launcher_web_build
     ;;
   full)

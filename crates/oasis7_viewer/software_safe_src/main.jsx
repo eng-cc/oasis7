@@ -16,28 +16,13 @@ function localeCode(locale) {
 }
 
 function buildViewerEntryUrls(locale) {
-  const standardUrl = new URL(window.location.href);
-  standardUrl.pathname = standardUrl.pathname.replace(/software_safe\.html$/, "");
-  if (!standardUrl.pathname) {
-    standardUrl.pathname = "/";
-  }
-  standardUrl.searchParams.set("render_mode", "standard");
-  standardUrl.searchParams.set("locale", localeCode(locale));
-  standardUrl.searchParams.delete("language");
-  standardUrl.searchParams.delete("software_safe_reason");
-
   const softwareSafeUrl = new URL(window.location.href);
   softwareSafeUrl.searchParams.set("locale", localeCode(locale));
   softwareSafeUrl.searchParams.delete("language");
 
   return {
     softwareSafeUrl: softwareSafeUrl.toString(),
-    standardUrl: standardUrl.toString(),
   };
-}
-
-function openViewerUrl(url) {
-  window.open(url, "_blank", "noopener");
 }
 
 function Badge(props) {
@@ -201,8 +186,8 @@ function ViewerEntryMenu() {
           <div class="feedback-detail">
             {tr(
               locale(),
-              "主玩法继续留在当前页面；这里只保留语言切换和标准 Viewer 跳转。",
-              "Primary gameplay stays on this page. This menu only keeps locale switching and the standard Viewer jump.",
+              "主玩法继续留在当前页面；这里只保留语言切换。",
+              "Primary gameplay stays on this page. This menu only keeps locale switching.",
             )}
           </div>
         </div>
@@ -222,18 +207,10 @@ function ViewerEntryMenu() {
             English
           </button>
         </div>
-        <div class="toolbar">
-          <button
-            data-entry="standard-viewer-current-locale"
-            onClick={() => openViewerUrl(viewerEntryUrls().standardUrl)}
-          >
-            {tr(locale(), "打开标准 Viewer", "Open standard Viewer")}
-          </button>
-        </div>
         <div class="badge-row">
           <Badge>{`locale=${localeCode(locale())}`}</Badge>
         </div>
-        <div class="feedback-detail">{viewerEntryUrls().standardUrl}</div>
+        <div class="feedback-detail">{viewerEntryUrls().softwareSafeUrl}</div>
       </div>
     </details>
   );

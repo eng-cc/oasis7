@@ -10,7 +10,7 @@
 - `TASK-WORLD_SIMULATOR-152` 已把真实 `player_parity` 执行 lane 接到 runtime live / launcher / parity bench / `oasis7`。
 - 当前已经能分别对 `headless_agent` 与 `player_parity` 路径给出真实 Local Provider smoke 通过证据。
 - T4 不再被“`player_parity` 未接线”阻断；当前状态改为 `pending / ready_for_qa`，等待 `qa_engineer` / `producer_system_designer` 基于真实双样本给出正式对照结论。
-- 按 `PRD-CORE-009`，本文件中的“默认模式策略”特指 Local Provider execution lane 默认值，不等同于玩家访问模式默认入口；对外结论仍需先绑定 `standard_3d / software_safe / pure_api` 之一。
+- 按 `PRD-CORE-009`，本文件中的“默认模式策略”特指 Local Provider execution lane 默认值，不等同于玩家访问模式默认入口；对外结论仍需先绑定 `software_safe` 或 `pure_api` 之一。
 
 ## 2. 已验证证据
 ### 2.1 环境准备
@@ -84,4 +84,4 @@
   - `headless_agent`：继续作为无 GUI / 无 GPU 回归主链路。
   - `debug_viewer`：继续作为旁路观战/解释层。
   - `player_parity`：作为体验对照 lane 保留，不作为默认回归主链路。
-  - 如需形成玩家入口结论，需另行补记对应的 `standard_3d` 或 `software_safe` 玩家访问模式，不得仅凭 lane 名称对外宣称。
+  - 如需形成玩家入口结论，需另行补记对应的 `software_safe` 或 `pure_api` 玩家访问模式，不得仅凭 lane 名称对外宣称。

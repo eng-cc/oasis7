@@ -86,7 +86,7 @@
   - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
   - `doc/testing/evidence/post-onboarding-headless-smoke-2026-03-19.md`
   - `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md`
-  - `doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md`
+  - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
   - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:

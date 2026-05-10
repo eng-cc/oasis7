@@ -7,14 +7,14 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
-  - scripts/capture-viewer-frame.sh
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - testing-manual.md
 doc_refs:
   - doc/world-simulator/prd.md
   - doc/world-simulator/project.md
   - doc/world-simulator/viewer/viewer-manual.manual.md
 related_prd:
-  - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+  - PRD-WORLD_SIMULATOR-039
 acceptance:
   - "capture-viewer-frame 不再把切 3D 作为默认 auto-focus 行为"
   - "Viewer 手册与兼容入口不再把 3D 描述为当前默认排障路径"

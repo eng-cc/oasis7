@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - doc/testing/project.md
   - .github/workflows/release-packages.yml
-  - scripts/viewer-release-qa-loop.sh
+  - scripts/viewer-primary-web-entry-regression.sh
 doc_refs:
   - doc/testing/prd.md
 related_prd:

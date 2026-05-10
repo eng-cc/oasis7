@@ -10,7 +10,7 @@ entries:
     source_refs:
       - doc/core/player-access-mode-contract-2026-03-19.prd.md
       - doc/world-simulator/prd.md
-      - doc/world-simulator/viewer/viewer-3d-pause-user-interaction-hold-2026-04-01.prd.md
+      - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
       - .pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md
     captured_at: 2026-04-07T16:41:51+08:00
     expires_at: 2026-04-09T16:41:51+08:00

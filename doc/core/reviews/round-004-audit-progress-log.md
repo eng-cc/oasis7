@@ -244,7 +244,7 @@
 | 2026-03-06 11:49:45 +0800 | codex | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | issue_open | I4-002,I4-003 | 里程碑验收命令写为裸 `cargo check`（未对齐 `env -u RUSTC_WRAPPER` 口径），且存在重复审计字段 `- 审计轮次: 2`。 |
 | 2026-03-06 11:49:58 +0800 | codex | `doc/playability_test_result/prd.index.md` | pass | - | PRD 索引维持“专题 PRD 与 project 成对登记”且入口链路可达。 |
 | 2026-03-06 11:50:09 +0800 | codex | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 `- 审计轮次: 2`；状态最近更新停在 2026-02-26，缺 ROUND-004 审计后的状态说明。 |
-| 2026-03-06 11:50:17 +0800 | codex | `doc/scripts/viewer-tools/capture-viewer-frame.prd.md` | pass | - | 提供了可直接运行的 fallback 命令（run-viewer-web / capture-viewer-frame）并给出参数语义。 |
+| 2026-03-06 11:50:17 +0800 | codex | `historical removed viewer-tools doc set: capture-viewer-frame.prd` | pass | - | 提供了可直接运行的 fallback 命令（run-viewer-web / capture-viewer-frame）并给出参数语义。 |
 | 2026-03-06 11:50:27 +0800 | Codex-G4-001 | `doc/core/reviews/consistency-review-round-004.md` | issue_open | I4-203 | `S_round004` 当前基线记为 18 份，但本分区已回写 45 份，统计口径与实时进度仍未对齐。 |
 | 2026-03-06 11:50:35 +0800 | codex | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | issue_open | I4-003 | 文档内 `审计轮次` 字段重复（主字段与 `- 审计轮次: 2` 并存），造成轮次判读歧义。 |
 | 2026-03-06 11:51:01 +0800 | codex | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 `- 审计轮次: 2`；状态最近更新时间停在 2026-02-12，缺本轮审计后的时效说明。 |
@@ -252,13 +252,13 @@
 | 2026-03-06 11:51:46 +0800 | codex | `doc/site/manual/site-manual-static-docs.project.md` | issue_open | I4-001,I4-006 | 任务项仍使用 `site/site/doc/cn/index.html` 错误路径；状态更新时间停在 2026-02-15，缺本轮审计后的时效标注。 |
 | 2026-03-06 11:51:46 +0800 | codex | `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | issue_open | I4-004 | 验收标准要求“可直接复制命令”，但正文未给出任何可执行命令示例，无法直接按文复现。 |
 | 2026-03-06 11:52:07 +0800 | codex | `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | issue_open | I4-002 | 里程碑验收写为裸 `cargo check`，未与仓库统一命令 `env -u RUSTC_WRAPPER cargo check` 对齐。 |
-| 2026-03-06 11:52:20 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd.md | pass | - | PRD 目标态与验证闭环完整，未发现本文件内新增 D4 高中风险分工问题。 |
+| 2026-03-06 11:52:20 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd | pass | - | PRD 目标态与验证闭环完整，未发现本文件内新增 D4 高中风险分工问题。 |
 | 2026-03-06 11:52:33 +0800 | codex | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` | pass | - | 任务、依赖、状态与验收命令口径一致，未发现 D4-001~D4-008 的新增高/中风险问题。 |
 | 2026-03-06 11:52:38 +0800 | codex | `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md` | issue_open | I4-005 | WPCM-5 映射到 `PRD-TESTING-004`，与主 PRD 使用的 `PRD-TESTING-WEB-*` 编号体系不一致，追踪链路断裂。 |
-| 2026-03-06 11:52:45 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-asset-pipeline-ui-system-hardening-2026-03-05.project.md | pass | - | 任务拆解含 PRD-ID 映射与状态时间，项目口径与 PRD 分工一致。 |
-| 2026-03-06 11:53:03 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md | pass | - | 闭环策略文档与配套 project 分工清晰，未发现新增 D4 高中风险问题。 |
+| 2026-03-06 11:52:45 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.project | pass | - | 任务拆解含 PRD-ID 映射与状态时间，项目口径与 PRD 分工一致。 |
+| 2026-03-06 11:53:03 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.prd | pass | - | 闭环策略文档与配套 project 分工清晰，未发现新增 D4 高中风险问题。 |
 | 2026-03-06 11:53:02 +0800 | codex | `doc/testing/manual/systematic-application-testing-manual.prd.md` | issue_open | I4-004 | 文档定义 required/full 口径与脚本入口，但未给出可直接执行的命令示例，验收复现需跨文档跳转。 |
-| 2026-03-06 11:53:25 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-web-closure-testing-policy.project.md | issue_open | I4-006 | 依赖列表写为 `doc/world-simulator.project.md`（路径不存在），会导致主项目入口可达性断点。 |
+| 2026-03-06 11:53:25 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.project | issue_open | I4-006 | 依赖列表写为 `doc/world-simulator.project.md`（路径不存在），会导致主项目入口可达性断点。 |
 | 2026-03-06 11:53:22 +0800 | codex | `doc/testing/manual/systematic-application-testing-manual.project.md` | issue_open | I4-005 | TMAN-5 使用 `PRD-TESTING-004`，与主 PRD 的 `PRD-TESTING-MANUAL-*` 编号体系不一致，任务追踪存在断链风险。 |
 | 2026-03-06 11:53:46 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md | issue_open | I4-007 | 主 PRD 合并了 phase8~10 的执行过程与验收产物清单，混入 project/devlog 属性内容。 |
 | 2026-03-06 11:53:47 +0800 | codex | `doc/testing/README.md` | pass | - | 入口索引与目录结构一致，未发现 D4-001~D4-008 的立即整改项。 |
@@ -367,15 +367,15 @@
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/prd.index.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/scripts/viewer-tools/capture-viewer-frame.project.md` | pass | - | 验证命令与脚本路径明确且可执行，fallback 使用边界清晰。 |
+| 2026-03-06 11:57:27 +0800 | codex | `historical removed viewer-tools doc set: capture-viewer-frame.project` | pass | - | 验证命令与脚本路径明确且可执行，fallback 使用边界清晰。 |
 | 2026-03-06 11:57:38 +0800 | G4-002-Aristotle | doc/world-simulator/scenario/scenario-files.project.md | issue_open | I4-009 | 任务拆解标题声明“含 PRD-ID 映射”但条目未标注 PRD-ID，追溯链不完整。 |
-| 2026-03-06 11:57:51 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.prd.md` | pass | - | 脚本入口、参数与输出路径定义完整，未发现不可执行命令口径问题。 |
+| 2026-03-06 11:57:51 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd` | pass | - | 脚本入口、参数与输出路径定义完整，未发现不可执行命令口径问题。 |
 | 2026-03-06 11:58:00 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md | pass | - | 设计文档以 Why/What/Done 为主，未发现新增高风险分工或可达性问题。 |
 | 2026-03-06 11:58:18 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md | issue_open | I4-009,I4-010 | 标题声明“含 PRD-ID 映射”但任务未标 PRD-ID，且状态段缺最近更新时间。 |
-| 2026-03-06 11:58:13 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-art-capture-2026-02-28.project.md` | pass | - | 任务拆解与依赖口径完整，未发现 D4-001~D4-008 新增问题。 |
-| 2026-03-06 11:58:32 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.prd.md` | pass | - | 回归命令参数完整且产物路径明确，可直接复现框架验证结果。 |
-| 2026-03-06 11:58:49 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-02-28.project.md` | pass | - | 任务拆解与依赖链路清晰，未发现命令可执行性相关异常。 |
-| 2026-03-06 11:59:08 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.prd.md` | pass | - | 关键回归产物与参数结果可追溯，未见不可执行验收命令表达。 |
+| 2026-03-06 11:58:13 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.project` | pass | - | 任务拆解与依赖口径完整，未发现 D4-001~D4-008 新增问题。 |
+| 2026-03-06 11:58:32 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd` | pass | - | 回归命令参数完整且产物路径明确，可直接复现框架验证结果。 |
+| 2026-03-06 11:58:49 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project` | pass | - | 任务拆解与依赖链路清晰，未发现命令可执行性相关异常。 |
+| 2026-03-06 11:59:08 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.prd` | pass | - | 关键回归产物与参数结果可追溯，未见不可执行验收命令表达。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
@@ -437,11 +437,11 @@
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/wasm/wasm-sdk-no-std.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
-| 2026-03-06 11:59:31 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-framework-rationalization-2026-03-01.project.md` | pass | - | 项目任务与依赖边界清晰，未发现 D4 命令可执行性风险。 |
-| 2026-03-06 11:59:55 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.prd.md` | pass | - | 参数与输出元数据定义清楚，未出现不可执行验收命令表达。 |
-| 2026-03-06 12:00:19 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-material-recognizability-2026-02-28.project.md` | pass | - | 依赖中的 viewer 启动命令与脚本路径明确，未发现执行口径冲突。 |
-| 2026-03-06 12:00:46 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd.md` | pass | - | T3 回归命令可直接执行且证据路径清晰，未见命令可执行性缺陷。 |
-| 2026-03-06 12:01:08 +0800 | codex | `doc/scripts/viewer-tools/viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project.md` | pass | - | 任务链与依赖路径完整，未发现 D4 命令可执行性问题。 |
+| 2026-03-06 11:59:31 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.project` | pass | - | 项目任务与依赖边界清晰，未发现 D4 命令可执行性风险。 |
+| 2026-03-06 11:59:55 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.prd` | pass | - | 参数与输出元数据定义清楚，未出现不可执行验收命令表达。 |
+| 2026-03-06 12:00:19 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-material-recognizability-2026-02-28.project` | pass | - | 依赖中的 viewer 启动命令与脚本路径明确，未发现执行口径冲突。 |
+| 2026-03-06 12:00:46 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.prd` | pass | - | T3 回归命令可直接执行且证据路径清晰，未见命令可执行性缺陷。 |
+| 2026-03-06 12:01:08 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-visual-detail-system-optimization-2026-02-28.project` | pass | - | 任务链与依赖路径完整，未发现 D4 命令可执行性问题。 |
 | 2026-03-06 12:01:38 +0800 | codex | `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | pass | - | 构建入口、环境变量与校验脚本定义完整，未见不可执行命令表述。 |
 | 2026-03-06 12:02:05 +0800 | codex | `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md` | pass | - | `CI_VERBOSE=1 ./scripts/ci-tests.sh required` 等验收命令可执行且与依赖口径一致。 |
 | 2026-03-06 12:02:31 +0800 | codex | `doc/playability_test_result/prd.md` | pass | - | 模块主 PRD 的证据流程与追踪口径完整，未发现 D4 即时问题。 |
@@ -617,26 +617,26 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/scenario-seed-locations.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/world-initialization.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/world-initialization.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-2d-3d-clarity-improvement.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-2d-3d-clarity-improvement.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-2d-visual-polish.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-2d-visual-polish.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-3d-commercial-polish.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-3d-commercial-polish.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-3d-polish-performance.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-3d-polish-performance.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-module-rendering.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-module-rendering.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-3d-commercial-polish.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-quick-locate.project.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-size-inspection.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-agent-size-inspection.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-auto-focus-capture.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-auto-select-capture.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-auto-select-capture.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-bevy-web-runtime.prd.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-bevy-web-runtime.project.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-auto-focus-capture.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-auto-select-capture.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-auto-select-capture.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.prd` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.project` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-agent-prompt-default-values-prefill.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -657,22 +657,22 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase1-asset-pipeline.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase2-visual-quality-gate.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase3-material-style-layer.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase4-texture-style-layer.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase5-advanced-texture-maps.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase1-asset-pipeline.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase3-material-style-layer.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase4-texture-style-layer.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -685,8 +685,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-copyable-text.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-dual-view-2d-3d.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-dual-view-2d-3d.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -715,8 +715,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-i18n.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-i18n.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-industrial-visual-closure.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-industrial-visual-closure.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-industrial-visual-closure.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-disable-seek-p2p-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -737,10 +737,10 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-location-depletion-visualization.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-location-depletion-visualization.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-manual.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-minimal-system.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -748,39 +748,39 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-module-visual-entities.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-observability-visual-optimization.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-observability-visual-optimization.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-open-world-sandbox-readiness.stress-report.template.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-open-world-sandbox-readiness.stress-report.template` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-overview-map-zoom.project.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-release-full-coverage-gate.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-release-full-coverage-gate.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-release-qa-iteration-loop.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-rendering-physical-accuracy.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-release-qa-iteration-loop.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-rendering-physical-accuracy.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-right-panel-module-visibility.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-selection-details.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-selection-details.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-step-completion-ack-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-texture-inspector.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-texture-inspector.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visual-release-readiness-hardening-2026-03-01.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visual-upgrade.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visual-upgrade.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visualization-3d.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visualization-3d.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visualization.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-visualization.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-wasd-camera-navigation.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-wasd-camera-navigation.project.md` | issue_open | I4-002,I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-texture-inspector.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-texture-inspector.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visual-release-readiness-hardening-2026-03-01.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visual-upgrade.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visual-upgrade.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visualization-3d.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visualization-3d.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visualization.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-visualization.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.project` | issue_open | I4-002,I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.prd.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
@@ -795,7 +795,7 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.project.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.prd.md` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-webgl-deferred-compat-2026-02-24.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.prd` | issue_open | I4-002 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-websocket-http-bridge.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |

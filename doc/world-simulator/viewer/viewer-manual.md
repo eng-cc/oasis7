@@ -48,16 +48,12 @@
 - 连接失败：检查 `oasis7_viewer_live` 是否运行、端口与 viewer 地址是否一致。
 
 ## 参考文档
-- `doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md`
-- `doc/world-simulator/viewer/viewer-auto-focus-capture.prd.md`
-- `doc/world-simulator/viewer/viewer-web-closure-testing-policy.prd.md`
+- `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/viewer/viewer-selection-details.prd.md`
 - `doc/world-simulator/viewer/viewer-right-panel-module-visibility.prd.md`
-- `doc/world-simulator/viewer/viewer-web-fullscreen-panel-toggle.prd.md`
 - `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md`
 - `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md`
 - `doc/world-simulator/viewer/viewer-copyable-text.prd.md`
-- `doc/scripts/viewer-tools/capture-viewer-frame.prd.md`（native fallback）
 
 ## Fragment 元素分块渲染（默认开启）
 - 目标：把 location 的 fragment 分块默认显示出来，并按主导元素显示不同颜色。

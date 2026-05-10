@@ -96,7 +96,7 @@
   - AC-6: `doc/site/github-pages/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
   - AC-7: `doc/site/github-pages/**` 活跃专题中的当前 `cargo check -p` 命令、viewer crate 路径与 wasm 包名必须写为 `oasis7_viewer` / `crates/oasis7*`；旧品牌 viewer 包名与源码路径仅允许保留在历史证据或外部原文引用中。
   - AC-8: `site/index.html` 与 `site/en/index.html` 的首屏和首个正文段必须明确交代游戏类型、玩家扮演的角色、核心差异点，以及“当前仍是技术预览”的边界，且中英结构保持同构。
-  - AC-9: 首页必须明确说明 `software_safe` 是默认 formal Web 入口，`standard_3d` 只属于 opt-in 可视化访问面；`--no-llm` 仅允许出现在诊断/排障语境，不得继续作为首页 primary path 展示。
+  - AC-9: 首页必须明确说明 `software_safe` 是唯一公开 Web 验证入口；`--no-llm` 仅允许出现在诊断/排障语境，不得继续作为首页 primary path 展示。
   - AC-10: 首页必须以访客能理解的语言拆开“当前公开可做的事”“builder/developer 验证路径”“未来模块平台方向”，并明确当前未开放 creator-facing module/platform。
   - AC-11: `site/index.html` 与 `site/en/index.html` 都必须通过统一的 homepage claim/parity check，覆盖可玩状态、下载边界、正式公告状态、公开访问面与未来平台边界。
   - AC-12: 移动端顶栏在无 JS 情况下仍能看到导航链接；首页提供 skip link 直达 `main`。

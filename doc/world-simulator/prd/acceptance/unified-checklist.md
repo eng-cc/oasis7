@@ -21,7 +21,7 @@
 | Gate-ID | 模块 | 通过标准 | 必跑命令（示例） | 证据要求 |
 | --- | --- | --- | --- | --- |
 | G1 | 场景系统 | 场景 ID 与模板稳定，核心场景可回放 | `env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required scenario_specs_match_ids -- --nocapture`<br>`env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required scenarios_are_stable -- --nocapture` | 终端日志（通过/失败） |
-| G2 | Viewer Web 闭环 | 页面可加载、`console error = 0`、至少 1 张截图 | 按 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` 执行 S6（如 `./scripts/viewer-release-qa-loop.sh`） | `output/playwright/*.png` + `output/playwright/viewer/console.log` |
+| G2 | Viewer Web 闭环 | 页面可加载、至少 1 张截图、主入口与 `software_safe` 状态可追溯 | 按 `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` 执行 S6（如 `./scripts/viewer-primary-web-entry-regression.sh`、`./scripts/viewer-software-safe-step-regression.sh`） | `output/playwright/*.png` + `output/playwright/viewer/console.log` |
 | G3 | 启动器统一入口 | launcher 参数解析与 URL 组装路径通过 | `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher` | 终端日志（通过/失败） |
 | G4 | 启动器客户端 | 配置校验、链路提交流程可执行 | `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher` | 终端日志（通过/失败） |
 | G5 | 文档追踪 | PRD 与 project 状态一致、依赖可达 | `./scripts/doc-governance-check.sh` | 治理脚本输出（OK） |

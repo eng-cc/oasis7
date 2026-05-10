@@ -91,7 +91,6 @@
 - 目标与完整流程已迁移至 `testing-manual.md`（S6 及其补充约定）。
 - 约束保持不变：
   - Web 闭环为默认链路（agent-browser 优先）。
-  - `capture-viewer-frame.sh` 仅在 native 图形链路问题或 Web 无法复现时使用。
 
 # Project Agents
 

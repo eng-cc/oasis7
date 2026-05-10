@@ -22,12 +22,10 @@ FORBIDDEN_PATTERNS=(
 
 SOURCE_REFERENCE_REQUIRED_PATTERNS=(
   'doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md'
-  'doc/scripts/viewer-tools/capture-viewer-frame.prd.md'
 )
 
 MIRROR_REFERENCE_REQUIRED_PATTERNS=(
   'https://github.com/eng-cc/oasis7/blob/main/doc/world-simulator/viewer/viewer-location-fine-grained-rendering.prd.md'
-  'https://github.com/eng-cc/oasis7/blob/main/doc/scripts/viewer-tools/capture-viewer-frame.prd.md'
 )
 
 MIRROR_REFERENCE_FORBIDDEN_PATTERNS=(
@@ -41,7 +39,6 @@ MIRROR_REFERENCE_FORBIDDEN_PATTERNS=(
   'doc/world-simulator/viewer-copyable-text.md'
   'doc/world-simulator/viewer-generic-focus-targets.md'
   'doc/world-simulator/viewer-web-test-api-step-control-2026-02-24.md'
-  'doc/scripts/viewer-tools/capture-viewer-frame.md'
 )
 
 contains_fixed_pattern() {

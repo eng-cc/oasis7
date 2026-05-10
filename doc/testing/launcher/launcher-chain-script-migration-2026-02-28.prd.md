@@ -10,7 +10,7 @@
 - Problem Statement: 多个运行脚本仍依赖 `oasis7_viewer_live` 旧节点参数链路（`--node-*`/`--topology`/`--reward-runtime-*`），在新启动架构下已失效且错误提示不清晰。
 - Proposed Solution: 将日常脚本迁移到 `oasis7_game_launcher`，并对尚未重构完成的长跑脚本提供显式阻断与迁移指引，统一启动口径。
 - Success Criteria:
-  - SC-1: `run-game-test.sh` 与 `viewer-release-qa-loop.sh` 迁移到 `oasis7_game_launcher` 调用链路。
+  - SC-1: `run-game-test.sh` 与当时仍存在的 `viewer-release-qa-loop.sh` 已迁移到 `oasis7_game_launcher` 调用链路；当前 Web 主链路只保留 `software_safe` 相关回归脚本。
   - SC-2: `s10-five-node-game-soak.sh` 与 `p2p-longrun-soak.sh` 在旧参数路径下启动前明确失败并给出迁移方向。
   - SC-3: 文档与手册口径同步到“单机优先 `oasis7_game_launcher`、多节点建议 `oasis7_chain_runtime`”。
   - SC-4: 迁移后脚本失败信息可定位，不再出现隐式参数失效。
@@ -31,10 +31,10 @@
   - PRD-TESTING-LAUNCHER-SCRIPT-003: As a 发布负责人, I want manual/docs aligned to the new launch entrypoints, so that release checks remain operable.
   - PRD-TESTING-LAUNCHER-SCRIPT-004: As a 发布负责人, I want QA 脚本与 launcher 对静态资源目录拥有一致覆盖规则, so that 协议与前端构建不会错配。
 - Critical User Flows:
-  1. Flow-LAUNCH-001: `执行 run-game-test/viewer-release-qa-loop -> oasis7_game_launcher 启动 -> 输出兼容日志`
+  1. Flow-LAUNCH-001: `执行 run-game-test/当时的 viewer-release-qa-loop -> oasis7_game_launcher 启动 -> 输出兼容日志`
   2. Flow-LAUNCH-002: `执行长跑脚本 -> 命中旧参数链路 -> 显式阻断并输出迁移提示`
   3. Flow-LAUNCH-003: `查阅 testing-manual -> 按新口径选择 oasis7_game_launcher 或 oasis7_chain_runtime`
-  4. Flow-LAUNCH-004: `执行 viewer-release-qa-loop -> 传入/继承 viewer-static-dir -> oasis7_game_launcher 显式锁定静态目录 -> 避免陈旧 dist 触发协议解码错误`
+  4. Flow-LAUNCH-004: `执行当时的 viewer-release-qa-loop -> 传入/继承 viewer-static-dir -> oasis7_game_launcher 显式锁定静态目录 -> 避免陈旧 dist 触发协议解码错误`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -49,7 +49,7 @@
   - AC-3: 手册与专题文档反映新启动口径与暂不可执行边界。
   - AC-4: 未重构的长跑多节点闭环不在本轮硬实现范围。
   - AC-5: 文档与任务状态可在项目文档/devlog 追溯。
-  - AC-6: `viewer-release-qa-loop.sh` 支持 `--viewer-static-dir` 并传递到 `oasis7_game_launcher`；当 `OASIS7_GAME_STATIC_DIR` 配置有效目录时可覆盖默认 `web`。
+  - AC-6: 历史上的 `viewer-release-qa-loop.sh` 已支持 `--viewer-static-dir` 并传递到 `oasis7_game_launcher`；当前仓库已删除该旧 visual QA 脚本，但保留这条历史迁移记录。
 - Non-Goals:
   - 不在本轮重写 S10/P2P 为完整 `oasis7_chain_runtime` 多节点闭环。
   - 不恢复 `oasis7_viewer_live` 内嵌节点参数兼容。
@@ -63,7 +63,7 @@
 - Architecture Overview: 启动入口分层为“单机场景 `oasis7_game_launcher` + 多节点场景 `oasis7_chain_runtime`”，脚本按场景选择入口并对失效链路 fail-fast。
 - Integration Points:
   - `scripts/run-game-test.sh`
-  - `scripts/viewer-release-qa-loop.sh`
+  - 历史上的 `scripts/viewer-release-qa-loop.sh`
   - `scripts/s10-five-node-game-soak.sh`
   - `scripts/p2p-longrun-soak.sh`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
@@ -105,7 +105,7 @@
 | PRD-TESTING-LAUNCHER-SCRIPT-001 | LAUNCHMIG-1/2 | `test_tier_required` | 日常脚本启动参数与执行路径检查 | 本地/发布前日常脚本链路 |
 | PRD-TESTING-LAUNCHER-SCRIPT-002 | LAUNCHMIG-2/3 | `test_tier_required` | 长跑脚本阻断与提示文案校验 | 长跑任务触发安全性 |
 | PRD-TESTING-LAUNCHER-SCRIPT-003 | LAUNCHMIG-3/4 | `test_tier_required` | 手册/项目文档/devlog 一致性检查 | 运行指引可用性 |
-| PRD-TESTING-LAUNCHER-SCRIPT-004 | LAUNCHMIG-6 | `test_tier_required` | `viewer-release-qa-loop --viewer-static-dir` 参数透传检查 + `oasis7_game_launcher` 静态目录覆盖单测 + QA 冒烟复验 | Web 发行验收稳定性 |
+| PRD-TESTING-LAUNCHER-SCRIPT-004 | LAUNCHMIG-6 | `test_tier_required` | 历史上的 `viewer-release-qa-loop --viewer-static-dir` 参数透传检查 + `oasis7_game_launcher` 静态目录覆盖单测 + QA 冒烟复验 | Web 发行验收稳定性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
