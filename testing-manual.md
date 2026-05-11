@@ -367,11 +367,11 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
 - 模式总口径（`PRD-CORE-009`）：
-  - `software_safe` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口。
+  - `viewer` / `pure_api` 是当前正式玩家访问模式，分别对应默认 Web 入口和纯接口正式入口；`software_safe` 仅保留为 `viewer` 的兼容 alias。
   - `pure_api` 的正式游玩与 headed Web/UI 一样，默认要求 active LLM access；禁用 LLM 后只能做 blocked/observer-debug 诊断，不再计入正式可玩性证据。
   - `player_parity` / `headless_agent` / `debug_viewer` 是 agent provider 的 execution lane；当前 Local Provider provider-backed 主口径必须写成 `agent_decision_source=provider_backed + agent_provider_backend=provider_local_bridge + agent_provider_contract=worldsim_provider_v1 + agent_provider_transport=loopback_http`，`agent_direct_connect/provider_loopback_http` 只保留为兼容 alias，这些字段都不构成额外玩家访问模式。
   - 任何 QA / release / playability 结论都应先标明玩家访问模式，再补充 execution lane；不得把 `headless_agent` 或 `debug_viewer` 直接当成“第四种入口”。
-- `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=software_safe` 且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
+- `oasis7_viewer_live` / Viewer 页面：默认使用 `agent-browser` 驱动页面与采集证据；当 `renderMode=viewer`（或兼容 alias `software_safe`）且带 viewer auth bootstrap 时，允许继续验证选中 Agent 的最小 `prompt/chat` 闭环。
 - 若只需要回归 `software_safe` 纯实时最小闭环（加载 -> 连接 -> 选择目标 -> 实时事件/语义摘要可见，且页面不再暴露回放控件），优先执行 `./scripts/viewer-software-safe-step-regression.sh`；该脚本不再主动调用 `__AW_TEST__.sendControl('step')`，而是等待 `logicalTime/eventSeq` 自然增长；若当前 runtime 被 `llm_required` 等 gameplay blocker 卡住，则要求页面显式暴露 blocker，而不是再用手动步进补推进。
 - 若只想先确认 Web/UI automation tooling 本身没有漂移，而不想起完整 runtime/build，先执行 `./scripts/viewer-software-safe-step-regression-smoke.sh`；它会用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh` 验证最小浏览器链路和 summary/state 产物契约，但不替代正式 S6 证据。
 - 若需要把 `software_safe` 的 prompt/chat/rollback/message-flow 做成独立 QA smoke，优先执行 `./scripts/viewer-software-safe-chat-regression.sh`；当脚本自举 source stack 并自动启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 时，若 QA echo 没有在 `chat ack` 后、无额外 `step/play` 的同一轮交互里进入消息流，会直接判为阻断失败；外部 URL 场景仍默认把 `agent_spoke` 缺失记为可追溯 warning，显式加 `--require-agent-spoke` 时再升级为阻断失败。
@@ -379,8 +379,8 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 若需要稳定触发一条标准 `AgentSpoke` 供消息流验收，在 source runtime 启动前显式设置 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`；该开关仅用于 Viewer / QA 测试态，默认产品路径必须保持关闭。
 - 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，必须查看 `window.__AW_TEST__.getState().lastError`；命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
-  - `renderMode=software_safe`：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
-  - `renderMode!=software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
+  - `renderMode=viewer`（或兼容 alias `software_safe`）：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
+  - `renderMode` 既不是 `viewer` 也不是兼容 alias `software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
 - `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-game-test.sh --bundle-dir <bundle>` 启动。
 - agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-game-test.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。

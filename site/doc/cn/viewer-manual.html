@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="oasis7 Viewer 使用手册：software_safe Web 入口、agent-browser 闭环与常见排查。" />
+    <meta name="description" content="oasis7 Viewer 使用手册：viewer Web 主入口、software_safe 兼容 alias、agent-browser 闭环与常见排查。" />
     <meta property="og:title" content="Viewer 使用手册 | oasis7" />
-    <meta property="og:description" content="当前仓库仅保留 software_safe Viewer Web 入口。" />
+    <meta property="og:description" content="当前仓库仅保留 viewer 作为正式 Viewer Web 入口，software_safe 仅作兼容 alias。" />
     <meta property="og:type" content="article" />
     <meta property="og:image" content="../../assets/images/og-cover.png" />
     <meta property="og:locale" content="zh_CN" />
@@ -52,7 +52,7 @@
       <section class="section docs-hero" data-reveal>
         <p class="eyebrow">Viewer Manual</p>
         <h1>oasis7 Viewer 使用手册</h1>
-        <p class="subtitle">当前仓库仅保留 `software_safe` Viewer Web 入口；本页覆盖启动、闭环验证与常见排查。</p>
+        <p class="subtitle">当前仓库仅保留 `viewer` 作为正式 Viewer Web 入口；`software_safe` 只作兼容 alias；本页覆盖启动、闭环验证与常见排查。</p>
       </section>
 
       <section id="quickstart" class="section" data-reveal>
@@ -64,7 +64,7 @@
         <h3>2) 启动 Web Viewer</h3>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
         <p>访问：<code>http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011</code></p>
-        <p>当前只保留 <code>software_safe</code> 单一入口，不再维护其他 Viewer surface 或 native Viewer。</p>
+        <p>当前只保留 <code>viewer</code> 单一正式入口；<code>software_safe</code> 只保留兼容别名，不再维护其他 Viewer surface 或 native Viewer。</p>
       </section>
 
       <section id="web-loop" class="section" data-reveal>
@@ -79,14 +79,14 @@
         <pre><code>command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 mkdir -p output/playwright/viewer
 agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=software_safe&amp;test_api=1"
+agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
 agent-browser wait --load networkidle
 agent-browser snapshot -i
 agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
 agent-browser console | tee output/playwright/viewer/console.log
 agent-browser screenshot output/playwright/viewer/viewer-web.png
 agent-browser close</code></pre>
-        <p>最小通过标准：页面加载成功、<code>__AW_TEST__</code> 可用、<code>renderMode=software_safe</code>、并产出截图与日志。</p>
+        <p>最小通过标准：页面加载成功、<code>__AW_TEST__</code> 可用、<code>renderMode=viewer</code>（或兼容 alias <code>software_safe</code>）、并产出截图与日志。</p>
       </section>
 
       <section class="section" data-reveal>

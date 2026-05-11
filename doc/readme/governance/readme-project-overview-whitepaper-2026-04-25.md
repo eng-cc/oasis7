@@ -224,7 +224,7 @@
 - runtime / viewer / testing / world-simulator 等模块已经形成较完整的工程文档树。
 - 仓库、站点和 GitHub Releases 已经能承载技术预览阶段的构建、手册与验证说明。
 - 浏览器与公开访问面的正式口径已经冻结为双模式 taxonomy：
-  - `software_safe`：主要正式 Web 入口。
+  - `viewer`：主要正式 Web / UI 入口（旧 `software_safe` 仅保留为兼容 alias）。
   - `pure_api`：无 UI、自动化、长稳与集成入口。
 
 ### 10.2 当前还不能误读的部分

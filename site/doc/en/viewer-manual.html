@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="oasis7 Viewer manual for the software_safe web entry, browser regression flows, and troubleshooting." />
+    <meta name="description" content="oasis7 Viewer manual for the canonical viewer web entry, the software_safe compatibility alias, browser regression flows, and troubleshooting." />
     <meta property="og:title" content="Viewer User Manual | oasis7" />
-    <meta property="og:description" content="The repository now keeps only the software_safe Viewer web surface." />
+    <meta property="og:description" content="The repository now keeps viewer as the formal Viewer web surface, with software_safe only as a compatibility alias." />
     <meta property="og:type" content="article" />
     <meta property="og:image" content="../../assets/images/og-cover.png" />
     <meta property="og:locale" content="en_US" />
@@ -52,7 +52,7 @@
       <section class="section docs-hero" data-reveal>
         <p class="eyebrow">Viewer Manual</p>
         <h1>oasis7 Viewer User Manual</h1>
-        <p class="subtitle">This repository now keeps only the <code>software_safe</code> Viewer web surface.</p>
+        <p class="subtitle">This repository now keeps <code>viewer</code> as the formal Viewer web surface, with <code>software_safe</code> only as a compatibility alias.</p>
       </section>
 
       <section id="quickstart" class="section" data-reveal>
@@ -64,7 +64,7 @@
         <h3>2) Start the web viewer</h3>
         <pre><code>env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173</code></pre>
         <p>Open: <code>http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011</code></p>
-        <p>The repo now ships only the <code>software_safe</code> web surface and no other Viewer entry.</p>
+        <p>The repo now ships only the formal <code>viewer</code> web surface; <code>software_safe</code> remains a compatibility alias and no other Viewer entry is maintained.</p>
       </section>
 
       <section id="web-loop" class="section" data-reveal>
@@ -79,14 +79,14 @@
         <pre><code>command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 mkdir -p output/playwright/viewer
 agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=software_safe&amp;test_api=1"
+agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
 agent-browser wait --load networkidle
 agent-browser snapshot -i
 agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
 agent-browser console | tee output/playwright/viewer/console.log
 agent-browser screenshot output/playwright/viewer/viewer-web.png
 agent-browser close</code></pre>
-        <p>Minimum pass criteria: the page loads, <code>__AW_TEST__</code> is available, <code>renderMode=software_safe</code>, and screenshot/log artifacts are produced.</p>
+        <p>Minimum pass criteria: the page loads, <code>__AW_TEST__</code> is available, <code>renderMode=viewer</code> (or the compatibility alias <code>software_safe</code>), and screenshot/log artifacts are produced.</p>
       </section>
 
       <section class="section" data-reveal>

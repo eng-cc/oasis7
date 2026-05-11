@@ -1,0 +1,21 @@
+task_uid: task_085e8a8ad95a43de9b9c4d015decbca0
+title: "rename software_safe canonical ui mode to viewer"
+owner_role: producer_system_designer
+worktree_hint: null
+execution_log_path: .pm/tasks/task_085e8a8ad95a43de9b9c4d015decbca0.execution.md
+status: done
+priority: P1
+source_signal: null
+source_refs:
+  - doc/core/player-access-mode-contract-2026-03-19.prd.md
+  - doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md
+  - testing-manual.md
+doc_refs: []
+related_prd:
+  - PRD-CORE-009
+  - PRD-WORLD_SIMULATOR-039
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-11T10:07:47+08:00
+last_started_at: 2026-05-11T00:14:21+08:00
+last_closed_at: 2026-05-11T10:07:47+08:00

@@ -9,8 +9,8 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/viewer-software-safe-chat-regression.sh [options] [run-game-test options...]
 
-Run a Web-first QA regression for Viewer `software_safe` prompt/chat flow.
-The script forces `render_mode=software_safe`, then verifies:
+Run a Web-first QA regression for the canonical Viewer prompt/chat flow.
+The script forces `render_mode=viewer` and still accepts the `software_safe` compatibility alias, then verifies:
 - selected agent prompt apply ack
 - prompt rollback ack + prompt textarea refresh
 - agent chat ack + outbound chatHistory entry
@@ -65,7 +65,7 @@ import sys
 raw = sys.argv[1]
 parts = urlparse(raw)
 query = dict(parse_qsl(parts.query, keep_blank_values=True))
-query["render_mode"] = "software_safe"
+query["render_mode"] = "viewer"
 query["test_api"] = "1"
 print(urlunparse(parts._replace(query=urlencode(query))))
 PY
@@ -435,8 +435,8 @@ write_json_file "$(browser_env)" "$browser_env_json"
 
 render_mode="$(state_render_mode "$initial_state")"
 auth_ready="$(state_auth_ready "$initial_state")"
-[[ "$render_mode" == "software_safe" ]] || { echo "error: expected renderMode=software_safe, got $render_mode" >&2; exit 1; }
-[[ "$auth_ready" == "true" ]] || { echo "error: viewer auth bootstrap is unavailable in software_safe" >&2; exit 1; }
+[[ "$render_mode" == "viewer" || "$render_mode" == "software_safe" ]] || { echo "error: expected renderMode=viewer-compatible, got $render_mode" >&2; exit 1; }
+[[ "$auth_ready" == "true" ]] || { echo "error: viewer auth bootstrap is unavailable in canonical viewer mode" >&2; exit 1; }
 
 ab_eval "$session" "window.__AW_TEST__.select('agent:${AGENT_ID}')" >>"$ab_log" 2>&1
 wait_for_js_true "(() => window.__AW_TEST__?.getState?.()?.selectedId === ${AGENT_ID@Q})()" 6000 || {
@@ -587,7 +587,7 @@ src = pathlib.Path(sys.argv[1])
 out = pathlib.Path(sys.argv[2])
 data = json.loads(src.read_text())
 lines = [
-    '# Viewer software_safe prompt/chat regression summary',
+    '# Viewer prompt/chat regression summary',
     '',
     f"- ok: `{data['ok']}`",
     f"- failCategory: `{data['failCategory']}`",
