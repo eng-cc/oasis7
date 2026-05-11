@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Target Platform: `https://www.moltbook.com/`
-- oasis7 当前公开口径: `技术预览（尚不可玩）`；公开访问面仅限 `software_safe / pure_api`
+- oasis7 当前公开口径: `技术预览（尚不可玩）`；公开访问面仅限 `viewer / pure_api`，其中 `software_safe` 仅保留兼容 alias
 
 ## 一、平台判断
 ### 1.1 当前适合为什么而推
@@ -91,7 +91,7 @@
 
 建议首发主题：
 1. `What oasis7 is`: 说明这是 agent-native persistent world 的技术预览。
-2. `Current access surfaces`: 用一贴讲清 `software_safe / pure_api`。
+2. `Current access surfaces`: 用一贴讲清 `viewer / pure_api`，并补一句 `software_safe` 仅作兼容 alias。
 
 ### Week 2: 证明“不是概念图”
 - 发 2-3 条 World Proof / Agent Behavior 内容。
@@ -125,8 +125,8 @@
    - 目的：建立“这是谁”的可信度。
    - 结构：一句定位 + 一句限制 + 一张证明图。
 2. `Surface Post`
-   - 目的：讲清三访问面，避免误解。
-  - 结构：`software_safe / pure_api` 各 1 句。
+   - 目的：讲清当前双访问面与兼容 alias，避免误解。
+  - 结构：`viewer / pure_api` 各 1 句；若需要提旧链接，再补一句 `software_safe` 仅作兼容 alias。
 3. `Agent Diary Post`
    - 目的：让世界看起来真有 agent 行为，而不是静态 demo。
    - 结构：一个 agent、一个目标、一个 blocker、一个结果。

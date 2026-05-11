@@ -327,7 +327,7 @@
 - 当前状态: active
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 最新完成: `TASK-CORE-053`（已将 `software_safe` 重写为主要正式 Web 入口，并保留 `pure_api` 的一等公民 no-UI 角色。）
+- 最新完成: `TASK-CORE-053`（历史上已将唯一正式 Web 入口从旧命名收口到当前 `viewer` canonical 名称，并保留 `pure_api` 的一等公民 no-UI 角色；`software_safe` 仅保留兼容 alias。）
 - 最新完成: `TASK-CORE-051`（已将 `non-3D / 2D 优先` 收口为 delivery priority / interaction scope 话术，并明确 `software_safe` 才是弱图形玩家访问模式。）
 - 最新完成: `TASK-CORE-055`（已将活跃结构层的旧 provider branding 继续收口到 `provider_loopback_http` / `oasis7_provider_*` / `oasis7_provider_agent`，退役 alias 不再作为当前 operator-facing 真值。）
 - 最新完成: `TASK-CORE-052`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
@@ -347,8 +347,8 @@
 - 最新完成: `TASK-CORE-025`（已清理 core 主项目中的串位产物块，恢复任务区结构一致性）。
 - 最新完成: `TASK-CORE-026`（已同步 core 模块目录索引并补齐活跃专题入口）。
 - 最新完成: `TASK-CORE-027`（已清理工程总入口兼容跳转重复条目）。
-- 最新完成: `TASK-CORE-028`（历史上已建立玩家访问模式总契约；当前活跃口径已冻结为 `software_safe / pure_api` 双模式，并明确 mode / execution lane 分层口径。）
-- 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，现行口径收口为双模式与 execution lane 的跨模块分层。）
+- 最新完成: `TASK-CORE-028`（历史上已建立玩家访问模式总契约；当前活跃口径已冻结为 `viewer / pure_api` 双模式，其中 `software_safe` 仅保留兼容 alias，并明确 mode / execution lane 分层口径。）
+- 最新完成: `TASK-CORE-029`（已完成 `testing-manual`、`world-simulator`、`game` 与 `testing` 的下游术语回写，现行口径收口为 `viewer / pure_api` 双模式与 execution lane 的跨模块分层。）
 - 最新完成: `TASK-CORE-030`（已完成 core / viewer 活跃入口与实际窗口标题的 `oasis7` 品牌收口）。
 - 最新完成: `TASK-CORE-031`（已完成 `engineering`、`scripts`、`world-runtime` 的活跃专题品牌收口）。
 - 最新完成: `TASK-CORE-033`（已建立 ROUND-009 小分母治理台账，冻结消费入口/手册语义 focused scope 与问题池）。

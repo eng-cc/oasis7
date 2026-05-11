@@ -147,7 +147,7 @@
 - 最新完成: `homepage-player-first-hook-follow-up`（首屏已移出 `software_safe` / hosted-join 说明，第二 CTA 改成“看一局事件链”，首个解释区块改成资源紧张/联盟松动/战争留痕的局面化描述，builder 文案已退回折叠开发者路径；英文页同步做了一轮去术语化与更游戏化表达。）
 - 最新完成: `homepage-first-glance-game-hook`（中英首页首屏改成“玩家动作 + 文明幻想”优先：默认网页验证入口降为次级说明，builder / hosted-join 边界退出主标题段，future-platform claim 移到首个解释区块脚注，首页第一眼更像游戏入口而不是技术验证页。）
 - 最新完成: `homepage-first-impression-hardening`（中英首页首屏已把“破碎小行星带世界 + 文明外部指挥者 + Agent 自主经营/交易/结盟/开战”前置，首个解释区块改成题材/玩家幻想优先，builder 与 future-platform 边界保留但不再抢首感。）
-- 最新完成: `homepage-entry-claim-boundary-hardening`（中英首页已按“公开访客入口 -> builder 验证 -> future platform”三层收紧 claim；`software_safe` 已被固定为默认 formal Web 入口，新增 homepage claim/parity gate，并补齐移动端 no-JS 导航与 skip-link a11y 收口。）
+- 最新完成: `homepage-entry-claim-boundary-hardening`（中英首页已按“公开访客入口 -> builder 验证 -> future platform”三层收紧 claim；`viewer` 已被固定为默认 formal Web / UI 入口，`software_safe` 仅保留兼容 alias，新增 homepage claim/parity gate，并补齐移动端 no-JS 导航与 skip-link a11y 收口。）
 - 最新完成: `homepage-game-explainer`（公开首页已改成游戏说明优先的首屏；中英页同步收紧首屏信息密度，先回答“这是什么 / 你在这里做什么 / 现在是否可玩”，技术验证与下载细节下沉到后续版块。）
 - 最新完成: `TASK-SITE-022`（GitHub Release 公开下载产物已切到 `.deb` / `.dmg` / `.exe` 原生安装器；中英首页与下载校验脚本已同步，不再将 `.tar.gz` / `.zip` 暴露为公开下载主入口。）
 - 最新完成: `TASK-SITE-021`（中英首页在线验证示例已把 `--no-llm` 明确收紧为 observer/debug-only 诊断路径，不再暗示可作为正式在线验证证据。）
@@ -159,7 +159,7 @@
 - 最新完成: `TASK-SITE-016`（已完成 `doc/site/github-pages/**` 历史专题首行标题的 title-only cleanup，旧 `oasis7*` 公开标题已统一切到 `oasis7*`）。
 - 最新完成: `TASK-SITE-011`（site 模块 README 目录索引同步）。
 - 最新完成: `TASK-SITE-012`（site 模块 completed 状态摘要补齐）。
-- 最新完成: `TASK-SITE-013`（中英首页已对齐当前双模式技术预览访问面口径，消除旧“运行模式/LLM 默认模式”歧义；现行公开访问面只保留 `software_safe / pure_api`。）
+- 最新完成: `TASK-SITE-013`（中英首页已对齐当前双模式技术预览访问面口径，消除旧“运行模式/LLM 默认模式”歧义；现行公开访问面只保留 `viewer / pure_api`，其中 `software_safe` 仅保留兼容 alias。）
 - 最新完成: `TASK-SITE-014`（site manual sync gate 已追平 `test_api=1` viewer 命令基线，解除 Pages 假失败）。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-002 进展: manual 子簇主从化已完成（`site-manual-static-docs` 主入口，`viewer-manual-content-migration-2026-02-15` 增量维护）。

@@ -10,7 +10,7 @@
 - Proposed Solution: 在 `readme/governance` 建立一份 Moltbook 专题推广方案，先固化平台现状、目标受众、内容支柱、30 天执行节奏、禁宣称项、反馈回流和 owner 审核链，再供 `liveops_community` 按方案派生真实帖子与互动回复。
 - Success Criteria:
   - SC-1: 方案明确 Moltbook 当前公开机制与推荐打法，而不是抽象“社媒运营”空话。
-  - SC-2: 所有对外表述都绑定当前 `software_safe / pure_api` 双访问面的技术预览 claim envelope。
+- SC-2: 所有对外表述都绑定当前 `viewer / pure_api` 双访问面的技术预览 claim envelope，`software_safe` 只保留兼容 alias 说明。
   - SC-3: 方案包含明确的内容节奏、社区互动规则、CTA 层级和信号回流机制。
   - SC-4: 方案包含 `liveops_community -> producer_system_designer` 的审核边界，避免未经批准的外部承诺。
 
@@ -42,7 +42,7 @@
 - Acceptance Criteria:
   - AC-1: 产出 Moltbook 专题 PRD / Design / Project / Plan 文档。
   - AC-2: 实际方案必须包含平台现状、账号定位、内容支柱、30 天节奏、指标和禁宣称项。
-  - AC-3: 方案必须明确使用当前技术预览三访问面口径，不能写成已开放玩家版。
+- AC-3: 方案必须明确使用当前技术预览双访问面口径（`viewer / pure_api`），不能写成已开放玩家版。
   - AC-4: 方案必须给出反馈回流、升级路径和 owner 审核链。
 - Non-Goals:
   - 不在本专题中直接执行 Moltbook 发帖或购买广告。
@@ -55,7 +55,7 @@
   - 内部口径源：`README.md`、`site/index.html`、`doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - Evaluation Strategy:
   - 抽样检查方案是否引用 Moltbook 当前公开定位与机制。
-  - 抽样检查所有 CTA 与表述是否落在 `software_safe / pure_api` 技术预览边界内。
+- 抽样检查所有 CTA 与表述是否落在 `viewer / pure_api` 技术预览边界内。
   - 若出现“已正式上线”“已面向玩家开放”“已完成 Moltbook 身份集成”等表述，判为不通过。
 
 ## 4. Technical Specifications
