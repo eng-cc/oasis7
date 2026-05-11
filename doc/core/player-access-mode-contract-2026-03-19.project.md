@@ -47,13 +47,13 @@
 - 更新日期: 2026-04-07
 - 当前状态: active
 - 下一任务: T10
-- 最新完成: `T1/T2/T3/T4/T5/T6/T7`（历史上已完成三模式总契约建模与下游术语收口；当前仓库真值已进一步收口为 `software_safe / pure_api` 双模式，并同步完成 core 主入口挂载、`pure_api` 的 LLM-required 正式游玩口径收口、`agent_direct_connect` / `provider_loopback_http` / execution lane 的多层术语收口，以及 `non-3D` / `software_safe` 的 priority-vs-mode 边界澄清。）
+- 最新完成: `T1/T2/T3/T4/T5/T6/T7`（历史上已完成三模式总契约建模与下游术语收口；当前仓库真值已进一步收口为 `viewer / pure_api` 双模式，其中 `software_safe` 仅保留兼容 alias，并同步完成 core 主入口挂载、`pure_api` 的 LLM-required 正式游玩口径收口、`agent_direct_connect` / `provider_loopback_http` / execution lane 的多层术语收口，以及 `non-3D` / `software_safe` 的 priority-vs-mode 边界澄清。）
 - 最新完成: `T8`（已将 agent provider 正式配置收口为 `agent_decision_source + agent_provider_* + agent_execution_lane` 结构化 taxonomy，并把 `agent_direct_connect/provider_loopback_http` 降为兼容 alias。）
-- 最新完成: `T9`（历史上已将 `software_safe` 重写为主要正式 Web 入口、将 `standard_3d` 收口为 visual QA 模式；当前仓库真值进一步收口为 `software_safe / pure_api` 双模式。）
+- 最新完成: `T9`（历史上已将唯一正式 Web 入口从旧命名收口到当前 `viewer` canonical 名称、将 `standard_3d` 收口为 visual QA 模式；当前仓库真值进一步收口为 `viewer / pure_api` 双模式，`software_safe` 仅保留兼容 alias。）
 - 备注:
   - 本专题只冻结 taxonomy 与 claim contract，不替代下游专题实现。
   - 后续若新增同层玩家访问模式，必须先更新本专题再更新模块文档。
   - `--no-llm` 仍可作为观战/调试旁路保留，但不能再被写成正式可玩、parity 或发布放行入口。
   - 正式 operator-facing 配置、CLI 与 env 口径以 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane` 为准；`agent_provider_mode`、`agent_direct_connect` 与 `provider_loopback_http` 只允许作为兼容解析保留。
-  - `non-3D` / `2D 优先` 只允许描述阶段优先级或交互范围；若要表达玩家入口，必须显式写回 `software_safe / pure_api`。
+  - `non-3D` / `2D 优先` 只允许描述阶段优先级或交互范围；若要表达玩家入口，必须显式写回 `viewer / pure_api`，并只在兼容说明里提 `software_safe`。
   - 在 T10 完成前，README / testing-manual 一类“当前预览入口”载体仍可保留现状描述，但不得与本专题新目标混写成“已实现”。
