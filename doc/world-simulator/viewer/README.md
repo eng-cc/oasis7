@@ -4,7 +4,7 @@
 
 ## 从这里开始
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
-- 想确认正式浏览器主入口、`software_safe` 边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
+- 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
 - 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`
@@ -29,16 +29,16 @@
 - 适合问题:
   - 怎么启动 Viewer
   - Web 闭环怎么跑
-  - `software_safe` / bilingual URL / test API 怎么使用
+  - `viewer` canonical 入口、`software_safe` alias / bilingual URL / test API 怎么使用
 - 说明: 如果你是来“操作”而不是“做治理判断”，这里通常是第一入口。
 
-### 2. `software_safe` 与正式 Web 主入口
+### 2. `viewer` 与正式 Web 主入口
 - 首读入口:
   - `viewer-web-software-safe-mode-2026-03-16.prd.md`
   - `viewer-web-runtime-fatal-surfacing-2026-03-12.prd.md`
   - `viewer-web-semantic-test-api.prd.md`
 - 适合问题:
-  - 为什么正式 Web 默认走 `software_safe`
+  - 为什么正式 Web 默认走 `viewer`
   - 弱机 / CI / 无 GPU 环境下的 canonical 路径是什么
   - 浏览器 fatal、语义测试接口、正式主入口怎么对齐
 
@@ -66,7 +66,7 @@
 - 首读入口:
   - `viewer-gameplay-release-experience-overhaul.prd.md`
 - 适合问题:
-  - 首局体验、release readiness、software_safe 主体验的主文档是什么
+  - 首局体验、release readiness、viewer 主体验的主文档是什么
   - 哪些沉浸阶段已经物理合并，哪些不再是独立首读入口
 
 ## 定向检索边界

@@ -10,8 +10,8 @@ usage() {
 Usage: ./scripts/viewer-primary-web-entry-regression.sh [options]
 
 Run a browser QA regression for the formal Web entry contract:
-- default browser entry (`/`) must land in `software_safe`
-- `render_mode=auto` must still land in `software_safe`
+- default browser entry (`/`) must land in `viewer`
+- `render_mode=auto` must still land in `viewer`
 
 Options:
   --scenario <name>          oasis7_game_launcher scenario (default: llm_bootstrap)
@@ -116,7 +116,7 @@ ab_state() {
 
 state_connection() { json_get "$1" connectionStatus; }
 state_render_mode() { json_get "$1" renderMode; }
-state_reason() { json_get "$1" softwareSafeReason; }
+state_reason() { json_get "$1" viewerReason; }
 state_selected_kind() { json_get "$1" selectedKind; }
 state_last_error() { json_get "$1" lastError; }
 
@@ -346,9 +346,9 @@ ab_cmd "$default_session" get text body >"$default_body_path"
 ab_screenshot "$default_session" "$out_dir/default-entry.png" >/dev/null
 default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 
-[[ "$(state_render_mode "$default_state")" == "software_safe" ]] || { echo "error: default route did not land in software_safe" >&2; exit 1; }
+[[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
 [[ "$(state_reason "$default_state")" == "primary_web_entry" ]] || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
-[[ "$default_url_final" == *"software_safe.html"* ]] || { echo "error: default route did not redirect to software_safe.html" >&2; exit 1; }
+[[ "$default_url_final" == *"viewer.html"* || "$default_url_final" == *"software_safe.html"* ]] || { echo "error: default route did not redirect to viewer-compatible entry" >&2; exit 1; }
 grep -q "Formal Gameplay Summary" "$default_body_path" || { echo "error: default route body missing Formal Gameplay Summary" >&2; exit 1; }
 grep -q "Missing Action Handoff" "$default_body_path" || { echo "error: default route body missing Missing Action Handoff" >&2; exit 1; }
 
@@ -361,9 +361,9 @@ ab_cmd "$auto_session" get text body >"$auto_body_path"
 ab_screenshot "$auto_session" "$out_dir/auto-entry.png" >/dev/null
 auto_url_final=$(normalize_eval_token "$(ab_cmd "$auto_session" get url)")
 
-[[ "$(state_render_mode "$auto_state")" == "software_safe" ]] || { echo "error: auto route did not land in software_safe" >&2; exit 1; }
+[[ "$(state_render_mode "$auto_state")" == "viewer" ]] || { echo "error: auto route did not land in viewer" >&2; exit 1; }
 [[ "$(state_reason "$auto_state")" == "auto_primary_web_entry" ]] || { echo "error: auto route reason mismatch: $(state_reason "$auto_state")" >&2; exit 1; }
-[[ "$auto_url_final" == *"software_safe.html"* ]] || { echo "error: auto route did not redirect to software_safe.html" >&2; exit 1; }
+[[ "$auto_url_final" == *"viewer.html"* || "$auto_url_final" == *"software_safe.html"* ]] || { echo "error: auto route did not redirect to viewer-compatible entry" >&2; exit 1; }
 
 python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$default_url_final" "$auto_url_final" "$out_dir/default-entry.png" "$out_dir/auto-entry.png"
 import json
@@ -402,19 +402,19 @@ lines = [
     "",
     "## Verdict",
     "- Overall: `pass`",
-    "- Formal gameplay entry (`/`): `software_safe`",
-    "- Auto entry (`?render_mode=auto`): `software_safe`",
+    "- Formal gameplay entry (`/`): `viewer`",
+    "- Auto entry (`?render_mode=auto`): `viewer`",
     "",
     "## Default entry",
     f"- Final URL: `{summary['default_entry']['final_url']}`",
     f"- Render mode: `{default_state.get('renderMode')}`",
-    f"- Entry reason: `{default_state.get('softwareSafeReason')}`",
+    f"- Entry reason: `{default_state.get('viewerReason') or default_state.get('softwareSafeReason')}`",
     f"- Screenshot: `{summary['default_entry']['screenshot']}`",
     "",
     "## Auto entry",
     f"- Final URL: `{summary['auto_entry']['final_url']}`",
     f"- Render mode: `{auto_state.get('renderMode')}`",
-    f"- Entry reason: `{auto_state.get('softwareSafeReason')}`",
+    f"- Entry reason: `{auto_state.get('viewerReason') or auto_state.get('softwareSafeReason')}`",
     f"- Screenshot: `{summary['auto_entry']['screenshot']}`",
 ]
 pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -195,14 +195,14 @@ function ViewerEntryMenu() {
           <button
             data-locale="zh"
             disabled={locale() === "zh"}
-            onClick={() => core.setSoftwareSafeLocale("zh")}
+            onClick={() => core.setViewerLocale("zh")}
           >
             中文
           </button>
           <button
             data-locale="en"
             disabled={locale() === "en"}
-            onClick={() => core.setSoftwareSafeLocale("en")}
+            onClick={() => core.setViewerLocale("en")}
           >
             English
           </button>
@@ -342,7 +342,7 @@ function WorldSummaryPanel() {
   return (
     <div class="stack">
       <div class="badge-row">
-        <Badge class="badge badge--accent">software_safe</Badge>
+        <Badge class="badge badge--accent">viewer</Badge>
         <Badge class="badge badge--accent">{tr(locale(), "正式 Web 主入口", "Formal Web Entry")}</Badge>
         <Badge class={core.connectionBadgeClass()}>
           {tr(locale(), "连接状态", "connection")}={state.connectionStatus}
@@ -623,7 +623,7 @@ function WorldSummaryPanel() {
         <div class="panel__body stack">
           <div class="badge-row">
             <Badge>{`ws=${state.wsUrl || "-"}`}</Badge>
-            <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
+            <Badge>{`entryReason=${state.viewerReason || "-"}`}</Badge>
             <Badge>{`renderer=${state.renderer || "n/a"}`}</Badge>
             <Badge>{`controlProfile=${state.controlProfile}`}</Badge>
           </div>
@@ -632,7 +632,7 @@ function WorldSummaryPanel() {
               <Badge class="badge badge--accent">debug_viewer</Badge>
               <Badge>{`status=${state.debugViewerStatus}`}</Badge>
               <Badge>{`renderMode=${state.renderMode}`}</Badge>
-              <Badge>{`entryReason=${state.softwareSafeReason || "-"}`}</Badge>
+              <Badge>{`entryReason=${state.viewerReason || "-"}`}</Badge>
             </div>
             <EmptyState style="margin-top:-2px;">
               {tr(
@@ -883,8 +883,8 @@ function InteractionPanel() {
     mainTokenTransferCapability().enabled
       ? tr(
           locale(),
-          "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 software_safe 这里仍然不会直接暴露转账表单。",
-          "Contract marks main_token_transfer as strong_auth-capable on this lane, but software_safe still exposes no transfer form here.",
+          "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 viewer 这里仍然不会直接暴露转账表单。",
+          "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.",
         )
       : mainTokenTransferCapability().reason;
   const promptSettingsSummary = () =>
@@ -928,10 +928,10 @@ function InteractionPanel() {
             locale(),
             `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${
               debugContext()?.execution_mode || "headless_agent"
-            }；software_safe 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`,
+            }；viewer 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`,
             `Selected agent currently runs through the provider-backed loopback bridge in ${
               debugContext()?.execution_mode || "headless_agent"
-            }; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`,
+            }; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`,
           )}
         </EmptyState>
       </Show>
@@ -1379,7 +1379,7 @@ function AppShell() {
 
 const app = document.getElementById("app");
 if (!app) {
-  throw new Error("software_safe root #app is missing");
+  throw new Error("viewer root #app is missing");
 }
 
 let dispose = mount(() => <AppShell />, app);

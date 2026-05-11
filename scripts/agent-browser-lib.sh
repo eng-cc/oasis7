@@ -269,7 +269,9 @@ PY
     npm --prefix crates/oasis7_viewer run build:software-safe
   ) >&2
   cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/index.html"
+  cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/viewer.html"
   cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
+  cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/viewer.js"
   cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
   cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
     "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"

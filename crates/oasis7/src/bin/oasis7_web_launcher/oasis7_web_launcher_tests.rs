@@ -459,7 +459,9 @@ fn build_game_url_uses_request_host_for_wildcard_bindings() {
         ..LauncherConfig::default()
     };
     let url = build_game_url(&config, Some("10.10.1.8"));
-    assert!(url.starts_with("http://10.10.1.8:4173/?render_mode=software_safe&ws=ws%3A%2F%2F10.10.1.8%3A5011&hosted_access="));
+    assert!(url.starts_with(
+        "http://10.10.1.8:4173/?render_mode=viewer&ws=ws%3A%2F%2F10.10.1.8%3A5011&hosted_access="
+    ));
     assert!(url.contains("%22deployment_mode%22%3A%22hosted_public_join%22"));
     assert!(url.contains("%22local_chain_runtime%22%3A%22blocked_for_public_player_plane%22"));
     assert!(url.contains("%22node_admission%22%3A%22operator_managed_node_onboarding_only%22"));

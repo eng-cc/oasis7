@@ -694,15 +694,16 @@ function cleanChildren(parent, current, marker, replacement) {
 }
 const TEST_API_GLOBAL_NAME = "__AW_TEST__";
 const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
-const SOFTWARE_SAFE_RENDER_MODE = "software_safe";
+const VIEWER_RENDER_MODE = "viewer";
+const SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
 const VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
 const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
 const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
 const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
-const UI_LOCALE_STORAGE_PREFIX = "oasis7.software_safe.locale.v1";
-const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.software_safe.prompt_overrides_visible.v1";
+const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
+const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
 const HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
 const HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
 const HOSTED_PLAYER_SESSION_ISSUE_ROUTE = "/api/public/player-session/issue";
@@ -751,12 +752,12 @@ const state = {
   lastError: null,
   eventCount: 0,
   traceCount: 0,
-  cameraMode: "software_safe",
+  cameraMode: "viewer",
   cameraRadius: 0,
   cameraOrthoScale: 0,
-  renderMode: SOFTWARE_SAFE_RENDER_MODE,
+  renderMode: VIEWER_RENDER_MODE,
   rendererClass: "none",
-  softwareSafeReason: null,
+  viewerReason: null,
   renderer: null,
   vendor: null,
   webglVersion: null,
@@ -851,7 +852,7 @@ function isLocaleZh(locale = state.uiLocale) {
   return normalizeUiLocale(locale) === "zh";
 }
 function uiLocaleStorageKey() {
-  return `${UI_LOCALE_STORAGE_PREFIX}:${window.location.pathname || "software_safe.html"}`;
+  return `${UI_LOCALE_STORAGE_PREFIX}:${window.location.pathname || "viewer.html"}`;
 }
 function persistUiLocale(locale) {
   try {
@@ -871,7 +872,7 @@ function resolveInitialUiLocale() {
   return normalizeUiLocale(params.get("locale") || params.get("language")) || resolveStoredUiLocale() || "en";
 }
 function promptOverridesVisibilityStorageKey() {
-  return `${PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX}:${window.location.pathname || "software_safe.html"}`;
+  return `${PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX}:${window.location.pathname || "viewer.html"}`;
 }
 function persistPromptOverridesVisibility(visible) {
   try {
@@ -896,7 +897,7 @@ function updateUiLocaleQuery(locale) {
   url.searchParams.delete("language");
   window.history.replaceState({}, "", url.toString());
 }
-function setSoftwareSafeLocale(locale) {
+function setViewerLocale(locale) {
   const normalized = normalizeUiLocale(locale);
   if (!normalized) {
     return state.uiLocale;
@@ -1101,7 +1102,7 @@ function buildWorldScaleSurface(locale = state.uiLocale) {
   const presentationScale = {
     markerTruthNote: isZh ? "3D marker、2D overview map 和 halo 允许为了可读性被放大；请把距离/半径标签当成真值，不要把屏幕上的直径当成真实几何尺寸。" : "3D markers, the 2D overview map, and halos may be enlarged for readability. Treat the distance/radius labels as truth; do not read on-screen diameter as real geometry size.",
     zoomTruthNote: isZh ? "overview/detail 的 zoom tier 只切换表现语义，不会改写世界的厘米真值。" : "Overview/detail zoom tiers only switch presentation semantics; they do not rewrite centimeter truth in the world model.",
-    softwareSafeNote: isZh ? "software_safe 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。" : "The software_safe entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here."
+    softwareSafeNote: isZh ? "viewer 主入口优先给出文字和数值真值；更底层的 visual QA viewer 可以更夸张，但不应覆盖这里的物理标签。" : "The viewer entry prioritizes textual and numeric truth. Lower-level visual QA surfaces may exaggerate more aggressively, but they should not override the physical labels here."
   };
   return {
     physicalTruth,
@@ -1110,11 +1111,12 @@ function buildWorldScaleSurface(locale = state.uiLocale) {
 }
 function detectRendererMeta() {
   const params = getSearchParams();
-  const reasonFromQuery = params.get("software_safe_reason");
+  const reasonFromQuery = params.get("viewer_reason") || params.get("software_safe_reason");
+  const requestedRenderMode = String(params.get("render_mode") || "").trim().toLowerCase();
   const meta = {
-    renderMode: SOFTWARE_SAFE_RENDER_MODE,
+    renderMode: requestedRenderMode === SOFTWARE_SAFE_RENDER_MODE_ALIAS || requestedRenderMode === VIEWER_RENDER_MODE ? VIEWER_RENDER_MODE : VIEWER_RENDER_MODE,
     rendererClass: "none",
-    softwareSafeReason: reasonFromQuery || "direct_software_safe_entry",
+    viewerReason: reasonFromQuery || "direct_viewer_entry",
     renderer: null,
     vendor: null,
     webglVersion: null
@@ -1124,7 +1126,7 @@ function detectRendererMeta() {
     const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
     if (!gl) {
       meta.rendererClass = "none";
-      meta.softwareSafeReason = reasonFromQuery || "webgl_unavailable";
+      meta.viewerReason = reasonFromQuery || "webgl_unavailable";
       return meta;
     }
     meta.webglVersion = gl.getParameter(gl.VERSION) || null;
@@ -1460,7 +1462,7 @@ function playerSessionReason(auth, deploymentHint) {
   return auth.error || "viewer auth bootstrap is missing or incomplete";
 }
 function strongAuthReason() {
-  return "strong auth remains a separate upgrade plane; software_safe only previews backend reauth for prompt_control and still does not issue hosted-ready asset/governance proofs";
+  return "strong auth remains a separate upgrade plane; viewer only previews backend reauth for prompt_control and still does not issue hosted-ready asset/governance proofs";
 }
 function isStrongAuthSensitiveAction(actionId) {
   const policy = hostedActionPolicy(actionId);
@@ -1479,7 +1481,7 @@ function buildSemanticCapability(actionId) {
       actionId,
       enabled: false,
       code: "observer_only",
-      reason: "selected agent runs through the provider-backed loopback bridge; software_safe stays observer-only for prompt/chat on this lane"
+      reason: "selected agent runs through the provider-backed loopback bridge; viewer stays observer-only for prompt/chat on this lane"
     };
   }
   if (policy) {
@@ -1951,7 +1953,7 @@ function buildGameplaySummary(locale = state.uiLocale) {
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
     firstAgentClaimApprovalRequest,
-    assetGovernanceHandoff: isLocaleZh(locale) ? "资产 / 治理动作仍在单独 lane 处理；software_safe 这里不会直接暴露主代币转账表单。" : "Asset/governance actions remain a separate lane. software_safe exposes no main token transfer form here."
+    assetGovernanceHandoff: isLocaleZh(locale) ? "资产 / 治理动作仍在单独 lane 处理；viewer 这里不会直接暴露主代币转账表单。" : "Asset/governance actions remain a separate lane. viewer exposes no main token transfer form here."
   };
 }
 function describeFirstAgentClaimApprovalRequest(request, locale = state.uiLocale) {
@@ -2039,7 +2041,8 @@ function getState() {
     lastGameplayActionFeedback: snapshotSemanticFeedback(state.lastGameplayActionFeedback),
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
-    softwareSafeReason: state.softwareSafeReason,
+    viewerReason: state.viewerReason,
+    softwareSafeReason: state.viewerReason,
     renderer: state.renderer,
     vendor: state.vendor,
     webglVersion: state.webglVersion,
@@ -2290,7 +2293,7 @@ function describeControls() {
     ],
     usage: "Use fillControlExample(action), sendControl(action), sendGameplayAction(actionIdOrPayload), sendAgentChat(agentId, message), sendPromptControl(mode, payload).",
     notes: [
-      "software_safe acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
+      "viewer acts as a debug_viewer lane: it subscribes to runtime snapshots/events and does not own world authority",
       "when selectedAgentDebug.provider_mode=provider_loopback_http, prompt/chat stay observer-only in runtime live",
       "without viewer auth bootstrap the browser stays guest_session only; hosted public join player-session issuance is still pending"
     ]
@@ -2416,7 +2419,7 @@ function runSteps(payload) {
 function setMode() {
   return {
     ok: false,
-    reason: "software_safe viewer does not expose 2d/3d camera modes"
+    reason: "viewer does not expose 2d/3d camera modes"
   };
 }
 function updateControlFeedbackFromProgress() {
@@ -3885,7 +3888,7 @@ function attachSocket(ws) {
     state.connectionStatus = "connected";
     state.debugViewerStatus = "detached";
     state.lastError = null;
-    sendJson({ type: "hello", client: "software_safe_viewer", version: 1 });
+    sendJson({ type: "hello", client: "viewer", version: 1 });
     sendJson({ type: "subscribe", streams: ["snapshot", "events", "metrics"], event_kinds: [] });
     sendJson({ type: "request_snapshot" });
     syncHostedSessionRefreshLoop();
@@ -4016,7 +4019,8 @@ function bootstrap() {
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
-    softwareSafeReason: state.softwareSafeReason,
+    viewerReason: state.viewerReason,
+    softwareSafeReason: state.viewerReason,
     renderer: state.renderer,
     vendor: state.vendor,
     webglVersion: state.webglVersion
@@ -4308,8 +4312,8 @@ function ViewerEntryMenu() {
     insert(_el$32, () => tr(locale(), "入口", "Entry"));
     insert(_el$35, () => tr(locale(), "语言与 Viewer 入口", "Language and Viewer Entry"));
     insert(_el$36, () => tr(locale(), "主玩法继续留在当前页面；这里只保留语言切换。", "Primary gameplay stays on this page. This menu only keeps locale switching."));
-    _el$38.$$click = () => setSoftwareSafeLocale("zh");
-    _el$39.$$click = () => setSoftwareSafeLocale("en");
+    _el$38.$$click = () => setViewerLocale("zh");
+    _el$39.$$click = () => setViewerLocale("en");
     insert(_el$40, createComponent(Badge, {
       get children() {
         return `locale=${localeCode(locale())}`;
@@ -4446,7 +4450,7 @@ function WorldSummaryPanel() {
     var _el$58 = _tmpl$20(), _el$59 = _el$58.firstChild, _el$60 = _el$59.nextSibling, _el$66 = _el$60.nextSibling, _el$67 = _el$66.firstChild, _el$68 = _el$67.firstChild, _el$69 = _el$68.firstChild, _el$70 = _el$69.nextSibling, _el$71 = _el$68.nextSibling, _el$72 = _el$67.nextSibling, _el$73 = _el$72.firstChild, _el$75 = _el$73.nextSibling, _el$82 = _el$75.nextSibling, _el$83 = _el$82.nextSibling, _el$84 = _el$83.firstChild, _el$85 = _el$84.nextSibling;
     insert(_el$59, createComponent(Badge, {
       "class": "badge badge--accent",
-      children: "software_safe"
+      children: "viewer"
     }), null);
     insert(_el$59, createComponent(Badge, {
       "class": "badge badge--accent",
@@ -4944,7 +4948,7 @@ function WorldSummaryPanel() {
     }), null);
     insert(_el$73, createComponent(Badge, {
       get children() {
-        return `entryReason=${state$1.softwareSafeReason || "-"}`;
+        return `entryReason=${state$1.viewerReason || "-"}`;
       }
     }), null);
     insert(_el$73, createComponent(Badge, {
@@ -4980,7 +4984,7 @@ function WorldSummaryPanel() {
           }), null);
           insert(_el$74, createComponent(Badge, {
             get children() {
-              return `entryReason=${state$1.softwareSafeReason || "-"}`;
+              return `entryReason=${state$1.viewerReason || "-"}`;
             }
           }), null);
           return _el$74;
@@ -5507,7 +5511,7 @@ function InteractionPanel() {
   const interactionEnabled = () => promptCapability().enabled;
   const promptOverridesVisible = () => !!state.promptOverridesVisible;
   const assetLaneStatusText = () => mainTokenTransferCapability().enabled ? tr(locale(), "仅预览", "preview_only") : mainTokenTransferCapability().code || "blocked";
-  const assetLaneDetail = () => mainTokenTransferCapability().enabled ? tr(locale(), "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 software_safe 这里仍然不会直接暴露转账表单。", "Contract marks main_token_transfer as strong_auth-capable on this lane, but software_safe still exposes no transfer form here.") : mainTokenTransferCapability().reason;
+  const assetLaneDetail = () => mainTokenTransferCapability().enabled ? tr(locale(), "contract 表明这个 lane 具备 strong_auth 级 main_token_transfer 能力，但 viewer 这里仍然不会直接暴露转账表单。", "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.") : mainTokenTransferCapability().reason;
   const promptSettingsSummary = () => promptOverridesVisible() ? tr(locale(), "高级 Prompt 设置已展开；你可以继续做 preview/apply/rollback，页面也会显示最近一次反馈。", "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.") : tr(locale(), "Prompt Overrides 默认收起，避免把 operator 级编辑控件直接堆在主入口。显式展开后仍可做 preview/apply/rollback，`__AW_TEST__.sendPromptControl(...)` 也保持可用。", "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.");
   const promptSettingsButtonLabel = () => promptOverridesVisible() ? tr(locale(), "收起 Prompt Overrides", "Hide Prompt Overrides") : tr(locale(), "显示 Prompt Overrides", "Show Prompt Overrides");
   if (!agentId()) {
@@ -5565,7 +5569,7 @@ function InteractionPanel() {
       get children() {
         return createComponent(EmptyState, {
           get children() {
-            return tr(locale(), `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${debugContext()?.execution_mode || "headless_agent"}；software_safe 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`, `Selected agent currently runs through the provider-backed loopback bridge in ${debugContext()?.execution_mode || "headless_agent"}; software_safe stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`);
+            return tr(locale(), `当前选中的 Agent 正通过 provider-backed loopback bridge 运行在 ${debugContext()?.execution_mode || "headless_agent"}；viewer 仍处于 debug_viewer 只读观察模式，所以这里会刻意禁用 prompt/chat。`, `Selected agent currently runs through the provider-backed loopback bridge in ${debugContext()?.execution_mode || "headless_agent"}; viewer stays in debug_viewer observer-only mode, so prompt/chat are intentionally disabled here.`);
           }
         });
       }
@@ -6253,7 +6257,7 @@ function AppShell() {
 }
 const app = document.getElementById("app");
 if (!app) {
-  throw new Error("software_safe root #app is missing");
+  throw new Error("viewer root #app is missing");
 }
 let dispose = render$1(() => createComponent(AppShell, {}), app);
 setRenderHook(() => {

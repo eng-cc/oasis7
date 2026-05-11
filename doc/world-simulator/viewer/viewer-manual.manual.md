@@ -8,19 +8,19 @@
 - 系统级测试分层与 suite 选择仍以 `testing-manual.md` 为权威总入口。
 
 ## 目标
-- 提供 `software_safe` Viewer Web 主入口的统一操作手册。
+- 提供 `viewer` Viewer Web 主入口的统一操作手册，并说明 `software_safe` 兼容 alias。
 - 统一 live server、Web 静态入口、agent-browser 闭环与常见排查步骤。
 - 明确当前仓库已不再提供旧 3D / native / 视觉专项工具链。
 
 ## 适用范围
 - live server：`crates/oasis7 --bin oasis7_viewer_live`
-- Web 静态入口：`crates/oasis7_viewer/software_safe.html`
+- Web 静态入口：发布产物使用 `viewer.html`（canonical）/ `software_safe.html`（compat）；源码页面文件当前仍由 `crates/oasis7_viewer/software_safe.html` 生成并同步复制
 - Web 启动脚本：`scripts/run-viewer-web.sh`
 - Web 回归脚本：
   - `scripts/viewer-primary-web-entry-regression.sh`
   - `scripts/viewer-software-safe-step-regression.sh`
   - `scripts/viewer-software-safe-chat-regression.sh`
-- 边界说明：本手册只适用于 `software_safe` Viewer Web 页面，不适用于 `oasis7_web_launcher` / launcher Web 控制面；后者默认先走 GUI Agent。
+- 边界说明：本手册只适用于 `viewer` Viewer Web 页面（兼容 `software_safe` alias），不适用于 `oasis7_web_launcher` / launcher Web 控制面；后者默认先走 GUI Agent。
 
 ## 快速开始
 
@@ -39,7 +39,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 ```
 
 - 默认访问地址：`http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011`
-- 当前仓库只提供 `software_safe` 单一 Web 入口；不再维护其他 Viewer surface。
+- 当前仓库只提供 `viewer` 单一 Web / UI 入口；`software_safe` 只保留为兼容 alias，不再作为正式模式名。
 
 ### 3）前置依赖
 - Node.js / npm
@@ -47,7 +47,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - 若要跑 agent-browser 闭环，还需安装 `agent-browser`
 
 ## 页面能力
-- 当前页面聚焦 `software_safe` 实时观察与正式玩法摘要。
+- 当前页面聚焦 `viewer` 实时观察与正式玩法摘要。
 - 支持 `locale=zh|en` 初始化和页面内中英文切换。
 - 支持最小 prompt/chat 控制面；仅在 auth/bootstrap 可用时开放。
 - 页面不再提供 `standard Viewer` 跳转，也不再承担材质/theme/3D 视觉 QA 职责。
@@ -70,7 +70,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 mkdir -p output/playwright/viewer
 agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=software_safe&test_api=1"
+agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
 agent-browser wait --load networkidle
 agent-browser snapshot -i
 agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
@@ -95,7 +95,7 @@ agent-browser close
 
 ## 最小通过标准
 - 页面可加载，且 `window.__AW_TEST__` 可用。
-- `getState().renderMode=software_safe`。
+- `getState().renderMode=viewer`（兼容 alias 场景可回出 `software_safe` 但不再是 canonical 期望）。
 - `connectionStatus=connected`，或页面显式给出可追溯 blocker。
 - 至少产出 1 张截图与 1 份 console/state 证据。
 
@@ -104,7 +104,7 @@ agent-browser close
 - `window.__AW_TEST__.sendControl("step")`
 - `window.__AW_TEST__.sendPromptControl("preview", { agentId: "agent-0", shortTermGoal: "test" })`
 - `window.__AW_TEST__.sendPromptControl("apply", { agentId: "agent-0", shortTermGoal: "test" })`
-- `window.__AW_TEST__.sendAgentChat("agent-0", "hello from software_safe")`
+- `window.__AW_TEST__.sendAgentChat("agent-0", "hello from viewer")`
 
 ## 常见问题排查
 - 页面空白：确认 `run-viewer-web.sh` 已完成构建并监听目标端口。

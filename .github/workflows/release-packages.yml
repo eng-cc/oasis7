@@ -280,7 +280,9 @@ jobs:
           (
             npm --prefix crates/oasis7_viewer run build:software-safe
             cp crates/oasis7_viewer/software_safe.html output/release/web-dist/index.html
+            cp crates/oasis7_viewer/software_safe.html output/release/web-dist/viewer.html
             cp crates/oasis7_viewer/software_safe.html output/release/web-dist/software_safe.html
+            cp crates/oasis7_viewer/software_safe.js output/release/web-dist/viewer.js
             cp crates/oasis7_viewer/software_safe.js output/release/web-dist/software_safe.js
             cp crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html output/release/web-dist/software_safe_first_agent_claim_evidence.html
             cp crates/oasis7_viewer/favicon.ico output/release/web-dist/favicon.ico

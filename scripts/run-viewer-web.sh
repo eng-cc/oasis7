@@ -11,7 +11,7 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-viewer-web.sh [options]
 
-Build and serve the software-safe viewer static site.
+Build and serve the viewer static site.
 
 Options:
   --address <host>  HTTP bind address (default: 127.0.0.1)
@@ -61,7 +61,9 @@ fi
 )
 mkdir -p "$DIST_DIR"
 cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/index.html"
+cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/viewer.html"
 cp "$VIEWER_DIR/software_safe.html" "$DIST_DIR/software_safe.html"
+cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/viewer.js"
 cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/software_safe.js"
 cp "$VIEWER_DIR/software_safe_first_agent_claim_evidence.html" \
   "$DIST_DIR/software_safe_first_agent_claim_evidence.html"

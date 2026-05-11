@@ -893,7 +893,7 @@ fn build_game_url(options: &CliOptions) -> String {
     format!(
         "http://{viewer_host}:{}/?{}&{}&{}",
         options.viewer_port,
-        encoded_query_pair("render_mode", "software_safe"),
+        encoded_query_pair("render_mode", "viewer"),
         encoded_query_pair("ws", ws_url.as_str()),
         encoded_query_pair("hosted_access", hosted_access_hint.as_str()),
     )
