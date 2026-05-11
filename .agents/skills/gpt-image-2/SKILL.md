@@ -5,10 +5,11 @@ description: >
   Generate images with GPT Image 2 (ChatGPT Images 2.0) inside Claude Code,
   using your existing ChatGPT Plus or Pro subscription — no separate OpenAI
   access, no per-image billing. Supports text-to-image, image-to-image
-  editing, style transfer, and multi-reference composition via the local
-  Codex CLI. Triggers on "gpt image 2", "gpt-image-2", "ChatGPT Images 2.0",
-  "image 2", or any explicit ask to generate or edit an image through the
-  user's ChatGPT plan.
+  editing, style transfer, and multi-reference composition. Prefer the
+  current session's built-in image generation path; fall back to the local
+  Codex CLI wrapper only when direct image output is unavailable. Triggers on
+  "gpt image 2", "gpt-image-2", "ChatGPT Images 2.0", "image 2", or any
+  explicit ask to generate or edit an image through the user's ChatGPT plan.
 emoji: "🪞"
 homepage: https://agentspace.so
 license: MIT
@@ -20,7 +21,7 @@ license: MIT
 
 Generate images with **GPT Image 2** (ChatGPT Images 2.0) inside your agent, using your existing ChatGPT Plus or Pro subscription — **no separate OpenAI access, no Fal or Replicate tokens, no per-image billing.**
 
-Text-to-image, image-to-image editing, style transfer, and multi-reference composition. Runs entirely through the local `codex` CLI you're already logged into.
+Text-to-image, image-to-image editing, style transfer, and multi-reference composition. Prefer the current Codex session's built-in image output path. Use the bundled local `codex` CLI wrapper only as a fallback when the current session cannot emit images directly.
 
 > **Heads up — this skill requires a ChatGPT Plus or Pro subscription _plus_ the Codex CLI installed locally.** If you have neither, you can use GPT Image 2 in the browser via RunComfy instead — hosted, no ChatGPT subscription or local install needed (RunComfy account required):
 >
@@ -45,9 +46,29 @@ Do **not** auto-trigger for a plain "generate an image" request if the user didn
 
 ## How to invoke
 
-A single bash script handles everything: runs `codex exec` with the right flags, then decodes the generated image from the persisted session rollout.
+This skill has two execution paths.
 
-**Text-to-image:**
+### Default path: current session direct image output
+
+Use the current session's built-in image generation capability first. Do not jump straight to `scripts/gen.sh` when the current session can already generate images.
+
+Process:
+
+1. Generate the image directly in the current session.
+2. If the user named a destination path or the output is meant for the current project, move or copy the selected image into the workspace.
+3. Report the saved path and keep the prompt faithful to the user's request.
+
+Use this path for ordinary "generate/edit an image with GPT Image 2" requests.
+
+### Fallback path: local `codex` CLI wrapper
+
+Use `scripts/gen.sh` only when one of these is true:
+
+- the current session does not expose direct image output capability
+- the current session explicitly refuses direct image output
+- the user explicitly wants a local shell workflow / terminal command / repeatable script entrypoint
+
+Fallback text-to-image:
 
 ```bash
 bash scripts/gen.sh \
@@ -55,7 +76,7 @@ bash scripts/gen.sh \
   --out <absolute/path/to/output.png>
 ```
 
-**Image-to-image** (reference flag is repeatable for multi-reference composition):
+Fallback image-to-image (reference flag is repeatable for multi-reference composition):
 
 ```bash
 bash scripts/gen.sh \
@@ -69,25 +90,34 @@ Optional: `--timeout-sec 300` (default 300).
 ## Default behavior
 
 - **Pass the user's prompt through raw.** Do not translate, polish, or add style modifiers unless the user asked for it.
-- **Choose the output path.** Default to `./image-<YYYYMMDD-HHMMSS>.png` in the current working directory if the user didn't specify.
+- **Prefer direct image output in the current session.** Treat `scripts/gen.sh` as fallback infrastructure, not the primary route.
+- **Choose the output path.** If using the fallback script and the user did not specify a path, default to `./image-<YYYYMMDD-HHMMSS>.png` in the current working directory.
 - **Deliver the image.** After the script succeeds, display / attach the output file. Do not stop at "done, see path X".
 - **Text-heavy layouts are fine.** Image 2 handles infographics and timeline prompts well. Do not preemptively warn just because a prompt has a lot of text.
 
 ## Hard constraints
 
 - Do not switch routes without permission. If the user said "use GPT Image 2", do not substitute DALL·E, Midjourney, an HTML mockup, or a manual screenshot workflow.
+- Do not force a nested `codex exec` when the current session already has direct image output capability.
 - Do not rewrite the prompt unless asked.
-- Do not imply this skill works without a local `codex` login and a valid ChatGPT subscription with image-generation entitlement.
+- Do not imply the fallback script works without a local `codex` login and a valid ChatGPT subscription with image-generation entitlement.
+- Do not imply the fallback script can manufacture image capability when the nested session itself reports that direct image output is unavailable.
 
 ## Prerequisites
+
+### Default path
+
+- A Codex session that exposes built-in direct image output capability.
+
+### Fallback path
 
 1. `codex` CLI installed — `brew install codex` or see [openai/codex](https://github.com/openai/codex).
 2. Logged in with a ChatGPT plan that includes Image 2 — `codex login`.
 3. `python3` on PATH (ships with macOS; `apt install python3` on Linux).
 
-This skill does **not** grant image-generation capability on its own. It exposes the capability the user already has through their ChatGPT subscription.
+This skill does **not** grant image-generation capability on its own. Both paths depend on capability the user already has; the fallback script only repackages that capability through a nested `codex exec`.
 
-## Exit codes
+## Fallback exit codes
 
 | code | meaning |
 |------|---------|
@@ -99,21 +129,25 @@ This skill does **not** grant image-generation capability on its own. It exposes
 | 6    | no new session file detected |
 | 7    | imagegen did not produce an image payload (feature not enabled, quota, or capability refused) |
 
-On failure, name the layer in one sentence instead of dumping the full stderr at the user.
+On fallback failure, name the layer in one sentence instead of dumping the full stderr at the user.
 
-## How it works
+## Fallback internals
 
-The `codex` CLI reuses the logged-in ChatGPT session and exposes an `imagegen` tool (gated behind the `image_generation` feature flag). The script:
+The fallback wrapper uses a nested `codex exec`. It is no longer the preferred path because nested sessions can fail to inherit direct image output capability even when another session succeeded earlier.
+
+When fallback is required, the script:
 
 1. snapshots `~/.codex/sessions/` before the run
-2. runs `codex exec --enable image_generation --sandbox read-only ...` (with `-i <file>` for each reference image)
-3. diffs the sessions directory, then invokes `scripts/extract_image.py` to scan every new rollout JSONL for a base64 image payload (PNG / JPEG / WebP magic-header match)
-4. decodes the largest matching blob and writes it to `--out`
+2. runs `codex exec --enable image_generation ...` from an isolated temporary directory (with `-i <file>` for each reference image)
+3. diffs the sessions directory, then invokes `scripts/extract_image.py` to scan every new rollout JSONL for image payloads
+4. accepts both classic base64 blobs and inline `data:image/...` payloads, then writes the largest matching result to `--out`
+5. if no image payload exists, surfaces the nested session's final failure sentence so the caller can distinguish "no capability" from "parse failure"
 
-Two non-obvious flags other wrappers get wrong on codex-cli 0.111.0+:
+Important fallback behavior:
 
 - `--enable image_generation` is **required**; the feature is still under-development and off by default.
 - `--ephemeral` **must not** be used — ephemeral sessions aren't persisted, so the image payload has nowhere to live.
+- A nested success requires a real image-generation event in the nested rollout. If the nested session only answers with text like `Direct image output is unavailable in this session.`, no script-side extraction change can turn that run into a successful image.
 
 ## Data handling
 
@@ -126,4 +160,4 @@ The script is narrowly scoped on purpose:
 
 ## What this skill is not
 
-Not a direct OpenAI API client. Not a capability grant — it depends on the user's working Codex CLI login. Not a multi-tenant service (one call per invocation; concurrent calls are serialized by the filesystem-snapshot diff).
+Not a direct OpenAI API client. Not a capability grant — it depends on the user's existing direct or nested Codex image capability. Not a guarantee that nested fallback will always inherit the same entitlement as the current session. Not a multi-tenant service (one call per invocation; concurrent calls are serialized by the filesystem-snapshot diff).
