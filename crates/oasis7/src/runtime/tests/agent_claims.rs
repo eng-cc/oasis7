@@ -854,7 +854,20 @@ fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refu
     }
     world.step().expect("finalize release after grant expiry");
 
-    match &world.journal().events.last().expect("event").body {
+    let released_event = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.body,
+                WorldEventBody::Domain(DomainEvent::AgentClaimReleased { .. })
+            )
+        })
+        .expect("missing AgentClaimReleased event");
+
+    match &released_event.body {
         WorldEventBody::Domain(DomainEvent::AgentClaimReleased {
             refunded_bond_restricted_amount,
             refunded_bond_restricted_sink,
@@ -931,7 +944,20 @@ fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refu
     }
     world.step().expect("finalize release after revoke");
 
-    match &world.journal().events.last().expect("event").body {
+    let released_event = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find(|event| {
+            matches!(
+                event.body,
+                WorldEventBody::Domain(DomainEvent::AgentClaimReleased { .. })
+            )
+        })
+        .expect("missing AgentClaimReleased event");
+
+    match &released_event.body {
         WorldEventBody::Domain(DomainEvent::AgentClaimReleased {
             refunded_bond_restricted_amount,
             refunded_bond_restricted_sink,

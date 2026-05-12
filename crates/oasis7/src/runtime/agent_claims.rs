@@ -139,6 +139,25 @@ pub(crate) fn agent_claim_eligible_balance(
     }
 }
 
+pub(crate) fn auto_restricted_starter_claim_amount(
+    slot_index: u8,
+    liquid_balance: u64,
+    restricted_balance: u64,
+    liveops_pool_balance: u64,
+    total_upfront_amount: u64,
+    has_active_restricted_grant: bool,
+) -> u64 {
+    if slot_index != 1 || has_active_restricted_grant || restricted_balance > 0 {
+        return 0;
+    }
+    let eligible_without_auto =
+        agent_claim_eligible_balance(slot_index, liquid_balance, restricted_balance);
+    if eligible_without_auto >= total_upfront_amount {
+        return 0;
+    }
+    liveops_pool_balance.min(total_upfront_amount.saturating_sub(eligible_without_auto))
+}
+
 pub(crate) fn split_agent_claim_upfront_funding(
     slot_index: u8,
     liquid_balance: u64,

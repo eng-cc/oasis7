@@ -100,6 +100,7 @@ pub use manifest::{
 };
 
 // Modules
+pub(crate) use agent_claims::auto_restricted_starter_claim_amount;
 pub use agent_claims::{
     agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier, AgentClaimCostQuote,
 };

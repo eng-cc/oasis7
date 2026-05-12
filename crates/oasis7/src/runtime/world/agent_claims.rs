@@ -119,7 +119,7 @@ impl World {
                         latest_claim.forced_reclaim_penalty_bps,
                     );
                 let refund_sink =
-                    self.restricted_starter_claim_refund_sink(latest_claim.claim_owner_id.as_str());
+                    self.restricted_starter_claim_refund_sink_for_claim(&latest_claim);
                 let refunded_bond_split = split_agent_claim_bond_refund(
                     latest_claim.claim_bond_locked_restricted_amount,
                     latest_claim.claim_bond_locked_liquid_amount,
@@ -172,8 +172,7 @@ impl World {
     ) -> Result<(), WorldError> {
         if let Some(ready_at_epoch) = claim.release_ready_at_epoch {
             if current_epoch >= ready_at_epoch {
-                let refund_sink =
-                    self.restricted_starter_claim_refund_sink(claim.claim_owner_id.as_str());
+                let refund_sink = self.restricted_starter_claim_refund_sink_for_claim(claim);
                 let refunded_bond_split = split_agent_claim_bond_refund(
                     claim.claim_bond_locked_restricted_amount,
                     claim.claim_bond_locked_liquid_amount,
@@ -207,8 +206,7 @@ impl World {
                 0,
                 claim.forced_reclaim_penalty_bps,
             );
-            let refund_sink =
-                self.restricted_starter_claim_refund_sink(claim.claim_owner_id.as_str());
+            let refund_sink = self.restricted_starter_claim_refund_sink_for_claim(claim);
             let refunded_bond_split = split_agent_claim_bond_refund(
                 claim.claim_bond_locked_restricted_amount,
                 claim.claim_bond_locked_liquid_amount,

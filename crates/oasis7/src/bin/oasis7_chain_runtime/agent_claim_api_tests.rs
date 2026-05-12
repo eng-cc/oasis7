@@ -241,6 +241,23 @@ fn approved_request_world_dir() -> PathBuf {
     save_world(&world, "approved")
 }
 
+fn auto_funding_claim_world_dir() -> PathBuf {
+    let mut world = configure_claim_world();
+    world.set_main_token_supply(MainTokenSupplyState {
+        total_supply: 325,
+        circulating_supply: 0,
+        ..MainTokenSupplyState::default()
+    });
+    world
+        .set_main_token_treasury_balance(
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+            325,
+        )
+        .expect("seed dedicated pool");
+    world.step().expect("persist auto-funding world state root");
+    save_world(&world, "auto-funding")
+}
+
 fn build_http_request(path: &str, method: &str, body: &str) -> Vec<u8> {
     format!(
         "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:5121\r\nContent-Length: {}\r\n\r\n{}",
@@ -579,6 +596,58 @@ fn agent_claim_submit_handler_accepts_slot_1_claim_after_approval() {
             .as_ref()
             .and_then(|preview| preview.slot_index),
         Some(1)
+    );
+
+    wait_for_committed_height(&runtime, 1);
+    stop_runtime(&runtime);
+}
+
+#[test]
+fn agent_claim_submit_handler_previews_slot_1_auto_funding() {
+    let _guard = agent_claim_api_test_guard();
+    reset_agent_claim_api_state_for_tests();
+    let runtime = started_runtime("node-agent-claim-auto-funding");
+    let world_dir = auto_funding_claim_world_dir();
+
+    let request = ChainAgentClaimSubmitRequest {
+        claimer_agent_id: "alice".to_string(),
+        target_agent_id: "bob".to_string(),
+    };
+    let body = serde_json::to_string(&request).expect("serialize request");
+    let http_request = build_http_request("/v1/chain/agent-claim/submit", "POST", &body);
+    let (mut server_stream, mut client_stream) = tcp_stream_pair();
+    let handled = maybe_handle_agent_claim_request(
+        &mut server_stream,
+        &http_request,
+        &runtime,
+        "POST",
+        "/v1/chain/agent-claim/submit",
+        "/v1/chain/agent-claim/submit",
+        DEFAULT_NODE_ID,
+        "world-agent-claim-auto-funding",
+        world_dir.as_path(),
+    )
+    .expect("handler should process request");
+    assert!(handled);
+    drop(server_stream);
+
+    client_stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("set client timeout");
+    let mut response_bytes = Vec::new();
+    client_stream
+        .read_to_end(&mut response_bytes)
+        .expect("read handler response");
+    let (status, response): (u16, ChainAgentClaimActionResponse) =
+        decode_http_json_response(&response_bytes);
+    assert_eq!(status, 200, "{response:?}");
+    assert!(response.ok);
+    assert_eq!(
+        response
+            .preview
+            .as_ref()
+            .and_then(|preview| preview.auto_issued_restricted_amount),
+        Some(325)
     );
 
     wait_for_committed_height(&runtime, 1);

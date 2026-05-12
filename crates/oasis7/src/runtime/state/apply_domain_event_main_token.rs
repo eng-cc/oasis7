@@ -16,7 +16,7 @@ mod economy;
 #[path = "apply_domain_event_main_token_genesis.rs"]
 mod genesis;
 #[path = "apply_domain_event_main_token_helpers.rs"]
-mod helpers;
+pub(super) mod helpers;
 #[path = "apply_domain_event_main_token_restricted_claims.rs"]
 mod restricted_claims;
 

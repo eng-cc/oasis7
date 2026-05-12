@@ -20,7 +20,7 @@ pub(super) fn add_main_token_treasury_balance(
     Ok(())
 }
 
-pub(super) fn debit_main_token_treasury_balance(
+pub(in super::super) fn debit_main_token_treasury_balance(
     balances: &mut BTreeMap<String, u64>,
     bucket_id: &str,
     amount: u64,

@@ -398,6 +398,10 @@ pub enum DomainEvent {
         #[serde(default)]
         upfront_liquid_spent_amount: u64,
         #[serde(default)]
+        auto_issued_restricted_amount: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auto_issued_restricted_source_treasury_bucket_id: Option<String>,
+        #[serde(default)]
         claim_bond_locked_restricted_amount: u64,
         #[serde(default)]
         claim_bond_locked_liquid_amount: u64,

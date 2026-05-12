@@ -304,6 +304,8 @@ pub struct AgentClaimState {
     pub claim_bond_locked_restricted_amount: u64,
     #[serde(default)]
     pub claim_bond_locked_liquid_amount: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_bond_restricted_source_treasury_bucket_id: Option<String>,
     #[serde(default)]
     pub upkeep_per_epoch: u64,
     #[serde(default)]

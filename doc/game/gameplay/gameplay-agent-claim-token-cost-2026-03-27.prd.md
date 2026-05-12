@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 当前规则把 agent 认领完全绑定到 `liquid main token`。在“首个 claim 也不免费”生效后，limited preview / allowlist / QA seed 账号若没有可流通余额就无法进入中循环；但直接空投可转账 main token 又会打开刷号和套现路径。
-- Proposed Solution: 保持“首个 claim 仍为非零 canonical 成本”的主规则不变，在 main token 账本中新增 `restricted starter claim balance`。该余额不可转账、不可提现、不可用于普通资产动作，只可用于 `slot-1` 的 claim / upkeep；由其资助的 bond refund 必须退回同一 restricted bucket，不得洗成可流通余额。
+- Proposed Solution: 保持“首个 claim 仍为非零 canonical 成本”的主规则不变，在 main token 账本中新增 `restricted starter claim balance`。该余额不可转账、不可提现、不可用于普通资产动作，只可用于 `slot-1` 的 claim / upkeep；当新账号首个 `slot-1` claim 没有现成 restricted grant/balance 且 dedicated pool 足够覆盖缺口时，runtime 应在 `ClaimAgent` 路径自动补足启动额度，而不是要求额外运营审批；由其资助的 bond refund 必须继续保留 provenance，不得洗成可流通余额。
 - Success Criteria:
   - SC-1: 第 1 个 agent 认领仍不存在免费路径；所有成功认领都必须满足 `activation_fee_amount > 0`、`claim_bond_amount > 0`、`upkeep_per_epoch > 0`。
   - SC-2: `restricted starter claim balance` 仅允许用于 `slot-1` 的 upfront claim cost 与 `slot-1` upkeep；其通过 `TransferMainToken`、公开转账 API 或 explorer 导出的误放过率为 `0`。
@@ -21,6 +21,7 @@
   - SC-10: 在正式 CLI 之上，仓库还必须提供一层面向运营同事的短命令 wrapper，支持 `status / issue / revoke` 的位置参数和 `OASIS7_WORLD_DIR` 默认注入，同时不新增任何绕过 runtime / controller-governed admin registry 的旁路。
   - SC-11: governance registry 的 manifest/import/audit 工具链必须支持按 `slot_id` 声明独立 signer threshold；`liveops` 这类低权限 restricted grant admin slot 可以显式使用 `1-of-2`，而 treasury/controller 主槽位继续默认 `2-of-3`，且不得因为引入 `liveops` 特例而把其他 slot 一并降阈值。
   - SC-12: daily restricted grant 的出账源必须从 `ecosystem_pool` 切换到独立 `restricted_starter_claim_liveops_pool`；该专用池只能由当前 `ecosystem_pool` treasury controller slot 绑定的 controller account 通过正式 top-up action 从大池划拨资金，`liveops_community` 的日常 `issue/revoke/status` 只消费和回读该专用池，不直接动 `ecosystem_pool`。
+  - SC-13: 当玩家处于首个 `slot-1` claim、当前没有 active restricted grant、账户也没有现成 restricted starter balance 时，只要 `restricted_starter_claim_liveops_pool` 能覆盖 upfront 缺口，runtime 就必须在 `ClaimAgent` 路径自动补足该缺口并继续认领，不再要求额外 `approval request -> operator review`；若 dedicated pool 仍不足，则只返回资金不足 blocker，不得生成 pending 审批状态。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -43,12 +44,12 @@
   - PRD-GAME-011: As a 中循环玩家, I want every agent claim to keep a non-zero main-token-denominated cost and require ongoing upkeep, so that agent control reflects actual commitment instead of zero-cost squatting.
   - PRD-GAME-011A: As a `producer_system_designer`, I want the first claim to also be non-free, so that the world does not silently create a “starter free slot” that weakens the sink and encourages alt abuse.
   - PRD-GAME-011B: As a `qa_engineer`, I want forced reclaim and refund/slash outcomes to be deterministic, so that we can test abuse resistance instead of relying on manual moderation.
-  - PRD-GAME-011C: As a limited preview / allowlist owner, I want to seed first-claim funds without granting transferable assets, so that test users can enter mid-loop without opening an airdrop abuse lane.
+  - PRD-GAME-011C: As a limited preview / allowlist owner, I want the first `slot-1` claim to auto-draw dedicated-pool startup funds without granting transferable assets, so that test users can enter mid-loop without opening an airdrop abuse lane or waiting for manual approval.
   - PRD-GAME-011D: As a `runtime_engineer`, I want claim/refund accounting to preserve funding-source provenance, so that restricted starter funds cannot be converted into transferable main token through release or reclaim.
   - PRD-GAME-011E: As a new account entering PostOnboarding with `owned_claim_count=0`, I want a dedicated `slot-1` claim onboarding flow that reuses the canonical quote and still requires explicit confirmation, so that I can finish the first claim without hunting raw detail text or triggering a silent auto-claim.
 - Critical User Flows:
-  1. Flow-AGC-001: `liveops / onboarding / QA seed 发放 restricted starter claim balance -> 账户获得不可转账、带用途范围的 canonical bucket`
-  2. Flow-AGC-002: `玩家选择未认领 agent -> 系统返回 slot quote（activation fee / bond / upkeep / cap / eligible balances）-> 若为 slot-1 则 restricted 余额优先参与报价 -> 玩家确认 -> 扣除 activation fee、锁定 bond -> agent 进入 claimed_active`
+  1. Flow-AGC-001: `liveops / onboarding / QA seed 仍可显式发放 restricted starter claim balance；但默认首个 slot-1 claim 不再依赖运营审批，而是优先消费现有 restricted/liquid，并在 dedicated pool 足够时自动补足缺口`
+  2. Flow-AGC-002: `玩家选择未认领 agent -> 系统返回 slot quote（activation fee / bond / upkeep / cap / eligible balances / auto starter funding）-> 若为 slot-1 则先评估现有 restricted 余额，再判断 dedicated pool 可自动补足多少缺口 -> 玩家确认 -> runtime 原子完成 auto-funding（若需要）、扣除 activation fee、锁定 bond -> agent 进入 claimed_active`
   3. Flow-AGC-002A: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 canonical `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` onboarding CTA -> 玩家先选中未认领目标 -> HUD 回显 canonical quote / blocker -> 玩家显式点击 Prepare 后再 Confirm -> Viewer 才提交正式 claim action
   4. Flow-AGC-003: `每个 upkeep epoch 到达 -> 系统按 restricted -> liquid 优先级尝试结算 slot-1 upkeep -> 余额足够则继续持有 -> 不足则进入 upkeep_grace`
   5. Flow-AGC-004: `玩家在 cooldown 后主动 release -> 系统结清欠费 -> 按原 funding source 退还 bond 剩余部分 -> agent 回到 unclaimed`
@@ -59,8 +60,8 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | Restricted Starter Balance | `account_id`、`restricted_starter_claim_balance`、`issuance_reason`、`spend_scope`、`expires_at_epoch`、`issuer_id` | liveops / onboarding / QA seed 发放或回收受限余额 | `unissued -> issued -> partially_spent -> exhausted/expired/revoked` | `spend_scope` 固定为 `slot-1 claim + slot-1 upkeep`；默认不可与 `TransferMainToken` 共享 | 仅指定 issuer 可发放/回收；持有人不可转赠 |
-| Claim Quote | `agent_id`、`claimer_id`、`claim_slot_index`、`reputation_tier`、`claim_cap`、`activation_fee_amount`、`claim_bond_amount`、`upkeep_per_epoch`、`transferable_liquid_balance`、`restricted_starter_claim_balance`、`eligible_claim_balance`、`release_cooldown_epochs` | 玩家查看未认领 agent 时返回成本报价与风险提示 | `unclaimed -> quote_ready` | `slot-1 multiplier=1.0`、`slot-2=1.5`、`slot-3=2.0`；`total_upfront_cost = activation_fee_amount + claim_bond_amount + upkeep_per_epoch` | 仅当 agent 未被认领、玩家未超 cap，且 `eligible_claim_balance >= total_upfront_cost` 时可确认；`slot-2/3` 的 eligible balance 不得包含 restricted bucket |
-| Claim Activation | `claim_owner_id`、`claim_started_epoch`、`next_upkeep_epoch`、`claim_bond_locked_amount`、`claim_bond_locked_restricted_amount`、`claim_bond_locked_liquid_amount`、`activation_fee_burn_amount`、`activation_fee_treasury_amount`、`upfront_restricted_spent_amount`、`upfront_liquid_spent_amount` | 点击确认认领后扣费并锁定 bond | `quote_ready -> claimed_active` | `activation_fee_split_bps = 5000 burn / 5000 treasury`；`slot-1` 优先花 restricted，再补 liquid；首个认领也必须扣费 | 同一 agent 同时只能成功 1 个 claim；并发失败方必须原子回滚 |
+| Claim Quote | `agent_id`、`claimer_id`、`claim_slot_index`、`reputation_tier`、`claim_cap`、`activation_fee_amount`、`claim_bond_amount`、`upkeep_per_epoch`、`transferable_liquid_balance`、`restricted_starter_claim_balance`、`auto_restricted_starter_claim_amount`、`eligible_claim_balance`、`release_cooldown_epochs` | 玩家查看未认领 agent 时返回成本报价与风险提示 | `unclaimed -> quote_ready` | `slot-1 multiplier=1.0`、`slot-2=1.5`、`slot-3=2.0`；`total_upfront_cost = activation_fee_amount + claim_bond_amount + upkeep_per_epoch` | 仅当 agent 未被认领、玩家未超 cap，且 `eligible_claim_balance >= total_upfront_cost` 时可确认；`slot-2/3` 的 eligible balance 不得包含 restricted bucket；自动启动金额只允许出现在首个 `slot-1` |
+| Claim Activation | `claim_owner_id`、`claim_started_epoch`、`next_upkeep_epoch`、`claim_bond_locked_amount`、`claim_bond_locked_restricted_amount`、`claim_bond_locked_liquid_amount`、`activation_fee_burn_amount`、`activation_fee_treasury_amount`、`upfront_restricted_spent_amount`、`upfront_liquid_spent_amount`、`auto_issued_restricted_amount` | 点击确认认领后扣费并锁定 bond | `quote_ready -> claimed_active` | `activation_fee_split_bps = 5000 burn / 5000 treasury`；`slot-1` 优先花 restricted，再补 liquid；当 dedicated pool 自动补足时，auto-issued restricted amount 先进入同一 provenance 结算，再继续 claim；首个认领也必须扣费 | 同一 agent 同时只能成功 1 个 claim；并发失败方必须原子回滚 |
 | Upkeep Settlement | `upkeep_due_epoch`、`upkeep_per_epoch`、`upkeep_paid_amount`、`upkeep_restricted_spent_amount`、`upkeep_liquid_spent_amount`、`grace_deadline_epoch`、`delinquent_amount` | 到达结算 epoch 时自动尝试扣除 upkeep | `claimed_active -> claimed_active` 或 `claimed_active -> upkeep_grace` | `slot-1` upkeep 先尝试 restricted，再尝试 liquid；`slot-2/3` upkeep 只能花 liquid；每次只结算 1 个 epoch 的应付额 | 仅系统结算；owner 可通过补足可用余额恢复 |
 | Voluntary Release | `release_requested_epoch`、`release_effective_epoch`、`bond_refund_amount`、`bond_refund_restricted_amount`、`bond_refund_liquid_amount`、`cooldown_satisfied` | owner 主动放弃当前 claim | `claimed_active/upkeep_grace -> released -> unclaimed` | 退款金额 = `claim_bond_locked_amount - unpaid_upkeep - penalties`；restricted 来源的 bond 退款必须回 restricted bucket | 只有当前 owner 可 release；未过 cooldown 不允许 |
 | Forced Reclaim | `forced_reason`、`forced_reclaim_epoch`、`forced_penalty_amount`、`bond_refund_amount`、`bond_refund_restricted_amount`、`bond_refund_liquid_amount` | 欠费超宽限或持续闲置时系统回收 | `upkeep_grace/inactive_reclaim_candidate -> forced_reclaimed -> unclaimed` | 欠费宽限 `grace_epochs = 2`；闲置阈值 `7` 个 epoch，最晚 `10` 个 epoch 完成回收；`forced_reclaim_penalty_bps = 2000`（作用于剩余 bond） | 仅系统可执行；owner 不能在最终回收点之后阻断 |
@@ -80,6 +81,7 @@
   - AC-9: `TransferMainToken`、公开转账 API、explorer 余额排序与总额展示必须显式区分 `transferable_balance` 与 `restricted_balance`；restricted 不得被视为可转账资产。
   - AC-10: 本机制不得被表述为现实货币付费解锁、公开售卖 agent 或永久产权出售；它是 gameplay 内部的 main token 承诺成本机制与受限启动资助工具。
   - AC-11: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` 认领引导卡；该卡必须直接复用 canonical quote / blocker，并要求玩家完成“选目标 -> Prepare -> Confirm”的显式确认链路，不允许静默自动认领。
+  - AC-12: 当玩家处于首个 `slot-1` claim、没有 active restricted grant、账户也没有现成 restricted starter balance，且 dedicated pool 能覆盖 upfront 缺口时，`ClaimAgent` 必须原子完成 auto-funding + claim；若 dedicated pool 仍不足，则 runtime / viewer / pure API 只返回资金不足 blocker，不再生成 pending/operator-review 状态。
 - Non-Goals:
   - 不在本专题内定义现实货币购买、法币结算或站外商城。
   - 不把 agent 认领做成永久不可回收的链上产权 NFT。
@@ -108,6 +110,8 @@
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - 余额不足：报价可见，但确认认领必须拒绝，并明确缺少的是 `activation fee`、`bond`、`upkeep` 还是 `eligible_claim_balance` 总额不足。
+  - 首个 `slot-1` dedicated pool 不足：若账户现有 liquid/restricted 与 dedicated pool 自动补足后仍不足，报价与 claim 都必须明确显示剩余缺口；不得回退成 pending approval request。
+  - 账户已有 restricted grant / restricted balance：已有显式 grant 或现成 restricted starter balance 时，不再额外自动补新的一笔 dedicated-pool startup amount，避免把自动首发变成隐式重复补贴。
   - restricted grant admin 未登记：当 `governance_main_token_controller_registry.restricted_starter_claim_admin_account_ids` 缺失、为空、或不包含当前 `issuer_account_id` 时，issue / revoke 必须在 grant / treasury / beneficiary 逻辑之前直接拒绝。
   - restricted bucket 过期：已过 `expires_at_epoch` 的 starter balance 不得进入 quote 可用余额，且必须生成可审计的 `expired` 事件。
   - mixed funding：若 upfront cost 同时由 restricted 与 liquid 支付，系统必须记录 bond provenance；后续 refund/slash 结算必须按该 provenance 拆分。
@@ -177,6 +181,7 @@
 | PRD-GAME-011 | `TASK-GAME-055` | `test_tier_required` | 新增 `scripts/oasis7-liveops-grant.sh` 作为运营 wrapper，验证位置参数、`OASIS7_WORLD_DIR` 默认注入与 `--print-cmd/--cli-bin` smoke，同时保持底层仍只调用 `oasis7_liveops_grant_cli` | 运营执行门槛进一步降低、字段误填率下降、治理边界不扩散 |
 | PRD-GAME-011 | `TASK-GAME-056` | `test_tier_required` | 将 governance registry manifest/import/audit 扩成 per-slot threshold，验证 `liveops` 可显式声明 `1-of-2` 且通过 audit/import，而既有 controller/finality slot 继续保持默认 `2-of-3` 与单 signer 故障容忍审计 | 低权限运营槽位可正式落地、治理工具链不再全局绑死一个 threshold |
 | PRD-GAME-011 | `TASK-GAME-059` | `test_tier_required` + `test_tier_full` | 新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action、独立 `restricted_starter_claim_liveops_pool` treasury bucket 与 top-up 审计记录，验证 top-up 固定绑定 `ecosystem_pool` controller slot 的 signer allowlist / threshold policy，且 daily restricted grant 只从专用池出账/退款回流 | restricted grant 资金池分层、高权限大池审批与低权限日常发放解耦、运营口径收敛 |
+| PRD-GAME-011 / PRD-WORLD_RUNTIME-040 | `task_313368c409c54cc2bcf8ef4f47919b65` | `test_tier_required` | 首个 `slot-1` claim auto-funding runtime / snapshot / API / viewer 回归，验证 dedicated pool 自动补足、legacy 审批去阻塞与 funding provenance 保持可审计 | 新账号 onboarding、自动启动金、claim 直连闭环 |
 
 - Decision Log:
 
@@ -199,3 +204,4 @@
 | DEC-AGC-015 | 在正式 CLI 之上补一层仓库脚本 `scripts/oasis7-liveops-grant.sh`，把 world-dir/issuer 缺省、位置参数与常用命令收口，但最终仍只转发到 `oasis7_liveops_grant_cli` | 继续要求运营直接敲长 `cargo run` 命令；或把更多运营逻辑复制进第二套脚本状态机 | 当前痛点已经从“没有 CLI”变成“正式 CLI 仍太长、太像开发命令”；薄 wrapper 可以减少误操作与培训成本，但不能复制第二份业务规则或引入脚本直改 world 的捷径。 |
 | DEC-AGC-016 | 允许 `liveops` 这类 restricted grant admin 低权限 slot 在 manifest 中显式声明 `threshold=1`，并以 `1-of-2` signer policy 进入 governance registry；其余 treasury/controller 主槽位继续默认 `2-of-3` | 要么强迫 `liveops` 也走统一 `2-of-3`，抬高运营摩擦；要么直接把所有 controller slot 的 threshold 一起降到 `1` 或 `1-of-2` | `liveops` 只负责不可转账 restricted grant 的日常发放/撤销，权限面明显低于 treasury/controller 主槽位；把 threshold 下调收口到单独 slot，既能降运营 ceremony 成本，又不把更高风险的主槽位一起放宽。 |
 | DEC-AGC-017 | 将 daily restricted grant 的 source bucket 从 `ecosystem_pool` 拆成独立 `restricted_starter_claim_liveops_pool`，并只开放一条由 `ecosystem_pool` controller-governed top-up action 负责向该池补款 | 继续让日常发放直接动 `ecosystem_pool`；或把一部分 liquid treasury 先转到 `liveops` 账户；或直接泛化成任意 treasury-to-treasury 转账框架 | 运营需要把高风险大池审批和低权限日常发放明确分层；专用池 + 固定 top-up action 既保留 `ecosystem_pool` 的 `2-of-3` 审批门槛，又不把 `liveops` 变成 liquid treasury 分发者，同时避免当前切片过早扩成通用 bucket 间转账框架。 |
+| DEC-AGC-018 | 首个 `slot-1` 启动金默认走 dedicated pool 自动补足，而不是额外运营审批；自动补足只覆盖首个 claim 的 upfront 缺口，不把已有显式 grant/balance 再次叠加成重复补贴 | 保留 `approval request -> operator review -> approve/reject` 作为首笔启动 OC 的必经路径；或把自动补足扩成“只要有 dedicated pool 就总是替玩家垫付全部 slot-1 成本” | 用户要求把日常首笔启动 OC 改成无需审批；但若对已有显式 grant/balance 继续自动叠加，会把一次性启动资助放大为隐式重复补贴，因此自动路径只覆盖“无现成 restricted starter 余额/grant 的首个 slot-1 缺口”。 |

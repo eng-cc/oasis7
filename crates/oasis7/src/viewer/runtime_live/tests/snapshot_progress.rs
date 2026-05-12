@@ -402,6 +402,60 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
 }
 
 #[test]
+fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+
+    server
+        .world
+        .set_governance_execution_policy(crate::runtime::GovernanceExecutionPolicy {
+            epoch_length_ticks: 1,
+            ..crate::runtime::GovernanceExecutionPolicy::default()
+        })
+        .expect("set governance policy");
+    server
+        .world
+        .set_main_token_supply(crate::runtime::MainTokenSupplyState {
+            total_supply: 325,
+            circulating_supply: 0,
+            ..crate::runtime::MainTokenSupplyState::default()
+        });
+    server
+        .world
+        .set_main_token_treasury_balance(
+            crate::runtime::MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+            325,
+        )
+        .expect("seed dedicated pool");
+
+    let snapshot = server.compat_snapshot();
+    let claim = snapshot
+        .player_gameplay
+        .as_ref()
+        .and_then(|gameplay| gameplay.agent_claim.as_ref())
+        .expect("player agent claim snapshot");
+    assert_eq!(claim.claimer_agent_id, primary_agent_id);
+    assert_eq!(claim.restricted_starter_claim_balance, 0);
+    assert_eq!(claim.slot_1_auto_restricted_starter_claim_amount, 325);
+    assert_eq!(claim.slot_1_eligible_claim_balance, 325);
+
+    let quote = claim.next_claim_quote.as_ref().expect("next claim quote");
+    assert_eq!(quote.slot_index, 1);
+    assert_eq!(quote.auto_restricted_starter_claim_amount, 325);
+    assert_eq!(quote.eligible_claim_balance, 325);
+    assert_eq!(quote.blocked_reason, None);
+}
+
+#[test]
 fn compat_snapshot_exposes_first_agent_claim_approval_request_status() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
