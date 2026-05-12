@@ -18,3 +18,13 @@
   - 新回归证据目录：`output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260512-200251/`。
 - 遗留事项:
   - 本专题实现与验证已完成，可进入 task closeout / commit / PR 流程。
+
+## 2026-05-12 21:42:57 CST / viewer_engineer
+
+- 完成内容:
+  - 从 `viewer-primary-web-entry` 回归产物导出两张 PR 可引用截图，落到 `doc/world-simulator/viewer/evidence/`：
+    - `viewer-web-entry-visual-redesign-default-entry-2026-05-12.png`
+    - `viewer-web-entry-visual-redesign-auto-entry-2026-05-12.png`
+  - 准备用于 PR 描述里的默认 `/` 入口与 `render_mode=auto` 入口可视证据。
+- 遗留事项:
+  - 将截图随 follow-up commit push 到 PR 分支，并把图片链接补进 GitHub PR 描述。
