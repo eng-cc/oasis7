@@ -233,6 +233,49 @@ function gameplayStatusBadgeClass(status) {
       : "badge badge--accent";
 }
 
+function gameplayStageToneClass(status) {
+  return status === "blocked"
+    ? "hero-focus-card__value hero-focus-card__value--warn"
+    : status === "branch_ready"
+      ? "hero-focus-card__value hero-focus-card__value--good"
+      : "hero-focus-card__value hero-focus-card__value--accent";
+}
+
+function gameplayStageLabel(status, locale) {
+  if (status === "blocked") {
+    return tr(locale, "当前受阻", "Blocked Now");
+  }
+  if (status === "branch_ready") {
+    return tr(locale, "可以推进", "Ready to Act");
+  }
+  if (status === "active") {
+    return tr(locale, "正在推进", "In Motion");
+  }
+  if (status === "completed") {
+    return tr(locale, "阶段完成", "Stage Complete");
+  }
+  return status || tr(locale, "等待同步", "Waiting for Sync");
+}
+
+function gameplayProgressLabel(progressPercent, locale) {
+  return progressPercent == null
+    ? tr(locale, "进度待发布", "Progress Pending")
+    : tr(locale, `进度 ${progressPercent}%`, `Progress ${progressPercent}%`);
+}
+
+function connectionStatusLabel(status, locale) {
+  if (status === "connected") {
+    return tr(locale, "世界在线", "World Live");
+  }
+  if (status === "connecting") {
+    return tr(locale, "正在连入世界", "Connecting to World");
+  }
+  if (status === "closed") {
+    return tr(locale, "连接已关闭", "Connection Closed");
+  }
+  return tr(locale, `连接异常：${status || "unknown"}`, `Connection Issue: ${status || "unknown"}`);
+}
+
 function renderResourceSummary(resources) {
   return core.resourceSummary(resources);
 }
@@ -243,7 +286,15 @@ function WorldStageHero() {
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
-      : tr(locale(), "未选中目标", "no_target_selected");
+      : tr(locale(), "尚未选择目标", "No target selected");
+  const selectionHint = () =>
+    core.state.selectedKind && core.state.selectedId
+      ? tr(locale(), "右侧命令面会围绕这个对象展开。", "The command surface on the right now follows this target.")
+      : tr(locale(), "先从左侧锁定一个 Agent 或地点，再进入右侧命令面。", "Lock onto an agent or location from the left before entering the command surface.");
+  const stageLabel = () => gameplayStageLabel(gameplaySummary()?.stageStatus, locale());
+  const nextStepCopy = () =>
+    gameplaySummary()?.nextStepHint
+    || tr(locale(), "先读世界状态，再决定是否推进、恢复或对目标发消息。", "Read the world first, then decide whether to advance, resume, or message the target.");
 
   return (
     <div class="stage-hero">
@@ -265,20 +316,40 @@ function WorldStageHero() {
         </div>
         <ViewerEntryMenu />
       </div>
-      <div class="badge-row">
-        <Badge class="badge badge--accent">viewer</Badge>
-        <Badge class="badge badge--accent">{tr(locale(), "正式可玩 Web 入口", "formal playable web entry")}</Badge>
-        <Badge class={core.connectionBadgeClass()}>
-          {tr(locale(), "连接", "connection")}={core.state.connectionStatus}
-        </Badge>
-        <Badge>{`world=${core.state.worldId || "-"}`}</Badge>
-        <Badge>{`${tr(locale(), "目标", "target")}=${selectedLabel()}`}</Badge>
-        <Show when={gameplaySummary()?.stageStatus}>
-          <Badge class={gameplayStatusBadgeClass(gameplaySummary().stageStatus)}>
-            {`stage=${gameplaySummary().stageStatus}`}
-          </Badge>
-        </Show>
+      <div class="hero-focus-grid">
+        <div class="hero-focus-card">
+          <div class="hero-focus-card__label">{tr(locale(), "局势", "Situation")}</div>
+          <div class={gameplayStageToneClass(gameplaySummary()?.stageStatus)}>
+            {stageLabel()}
+          </div>
+          <div class="hero-focus-card__detail">{gameplayProgressLabel(gameplaySummary()?.progressPercent, locale())}</div>
+        </div>
+        <div class="hero-focus-card">
+          <div class="hero-focus-card__label">{tr(locale(), "当前选择", "Current Selection")}</div>
+          <div class="hero-focus-card__value">{selectedLabel()}</div>
+          <div class="hero-focus-card__detail">{selectionHint()}</div>
+        </div>
+        <div class="hero-focus-card">
+          <div class="hero-focus-card__label">{tr(locale(), "下一步", "Next Step")}</div>
+          <div class="hero-focus-card__value hero-focus-card__value--body">{nextStepCopy()}</div>
+        </div>
       </div>
+      <Show when={core.state.connectionStatus !== "connected"}>
+        <CalloutCard
+          title={tr(locale(), "世界连接需要注意", "World Connection Needs Attention")}
+          badge={connectionStatusLabel(core.state.connectionStatus, locale())}
+          badgeClass={core.connectionBadgeClass()}
+          variant="warn"
+        >
+          <div class="feedback-summary">
+            {tr(
+              locale(),
+              "首屏优先展示世界与目标；只有连接异常时，才把连接状态抬到这里提示你。",
+              "This entry keeps the world and target first, and only elevates connection status when it needs attention.",
+            )}
+          </div>
+        </CalloutCard>
+      </Show>
     </div>
   );
 }
@@ -297,18 +368,26 @@ function MobileJumpRail() {
 function TargetsPanel() {
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
+  const selectedLabel = () =>
+    core.state.selectedKind && core.state.selectedId
+      ? `${core.state.selectedKind}:${core.state.selectedId}`
+      : null;
 
   return (
     <div class="stack">
-      <div class="badge-row">
-        <Badge>{`agents=${lists().agents.length}`}</Badge>
-        <Badge>{`locations=${lists().locations.length}`}</Badge>
-      </div>
+      <Show when={selectedLabel()}>
+        {(selected) => (
+          <div class="badge-row">
+            <Badge class="badge badge--accent">{tr(locale(), "已锁定目标", "Locked Target")}</Badge>
+            <Badge>{selected()}</Badge>
+          </div>
+        )}
+      </Show>
       <EmptyState>
         {tr(
           locale(),
-          "先从这里锁定一个 Agent 或地点，再去世界舞台和右侧命令面板继续操作。",
-          "Pick an agent or location here first, then continue in the world stage and command panel.",
+          "先从这里锁定一个 Agent 或地点。中间读局势，右侧只处理你当前选中的目标。",
+          "Lock onto an agent or location here first. Read the world in the middle, then use the right column only for the selected target.",
         )}
       </EmptyState>
       <div class="field">
@@ -407,9 +486,12 @@ function WorldSummaryPanel() {
         || state.auth.runtimeStatus === "rebind_retrying"
         || state.auth.runtimeStatus === "rebind_registering");
   const showPlayerSessionSurface = () =>
-    String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
-      || state.auth.available
-      || !!hostedRecoveryHint();
+    !!hostedRecoveryHint()
+      || (
+        !state.auth.available
+        && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+      )
+      || showRebindNotice();
   const diagnosticsSummaryBadges = () => [
     `debugViewer=${state.debugViewerMode}:${state.debugViewerStatus}`,
     `auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`,
@@ -431,17 +513,10 @@ function WorldSummaryPanel() {
             <>
               <div class="badge-row">
                 <Badge class={gameplayStatusBadgeClass(gameplay().stageStatus)}>
-                  {`stage=${gameplay().stageStatus || "-"}`}
+                  {gameplayStageLabel(gameplay().stageStatus, locale())}
                 </Badge>
-                <Badge>{`stageId=${gameplay().stageId || "-"}`}</Badge>
-                <Badge>{`goal=${gameplay().goalId || "-"}`}</Badge>
-                <Show when={gameplay().goalKind}>
-                  <Badge>{`goalKind=${gameplay().goalKind}`}</Badge>
-                </Show>
-                <Badge>
-                  {`progress=${
-                    gameplay().progressPercent == null ? "-" : `${gameplay().progressPercent}%`
-                  }`}
+                <Badge class="badge badge--accent">
+                  {gameplayProgressLabel(gameplay().progressPercent, locale())}
                 </Badge>
               </div>
               <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
@@ -490,7 +565,11 @@ function WorldSummaryPanel() {
                     badgeClass={
                       feedback().stage === "blocked" ? "badge badge--warn" : "badge badge--good"
                     }
-                    meta={`action=${feedback().action || "-"} · Δtick=${feedback().deltaLogicalTime} · Δevent=${feedback().deltaEventSeq}`}
+                    meta={
+                      feedback().action
+                        ? tr(locale(), `来自动作 ${feedback().action}`, `From action ${feedback().action}`)
+                        : tr(locale(), "最近一条玩法回执", "Most recent gameplay feedback")
+                    }
                   >
                     <div class="feedback-summary">
                       {feedback().effect || feedback().reason || "Gameplay feedback updated."}
@@ -551,7 +630,11 @@ function WorldSummaryPanel() {
                           title={action.label || action.actionId || "unknown_action"}
                           badge={action.disabledReason ? "handoff" : "ready"}
                           badgeClass={action.disabledReason ? "badge badge--warn" : "badge badge--good"}
-                          meta={`protocol=${action.protocolAction || "-"} · target=${action.targetAgentId || "-"}`}
+                          meta={
+                            action.targetAgentId
+                              ? tr(locale(), `作用对象 ${action.targetAgentId}`, `Acts on ${action.targetAgentId}`)
+                              : tr(locale(), "世界级动作", "World-level action")
+                          }
                         >
                           <div class="feedback-detail">
                             {action.disabledReason
@@ -609,14 +692,12 @@ function WorldSummaryPanel() {
           )}
         </Show>
       </PanelSection>
-      <div class="summary-grid">
-        <MetricCard label={tr(locale(), "逻辑时间", "Logical Time")} value={state.logicalTime} />
-        <MetricCard label={tr(locale(), "事件序号", "Event Seq")} value={state.eventSeq} />
-        <MetricCard label={tr(locale(), "世界", "World")} value={state.worldId || "-"} />
-        <MetricCard label={tr(locale(), "Viewer 服务", "Viewer Server")} value={state.server || "-"} />
-      </div>
       <Show when={showPlayerSessionSurface()}>
-        <PanelSection title={tr(locale(), "玩家会话", "Player Session")}>
+        <PanelSection
+          title={tr(locale(), "进入会话", "Player Access")}
+          eyebrow={tr(locale(), "只在需要时出现", "Only When Needed")}
+          meta={tr(locale(), "只有当玩家会话缺失、重绑中或需要恢复时，这里才会打断主玩法路径。", "This only interrupts the main path when the player session is missing, rebinding, or needs recovery.")}
+        >
           <div class="badge-row">
             <Badge class={state.auth.available ? "badge badge--good" : "badge badge--warn"}>
               {`auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}`}
@@ -785,6 +866,48 @@ function WorldSummaryPanel() {
             <Badge>{`boundAgent=${state.auth.boundAgentId || "-"}`}</Badge>
             <Badge>{`requestedAgent=${state.auth.pendingRequestedAgentId || "-"}`}</Badge>
             <Badge>{state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle"}</Badge>
+          </div>
+          <div class="toolbar">
+            <Show when={hostedRecoveryHint()}>
+              {(hint) => (
+                <button
+                  data-auth-action="retry-issue"
+                  disabled={state.auth.issueInFlight}
+                  onClick={() => {
+                    void core.retryHostedPlayerIdentityIssue();
+                  }}
+                >
+                  {hint().cta}
+                </button>
+              )}
+            </Show>
+            <Show
+              when={
+                !state.auth.available
+                && String(state.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join"
+                && !hostedRecoveryHint()
+              }
+            >
+              <button
+                data-auth-action="retry-issue"
+                disabled={state.auth.issueInFlight}
+                onClick={() => {
+                  void core.retryHostedPlayerIdentityIssue();
+                }}
+              >
+                {tr(locale(), "领取玩家会话", "Acquire Player Session")}
+              </button>
+            </Show>
+            <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
+              <button
+                data-auth-action="logout"
+                onClick={() => {
+                  void core.logoutHostedPlayerSession();
+                }}
+              >
+                {tr(locale(), "释放玩家会话", "Release Player Session")}
+              </button>
+            </Show>
           </div>
           <Show when={state.auth.recoveryErrorCode || state.auth.recoveryErrorMessage}>
             <div class="badge-row">
@@ -988,13 +1111,11 @@ function InteractionPanel() {
   return (
     <div class="stack">
       <div class="badge-row">
-        <Badge class="badge badge--accent">Agent Interaction</Badge>
+        <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
-        <Badge>{`activePrompt=${`v${promptVersionState().currentVersion}`}`}</Badge>
-        <Badge>{`nextRollback=${`v${promptVersionState().nextRollbackTargetVersion}`}`}</Badge>
-        <Show when={promptVersionState().restoredFromVersion != null}>
-          <Badge>{`restoredFrom=${`v${promptVersionState().restoredFromVersion}`}`}</Badge>
-        </Show>
+        <Badge class={chatCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
+          {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
+        </Badge>
       </div>
       <Show when={debugContext()?.provider_mode === "provider_loopback_http"}>
         <EmptyState>
@@ -1036,23 +1157,6 @@ function InteractionPanel() {
         </Badge>
       </div>
       <EmptyState>{assetLaneDetail()}</EmptyState>
-      <PanelSection title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}>
-        <div class="badge-row">
-          <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
-            {`main_token_transfer=${assetLaneStatusText()}`}
-          </Badge>
-          <Badge>{`required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`}</Badge>
-          <Badge>{`availability=${mainTokenTransferPolicy()?.availability || "-"}`}</Badge>
-        </div>
-        <EmptyState>{assetLaneDetail()}</EmptyState>
-        <EmptyState>
-          {mainTokenTransferPolicy()?.reason
-            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
-        </EmptyState>
-        <div class="toolbar">
-          <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
-        </div>
-      </PanelSection>
       <PanelSection
         title={tr(locale(), "Agent 聊天", "Agent Chat")}
         eyebrow={tr(locale(), "命令面", "Command Surface")}
@@ -1113,6 +1217,11 @@ function InteractionPanel() {
         meta={tr(locale(), "保留 operator 级 prompt 控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.")}
       >
         <div class="badge-row">
+          <Badge>{`activePrompt=v${promptVersionState().currentVersion}`}</Badge>
+          <Badge>{`nextRollback=v${promptVersionState().nextRollbackTargetVersion}`}</Badge>
+          <Show when={promptVersionState().restoredFromVersion != null}>
+            <Badge>{`restoredFrom=v${promptVersionState().restoredFromVersion}`}</Badge>
+          </Show>
           <Badge class={promptOverridesVisible() ? "badge badge--good" : "badge"}>
             {promptOverridesVisible()
               ? tr(locale(), "状态=已展开", "state=expanded")
@@ -1252,6 +1361,27 @@ function InteractionPanel() {
           </Show>
         </PanelSection>
       </Show>
+      <PanelSection
+        title={tr(locale(), "资产 / 治理 Lane", "Asset / Governance Lane")}
+        eyebrow={tr(locale(), "后置能力", "Deferred Surface")}
+        meta={tr(locale(), "这类能力保留在右侧底部，只作为边界说明，不再抢占聊天与主玩法路径。", "These capabilities stay at the bottom of the right column as boundary guidance instead of competing with chat and the main player path.")}
+      >
+        <div class="badge-row">
+          <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
+            {`main_token_transfer=${assetLaneStatusText()}`}
+          </Badge>
+          <Badge>{`required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`}</Badge>
+          <Badge>{`availability=${mainTokenTransferPolicy()?.availability || "-"}`}</Badge>
+        </div>
+        <EmptyState>{assetLaneDetail()}</EmptyState>
+        <EmptyState>
+          {mainTokenTransferPolicy()?.reason
+            || tr(locale(), "当前 lane 没有 main_token_transfer 的 hosted action policy。", "No hosted action policy is available for main_token_transfer on this lane.")}
+        </EmptyState>
+        <div class="toolbar">
+          <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
+        </div>
+      </PanelSection>
     </div>
   );
 }
@@ -1287,7 +1417,7 @@ function DetailsPanel() {
   return (
     <div class="stack">
       <div class="badge-row">
-        <Badge class="badge badge--accent">{tr(locale(), "已选中", "Selected")}</Badge>
+        <Badge class="badge badge--accent">{tr(locale(), "当前命令目标", "Current Command Target")}</Badge>
         <Badge>{selectedLabel()}</Badge>
       </div>
       <InteractionPanel />
@@ -1466,9 +1596,9 @@ function AppShell() {
       <section class="panel panel--details" id="viewer-details-panel">
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
-          <div class="panel__title">{tr(locale(), "明细", "Details")}</div>
+          <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
           <div class="panel__meta-copy">
-            {tr(locale(), "把聊天、Prompt 和对象核查留在这里，避免继续淹没主舞台。", "Keep chat, prompt controls, and object inspection here so they stop flooding the main stage.")}
+            {tr(locale(), "只有锁定目标后才进入这里。聊天优先，Prompt 与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it.")}
           </div>
         </div>
         <div class="panel__body">

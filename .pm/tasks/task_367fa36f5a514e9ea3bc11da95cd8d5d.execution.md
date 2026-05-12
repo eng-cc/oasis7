@@ -28,3 +28,13 @@
   - 准备用于 PR 描述里的默认 `/` 入口与 `render_mode=auto` 入口可视证据。
 - 遗留事项:
   - 将截图随 follow-up commit push 到 PR 分支，并把图片链接补进 GitHub PR 描述。
+
+## 2026-05-12 23:36:12 CST / viewer_engineer
+
+- 完成内容:
+  - 继续在同一 PR 内做产品层级收敛：`WorldStageHero` 顶部改成“局势 / 当前选择 / 下一步”三块玩家导向摘要，不再把 `viewer/stageId/goalId/goalKind/world` 这类内部标识放在首屏最上方。
+  - `Formal Gameplay Summary` 去掉主路径顶部的内部 ID badge 与 `逻辑时间 / 事件序号 / Viewer 服务` 指标卡，只保留玩家可理解的阶段与进度；同时把动作卡 meta 改成面向目标/世界的说明。
+  - 右侧列改成聊天优先：交互区顶部不再先露出 Prompt 版本号，`资产 / 治理 Lane` 后置到右侧底部，`Player Session` 仅在缺失、重绑或恢复时才打断主路径；会话操作则保留在 diagnostics 内可达。
+  - 重新跑通回归并生成新的证据目录：`output/playwright/viewer-primary-web-entry/viewer-primary-web-entry-20260512-233448/`。
+- 遗留事项:
+  - 把新的 PR 截图证据同步到仓库与 GitHub PR 描述。

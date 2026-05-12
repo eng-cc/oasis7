@@ -364,6 +364,47 @@
         font-size: 14px;
         line-height: 1.6;
       }
+      .hero-focus-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .hero-focus-card {
+        min-height: 128px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(152, 177, 150, 0.16);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+          rgba(255, 255, 255, 0.015);
+      }
+      .hero-focus-card__label {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .hero-focus-card__value {
+        font-family: var(--font-display);
+        font-size: 24px;
+        line-height: 1.1;
+      }
+      .hero-focus-card__value--accent { color: #e3efe7; }
+      .hero-focus-card__value--good { color: var(--good); }
+      .hero-focus-card__value--warn { color: var(--warn); }
+      .hero-focus-card__value--body {
+        font-family: var(--font-body);
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .hero-focus-card__detail {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
       .mobile-rail {
         display: none;
       }
@@ -570,6 +611,8 @@
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }
         .stage-hero__title { max-width: none; }
+        .hero-focus-grid { grid-template-columns: 1fr; }
+        .hero-focus-card { min-height: 0; }
         .mobile-rail {
           position: sticky;
           top: 10px;
