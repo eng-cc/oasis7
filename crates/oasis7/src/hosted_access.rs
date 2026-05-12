@@ -1,4 +1,6 @@
 use serde::Serialize;
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
 
 pub(super) const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
 #[allow(dead_code)]
@@ -16,6 +18,12 @@ const DEFAULT_KICK_POLICY: &str = "operator_audit_required";
 const HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 const HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY";
 const HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE";
+
+#[cfg(test)]
+pub(super) fn hosted_strong_auth_test_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DeploymentMode {
@@ -319,12 +327,6 @@ pub(super) fn web_launcher_private_endpoints() -> &'static [&'static str] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn hosted_access_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     fn clear_env() {
         for name in [
@@ -354,7 +356,7 @@ mod tests {
 
     #[test]
     fn hosted_public_join_prompt_control_stays_blocked_without_backend_grant_env() {
-        let _guard = hosted_access_env_lock().lock().expect("env lock");
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_env();
         let policy = prompt_control_apply_policy(DeploymentMode::HostedPublicJoin);
         assert_eq!(policy.required_auth, "strong_auth");
@@ -363,7 +365,7 @@ mod tests {
 
     #[test]
     fn hosted_public_join_prompt_control_exposes_backend_reauth_preview_when_env_ready() {
-        let _guard = hosted_access_env_lock().lock().expect("env lock");
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_env();
         std::env::set_var(
             HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
@@ -385,7 +387,7 @@ mod tests {
 
     #[test]
     fn hosted_public_join_main_token_transfer_stays_blocked_even_when_prompt_reauth_env_ready() {
-        let _guard = hosted_access_env_lock().lock().expect("env lock");
+        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_env();
         std::env::set_var(
             HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
