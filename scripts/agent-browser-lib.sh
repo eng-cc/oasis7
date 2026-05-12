@@ -192,6 +192,8 @@ resolve_viewer_static_dir_for_web_closure() {
 
   local dist_dir="$repo_root/crates/oasis7_viewer/dist"
   local dist_index="$dist_dir/index.html"
+  local runtime_source_dir="$repo_root/crates/oasis7_viewer/pixel-world-bridge"
+  local runtime_dist_js="$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
   local newest_source=0
   local dist_mtime=0
   local rebuilt_dir
@@ -214,6 +216,7 @@ from pathlib import Path
 
 repo_root = Path(sys.argv[1]).resolve()
 scope = [
+    "Cargo.toml",
     "Cargo.lock",
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/software_safe.js",
@@ -222,6 +225,8 @@ scope = [
     "crates/oasis7_viewer/package-lock.json",
     "crates/oasis7_viewer/vite.software-safe.config.mjs",
     "crates/oasis7_viewer/scripts",
+    "crates/pixel_world_bridge/Cargo.toml",
+    "crates/pixel_world_bridge/src",
     "crates/oasis7_viewer/software_safe_src",
     "crates/oasis7_viewer/favicon.ico",
     "crates/oasis7_proto/Cargo.toml",
@@ -246,9 +251,13 @@ PY
   newest_source=${newest_source:-0}
 
   if [[ -f "$dist_index" && "$dist_mtime" -ge "$newest_source" ]]; then
-    printf '%s
+    if [[ -d "$runtime_source_dir" && ! -f "$runtime_dist_js" ]]; then
+      :
+    else
+      printf '%s
 ' "$dist_dir"
-    return 0
+      return 0
+    fi
   fi
 
   if ! command -v npm >/dev/null 2>&1; then
@@ -276,6 +285,10 @@ PY
   cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
     "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
   cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
+  if [[ -d "$repo_root/crates/oasis7_viewer/pixel-world-bridge" ]]; then
+    rm -rf "$rebuilt_dir/pixel-world-bridge"
+    cp -R "$repo_root/crates/oasis7_viewer/pixel-world-bridge" "$rebuilt_dir/pixel-world-bridge"
+  fi
   printf '%s
 ' "$rebuilt_dir"
 }

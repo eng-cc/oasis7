@@ -231,6 +231,104 @@
         flex-direction: column;
         gap: 10px;
       }
+      .pixel-world-host__summary {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .pixel-world-host__headline {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .pixel-world-canvas {
+        position: relative;
+        min-height: 280px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid rgba(99, 179, 255, 0.24);
+        background:
+          linear-gradient(180deg, rgba(9, 16, 25, 0.88), rgba(8, 14, 20, 0.96)),
+          radial-gradient(circle at 20% 20%, rgba(99, 179, 255, 0.14), transparent 30%);
+      }
+      .pixel-world-canvas--rendered {
+        min-height: auto;
+      }
+      .pixel-world-canvas__surface {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+      .pixel-world-canvas__grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(99, 179, 255, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 179, 255, 0.08) 1px, transparent 1px);
+        background-size: 24px 24px;
+        opacity: 0.75;
+      }
+      .pixel-world-entity {
+        position: absolute;
+        min-width: 26px;
+        min-height: 26px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 700;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 10px 24px rgba(0,0,0,0.28);
+      }
+      .pixel-world-entity--location {
+        background: linear-gradient(180deg, rgba(110, 231, 183, 0.35), rgba(110, 231, 183, 0.12));
+        border-color: rgba(110, 231, 183, 0.5);
+      }
+      .pixel-world-entity--agent {
+        background: linear-gradient(180deg, rgba(99, 179, 255, 0.38), rgba(99, 179, 255, 0.14));
+        border-color: rgba(99, 179, 255, 0.54);
+      }
+      .pixel-world-canvas__overlay {
+        position: absolute;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .pixel-world-canvas__callout {
+        display: inline-flex;
+        align-self: flex-start;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        background: rgba(7, 12, 18, 0.82);
+      }
+      .pixel-world-canvas__callout--goal {
+        border-color: rgba(110, 231, 183, 0.38);
+        color: var(--good);
+      }
+      .pixel-world-canvas__callout--blocker {
+        border-color: rgba(248, 113, 113, 0.4);
+        color: var(--bad);
+      }
+      .pixel-world-canvas__selection {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 12px;
+        border: 1px solid rgba(99, 179, 255, 0.34);
+        background: rgba(7, 12, 18, 0.82);
+      }
       .diagnostic {
         border-top: 1px dashed var(--border);
         padding-top: 10px;

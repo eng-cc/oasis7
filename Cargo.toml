@@ -7,6 +7,7 @@ members = [
     "crates/oasis7_distfs",
     "crates/oasis7_net",
     "crates/oasis7_node",
+    "crates/pixel_world_bridge",
     "crates/oasis7_proto",
     "crates/oasis7_wasm_abi",
     "crates/oasis7_wasm_executor",

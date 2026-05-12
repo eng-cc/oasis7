@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
+import { PixelWorldHost } from "./pixel_world_host.jsx";
 
 function uiLocale() {
   return core.state.uiLocale;
@@ -1362,7 +1363,10 @@ function AppShell() {
           <ViewerEntryMenu />
         </div>
         <div class="panel__body">
-          <WorldSummaryPanel />
+          <div class="stack">
+            <PixelWorldHost locale={locale()} />
+            <WorldSummaryPanel />
+          </div>
         </div>
       </section>
       <section class="panel">

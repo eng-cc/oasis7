@@ -54,6 +54,11 @@ export const state = {
   renderer: null,
   vendor: null,
   webglVersion: null,
+  pixelWorldRuntimeStatus: "detached",
+  pixelWorldRuntimeSource: "detached",
+  pixelWorldRuntimeModuleUrl: null,
+  pixelWorldCamera: null,
+  pixelWorldFatal: null,
   controlProfile: "playback",
   debugViewerMode: "debug_viewer",
   debugViewerStatus: "detached",
@@ -1659,6 +1664,11 @@ function getState() {
     renderer: state.renderer,
     vendor: state.vendor,
     webglVersion: state.webglVersion,
+    pixelWorldRuntimeStatus: state.pixelWorldRuntimeStatus,
+    pixelWorldRuntimeSource: state.pixelWorldRuntimeSource,
+    pixelWorldRuntimeModuleUrl: state.pixelWorldRuntimeModuleUrl,
+    pixelWorldCamera: clone(state.pixelWorldCamera),
+    pixelWorldFatal: clone(state.pixelWorldFatal),
     uiLocale: state.uiLocale,
     promptOverridesVisible: state.promptOverridesVisible,
     controlProfile: state.controlProfile,
@@ -4445,6 +4455,28 @@ function bootstrap() {
   }
 }
 
+function updatePixelWorldRuntimeMeta(meta = {}) {
+  if (!meta || typeof meta !== "object") {
+    return getState();
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, "runtimeStatus")) {
+    state.pixelWorldRuntimeStatus = meta.runtimeStatus || "detached";
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, "runtimeSource")) {
+    state.pixelWorldRuntimeSource = meta.runtimeSource || "detached";
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, "runtimeModuleUrl")) {
+    state.pixelWorldRuntimeModuleUrl = meta.runtimeModuleUrl || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, "camera")) {
+    state.pixelWorldCamera = clone(meta.camera || null);
+  }
+  if (Object.prototype.hasOwnProperty.call(meta, "fatal")) {
+    state.pixelWorldFatal = clone(meta.fatal || null);
+  }
+  return getState();
+}
+
 export function initializeSoftwareSafeCore() {
   if (bootstrapped) {
     return;
@@ -4507,6 +4539,7 @@ export {
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,
+  updatePixelWorldRuntimeMeta,
   snapshotControlFeedback,
   snapshotSemanticFeedback,
   summarizeEventTitle,

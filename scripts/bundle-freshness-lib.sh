@@ -22,6 +22,7 @@ from pathlib import Path
 
 repo_root = Path(sys.argv[1]).resolve()
 scope = [
+    "Cargo.toml",
     "Cargo.lock",
     "crates/oasis7/Cargo.toml",
     "crates/oasis7/src/viewer",
@@ -38,6 +39,8 @@ scope = [
     "crates/oasis7_viewer/package-lock.json",
     "crates/oasis7_viewer/vite.software-safe.config.mjs",
     "crates/oasis7_viewer/scripts",
+    "crates/pixel_world_bridge/Cargo.toml",
+    "crates/pixel_world_bridge/src",
     "crates/oasis7_viewer/software_safe_src",
     "crates/oasis7_viewer/favicon.ico",
     "crates/oasis7_client_launcher/Cargo.toml",
@@ -114,8 +117,24 @@ def hash_first(pattern: str) -> tuple[str | None, str | None]:
     digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
     return candidate.relative_to(bundle_dir).as_posix(), digest
 
+def hash_exact(rel_path: str) -> tuple[str | None, str | None]:
+    candidate = bundle_dir / rel_path
+    if not candidate.is_file():
+        return None, None
+    digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+    return candidate.relative_to(bundle_dir).as_posix(), digest
+
 viewer_js_path, viewer_js_sha256 = hash_first("web/*.js")
 viewer_wasm_path, viewer_wasm_sha256 = hash_first("web/*.wasm")
+pixel_world_runtime_module_path, pixel_world_runtime_module_sha256 = hash_exact(
+    "web/pixel-world-bridge/pixel_world_bridge.js"
+)
+pixel_world_bindgen_js_path, pixel_world_bindgen_js_sha256 = hash_exact(
+    "web/pixel-world-bridge/pixel_world_bridge_bindgen.js"
+)
+pixel_world_bindgen_wasm_path, pixel_world_bindgen_wasm_sha256 = hash_exact(
+    "web/pixel-world-bridge/pixel_world_bridge_bindgen_bg.wasm"
+)
 launcher_js_path, launcher_js_sha256 = hash_first("web-launcher/*.js")
 launcher_wasm_path, launcher_wasm_sha256 = hash_first("web-launcher/*.wasm")
 
@@ -128,6 +147,12 @@ manifest = {
         "viewerJsSha256": viewer_js_sha256,
         "viewerWasmPath": viewer_wasm_path,
         "viewerWasmSha256": viewer_wasm_sha256,
+        "pixelWorldRuntimeModulePath": pixel_world_runtime_module_path,
+        "pixelWorldRuntimeModuleSha256": pixel_world_runtime_module_sha256,
+        "pixelWorldBindgenJsPath": pixel_world_bindgen_js_path,
+        "pixelWorldBindgenJsSha256": pixel_world_bindgen_js_sha256,
+        "pixelWorldBindgenWasmPath": pixel_world_bindgen_wasm_path,
+        "pixelWorldBindgenWasmSha256": pixel_world_bindgen_wasm_sha256,
         "launcherJsPath": launcher_js_path,
         "launcherJsSha256": launcher_js_sha256,
         "launcherWasmPath": launcher_wasm_path,
