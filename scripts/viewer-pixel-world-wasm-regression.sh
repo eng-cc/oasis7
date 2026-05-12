@@ -65,10 +65,6 @@ state_pixel_runtime_status() { json_get "$1" pixelWorldRuntimeStatus; }
 state_pixel_runtime_source() { json_get "$1" pixelWorldRuntimeSource; }
 state_pixel_runtime_url() { json_get "$1" pixelWorldRuntimeModuleUrl; }
 
-browser_runtime_lane() {
-  normalize_eval_token "$(ab_eval "$session" '(() => (navigator.webdriver === true || /HeadlessChrome/i.test(String(navigator.userAgent || ""))) ? "automation_fallback_ok" : "bevy_required")()')"
-}
-
 wait_for_api() {
   local timeout_ms=${1:-20000}
   local deadline=$((SECONDS * 1000 + timeout_ms))
@@ -269,32 +265,18 @@ pixel_runtime_source=$(state_pixel_runtime_source "$ready_state")
 pixel_runtime_status=$(state_pixel_runtime_status "$ready_state")
 pixel_runtime_url=$(state_pixel_runtime_url "$ready_state")
 last_error=$(state_last_error "$ready_state")
-runtime_lane=$(browser_runtime_lane)
+[[ "$pixel_runtime_source" == "wasm_bindgen_runtime" ]] || {
+  echo "error: expected pixelWorldRuntimeSource=wasm_bindgen_runtime, got $pixel_runtime_source" >&2
+  exit 1
+}
 [[ "$pixel_runtime_status" == "ready" ]] || {
   echo "error: expected pixelWorldRuntimeStatus=ready, got $pixel_runtime_status" >&2
   exit 1
 }
-if [[ "$runtime_lane" == "bevy_required" ]]; then
-  [[ "$pixel_runtime_source" == "wasm_bindgen_runtime" ]] || {
-    echo "error: expected pixelWorldRuntimeSource=wasm_bindgen_runtime, got $pixel_runtime_source" >&2
-    exit 1
-  }
-  [[ "$pixel_runtime_url" == *"pixel-world-bridge/pixel_world_bridge.js"* ]] || {
-    echo "error: unexpected pixelWorldRuntimeModuleUrl: $pixel_runtime_url" >&2
-    exit 1
-  }
-else
-  [[ "$pixel_runtime_source" == "wasm_bindgen_runtime" || "$pixel_runtime_source" == "js_fallback" ]] || {
-    echo "error: expected automation runtime source wasm_bindgen_runtime|js_fallback, got $pixel_runtime_source" >&2
-    exit 1
-  }
-  if [[ "$pixel_runtime_source" == "wasm_bindgen_runtime" ]]; then
-    [[ "$pixel_runtime_url" == *"pixel-world-bridge/pixel_world_bridge.js"* ]] || {
-      echo "error: unexpected pixelWorldRuntimeModuleUrl: $pixel_runtime_url" >&2
-      exit 1
-    }
-  fi
-fi
+[[ "$pixel_runtime_url" == *"pixel-world-bridge/pixel_world_bridge.js"* ]] || {
+  echo "error: unexpected pixelWorldRuntimeModuleUrl: $pixel_runtime_url" >&2
+  exit 1
+}
 [[ -z "$last_error" ]] || {
   echo "error: expected no lastError after runtime startup, got $last_error" >&2
   exit 1
