@@ -583,28 +583,6 @@ function WorldSummaryPanel() {
                   </EventCard>
                 )}
               </Show>
-              <Show when={gameplay().firstAgentClaimApprovalRequest}>
-                {(request) => (
-                  (() => {
-                    const display = core.describeFirstAgentClaimApprovalRequest(request(), locale());
-                    return (
-                  <EventCard
-                    title={tr(locale(), "首个 Agent Claim 审批", "First Agent Claim Approval")}
-                    badge={display?.label || "unknown"}
-                    badgeClass={display?.badgeClass || "badge badge--warn"}
-                    meta={display?.meta || `request=${request().requestId}`}
-                  >
-                    <div class="feedback-summary">
-                      {display?.summary || request().status || "unknown"}
-                    </div>
-                    <For each={display?.details || []}>
-                      {(detail) => <div class="feedback-detail">{detail}</div>}
-                    </For>
-                  </EventCard>
-                    );
-                  })()
-                )}
-              </Show>
               <EventCard title={tr(locale(), "下一步", "Next Step")} badge={gameplay().stageStatus || "-"}>
                 <div class="feedback-summary">
                   {gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}

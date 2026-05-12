@@ -145,65 +145,6 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
-  const approvedDisplay = core.describeFirstAgentClaimApprovalRequest({
-    requestId: 9,
-    status: "approved",
-    requestedSlotIndex: 1,
-    requestedReputationTier: 0,
-    requestedTotalUpfrontAmount: 325,
-    requestedAtEpoch: 3,
-    updatedAtEpoch: 4,
-    operatorAccountId: "ops-1",
-    approvedAmount: 325,
-    expiresAtEpoch: 9,
-    rejectionReason: null,
-  });
-  assert.equal(approvedDisplay.label, "approved");
-  assert.equal(approvedDisplay.badgeClass, "badge badge--good");
-  assert.match(approvedDisplay.summary, /Approved amount: 325/);
-  assert(approvedDisplay.details.includes("approved_amount=325"));
-  assert(approvedDisplay.details.includes("expires_at_epoch=9"));
-  assert(approvedDisplay.details.includes("operator=ops-1"));
-
-  const rejectedDisplay = core.describeFirstAgentClaimApprovalRequest({
-    requestId: 10,
-    status: "rejected",
-    requestedSlotIndex: 1,
-    requestedReputationTier: 0,
-    requestedTotalUpfrontAmount: 325,
-    requestedAtEpoch: 3,
-    updatedAtEpoch: 5,
-    operatorAccountId: "ops-2",
-    approvedAmount: null,
-    expiresAtEpoch: null,
-    rejectionReason: "missing_reputation_proof",
-  });
-  assert.equal(rejectedDisplay.label, "rejected");
-  assert.equal(rejectedDisplay.badgeClass, "badge badge--warn");
-  assert.match(rejectedDisplay.summary, /rejected/i);
-  assert(rejectedDisplay.details.includes("operator=ops-2"));
-  assert(rejectedDisplay.details.includes("rejection_reason=missing_reputation_proof"));
-
-  const unknownDisplay = core.describeFirstAgentClaimApprovalRequest({
-    requestId: 11,
-    status: "queued_for_manual_recheck",
-    requestedSlotIndex: 1,
-    requestedReputationTier: 0,
-    requestedTotalUpfrontAmount: 325,
-    requestedAtEpoch: 3,
-    updatedAtEpoch: 6,
-    operatorAccountId: null,
-    approvedAmount: null,
-    expiresAtEpoch: null,
-    rejectionReason: null,
-  });
-  assert.equal(unknownDisplay.label, "unknown");
-  assert.equal(unknownDisplay.badgeClass, "badge badge--warn");
-  assert.match(unknownDisplay.summary, /unrecognized approval status/i);
-  assert.match(unknownDisplay.summary, /queued_for_manual_recheck/);
-}
-
-{
   const injectedState = core.injectSnapshot({
     time: 12,
     config: {
@@ -284,13 +225,11 @@ const core = await import("../software_safe_src/legacy_core.js");
           forced_reclaim_penalty_bps: 2000,
           blocked_reason: null,
         },
-        first_agent_claim_approval_request: null,
         owned_claims: [],
       },
     },
   });
   assert.equal(injectedState.logicalTime, 12);
-  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest, null);
   assert.equal(injectedState.gameplaySummary.agentClaim.next_claim_quote.auto_restricted_starter_claim_amount, 325);
   assert.equal(injectedState.gameplaySummary.agentClaim.slot_1_auto_restricted_starter_claim_amount, 325);
   core.select({ kind: "location", id: "loc-0" });
@@ -307,10 +246,6 @@ const core = await import("../software_safe_src/legacy_core.js");
   );
   assert.match(worldScale.presentationScale.markerTruthNote, /do not read on-screen diameter/i);
   assert.match(worldScale.presentationScale.zoomTruthNote, /zoom tiers/i);
-  const approvalDisplay = core.describeFirstAgentClaimApprovalRequest(
-    injectedState.gameplaySummary.firstAgentClaimApprovalRequest,
-  );
-  assert.equal(approvalDisplay, null);
 }
 
 {

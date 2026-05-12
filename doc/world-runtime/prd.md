@@ -55,7 +55,7 @@
 - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
   - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
 - SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
-- SC-25: 首个 agent `slot-1` claim 必须补齐“canonical quote -> 若专用池足够则自动补足 restricted starter amount -> 直接 `ClaimAgent`”的链上闭环；`/v1/chain/agent-claim/**` 需要让玩家在不经过运营审批的前提下直连 claim，同时仍由 runtime 真值暴露自动资助额度、claim 结果与 legacy 审批数据兼容读取边界。
+- SC-25: 首个 agent `slot-1` claim 必须补齐“canonical quote -> 若专用池足够则自动补足 restricted starter amount -> 直接 `ClaimAgent`”的链上闭环；`/v1/chain/agent-claim/**` 需要让玩家在不经过运营审批的前提下直连 claim，并由 runtime 真值暴露自动资助额度与 claim 结果。
 - SC-26: builtin wasm 模块边界中的 `GeoPos` 与一切 `*_cm` 坐标字段必须维持整数厘米合同；持久化状态允许兼容读取旧的“整值浮点”厘米表示，但动作/事件/观测入口不得接受 fractional cm，也不得再输出 `0.0` 这类浮点厘米表象。
 
 ## 2. User Experience & Functionality

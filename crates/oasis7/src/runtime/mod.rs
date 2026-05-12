@@ -130,8 +130,7 @@ pub use modules::{
 // Node points
 pub use main_token::{
     main_token_account_id_from_node_public_key, main_token_bucket_unlocked_amount,
-    production_hardened_main_token_config, FirstAgentClaimApprovalRequestState,
-    FirstAgentClaimApprovalRequestStatus, MainTokenAccountBalance, MainTokenBurnPolicy,
+    production_hardened_main_token_config, MainTokenAccountBalance, MainTokenBurnPolicy,
     MainTokenConfig, MainTokenEconomyAnomalyAlert, MainTokenEconomyAuditReport,
     MainTokenEconomyAuditThresholds, MainTokenEpochIssuanceRecord,
     MainTokenGenesisAllocationBucketState, MainTokenGenesisAllocationPlan,
@@ -140,9 +139,9 @@ pub use main_token::{
     MainTokenTreasuryDistribution, MainTokenTreasuryDistributionRecord,
     RestrictedStarterClaimGrantState, RestrictedStarterClaimGrantStatus,
     RestrictedStarterClaimLiveopsPoolTopUpRecord, RestrictedStarterClaimRefundSink,
-    FIRST_AGENT_CLAIM_APPROVAL_ISSUANCE_REASON, FROZEN_MAIN_TOKEN_INITIAL_SUPPLY,
-    MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE,
-    MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    FROZEN_MAIN_TOKEN_INITIAL_SUPPLY, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
+    MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE, MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
     MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_SLASH,
     MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,

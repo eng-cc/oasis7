@@ -69,15 +69,6 @@ pub(super) fn event_kind_label(body: &WorldEventBody) -> &'static str {
             DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
                 "domain.main_token.restricted_claim_grant_revoked"
             }
-            DomainEvent::FirstAgentClaimApprovalRequested { .. } => {
-                "domain.main_token.first_agent_claim_approval_requested"
-            }
-            DomainEvent::FirstAgentClaimApprovalApproved { .. } => {
-                "domain.main_token.first_agent_claim_approval_approved"
-            }
-            DomainEvent::FirstAgentClaimApprovalRejected { .. } => {
-                "domain.main_token.first_agent_claim_approval_rejected"
-            }
             DomainEvent::AgentClaimed { .. } => "domain.gameplay.agent_claimed",
             DomainEvent::AgentClaimReleaseRequested { .. } => {
                 "domain.gameplay.agent_claim_release_requested"
@@ -235,15 +226,6 @@ pub(super) fn action_kind_label(action: &Action) -> &'static str {
         }
         Action::RevokeRestrictedStarterClaimGrant { .. } => {
             "action.main_token.revoke_restricted_claim_grant"
-        }
-        Action::SubmitFirstAgentClaimApprovalRequest { .. } => {
-            "action.main_token.submit_first_agent_claim_approval_request"
-        }
-        Action::ApproveFirstAgentClaimApprovalRequest { .. } => {
-            "action.main_token.approve_first_agent_claim_approval_request"
-        }
-        Action::RejectFirstAgentClaimApprovalRequest { .. } => {
-            "action.main_token.reject_first_agent_claim_approval_request"
         }
         Action::ClaimAgent { .. } => "action.gameplay.claim_agent",
         Action::ReleaseAgentClaim { .. } => "action.gameplay.release_agent_claim",

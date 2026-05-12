@@ -151,25 +151,6 @@ pub struct PlayerAgentClaimOwnedSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlayerFirstAgentClaimApprovalRequestSnapshot {
-    pub request_id: u64,
-    pub status: String,
-    pub requested_slot_index: u8,
-    pub requested_reputation_tier: u8,
-    pub requested_total_upfront_amount: u64,
-    pub requested_at_epoch: u64,
-    pub updated_at_epoch: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operator_account_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_amount: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at_epoch: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rejection_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerAgentClaimSnapshot {
     pub claimer_agent_id: String,
     pub current_epoch: u64,
@@ -185,8 +166,6 @@ pub struct PlayerAgentClaimSnapshot {
     pub slot_1_eligible_claim_balance: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_claim_quote: Option<PlayerAgentClaimQuoteSnapshot>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub first_agent_claim_approval_request: Option<PlayerFirstAgentClaimApprovalRequestSnapshot>,
     #[serde(default)]
     pub owned_claims: Vec<PlayerAgentClaimOwnedSnapshot>,
 }

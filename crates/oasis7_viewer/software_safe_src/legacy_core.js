@@ -1496,27 +1496,6 @@ function buildGameplaySummary(locale = state.uiLocale) {
         deltaEventSeq: Number(gameplay.recent_feedback.delta_event_seq || 0),
       }
     : null;
-  const firstAgentClaimApprovalRequest =
-    gameplay.agent_claim?.first_agent_claim_approval_request
-    && typeof gameplay.agent_claim.first_agent_claim_approval_request === "object"
-      ? {
-          requestId: normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.request_id) || "0",
-          status: gameplay.agent_claim.first_agent_claim_approval_request.status || null,
-          requestedSlotIndex: Number(gameplay.agent_claim.first_agent_claim_approval_request.requested_slot_index || 0),
-          requestedReputationTier: Number(gameplay.agent_claim.first_agent_claim_approval_request.requested_reputation_tier || 0),
-          requestedTotalUpfrontAmount: normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.requested_total_upfront_amount) || "0",
-          requestedAtEpoch: normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.requested_at_epoch) || "0",
-          updatedAtEpoch: normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.updated_at_epoch) || "0",
-          operatorAccountId: gameplay.agent_claim.first_agent_claim_approval_request.operator_account_id || null,
-          approvedAmount: gameplay.agent_claim.first_agent_claim_approval_request.approved_amount == null
-            ? null
-            : normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.approved_amount),
-          expiresAtEpoch: gameplay.agent_claim.first_agent_claim_approval_request.expires_at_epoch == null
-            ? null
-            : normalizeU64Display(gameplay.agent_claim.first_agent_claim_approval_request.expires_at_epoch),
-          rejectionReason: gameplay.agent_claim.first_agent_claim_approval_request.rejection_reason || null,
-        }
-      : null;
   const runtimeBlockerKind = gameplay.blocker_kind || null;
   const runtimeBlockerDetail = gameplay.blocker_detail || null;
   const runtimeAlreadyPublishedEmptyEntityBlocker =
@@ -1557,80 +1536,9 @@ function buildGameplaySummary(locale = state.uiLocale) {
     availableActions,
     recentFeedback,
     agentClaim: clone(gameplay.agent_claim),
-    firstAgentClaimApprovalRequest,
     assetGovernanceHandoff: isLocaleZh(locale)
       ? "资产 / 治理动作仍在单独 lane 处理；viewer 这里不会直接暴露主代币转账表单。"
       : "Asset/governance actions remain a separate lane. viewer exposes no main token transfer form here.",
-  };
-}
-
-function describeFirstAgentClaimApprovalRequest(request, locale = state.uiLocale) {
-  if (!request || typeof request !== "object") {
-    return null;
-  }
-  const status = String(request.status || "").trim().toLowerCase();
-  const isZh = isLocaleZh(locale);
-  const details = [
-    `requested_total=${request.requestedTotalUpfrontAmount || "0"} · requested_at_epoch=${request.requestedAtEpoch || "0"} · updated_at_epoch=${request.updatedAtEpoch || "0"}`,
-  ];
-  if (request.approvedAmount != null) {
-    details.push(`approved_amount=${request.approvedAmount}`);
-  }
-  if (request.expiresAtEpoch != null) {
-    details.push(`expires_at_epoch=${request.expiresAtEpoch}`);
-  }
-  if (request.operatorAccountId) {
-    details.push(`operator=${request.operatorAccountId}`);
-  }
-  if (request.rejectionReason) {
-    details.push(`rejection_reason=${request.rejectionReason}`);
-  }
-
-  if (status === "approved") {
-    return {
-      status,
-      badgeClass: "badge badge--good",
-      label: isZh ? "已批准" : "approved",
-      meta: `request=${request.requestId} · slot=${request.requestedSlotIndex} · tier=${request.requestedReputationTier}`,
-      summary: isZh
-        ? `运营已批准你的首个 agent claim，可用额度 ${request.approvedAmount ?? request.requestedTotalUpfrontAmount}，接下来可以继续提交 ClaimAgent。`
-        : `Operations approved your first agent claim. Approved amount: ${request.approvedAmount ?? request.requestedTotalUpfrontAmount}. You can now continue with ClaimAgent.`,
-      details,
-    };
-  }
-  if (status === "rejected") {
-    return {
-      status,
-      badgeClass: "badge badge--warn",
-      label: isZh ? "已拒绝" : "rejected",
-      meta: `request=${request.requestId} · slot=${request.requestedSlotIndex} · tier=${request.requestedReputationTier}`,
-      summary: isZh
-        ? "首个 agent claim 审批已被拒绝；先看拒绝原因，再决定是否重新申请。"
-        : "The first agent claim approval request was rejected. Review the rejection reason before resubmitting.",
-      details,
-    };
-  }
-  if (status === "pending") {
-    return {
-      status,
-      badgeClass: "badge badge--accent",
-      label: isZh ? "待审核" : "pending",
-      meta: `request=${request.requestId} · slot=${request.requestedSlotIndex} · tier=${request.requestedReputationTier}`,
-      summary: isZh
-        ? "首个 agent claim 审批请求已经上链登记，当前等待运营审核。"
-        : "The first agent claim approval request is recorded on-chain and is waiting for operator review.",
-      details,
-    };
-  }
-  return {
-    status: status || "unknown",
-    badgeClass: "badge badge--warn",
-    label: isZh ? "未知状态" : "unknown",
-    meta: `request=${request.requestId} · slot=${request.requestedSlotIndex} · tier=${request.requestedReputationTier}`,
-    summary: isZh
-      ? `runtime 返回了未识别的审批状态：${status || "(empty)"}。`
-      : `Runtime returned an unrecognized approval status: ${status || "(empty)"}.`,
-    details,
   };
 }
 
@@ -4504,7 +4412,6 @@ export {
   buildWorldScaleSurface,
   clone,
   connectionBadgeClass,
-  describeFirstAgentClaimApprovalRequest,
   describeControls,
   describePromptVersionState,
   describeSemanticFeedback,
