@@ -221,17 +221,21 @@ fn preview_text(text: &str, limit: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::fs::{self, OpenOptions};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::thread;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::Duration;
+
+    static TEMP_CONFIG_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn probe_hello_response_succeeds_against_mock_stream() {
         let base_url = spawn_success_responses_server();
         let config_path = write_temp_config(base_url.as_str(), 5000);
         let config = LlmAgentConfig::from_config_file(config_path.as_path()).expect("load config");
+        fs::remove_file(&config_path).ok();
         let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
 
         let result = client
@@ -246,6 +250,7 @@ mod tests {
         let base_url = spawn_slow_responses_server(Duration::from_millis(400));
         let config_path = write_temp_config(base_url.as_str(), 100);
         let config = LlmAgentConfig::from_config_file(config_path.as_path()).expect("load config");
+        fs::remove_file(&config_path).ok();
         let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
 
         let err = client
@@ -265,6 +270,7 @@ mod tests {
         let base_url = spawn_tool_call_responses_server();
         let config_path = write_temp_config(base_url.as_str(), 5000);
         let config = LlmAgentConfig::from_config_file(config_path.as_path()).expect("load config");
+        fs::remove_file(&config_path).ok();
         let client = OpenAiChatCompletionClient::from_config(&config).expect("client");
 
         let result = client
@@ -448,20 +454,25 @@ mod tests {
     }
 
     fn write_temp_config(base_url: &str, timeout_ms: u64) -> std::path::PathBuf {
-        let mut path = std::env::temp_dir();
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        path.push(format!(
-            "oasis7-llm-provider-probe-{}-{nonce}.toml",
-            std::process::id()
-        ));
         let content = format!(
             "[llm]\nmodel = \"gpt-test\"\nbase_url = \"{}\"\napi_key = \"test-key\"\ntimeout_ms = {}\n",
             base_url, timeout_ms
         );
-        fs::write(&path, content).expect("write temp config");
-        path
+
+        loop {
+            let counter = TEMP_CONFIG_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "oasis7-llm-provider-probe-{}-{counter}.toml",
+                std::process::id()
+            ));
+            let mut file = match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => file,
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => panic!("create temp config failed: {err}"),
+            };
+            file.write_all(content.as_bytes())
+                .expect("write temp config");
+            return path;
+        }
     }
 }
