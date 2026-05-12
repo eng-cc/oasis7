@@ -33,9 +33,24 @@ MARKDOWN_IMAGE_URL_PATTERN = re.compile(
     r"!\[[^\]]*\]\((https?://[^)]+)\)",
     re.IGNORECASE,
 )
+ALLOWED_REMOTE_IMAGE_HOSTS: frozenset[str] = frozenset({"image.pollinations.ai"})
+ALLOWED_REMOTE_IMAGE_SCHEMES: frozenset[str] = frozenset({"https"})
+MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
+REMOTE_READ_CHUNK_BYTES = 64 * 1024
+
+
+def _is_allowed_remote_image_url(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme.lower() not in ALLOWED_REMOTE_IMAGE_SCHEMES:
+        return False
+    hostname = (parsed.hostname or "").lower()
+    return hostname in ALLOWED_REMOTE_IMAGE_HOSTS
 
 
 def _download_remote_image(url: str) -> tuple[bytes, str] | None:
+    if not _is_allowed_remote_image_url(url):
+        return None
+
     request = urllib.request.Request(
         url,
         headers={
@@ -48,10 +63,22 @@ def _download_remote_image(url: str) -> tuple[bytes, str] | None:
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
+            if not _is_allowed_remote_image_url(response.geturl()):
+                return None
             content_type = response.headers.get_content_type().lower()
             if not content_type.startswith("image/"):
                 return None
-            image_bytes = response.read()
+            chunks: list[bytes] = []
+            total_bytes = 0
+            while True:
+                chunk = response.read(REMOTE_READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_REMOTE_IMAGE_BYTES:
+                    return None
+                chunks.append(chunk)
+            image_bytes = b"".join(chunks)
     except Exception:
         return None
 
@@ -159,6 +186,16 @@ def validate_output_path(raw_out: str) -> pathlib.Path:
     return resolved
 
 
+def choose_output_path(requested_path: pathlib.Path, detected_ext: str) -> pathlib.Path:
+    detected_suffix = f".{detected_ext.lower()}"
+    requested_suffix = requested_path.suffix.lower()
+    if requested_suffix == detected_suffix:
+        return requested_path
+    if requested_suffix in {".jpg", ".jpeg"} and detected_suffix in {".jpg", ".jpeg"}:
+        return requested_path
+    return requested_path.with_suffix(detected_suffix)
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         print(
@@ -185,10 +222,11 @@ def main(argv: list[str]) -> int:
         print("IMAGE_NOT_FOUND_IN_SESSION", file=sys.stderr)
         return 1
 
-    image_bytes, _ext = result
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(image_bytes)
-    print(out_path)
+    image_bytes, detected_ext = result
+    final_out_path = choose_output_path(out_path, detected_ext)
+    final_out_path.parent.mkdir(parents=True, exist_ok=True)
+    final_out_path.write_bytes(image_bytes)
+    print(final_out_path)
     return 0
 
 

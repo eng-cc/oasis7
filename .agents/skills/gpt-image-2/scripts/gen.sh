@@ -32,20 +32,35 @@ REF_IMAGES=()
 TIMEOUT_SEC=300
 ATTEMPTS=5
 
+usage() {
+  sed -n '2,24p' "$0"
+}
+
+require_flag_value() {
+  local flag="$1"
+  local value="${2-}"
+  if [[ -z "$value" || "$value" == --* ]]; then
+    echo "Missing value for $flag" >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --prompt)      PROMPT="$2"; shift 2 ;;
-    --out)         OUT="$2"; shift 2 ;;
-    --ref)         REF_IMAGES+=("$2"); shift 2 ;;
-    --timeout-sec) TIMEOUT_SEC="$2"; shift 2 ;;
-    --attempts)    ATTEMPTS="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,24p' "$0"; exit 0 ;;
+    --prompt)      require_flag_value "$1" "${2-}"; PROMPT="$2"; shift 2 ;;
+    --out)         require_flag_value "$1" "${2-}"; OUT="$2"; shift 2 ;;
+    --ref)         require_flag_value "$1" "${2-}"; REF_IMAGES+=("$2"); shift 2 ;;
+    --timeout-sec) require_flag_value "$1" "${2-}"; TIMEOUT_SEC="$2"; shift 2 ;;
+    --attempts)    require_flag_value "$1" "${2-}"; ATTEMPTS="$2"; shift 2 ;;
+    -h|--help)     usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
 [[ -z "$PROMPT" ]] && { echo "Missing --prompt" >&2; exit 2; }
 [[ -z "$OUT" ]]    && { echo "Missing --out" >&2; exit 2; }
+[[ "$TIMEOUT_SEC" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout-sec must be a positive integer" >&2; exit 2; }
+[[ "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || { echo "--attempts must be a positive integer" >&2; exit 2; }
 
 command -v codex >/dev/null 2>&1 || {
   echo "codex CLI not found. Install Codex CLI and run 'codex login' first." >&2
@@ -56,9 +71,12 @@ command -v python3 >/dev/null 2>&1 || { echo "python3 not found" >&2; exit 3; }
 SESSIONS_ROOT="$HOME/.codex/sessions"
 mkdir -p "$SESSIONS_ROOT"
 
-before="$(mktemp)"; after="$(mktemp)"
-stdout_log="$(mktemp)"; stderr_log="$(mktemp)"
-trap 'rm -f "$before" "$after" "$stdout_log" "$stderr_log"' EXIT
+tmp_dir="$(mktemp -d)"
+before="$tmp_dir/before.txt"; after="$tmp_dir/after.txt"
+stdout_log="$tmp_dir/stdout.log"; stderr_log="$tmp_dir/stderr.log"
+new_sessions_file="$tmp_dir/new_sessions.txt"
+stdout_sources_file="$tmp_dir/stdout_sources.txt"
+trap 'rm -rf "$tmp_dir"' EXIT
 
 find "$SESSIONS_ROOT" -type f -name 'rollout-*.jsonl' -print 2>/dev/null | sort > "$before" || true
 
@@ -120,9 +138,6 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   # Collect ALL new session files. A single `codex exec` call can spawn more
   # than one session rollout (e.g. when the imagegen tool runs in a sub-turn),
   # so we must scan every new one rather than blindly picking the last.
-  new_sessions_file="$(mktemp)"
-  stdout_sources_file="$(mktemp)"
-  trap 'rm -f "$before" "$after" "$stdout_log" "$stderr_log" "$new_sessions_file" "$stdout_sources_file"' EXIT
   comm -13 "$before" "$after" > "$new_sessions_file" || true
 
   printf '%s\n%s\n' "$stdout_log" "$stderr_log" > "$stdout_sources_file"
