@@ -29,7 +29,6 @@ pub const MAIN_TOKEN_TREASURY_BUCKET_GAS_FEE: &str = "gas_fee_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_SLASH: &str = "slash_treasury";
 pub const MAIN_TOKEN_TREASURY_BUCKET_MODULE_FEE: &str = "module_fee_treasury";
 pub const RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY: &str = "slot_1_claim_and_upkeep";
-pub const FIRST_AGENT_CLAIM_APPROVAL_ISSUANCE_REASON: &str = "first_agent_claim_approved";
 
 pub fn production_hardened_main_token_config() -> MainTokenConfig {
     MainTokenConfig {
@@ -258,37 +257,6 @@ pub struct RestrictedStarterClaimLiveopsPoolTopUpRecord {
     pub target_treasury_bucket_id: String,
     pub amount: u64,
     pub topped_up_at_epoch: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum FirstAgentClaimApprovalRequestStatus {
-    #[default]
-    Pending,
-    Approved,
-    Rejected,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct FirstAgentClaimApprovalRequestState {
-    pub request_id: u64,
-    pub claimer_agent_id: String,
-    pub requested_slot_index: u8,
-    pub requested_reputation_tier: u8,
-    pub requested_total_upfront_amount: u64,
-    pub requested_at_epoch: u64,
-    #[serde(default)]
-    pub status: FirstAgentClaimApprovalRequestStatus,
-    #[serde(default)]
-    pub updated_at_epoch: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operator_account_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_amount: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at_epoch: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rejection_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -42,9 +42,6 @@ impl World {
                 | Action::SettleEconomicContract { .. }
                 | Action::ClaimAgent { .. }
                 | Action::ReleaseAgentClaim { .. }
-                | Action::SubmitFirstAgentClaimApprovalRequest { .. }
-                | Action::ApproveFirstAgentClaimApprovalRequest { .. }
-                | Action::RejectFirstAgentClaimApprovalRequest { .. }
                 | Action::IssueRestrictedStarterClaimGrant { .. }
                 | Action::RevokeRestrictedStarterClaimGrant { .. }
         )

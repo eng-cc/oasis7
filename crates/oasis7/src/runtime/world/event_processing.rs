@@ -175,9 +175,6 @@ impl World {
             | Action::TopUpRestrictedStarterClaimLiveopsPool { .. }
             | Action::IssueRestrictedStarterClaimGrant { .. }
             | Action::RevokeRestrictedStarterClaimGrant { .. }
-            | Action::SubmitFirstAgentClaimApprovalRequest { .. }
-            | Action::ApproveFirstAgentClaimApprovalRequest { .. }
-            | Action::RejectFirstAgentClaimApprovalRequest { .. }
             | Action::TransferMaterial { .. } => {
                 self.action_to_event_core(action_id, &envelope.action)
             }

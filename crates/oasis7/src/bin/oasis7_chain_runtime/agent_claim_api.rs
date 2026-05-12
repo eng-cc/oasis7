@@ -6,17 +6,10 @@ use std::sync::{Arc, Mutex};
 use oasis7::consensus_action_payload::{
     encode_consensus_action_payload, ConsensusActionPayloadEnvelope,
 };
-use oasis7::runtime::{
-    Action, DomainEvent, FirstAgentClaimApprovalRequestState, FirstAgentClaimApprovalRequestStatus,
-    RejectReason, World, WorldEventBody,
-};
+use oasis7::runtime::{Action, DomainEvent, RejectReason, World, WorldEventBody};
 use oasis7_node::NodeRuntime;
 use serde::{Deserialize, Serialize};
 
-const APPROVAL_REQUEST_SUBMIT_PATH: &str = "/v1/chain/agent-claim/approval-request/submit";
-const APPROVAL_REQUESTS_PATH: &str = "/v1/chain/agent-claim/approval-requests";
-const APPROVAL_REQUEST_APPROVE_PATH: &str = "/v1/chain/agent-claim/approval-request/approve";
-const APPROVAL_REQUEST_REJECT_PATH: &str = "/v1/chain/agent-claim/approval-request/reject";
 const AGENT_CLAIM_SUBMIT_PATH: &str = "/v1/chain/agent-claim/submit";
 const AGENT_CLAIM_ERROR_INVALID_REQUEST: &str = "invalid_request";
 const AGENT_CLAIM_ERROR_ACTION_REJECTED: &str = "action_rejected";
@@ -27,28 +20,6 @@ static NEXT_AGENT_CLAIM_ACTION_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct ChainFirstAgentClaimApprovalRequestSubmit {
-    pub(super) claimer_agent_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ChainFirstAgentClaimApprovalApproveRequest {
-    pub(super) operator_account_id: String,
-    pub(super) request_id: u64,
-    pub(super) expires_at_epoch: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ChainFirstAgentClaimApprovalRejectRequest {
-    pub(super) operator_account_id: String,
-    pub(super) request_id: u64,
-    pub(super) reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub(super) struct ChainAgentClaimSubmitRequest {
     pub(super) claimer_agent_id: String,
     pub(super) target_agent_id: String,
@@ -56,10 +27,6 @@ pub(super) struct ChainAgentClaimSubmitRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub(super) struct ChainAgentClaimActionPreview {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) request_id: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) approval_status: Option<FirstAgentClaimApprovalRequestStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) claimer_agent_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -72,10 +39,6 @@ pub(super) struct ChainAgentClaimActionPreview {
     pub(super) requested_total_upfront_amount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) auto_issued_restricted_amount: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) approved_amount: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) expires_at_epoch: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,128 +84,18 @@ impl ChainAgentClaimActionResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) struct ChainAgentClaimApprovalRequestsResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    pub(super) node_id: String,
-    pub(super) world_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) claimer_agent_id_filter: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) status_filter: Option<FirstAgentClaimApprovalRequestStatus>,
-    pub(super) total: usize,
-    pub(super) items: Vec<FirstAgentClaimApprovalRequestState>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error_code: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) error: Option<String>,
-}
-
-impl ChainAgentClaimApprovalRequestsResponse {
-    fn success(
-        node_id: &str,
-        world_id: &str,
-        claimer_agent_id_filter: Option<String>,
-        status_filter: Option<FirstAgentClaimApprovalRequestStatus>,
-        items: Vec<FirstAgentClaimApprovalRequestState>,
-    ) -> Self {
-        Self {
-            ok: true,
-            observed_at_unix_ms: super::now_unix_ms(),
-            node_id: node_id.to_string(),
-            world_id: world_id.to_string(),
-            claimer_agent_id_filter,
-            status_filter,
-            total: items.len(),
-            items,
-            error_code: None,
-            error: None,
-        }
-    }
-
-    fn error(
-        node_id: &str,
-        world_id: &str,
-        code: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
-        Self {
-            ok: false,
-            observed_at_unix_ms: super::now_unix_ms(),
-            node_id: node_id.to_string(),
-            world_id: world_id.to_string(),
-            claimer_agent_id_filter: None,
-            status_filter: None,
-            total: 0,
-            items: Vec::new(),
-            error_code: Some(code.into()),
-            error: Some(message.into()),
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct ApprovalRequestsQuery {
-    claimer_agent_id_filter: Option<String>,
-    status_filter: Option<FirstAgentClaimApprovalRequestStatus>,
-}
-
 pub(super) fn maybe_handle_agent_claim_request(
     stream: &mut TcpStream,
     request_bytes: &[u8],
     runtime: &Arc<Mutex<NodeRuntime>>,
     method: &str,
-    target: &str,
+    _target: &str,
     path: &str,
-    node_id: &str,
-    world_id: &str,
+    _node_id: &str,
+    _world_id: &str,
     execution_world_dir: &Path,
 ) -> Result<bool, String> {
-    let head_only = method.eq_ignore_ascii_case("HEAD");
     match path {
-        APPROVAL_REQUEST_SUBMIT_PATH => {
-            if !method.eq_ignore_ascii_case("POST") {
-                write_agent_claim_error(
-                    stream,
-                    405,
-                    AGENT_CLAIM_ERROR_INVALID_REQUEST,
-                    format!("method {method} is not allowed for {APPROVAL_REQUEST_SUBMIT_PATH}")
-                        .as_str(),
-                )?;
-                return Ok(true);
-            }
-            handle_approval_request_submit(stream, request_bytes, runtime, execution_world_dir)?;
-            Ok(true)
-        }
-        APPROVAL_REQUEST_APPROVE_PATH => {
-            if !method.eq_ignore_ascii_case("POST") {
-                write_agent_claim_error(
-                    stream,
-                    405,
-                    AGENT_CLAIM_ERROR_INVALID_REQUEST,
-                    format!("method {method} is not allowed for {APPROVAL_REQUEST_APPROVE_PATH}")
-                        .as_str(),
-                )?;
-                return Ok(true);
-            }
-            handle_approval_request_approve(stream, request_bytes, runtime, execution_world_dir)?;
-            Ok(true)
-        }
-        APPROVAL_REQUEST_REJECT_PATH => {
-            if !method.eq_ignore_ascii_case("POST") {
-                write_agent_claim_error(
-                    stream,
-                    405,
-                    AGENT_CLAIM_ERROR_INVALID_REQUEST,
-                    format!("method {method} is not allowed for {APPROVAL_REQUEST_REJECT_PATH}")
-                        .as_str(),
-                )?;
-                return Ok(true);
-            }
-            handle_approval_request_reject(stream, request_bytes, runtime, execution_world_dir)?;
-            Ok(true)
-        }
         AGENT_CLAIM_SUBMIT_PATH => {
             if !method.eq_ignore_ascii_case("POST") {
                 write_agent_claim_error(
@@ -257,76 +110,14 @@ pub(super) fn maybe_handle_agent_claim_request(
             handle_agent_claim_submit(stream, request_bytes, runtime, execution_world_dir)?;
             Ok(true)
         }
-        APPROVAL_REQUESTS_PATH => {
-            if !method.eq_ignore_ascii_case("GET") && !head_only {
-                write_agent_claim_requests_json_response(
-                    stream,
-                    405,
-                    &ChainAgentClaimApprovalRequestsResponse::error(
-                        node_id,
-                        world_id,
-                        AGENT_CLAIM_ERROR_INVALID_REQUEST,
-                        format!("method {method} is not allowed for {APPROVAL_REQUESTS_PATH}"),
-                    ),
-                    head_only,
-                )?;
-                return Ok(true);
-            }
-            handle_approval_requests_list(
-                stream,
-                target,
-                node_id,
-                world_id,
-                execution_world_dir,
-                head_only,
-            )?;
-            Ok(true)
-        }
         _ => Ok(false),
     }
 }
 
-fn handle_approval_request_submit(
-    stream: &mut TcpStream,
-    request_bytes: &[u8],
-    runtime: &Arc<Mutex<NodeRuntime>>,
-    execution_world_dir: &Path,
-) -> Result<(), String> {
-    let request = parse_json_request::<ChainFirstAgentClaimApprovalRequestSubmit>(request_bytes)?;
-    let action = Action::SubmitFirstAgentClaimApprovalRequest {
-        claimer_agent_id: request.claimer_agent_id,
-    };
-    handle_agent_claim_action(stream, runtime, execution_world_dir, action)
-}
-
-fn handle_approval_request_approve(
-    stream: &mut TcpStream,
-    request_bytes: &[u8],
-    runtime: &Arc<Mutex<NodeRuntime>>,
-    execution_world_dir: &Path,
-) -> Result<(), String> {
-    let request = parse_json_request::<ChainFirstAgentClaimApprovalApproveRequest>(request_bytes)?;
-    let action = Action::ApproveFirstAgentClaimApprovalRequest {
-        operator_account_id: request.operator_account_id,
-        request_id: request.request_id,
-        expires_at_epoch: request.expires_at_epoch,
-    };
-    handle_agent_claim_action(stream, runtime, execution_world_dir, action)
-}
-
-fn handle_approval_request_reject(
-    stream: &mut TcpStream,
-    request_bytes: &[u8],
-    runtime: &Arc<Mutex<NodeRuntime>>,
-    execution_world_dir: &Path,
-) -> Result<(), String> {
-    let request = parse_json_request::<ChainFirstAgentClaimApprovalRejectRequest>(request_bytes)?;
-    let action = Action::RejectFirstAgentClaimApprovalRequest {
-        operator_account_id: request.operator_account_id,
-        request_id: request.request_id,
-        reason: request.reason,
-    };
-    handle_agent_claim_action(stream, runtime, execution_world_dir, action)
+fn parse_json_request<T: for<'de> Deserialize<'de>>(request_bytes: &[u8]) -> Result<T, String> {
+    let body = super::feedback_submit_api::extract_http_json_body(request_bytes)
+        .map_err(|err| format!("invalid agent claim request body: {err}"))?;
+    serde_json::from_slice(body).map_err(|err| format!("invalid agent claim request: {err}"))
 }
 
 fn handle_agent_claim_submit(
@@ -367,177 +158,6 @@ fn handle_agent_claim_action(
     write_agent_claim_json_response(stream, 200, &response)
 }
 
-fn handle_approval_requests_list(
-    stream: &mut TcpStream,
-    target: &str,
-    node_id: &str,
-    world_id: &str,
-    execution_world_dir: &Path,
-    head_only: bool,
-) -> Result<(), String> {
-    let query = match parse_approval_requests_query(target) {
-        Ok(query) => query,
-        Err(err) => {
-            write_agent_claim_requests_json_response(
-                stream,
-                400,
-                &ChainAgentClaimApprovalRequestsResponse::error(
-                    node_id,
-                    world_id,
-                    AGENT_CLAIM_ERROR_INVALID_REQUEST,
-                    err,
-                ),
-                head_only,
-            )?;
-            return Ok(());
-        }
-    };
-    let response = build_approval_requests_response(node_id, world_id, execution_world_dir, query);
-    let status_code = if response.ok { 200 } else { 500 };
-    write_agent_claim_requests_json_response(stream, status_code, &response, head_only)
-}
-
-fn parse_json_request<T: for<'de> Deserialize<'de>>(request_bytes: &[u8]) -> Result<T, String> {
-    let body = super::feedback_submit_api::extract_http_json_body(request_bytes)
-        .map_err(|err| format!("invalid agent claim request body: {err}"))?;
-    serde_json::from_slice(body).map_err(|err| format!("invalid agent claim request: {err}"))
-}
-
-fn parse_approval_requests_query(target: &str) -> Result<ApprovalRequestsQuery, String> {
-    let Some((_, raw_query)) = target.split_once('?') else {
-        return Ok(ApprovalRequestsQuery::default());
-    };
-    let mut query = ApprovalRequestsQuery::default();
-    for pair in raw_query.split('&').filter(|pair| !pair.is_empty()) {
-        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
-        let key = percent_decode(key);
-        let value = percent_decode(value);
-        match key.as_str() {
-            "claimer_agent_id" => {
-                let value = value.trim();
-                if !value.is_empty() {
-                    query.claimer_agent_id_filter = Some(value.to_string());
-                }
-            }
-            "status" => {
-                let value = value.trim();
-                if !value.is_empty() {
-                    query.status_filter = Some(parse_approval_request_status(value)?);
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(query)
-}
-
-fn parse_approval_request_status(
-    raw: &str,
-) -> Result<FirstAgentClaimApprovalRequestStatus, String> {
-    match raw.trim().to_ascii_lowercase().as_str() {
-        "pending" => Ok(FirstAgentClaimApprovalRequestStatus::Pending),
-        "approved" => Ok(FirstAgentClaimApprovalRequestStatus::Approved),
-        "rejected" => Ok(FirstAgentClaimApprovalRequestStatus::Rejected),
-        _ => Err(format!(
-            "unsupported approval request status filter: {raw} (expected pending|approved|rejected)"
-        )),
-    }
-}
-
-fn percent_decode(raw: &str) -> String {
-    let bytes = raw.as_bytes();
-    let mut cursor = 0_usize;
-    let mut output = Vec::with_capacity(bytes.len());
-
-    while cursor < bytes.len() {
-        let byte = bytes[cursor];
-        if byte == b'+' {
-            output.push(b' ');
-            cursor += 1;
-            continue;
-        }
-        if byte == b'%' && cursor + 2 < bytes.len() {
-            let high = hex_value(bytes[cursor + 1]);
-            let low = hex_value(bytes[cursor + 2]);
-            if let (Some(high), Some(low)) = (high, low) {
-                output.push((high << 4) | low);
-                cursor += 3;
-                continue;
-            }
-        }
-        output.push(byte);
-        cursor += 1;
-    }
-
-    String::from_utf8(output).unwrap_or_else(|_| raw.to_string())
-}
-
-fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte - b'0'),
-        b'a'..=b'f' => Some(byte - b'a' + 10),
-        b'A'..=b'F' => Some(byte - b'A' + 10),
-        _ => None,
-    }
-}
-
-fn build_approval_requests_response(
-    node_id: &str,
-    world_id: &str,
-    execution_world_dir: &Path,
-    query: ApprovalRequestsQuery,
-) -> ChainAgentClaimApprovalRequestsResponse {
-    let world = match super::execution_bridge::load_execution_world(execution_world_dir) {
-        Ok(world) => world,
-        Err(err) => {
-            return ChainAgentClaimApprovalRequestsResponse::error(
-                node_id,
-                world_id,
-                AGENT_CLAIM_ERROR_INTERNAL,
-                format!("load execution world failed: {err}"),
-            );
-        }
-    };
-
-    let mut items = world
-        .state()
-        .first_agent_claim_approval_requests
-        .values()
-        .filter(|request| {
-            query
-                .claimer_agent_id_filter
-                .as_ref()
-                .is_none_or(|claimer| request.claimer_agent_id == *claimer)
-        })
-        .filter(|request| {
-            query
-                .status_filter
-                .is_none_or(|status| request.status == status)
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    items.sort_by(|left, right| {
-        approval_request_sort_rank(left.status)
-            .cmp(&approval_request_sort_rank(right.status))
-            .then_with(|| right.request_id.cmp(&left.request_id))
-    });
-    ChainAgentClaimApprovalRequestsResponse::success(
-        node_id,
-        world_id,
-        query.claimer_agent_id_filter,
-        query.status_filter,
-        items,
-    )
-}
-
-fn approval_request_sort_rank(status: FirstAgentClaimApprovalRequestStatus) -> u8 {
-    match status {
-        FirstAgentClaimApprovalRequestStatus::Pending => 0,
-        FirstAgentClaimApprovalRequestStatus::Approved => 1,
-        FirstAgentClaimApprovalRequestStatus::Rejected => 2,
-    }
-}
-
 fn preflight_agent_claim_action(
     execution_world_dir: &Path,
     action: Action,
@@ -572,65 +192,6 @@ fn extract_agent_claim_preview(
             DomainEvent::ActionRejected { reason, .. } => {
                 return Err(reject_reason_to_api_error(reason));
             }
-            DomainEvent::FirstAgentClaimApprovalRequested {
-                request_id,
-                claimer_agent_id,
-                requested_slot_index,
-                requested_reputation_tier,
-                requested_total_upfront_amount,
-                ..
-            } => {
-                return Ok(ChainAgentClaimActionPreview {
-                    request_id: Some(*request_id),
-                    approval_status: Some(FirstAgentClaimApprovalRequestStatus::Pending),
-                    claimer_agent_id: Some(claimer_agent_id.clone()),
-                    target_agent_id: None,
-                    slot_index: Some(*requested_slot_index),
-                    reputation_tier: Some(*requested_reputation_tier),
-                    requested_total_upfront_amount: Some(*requested_total_upfront_amount),
-                    auto_issued_restricted_amount: None,
-                    approved_amount: None,
-                    expires_at_epoch: None,
-                });
-            }
-            DomainEvent::FirstAgentClaimApprovalApproved {
-                request_id,
-                claimer_agent_id,
-                approved_amount,
-                expires_at_epoch,
-                ..
-            } => {
-                return Ok(ChainAgentClaimActionPreview {
-                    request_id: Some(*request_id),
-                    approval_status: Some(FirstAgentClaimApprovalRequestStatus::Approved),
-                    claimer_agent_id: Some(claimer_agent_id.clone()),
-                    target_agent_id: None,
-                    slot_index: Some(1),
-                    reputation_tier: None,
-                    requested_total_upfront_amount: None,
-                    auto_issued_restricted_amount: None,
-                    approved_amount: Some(*approved_amount),
-                    expires_at_epoch: Some(*expires_at_epoch),
-                });
-            }
-            DomainEvent::FirstAgentClaimApprovalRejected {
-                request_id,
-                claimer_agent_id,
-                ..
-            } => {
-                return Ok(ChainAgentClaimActionPreview {
-                    request_id: Some(*request_id),
-                    approval_status: Some(FirstAgentClaimApprovalRequestStatus::Rejected),
-                    claimer_agent_id: Some(claimer_agent_id.clone()),
-                    target_agent_id: None,
-                    slot_index: Some(1),
-                    reputation_tier: None,
-                    requested_total_upfront_amount: None,
-                    auto_issued_restricted_amount: None,
-                    approved_amount: None,
-                    expires_at_epoch: None,
-                });
-            }
             DomainEvent::AgentClaimed {
                 claimer_agent_id,
                 target_agent_id,
@@ -643,8 +204,6 @@ fn extract_agent_claim_preview(
                 ..
             } => {
                 return Ok(ChainAgentClaimActionPreview {
-                    request_id: None,
-                    approval_status: None,
                     claimer_agent_id: Some(claimer_agent_id.clone()),
                     target_agent_id: Some(target_agent_id.clone()),
                     slot_index: Some(*slot_index),
@@ -656,8 +215,6 @@ fn extract_agent_claim_preview(
                     ),
                     auto_issued_restricted_amount: (*auto_issued_restricted_amount > 0)
                         .then_some(*auto_issued_restricted_amount),
-                    approved_amount: None,
-                    expires_at_epoch: None,
                 });
             }
             _ => {}
@@ -798,18 +355,6 @@ fn write_agent_claim_json_response(
         .map_err(|err| format!("failed to encode agent claim response: {err}"))?;
     super::write_json_response(stream, status_code, body.as_slice(), false)
         .map_err(|err| format!("failed to write agent claim response: {err}"))
-}
-
-fn write_agent_claim_requests_json_response(
-    stream: &mut TcpStream,
-    status_code: u16,
-    payload: &ChainAgentClaimApprovalRequestsResponse,
-    head_only: bool,
-) -> Result<(), String> {
-    let body = serde_json::to_vec_pretty(payload)
-        .map_err(|err| format!("failed to encode agent claim request list response: {err}"))?;
-    super::write_json_response(stream, status_code, body.as_slice(), head_only)
-        .map_err(|err| format!("failed to write agent claim request list response: {err}"))
 }
 
 #[cfg(test)]

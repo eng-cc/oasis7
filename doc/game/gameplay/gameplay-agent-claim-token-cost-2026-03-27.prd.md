@@ -181,7 +181,7 @@
 | PRD-GAME-011 | `TASK-GAME-055` | `test_tier_required` | 新增 `scripts/oasis7-liveops-grant.sh` 作为运营 wrapper，验证位置参数、`OASIS7_WORLD_DIR` 默认注入与 `--print-cmd/--cli-bin` smoke，同时保持底层仍只调用 `oasis7_liveops_grant_cli` | 运营执行门槛进一步降低、字段误填率下降、治理边界不扩散 |
 | PRD-GAME-011 | `TASK-GAME-056` | `test_tier_required` | 将 governance registry manifest/import/audit 扩成 per-slot threshold，验证 `liveops` 可显式声明 `1-of-2` 且通过 audit/import，而既有 controller/finality slot 继续保持默认 `2-of-3` 与单 signer 故障容忍审计 | 低权限运营槽位可正式落地、治理工具链不再全局绑死一个 threshold |
 | PRD-GAME-011 | `TASK-GAME-059` | `test_tier_required` + `test_tier_full` | 新增 `TopUpRestrictedStarterClaimLiveopsPool` controller-governed runtime action、独立 `restricted_starter_claim_liveops_pool` treasury bucket 与 top-up 审计记录，验证 top-up 固定绑定 `ecosystem_pool` controller slot 的 signer allowlist / threshold policy，且 daily restricted grant 只从专用池出账/退款回流 | restricted grant 资金池分层、高权限大池审批与低权限日常发放解耦、运营口径收敛 |
-| PRD-GAME-011 / PRD-WORLD_RUNTIME-040 | `task_313368c409c54cc2bcf8ef4f47919b65` | `test_tier_required` | 首个 `slot-1` claim auto-funding runtime / snapshot / API / viewer 回归，验证 dedicated pool 自动补足、legacy 审批去阻塞与 funding provenance 保持可审计 | 新账号 onboarding、自动启动金、claim 直连闭环 |
+| PRD-GAME-011 / PRD-WORLD_RUNTIME-040 | `task_313368c409c54cc2bcf8ef4f47919b65` | `test_tier_required` | 首个 `slot-1` claim auto-funding runtime / snapshot / API / viewer 回归，验证 dedicated pool 自动补足、旧审批路径移除与 funding provenance 保持可审计 | 新账号 onboarding、自动启动金、claim 直连闭环 |
 
 - Decision Log:
 

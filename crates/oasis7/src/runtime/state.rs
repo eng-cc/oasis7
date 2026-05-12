@@ -26,12 +26,12 @@ use super::governance::{
     GovernanceValidatorAdmissionRecord,
 };
 use super::main_token::{
-    main_token_bucket_unlocked_amount, FirstAgentClaimApprovalRequestState,
-    MainTokenAccountBalance, MainTokenConfig, MainTokenEpochIssuanceRecord,
-    MainTokenGenesisAllocationBucketState, MainTokenNodePointsBridgeDistribution,
-    MainTokenNodePointsBridgeEpochRecord, MainTokenScheduledPolicyUpdate, MainTokenSupplyState,
-    MainTokenTreasuryDistributionRecord, RestrictedStarterClaimGrantState,
-    RestrictedStarterClaimLiveopsPoolTopUpRecord, MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
+    main_token_bucket_unlocked_amount, MainTokenAccountBalance, MainTokenConfig,
+    MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
+    MainTokenNodePointsBridgeDistribution, MainTokenNodePointsBridgeEpochRecord,
+    MainTokenScheduledPolicyUpdate, MainTokenSupplyState, MainTokenTreasuryDistributionRecord,
+    RestrictedStarterClaimGrantState, RestrictedStarterClaimLiveopsPoolTopUpRecord,
+    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::{
@@ -74,10 +74,6 @@ fn default_next_module_instance_id() -> u64 {
 }
 
 fn default_next_module_release_request_id() -> u64 {
-    1
-}
-
-fn default_next_first_agent_claim_approval_request_id() -> u64 {
     1
 }
 
@@ -484,12 +480,6 @@ pub struct WorldState {
     pub main_token_balances: BTreeMap<String, MainTokenAccountBalance>,
     #[serde(default)]
     pub restricted_starter_claim_grants: BTreeMap<String, RestrictedStarterClaimGrantState>,
-    #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
-    pub first_agent_claim_approval_requests: BTreeMap<u64, FirstAgentClaimApprovalRequestState>,
-    #[serde(default)]
-    pub latest_first_agent_claim_approval_request_ids_by_claimer: BTreeMap<String, u64>,
-    #[serde(default = "default_next_first_agent_claim_approval_request_id")]
-    pub next_first_agent_claim_approval_request_id: u64,
     #[serde(default)]
     pub main_token_genesis_buckets: BTreeMap<String, MainTokenGenesisAllocationBucketState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
@@ -586,10 +576,6 @@ impl Default for WorldState {
             main_token_supply: MainTokenSupplyState::default(),
             main_token_balances: BTreeMap::new(),
             restricted_starter_claim_grants: BTreeMap::new(),
-            first_agent_claim_approval_requests: BTreeMap::new(),
-            latest_first_agent_claim_approval_request_ids_by_claimer: BTreeMap::new(),
-            next_first_agent_claim_approval_request_id:
-                default_next_first_agent_claim_approval_request_id(),
             main_token_genesis_buckets: BTreeMap::new(),
             main_token_epoch_issuance_records: BTreeMap::new(),
             main_token_treasury_balances: BTreeMap::new(),
@@ -632,33 +618,6 @@ impl WorldState {
         }
 
         sync_compat_world_materials(&self.material_ledgers, &mut self.materials);
-    }
-
-    pub fn migrate_compat_first_agent_claim_approval_request_index(&mut self) {
-        if self.first_agent_claim_approval_requests.is_empty() {
-            return;
-        }
-        let highest_request_id = self
-            .first_agent_claim_approval_requests
-            .last_key_value()
-            .map(|(request_id, _)| *request_id)
-            .unwrap_or(0);
-        self.next_first_agent_claim_approval_request_id = self
-            .next_first_agent_claim_approval_request_id
-            .max(highest_request_id.saturating_add(1).max(1));
-        if !self
-            .latest_first_agent_claim_approval_request_ids_by_claimer
-            .is_empty()
-        {
-            return;
-        }
-        for request in self.first_agent_claim_approval_requests.values() {
-            let entry = self
-                .latest_first_agent_claim_approval_request_ids_by_claimer
-                .entry(request.claimer_agent_id.clone())
-                .or_insert(request.request_id);
-            *entry = (*entry).max(request.request_id);
-        }
     }
 
     pub fn has_data_access_permission(
@@ -929,7 +888,6 @@ impl WorldState {
         now: WorldTime,
     ) -> Result<(), WorldError> {
         self.migrate_compat_material_ledgers();
-        self.migrate_compat_first_agent_claim_approval_request_index();
         match event {
             DomainEvent::AgentRegistered { .. }
             | DomainEvent::AgentMoved { .. }
@@ -992,10 +950,7 @@ impl WorldState {
             | DomainEvent::RestrictedStarterClaimLiveopsPoolToppedUp { .. }
             | DomainEvent::RestrictedStarterClaimGrantIssued { .. }
             | DomainEvent::RestrictedStarterClaimGrantExpired { .. }
-            | DomainEvent::RestrictedStarterClaimGrantRevoked { .. }
-            | DomainEvent::FirstAgentClaimApprovalRequested { .. }
-            | DomainEvent::FirstAgentClaimApprovalApproved { .. }
-            | DomainEvent::FirstAgentClaimApprovalRejected { .. } => {
+            | DomainEvent::RestrictedStarterClaimGrantRevoked { .. } => {
                 self.apply_domain_event_main_token(event, now)?
             }
             DomainEvent::GameplayPolicyUpdated { .. }

@@ -3,25 +3,26 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
-- [ ] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 需同步去掉 pending-review 依赖，只保留 legacy 审批数据兼容读取。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
-- [x] first-agent-claim-approval-closure (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐首个 agent `slot-1` claim 的申请、运营审核、批准/拒绝、grant 发放与最终 `ClaimAgent` 直连 API 闭环；玩家与运营都必须从同一条 runtime 真值读取 request 状态。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
+- [x] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 同步移除旧审批 surface，只保留 dedicated pool auto-funding 直连 claim 真值。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`
     - `doc/world-runtime/project.md`
-    - `doc/world-simulator/prd.md`
-    - `doc/world-simulator/project.md`
+    - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
     - `crates/oasis7/src/runtime/events.rs`
     - `crates/oasis7/src/runtime/events/domain_event.rs`
     - `crates/oasis7/src/runtime/main_token.rs`
     - `crates/oasis7/src/runtime/state.rs`
+    - `crates/oasis7/src/runtime/state/apply_domain_event_main_token.rs`
     - `crates/oasis7/src/runtime/state/apply_domain_event_main_token_restricted_claims.rs`
     - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
     - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core_main_token.rs`
-    - `crates/oasis7/src/runtime/tests/agent_claims.rs`
-    - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
-    - `crates/oasis7/src/bin/oasis7_chain_runtime/status_server_support.rs`
+    - `crates/oasis7/src/runtime/world/event_processing.rs`
+    - `crates/oasis7/src/runtime/world/module_runtime_labels.rs`
+    - `crates/oasis7/src/runtime/world/step.rs`
+    - `crates/oasis7/src/runtime/tests/agent_claims_auto_funding.rs`
     - `crates/oasis7/src/bin/oasis7_chain_runtime/runtime_status_util.rs`
     - `crates/oasis7/src/bin/oasis7_chain_runtime/agent_claim_api.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/agent_claim_api_tests.rs`
     - `crates/oasis7/src/simulator/persist.rs`
     - `crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs`
     - `crates/oasis7/src/viewer/runtime_live/tests/snapshot_progress.rs`
@@ -29,11 +30,12 @@
     - `crates/oasis7_viewer/software_safe_src/main.jsx`
     - `crates/oasis7_viewer/software_safe.js`
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-    - `doc/world-simulator/llm/oasis7-governance-call-surface-2026-04-26.md`
+    - `crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html`
   - 验收命令 (`test_tier_required`):
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 first_agent_claim_approval -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime approval_request_approve_handler_accepts_allowlisted_operator -- --nocapture`
-    - `env -u RUSTC_WRAPPER cargo test -p oasis7 compat_snapshot_exposes_first_agent_claim_approval_request_status -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib first_slot_claim_auto_funds_shortfall_from_dedicated_pool_without_approval -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib auto_funded_restricted_bond_refund_returns_to_dedicated_pool_on_release -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime agent_claim_submit_handler_previews_slot_1_auto_funding -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime --bin oasis7_viewer_live`
     - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `npm --prefix crates/oasis7_viewer run build:software-safe`

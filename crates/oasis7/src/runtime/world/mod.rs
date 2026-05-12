@@ -312,7 +312,6 @@ impl World {
 
     pub fn new_with_state(mut state: WorldState) -> Self {
         state.migrate_compat_material_ledgers();
-        state.migrate_compat_first_agent_claim_approval_request_index();
         state
             .node_identity_bindings
             .entry(BUILTIN_MODULE_SIGNER_NODE_ID.to_string())

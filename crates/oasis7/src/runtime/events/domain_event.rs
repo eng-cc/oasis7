@@ -358,32 +358,6 @@ pub enum DomainEvent {
         configured_expires_at_epoch: u64,
         revoke_reason: String,
     },
-    FirstAgentClaimApprovalRequested {
-        request_id: u64,
-        claimer_agent_id: String,
-        requested_slot_index: u8,
-        requested_reputation_tier: u8,
-        requested_total_upfront_amount: u64,
-        requested_at_epoch: u64,
-    },
-    FirstAgentClaimApprovalApproved {
-        request_id: u64,
-        operator_account_id: String,
-        claimer_agent_id: String,
-        approved_amount: u64,
-        issuance_reason: String,
-        spend_scope: String,
-        source_treasury_bucket_id: String,
-        approved_at_epoch: u64,
-        expires_at_epoch: u64,
-    },
-    FirstAgentClaimApprovalRejected {
-        request_id: u64,
-        operator_account_id: String,
-        claimer_agent_id: String,
-        rejected_at_epoch: u64,
-        reason: String,
-    },
     AgentClaimed {
         claimer_agent_id: String,
         target_agent_id: String,
@@ -865,17 +839,6 @@ impl DomainEvent {
                 Some(issuer_id.as_str())
             }
             DomainEvent::RestrictedStarterClaimGrantExpired { .. } => None,
-            DomainEvent::FirstAgentClaimApprovalRequested {
-                claimer_agent_id, ..
-            } => Some(claimer_agent_id.as_str()),
-            DomainEvent::FirstAgentClaimApprovalApproved {
-                operator_account_id,
-                ..
-            }
-            | DomainEvent::FirstAgentClaimApprovalRejected {
-                operator_account_id,
-                ..
-            } => Some(operator_account_id.as_str()),
             DomainEvent::AgentClaimed {
                 claimer_agent_id, ..
             }
