@@ -4490,6 +4490,13 @@ function resolvePixelWorldRuntimeModuleUrl() {
   return "./pixel-world-bridge/pixel_world_bridge.js";
 }
 const PIXEL_WORLD_WASM_MODULE_URL = resolvePixelWorldRuntimeModuleUrl();
+function shouldBypassWasmRuntimeForCurrentBrowser() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const userAgent = String(navigator.userAgent || "");
+  return navigator.webdriver === true || /HeadlessChrome/i.test(userAgent);
+}
 async function tryLoadWasmBridgeModule() {
   try {
     return {
@@ -4504,6 +4511,13 @@ async function tryLoadWasmBridgeModule() {
   }
 }
 async function createPixelWorldRuntimeBridge({ onEvent, onFatal } = {}) {
+  if (shouldBypassWasmRuntimeForCurrentBrowser()) {
+    return {
+      bridge: createPixelWorldBevyBridge({ onEvent, onFatal }),
+      source: "js_fallback",
+      moduleUrl: null
+    };
+  }
   const runtimeModule = await tryLoadWasmBridgeModule();
   if (runtimeModule?.module?.createPixelWorldBridge) {
     return {
@@ -4518,9 +4532,21 @@ async function createPixelWorldRuntimeBridge({ onEvent, onFatal } = {}) {
     moduleUrl: null
   };
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
+}
+const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+async function waitForRuntimeCanvasAttachment(canvas) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (canvas?.isConnected && document.getElementById(PIXEL_WORLD_RUNTIME_CANVAS_ID) === canvas) {
+      return true;
+    }
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+  return false;
 }
 function normalizePosition(pos) {
   if (!pos || typeof pos !== "object") {
@@ -4910,6 +4936,24 @@ function PixelWorldHost(props) {
     setRendererFatal(null);
     setRendererStatus("booting");
     setRuntimeSource("loading");
+    const attached = await waitForRuntimeCanvasAttachment(mountedCanvas);
+    if (!attached) {
+      const fatal = {
+        code: "pixel_world_renderer_canvas_detached",
+        message: "pixel world runtime canvas never became queryable in document"
+      };
+      setRendererFatal(fatal);
+      setRendererStatus("fallback");
+      setRuntimeSource("detached");
+      updatePixelWorldRuntimeMeta({
+        runtimeStatus: "fallback",
+        runtimeSource: "detached",
+        runtimeModuleUrl: null,
+        camera: cameraState(),
+        fatal
+      });
+      return;
+    }
     const result = await adapter().mount(mountedCanvas, renderState());
     if (result?.fatal) {
       setRendererFatal(result.fatal);

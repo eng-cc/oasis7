@@ -17,7 +17,7 @@ const pixelWorldCompiledWasmPath = resolve(
   workspaceRoot,
   "target",
   "wasm32-unknown-unknown",
-  "debug",
+  "release",
   "pixel_world_bridge.wasm",
 );
 
@@ -72,6 +72,7 @@ await runChecked("env", [
   "pixel_world_bridge",
   "--target",
   "wasm32-unknown-unknown",
+  "--release",
 ]);
 await access(pixelWorldCompiledWasmPath);
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });

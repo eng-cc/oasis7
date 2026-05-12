@@ -7,6 +7,23 @@ function tr(locale, zh, en) {
   return core.isLocaleZh(locale) ? zh : en;
 }
 
+const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+
+async function waitForRuntimeCanvasAttachment(canvas) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    if (
+      canvas?.isConnected
+      && document.getElementById(PIXEL_WORLD_RUNTIME_CANVAS_ID) === canvas
+    ) {
+      return true;
+    }
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+  return false;
+}
+
 function normalizePosition(pos) {
   if (!pos || typeof pos !== "object") {
     return null;
@@ -204,6 +221,7 @@ function PixelWorldCanvasRenderer(props) {
     <div class="pixel-world-canvas pixel-world-canvas--rendered" data-renderer-ready="true">
       <canvas
         ref={canvasRef}
+        id={PIXEL_WORLD_RUNTIME_CANVAS_ID}
         class="pixel-world-canvas__surface"
         width="960"
         height="540"
@@ -368,6 +386,24 @@ export function PixelWorldHost(props) {
     setRendererFatal(null);
     setRendererStatus("booting");
     setRuntimeSource("loading");
+    const attached = await waitForRuntimeCanvasAttachment(mountedCanvas);
+    if (!attached) {
+      const fatal = {
+        code: "pixel_world_renderer_canvas_detached",
+        message: "pixel world runtime canvas never became queryable in document",
+      };
+      setRendererFatal(fatal);
+      setRendererStatus("fallback");
+      setRuntimeSource("detached");
+      core.updatePixelWorldRuntimeMeta({
+        runtimeStatus: "fallback",
+        runtimeSource: "detached",
+        runtimeModuleUrl: null,
+        camera: cameraState(),
+        fatal,
+      });
+      return;
+    }
     const result = await adapter().mount(mountedCanvas, renderState());
     if (result?.fatal) {
       setRendererFatal(result.fatal);

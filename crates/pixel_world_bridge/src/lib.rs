@@ -1,9 +1,17 @@
+use std::cell::RefCell;
+use std::mem;
+
+use bevy::prelude::*;
+use bevy::window::{PrimaryWindow, WindowPlugin};
 use js_sys::{Function, JSON};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+use web_sys::HtmlCanvasElement;
+
+thread_local! {
+    static BRIDGE_SHARED: RefCell<BridgeSharedState> = RefCell::new(BridgeSharedState::default());
+}
 
 #[derive(Clone, Debug, Deserialize)]
 struct Position {
@@ -65,6 +73,16 @@ struct CameraState {
     pan_y_px: f64,
 }
 
+impl Default for CameraState {
+    fn default() -> Self {
+        Self {
+            zoom: 1.0,
+            pan_x_px: 0.0,
+            pan_y_px: 0.0,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct DragState {
     pointer_id: i32,
@@ -84,17 +102,68 @@ struct HitRegion {
     bottom: f64,
 }
 
-#[wasm_bindgen]
-pub struct PixelWorldBridge {
+#[derive(Clone, Debug)]
+enum InputEvent {
+    PointerDown {
+        x: f64,
+        y: f64,
+        pointer_id: i32,
+    },
+    PointerMove {
+        x: f64,
+        y: f64,
+        is_leave: bool,
+        pointer_id: i32,
+    },
+    PointerUp {
+        pointer_id: i32,
+    },
+    Wheel {
+        delta_y: f64,
+    },
+    Click {
+        x: f64,
+        y: f64,
+    },
+}
+
+#[derive(Default)]
+struct BridgeSharedState {
+    booted: bool,
     mounted: bool,
-    canvas: Option<HtmlCanvasElement>,
-    context: Option<CanvasRenderingContext2d>,
+    canvas_selector: Option<String>,
     render_state: Option<RenderState>,
+    render_version: u64,
+    input_events: Vec<InputEvent>,
+    on_event: Option<Function>,
+    on_fatal: Option<Function>,
+}
+
+#[derive(Resource, Default)]
+struct BevyRuntimeState {
+    mounted: bool,
+    render_state: Option<RenderState>,
+    render_version: u64,
     camera: CameraState,
     drag_state: Option<DragState>,
     hit_regions: Vec<HitRegion>,
-    last_hover_key: Option<String>,
-    last_animation_ms: f64,
+    hover_key: Option<String>,
+}
+
+#[derive(Component)]
+struct PixelWorldVisual;
+
+#[derive(Default)]
+struct SharedSnapshot {
+    mounted: bool,
+    render_state: Option<RenderState>,
+    render_version: u64,
+    input_events: Vec<InputEvent>,
+}
+
+#[wasm_bindgen]
+pub struct PixelWorldBridge {
+    mounted: bool,
     on_event: Function,
     on_fatal: Function,
 }
@@ -169,24 +238,335 @@ fn to_canvas_point(
     ))
 }
 
+fn to_bevy_translation(canvas_x: f64, canvas_y: f64, width: f64, height: f64, z: f32) -> Vec3 {
+    Vec3::new(
+        (canvas_x - (width / 2.0)) as f32,
+        ((height / 2.0) - canvas_y) as f32,
+        z,
+    )
+}
+
+fn emit_event_value(value: &Value) -> Result<(), JsValue> {
+    let payload = js_value_from_json_value(value)?;
+    BRIDGE_SHARED.with(|shared| {
+        shared
+            .borrow()
+            .on_event
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("event callback missing"))?
+            .call1(&JsValue::NULL, &payload)
+            .map(|_| ())
+            .map_err(|_| JsValue::from_str("event callback failed"))
+    })
+}
+
+fn emit_camera_state(camera: &CameraState) -> Result<(), JsValue> {
+    emit_event_value(&json!({
+        "type": "camera_state_changed",
+        "camera": CameraStatePayload {
+            zoom: (camera.zoom * 1000.0).round() / 1000.0,
+            pan_x_px: camera.pan_x_px.round() as i32,
+            pan_y_px: camera.pan_y_px.round() as i32,
+        }
+    }))
+}
+
+fn emit_fatal_payload(message: &str) -> JsValue {
+    let payload = json!({
+        "code": "pixel_world_renderer_fatal",
+        "message": message,
+    });
+    if let Ok(js_payload) = js_value_from_json_value(&payload) {
+        BRIDGE_SHARED.with(|shared| {
+            if let Some(on_fatal) = shared.borrow().on_fatal.as_ref() {
+                let _ = on_fatal.call1(&JsValue::NULL, &js_payload);
+            }
+        });
+    }
+    json!({ "status": "fallback", "fatal": payload })
+        .to_string()
+        .parse::<String>()
+        .ok()
+        .and_then(|encoded| JSON::parse(&encoded).ok())
+        .unwrap_or_else(|| status_value("fallback"))
+}
+
+fn shared_snapshot() -> SharedSnapshot {
+    BRIDGE_SHARED.with(|shared| {
+        let mut shared = shared.borrow_mut();
+        SharedSnapshot {
+            mounted: shared.mounted,
+            render_state: shared.render_state.clone(),
+            render_version: shared.render_version,
+            input_events: mem::take(&mut shared.input_events),
+        }
+    })
+}
+
+fn push_input_event(event: InputEvent) {
+    BRIDGE_SHARED.with(|shared| {
+        shared.borrow_mut().input_events.push(event);
+    });
+}
+
+fn boot_bevy_app(canvas_selector: String) {
+    let mut app = App::new();
+    app.insert_resource(ClearColor(Color::srgb_u8(10, 18, 26)));
+    app.insert_resource(BevyRuntimeState::default());
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Pixel World Embedded Runtime".to_string(),
+            resolution: (960u32, 540u32).into(),
+            canvas: Some(canvas_selector),
+            fit_canvas_to_parent: true,
+            prevent_default_event_handling: false,
+            ..default()
+        }),
+        ..default()
+    }));
+    app.add_systems(Startup, setup_scene);
+    app.add_systems(Update, (sync_external_state, render_scene));
+    app.run();
+}
+
+fn setup_scene(mut commands: Commands) {
+    commands.spawn(Camera2d);
+}
+
+fn hit_test(hit_regions: &[HitRegion], x: f64, y: f64) -> Option<(String, String)> {
+    for region in hit_regions.iter().rev() {
+        if x >= region.left && x <= region.right && y >= region.top && y <= region.bottom {
+            return Some((region.kind.to_string(), region.id.clone()));
+        }
+    }
+    None
+}
+
+fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
+    let snapshot = shared_snapshot();
+    runtime.mounted = snapshot.mounted;
+    if snapshot.render_version != runtime.render_version {
+        runtime.render_version = snapshot.render_version;
+        runtime.render_state = snapshot.render_state;
+    }
+
+    for event in snapshot.input_events {
+        match event {
+            InputEvent::PointerDown { x, y, pointer_id } => {
+                runtime.drag_state = Some(DragState {
+                    pointer_id,
+                    start_x: x,
+                    start_y: y,
+                    start_pan_x: runtime.camera.pan_x_px,
+                    start_pan_y: runtime.camera.pan_y_px,
+                });
+            }
+            InputEvent::PointerMove {
+                x,
+                y,
+                is_leave,
+                pointer_id,
+            } => {
+                if let Some((start_pan_x, start_pan_y, start_x, start_y)) = runtime
+                    .drag_state
+                    .as_ref()
+                    .filter(|drag_state| drag_state.pointer_id == pointer_id)
+                    .map(|drag_state| {
+                        (
+                            drag_state.start_pan_x,
+                            drag_state.start_pan_y,
+                            drag_state.start_x,
+                            drag_state.start_y,
+                        )
+                    })
+                {
+                    runtime.camera.pan_x_px = start_pan_x + (x - start_x);
+                    runtime.camera.pan_y_px = start_pan_y + (y - start_y);
+                    let _ = emit_camera_state(&runtime.camera);
+                    continue;
+                }
+
+                if is_leave {
+                    if runtime.hover_key.take().is_some() {
+                        let _ = emit_event_value(
+                            &json!({ "type": "hover_entity", "selection": Value::Null }),
+                        );
+                    }
+                    continue;
+                }
+
+                let hit = hit_test(&runtime.hit_regions, x, y);
+                let hover_key = hit.as_ref().map(|(kind, id)| format!("{kind}/{id}"));
+                if hover_key == runtime.hover_key {
+                    continue;
+                }
+                runtime.hover_key = hover_key;
+                let selection = hit
+                    .map(|(kind, id)| json!({ "kind": kind, "id": id }))
+                    .unwrap_or(Value::Null);
+                let _ =
+                    emit_event_value(&json!({ "type": "hover_entity", "selection": selection }));
+            }
+            InputEvent::PointerUp { pointer_id } => {
+                if runtime
+                    .drag_state
+                    .as_ref()
+                    .map(|drag_state| drag_state.pointer_id == pointer_id)
+                    .unwrap_or(false)
+                {
+                    runtime.drag_state = None;
+                }
+            }
+            InputEvent::Wheel { delta_y } => {
+                let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
+                runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, 3.5);
+                let _ = emit_camera_state(&runtime.camera);
+            }
+            InputEvent::Click { x, y } => {
+                if let Some((kind, id)) = hit_test(&runtime.hit_regions, x, y) {
+                    let _ = emit_event_value(&json!({
+                        "type": "select_entity",
+                        "selection": { "kind": kind, "id": id }
+                    }));
+                }
+            }
+        }
+    }
+}
+
+fn render_scene(
+    mut commands: Commands,
+    mut runtime: ResMut<BevyRuntimeState>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    current_visuals: Query<Entity, With<PixelWorldVisual>>,
+    time: Res<Time>,
+) {
+    for entity in &current_visuals {
+        commands.entity(entity).despawn();
+    }
+    runtime.hit_regions.clear();
+
+    if !runtime.mounted {
+        return;
+    }
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(render_state) = runtime.render_state.clone() else {
+        return;
+    };
+
+    let width = window.width() as f64;
+    let height = window.height() as f64;
+    let animation_ms = time.elapsed_secs_f64() * 1000.0;
+    spawn_grid(&mut commands, &runtime.camera, width, height);
+
+    if let Some(world_bounds) = &render_state.world_bounds {
+        for location in &render_state.locations {
+            if let Some((canvas_x, canvas_y)) =
+                to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
+            {
+                let pulse =
+                    1.0 + (0.08 * ((animation_ms / 360.0) + location.id.len() as f64).sin());
+                let size = 16.0 * pulse;
+                commands.spawn((
+                    Sprite::from_color(
+                        Color::srgba_u8(110, 231, 183, 184),
+                        Vec2::splat(size as f32),
+                    ),
+                    Transform::from_translation(to_bevy_translation(
+                        canvas_x, canvas_y, width, height, 1.0,
+                    )),
+                    PixelWorldVisual,
+                ));
+                runtime.hit_regions.push(HitRegion {
+                    kind: "location",
+                    id: location.id.clone(),
+                    left: canvas_x - 8.0,
+                    top: canvas_y - 8.0,
+                    right: canvas_x + 8.0,
+                    bottom: canvas_y + 8.0,
+                });
+            }
+        }
+    }
+
+    for (index, agent) in render_state.agents.iter().enumerate() {
+        let (canvas_x, canvas_y) = render_state
+            .world_bounds
+            .as_ref()
+            .and_then(|world_bounds| {
+                agent.pos.as_ref().and_then(|pos| {
+                    to_canvas_point(pos, world_bounds, width, height, &runtime.camera)
+                })
+            })
+            .unwrap_or_else(|| {
+                fallback_point_for_entity(&agent.id, width, height, &runtime.camera)
+            });
+        let is_selected = render_state
+            .selection
+            .as_ref()
+            .map(|selection| selection.kind == "agent" && selection.id == agent.id)
+            .unwrap_or(false);
+        let pulse = 1.0 + (0.12 * ((animation_ms / 240.0) + index as f64).sin());
+        let size = if is_selected { 15.0 } else { 12.0 } * pulse;
+        let color = if is_selected {
+            Color::srgb_u8(251, 191, 36)
+        } else {
+            Color::srgb_u8(99, 179, 255)
+        };
+        commands.spawn((
+            Sprite::from_color(color, Vec2::splat(size as f32)),
+            Transform::from_translation(to_bevy_translation(
+                canvas_x, canvas_y, width, height, 2.0,
+            )),
+            PixelWorldVisual,
+        ));
+        runtime.hit_regions.push(HitRegion {
+            kind: "agent",
+            id: agent.id.clone(),
+            left: canvas_x - 8.0,
+            top: canvas_y - 8.0,
+            right: canvas_x + 8.0,
+            bottom: canvas_y + 8.0,
+        });
+    }
+}
+
+fn spawn_grid(commands: &mut Commands, camera: &CameraState, width: f64, height: f64) {
+    let grid_step = clamp(24.0 * camera.zoom.max(0.5), 12.0, 72.0);
+    let offset_x = ((camera.pan_x_px % grid_step) + grid_step) % grid_step;
+    let offset_y = ((camera.pan_y_px % grid_step) + grid_step) % grid_step;
+    let grid_color = Color::srgba_u8(99, 179, 255, 26);
+
+    let mut x = offset_x;
+    while x <= width {
+        commands.spawn((
+            Sprite::from_color(grid_color, Vec2::new(1.0, height as f32)),
+            Transform::from_translation(to_bevy_translation(x, height / 2.0, width, height, 0.0)),
+            PixelWorldVisual,
+        ));
+        x += grid_step;
+    }
+
+    let mut y = offset_y;
+    while y <= height {
+        commands.spawn((
+            Sprite::from_color(grid_color, Vec2::new(width as f32, 1.0)),
+            Transform::from_translation(to_bevy_translation(width / 2.0, y, width, height, 0.0)),
+            PixelWorldVisual,
+        ));
+        y += grid_step;
+    }
+}
+
 #[wasm_bindgen]
 impl PixelWorldBridge {
     #[wasm_bindgen(constructor)]
     pub fn new(on_event: Function, on_fatal: Function) -> Self {
         Self {
             mounted: false,
-            canvas: None,
-            context: None,
-            render_state: None,
-            camera: CameraState {
-                zoom: 1.0,
-                pan_x_px: 0.0,
-                pan_y_px: 0.0,
-            },
-            drag_state: None,
-            hit_regions: Vec::new(),
-            last_hover_key: None,
-            last_animation_ms: 0.0,
             on_event,
             on_fatal,
         }
@@ -194,41 +574,54 @@ impl PixelWorldBridge {
 
     #[wasm_bindgen]
     pub fn mount(&mut self, canvas: HtmlCanvasElement, initial_render_state: JsValue) -> JsValue {
-        let context = match canvas
-            .get_context("2d")
-            .ok()
-            .flatten()
-            .and_then(|value| value.dyn_into::<CanvasRenderingContext2d>().ok())
-        {
-            Some(context) => context,
-            None => return self.emit_fatal("2d canvas context unavailable"),
-        };
-
         let parsed_state = match parse_render_state(initial_render_state) {
             Ok(state) => state,
-            Err(error) => return self.emit_fatal_js(error),
+            Err(error) => return emit_fatal_payload(&error.as_string().unwrap_or_default()),
+        };
+        let canvas_id = if canvas.id().is_empty() {
+            let generated = "pixel-world-embedded-runtime-canvas".to_string();
+            canvas.set_id(&generated);
+            generated
+        } else {
+            canvas.id()
+        };
+        let canvas_selector = format!("#{canvas_id}");
+
+        let mount_result = BRIDGE_SHARED.with(|shared| {
+            let mut shared = shared.borrow_mut();
+            if let Some(existing_selector) = &shared.canvas_selector {
+                if existing_selector != &canvas_selector {
+                    return Err(format!(
+                        "bevy runtime already bound to {existing_selector}, cannot rebind to {canvas_selector}"
+                    ));
+                }
+            }
+            shared.canvas_selector = Some(canvas_selector.clone());
+            shared.render_state = Some(parsed_state);
+            shared.render_version += 1;
+            shared.mounted = true;
+            shared.on_event = Some(self.on_event.clone());
+            shared.on_fatal = Some(self.on_fatal.clone());
+            let should_boot = !shared.booted;
+            if should_boot {
+                shared.booted = true;
+            }
+            Ok(should_boot)
+        });
+
+        let should_boot = match mount_result {
+            Ok(should_boot) => should_boot,
+            Err(message) => return emit_fatal_payload(&message),
         };
 
-        self.canvas = Some(canvas);
-        self.context = Some(context);
-        self.render_state = Some(parsed_state);
-        self.camera = CameraState {
-            zoom: 1.0,
-            pan_x_px: 0.0,
-            pan_y_px: 0.0,
-        };
-        self.drag_state = None;
-        self.hit_regions.clear();
-        self.last_hover_key = None;
-        self.last_animation_ms = 0.0;
         self.mounted = true;
 
-        if let Err(error) = self.render_current_frame() {
-            return self.emit_fatal_js(error);
+        if should_boot {
+            boot_bevy_app(canvas_selector);
         }
 
-        let _ = self.emit_event_value(&json!({ "type": "canvas_ready" }));
-        let _ = self.emit_camera_state();
+        let _ = emit_event_value(&json!({ "type": "canvas_ready" }));
+        let _ = emit_camera_state(&CameraState::default());
         status_value("ready")
     }
 
@@ -237,292 +630,72 @@ impl PixelWorldBridge {
         if !self.mounted {
             return status_value("detached");
         }
-        self.render_state = match parse_render_state(next_render_state) {
-            Ok(state) => Some(state),
-            Err(error) => return self.emit_fatal_js(error),
+        let parsed_state = match parse_render_state(next_render_state) {
+            Ok(state) => state,
+            Err(error) => return emit_fatal_payload(&error.as_string().unwrap_or_default()),
         };
-        if let Err(error) = self.render_current_frame() {
-            return self.emit_fatal_js(error);
-        }
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn tick(&mut self, animation_ms: f64) -> JsValue {
-        if !self.mounted {
-            return status_value("detached");
-        }
-        self.last_animation_ms = animation_ms;
-        if let Err(error) = self.render_current_frame() {
-            return self.emit_fatal_js(error);
-        }
-        status_value("ready")
-    }
-
-    #[wasm_bindgen]
-    pub fn pointer_down(&mut self, x: f64, y: f64, pointer_id: i32) -> JsValue {
-        self.drag_state = Some(DragState {
-            pointer_id,
-            start_x: x,
-            start_y: y,
-            start_pan_x: self.camera.pan_x_px,
-            start_pan_y: self.camera.pan_y_px,
+        BRIDGE_SHARED.with(|shared| {
+            let mut shared = shared.borrow_mut();
+            shared.render_state = Some(parsed_state);
+            shared.render_version += 1;
         });
         status_value("ready")
     }
 
     #[wasm_bindgen]
+    pub fn tick(&mut self, _animation_ms: f64) -> JsValue {
+        if self.mounted {
+            status_value("ready")
+        } else {
+            status_value("detached")
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn pointer_down(&mut self, x: f64, y: f64, pointer_id: i32) -> JsValue {
+        push_input_event(InputEvent::PointerDown { x, y, pointer_id });
+        status_value("ready")
+    }
+
+    #[wasm_bindgen]
     pub fn pointer_move(&mut self, x: f64, y: f64, is_leave: bool, pointer_id: i32) -> JsValue {
-        if let Some(drag_state) = &self.drag_state {
-            if drag_state.pointer_id == pointer_id {
-                self.camera.pan_x_px = drag_state.start_pan_x + (x - drag_state.start_x);
-                self.camera.pan_y_px = drag_state.start_pan_y + (y - drag_state.start_y);
-                if let Err(error) = self.render_current_frame() {
-                    return self.emit_fatal_js(error);
-                }
-                let _ = self.emit_camera_state();
-                return status_value("ready");
-            }
-        }
-
-        if is_leave {
-            if self.last_hover_key.take().is_some() {
-                let _ = self
-                    .emit_event_value(&json!({ "type": "hover_entity", "selection": Value::Null }));
-            }
-            return status_value("ready");
-        }
-
-        let hit = self.hit_test(x, y);
-        let hover_key = hit.as_ref().map(|(kind, id)| format!("{kind}/{id}"));
-        if hover_key == self.last_hover_key {
-            return status_value("ready");
-        }
-        self.last_hover_key = hover_key;
-        let selection = hit
-            .map(|(kind, id)| json!({ "kind": kind, "id": id }))
-            .unwrap_or(Value::Null);
-        let _ = self.emit_event_value(&json!({ "type": "hover_entity", "selection": selection }));
+        push_input_event(InputEvent::PointerMove {
+            x,
+            y,
+            is_leave,
+            pointer_id,
+        });
         status_value("ready")
     }
 
     #[wasm_bindgen]
     pub fn pointer_up(&mut self, pointer_id: i32) -> JsValue {
-        if self
-            .drag_state
-            .as_ref()
-            .map(|drag_state| drag_state.pointer_id == pointer_id)
-            .unwrap_or(false)
-        {
-            self.drag_state = None;
-        }
+        push_input_event(InputEvent::PointerUp { pointer_id });
         status_value("ready")
     }
 
     #[wasm_bindgen]
     pub fn wheel(&mut self, delta_y: f64) -> JsValue {
-        let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
-        self.camera.zoom = clamp(self.camera.zoom * factor, 0.6, 3.5);
-        if let Err(error) = self.render_current_frame() {
-            return self.emit_fatal_js(error);
-        }
-        let _ = self.emit_camera_state();
+        push_input_event(InputEvent::Wheel { delta_y });
         status_value("ready")
     }
 
     #[wasm_bindgen]
     pub fn click(&mut self, x: f64, y: f64) -> JsValue {
-        if let Some((kind, id)) = self.hit_test(x, y) {
-            let _ = self.emit_event_value(&json!({
-                "type": "select_entity",
-                "selection": { "kind": kind, "id": id }
-            }));
-        }
+        push_input_event(InputEvent::Click { x, y });
         status_value("ready")
     }
 
     #[wasm_bindgen]
     pub fn unmount(&mut self) -> JsValue {
         self.mounted = false;
-        self.canvas = None;
-        self.context = None;
-        self.render_state = None;
-        self.hit_regions.clear();
-        self.drag_state = None;
-        self.last_hover_key = None;
-        status_value("detached")
-    }
-}
-
-impl PixelWorldBridge {
-    fn emit_fatal(&self, message: &str) -> JsValue {
-        self.emit_fatal_js(JsValue::from_str(message))
-    }
-
-    fn emit_fatal_js(&self, error: JsValue) -> JsValue {
-        let message = error
-            .as_string()
-            .unwrap_or_else(|| "pixel world renderer fatal".to_string());
-        let payload = json!({
-            "code": "pixel_world_renderer_fatal",
-            "message": message,
+        BRIDGE_SHARED.with(|shared| {
+            let mut shared = shared.borrow_mut();
+            shared.mounted = false;
+            shared.render_state = None;
+            shared.render_version += 1;
+            shared.input_events.clear();
         });
-        if let Ok(js_payload) = js_value_from_json_value(&payload) {
-            let _ = self.on_fatal.call1(&JsValue::NULL, &js_payload);
-            return json!({ "status": "fallback", "fatal": payload })
-                .to_string()
-                .parse::<String>()
-                .ok()
-                .and_then(|encoded| JSON::parse(&encoded).ok())
-                .unwrap_or_else(|| status_value("fallback"));
-        }
-        status_value("fallback")
-    }
-
-    fn emit_event_value(&self, value: &Value) -> Result<(), JsValue> {
-        let payload = js_value_from_json_value(value)?;
-        self.on_event
-            .call1(&JsValue::NULL, &payload)
-            .map(|_| ())
-            .map_err(|_| JsValue::from_str("event callback failed"))
-    }
-
-    fn emit_camera_state(&self) -> Result<(), JsValue> {
-        self.emit_event_value(&json!({
-            "type": "camera_state_changed",
-            "camera": CameraStatePayload {
-                zoom: (self.camera.zoom * 1000.0).round() / 1000.0,
-                pan_x_px: self.camera.pan_x_px.round() as i32,
-                pan_y_px: self.camera.pan_y_px.round() as i32,
-            }
-        }))
-    }
-
-    fn hit_test(&self, x: f64, y: f64) -> Option<(String, String)> {
-        for region in self.hit_regions.iter().rev() {
-            if x >= region.left && x <= region.right && y >= region.top && y <= region.bottom {
-                return Some((region.kind.to_string(), region.id.clone()));
-            }
-        }
-        None
-    }
-
-    #[allow(deprecated)]
-    fn render_current_frame(&mut self) -> Result<(), JsValue> {
-        let canvas = self
-            .canvas
-            .as_ref()
-            .ok_or_else(|| JsValue::from_str("canvas missing during render"))?;
-        let context = self
-            .context
-            .as_ref()
-            .ok_or_else(|| JsValue::from_str("2d context missing during render"))?;
-        let render_state = self
-            .render_state
-            .as_ref()
-            .ok_or_else(|| JsValue::from_str("render state missing during render"))?;
-        let width = canvas.width() as f64;
-        let height = canvas.height() as f64;
-
-        context.clear_rect(0.0, 0.0, width, height);
-        context.set_fill_style(&JsValue::from_str("#0a121a"));
-        context.fill_rect(0.0, 0.0, width, height);
-
-        self.draw_grid(context, width, height);
-        self.hit_regions.clear();
-
-        if let Some(world_bounds) = &render_state.world_bounds {
-            for location in &render_state.locations {
-                if let Some((x, y)) =
-                    to_canvas_point(&location.pos, world_bounds, width, height, &self.camera)
-                {
-                    let pulse = 1.0
-                        + (0.08
-                            * ((self.last_animation_ms / 360.0) + location.id.len() as f64).sin());
-                    let size = 16.0 * pulse;
-                    context.set_fill_style(&JsValue::from_str("rgba(110, 231, 183, 0.72)"));
-                    context.fill_rect(x - (size / 2.0), y - (size / 2.0), size, size);
-                    context.set_stroke_style(&JsValue::from_str("rgba(110, 231, 183, 0.95)"));
-                    context.stroke_rect(x - (size / 2.0), y - (size / 2.0), size, size);
-                    self.hit_regions.push(HitRegion {
-                        kind: "location",
-                        id: location.id.clone(),
-                        left: x - 8.0,
-                        top: y - 8.0,
-                        right: x + 8.0,
-                        bottom: y + 8.0,
-                    });
-                }
-            }
-        }
-
-        for (index, agent) in render_state.agents.iter().enumerate() {
-            let point = render_state
-                .world_bounds
-                .as_ref()
-                .and_then(|world_bounds| {
-                    agent.pos.as_ref().and_then(|pos| {
-                        to_canvas_point(pos, world_bounds, width, height, &self.camera)
-                    })
-                })
-                .unwrap_or_else(|| {
-                    fallback_point_for_entity(&agent.id, width, height, &self.camera)
-                });
-            let is_selected = render_state
-                .selection
-                .as_ref()
-                .map(|selection| selection.kind == "agent" && selection.id == agent.id)
-                .unwrap_or(false);
-            let pulse = 1.0 + (0.12 * ((self.last_animation_ms / 240.0) + index as f64).sin());
-            let size = if is_selected { 15.0 } else { 12.0 } * pulse;
-            context.set_fill_style(&JsValue::from_str(if is_selected {
-                "#fbbf24"
-            } else {
-                "#63b3ff"
-            }));
-            context.fill_rect(point.0 - (size / 2.0), point.1 - (size / 2.0), size, size);
-            context.set_stroke_style(&JsValue::from_str(if is_selected {
-                "#fde68a"
-            } else {
-                "#c6e4ff"
-            }));
-            context.set_line_width(2.0);
-            context.stroke_rect(point.0 - (size / 2.0), point.1 - (size / 2.0), size, size);
-            self.hit_regions.push(HitRegion {
-                kind: "agent",
-                id: agent.id.clone(),
-                left: point.0 - 8.0,
-                top: point.1 - 8.0,
-                right: point.0 + 8.0,
-                bottom: point.1 + 8.0,
-            });
-        }
-
-        Ok(())
-    }
-
-    #[allow(deprecated)]
-    fn draw_grid(&self, context: &CanvasRenderingContext2d, width: f64, height: f64) {
-        let grid_step = clamp(24.0 * self.camera.zoom.max(0.5), 12.0, 72.0);
-        let offset_x = ((self.camera.pan_x_px % grid_step) + grid_step) % grid_step;
-        let offset_y = ((self.camera.pan_y_px % grid_step) + grid_step) % grid_step;
-        context.set_stroke_style(&JsValue::from_str("rgba(99, 179, 255, 0.10)"));
-        context.set_line_width(1.0);
-        let mut x = offset_x;
-        while x <= width {
-            context.begin_path();
-            context.move_to(x + 0.5, 0.0);
-            context.line_to(x + 0.5, height);
-            context.stroke();
-            x += grid_step;
-        }
-        let mut y = offset_y;
-        while y <= height {
-            context.begin_path();
-            context.move_to(0.0, y + 0.5);
-            context.line_to(width, y + 0.5);
-            context.stroke();
-            y += grid_step;
-        }
+        status_value("detached")
     }
 }
