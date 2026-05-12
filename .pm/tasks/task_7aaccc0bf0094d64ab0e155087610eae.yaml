@@ -1,0 +1,21 @@
+task_uid: task_7aaccc0bf0094d64ab0e155087610eae
+title: "bevy embedded pixel world canvas host skeleton"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-bevy-embedded-pixel-world-canvas-host-skeleton
+execution_log_path: .pm/tasks/task_7aaccc0bf0094d64ab0e155087610eae.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - /home/scc/worktrees/oasis7-viewer-bevy-embedded-pixel-world-canvas/doc/world-simulator/viewer/viewer-bevy-embedded-pixel-world-canvas-2026-05-11.prd.md
+  - doc/world-simulator/project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_SIMULATOR-046
+acceptance:
+  - "Current Web Viewer mounts a dedicated pixel-world host surface and derives a stable render DTO without changing existing gameplay/auth/chat control ownership."
+  - "Skeleton code defines host-renderer boundary objects and fallback-safe UI integration for a future embedded Bevy canvas."
+handoff_to: []
+updated_at: 2026-05-12T09:56:19+08:00
+last_started_at: 2026-05-11T21:30:05+08:00
+last_closed_at: 2026-05-12T09:56:19+08:00

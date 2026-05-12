@@ -290,6 +290,10 @@ else
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe.js" "$BUNDLE_WEB_DIR/software_safe.js"
   run cp "$ROOT_DIR/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" "$BUNDLE_WEB_DIR/software_safe_first_agent_claim_evidence.html"
   run cp "$ROOT_DIR/crates/oasis7_viewer/favicon.ico" "$BUNDLE_WEB_DIR/favicon.ico"
+  if [[ -d "$ROOT_DIR/crates/oasis7_viewer/pixel-world-bridge" ]]; then
+    run rm -rf "$BUNDLE_WEB_DIR/pixel-world-bridge"
+    run cp -R "$ROOT_DIR/crates/oasis7_viewer/pixel-world-bridge" "$BUNDLE_WEB_DIR/pixel-world-bridge"
+  fi
 fi
 
 # 3) Prepare launcher web dist (prebuilt artifact preferred; trunk build fallback).

@@ -68,5 +68,9 @@ cp "$VIEWER_DIR/software_safe.js" "$DIST_DIR/software_safe.js"
 cp "$VIEWER_DIR/software_safe_first_agent_claim_evidence.html" \
   "$DIST_DIR/software_safe_first_agent_claim_evidence.html"
 cp "$VIEWER_DIR/favicon.ico" "$DIST_DIR/favicon.ico"
+if [[ -d "$VIEWER_DIR/pixel-world-bridge" ]]; then
+  rm -rf "$DIST_DIR/pixel-world-bridge"
+  cp -R "$VIEWER_DIR/pixel-world-bridge" "$DIST_DIR/pixel-world-bridge"
+fi
 
 exec python3 -m http.server "$PORT" --bind "$ADDRESS" --directory "$DIST_DIR"
