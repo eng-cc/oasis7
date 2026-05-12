@@ -14,7 +14,9 @@ Usage: ./scripts/pm/new-task-worktree-bootstrap-smoke.sh [--json] [--keep-temp]
 Create a temporary task worktree, bootstrap a `.pm` task inside it through
 `new-task-worktree.sh --pm-*`, and assert that the source worktree stays
 unchanged while the target worktree receives the task files, start metadata,
-and the canonical main-worktree `config.toml` when available.
+and a copied canonical main-worktree `config.toml`. When the canonical source
+checkout has no local `config.toml`, this smoke seeds a temporary fixture so
+the copy path is still covered.
 
 Options:
   --json       Print machine-readable JSON summary
@@ -49,9 +51,25 @@ TMPDIR="$(mktemp -d)"
 WORKTREE_PATH="$TMPDIR/worktree"
 BRANCH_NAME="task/smoke-task-worktree-pm-bootstrap-$$-$(date +%s)"
 SOURCE_STATUS_BEFORE="$(git -C "$ROOT_DIR" status --short)"
+CANONICAL_REPO_ROOT="$(cd "$(git -C "$ROOT_DIR" rev-parse --git-common-dir)/.." && pwd -P)"
+CANONICAL_CONFIG_PATH="$CANONICAL_REPO_ROOT/config.toml"
+CREATED_CANONICAL_CONFIG_FIXTURE=0
+
+if [[ ! -f "$CANONICAL_CONFIG_PATH" ]]; then
+  cat >"$CANONICAL_CONFIG_PATH" <<'EOF'
+[llm]
+model = "smoke-model"
+base_url = "https://example.invalid/v1"
+api_key = "smoke-api-key"
+EOF
+  CREATED_CANONICAL_CONFIG_FIXTURE=1
+fi
 
 cleanup() {
   set +e
+  if [[ "$CREATED_CANONICAL_CONFIG_FIXTURE" == "1" ]]; then
+    rm -f "$CANONICAL_CONFIG_PATH"
+  fi
   if [[ "$KEEP_TEMP" == "1" ]]; then
     return
   fi
@@ -119,18 +137,17 @@ if pm_task["task_uid"] not in execution_log_text:
 
 source_config_path = Path(config_summary["source_path"])
 target_config_path = worktree / "config.toml"
-if config_summary.get("source_exists"):
-    if not source_config_path.is_file():
-        raise SystemExit("reported canonical config source path does not exist")
-    if not target_config_path.is_file():
-        raise SystemExit("target worktree missing copied canonical config.toml")
-    if source_config_path.read_bytes() != target_config_path.read_bytes():
-        raise SystemExit("target worktree config.toml does not match canonical source config")
-    config_copied = True
-else:
-    if target_config_path.exists():
-        raise SystemExit("target worktree unexpectedly contains config.toml without canonical source file")
-    config_copied = False
+if not config_summary.get("source_exists"):
+    raise SystemExit("smoke expected canonical config source fixture to exist")
+if not source_config_path.is_file():
+    raise SystemExit("reported canonical config source path does not exist")
+if not target_config_path.is_file():
+    raise SystemExit("target worktree missing copied canonical config.toml")
+if source_config_path.read_bytes() != target_config_path.read_bytes():
+    raise SystemExit("target worktree config.toml does not match canonical source config")
+if not config_summary.get("copied"):
+    raise SystemExit("new-task-worktree summary did not report config copy")
+config_copied = True
 
 tracked_config = subprocess.run(
     ["git", "-C", str(worktree), "ls-files", "--error-unmatch", "config.toml"],

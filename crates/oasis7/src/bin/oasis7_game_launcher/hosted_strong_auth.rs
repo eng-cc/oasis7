@@ -208,15 +208,9 @@ fn now_unix_ms() -> u64 {
 mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
-    use std::sync::{Mutex, OnceLock};
-
-    fn hosted_strong_auth_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     fn lock_hosted_strong_auth_env() -> std::sync::MutexGuard<'static, ()> {
-        hosted_strong_auth_env_lock()
+        super::hosted_access::hosted_strong_auth_test_env_lock()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
