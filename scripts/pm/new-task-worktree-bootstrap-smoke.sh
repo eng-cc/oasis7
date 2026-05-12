@@ -13,7 +13,8 @@ Usage: ./scripts/pm/new-task-worktree-bootstrap-smoke.sh [--json] [--keep-temp]
 
 Create a temporary task worktree, bootstrap a `.pm` task inside it through
 `new-task-worktree.sh --pm-*`, and assert that the source worktree stays
-unchanged while the target worktree receives the task files and start metadata.
+unchanged while the target worktree receives the task files, start metadata,
+and the canonical main-worktree `config.toml` when available.
 
 Options:
   --json       Print machine-readable JSON summary
@@ -93,6 +94,9 @@ payload = json.loads(__import__("os").environ["BOOTSTRAP_JSON"])
 pm_task = payload.get("pm_task")
 if not pm_task:
     raise SystemExit("pm_task summary missing from new-task-worktree bootstrap output")
+config_summary = payload.get("config")
+if not config_summary:
+    raise SystemExit("config summary missing from new-task-worktree output")
 
 task_path = worktree / pm_task["task_path"]
 execution_log_path = worktree / pm_task["execution_log_path"]
@@ -113,6 +117,37 @@ execution_log_text = execution_log_path.read_text(encoding="utf-8")
 if pm_task["task_uid"] not in execution_log_text:
     raise SystemExit("execution log missing task uid header")
 
+source_config_path = Path(config_summary["source_path"])
+target_config_path = worktree / "config.toml"
+if config_summary.get("source_exists"):
+    if not source_config_path.is_file():
+        raise SystemExit("reported canonical config source path does not exist")
+    if not target_config_path.is_file():
+        raise SystemExit("target worktree missing copied canonical config.toml")
+    if source_config_path.read_bytes() != target_config_path.read_bytes():
+        raise SystemExit("target worktree config.toml does not match canonical source config")
+    config_copied = True
+else:
+    if target_config_path.exists():
+        raise SystemExit("target worktree unexpectedly contains config.toml without canonical source file")
+    config_copied = False
+
+tracked_config = subprocess.run(
+    ["git", "-C", str(worktree), "ls-files", "--error-unmatch", "config.toml"],
+    text=True,
+    capture_output=True,
+)
+if tracked_config.returncode == 0:
+    raise SystemExit("copied config.toml became git-tracked inside target worktree")
+ignored_status = subprocess.check_output(
+    ["git", "-C", str(worktree), "status", "--short", "--ignored", "--", "config.toml"],
+    text=True,
+).strip()
+if config_copied and ignored_status != "!! config.toml":
+    raise SystemExit("copied config.toml is not ignored in target worktree as expected")
+if not config_copied and ignored_status:
+    raise SystemExit("target worktree reported unexpected config.toml status without canonical source file")
+
 source_status_after = subprocess.check_output(
     ["git", "-C", str(root), "status", "--short"],
     text=True,
@@ -129,6 +164,7 @@ print(
             "source_status_preserved": True,
             "workflow_started": True,
             "worktree_path": str(worktree),
+            "config_copied": config_copied,
         },
         ensure_ascii=False,
     )

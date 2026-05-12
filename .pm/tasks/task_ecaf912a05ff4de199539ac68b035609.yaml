@@ -1,0 +1,23 @@
+task_uid: task_ecaf912a05ff4de199539ac68b035609
+title: "propagate main config into new task worktrees"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-task-worktree-main-config-bootstrap
+execution_log_path: .pm/tasks/task_ecaf912a05ff4de199539ac68b035609.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/prd.md
+  - doc/engineering/project.md
+  - scripts/new-task-worktree.sh
+doc_refs:
+  - doc/engineering/prd.md
+related_prd:
+  - PRD-ENGINEERING-021
+acceptance:
+  - "new task worktree copies canonical main config.toml when available"
+  - "bootstrap smoke covers config propagation without dirtying source worktree"
+handoff_to: []
+updated_at: 2026-05-12T10:17:38+08:00
+last_started_at: 2026-05-12T10:11:00+08:00
+last_closed_at: 2026-05-12T10:17:38+08:00
