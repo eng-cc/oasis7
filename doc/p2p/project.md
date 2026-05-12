@@ -589,7 +589,7 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-- [x] triad-observability-stack (PRD-P2P-025) [test_tier_required]: 为本机 observer + 2 ECS triad 新增完整监控体系，统一 host/process、chain status、traffic window、wasm window 与 merged summary 的 canonical 入口。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
+- [x] triad-observability-stack (PRD-P2P-025) [test_tier_required]: 为当前 real-env triad（物理上本机 + 2 ECS，runtime 已为 three_equal_validator）新增完整监控体系，统一 host/process、chain status、traffic window、wasm window 与 merged summary 的 canonical 入口，并保留 legacy service label 兼容说明。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
   - 产物文件:
     - `scripts/p2p-real-env-node-host-sample.sh`
     - `scripts/p2p-real-env-host-summary.py`

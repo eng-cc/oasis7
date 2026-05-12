@@ -9,7 +9,7 @@
 - Problem Statement: 当前真实三节点运维已经有 `triad snapshot`、`traffic monitor`、`node observability report`、`wasm metrics monitor` 等零散脚本，但宿主机资源、systemd 进程、链状态、流量窗口与 WASM 窗口仍需手工拼接，导致“CPU 为什么高”“哪台机先退化”“链高正常但控制面过热”这类问题缺少一次执行即可复盘的统一监控入口。
 - Proposed Solution: 在仓库内冻结一套 triad 级完整监控体系，复用现有 status/traffic/wasm 能力，新增 host/process 采样与统一汇总层，并把 raw `status.json` 细分为 `host_runtime / consensus / observability / replication / storage / reward_runtime / transactions / wasm / traffic_control_plane / p2p_reachability` 等模块摘要，输出单次可审计的 `snapshot + host/process + traffic + wasm + merged summary` 证据包。
 - Success Criteria:
-  - SC-1: local observer + 2 ECS 节点的宿主机 CPU/load/memory/storage 与 runtime 进程 CPU/memory/threads 可被统一采样。
+  - SC-1: 当前 real-env triad（物理上本机 + 2 ECS，runtime 上可为 `three_equal_validator`，历史 `observer_local / sequencer_ecs / storage_ecs` label 仅作兼容别名）的宿主机 CPU/load/memory/storage 与 runtime 进程 CPU/memory/threads 可被统一采样。
   - SC-2: 链状态、service health、traffic window、WASM window 继续沿用 repo 现有脚本，不引入外部监控平台依赖。
   - SC-3: triad 级 merged summary 能同时回答“链是否健康”“哪台机资源吃紧”“traffic 主要在哪条 lane”“WASM 是否退化”，并能把问题定位到具体 runtime 子模块。
   - SC-4: 输出必须机器可读，并附带 Markdown 摘要，方便 operator、QA、producer 共用同一份真值。
@@ -22,7 +22,7 @@
   - `qa_engineer`: 需要把 real-env triad 的健康度冻结成可复查的证据包，而不是聊天式结论。
   - `producer_system_designer`: 需要在继续扩 shared-network / web-trial 口径前，先知道当前 triad 的真实运行边界。
 - User Scenarios & Frequency:
-  - 每次真实环境 triad rollout 后，立即跑一次完整监控确认资源和链状态。
+  - 每次真实环境 triad rollout 后，立即跑一次完整监控确认资源和链状态，并冻结该窗口里的真实 runtime role。
   - 每次用户问“哪个节点 CPU 高”“流量是否正常”“WASM 是否退化”时，直接运行完整监控，而不是手工 SSH 多台机器。
   - 每次要写 `doc/testing/evidence/*` 时，先用该脚本生成统一 summary 再回写证据。
 - User Stories:
@@ -30,7 +30,7 @@
   - PRD-P2P-025-B: As a `qa_engineer`, I want one merged observability summary for snapshot/traffic/wasm/host metrics, so that evidence does not depend on manual cross-file stitching.
   - PRD-P2P-025-C: As a `producer_system_designer`, I want triad monitoring to surface concrete alerts like runtime CPU hot or service unhealthy, so that rollout claims stay bounded by current operating reality.
 - Critical User Flows:
-  1. Flow-P2P-TOS-001: `operator runs triad observability monitor -> snapshot + host monitor + traffic monitor + wasm summary all execute -> merged summary produced`
+  1. Flow-P2P-TOS-001: `operator runs triad observability monitor -> snapshot + host monitor + traffic monitor + wasm summary all execute -> merged summary produced with legacy labels preserved but runtime role read from sampled status truth`
   2. Flow-P2P-TOS-002: `summary reports pass_candidate / pass_with_resource_alerts / pass_with_module_alerts / blocked -> operator reads node-level CPU/load/memory/storage + chain status deltas + module breakdown -> evidence doc references canonical output paths`
   3. Flow-P2P-TOS-003: `fixture test feeds synthetic snapshot/host/traffic/wasm/raw-status inputs -> merged summary contract stays stable without real ECS dependency`
 - Functional Specification Matrix:

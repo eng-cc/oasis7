@@ -9,9 +9,9 @@ usage() {
 Usage: ./scripts/p2p-real-env-triad-snapshot.sh [options]
 
 Capture a P2PARCH-6 real-environment triad snapshot from:
-  - local triad node (historical service alias: observer_local)
-  - remote ECS node A (historical service alias: sequencer_ecs)
-  - remote ECS node B (historical service alias: storage_ecs)
+  - local triad node (historical artifact/service alias: observer_local)
+  - remote ECS node A (historical artifact/service alias: sequencer_ecs)
+  - remote ECS node B (historical artifact/service alias: storage_ecs)
 
 Options:
   --samples <n>                    number of status samples per node (default: 4)
@@ -59,8 +59,9 @@ Notes:
   - No secrets are written into the repository or the generated summary.
   - If the password env vars are unset, the script falls back to plain SSH and
     assumes key-based auth already works.
-  - Node labels in the artifact tree are placement aliases for continuity; the
-    runtime role truth is taken from each sampled `status.json`.
+  - Node labels in the artifact tree are legacy placement aliases kept for
+    continuity; they do not imply the current runtime role.
+  - Runtime role truth is always taken from each sampled `status.json`.
   - Artifacts are written to:
       <out-dir>/<timestamp>/{
         config.json,

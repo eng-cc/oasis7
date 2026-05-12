@@ -1,0 +1,23 @@
+task_uid: task_9c8babbd74814b0ea7b88c2dccf783e6
+title: "align triad docs and snapshot help with three-equal-validator truth"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-triad-doc-truth-alignment
+execution_log_path: .pm/tasks/task_9c8babbd74814b0ea7b88c2dccf783e6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+  - scripts/p2p-real-env-triad-snapshot.sh
+doc_refs: []
+related_prd:
+  - PRD-P2P-025
+  - PRD-P2P-026
+acceptance:
+  - "PRD-P2P-025 and triad observability docs no longer describe the live triad as local observer plus 2 ECS"
+  - "triad snapshot help and labels distinguish legacy service aliases from current three-equal-validator runtime truth"
+handoff_to: []
+updated_at: 2026-05-12T22:42:15+08:00
+last_started_at: 2026-05-12T21:48:19+08:00
+last_closed_at: 2026-05-12T22:42:15+08:00

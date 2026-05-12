@@ -6,7 +6,7 @@
 审计轮次: 2
 
 ## 任务拆解（含 PRD-ID 映射）
-- [x] triad-observability-host-monitor (PRD-P2P-025-A) [test_tier_required]: 新增 triad host/process monitor，冻结 local observer + 2 ECS 的资源采样 contract。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
+- [x] triad-observability-host-monitor (PRD-P2P-025-A) [test_tier_required]: 新增 triad host/process monitor，冻结当前 real-env triad（本机 + 2 ECS，runtime role 以 sampled status 为准）的资源采样 contract，并保留 legacy label 兼容口径。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
 - [x] triad-observability-merged-summary (PRD-P2P-025-B) [test_tier_required]: 新增 merged summary helper 与 triad observability wrapper，串起 snapshot/host/traffic/wasm。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
 - [x] triad-observability-docs-and-smoke (PRD-P2P-025-C) [test_tier_required]: 回写 `doc/p2p` / `testing-manual.md`，补 fixture 回归与 real-env 小样本验证入口。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
 - [x] triad-observability-module-breakdown (PRD-P2P-025) [test_tier_required]: 把 triad observability summary 细分到 runtime 子模块，并输出可执行的 optimization candidates。 Trace: .pm/tasks/task_129613e6a9fd421da0a2c2f79824c51c.yaml
