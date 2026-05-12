@@ -71,6 +71,8 @@ pub(super) struct ChainAgentClaimActionPreview {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) requested_total_upfront_amount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) auto_issued_restricted_amount: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) approved_amount: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) expires_at_epoch: Option<u64>,
@@ -586,6 +588,7 @@ fn extract_agent_claim_preview(
                     slot_index: Some(*requested_slot_index),
                     reputation_tier: Some(*requested_reputation_tier),
                     requested_total_upfront_amount: Some(*requested_total_upfront_amount),
+                    auto_issued_restricted_amount: None,
                     approved_amount: None,
                     expires_at_epoch: None,
                 });
@@ -605,6 +608,7 @@ fn extract_agent_claim_preview(
                     slot_index: Some(1),
                     reputation_tier: None,
                     requested_total_upfront_amount: None,
+                    auto_issued_restricted_amount: None,
                     approved_amount: Some(*approved_amount),
                     expires_at_epoch: Some(*expires_at_epoch),
                 });
@@ -622,6 +626,7 @@ fn extract_agent_claim_preview(
                     slot_index: Some(1),
                     reputation_tier: None,
                     requested_total_upfront_amount: None,
+                    auto_issued_restricted_amount: None,
                     approved_amount: None,
                     expires_at_epoch: None,
                 });
@@ -634,6 +639,7 @@ fn extract_agent_claim_preview(
                 activation_fee_amount,
                 claim_bond_amount,
                 upkeep_per_epoch,
+                auto_issued_restricted_amount,
                 ..
             } => {
                 return Ok(ChainAgentClaimActionPreview {
@@ -648,6 +654,8 @@ fn extract_agent_claim_preview(
                             .saturating_add(*claim_bond_amount)
                             .saturating_add(*upkeep_per_epoch),
                     ),
+                    auto_issued_restricted_amount: (*auto_issued_restricted_amount > 0)
+                        .then_some(*auto_issued_restricted_amount),
                     approved_amount: None,
                     expires_at_epoch: None,
                 });

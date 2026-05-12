@@ -1,4 +1,6 @@
+use super::apply_domain_event_main_token::helpers::debit_main_token_treasury_balance;
 use super::*;
+use crate::runtime::MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL;
 
 impl WorldState {
     pub(super) fn apply_domain_event_gameplay_claims(
@@ -18,6 +20,8 @@ impl WorldState {
                 claim_bond_amount,
                 upfront_restricted_spent_amount,
                 upfront_liquid_spent_amount,
+                auto_issued_restricted_amount,
+                auto_issued_restricted_source_treasury_bucket_id,
                 claim_bond_locked_restricted_amount,
                 claim_bond_locked_liquid_amount,
                 upkeep_per_epoch,
@@ -107,15 +111,53 @@ impl WorldState {
                     .get(claimer_agent_id)
                     .map(|balance| balance.restricted_starter_claim_balance)
                     .unwrap_or(0);
+                let has_active_restricted_grant = self
+                    .restricted_starter_claim_grants
+                    .get(claimer_agent_id)
+                    .is_some_and(|grant| grant.status == RestrictedStarterClaimGrantStatus::Issued);
+                let expected_auto_issued_restricted_amount =
+                    crate::runtime::agent_claims::auto_restricted_starter_claim_amount(
+                        *slot_index,
+                        liquid_balance,
+                        restricted_balance,
+                        self.main_token_treasury_balances
+                            .get(MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL)
+                            .copied()
+                            .unwrap_or(0),
+                        upfront_amount,
+                        has_active_restricted_grant,
+                    );
                 let expected_funding = split_agent_claim_upfront_funding(
                     *slot_index,
                     liquid_balance,
-                    restricted_balance,
+                    restricted_balance.saturating_add(expected_auto_issued_restricted_amount),
                     *activation_fee_amount,
                     *claim_bond_amount,
                     *upkeep_per_epoch,
                 )
                 .map_err(|reason| WorldError::ResourceBalanceInvalid { reason })?;
+                let expected_auto_issued_restricted_source_treasury_bucket_id =
+                    (expected_auto_issued_restricted_amount > 0
+                        && expected_funding.claim_bond.restricted_amount > 0)
+                        .then(|| {
+                            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+                                .to_string()
+                        });
+                if *auto_issued_restricted_amount != expected_auto_issued_restricted_amount
+                    || *auto_issued_restricted_source_treasury_bucket_id
+                        != expected_auto_issued_restricted_source_treasury_bucket_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "agent claim auto funding mismatch: target={} expected_amount={} actual_amount={} expected_bucket={:?} actual_bucket={:?}",
+                            target_agent_id,
+                            expected_auto_issued_restricted_amount,
+                            auto_issued_restricted_amount,
+                            expected_auto_issued_restricted_source_treasury_bucket_id,
+                            auto_issued_restricted_source_treasury_bucket_id
+                        ),
+                    });
+                }
                 if expected_funding.upfront.restricted_amount != *upfront_restricted_spent_amount
                     || expected_funding.upfront.liquid_amount != *upfront_liquid_spent_amount
                     || expected_funding.claim_bond.restricted_amount
@@ -133,6 +175,19 @@ impl WorldState {
                             claim_bond_locked_liquid_amount
                         ),
                     });
+                }
+                if *auto_issued_restricted_amount > 0 {
+                    debit_main_token_treasury_balance(
+                        &mut self.main_token_treasury_balances,
+                        MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+                        *auto_issued_restricted_amount,
+                    )?;
+                    credit_main_token_restricted_starter_claim_balance(
+                        self,
+                        claimer_agent_id,
+                        *auto_issued_restricted_amount,
+                    )?;
+                    increase_main_token_circulating_supply(self, *auto_issued_restricted_amount)?;
                 }
                 debit_main_token_restricted_starter_claim_balance(
                     self,
@@ -177,6 +232,8 @@ impl WorldState {
                         upfront_liquid_spent_amount: *upfront_liquid_spent_amount,
                         claim_bond_locked_restricted_amount: *claim_bond_locked_restricted_amount,
                         claim_bond_locked_liquid_amount: *claim_bond_locked_liquid_amount,
+                        claim_bond_restricted_source_treasury_bucket_id:
+                            auto_issued_restricted_source_treasury_bucket_id.clone(),
                         upkeep_per_epoch: *upkeep_per_epoch,
                         release_cooldown_epochs: *release_cooldown_epochs,
                         grace_epochs: *grace_epochs,
@@ -462,7 +519,7 @@ impl WorldState {
                     });
                 }
                 let (expected_sink, expected_sink_bucket_id) =
-                    restricted_refund_sink_for_account(self, claimer_agent_id);
+                    restricted_refund_sink_for_claim(self, claimer_agent_id, &claim);
                 if *refunded_bond_restricted_sink != expected_sink
                     || *refunded_bond_restricted_sink_bucket_id != expected_sink_bucket_id
                 {
@@ -583,7 +640,7 @@ impl WorldState {
                     });
                 }
                 let (expected_sink, expected_sink_bucket_id) =
-                    restricted_refund_sink_for_account(self, claimer_agent_id);
+                    restricted_refund_sink_for_claim(self, claimer_agent_id, &claim);
                 if *refunded_bond_restricted_sink != expected_sink
                     || *refunded_bond_restricted_sink_bucket_id != expected_sink_bucket_id
                 {
@@ -872,11 +929,21 @@ fn increase_main_token_circulating_supply(
     Ok(())
 }
 
-fn restricted_refund_sink_for_account(
+fn restricted_refund_sink_for_claim(
     state: &WorldState,
     account_id: &str,
+    claim: &AgentClaimState,
 ) -> (RestrictedStarterClaimRefundSink, String) {
     let Some(grant) = state.restricted_starter_claim_grants.get(account_id) else {
+        if let Some(bucket_id) = claim
+            .claim_bond_restricted_source_treasury_bucket_id
+            .clone()
+        {
+            return (
+                RestrictedStarterClaimRefundSink::SourceTreasuryBucket,
+                bucket_id,
+            );
+        }
         return (
             RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance,
             String::new(),

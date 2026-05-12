@@ -1,5 +1,11 @@
 use super::*;
-use crate::runtime::agent_claims::split_agent_claim_upfront_funding;
+use crate::runtime::agent_claims::{
+    auto_restricted_starter_claim_amount, split_agent_claim_upfront_funding,
+};
+use crate::runtime::{
+    RestrictedStarterClaimGrantStatus,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+};
 
 impl World {
     pub(super) fn action_to_event_gameplay(
@@ -50,10 +56,28 @@ impl World {
                         }));
                     }
                 };
-                let funding = match split_agent_claim_upfront_funding(
+                let total_upfront_amount = quote
+                    .activation_fee_amount
+                    .saturating_add(quote.claim_bond_amount)
+                    .saturating_add(quote.upkeep_per_epoch);
+                let auto_issued_restricted_amount = auto_restricted_starter_claim_amount(
                     quote.slot_index,
                     self.main_token_liquid_balance(claimer_agent_id),
                     self.main_token_restricted_starter_claim_balance(claimer_agent_id),
+                    self.main_token_treasury_balance(
+                        MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
+                    ),
+                    total_upfront_amount,
+                    self.restricted_starter_claim_grant(claimer_agent_id)
+                        .is_some_and(|grant| {
+                            grant.status == RestrictedStarterClaimGrantStatus::Issued
+                        }),
+                );
+                let funding = match split_agent_claim_upfront_funding(
+                    quote.slot_index,
+                    self.main_token_liquid_balance(claimer_agent_id),
+                    self.main_token_restricted_starter_claim_balance(claimer_agent_id)
+                        .saturating_add(auto_issued_restricted_amount),
                     quote.activation_fee_amount,
                     quote.claim_bond_amount,
                     quote.upkeep_per_epoch,
@@ -82,6 +106,14 @@ impl World {
                     claim_bond_amount: quote.claim_bond_amount,
                     upfront_restricted_spent_amount: funding.upfront.restricted_amount,
                     upfront_liquid_spent_amount: funding.upfront.liquid_amount,
+                    auto_issued_restricted_amount,
+                    auto_issued_restricted_source_treasury_bucket_id:
+                        (auto_issued_restricted_amount > 0
+                            && funding.claim_bond.restricted_amount > 0)
+                            .then(|| {
+                                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+                                    .to_string()
+                            }),
                     claim_bond_locked_restricted_amount: funding.claim_bond.restricted_amount,
                     claim_bond_locked_liquid_amount: funding.claim_bond.liquid_amount,
                     upkeep_per_epoch: quote.upkeep_per_epoch,

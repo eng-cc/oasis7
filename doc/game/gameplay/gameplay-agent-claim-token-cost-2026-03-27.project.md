@@ -7,6 +7,7 @@
 
 ## 任务拆解
 
+- [x] agent-claim-slot-1-auto-starter-grant (PRD-GAME-011) [test_tier_required]: `runtime_engineer` 已将首个 `slot-1` claim 从“先申请审批再发 restricted grant”改成“dedicated pool 足够时在 `ClaimAgent` 路径自动补足 upfront 缺口并原子认领”，并同步 canonical quote、viewer/API 摘要与 funding provenance。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
 - [x] TASK-GAMEPLAY-AGC-001 (`PRD-GAME-011`) [test_tier_required]: `producer_system_designer` 已建立 agent claim 成本专题，冻结“首个也不免费”的规则边界、三段式成本结构、回收条件与 root 文档挂载。
 - [x] TASK-GAMEPLAY-AGC-002 (`PRD-GAME-011`) [test_tier_required + test_tier_full]: `runtime_engineer` 已落地 canonical claim 状态机、main token 扣费/锁定/退款/惩罚记账、epoch upkeep 结算与事件审计，并补齐 claim/release/grace/reclaim 的 required 定向回归。
 - [x] TASK-GAMEPLAY-AGC-003 (`PRD-GAME-011`) [test_tier_required]: `viewer_engineer` 已把 canonical claim 概览接入 `player_gameplay.agent_claim`，补齐 pure API `--player-gameplay-only` 所需的未认领报价、已认领状态、cooldown / grace / idle reclaim 倒计时与 cap 阻断原因，并在 viewer 选中 agent 详情中落地对应文本。

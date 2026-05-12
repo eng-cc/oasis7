@@ -1,6 +1,8 @@
 use crate::runtime::{
-    agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier, AgentClaimState,
-    FirstAgentClaimApprovalRequestStatus, WorldState,
+    agent_claim_cap_for_tier, agent_claim_quote, agent_claim_reputation_tier,
+    auto_restricted_starter_claim_amount, AgentClaimState, FirstAgentClaimApprovalRequestStatus,
+    RestrictedStarterClaimGrantStatus, WorldState,
+    MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimOwnedSnapshot, PlayerAgentClaimQuoteSnapshot, PlayerAgentClaimSnapshot,
@@ -37,6 +39,15 @@ pub(super) fn build_player_agent_claim_snapshot(
         .get(primary_agent_id)
         .map(|balance| balance.restricted_starter_claim_balance)
         .unwrap_or(0);
+    let has_active_restricted_grant = state
+        .restricted_starter_claim_grants
+        .get(primary_agent_id)
+        .is_some_and(|grant| grant.status == RestrictedStarterClaimGrantStatus::Issued);
+    let liveops_pool_balance = state
+        .main_token_treasury_balances
+        .get(MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL)
+        .copied()
+        .unwrap_or(0);
 
     let next_claim_quote = match agent_claim_quote(reputation_score, owned_claims_count) {
         Ok(quote) => {
@@ -44,8 +55,18 @@ pub(super) fn build_player_agent_claim_snapshot(
                 .activation_fee_amount
                 .saturating_add(quote.claim_bond_amount)
                 .saturating_add(quote.upkeep_per_epoch);
+            let auto_restricted_starter_claim_amount = auto_restricted_starter_claim_amount(
+                quote.slot_index,
+                liquid_main_token_balance,
+                restricted_starter_claim_balance,
+                liveops_pool_balance,
+                total_upfront_amount,
+                has_active_restricted_grant,
+            );
             let eligible_claim_balance = if quote.slot_index == 1 {
-                liquid_main_token_balance.saturating_add(restricted_starter_claim_balance)
+                liquid_main_token_balance
+                    .saturating_add(restricted_starter_claim_balance)
+                    .saturating_add(auto_restricted_starter_claim_amount)
             } else {
                 liquid_main_token_balance
             };
@@ -60,6 +81,7 @@ pub(super) fn build_player_agent_claim_snapshot(
                 total_upfront_amount,
                 transferable_liquid_balance: liquid_main_token_balance,
                 restricted_starter_claim_balance,
+                auto_restricted_starter_claim_amount,
                 eligible_claim_balance,
                 release_cooldown_epochs: quote.release_cooldown_epochs,
                 grace_epochs: quote.grace_epochs,
@@ -101,6 +123,7 @@ pub(super) fn build_player_agent_claim_snapshot(
             total_upfront_amount: 0,
             transferable_liquid_balance: liquid_main_token_balance,
             restricted_starter_claim_balance,
+            auto_restricted_starter_claim_amount: 0,
             eligible_claim_balance: liquid_main_token_balance
                 .saturating_add(restricted_starter_claim_balance),
             release_cooldown_epochs: 0,
@@ -119,6 +142,11 @@ pub(super) fn build_player_agent_claim_snapshot(
         .cloned()
         .collect::<Vec<_>>();
     owned_claims.sort_by(|left, right| left.target_agent_id.cmp(&right.target_agent_id));
+    let slot_1_auto_restricted_starter_claim_amount = next_claim_quote
+        .as_ref()
+        .filter(|quote| quote.slot_index == 1)
+        .map(|quote| quote.auto_restricted_starter_claim_amount)
+        .unwrap_or(0);
 
     Some(PlayerAgentClaimSnapshot {
         claimer_agent_id: primary_agent_id.to_string(),
@@ -128,8 +156,10 @@ pub(super) fn build_player_agent_claim_snapshot(
         owned_claim_count: u8::try_from(owned_claims_count).unwrap_or(u8::MAX),
         liquid_main_token_balance,
         restricted_starter_claim_balance,
+        slot_1_auto_restricted_starter_claim_amount,
         slot_1_eligible_claim_balance: liquid_main_token_balance
-            .saturating_add(restricted_starter_claim_balance),
+            .saturating_add(restricted_starter_claim_balance)
+            .saturating_add(slot_1_auto_restricted_starter_claim_amount),
         next_claim_quote,
         first_agent_claim_approval_request: latest_first_agent_claim_approval_request_snapshot(
             state,

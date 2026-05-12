@@ -42,6 +42,7 @@ fn sample_claim(target_agent_id: &str, claimer_agent_id: &str) -> AgentClaimStat
         upfront_liquid_spent_amount: 16,
         claim_bond_locked_restricted_amount: 0,
         claim_bond_locked_liquid_amount: 6,
+        claim_bond_restricted_source_treasury_bucket_id: None,
         upkeep_per_epoch: 2,
         release_cooldown_epochs: 1,
         grace_epochs: 1,

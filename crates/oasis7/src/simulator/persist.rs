@@ -111,6 +111,8 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     #[serde(default)]
     pub restricted_starter_claim_balance: u64,
     #[serde(default)]
+    pub auto_restricted_starter_claim_amount: u64,
+    #[serde(default)]
     pub eligible_claim_balance: u64,
     pub release_cooldown_epochs: u64,
     pub grace_epochs: u64,
@@ -177,6 +179,8 @@ pub struct PlayerAgentClaimSnapshot {
     pub liquid_main_token_balance: u64,
     #[serde(default)]
     pub restricted_starter_claim_balance: u64,
+    #[serde(default)]
+    pub slot_1_auto_restricted_starter_claim_amount: u64,
     #[serde(default)]
     pub slot_1_eligible_claim_balance: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

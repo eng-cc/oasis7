@@ -245,12 +245,12 @@ const core = await import("../software_safe_src/legacy_core.js");
       goal_id: "first_session_loop.create_first_world_feedback",
       goal_kind: "CreateFirstWorldFeedback",
       goal_title: "Claim your first agent slot",
-      objective: "Submit the first claim approval request before claiming slot-1.",
-      progress_detail: "Approval request is pending operator review.",
+      objective: "Select a target and submit your first slot-1 claim.",
+      progress_detail: "The dedicated starter pool can auto-fund the first slot-1 claim when you confirm it.",
       progress_percent: 24,
       blocker_kind: null,
       blocker_detail: null,
-      next_step_hint: "Wait for review or contact operations if the request is stale.",
+      next_step_hint: "Pick an unclaimed target, review the canonical quote, then confirm ClaimAgent.",
       branch_hint: null,
       available_actions: [],
       recent_feedback: null,
@@ -262,29 +262,37 @@ const core = await import("../software_safe_src/legacy_core.js");
         owned_claim_count: 0,
         liquid_main_token_balance: 0,
         restricted_starter_claim_balance: 0,
-        slot_1_eligible_claim_balance: 0,
-        next_claim_quote: null,
-        first_agent_claim_approval_request: {
-          request_id: 7,
-          status: "pending",
-          requested_slot_index: 1,
-          requested_reputation_tier: 0,
-          requested_total_upfront_amount: 325,
-          requested_at_epoch: 3,
-          updated_at_epoch: 3,
-          operator_account_id: null,
-          approved_amount: null,
-          expires_at_epoch: null,
-          rejection_reason: null,
+        slot_1_auto_restricted_starter_claim_amount: 325,
+        slot_1_eligible_claim_balance: 325,
+        next_claim_quote: {
+          slot_index: 1,
+          reputation_tier: 0,
+          claim_cap: 1,
+          owned_claim_count: 0,
+          activation_fee_amount: 100,
+          claim_bond_amount: 200,
+          upkeep_per_epoch: 25,
+          total_upfront_amount: 325,
+          transferable_liquid_balance: 0,
+          restricted_starter_claim_balance: 0,
+          auto_restricted_starter_claim_amount: 325,
+          eligible_claim_balance: 325,
+          release_cooldown_epochs: 3,
+          grace_epochs: 2,
+          idle_warning_epochs: 7,
+          forced_idle_reclaim_epochs: 10,
+          forced_reclaim_penalty_bps: 2000,
+          blocked_reason: null,
         },
+        first_agent_claim_approval_request: null,
         owned_claims: [],
       },
     },
   });
   assert.equal(injectedState.logicalTime, 12);
-  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.status, "pending");
-  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestId, "7");
-  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest.requestedTotalUpfrontAmount, "325");
+  assert.equal(injectedState.gameplaySummary.firstAgentClaimApprovalRequest, null);
+  assert.equal(injectedState.gameplaySummary.agentClaim.next_claim_quote.auto_restricted_starter_claim_amount, 325);
+  assert.equal(injectedState.gameplaySummary.agentClaim.slot_1_auto_restricted_starter_claim_amount, 325);
   core.select({ kind: "location", id: "loc-0" });
   const worldScale = core.buildWorldScaleSurface();
   assert.equal(worldScale.physicalTruth.canonicalUnitLabel, "1 cm");
@@ -299,12 +307,10 @@ const core = await import("../software_safe_src/legacy_core.js");
   );
   assert.match(worldScale.presentationScale.markerTruthNote, /do not read on-screen diameter/i);
   assert.match(worldScale.presentationScale.zoomTruthNote, /zoom tiers/i);
-  const pendingDisplay = core.describeFirstAgentClaimApprovalRequest(
+  const approvalDisplay = core.describeFirstAgentClaimApprovalRequest(
     injectedState.gameplaySummary.firstAgentClaimApprovalRequest,
   );
-  assert.equal(pendingDisplay.label, "pending");
-  assert.equal(pendingDisplay.badgeClass, "badge badge--accent");
-  assert.match(pendingDisplay.summary, /recorded on-chain/i);
+  assert.equal(approvalDisplay, null);
 }
 
 {

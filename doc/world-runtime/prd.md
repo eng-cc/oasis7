@@ -55,7 +55,7 @@
 - SC-22: WASM build / executor / router 必须形成统一的本地 observability snapshot，并通过 `/v1/chain/status.wasm` 暴露 bounded timing / cache / failure 指标；release candidate 与节点 incident 不得再只依赖 ignored perf probe 或临时日志回答热点归因。
   - SC-23: 每个 WASM 模块必须支持通过标准 module-local observe spec 接入共享 contract/perf runner，让新模块在新增时即可产出统一的功能与性能证据，而不是再写 bespoke 脚本。
 - SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
-- SC-25: 首个 agent `slot-1` claim 必须补齐 `submit request -> pending review -> approve/reject -> approved restricted grant -> ClaimAgent` 的链上闭环；`/v1/chain/agent-claim/**` 需要提供可直接调用的 request/review surface，玩家与运营都能从 runtime 真值读到同一条审批状态，且 `software_safe` 正式玩法摘要必须能直接展示该状态。
+- SC-25: 首个 agent `slot-1` claim 必须补齐“canonical quote -> 若专用池足够则自动补足 restricted starter amount -> 直接 `ClaimAgent`”的链上闭环；`/v1/chain/agent-claim/**` 需要让玩家在不经过运营审批的前提下直连 claim，同时仍由 runtime 真值暴露自动资助额度、claim 结果与 legacy 审批数据兼容读取边界。
 - SC-26: builtin wasm 模块边界中的 `GeoPos` 与一切 `*_cm` 坐标字段必须维持整数厘米合同；持久化状态允许兼容读取旧的“整值浮点”厘米表示，但动作/事件/观测入口不得接受 fractional cm，也不得再输出 `0.0` 这类浮点厘米表象。
 
 ## 2. User Experience & Functionality
@@ -100,7 +100,7 @@
   - PRD-WORLD_RUNTIME-037: As a `wasm_platform_engineer` / `qa_engineer`, I want each wasm module to expose a standard local observe spec consumable by a shared runner, so that every new module can inherit consistent contract and perf evidence without bespoke glue code.
   - PRD-WORLD_RUNTIME-038: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status.traffic.libp2p_replication` to expose real substream wire-byte totals plus derived control-plane wire bytes, so that control-plane overhead can be estimated from runtime truth instead of only host NIC totals or event-count heuristics.
   - PRD-WORLD_RUNTIME-039: As a `runtime_engineer` / 节点运营者, I want `/v1/chain/status` to expose commit freshness, pending proposal progress, pending consensus action queue pressure, recent finality latency, transfer lifecycle and confirmation latency summaries, plus inbound timing reject counters, so that common chain stalls can be classified directly from status truth instead of ad hoc log grep.
-  - PRD-WORLD_RUNTIME-040: As a 新账号玩家 / `liveops_community`, I want first-agent claim approval requests, operator review queue, and approval-issued `slot-1` restricted grants to share one chain-backed truth, so that onboarding no longer depends on off-chain spreadsheets or undocumented manual grants.
+  - PRD-WORLD_RUNTIME-040: As a 新账号玩家 / `liveops_community`, I want the first `slot-1` claim to auto-draw startup restricted funding from the dedicated pool when runtime says the pool can cover it, so that onboarding no longer depends on operator review queues or undocumented manual grants.
 - Critical User Flows:
   1. Flow-WR-001: `提交 runtime 变更 -> 执行回放一致性验证 -> 对比事件链 -> 输出兼容结论`
   2. Flow-WR-002: `WASM 模块注册/升级 -> 生命周期治理校验 -> 沙箱执行 -> 审计事件归档`
@@ -111,7 +111,7 @@
   7. Flow-WR-007: `viewer 连接 chain-linked runtime -> 轮询 /v1/chain/status -> committed_height 增加时重载 execution world -> 仅在出现新 event / logical time 变化时向 viewer 发出 snapshot/events`
   8. Flow-WR-008: `viewer 触发 gameplay_action -> POST /v1/chain/gameplay/submit -> chain runtime 校验 auth/nonce 并入 consensus queue -> committed execution world 落盘 -> viewer 仅在下一次 chain sync 后观察到结果`
   9. Flow-WR-009: `build suite / executor / router 更新本地累计 timing metrics -> oasis7_chain_runtime 通过 /v1/chain/status.wasm 暴露 bounded snapshot -> 外部脚本做窗口 delta / p50 / p95 / hotspot 汇总`
-  10. Flow-WR-010: `玩家 POST /v1/chain/agent-claim/approval-request/submit -> runtime 持久化 pending request -> 运营 GET /v1/chain/agent-claim/approval-requests 审核 -> approve/reject 写入链上状态 -> approve 时发放 slot-1 restricted grant -> 玩家 POST /v1/chain/agent-claim/submit 完成首个 claim`
+  10. Flow-WR-010: `玩家读取 slot-1 canonical quote -> runtime 判断是否可从 restricted_starter_claim_liveops_pool 自动补足首笔启动额度 -> 玩家 POST /v1/chain/agent-claim/submit -> runtime 原子完成自动资助与 ClaimAgent -> viewer / API 读取同一条 claim 与 auto-funding 真值`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -274,7 +274,7 @@
 | PRD-WORLD_RUNTIME-038 | task_c79092f4b50d4d52a36b11fe0fe5eb5e | `test_tier_required` | `libp2p` substream wire-byte 计数定向回归、chain status schema 回归、repo-owned traffic summary/observability 脚本口径更新、`doc-governance-check`、`git diff --check` | control-plane byte counters 真值补齐、payload 与非 payload 的可解释边界 |
 | PRD-WORLD_RUNTIME-039 | task_f15a1d9ea3194c39aa35158bf93d8ff1 | `test_tier_required` | `/v1/chain/status.consensus` commit freshness / pending proposal / queue pressure / inbound timing reject 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | 节点共识堵塞分类、提交停滞与队列压力真值补齐 |
 | PRD-WORLD_RUNTIME-039 | task_191e827b3ba84711bd0572504aea8251 | `test_tier_required` | transfer lifecycle/latency summary 回归、recent finality latency / payload-byte status payload 回归、`cargo check -p oasis7 --bin oasis7_chain_runtime`、`doc-governance-check`、`git diff --check` | transfer 提交确认时延、finality 最近窗口与 submit buffer/queue payload pressure 真值补齐 |
-| PRD-WORLD_RUNTIME-040 | task_95128237584e403bbaa24b24b5c024b9 | `test_tier_required` | 首个 claim 审批 request/approve/reject/claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` API 回归、viewer claim snapshot 审批状态回归、`software_safe` 正式摘要渲染回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、运营审批真值、slot-1 restricted grant 发放闭环 |
+| PRD-WORLD_RUNTIME-040 | task_313368c409c54cc2bcf8ef4f47919b65 | `test_tier_required` | 首个 claim auto-funding / claim runtime 回归、`oasis7_chain_runtime` `/v1/chain/agent-claim/**` claim submit API 回归、viewer claim snapshot 自动资助字段回归、`software_safe` 正式摘要去审批化回归、`doc-governance-check`、`git diff --check` | 新账号首个 agent onboarding、专用池自动资助真值、slot-1 restricted funding 直连 claim 闭环 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

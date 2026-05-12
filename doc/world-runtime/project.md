@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [ ] first-agent-claim-auto-grant (PRD-WORLD_RUNTIME-040) [test_tier_required]: 将首个 agent `slot-1` claim 从“申请/审核/批准后再发 grant”改为“专用池余额足够时在 `ClaimAgent` 路径自动补足 restricted starter funding 并原子完成认领”；viewer / API 需同步去掉 pending-review 依赖，只保留 legacy 审批数据兼容读取。 Trace: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml
 - [x] first-agent-claim-approval-closure (PRD-WORLD_RUNTIME-040) [test_tier_required]: 补齐首个 agent `slot-1` claim 的申请、运营审核、批准/拒绝、grant 发放与最终 `ClaimAgent` 直连 API 闭环；玩家与运营都必须从同一条 runtime 真值读取 request 状态。 Trace: .pm/tasks/task_95128237584e403bbaa24b24b5c024b9.yaml
   - 产物文件:
     - `doc/world-runtime/prd.md`

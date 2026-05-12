@@ -1,6 +1,6 @@
 use super::super::{
-    DomainEvent, RestrictedStarterClaimGrantStatus, RestrictedStarterClaimRefundSink, WorldError,
-    WorldEvent, WorldEventBody,
+    AgentClaimState, DomainEvent, RestrictedStarterClaimGrantStatus,
+    RestrictedStarterClaimRefundSink, WorldError, WorldEvent, WorldEventBody,
 };
 use super::World;
 
@@ -32,10 +32,20 @@ impl World {
             && self.restricted_starter_claim_locked_amount(account_id) == 0
     }
 
-    pub(super) fn restricted_starter_claim_refund_sink(
+    pub(super) fn restricted_starter_claim_refund_sink_for_claim(
         &self,
-        account_id: &str,
+        claim: &AgentClaimState,
     ) -> RestrictedStarterClaimRefundDecision {
+        if let Some(bucket_id) = claim
+            .claim_bond_restricted_source_treasury_bucket_id
+            .clone()
+        {
+            return RestrictedStarterClaimRefundDecision {
+                sink: RestrictedStarterClaimRefundSink::SourceTreasuryBucket,
+                treasury_bucket_id: Some(bucket_id),
+            };
+        }
+        let account_id = claim.claim_owner_id.as_str();
         let Some(grant) = self.state.restricted_starter_claim_grants.get(account_id) else {
             return RestrictedStarterClaimRefundDecision {
                 sink: RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance,

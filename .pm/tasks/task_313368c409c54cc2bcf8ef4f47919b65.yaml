@@ -1,0 +1,23 @@
+task_uid: task_313368c409c54cc2bcf8ef4f47919b65
+title: "auto first-claim starter grant when pool funded"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-world-runtime-first-agent-claim-auto-grant
+execution_log_path: .pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+  - doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-040
+  - PRD-GAME-011
+acceptance:
+  - "slot-1 first claim no longer requires operator approval when dedicated restricted pool has sufficient balance"
+  - "runtime, API, and viewer expose auto-funded first-claim behavior and remove stale pending-review gating"
+  - "docs and tests align to the new auto-issuance boundary"
+handoff_to: []
+updated_at: 2026-05-12T16:23:41+08:00
+last_started_at: 2026-05-12T15:02:30+08:00
+last_closed_at: 2026-05-12T16:23:41+08:00
