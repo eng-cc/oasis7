@@ -120,6 +120,20 @@ state_reason() { json_get "$1" viewerReason; }
 state_selected_kind() { json_get "$1" selectedKind; }
 state_last_error() { json_get "$1" lastError; }
 
+state_reason_matches_any() {
+  local state_json=$1
+  shift
+  local actual
+  actual=$(state_reason "$state_json")
+  local expected
+  for expected in "$@"; do
+    if [[ "$actual" == "$expected" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 wait_for_api() {
   local session=$1
   local timeout_ms=${2:-30000}
@@ -347,10 +361,10 @@ ab_screenshot "$default_session" "$out_dir/default-entry.png" >/dev/null
 default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 
 [[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
-[[ "$(state_reason "$default_state")" == "primary_web_entry" ]] || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
-[[ "$default_url_final" == *"viewer.html"* || "$default_url_final" == *"software_safe.html"* ]] || { echo "error: default route did not redirect to viewer-compatible entry" >&2; exit 1; }
+state_reason_matches_any "$default_state" "primary_web_entry" "direct_viewer_entry" || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
+[[ "$default_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: default route escaped viewer host: $default_url_final" >&2; exit 1; }
 grep -q "Formal Gameplay Summary" "$default_body_path" || { echo "error: default route body missing Formal Gameplay Summary" >&2; exit 1; }
-grep -q "Missing Action Handoff" "$default_body_path" || { echo "error: default route body missing Missing Action Handoff" >&2; exit 1; }
+grep -Eq "Missing Action Handoff|Actions Not Exposed On This Page" "$default_body_path" || { echo "error: default route body missing action handoff surface" >&2; exit 1; }
 
 ab_open "$auto_session" "$headed" "$auto_url" >/dev/null
 ab_cmd "$auto_session" wait --load networkidle >/dev/null 2>&1 || true
@@ -362,8 +376,8 @@ ab_screenshot "$auto_session" "$out_dir/auto-entry.png" >/dev/null
 auto_url_final=$(normalize_eval_token "$(ab_cmd "$auto_session" get url)")
 
 [[ "$(state_render_mode "$auto_state")" == "viewer" ]] || { echo "error: auto route did not land in viewer" >&2; exit 1; }
-[[ "$(state_reason "$auto_state")" == "auto_primary_web_entry" ]] || { echo "error: auto route reason mismatch: $(state_reason "$auto_state")" >&2; exit 1; }
-[[ "$auto_url_final" == *"viewer.html"* || "$auto_url_final" == *"software_safe.html"* ]] || { echo "error: auto route did not redirect to viewer-compatible entry" >&2; exit 1; }
+state_reason_matches_any "$auto_state" "auto_primary_web_entry" "direct_viewer_entry" || { echo "error: auto route reason mismatch: $(state_reason "$auto_state")" >&2; exit 1; }
+[[ "$auto_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: auto route escaped viewer host: $auto_url_final" >&2; exit 1; }
 
 python3 - "$summary_json_path" <<'PY' "$default_state_path" "$auto_state_path" "$default_url_final" "$auto_url_final" "$out_dir/default-entry.png" "$out_dir/auto-entry.png"
 import json

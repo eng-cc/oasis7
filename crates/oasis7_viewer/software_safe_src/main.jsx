@@ -93,7 +93,7 @@ function MetricCard(props) {
 
 function EventCard(props) {
   return (
-    <div class="event-card">
+    <div class={props.class ?? "event-card"}>
       <div class="event-card__title">
         <span>{props.title}</span>
         <Show when={props.badge}>
@@ -110,9 +110,17 @@ function EventCard(props) {
 
 function PanelSection(props) {
   return (
-    <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+    <div class={`panel panel--nested ${props.class ?? ""}`}>
       <div class="panel__header">
-        <div class="panel__title">{props.title}</div>
+        <div class="stack" style="gap:4px;">
+          <Show when={props.eyebrow}>
+            <div class="panel__eyebrow">{props.eyebrow}</div>
+          </Show>
+          <div class="panel__title">{props.title}</div>
+          <Show when={props.meta}>
+            <div class="panel__meta-copy">{props.meta}</div>
+          </Show>
+        </div>
       </div>
       <div class="panel__body stack">{props.children}</div>
     </div>
@@ -229,12 +237,80 @@ function renderResourceSummary(resources) {
   return core.resourceSummary(resources);
 }
 
+function WorldStageHero() {
+  const locale = () => uiLocale();
+  const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const selectedLabel = () =>
+    core.state.selectedKind && core.state.selectedId
+      ? `${core.state.selectedKind}:${core.state.selectedId}`
+      : tr(locale(), "未选中目标", "no_target_selected");
+
+  return (
+    <div class="stage-hero">
+      <div class="stage-hero__topline">
+        <div class="stack" style="gap:10px;">
+          <div class="stage-hero__eyebrow">{tr(locale(), "工业世界指挥桌", "Industrial World Command Desk")}</div>
+          <div class="stage-hero__title">
+            {gameplaySummary()?.goalTitle || tr(locale(), "进入世界，先看局势，再做动作", "Read the world first, then act.")}
+          </div>
+          <div class="stage-hero__lede">
+            {gameplaySummary()?.nextStepHint
+              || gameplaySummary()?.objective
+              || tr(
+                locale(),
+                "这张入口页优先保留世界、目标和关键动作；高级诊断与治理能力按需展开。",
+                "This entry keeps the world, objective, and primary actions in front. Advanced diagnostics and governance stay on demand.",
+              )}
+          </div>
+        </div>
+        <ViewerEntryMenu />
+      </div>
+      <div class="badge-row">
+        <Badge class="badge badge--accent">viewer</Badge>
+        <Badge class="badge badge--accent">{tr(locale(), "正式可玩 Web 入口", "formal playable web entry")}</Badge>
+        <Badge class={core.connectionBadgeClass()}>
+          {tr(locale(), "连接", "connection")}={core.state.connectionStatus}
+        </Badge>
+        <Badge>{`world=${core.state.worldId || "-"}`}</Badge>
+        <Badge>{`${tr(locale(), "目标", "target")}=${selectedLabel()}`}</Badge>
+        <Show when={gameplaySummary()?.stageStatus}>
+          <Badge class={gameplayStatusBadgeClass(gameplaySummary().stageStatus)}>
+            {`stage=${gameplaySummary().stageStatus}`}
+          </Badge>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function MobileJumpRail() {
+  const locale = () => uiLocale();
+  return (
+    <nav class="mobile-rail" aria-label={tr(locale(), "主入口分区导航", "Primary entry section navigation")}>
+      <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
+      <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
+      <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
+    </nav>
+  );
+}
+
 function TargetsPanel() {
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
 
   return (
     <div class="stack">
+      <div class="badge-row">
+        <Badge>{`agents=${lists().agents.length}`}</Badge>
+        <Badge>{`locations=${lists().locations.length}`}</Badge>
+      </div>
+      <EmptyState>
+        {tr(
+          locale(),
+          "先从这里锁定一个 Agent 或地点，再去世界舞台和右侧命令面板继续操作。",
+          "Pick an agent or location here first, then continue in the world stage and command panel.",
+        )}
+      </EmptyState>
       <div class="field">
         <label for="entity-search">{tr(locale(), "筛选目标", "Filter targets")}</label>
         <input
@@ -342,15 +418,11 @@ function WorldSummaryPanel() {
 
   return (
     <div class="stack">
-      <div class="badge-row">
-        <Badge class="badge badge--accent">viewer</Badge>
-        <Badge class="badge badge--accent">{tr(locale(), "正式 Web 主入口", "Formal Web Entry")}</Badge>
-        <Badge class={core.connectionBadgeClass()}>
-          {tr(locale(), "连接状态", "connection")}={state.connectionStatus}
-        </Badge>
-        <Badge>{`rendererClass=${state.rendererClass}`}</Badge>
-      </div>
-      <PanelSection title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}>
+      <PanelSection
+        title={tr(locale(), "正式玩法摘要", "Formal Gameplay Summary")}
+        eyebrow={tr(locale(), "玩家主路径", "Player Path")}
+        meta={tr(locale(), "先看目标、阻塞和下一步，再决定是否进入右侧命令区。", "Read the goal, blocker, and next step first, then decide whether to enter the command surface.")}
+      >
         <Show
           when={gameplaySummary()}
           fallback={<EmptyState>{tr(locale(), "等待首条 canonical gameplay 快照…", "Waiting for the first canonical gameplay snapshot…")}</EmptyState>}
@@ -467,7 +539,7 @@ function WorldSummaryPanel() {
               </Show>
               <div>
                 <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
-                <div class="event-list">
+                <div class="action-grid">
                   <Show
                     when={gameplay().availableActions.length > 0}
                     fallback={<EmptyState>{tr(locale(), "当前还没有发布 canonical gameplay 动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
@@ -475,6 +547,7 @@ function WorldSummaryPanel() {
                     <For each={gameplay().availableActions}>
                       {(action) => (
                         <EventCard
+                          class="event-card event-card--action"
                           title={action.label || action.actionId || "unknown_action"}
                           badge={action.disabledReason ? "handoff" : "ready"}
                           badgeClass={action.disabledReason ? "badge badge--warn" : "badge badge--good"}
@@ -980,7 +1053,11 @@ function InteractionPanel() {
           <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
         </div>
       </PanelSection>
-      <PanelSection title={tr(locale(), "Agent 聊天", "Agent Chat")}>
+      <PanelSection
+        title={tr(locale(), "Agent 聊天", "Agent Chat")}
+        eyebrow={tr(locale(), "命令面", "Command Surface")}
+        meta={tr(locale(), "主舞台负责看局势；这里负责向当前目标发消息和读回复。", "The stage is for reading the situation. This surface is for messaging the current target and reading replies.")}
+      >
         <div class="field">
           <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
           <textarea
@@ -1030,7 +1107,11 @@ function InteractionPanel() {
           </div>
         </div>
       </PanelSection>
-      <PanelSection title={tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings")}>
+      <PanelSection
+        title={tr(locale(), "高级 Prompt 设置", "Advanced Prompt Settings")}
+        eyebrow={tr(locale(), "高级控制", "Advanced Controls")}
+        meta={tr(locale(), "保留 operator 级 prompt 控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.")}
+      >
         <div class="badge-row">
           <Badge class={promptOverridesVisible() ? "badge badge--good" : "badge"}>
             {promptOverridesVisible()
@@ -1224,7 +1305,18 @@ function DetailsPanel() {
             : <EmptyState>{tr(locale(), "请先从左侧列表选一个 Agent 或地点。", "Select an agent or location from the left list.")}</EmptyState>
         }
       >
-        <JsonBlock value={core.clone(core.state.selectedObject)} />
+        {(selected) => (
+          <DiagnosticDetails
+            locale={locale()}
+            label={tr(locale(), "展开对象原始明细", "Expand Raw Object Details")}
+            note={tr(
+              locale(),
+              "默认只保留交互面；只有在核查快照字段或诊断对象结构时再展开原始 JSON。",
+              "The interaction surface stays in front by default. Expand raw JSON only when you need to inspect snapshot fields or diagnose object shape.",
+            )}
+            value={() => core.clone(selected())}
+          />
+        )}
       </Show>
       <div>
         <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "世界规模", "World Scale")}</div>
@@ -1349,29 +1441,35 @@ function AppShell() {
   const locale = () => uiLocale();
   return (
     <>
-      <section class="panel">
-        <div class="panel__header">
+      <MobileJumpRail />
+      <section class="panel panel--targets" id="viewer-targets-panel">
+        <div class="panel__header panel__header--stack">
+          <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
+          <div class="panel__meta-copy">
+            {tr(locale(), "先锁定对象，再进入世界舞台或右侧命令面。", "Lock onto a target first, then move into the stage or command surface.")}
+          </div>
         </div>
         <div class="panel__body">
           <TargetsPanel />
         </div>
       </section>
-      <section class="panel">
-        <div class="panel__header">
-          <div class="panel__title">{tr(locale(), "世界摘要", "World Summary")}</div>
-          <ViewerEntryMenu />
-        </div>
-        <div class="panel__body">
+      <section class="panel panel--stage" id="viewer-stage-panel">
+        <div class="panel__body panel__body--stage">
           <div class="stack">
+            <WorldStageHero />
             <PixelWorldHost locale={locale()} />
             <WorldSummaryPanel />
           </div>
         </div>
       </section>
-      <section class="panel">
-        <div class="panel__header">
+      <section class="panel panel--details" id="viewer-details-panel">
+        <div class="panel__header panel__header--stack">
+          <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "明细", "Details")}</div>
+          <div class="panel__meta-copy">
+            {tr(locale(), "把聊天、Prompt 和对象核查留在这里，避免继续淹没主舞台。", "Keep chat, prompt controls, and object inspection here so they stop flooding the main stage.")}
+          </div>
         </div>
         <div class="panel__body">
           <DetailsPanel />
