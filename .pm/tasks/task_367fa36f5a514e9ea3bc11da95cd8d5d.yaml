@@ -1,0 +1,22 @@
+task_uid: task_367fa36f5a514e9ea3bc11da95cd8d5d
+title: "viewer web entry visual redesign phase1"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-web-entry-visual-redesign-phase1
+execution_log_path: .pm/tasks/task_367fa36f5a514e9ea3bc11da95cd8d5d.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md
+  - crates/oasis7_viewer/software_safe_src/main.jsx
+doc_refs:
+  - doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md
+related_prd: []
+acceptance:
+  - "Viewer web entry adopts a clearer world-first layout with diagnostics demoted from the primary player path."
+  - "Player-facing web entry uses a cohesive visual system distinct from the current generic dashboard treatment."
+  - "Existing web viewer core flows remain scriptable and testable after the layout refresh."
+handoff_to: []
+updated_at: 2026-05-12T20:06:27+08:00
+last_started_at: 2026-05-12T16:42:37+08:00
+last_closed_at: 2026-05-12T20:06:27+08:00
