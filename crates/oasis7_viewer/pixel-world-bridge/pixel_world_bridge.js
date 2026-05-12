@@ -60,6 +60,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       try {
         runtime.tick(animationMs);
       } catch (error) {
+        stopAnimationLoop();
         onFatal?.({
           code: "pixel_world_renderer_fatal",
           message: error instanceof Error ? error.message : String(error || "renderer fatal"),
@@ -160,8 +161,14 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
     mount(canvas, renderState) {
       mountedCanvas = canvas;
       const result = runtime.mount(canvas, renderState);
-      attachCanvasListeners(canvas);
-      startAnimationLoop();
+      if (result?.status === "ready") {
+        attachCanvasListeners(canvas);
+        startAnimationLoop();
+      } else {
+        stopAnimationLoop();
+        cleanupCanvasListeners();
+        mountedCanvas = null;
+      }
       return result;
     },
     update(renderState) {

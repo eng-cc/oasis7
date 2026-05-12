@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,12 @@ const pixelWorldCompiledWasmPath = resolve(
   "release",
   "pixel_world_bridge.wasm",
 );
+const cargoHomeDir = process.env.CARGO_HOME
+  ? resolve(process.env.CARGO_HOME)
+  : resolve(process.env.HOME || workspaceRoot, ".cargo");
+const cargoBinDir = resolve(cargoHomeDir, "bin");
+const wasmBindgenCliPath = resolve(cargoBinDir, "wasm-bindgen");
+const cargoLockPath = resolve(workspaceRoot, "Cargo.lock");
 
 function runChecked(command, args, options = {}) {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -37,6 +43,39 @@ function runChecked(command, args, options = {}) {
       rejectPromise(new Error(`${command} ${args.join(" ")} exited with code ${code}`));
     });
   });
+}
+
+async function findWasmBindgenVersion() {
+  const lockContents = await readFile(cargoLockPath, "utf8");
+  const match = lockContents.match(/\[\[package\]\]\s+name = "wasm-bindgen"\s+version = "([^"]+)"/m);
+  if (!match?.[1]) {
+    throw new Error(`failed to resolve wasm-bindgen version from ${cargoLockPath}`);
+  }
+  return match[1];
+}
+
+async function resolveWasmBindgenCommand() {
+  try {
+    await access(wasmBindgenCliPath);
+    return wasmBindgenCliPath;
+  } catch {}
+
+  const wasmBindgenVersion = await findWasmBindgenVersion();
+  console.log(`wasm-bindgen cli missing; installing wasm-bindgen-cli ${wasmBindgenVersion}`);
+  await runChecked("env", [
+    "-u",
+    "RUSTC_WRAPPER",
+    "cargo",
+    "install",
+    "--locked",
+    "wasm-bindgen-cli",
+    "--version",
+    wasmBindgenVersion,
+    "--root",
+    cargoHomeDir,
+  ]);
+  await access(wasmBindgenCliPath);
+  return wasmBindgenCliPath;
 }
 
 async function listFilesRecursively(dirPath) {
@@ -77,7 +116,8 @@ await runChecked("env", [
 await access(pixelWorldCompiledWasmPath);
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
-await runChecked("wasm-bindgen", [
+const wasmBindgenCommand = await resolveWasmBindgenCommand();
+await runChecked(wasmBindgenCommand, [
   "--target",
   "web",
   "--out-dir",
