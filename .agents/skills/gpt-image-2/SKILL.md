@@ -73,6 +73,7 @@ Optional:
 
 - **Pass the user's prompt through raw.** Do not translate, polish, or add style modifiers unless the user asked for it.
 - **Choose the output path.** Default to `./image-<YYYYMMDD-HHMMSS>.png` in the current working directory if the user didn't specify.
+- **Trust the printed path.** If the requested suffix does not match the recovered image bytes, the script rewrites the suffix to the detected format and prints the final saved path on stdout.
 - **Deliver the image.** After the script succeeds, display / attach the output file. Do not stop at "done, see path X".
 - **Text-heavy layouts are fine.** Image 2 handles infographics and timeline prompts well. Do not preemptively warn just because a prompt has a lot of text.
 
@@ -127,11 +128,11 @@ Two non-obvious flags other wrappers get wrong on codex-cli 0.111.0+:
 
 The script is narrowly scoped on purpose:
 
-- It reads **only** session rollout files created by its own `codex exec` invocation, plus the short-lived stdout/stderr logs from that same invocation. The sessions directory is snapshotted before the call and diffed after, so any prior `~/.codex/sessions/*` files (which may contain unrelated Codex conversations) are never touched, read, or transmitted.
-- It writes only two kinds of file: the output PNG at the caller's `--out` path, and short-lived `mktemp` logs that are auto-deleted on exit via a trap.
-- No environment variables are read. No credentials are requested. No other paths under `~/.codex/` are accessed.
-- No network calls leave this skill. The only outbound traffic is the one made by the `codex` CLI itself (to OpenAI, using the user's existing ChatGPT login) — this skill does not add endpoints, telemetry, or callbacks.
+- It reads only rollout files newly observed between this invocation's before/after snapshots, plus the short-lived stdout/stderr logs from that same invocation. That keeps prior `~/.codex/sessions/*` history out of scope, but attribution is still snapshot-based rather than cryptographically bound; run one invocation at a time if other local `codex` activity could write sessions concurrently.
+- It writes only two kinds of file: the recovered image at the final detected output path, and short-lived temp files under one `mktemp -d` directory that are auto-deleted on exit.
+- It reads `$HOME` to locate `~/.codex/sessions`. No other environment variables are used. No credentials are requested. No other paths under `~/.codex/` are accessed.
+- It may perform one additional HTTPS download only when model output contains an allowlisted remote image URL (`image.pollinations.ai` today); those downloads are host-restricted and size-capped before bytes are written locally. The main outbound traffic is still the `codex` CLI call to OpenAI using the user's existing ChatGPT login.
 
 ## What this skill is not
 
-Not a direct OpenAI API client. Not a capability grant — it depends on the user's working Codex CLI login. Not a multi-tenant service (one call per invocation; concurrent calls are serialized by the filesystem-snapshot diff).
+Not a direct OpenAI API client. Not a capability grant — it depends on the user's working Codex CLI login. Not a multi-tenant service, and not concurrency-safe across simultaneous local invocations; treat it as a one-invocation-at-a-time helper.
