@@ -3,9 +3,10 @@ use std::mem;
 
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowPlugin};
-use js_sys::{Function, JSON};
+use js_sys::Function;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -172,22 +173,17 @@ fn clamp(value: f64, min: f64, max: f64) -> f64 {
     value.min(max).max(min)
 }
 
-fn js_value_from_json_value(value: &Value) -> Result<JsValue, JsValue> {
-    let encoded = serde_json::to_string(value)
-        .map_err(|error| JsValue::from_str(&format!("serialize json failed: {error}")))?;
-    JSON::parse(&encoded)
+fn js_value_from_serializable<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    to_value(value)
+        .map_err(|error| JsValue::from_str(&format!("serialize js payload failed: {error}")))
 }
 
 fn status_value(status: &str) -> JsValue {
-    js_value_from_json_value(&json!({ "status": status })).unwrap_or_else(|_| JsValue::NULL)
+    js_value_from_serializable(&json!({ "status": status })).unwrap_or_else(|_| JsValue::NULL)
 }
 
 fn parse_render_state(raw: JsValue) -> Result<RenderState, JsValue> {
-    let encoded = JSON::stringify(&raw)
-        .map_err(|_| JsValue::from_str("render state stringify failed"))?
-        .as_string()
-        .ok_or_else(|| JsValue::from_str("render state stringify produced non-string"))?;
-    serde_json::from_str::<RenderState>(&encoded)
+    from_value(raw)
         .map_err(|error| JsValue::from_str(&format!("render state parse failed: {error}")))
 }
 
@@ -247,7 +243,7 @@ fn to_bevy_translation(canvas_x: f64, canvas_y: f64, width: f64, height: f64, z:
 }
 
 fn emit_event_value(value: &Value) -> Result<(), JsValue> {
-    let payload = js_value_from_json_value(value)?;
+    let payload = js_value_from_serializable(value)?;
     BRIDGE_SHARED.with(|shared| {
         shared
             .borrow()
@@ -276,19 +272,15 @@ fn emit_fatal_payload(message: &str) -> JsValue {
         "code": "pixel_world_renderer_fatal",
         "message": message,
     });
-    if let Ok(js_payload) = js_value_from_json_value(&payload) {
+    if let Ok(js_payload) = js_value_from_serializable(&payload) {
         BRIDGE_SHARED.with(|shared| {
             if let Some(on_fatal) = shared.borrow().on_fatal.as_ref() {
                 let _ = on_fatal.call1(&JsValue::NULL, &js_payload);
             }
         });
     }
-    json!({ "status": "fallback", "fatal": payload })
-        .to_string()
-        .parse::<String>()
-        .ok()
-        .and_then(|encoded| JSON::parse(&encoded).ok())
-        .unwrap_or_else(|| status_value("fallback"))
+    js_value_from_serializable(&json!({ "status": "fallback", "fatal": payload }))
+        .unwrap_or_else(|_| status_value("fallback"))
 }
 
 fn shared_snapshot() -> SharedSnapshot {
