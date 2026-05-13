@@ -1,0 +1,23 @@
+task_uid: task_3432ce6ab4fc47fb84811bcfef2c22c8
+title: "viewer web ui automation baseline"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-viewer-web-ui-automation-baseline
+execution_log_path: .pm/tasks/task_3432ce6ab4fc47fb84811bcfef2c22c8.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md
+  - testing-manual.md
+doc_refs:
+  - doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md
+related_prd:
+  - PRD-WORLD_SIMULATOR-046
+acceptance:
+  - "viewer web entry structure anchors have repo-owned automated assertions"
+  - "viewer prompt overrides and agent chat surfaces have automated regression coverage"
+  - "testing-manual viewer gate description matches actual required/release wiring"
+handoff_to: []
+updated_at: 2026-05-13T21:14:36+08:00
+last_started_at: 2026-05-13T20:46:58+08:00
+last_closed_at: 2026-05-13T21:14:36+08:00

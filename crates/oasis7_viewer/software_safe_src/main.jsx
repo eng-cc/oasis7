@@ -1587,16 +1587,29 @@ function AppShell() {
   );
 }
 
-const app = document.getElementById("app");
-if (!app) {
-  throw new Error("viewer root #app is missing");
+export { AppShell };
+
+export function mountViewerApp(root = document.getElementById("app")) {
+  if (!root) {
+    throw new Error("viewer root #app is missing");
+  }
+
+  let dispose = mount(() => <AppShell />, root);
+  core.setRenderHook(() => {
+    dispose();
+    root.textContent = "";
+    dispose = mount(() => <AppShell />, root);
+  });
+
+  core.initializeSoftwareSafeCore();
+
+  return () => {
+    core.setRenderHook(null);
+    dispose();
+    root.textContent = "";
+  };
 }
 
-let dispose = mount(() => <AppShell />, app);
-core.setRenderHook(() => {
-  dispose();
-  app.textContent = "";
-  dispose = mount(() => <AppShell />, app);
-});
-
-core.initializeSoftwareSafeCore();
+if (document.getElementById("app")) {
+  mountViewerApp();
+}
