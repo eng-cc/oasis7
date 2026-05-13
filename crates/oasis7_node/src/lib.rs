@@ -632,6 +632,7 @@ impl NodeRuntime {
                 node_id: self.config.node_id.clone(),
             })?;
         }
+        self.gossip_endpoint = None;
         self.running.store(false, Ordering::SeqCst);
         Ok(())
     }

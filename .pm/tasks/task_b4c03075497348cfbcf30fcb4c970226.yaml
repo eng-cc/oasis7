@@ -1,0 +1,27 @@
+task_uid: task_b4c03075497348cfbcf30fcb4c970226
+title: "repair oasis7_node replication lib regressions from issue 182"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-issue-182-replication-lib-regressions
+execution_log_path: .pm/tasks/task_b4c03075497348cfbcf30fcb4c970226.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/prd.md
+  - doc/p2p/project.md
+  - crates/oasis7_node/src/tests_storage_replication.rs
+  - crates/oasis7_node/src/tests_hardening.rs
+  - crates/oasis7_node/src/tests/non_sequencer_followers.rs
+doc_refs: []
+related_prd:
+  - PRD-P2P-001
+  - PRD-P2P-003
+acceptance:
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_respects_topic_isolation -- --nocapture passes"
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode -- --nocapture passes"
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_gossip_replication_persists_guard_across_restart -- --nocapture passes"
+  - "env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib passes"
+handoff_to: []
+updated_at: 2026-05-13T22:04:57+08:00
+last_started_at: 2026-05-13T21:57:14+08:00
+last_closed_at: 2026-05-13T22:04:57+08:00
