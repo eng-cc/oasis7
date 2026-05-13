@@ -72,8 +72,10 @@
   - Agent chat
   - prompt override 展开链路
   - `__AW_TEST__` 合同
+- 嵌入式世界舞台必须以 wasm bridge 作为唯一 renderer runtime；若 bridge 缺失或启动失败，页面应显式退回 host fallback/callout，而不是静默切到第二套 JS renderer。
 - repo-owned 回归至少分两层：
   - 结构 / DOM 层：`Vitest + @solidjs/testing-library` 断言 `World / Targets / Command` 锚点、`Runtime Diagnostics` / `Session Ladder` / `Hosted Action Matrix` 降级面，以及 `Agent Chat` / `Prompt Overrides` 的可达性。
+  - 渲染 runtime 层：repo-owned 测试必须覆盖“wasm bridge 成功加载”和“wasm bridge 缺失时显式 fallback surface”两条分支。
   - headed browser 层：保留现有 `agent-browser` / release strict 脚本，验证真实页面加载、选择、实时推进、prompt/chat flow 与截图证据。
 
 ## 接口 / 数据
@@ -128,3 +130,4 @@
 | --- | --- | --- | --- | --- |
 | PRD-WORLD_SIMULATOR-046 | `task_367fa36f5a514e9ea3bc11da95cd8d5d` | `test_tier_required` | `npm run build:software-safe` + repo-owned Web regression + `agent-browser` 截图采证 + `./scripts/doc-governance-check.sh` + `git diff --check` | Viewer Web 单入口结构、视觉层级、移动端主路径与现有测试契约 |
 | PRD-WORLD_SIMULATOR-046 | `task_3432ce6ab4fc47fb84811bcfef2c22c8` | `test_tier_required` | `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs` + `npm --prefix crates/oasis7_viewer run test:ui` + `npm --prefix crates/oasis7_viewer run build:software-safe` | Viewer Web 单入口结构锚点、Prompt/Chat surface、diagnostics 降级面与 repo-owned DOM 回归 |
+| PRD-WORLD_SIMULATOR-046 | `task_15efbff5922a421e976430906e54c01f` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui` + `npm --prefix crates/oasis7_viewer run build:software-safe` + `./scripts/doc-governance-check.sh` + `git diff --check` | Pixel-world wasm runtime contract、explicit fallback surface 与 Viewer Web 渲染链真值 |

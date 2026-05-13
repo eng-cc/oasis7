@@ -457,8 +457,8 @@ export function PixelWorldHost(props) {
         <div class="feedback-detail">
           {tr(
             locale(),
-            "当前已接入 host-side render DTO、嵌入式 canvas、轻量拖拽缩放和事件回传。后续 Bevy wasm 将接管这个渲染面，但不接管 auth/chat/prompt/control 主链。",
-            "This now wires the host-side render DTO, embedded canvas, light pan-zoom interaction, and event callbacks. Future Bevy wasm will take over this render surface without taking over auth/chat/prompt/control ownership.",
+            "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。",
+            "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer.",
           )}
         </div>
       </div>
