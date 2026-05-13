@@ -7344,8 +7344,15 @@ function mountViewerApp(root = document.getElementById("app")) {
     root.textContent = "";
   };
 }
-if (document.getElementById("app")) {
-  mountViewerApp();
+function shouldBypassAutoMountForTestApi() {
+  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+const autoMountRoot = document.getElementById("app");
+if (autoMountRoot) {
+  mountViewerApp(autoMountRoot);
+} else if (!shouldBypassAutoMountForTestApi()) {
+  throw new Error("viewer root #app is missing");
 }
 delegateEvents(["click", "input"]);
 export {

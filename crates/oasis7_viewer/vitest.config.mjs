@@ -10,7 +10,7 @@ export default defineConfig({
     include: ["software_safe_src/**/*.test.jsx"],
     environmentOptions: {
       jsdom: {
-        url: "http://127.0.0.1:4173/software_safe.html?test_api=1&locale=en",
+        url: "http://127.0.0.1:4173/software_safe.html?test_api=1&connect=0&locale=en",
       },
     },
   },
