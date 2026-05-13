@@ -52,12 +52,15 @@ fn runtime_network_replication_respects_topic_isolation() {
             NodeReplicationNetworkHandle::new(Arc::clone(&network))
                 .with_topic("aw.world-topic-repl.replication.a")
                 .expect("topic a"),
-        );
-    let mut runtime_b = NodeRuntime::new(config_b).with_replication_network(
-        NodeReplicationNetworkHandle::new(Arc::clone(&network))
-            .with_topic("aw.world-topic-repl.replication.b")
-            .expect("topic b"),
-    );
+        )
+        .with_replication_network_consensus_enabled(false);
+    let mut runtime_b = NodeRuntime::new(config_b)
+        .with_replication_network(
+            NodeReplicationNetworkHandle::new(Arc::clone(&network))
+                .with_topic("aw.world-topic-repl.replication.b")
+                .expect("topic b"),
+        )
+        .with_replication_network_consensus_enabled(false);
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
     thread::sleep(Duration::from_millis(220));

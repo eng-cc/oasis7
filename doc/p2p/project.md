@@ -688,6 +688,20 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node libp2p_replication_network -- --nocapture`
     - `./scripts/doc-governance-check.sh`
     - `./scripts/check-rust-file-size.sh`
+- [x] issue-182-replication-lib-regressions (PRD-P2P-001/003) [test_tier_required]: 修复 GitHub issue `#182` 中剩余的 `oasis7_node --lib` regression，收口 gossip restart socket 释放、replication topic isolation 测试边界与 signed fetch handler 测试角色假设，恢复 `oasis7_node --lib` 全绿。 Trace: .pm/tasks/task_b4c03075497348cfbcf30fcb4c970226.yaml
+  - 产物文件:
+    - `crates/oasis7_node/src/lib.rs`
+    - `crates/oasis7_node/src/tests/non_sequencer_followers.rs`
+    - `crates/oasis7_node/src/tests_hardening.rs`
+    - `doc/p2p/project.md`
+    - `.pm/tasks/task_b4c03075497348cfbcf30fcb4c970226.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_respects_topic_isolation -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_gossip_replication_persists_guard_across_restart -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
     - `git diff --check`
 
 ## 依赖

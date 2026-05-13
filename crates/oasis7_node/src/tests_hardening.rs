@@ -648,7 +648,7 @@ fn runtime_fetch_handlers_reject_unsigned_fetch_request_in_signed_mode() {
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = Arc::new(TestInMemoryNetwork::default());
 
-    let config = NodeConfig::new("node-a", world_id, NodeRole::Observer)
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Storage)
         .expect("config")
         .with_tick_interval(Duration::from_millis(10))
         .expect("tick")
