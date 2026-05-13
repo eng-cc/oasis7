@@ -322,12 +322,12 @@ function handleError(err, owner = Owner) {
   throw error;
 }
 const FALLBACK = /* @__PURE__ */ Symbol("fallback");
-function dispose$1(d) {
+function dispose(d) {
   for (let i = 0; i < d.length; i++) d[i]();
 }
 function mapArray(list, mapFn, options = {}) {
   let items = [], mapped = [], disposers = [], len = 0, indexes = mapFn.length > 1 ? [] : null;
-  onCleanup(() => dispose$1(disposers));
+  onCleanup(() => dispose(disposers));
   return () => {
     let newItems = list() || [], newLen = newItems.length, i, j;
     newItems[$TRACK];
@@ -335,7 +335,7 @@ function mapArray(list, mapFn, options = {}) {
       let newIndices, newIndicesNext, temp, tempdisposers, tempIndexes, start, end, newEnd, item;
       if (newLen === 0) {
         if (len !== 0) {
-          dispose$1(disposers);
+          dispose(disposers);
           disposers = [];
           items = [];
           mapped = [];
@@ -7327,15 +7327,28 @@ function AppShell() {
     return _el$216;
   })()];
 }
-const app = document.getElementById("app");
-if (!app) {
-  throw new Error("viewer root #app is missing");
+function mountViewerApp(root = document.getElementById("app")) {
+  if (!root) {
+    throw new Error("viewer root #app is missing");
+  }
+  let dispose2 = render$1(() => createComponent(AppShell, {}), root);
+  setRenderHook(() => {
+    dispose2();
+    root.textContent = "";
+    dispose2 = render$1(() => createComponent(AppShell, {}), root);
+  });
+  initializeSoftwareSafeCore();
+  return () => {
+    setRenderHook(null);
+    dispose2();
+    root.textContent = "";
+  };
 }
-let dispose = render$1(() => createComponent(AppShell, {}), app);
-setRenderHook(() => {
-  dispose();
-  app.textContent = "";
-  dispose = render$1(() => createComponent(AppShell, {}), app);
-});
-initializeSoftwareSafeCore();
+if (document.getElementById("app")) {
+  mountViewerApp();
+}
 delegateEvents(["click", "input"]);
+export {
+  AppShell,
+  mountViewerApp
+};

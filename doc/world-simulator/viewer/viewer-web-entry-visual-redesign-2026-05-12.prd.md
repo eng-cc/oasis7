@@ -72,6 +72,9 @@
   - Agent chat
   - prompt override 展开链路
   - `__AW_TEST__` 合同
+- repo-owned 回归至少分两层：
+  - 结构 / DOM 层：`Vitest + @solidjs/testing-library` 断言 `World / Targets / Command` 锚点、`Runtime Diagnostics` / `Session Ladder` / `Hosted Action Matrix` 降级面，以及 `Agent Chat` / `Prompt Overrides` 的可达性。
+  - headed browser 层：保留现有 `agent-browser` / release strict 脚本，验证真实页面加载、选择、实时推进、prompt/chat flow 与截图证据。
 
 ## 接口 / 数据
 - 静态入口：
@@ -124,3 +127,4 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-WORLD_SIMULATOR-046 | `task_367fa36f5a514e9ea3bc11da95cd8d5d` | `test_tier_required` | `npm run build:software-safe` + repo-owned Web regression + `agent-browser` 截图采证 + `./scripts/doc-governance-check.sh` + `git diff --check` | Viewer Web 单入口结构、视觉层级、移动端主路径与现有测试契约 |
+| PRD-WORLD_SIMULATOR-046 | `task_3432ce6ab4fc47fb84811bcfef2c22c8` | `test_tier_required` | `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs` + `npm --prefix crates/oasis7_viewer run test:ui` + `npm --prefix crates/oasis7_viewer run build:software-safe` | Viewer Web 单入口结构锚点、Prompt/Chat surface、diagnostics 降级面与 repo-owned DOM 回归 |

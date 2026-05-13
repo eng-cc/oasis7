@@ -76,7 +76,8 @@
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
   - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`、`cargo test -p oasis7_viewer`、`cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
+  - `npm --prefix crates/oasis7_viewer run test:ui`
+  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-rust-file-size.sh`
@@ -85,9 +86,9 @@
     - 该 shard 现在只覆盖轻量核心基线；需要注册或执行 builtin wasm artifact 的 runtime 闭环用例已下放到 `test_tier_full`。
   - `cargo test -p oasis7_consensus --lib`
   - `cargo test -p oasis7_distfs --lib`
-  - `cargo test -p oasis7_viewer`
   - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
-  - `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`
+  - `npm --prefix crates/oasis7_viewer run test:ui`
+  - `npm --prefix crates/oasis7_viewer run build:software-safe`
 - `full`：
   - `required` 全部
   - `cargo test -p oasis7 --tests --features test_tier_full,wasmtime,viewer_live_integration`
@@ -376,6 +377,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 - 若只想先确认 Web/UI automation tooling 本身没有漂移，而不想起完整 runtime/build，先执行 `./scripts/viewer-software-safe-step-regression-smoke.sh`；它会用临时 fixture 页面复用真 `agent-browser` 与 `viewer-software-safe-step-regression.sh` 验证最小浏览器链路和 summary/state 产物契约，但不替代正式 S6 证据。
 - 若需要把 `software_safe` 的 prompt/chat/rollback/message-flow 做成独立 QA smoke，优先执行 `./scripts/viewer-software-safe-chat-regression.sh`；当脚本自举 source stack 并自动启用 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1` 时，若 QA echo 没有在 `chat ack` 后、无额外 `step/play` 的同一轮交互里进入消息流，会直接判为阻断失败；外部 URL 场景仍默认把 `agent_spoke` 缺失记为可追溯 warning，显式加 `--require-agent-spoke` 时再升级为阻断失败。
 - 若改动只触达 `software_safe` feedback 语义映射而不需要浏览器自举，优先执行 `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`；该 deterministic contract regression 已纳入 `./scripts/ci-tests.sh required`。
+- 若改动触达 `crates/oasis7_viewer/software_safe_src/**` 的结构、Prompt/Chat surface、主入口锚点或移动端分区导航，优先执行 `npm --prefix crates/oasis7_viewer run test:ui`；这套 Vitest + `@solidjs/testing-library` 回归用于验证 repo-owned `World / Targets / Command` 锚点、`Runtime Diagnostics` 降级面、`Agent Chat` 与 `Prompt Overrides` 的 DOM 可达性，不替代 S6 headed browser 证据。
 - 若需要稳定触发一条标准 `AgentSpoke` 供消息流验收，在 source runtime 启动前显式设置 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`；该开关仅用于 Viewer / QA 测试态，默认产品路径必须保持关闭。
 - 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，必须查看 `window.__AW_TEST__.getState().lastError`；命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
 - `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
