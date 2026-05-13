@@ -702,7 +702,6 @@
     - `env -u RUSTC_WRAPPER cargo test -p oasis7_node --lib`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
-    - `git diff --check`
 
 ## 依赖
 - 模块设计总览：`doc/p2p/design.md`

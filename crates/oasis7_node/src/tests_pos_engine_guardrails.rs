@@ -1,5 +1,19 @@
 use super::*;
 
+struct PanicExecutionHook {
+    called: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl NodeExecutionHook for PanicExecutionHook {
+    fn on_commit(
+        &mut self,
+        _context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        self.called.store(true, std::sync::atomic::Ordering::SeqCst);
+        panic!("panic execution hook");
+    }
+}
+
 #[test]
 fn pos_engine_commits_single_validator_head() {
     let config = NodeConfig::new("node-a", "world-a", NodeRole::Observer).expect("config");
@@ -447,4 +461,44 @@ fn runtime_start_and_stop_updates_snapshot() {
     let stopped = runtime.snapshot();
     assert!(!stopped.running);
     assert!(stopped.tick_count >= running.tick_count);
+}
+
+#[test]
+fn runtime_stop_cleans_up_after_worker_join_failure() {
+    let socket = UdpSocket::bind("127.0.0.1:0").expect("bind socket");
+    let addr = socket.local_addr().expect("addr");
+    drop(socket);
+
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let config = NodeConfig::new("node-a", "world-join-failure", NodeRole::Observer)
+        .expect("config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("tick interval")
+        .with_gossip_optional(addr, Vec::new());
+    let mut runtime = NodeRuntime::new(config).with_execution_hook(PanicExecutionHook {
+        called: Arc::clone(&called),
+    });
+    runtime.start().expect("start");
+
+    let hook_panicked = wait_until(Instant::now() + Duration::from_secs(1), || {
+        called.load(std::sync::atomic::Ordering::SeqCst)
+    });
+    assert!(hook_panicked, "execution hook did not run before stop");
+
+    let err = runtime
+        .stop()
+        .expect_err("stop should surface thread join failure");
+    assert!(matches!(err, NodeError::ThreadJoinFailed { .. }));
+    assert!(!runtime.snapshot().running);
+
+    let config_retry = NodeConfig::new("node-b", "world-join-failure", NodeRole::Observer)
+        .expect("retry config")
+        .with_tick_interval(Duration::from_millis(10))
+        .expect("retry tick interval")
+        .with_gossip_optional(addr, Vec::new());
+    let mut retry_runtime = NodeRuntime::new(config_retry);
+    retry_runtime
+        .start()
+        .expect("start retry runtime on released socket");
+    retry_runtime.stop().expect("stop retry runtime");
 }
