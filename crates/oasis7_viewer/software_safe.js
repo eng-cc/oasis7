@@ -4009,387 +4009,6 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-function createInitialCameraState() {
-  return {
-    zoom: 1,
-    pan_x_px: 0,
-    pan_y_px: 0
-  };
-}
-function toCanvasPoint(position, worldBounds, width, height, cameraState) {
-  if (!position || !worldBounds) {
-    return null;
-  }
-  const safeWidth = Math.max(1, Number(worldBounds.width_cm) || 1);
-  const safeDepth = Math.max(1, Number(worldBounds.depth_cm) || 1);
-  const normalizedX = clamp(position.x_cm / safeWidth, 0, 1);
-  const normalizedY = clamp(position.y_cm / safeDepth, 0, 1);
-  const baseX = 20 + normalizedX * Math.max(1, width - 40);
-  const baseY = 20 + normalizedY * Math.max(1, height - 40);
-  const zoom = Math.max(0.5, Number(cameraState?.zoom) || 1);
-  const panX = Number(cameraState?.pan_x_px) || 0;
-  const panY = Number(cameraState?.pan_y_px) || 0;
-  const centeredX = baseX - width / 2;
-  const centeredY = baseY - height / 2;
-  return {
-    x: width / 2 + centeredX * zoom + panX,
-    y: height / 2 + centeredY * zoom + panY
-  };
-}
-function fallbackPointForEntity(id, width, height, cameraState) {
-  const baseX = 36 + Math.abs(id.length * 29) % Math.max(40, width - 72);
-  const baseY = 44 + Math.abs(id.length * 17) % Math.max(48, height - 88);
-  return toCanvasPoint(
-    { x_cm: baseX, y_cm: baseY },
-    { width_cm: width, depth_cm: height },
-    width,
-    height,
-    cameraState
-  );
-}
-function drawGrid(context, width, height, cameraState) {
-  const zoom = Math.max(0.5, Number(cameraState?.zoom) || 1);
-  const panX = Number(cameraState?.pan_x_px) || 0;
-  const panY = Number(cameraState?.pan_y_px) || 0;
-  const gridStep = clamp(24 * zoom, 12, 72);
-  const offsetX = (panX % gridStep + gridStep) % gridStep;
-  const offsetY = (panY % gridStep + gridStep) % gridStep;
-  context.strokeStyle = "rgba(99, 179, 255, 0.10)";
-  context.lineWidth = 1;
-  for (let x = offsetX; x <= width; x += gridStep) {
-    context.beginPath();
-    context.moveTo(x + 0.5, 0);
-    context.lineTo(x + 0.5, height);
-    context.stroke();
-  }
-  for (let y = offsetY; y <= height; y += gridStep) {
-    context.beginPath();
-    context.moveTo(0, y + 0.5);
-    context.lineTo(width, y + 0.5);
-    context.stroke();
-  }
-}
-function drawBridgeFrame(canvas, renderState, cameraState, animationMs) {
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("2d canvas context unavailable");
-  }
-  const width = canvas.width;
-  const height = canvas.height;
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = "#0a121a";
-  context.fillRect(0, 0, width, height);
-  drawGrid(context, width, height, cameraState);
-  for (const location of renderState.locations || []) {
-    const point = toCanvasPoint(location.pos, renderState.world_bounds, width, height, cameraState);
-    if (!point) {
-      continue;
-    }
-    const pulse = 1 + 0.08 * Math.sin(animationMs / 360 + location.id.length);
-    const size = 16 * pulse;
-    context.fillStyle = "rgba(110, 231, 183, 0.72)";
-    context.fillRect(point.x - size / 2, point.y - size / 2, size, size);
-    context.strokeStyle = "rgba(110, 231, 183, 0.95)";
-    context.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
-  }
-  for (const [index, agent] of (renderState.agents || []).entries()) {
-    const point = toCanvasPoint(agent.pos, renderState.world_bounds, width, height, cameraState) || fallbackPointForEntity(agent.id, width, height, cameraState);
-    const isSelected = renderState.selection?.kind === "agent" && renderState.selection?.id === agent.id;
-    const pulse = 1 + 0.12 * Math.sin(animationMs / 240 + index);
-    const size = (isSelected ? 15 : 12) * pulse;
-    context.fillStyle = isSelected ? "#fbbf24" : "#63b3ff";
-    context.fillRect(point.x - size / 2, point.y - size / 2, size, size);
-    context.strokeStyle = isSelected ? "#fde68a" : "#c6e4ff";
-    context.lineWidth = 2;
-    context.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
-  }
-}
-function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
-  let mountedCanvas = null;
-  let lastRenderState = null;
-  let hitRegions = [];
-  let cameraState = createInitialCameraState();
-  let boundPointerDown = null;
-  let boundPointerMove = null;
-  let boundPointerUp = null;
-  let boundWheel = null;
-  let boundClick = null;
-  let lastHoverId = null;
-  let dragState = null;
-  let animationFrameId = null;
-  let lastAnimationMs = 0;
-  function emit(event) {
-    onEvent?.(event);
-  }
-  function emitCameraState() {
-    emit({
-      type: "camera_state_changed",
-      camera: {
-        zoom: Number(cameraState.zoom.toFixed(3)),
-        pan_x_px: Math.round(cameraState.pan_x_px),
-        pan_y_px: Math.round(cameraState.pan_y_px)
-      }
-    });
-  }
-  function fatal(error) {
-    const normalized = {
-      code: "pixel_world_renderer_fatal",
-      message: error instanceof Error ? error.message : String(error || "renderer fatal")
-    };
-    onFatal?.(normalized);
-    return normalized;
-  }
-  function rebuildHitRegions(canvas, renderState) {
-    const width = canvas.width;
-    const height = canvas.height;
-    const nextRegions = [];
-    for (const location of renderState.locations || []) {
-      const point = toCanvasPoint(location.pos, renderState.world_bounds, width, height, cameraState);
-      if (!point) {
-        continue;
-      }
-      nextRegions.push({
-        kind: "location",
-        id: location.id,
-        left: point.x - 8,
-        top: point.y - 8,
-        right: point.x + 8,
-        bottom: point.y + 8
-      });
-    }
-    for (const agent of renderState.agents || []) {
-      const point = toCanvasPoint(agent.pos, renderState.world_bounds, width, height, cameraState) || fallbackPointForEntity(agent.id, width, height, cameraState);
-      nextRegions.push({
-        kind: "agent",
-        id: agent.id,
-        left: point.x - 8,
-        top: point.y - 8,
-        right: point.x + 8,
-        bottom: point.y + 8
-      });
-    }
-    hitRegions = nextRegions;
-  }
-  function renderCurrentFrame(animationMs = lastAnimationMs) {
-    if (!mountedCanvas || !lastRenderState) {
-      return;
-    }
-    lastAnimationMs = animationMs;
-    drawBridgeFrame(mountedCanvas, lastRenderState, cameraState, animationMs);
-    rebuildHitRegions(mountedCanvas, lastRenderState);
-  }
-  function stopAnimationLoop() {
-    if (animationFrameId !== null) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-  }
-  function scheduleAnimationLoop() {
-    stopAnimationLoop();
-    const animate = (animationMs) => {
-      animationFrameId = requestAnimationFrame(animate);
-      try {
-        renderCurrentFrame(animationMs);
-      } catch (error) {
-        stopAnimationLoop();
-        fatal(error);
-      }
-    };
-    animationFrameId = requestAnimationFrame(animate);
-  }
-  function eventPoint(canvas, event) {
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) {
-      return null;
-    }
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY
-    };
-  }
-  function hitTest(point) {
-    if (!point) {
-      return null;
-    }
-    for (let index = hitRegions.length - 1; index >= 0; index -= 1) {
-      const region = hitRegions[index];
-      if (point.x >= region.left && point.x <= region.right && point.y >= region.top && point.y <= region.bottom) {
-        return { kind: region.kind, id: region.id };
-      }
-    }
-    return null;
-  }
-  function detachCanvasEvents() {
-    if (!mountedCanvas) {
-      return;
-    }
-    if (boundPointerDown) {
-      mountedCanvas.removeEventListener("pointerdown", boundPointerDown);
-    }
-    if (boundPointerMove) {
-      mountedCanvas.removeEventListener("pointermove", boundPointerMove);
-      mountedCanvas.removeEventListener("pointerleave", boundPointerMove);
-    }
-    if (boundPointerUp) {
-      mountedCanvas.removeEventListener("pointerup", boundPointerUp);
-      mountedCanvas.removeEventListener("pointercancel", boundPointerUp);
-    }
-    if (boundWheel) {
-      mountedCanvas.removeEventListener("wheel", boundWheel);
-    }
-    if (boundClick) {
-      mountedCanvas.removeEventListener("click", boundClick);
-    }
-    dragState = null;
-    mountedCanvas.style.cursor = "default";
-    boundPointerDown = null;
-    boundPointerMove = null;
-    boundPointerUp = null;
-    boundWheel = null;
-    boundClick = null;
-    lastHoverId = null;
-  }
-  function attachCanvasEvents(canvas) {
-    detachCanvasEvents();
-    boundPointerDown = (event) => {
-      dragState = {
-        pointerId: event.pointerId,
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        startPanX: cameraState.pan_x_px,
-        startPanY: cameraState.pan_y_px,
-        moved: false
-      };
-      canvas.style.cursor = "grabbing";
-      canvas.setPointerCapture?.(event.pointerId);
-    };
-    boundPointerMove = (event) => {
-      if (dragState && event.pointerId === dragState.pointerId) {
-        const deltaX = event.clientX - dragState.startClientX;
-        const deltaY = event.clientY - dragState.startClientY;
-        if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-          dragState.moved = true;
-        }
-        cameraState = {
-          ...cameraState,
-          pan_x_px: dragState.startPanX + deltaX,
-          pan_y_px: dragState.startPanY + deltaY
-        };
-        renderCurrentFrame();
-        emitCameraState();
-        return;
-      }
-      if (event.type === "pointerleave") {
-        if (lastHoverId !== null) {
-          lastHoverId = null;
-          emit({ type: "hover_entity", selection: null });
-        }
-        canvas.style.cursor = "default";
-        return;
-      }
-      const hit = hitTest(eventPoint(canvas, event));
-      const hoverKey = hit ? `${hit.kind}/${hit.id}` : null;
-      if (hoverKey === lastHoverId) {
-        return;
-      }
-      lastHoverId = hoverKey;
-      canvas.style.cursor = hit ? "pointer" : "grab";
-      emit({ type: "hover_entity", selection: hit });
-    };
-    boundPointerUp = (event) => {
-      if (dragState && event.pointerId === dragState.pointerId) {
-        canvas.releasePointerCapture?.(event.pointerId);
-        const moved = dragState.moved;
-        dragState = null;
-        canvas.style.cursor = moved ? "grab" : lastHoverId ? "pointer" : "default";
-      }
-    };
-    boundWheel = (event) => {
-      event.preventDefault();
-      const nextZoom = clamp(
-        cameraState.zoom * (event.deltaY < 0 ? 1.12 : 0.89),
-        0.6,
-        3.5
-      );
-      if (Math.abs(nextZoom - cameraState.zoom) < 1e-3) {
-        return;
-      }
-      cameraState = {
-        ...cameraState,
-        zoom: nextZoom
-      };
-      renderCurrentFrame();
-      emitCameraState();
-    };
-    boundClick = (event) => {
-      if (dragState?.moved) {
-        return;
-      }
-      const hit = hitTest(eventPoint(canvas, event));
-      if (!hit) {
-        return;
-      }
-      emit({ type: "select_entity", selection: hit });
-    };
-    canvas.style.cursor = "grab";
-    canvas.addEventListener("pointerdown", boundPointerDown);
-    canvas.addEventListener("pointermove", boundPointerMove);
-    canvas.addEventListener("pointerleave", boundPointerMove);
-    canvas.addEventListener("pointerup", boundPointerUp);
-    canvas.addEventListener("pointercancel", boundPointerUp);
-    canvas.addEventListener("wheel", boundWheel, { passive: false });
-    canvas.addEventListener("click", boundClick);
-  }
-  return {
-    mount(canvas, initialRenderState) {
-      if (!(canvas instanceof HTMLCanvasElement)) {
-        throw new Error("pixel world bridge mount requires a canvas element");
-      }
-      mountedCanvas = canvas;
-      lastRenderState = initialRenderState;
-      cameraState = createInitialCameraState();
-      try {
-        attachCanvasEvents(canvas);
-        renderCurrentFrame(0);
-        scheduleAnimationLoop();
-      } catch (error) {
-        return { status: "fallback", fatal: fatal(error) };
-      }
-      emit({ type: "canvas_ready" });
-      emitCameraState();
-      return { status: "ready" };
-    },
-    update(nextRenderState) {
-      lastRenderState = nextRenderState;
-      if (!mountedCanvas) {
-        return { status: "detached" };
-      }
-      try {
-        renderCurrentFrame();
-      } catch (error) {
-        return { status: "fallback", fatal: fatal(error) };
-      }
-      return { status: "ready" };
-    },
-    unmount() {
-      stopAnimationLoop();
-      detachCanvasEvents();
-      mountedCanvas = null;
-      lastRenderState = null;
-      hitRegions = [];
-      cameraState = createInitialCameraState();
-      return { status: "detached" };
-    },
-    getLastRenderState() {
-      return lastRenderState;
-    }
-  };
-}
 function resolvePixelWorldRuntimeModuleUrl() {
   if (typeof window !== "undefined" && window.location) {
     return new URL("./pixel-world-bridge/pixel_world_bridge.js", window.location.href).href;
@@ -4397,32 +4016,97 @@ function resolvePixelWorldRuntimeModuleUrl() {
   return "./pixel-world-bridge/pixel_world_bridge.js";
 }
 const PIXEL_WORLD_WASM_MODULE_URL = resolvePixelWorldRuntimeModuleUrl();
-async function tryLoadWasmBridgeModule() {
+const PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE = "pixel_world_renderer_runtime_unavailable";
+function defaultLoadRuntimeModule() {
+  return import(
+    /* @vite-ignore */
+    PIXEL_WORLD_WASM_MODULE_URL
+  );
+}
+function normalizeRuntimeModuleError(error) {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error || "unknown pixel world runtime import failure"));
+}
+async function tryLoadWasmBridgeModule(loadRuntimeModule = defaultLoadRuntimeModule) {
   try {
+    const module = await loadRuntimeModule();
+    if (!module?.createPixelWorldBridge) {
+      throw new Error("pixel world runtime module is missing createPixelWorldBridge export");
+    }
     return {
-      module: await import(
-        /* @vite-ignore */
-        PIXEL_WORLD_WASM_MODULE_URL
-      ),
-      moduleUrl: PIXEL_WORLD_WASM_MODULE_URL
+      module,
+      moduleUrl: PIXEL_WORLD_WASM_MODULE_URL,
+      error: null
     };
-  } catch (_) {
-    return null;
+  } catch (error) {
+    return {
+      module: null,
+      moduleUrl: PIXEL_WORLD_WASM_MODULE_URL,
+      error: normalizeRuntimeModuleError(error)
+    };
   }
 }
-async function createPixelWorldRuntimeBridge({ onEvent, onFatal } = {}) {
-  const runtimeModule = await tryLoadWasmBridgeModule();
-  if (runtimeModule?.module?.createPixelWorldBridge) {
+function buildRuntimeUnavailableFatal(moduleUrl, error) {
+  const message = [
+    "pixel world wasm runtime is unavailable",
+    moduleUrl ? `module=${moduleUrl}` : null,
+    error?.message || null
+  ].filter(Boolean).join(": ");
+  return {
+    code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
+    message
+  };
+}
+function createUnavailableBridge({ fatal, onFatal }) {
+  let emitted = false;
+  function emitFatal() {
+    if (!emitted) {
+      emitted = true;
+      onFatal?.(fatal);
+    }
+  }
+  return {
+    mount() {
+      emitFatal();
+      return {
+        status: "fallback",
+        fatal
+      };
+    },
+    update() {
+      return {
+        status: "fallback",
+        fatal
+      };
+    },
+    unmount() {
+      return {
+        status: "detached"
+      };
+    }
+  };
+}
+async function createPixelWorldRuntimeBridge({
+  onEvent,
+  onFatal,
+  loadRuntimeModule = defaultLoadRuntimeModule
+} = {}) {
+  const runtimeModule = await tryLoadWasmBridgeModule(loadRuntimeModule);
+  if (runtimeModule.module?.createPixelWorldBridge) {
     return {
       bridge: await runtimeModule.module.createPixelWorldBridge({ onEvent, onFatal }),
       source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
       moduleUrl: runtimeModule.moduleUrl
     };
   }
+  const fatal = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, runtimeModule.error);
   return {
-    bridge: createPixelWorldBevyBridge({ onEvent, onFatal }),
-    source: "js_fallback",
-    moduleUrl: null
+    bridge: createUnavailableBridge({ fatal, onFatal }),
+    source: "wasm_import_failed",
+    moduleUrl: runtimeModule.moduleUrl,
+    fatal
   };
 }
 var _tmpl$$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface width=960 height=540></canvas><div class=pixel-world-canvas__overlay>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas><div class=pixel-world-canvas__grid></div><div class=pixel-world-canvas__overlay>`), _tmpl$6$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$7$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"><span>`), _tmpl$8$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$9$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$0$1 = /* @__PURE__ */ template(`<div class="callout callout--warn"><div class=callout__header><div class=callout__title></div></div><div class=callout__body><div class=feedback-summary>`), _tmpl$1$1 = /* @__PURE__ */ template(`<div class="pixel-world-host stack"><div class=pixel-world-host__summary><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><button type=button></button></div><details class=diagnostic><summary></summary><div class=stack style=margin-top:10px><pre class=json>`);
@@ -4890,7 +4574,7 @@ function PixelWorldHost(props) {
   return (() => {
     var _el$15 = _tmpl$1$1(), _el$16 = _el$15.firstChild, _el$17 = _el$16.firstChild, _el$18 = _el$17.nextSibling, _el$19 = _el$16.nextSibling, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$23.nextSibling, _el$25 = _el$24.nextSibling, _el$29 = _el$25.nextSibling, _el$30 = _el$29.nextSibling, _el$31 = _el$30.nextSibling, _el$38 = _el$19.nextSibling, _el$39 = _el$38.firstChild, _el$40 = _el$39.nextSibling, _el$41 = _el$40.firstChild;
     insert(_el$17, () => tr$1(locale(), "嵌入式像素世界层（Host Skeleton）", "Embedded Pixel World Layer (Host Skeleton)"));
-    insert(_el$18, () => tr$1(locale(), "当前已接入 host-side render DTO、嵌入式 canvas、轻量拖拽缩放和事件回传。后续 Bevy wasm 将接管这个渲染面，但不接管 auth/chat/prompt/control 主链。", "This now wires the host-side render DTO, embedded canvas, light pan-zoom interaction, and event callbacks. Future Bevy wasm will take over this render surface without taking over auth/chat/prompt/control ownership."));
+    insert(_el$18, () => tr$1(locale(), "当前世界舞台优先依赖 wasm bridge、嵌入式 canvas、轻量拖拽缩放和事件回传。若 wasm bridge 缺失或启动失败，页面会显式退回 host fallback，而不是继续保留一套 JS renderer。", "The world stage now depends on the wasm bridge, embedded canvas, light pan-zoom interaction, and event callbacks. If the wasm bridge is missing or fails to boot, the page falls back explicitly instead of keeping a second JS renderer."));
     insert(_el$20, () => `locations=${renderState().locations.length}`);
     insert(_el$21, () => `agents=${renderState().agents.length}`);
     insert(_el$22, () => `hotspots=${renderState().recent_event_hotspots.length}`);

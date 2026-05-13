@@ -7,7 +7,10 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./test/setup.js"],
-    include: ["software_safe_src/**/*.test.jsx"],
+    include: [
+      "software_safe_src/**/*.test.js",
+      "software_safe_src/**/*.test.jsx",
+    ],
     environmentOptions: {
       jsdom: {
         url: "http://127.0.0.1:4173/software_safe.html?test_api=1&connect=0&locale=en",
