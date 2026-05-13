@@ -11,10 +11,10 @@ python3 ./scripts/p2p-real-env-observability-summary.py \
   --snapshot-summary fixtures/p2p_real_env_observability/snapshot_summary.json \
   --host-summary fixtures/p2p_real_env_observability/host_summary.json \
   --traffic-summary fixtures/p2p_real_env_observability/traffic_summary.json \
-  --observer-wasm-summary fixtures/p2p_real_env_observability/observer_wasm_summary.json \
+  --local-wasm-summary fixtures/p2p_real_env_observability/local_wasm_summary.json \
   --sequencer-wasm-summary fixtures/p2p_real_env_observability/sequencer_wasm_summary.json \
   --storage-wasm-summary fixtures/p2p_real_env_observability/storage_wasm_summary.json \
-  --observer-status-json fixtures/p2p_real_env_observability/observer_status.json \
+  --local-status-json fixtures/p2p_real_env_observability/local_status.json \
   --sequencer-status-json fixtures/p2p_real_env_observability/sequencer_status.json \
   --storage-status-json fixtures/p2p_real_env_observability/storage_status.json \
   --summary-json "$tmp_root/summary.json" \
@@ -31,12 +31,12 @@ summary = json.loads(Path(sys.argv[1]).read_text())
 assert summary["snapshot"]["claim_status"] == "pass_candidate"
 assert summary["overall"]["status"] == "pass_with_resource_alerts"
 assert "sequencer_ecs" in summary["host"]["aggregate"]["alerted_nodes"]
-observer = summary["nodes"]["observer_local"]
-assert observer["role"] == "observer"
-assert observer["host"]["runtime_cpu_percent"] == 47.3
-assert observer["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
-assert observer["modules"]["consensus"]["status"] == "ok"
-assert observer["optimization_candidates"] == []
+local_node = summary["nodes"]["local_node"]
+assert local_node["role"] == "observer"
+assert local_node["host"]["runtime_cpu_percent"] == 47.3
+assert local_node["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
+assert local_node["modules"]["consensus"]["status"] == "ok"
+assert local_node["optimization_candidates"] == []
 sequencer = summary["nodes"]["sequencer_ecs"]
 assert "runtime_cpu_hot" in sequencer["alerts"]
 assert sequencer["traffic"]["control_plane_total_events"] == 178

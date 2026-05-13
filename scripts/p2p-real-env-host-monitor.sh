@@ -9,7 +9,7 @@ usage() {
 Usage: ./scripts/p2p-real-env-host-monitor.sh [options]
 
 Collect triad host/process monitoring samples from:
-  - local observer node
+  - local triad node
   - remote ECS sequencer node
   - remote ECS storage node
 
@@ -19,10 +19,11 @@ Options:
   --ssh-timeout-secs <n>           SSH connect timeout in seconds (default: 8)
   --out-dir <path>                 output root (default: .tmp/p2p_real_env_host_monitor)
 
-  --observer-service <name>        local observer systemd unit
+  --local-service <name>           local node systemd unit
                                    (default: oasis7-triad-observer.service)
-  --observer-storage-path <path>   local observer storage path
+  --local-storage-path <path>      local node storage path
                                    (default: /opt/oasis7/p2p-triad-local/data/storage)
+  --observer-*                     deprecated aliases for the local-* options above
 
   --sequencer-target <user@host>   remote sequencer SSH target
                                    (default: root@39.104.204.172)
@@ -84,8 +85,8 @@ interval_secs=5
 ssh_timeout_secs=8
 out_root=".tmp/p2p_real_env_host_monitor"
 
-observer_service="oasis7-triad-observer.service"
-observer_storage_path="/opt/oasis7/p2p-triad-local/data/storage"
+local_service="oasis7-triad-observer.service"
+local_storage_path="/opt/oasis7/p2p-triad-local/data/storage"
 
 sequencer_target="root@39.104.204.172"
 sequencer_service="oasis7-triad-sequencer.service"
@@ -113,12 +114,12 @@ while [[ $# -gt 0 ]]; do
       out_root=${2:-}
       shift 2
       ;;
-    --observer-service)
-      observer_service=${2:-}
+    --local-service|--observer-service)
+      local_service=${2:-}
       shift 2
       ;;
-    --observer-storage-path)
-      observer_storage_path=${2:-}
+    --local-storage-path|--observer-storage-path)
+      local_storage_path=${2:-}
       shift 2
       ;;
     --sequencer-target)
@@ -171,7 +172,7 @@ latest_summary_json="$out_root/latest_summary.json"
 latest_summary_md="$out_root/latest_summary.md"
 
 mkdir -p \
-  "$nodes_root/observer_local" \
+  "$nodes_root/local_node" \
   "$nodes_root/sequencer_ecs" \
   "$nodes_root/storage_ecs"
 : > "$samples_ndjson"
@@ -284,7 +285,7 @@ for ((sample_index = 1; sample_index <= samples; sample_index++)); do
   captured_at_unix_ms=$(( $(date +%s) * 1000 ))
   echo "host sample $sample_index/$samples @ $captured_at"
 
-  capture_sample observer_local local "$observer_service" "$observer_storage_path"
+  capture_sample local_node local "$local_service" "$local_storage_path"
   capture_sample sequencer_ecs remote "$sequencer_service" "$sequencer_storage_path" "$sequencer_target" "$seq_password"
   capture_sample storage_ecs remote "$storage_service" "$storage_storage_path" "$storage_target" "$storage_password"
 

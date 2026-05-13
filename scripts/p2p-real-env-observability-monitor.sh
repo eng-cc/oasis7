@@ -110,7 +110,7 @@ snapshot_run_dir="$(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d | sort
   exit 1
 }
 snapshot_summary="$snapshot_run_dir/summary.json"
-observer_status_json="$snapshot_run_dir/nodes/observer_local/status.json"
+local_status_json="$snapshot_run_dir/nodes/local_node/status.json"
 sequencer_status_json="$snapshot_run_dir/nodes/sequencer_ecs/status.json"
 storage_status_json="$snapshot_run_dir/nodes/storage_ecs/status.json"
 
@@ -138,7 +138,7 @@ host_summary="$host_run_dir/summary.json"
 
 traffic_summary="$traffic_root/latest_summary.json"
 
-for label in observer_local sequencer_ecs storage_ecs; do
+for label in local_node sequencer_ecs storage_ecs; do
   sample_source_dir="$snapshot_run_dir/nodes/$label/samples"
   wasm_input_dir="$wasm_root/input/$label"
   wasm_out_dir="$wasm_root/$label"
@@ -159,10 +159,10 @@ python3 ./scripts/p2p-real-env-observability-summary.py \
   --snapshot-summary "$snapshot_summary" \
   --host-summary "$host_summary" \
   --traffic-summary "$traffic_summary" \
-  --observer-wasm-summary "$wasm_root/observer_local/latest_summary.json" \
+  --local-wasm-summary "$wasm_root/local_node/latest_summary.json" \
   --sequencer-wasm-summary "$wasm_root/sequencer_ecs/latest_summary.json" \
   --storage-wasm-summary "$wasm_root/storage_ecs/latest_summary.json" \
-  --observer-status-json "$observer_status_json" \
+  --local-status-json "$local_status_json" \
   --sequencer-status-json "$sequencer_status_json" \
   --storage-status-json "$storage_status_json" \
   --summary-json "$report_root/latest_summary.json" \

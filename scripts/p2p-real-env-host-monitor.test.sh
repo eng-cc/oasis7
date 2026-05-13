@@ -23,9 +23,9 @@ summary = json.loads(Path(sys.argv[1]).read_text())
 assert summary["aggregate"]["node_count"] == 3
 assert summary["aggregate"]["alerted_node_count"] == 1
 assert summary["aggregate"]["highest_runtime_cpu_node"] == "sequencer_ecs"
-observer = summary["nodes"]["observer_local"]
-assert observer["status"]["runtime_cpu"] == "normal"
-assert round(observer["latest"]["runtime_cpu_percent"], 1) == 47.3
+local_node = summary["nodes"]["local_node"]
+assert local_node["status"]["runtime_cpu"] == "normal"
+assert round(local_node["latest"]["runtime_cpu_percent"], 1) == 47.3
 sequencer = summary["nodes"]["sequencer_ecs"]
 assert sequencer["status"]["runtime_cpu"] == "hot"
 assert "runtime_cpu_hot" in sequencer["alerts"]

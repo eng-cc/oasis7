@@ -7,7 +7,7 @@
     "highest_runtime_cpu_percent": 157.0
   },
   "nodes": {
-    "observer_local": {
+    "local_node": {
       "available": true,
       "alerts": [],
       "status": {

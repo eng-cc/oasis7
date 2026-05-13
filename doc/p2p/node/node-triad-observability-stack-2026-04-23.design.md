@@ -19,7 +19,7 @@
 
 2. `scripts/p2p-real-env-host-monitor.sh`
    - triad host/process monitor。
-   - 负责当前 real-env triad（物理上本机 + 2 ECS，artifact label 可继续沿用 `observer_local / sequencer_ecs / storage_ecs`，但 runtime role 以 sampled status 为准）的周期采样。
+   - 负责当前 real-env triad（物理上本机 + 2 ECS，artifact label 以 `local_node / sequencer_ecs / storage_ecs` 为准，历史 `observer_local` 仅作兼容别名，但 runtime role 以 sampled status 为准）的周期采样。
    - 产物：`samples.ndjson`、`summary.json`、`summary.md`。
 
 3. `scripts/p2p-real-env-host-summary.py`

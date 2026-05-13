@@ -7,7 +7,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-NODE_LABELS = ("observer_local", "sequencer_ecs", "storage_ecs")
+NODE_LABELS = ("local_node", "sequencer_ecs", "storage_ecs")
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 IGNORED_WASM_DEGRADED_REASONS = {"build metrics path not configured"}
 
@@ -22,10 +22,10 @@ def parse_args():
     parser.add_argument("--snapshot-summary", required=True)
     parser.add_argument("--host-summary", required=True)
     parser.add_argument("--traffic-summary", required=True)
-    parser.add_argument("--observer-wasm-summary", required=True)
+    parser.add_argument("--local-wasm-summary", "--observer-wasm-summary", dest="local_wasm_summary", required=True)
     parser.add_argument("--sequencer-wasm-summary", required=True)
     parser.add_argument("--storage-wasm-summary", required=True)
-    parser.add_argument("--observer-status-json")
+    parser.add_argument("--local-status-json", "--observer-status-json", dest="local_status_json")
     parser.add_argument("--sequencer-status-json")
     parser.add_argument("--storage-status-json")
     parser.add_argument("--summary-json", required=True)
@@ -923,12 +923,12 @@ def main():
     host = load_json(args.host_summary)
     traffic = load_json(args.traffic_summary)
     wasm = {
-        "observer_local": load_json(args.observer_wasm_summary),
+        "local_node": load_json(args.local_wasm_summary),
         "sequencer_ecs": load_json(args.sequencer_wasm_summary),
         "storage_ecs": load_json(args.storage_wasm_summary),
     }
     raw_statuses = {
-        "observer_local": load_json(args.observer_status_json),
+        "local_node": load_json(args.local_status_json),
         "sequencer_ecs": load_json(args.sequencer_status_json),
         "storage_ecs": load_json(args.storage_status_json),
     }
@@ -971,12 +971,12 @@ def main():
         "host_summary_path": args.host_summary,
         "traffic_summary_path": args.traffic_summary,
         "wasm_summary_paths": {
-            "observer_local": args.observer_wasm_summary,
+            "local_node": args.local_wasm_summary,
             "sequencer_ecs": args.sequencer_wasm_summary,
             "storage_ecs": args.storage_wasm_summary,
         },
         "status_json_paths": {
-            "observer_local": args.observer_status_json,
+            "local_node": args.local_status_json,
             "sequencer_ecs": args.sequencer_status_json,
             "storage_ecs": args.storage_status_json,
         },

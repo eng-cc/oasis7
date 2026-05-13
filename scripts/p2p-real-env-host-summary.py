@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-NODE_LABELS = ("observer_local", "sequencer_ecs", "storage_ecs")
+NODE_LABELS = ("local_node", "sequencer_ecs", "storage_ecs")
 
 
 def parse_args():

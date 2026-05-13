@@ -3,10 +3,10 @@
   "failure_signatures": [],
   "analysis": {
     "cloud_pair_service_healthy": true,
-    "observer_service_healthy": true
+    "local_service_healthy": true
   },
   "nodes": {
-    "observer_local": {
+    "local_node": {
       "sample_count": 4,
       "healthz_all_ok": true,
       "status_fetch_all_ok": true,
