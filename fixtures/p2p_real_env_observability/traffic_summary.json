@@ -14,7 +14,7 @@
     }
   },
   "nodes": {
-    "observer_local": {
+    "local_node": {
       "available": true,
       "latest": {
         "role": "observer",

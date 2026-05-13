@@ -9,7 +9,7 @@ usage() {
 Usage: ./scripts/p2p-real-env-triad-snapshot.sh [options]
 
 Capture a P2PARCH-6 real-environment triad snapshot from:
-  - local triad node (historical artifact/service alias: observer_local)
+  - local triad node (artifact label: local_node)
   - remote ECS node A (historical artifact/service alias: sequencer_ecs)
   - remote ECS node B (historical artifact/service alias: storage_ecs)
 
@@ -20,14 +20,15 @@ Options:
   --out-dir <path>                 output root (default: .tmp/p2p_real_env_triad)
   --world-id <id>                  expected world id (default: shared-devnet-ecs-v1)
 
-  --observer-service <name>        local observer systemd unit
+  --local-service <name>           local node systemd unit
                                    (default: oasis7-triad-observer.service)
-  --observer-status-url <url>      local observer status endpoint
+  --local-status-url <url>         local node status endpoint
                                    (default: http://127.0.0.1:5633/v1/chain/status)
-  --observer-health-url <url>      local observer health endpoint
+  --local-health-url <url>         local node health endpoint
                                    (default: http://127.0.0.1:5633/healthz)
-  --observer-env-file <path>       local observer env file
+  --local-env-file <path>          local node env file
                                    (default: /opt/oasis7/p2p-triad-local/config/node.env)
+  --observer-*                     deprecated aliases for the local-* options above
 
   --sequencer-target <user@host>   remote sequencer SSH target
                                    (default: root@39.104.204.172)
@@ -59,8 +60,8 @@ Notes:
   - No secrets are written into the repository or the generated summary.
   - If the password env vars are unset, the script falls back to plain SSH and
     assumes key-based auth already works.
-  - Node labels in the artifact tree are legacy placement aliases kept for
-    continuity; they do not imply the current runtime role.
+  - Artifact labels are placement-oriented (`local_node / sequencer_ecs /
+    storage_ecs`) and do not imply the current runtime role.
   - Runtime role truth is always taken from each sampled `status.json`.
   - Artifacts are written to:
       <out-dir>/<timestamp>/{
@@ -235,10 +236,10 @@ ssh_timeout_secs=8
 out_root=".tmp/p2p_real_env_triad"
 world_id="shared-devnet-ecs-v1"
 
-observer_service="oasis7-triad-observer.service"
-observer_status_url="http://127.0.0.1:5633/v1/chain/status"
-observer_health_url="http://127.0.0.1:5633/healthz"
-observer_env_file="/opt/oasis7/p2p-triad-local/config/node.env"
+local_service="oasis7-triad-observer.service"
+local_status_url="http://127.0.0.1:5633/v1/chain/status"
+local_health_url="http://127.0.0.1:5633/healthz"
+local_env_file="/opt/oasis7/p2p-triad-local/config/node.env"
 
 sequencer_target="root@39.104.204.172"
 sequencer_service="oasis7-triad-sequencer.service"
@@ -274,20 +275,20 @@ while [[ $# -gt 0 ]]; do
       world_id=${2:-}
       shift 2
       ;;
-    --observer-service)
-      observer_service=${2:-}
+    --local-service|--observer-service)
+      local_service=${2:-}
       shift 2
       ;;
-    --observer-status-url)
-      observer_status_url=${2:-}
+    --local-status-url|--observer-status-url)
+      local_status_url=${2:-}
       shift 2
       ;;
-    --observer-health-url)
-      observer_health_url=${2:-}
+    --local-health-url|--observer-health-url)
+      local_health_url=${2:-}
       shift 2
       ;;
-    --observer-env-file)
-      observer_env_file=${2:-}
+    --local-env-file|--observer-env-file)
+      local_env_file=${2:-}
       shift 2
       ;;
     --sequencer-target)
@@ -355,7 +356,7 @@ summary_md="$run_dir/summary.md"
 config_json="$run_dir/config.json"
 
 mkdir -p \
-  "$nodes_root/observer_local/samples" \
+  "$nodes_root/local_node/samples" \
   "$nodes_root/sequencer_ecs/samples" \
   "$nodes_root/storage_ecs/samples"
 : > "$samples_ndjson"
@@ -367,10 +368,10 @@ jq -n \
   --arg run_id "$run_id" \
   --arg run_dir "$run_dir" \
   --arg world_id "$world_id" \
-  --arg observer_service "$observer_service" \
-  --arg observer_status_url "$observer_status_url" \
-  --arg observer_health_url "$observer_health_url" \
-  --arg observer_env_file "$observer_env_file" \
+  --arg local_service "$local_service" \
+  --arg local_status_url "$local_status_url" \
+  --arg local_health_url "$local_health_url" \
+  --arg local_env_file "$local_env_file" \
   --arg sequencer_target "$sequencer_target" \
   --arg sequencer_service "$sequencer_service" \
   --arg sequencer_status_url "$sequencer_status_url" \
@@ -392,12 +393,12 @@ jq -n \
     interval_secs: $interval_secs,
     ssh_timeout_secs: $ssh_timeout_secs,
     nodes: {
-      observer_local: {
+      local_node: {
         mode: "local",
-        service: $observer_service,
-        status_url: $observer_status_url,
-        health_url: $observer_health_url,
-        env_file: $observer_env_file
+        service: $local_service,
+        status_url: $local_status_url,
+        health_url: $local_health_url,
+        env_file: $local_env_file
       },
       sequencer_ecs: {
         mode: "remote",
@@ -418,11 +419,11 @@ jq -n \
     }
   }' > "$config_json"
 
-record_env_copy observer_local local "$observer_env_file"
+record_env_copy local_node local "$local_env_file"
 record_env_copy sequencer_ecs remote "$sequencer_target" "$seq_password" "$sequencer_env_file"
 record_env_copy storage_ecs remote "$storage_target" "$storage_password" "$storage_env_file"
 
-capture_service_state observer_local local "$observer_service"
+capture_service_state local_node local "$local_service"
 capture_service_state sequencer_ecs remote "$sequencer_service" "$sequencer_target" "$seq_password"
 capture_service_state storage_ecs remote "$storage_service" "$storage_target" "$storage_password"
 
@@ -432,8 +433,8 @@ for ((sample_index = 1; sample_index <= samples; sample_index++)); do
   captured_at=$(date -Iseconds)
   echo "sample $sample_index/$samples @ $captured_at"
 
-  capture_health_and_status observer_local local "$observer_health_url" "$observer_status_url" "$sample_index"
-  append_sample_record observer_local "$observer_service"
+  capture_health_and_status local_node local "$local_health_url" "$local_status_url" "$sample_index"
+  append_sample_record local_node "$local_service"
 
   capture_health_and_status sequencer_ecs remote "$sequencer_health_url" "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password"
   append_sample_record sequencer_ecs "$sequencer_service"
@@ -508,7 +509,7 @@ jq -s \
         node_count: (map(.label) | unique | length)
       },
       nodes: {
-        observer_local: node_summary("observer_local"),
+        local_node: node_summary("local_node"),
         sequencer_ecs: node_summary("sequencer_ecs"),
         storage_ecs: node_summary("storage_ecs")
       },
@@ -516,16 +517,16 @@ jq -s \
     }
   | .analysis = {
       local_service_healthy: (
-        (.nodes.observer_local.healthz_all_ok == true)
-        and (.nodes.observer_local.status_fetch_all_ok == true)
-        and ((.nodes.observer_local.service_states | index("active")) != null)
+        (.nodes.local_node.healthz_all_ok == true)
+        and (.nodes.local_node.status_fetch_all_ok == true)
+        and ((.nodes.local_node.service_states | index("active")) != null)
       ),
-      local_chain_visible: (.nodes.observer_local.heights.max_committed_height > 0),
-      local_runtime_role_observer: all_roles_equal("observer_local"; "observer"),
-      local_runtime_role_sequencer: all_roles_equal("observer_local"; "sequencer"),
-      local_peer_visibility_ok: (.nodes.observer_local.peers.max_known_peer_heads > 0),
-      local_network_commit_visible: (.nodes.observer_local.network.max_network_committed_height > 0),
-      local_committed_height_progressing: (.nodes.observer_local.heights.last_committed_height > .nodes.observer_local.heights.first_committed_height),
+      local_chain_visible: (.nodes.local_node.heights.max_committed_height > 0),
+      local_runtime_role_observer: all_roles_equal("local_node"; "observer"),
+      local_runtime_role_sequencer: all_roles_equal("local_node"; "sequencer"),
+      local_peer_visibility_ok: (.nodes.local_node.peers.max_known_peer_heads > 0),
+      local_network_commit_visible: (.nodes.local_node.network.max_network_committed_height > 0),
+      local_committed_height_progressing: (.nodes.local_node.heights.last_committed_height > .nodes.local_node.heights.first_committed_height),
       cloud_pair_service_healthy: (
         (.nodes.sequencer_ecs.healthz_all_ok == true)
         and (.nodes.storage_ecs.healthz_all_ok == true)
@@ -537,9 +538,9 @@ jq -s \
       sequencer_chain_visible: (.nodes.sequencer_ecs.heights.max_committed_height > 0),
       storage_chain_visible: (.nodes.storage_ecs.heights.max_committed_height > 0),
       triad_service_healthy: (
-        (.nodes.observer_local.healthz_all_ok == true)
-        and (.nodes.observer_local.status_fetch_all_ok == true)
-        and ((.nodes.observer_local.service_states | index("active")) != null)
+        (.nodes.local_node.healthz_all_ok == true)
+        and (.nodes.local_node.status_fetch_all_ok == true)
+        and ((.nodes.local_node.service_states | index("active")) != null)
         and (.nodes.sequencer_ecs.healthz_all_ok == true)
         and (.nodes.storage_ecs.healthz_all_ok == true)
         and (.nodes.sequencer_ecs.status_fetch_all_ok == true)
@@ -548,7 +549,7 @@ jq -s \
         and ((.nodes.storage_ecs.service_states | index("active")) != null)
       ),
       triad_chain_visible: (
-        (.nodes.observer_local.heights.max_committed_height > 0)
+        (.nodes.local_node.heights.max_committed_height > 0)
         and (.nodes.sequencer_ecs.heights.max_committed_height > 0)
         and (.nodes.storage_ecs.heights.max_committed_height > 0)
       ),
@@ -563,7 +564,7 @@ jq -s \
       triad_progress_signal_present: (
         (.nodes.sequencer_ecs.heights.last_committed_height > .nodes.sequencer_ecs.heights.first_committed_height)
         or (.nodes.storage_ecs.heights.last_committed_height > .nodes.storage_ecs.heights.first_committed_height)
-        or (.nodes.observer_local.heights.last_committed_height > .nodes.observer_local.heights.first_committed_height)
+        or (.nodes.local_node.heights.last_committed_height > .nodes.local_node.heights.first_committed_height)
       ),
       sequencer_execution_stale_height: (
         (.nodes.sequencer_ecs.last_errors | any(
@@ -571,17 +572,17 @@ jq -s \
         ))
       ),
       triad_all_validator_roles: (
-        all_roles_equal("observer_local"; "sequencer")
+        all_roles_equal("local_node"; "sequencer")
         and all_roles_equal("sequencer_ecs"; "sequencer")
         and all_roles_equal("storage_ecs"; "sequencer")
       ),
       claim_mode: (
         if (
-          all_roles_equal("observer_local"; "sequencer")
+          all_roles_equal("local_node"; "sequencer")
           and all_roles_equal("sequencer_ecs"; "sequencer")
           and all_roles_equal("storage_ecs"; "sequencer")
         ) then "three_equal_validator"
-        elif all_roles_equal("observer_local"; "observer") then "observer_mixed_topology"
+        elif all_roles_equal("local_node"; "observer") then "observer_mixed_topology"
         else "transitional"
         end
       )
@@ -661,7 +662,7 @@ jq -s \
   echo "- failure_signatures: \`$(jq -r '.failure_signatures | if length == 0 then "(none)" else join(", ") end' "$summary_json")\`"
   echo
   echo "## Node Summary"
-  for label in observer_local sequencer_ecs storage_ecs; do
+  for label in local_node sequencer_ecs storage_ecs; do
     echo "### \`$label\`"
     echo "- service_states: \`$(jq -r --arg label "$label" '.nodes[$label].service_states | join(", ")' "$summary_json")\`"
     echo "- healthz_all_ok: \`$(jq -r --arg label "$label" '.nodes[$label].healthz_all_ok' "$summary_json")\`"

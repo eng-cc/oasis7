@@ -622,7 +622,7 @@
     - `scripts/p2p-real-env-observability-summary.py`
     - `scripts/p2p-real-env-observability-monitor.sh`
     - `scripts/p2p-real-env-observability-monitor.test.sh`
-    - `fixtures/p2p_real_env_observability/observer_status.json`
+    - `fixtures/p2p_real_env_observability/local_status.json`
     - `fixtures/p2p_real_env_observability/sequencer_status.json`
     - `fixtures/p2p_real_env_observability/storage_status.json`
     - `doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md`

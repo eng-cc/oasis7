@@ -1,0 +1,24 @@
+task_uid: task_e306cae3343c44908393694806ab5579
+title: "rename triad local observability label from observer_local to local_node"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-triad-local-node-label-rename
+execution_log_path: .pm/tasks/task_e306cae3343c44908393694806ab5579.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md
+  - testing-manual.md
+doc_refs:
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.prd.md
+  - doc/p2p/node/node-triad-observability-stack-2026-04-23.project.md
+related_prd:
+  - PRD-P2P-025
+acceptance:
+  - "active triad observability scripts/tests/docs use local_node instead of observer_local for the local placement label"
+  - "runtime role truth remains sourced from sampled status rather than placement label"
+handoff_to: []
+updated_at: 2026-05-13T21:12:56+08:00
+last_started_at: 2026-05-13T20:46:47+08:00
+last_closed_at: 2026-05-13T21:12:56+08:00

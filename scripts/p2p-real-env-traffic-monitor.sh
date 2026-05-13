@@ -8,7 +8,7 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/p2p-real-env-traffic-monitor.sh [options]
 
-Sample `/v1/chain/status.traffic` from the local observer + ECS sequencer/storage
+Sample `/v1/chain/status.traffic` from the local node + ECS sequencer/storage
 triad, persist samples into a reusable history file, and derive recent-window
 traffic summaries from cumulative counters.
 
@@ -24,8 +24,9 @@ Options:
   --history-path <path>            override persistent history file path
   --summary-only                   skip sampling, recompute summary from history only
 
-  --observer-status-url <url>      local observer status endpoint
+  --local-status-url <url>         local node status endpoint
                                    (default: http://127.0.0.1:5633/v1/chain/status)
+  --observer-status-url <url>      deprecated alias for --local-status-url
 
   --sequencer-target <user@host>   remote sequencer SSH target
                                    (default: root@39.104.204.172)
@@ -232,7 +233,7 @@ out_root=".tmp/p2p_real_env_traffic_monitor"
 history_path=""
 summary_only=0
 
-observer_status_url="http://127.0.0.1:5633/v1/chain/status"
+local_status_url="http://127.0.0.1:5633/v1/chain/status"
 
 sequencer_target="root@39.104.204.172"
 sequencer_status_url="http://127.0.0.1:5631/v1/chain/status"
@@ -278,8 +279,8 @@ while [[ $# -gt 0 ]]; do
       summary_only=1
       shift
       ;;
-    --observer-status-url)
-      observer_status_url=${2:-}
+    --local-status-url|--observer-status-url)
+      local_status_url=${2:-}
       shift 2
       ;;
     --sequencer-target)
@@ -340,7 +341,7 @@ latest_summary_md="$out_root/latest_summary.md"
 config_json="$run_dir/config.json"
 summary_script="$repo_root/scripts/traffic-monitor-summary.py"
 
-mkdir -p "$run_dir/raw/observer_local" "$run_dir/raw/sequencer_ecs" "$run_dir/raw/storage_ecs"
+mkdir -p "$run_dir/raw/local_node" "$run_dir/raw/sequencer_ecs" "$run_dir/raw/storage_ecs"
 mkdir -p "$(dirname "$history_path")"
 : > "$run_samples_ndjson"
 touch "$history_path"
@@ -358,7 +359,7 @@ jq -n \
   --arg history_path "$history_path" \
   --arg latest_summary_json "$latest_summary_json" \
   --arg latest_summary_md "$latest_summary_md" \
-  --arg observer_status_url "$observer_status_url" \
+  --arg local_status_url "$local_status_url" \
   --arg sequencer_target "$sequencer_target" \
   --arg sequencer_status_url "$sequencer_status_url" \
   --arg storage_target "$storage_target" \
@@ -384,9 +385,9 @@ jq -n \
     ssh_timeout_secs: $ssh_timeout_secs,
     summary_only: ($summary_only == 1),
     nodes: {
-      observer_local: {
+      local_node: {
         mode: "local",
-        status_url: $observer_status_url
+        status_url: $local_status_url
       },
       sequencer_ecs: {
         mode: "remote",
@@ -407,9 +408,9 @@ if (( summary_only == 0 )); then
     captured_at_unix_ms=$(( $(date +%s) * 1000 ))
     echo "sample $sample_index/$samples @ $captured_at"
 
-    capture_status observer_local local "$observer_status_url" "$sample_index"
-    capture_network_interface observer_local local "$sample_index"
-    append_sample_record observer_local local "$observer_status_url"
+    capture_status local_node local "$local_status_url" "$sample_index"
+    capture_network_interface local_node local "$sample_index"
+    append_sample_record local_node local "$local_status_url"
 
     capture_status sequencer_ecs remote "$sequencer_status_url" "$sample_index" "$sequencer_target" "$seq_password"
     capture_network_interface sequencer_ecs remote "$sample_index" "$sequencer_target" "$seq_password"
@@ -442,7 +443,7 @@ python3 "$summary_script" \
   --top-n "$top_n" \
   --run-id "$run_id" \
   --run-dir "$run_dir" \
-  --label observer_local \
+  --label local_node \
   --label sequencer_ecs \
   --label storage_ecs
 

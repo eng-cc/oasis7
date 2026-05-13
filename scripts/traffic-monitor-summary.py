@@ -1239,7 +1239,7 @@ def main():
         summary["node"] = summarize_record_set(records, args.window_minutes, args.top_n)
         markdown_lines = render_single_node_markdown(summary, history_path, generated_at)
     else:
-        labels = args.label or ["observer_local", "sequencer_ecs", "storage_ecs"]
+        labels = args.label or ["local_node", "sequencer_ecs", "storage_ecs"]
         records_by_label = {label: [] for label in labels}
         for record in records:
             label = record.get("label")
