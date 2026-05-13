@@ -934,16 +934,16 @@ fn restricted_refund_sink_for_claim(
     account_id: &str,
     claim: &AgentClaimState,
 ) -> (RestrictedStarterClaimRefundSink, String) {
+    if let Some(bucket_id) = claim
+        .claim_bond_restricted_source_treasury_bucket_id
+        .clone()
+    {
+        return (
+            RestrictedStarterClaimRefundSink::SourceTreasuryBucket,
+            bucket_id,
+        );
+    }
     let Some(grant) = state.restricted_starter_claim_grants.get(account_id) else {
-        if let Some(bucket_id) = claim
-            .claim_bond_restricted_source_treasury_bucket_id
-            .clone()
-        {
-            return (
-                RestrictedStarterClaimRefundSink::SourceTreasuryBucket,
-                bucket_id,
-            );
-        }
         return (
             RestrictedStarterClaimRefundSink::BeneficiaryRestrictedBalance,
             String::new(),
@@ -960,5 +960,71 @@ fn restricted_refund_sink_for_claim(
                 grant.source_treasury_bucket_id.clone(),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY;
+
+    #[test]
+    fn restricted_refund_sink_prefers_claim_provenance_over_later_issued_grant() {
+        let mut state = WorldState::default();
+        state.restricted_starter_claim_grants.insert(
+            "alice".to_string(),
+            RestrictedStarterClaimGrantState {
+                beneficiary_account_id: "alice".to_string(),
+                issuer_id: "liveops".to_string(),
+                issuance_reason: "followup_seed".to_string(),
+                spend_scope: RESTRICTED_STARTER_CLAIM_GRANT_SPEND_SCOPE_SLOT_1_ONLY.to_string(),
+                source_treasury_bucket_id: "grant.bucket".to_string(),
+                issued_amount: 50,
+                issued_at_epoch: 1,
+                expires_at_epoch: 5,
+                status: RestrictedStarterClaimGrantStatus::Issued,
+                status_updated_at_epoch: Some(1),
+                status_reason: None,
+            },
+        );
+        let claim = AgentClaimState {
+            target_agent_id: "bob".to_string(),
+            claim_owner_id: "alice".to_string(),
+            reputation_tier: 0,
+            slot_index: 1,
+            activation_fee_amount: 0,
+            activation_fee_burn_amount: 0,
+            activation_fee_treasury_amount: 0,
+            claim_bond_amount: 0,
+            locked_bond_amount: 0,
+            upfront_restricted_spent_amount: 0,
+            upfront_liquid_spent_amount: 0,
+            claim_bond_locked_restricted_amount: 0,
+            claim_bond_locked_liquid_amount: 0,
+            claim_bond_restricted_source_treasury_bucket_id: Some(
+                MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL.to_string(),
+            ),
+            upkeep_per_epoch: 0,
+            release_cooldown_epochs: 0,
+            grace_epochs: 0,
+            idle_warning_epochs: 0,
+            forced_idle_reclaim_epochs: 0,
+            forced_reclaim_penalty_bps: 0,
+            claimed_at_epoch: 0,
+            upkeep_paid_through_epoch: 0,
+            delinquent_since_epoch: None,
+            grace_deadline_epoch: None,
+            release_requested_at_epoch: None,
+            release_ready_at_epoch: None,
+            idle_warning_emitted_at_epoch: None,
+        };
+
+        let (sink, bucket_id) = restricted_refund_sink_for_claim(&state, "alice", &claim);
+
+        assert_eq!(sink, RestrictedStarterClaimRefundSink::SourceTreasuryBucket);
+        assert_eq!(
+            bucket_id,
+            MAIN_TOKEN_TREASURY_BUCKET_RESTRICTED_STARTER_CLAIM_LIVEOPS_POOL
+        );
     }
 }
