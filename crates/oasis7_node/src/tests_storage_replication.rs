@@ -521,16 +521,26 @@ fn runtime_gossip_replication_with_signature_applies_files() {
     let mut runtime_b = NodeRuntime::new(config_b);
     runtime_a.start().expect("start a");
     runtime_b.start().expect("start b");
-    thread::sleep(Duration::from_millis(220));
+
+    let store_b = LocalCasStore::new(dir_b.join("store"));
+    let replicated = wait_until(Instant::now() + Duration::from_secs(3), || {
+        store_b
+            .list_files()
+            .map(|files| {
+                files
+                    .iter()
+                    .any(|item| item.path.starts_with("consensus/commits/"))
+            })
+            .unwrap_or(false)
+    });
+    let files = store_b.list_files().expect("list files");
+    assert!(
+        replicated,
+        "expected signed gossip replication to apply commit files, got {files:?}"
+    );
 
     runtime_a.stop().expect("stop a");
     runtime_b.stop().expect("stop b");
-
-    let store_b = LocalCasStore::new(dir_b.join("store"));
-    let files = store_b.list_files().expect("list files");
-    assert!(files
-        .iter()
-        .any(|item| item.path.starts_with("consensus/commits/")));
 
     let _ = fs::remove_dir_all(&dir_a);
     let _ = fs::remove_dir_all(&dir_b);

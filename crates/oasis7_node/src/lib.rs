@@ -627,14 +627,18 @@ impl NodeRuntime {
         if let Some(stop_tx) = self.stop_tx.take() {
             let _ = stop_tx.send(());
         }
-        if let Some(worker) = self.worker.take() {
+        let join_result = if let Some(worker) = self.worker.take() {
             worker.join().map_err(|_| NodeError::ThreadJoinFailed {
                 node_id: self.config.node_id.clone(),
-            })?;
-        }
+            })
+        } else {
+            Ok(())
+        };
+        // Always drop the bound gossip socket and clear the runtime flag, even if the
+        // worker thread already panicked and `join` surfaces an error.
         self.gossip_endpoint = None;
         self.running.store(false, Ordering::SeqCst);
-        Ok(())
+        join_result
     }
 
     pub fn snapshot(&self) -> NodeSnapshot {
