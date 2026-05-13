@@ -18,3 +18,10 @@ Example:
 - 完成内容: 重新构建 `crates/oasis7_viewer/software_safe.js`，保证 source/bundle 不漂移。
 - 验证结果: `npm --prefix crates/oasis7_viewer run test:ui` 通过；`node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs` 通过；`npm --prefix crates/oasis7_viewer run build:software-safe` 通过；`bash -n scripts/ci-tests.sh` 通过；`./scripts/ci-tests.sh commit` 通过；`./scripts/doc-governance-check.sh` 与 `git diff --check` 通过。
 - 遗留事项: 当前新增的是 repo-owned DOM/component regression，不替代 headed `agent-browser` / release strict 的真实页面回归；`Prompt Overrides` 的浏览器点击链路仍由现有 S6/release 脚本覆盖，本轮在组件层只对 toggle 后的 DOM 出现做 deterministic 断言。
+
+## 2026-05-13 21:37:36 CST / viewer_engineer
+- 完成内容: 根据 PR #215 review comment 收口 UI 测试自举细节：为 `software_safe` Vitest URL 与测试 helper 统一补 `connect=0`，避免 jsdom 环境触发 viewer websocket 连接/重连计时器；同时把 `mountViewerApp()` disposer 纳入 `afterEach` 级别 cleanup，避免跨测试遗留 `renderHook` 与 DOM side effect。
+- 完成内容: 恢复 `main.jsx` 自动挂载路径的 fail-fast 语义：当真实页面缺少 `#app` 且未显式启用 `test_api=1` 时直接抛错；测试导入场景仍允许在 `test_api=1` 下先 import 再手动挂载 root。
+- 完成内容: 对齐 `viewer-web-entry-visual-redesign-2026-05-12.project.md` 与 task 真值，把 `viewer-web-ui-automation-baseline` 标记为已完成，并将项目状态更新为 `done`。
+- 验证结果: 待本轮 comment fix 完成后重新执行 `npm --prefix crates/oasis7_viewer run test:ui`、`node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`./scripts/ci-tests.sh required`。
+- 遗留事项: 浏览器层 headed regression 仍保持现有 `viewer-software-safe-chat-regression.sh` / `release-gate-web-strict.sh` 边界，本轮只收口 review comment 指向的 repo-owned UI/文档一致性问题。

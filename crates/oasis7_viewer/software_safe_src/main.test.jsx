@@ -10,8 +10,10 @@ vi.mock("./pixel_world_host.jsx", () => ({
 }));
 
 function viewerUrl() {
-  return "/software_safe.html?test_api=1&locale=en";
+  return "/software_safe.html?test_api=1&connect=0&locale=en";
 }
+
+let activeCleanup = null;
 
 function sampleSnapshot(overrides = {}) {
   return {
@@ -74,6 +76,8 @@ function sampleSnapshot(overrides = {}) {
 }
 
 async function renderViewerApp({ snapshot = sampleSnapshot(), selection = null } = {}) {
+  activeCleanup?.();
+  activeCleanup = null;
   vi.resetModules();
   window.history.replaceState({}, "", viewerUrl());
   window.localStorage.clear();
@@ -92,9 +96,16 @@ async function renderViewerApp({ snapshot = sampleSnapshot(), selection = null }
   }
 
   const dispose = mountViewerApp(appRoot);
+  const cleanup = () => {
+    dispose();
+    if (activeCleanup === cleanup) {
+      activeCleanup = null;
+    }
+  };
+  activeCleanup = cleanup;
   return {
     core,
-    cleanup: dispose,
+    cleanup,
     container: appRoot,
   };
 }
@@ -106,6 +117,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  activeCleanup?.();
+  activeCleanup = null;
   document.body.innerHTML = "";
 });
 
@@ -136,7 +149,7 @@ describe("viewer web ui automation baseline", () => {
   });
 
   it("unlocks agent chat and prompt override surfaces once an agent is selected", async () => {
-    const { cleanup, core } = await renderViewerApp({
+    const { core } = await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },
     });
 
@@ -155,7 +168,6 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByLabelText("Short-Term Goal Override")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
-    cleanup();
   });
 
   it("keeps diagnostics visually demoted behind the player path surface", async () => {
