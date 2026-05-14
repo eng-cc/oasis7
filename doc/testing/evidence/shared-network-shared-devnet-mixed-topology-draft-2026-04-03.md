@@ -47,6 +47,40 @@
 - `pass_uplift_decision_ref`:
   - `<not applicable while lane_result=partial; required for pass uplift>`
 
+## Pending Checklist
+- [ ] 固定可接受的 `same_window_shared_evidence_ref`
+- [ ] 固定 producer/QA 联审通过的 `pass_uplift_decision_ref`
+- [ ] 回填 `validated_by`
+- [ ] 回填 `validated_at`
+- [ ] 若仍引用 `proxy_drill_ref`，明确它只是近似而非 dedicated sentry/NAT lab 真值
+
+## Pass Closure Rule
+- 只有以下两类字段同时齐全时，`mixed_topology_baseline` 才能升到 `pass`：
+  - same-window mixed-topology evidence：`same_window_shared_evidence_ref`
+  - producer/QA audited uplift decision：`pass_uplift_decision_ref`
+
+## Suggested Window Promotion Command
+```bash
+./scripts/shared-devnet-rehearsal.sh \
+  --window-id <shared-devnet-window-id> \
+  --candidate-bundle <output/release-candidates/current.json> \
+  --out-dir <output/shared-network/...> \
+  --release-gate-mode skip \
+  --web-mode evidence \
+  --web-evidence-ref <same-window web evidence> \
+  --headless-mode evidence \
+  --headless-evidence-ref <same-window no-ui evidence> \
+  --pure-api-mode evidence \
+  --pure-api-evidence-ref <same-window pure-api evidence> \
+  --governance-mode evidence \
+  --governance-window-evidence-ref <same-window governance evidence> \
+  --longrun-mode evidence \
+  --longrun-window-evidence-ref <same-window longrun evidence> \
+  --mixed-topology-pass \
+  --mixed-topology-shared-evidence-ref <same-window mixed-topology evidence> \
+  --mixed-topology-pass-decision-ref <producer/QA decision ref>
+```
+
 ## Notes
 - This document upgrades the lane from an implicit missing scaffold to an explicit audited `partial` evidence packet.
 - It is sufficient to keep `shared_devnet` gate semantics honest, but not sufficient to promote `shared_devnet` to `pass`.
