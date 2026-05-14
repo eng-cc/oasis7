@@ -2,6 +2,20 @@ version: 1
 role: viewer_engineer
 status: committed
 tasks:
+  - task_uid: task_7693ba2463d841f8aa8675fa12b982c0
+    title: "viewer hosted p0 truth reclosure"
+    priority: P0
+    source_signal: null
+    related_prd:
+      - PRD-P2P-023
+      - PRD-WORLD_SIMULATOR-039
+    acceptance:
+      - "viewer auth/session surface no longer reports hosted preview strong-auth and session recovery as not implemented when the lane is available"
+      - "repo-owned ui regression covers hosted player-session acquire/release, session ladder semantics, and reconnect messaging"
+      - "viewer docs reflect actual hosted preview boundary: prompt-control preview strong-auth works, main_token_transfer remains blocked"
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_7693ba2463d841f8aa8675fa12b982c0.yaml
   - task_uid: task_41236b37e7a0493fa4f20424cc465eeb
     title: "Switch GitHub Release downloads to direct installers"
     priority: P1
