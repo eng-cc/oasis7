@@ -292,6 +292,11 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getAllByRole("button", { name: "Release Player Session" }).length).toBeGreaterThan(0);
     expect(screen.getByText("preview_backend_reauth_available")).toBeInTheDocument();
     expect(
+      screen.getByText(
+        "hosted preview backend reauth is available after the browser-local player_session has completed runtime registration for prompt_control",
+      ),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText("page reload will reuse the browser-local hosted key and attempt reconnect_sync first"),
     ).toBeInTheDocument();
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
