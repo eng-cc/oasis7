@@ -1,0 +1,54 @@
+{
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "mainnet",
+  "status": "specified_skeleton_only",
+  "network_id": "oasis7-mainnet-example",
+  "chain_id": "oasis7-mainnet-example",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "output/release-candidates/mainnet-example.json",
+    "genesis_ref": "doc/testing/templates/mainnet-genesis.example.json",
+    "bootstrap_peer_ref": "doc/testing/templates/mainnet-bootstrap.example.txt"
+  },
+  "endpoint_policy": {
+    "rpc_ref": "https://mainnet.example.invalid/rpc",
+    "explorer_ref": "https://mainnet.example.invalid/explorer",
+    "faucet_ref": null
+  },
+  "validator_policy": {
+    "governance_mode": "governance_registry",
+    "validator_admission": "governance_registry_only",
+    "target_validator_count": 3,
+    "allow_observer_nodes": true
+  },
+  "token_policy": {
+    "symbol": "OC",
+    "faucet_mode": "none",
+    "reset_policy": "frozen",
+    "value_semantics": "production"
+  },
+  "claims_policy": {
+    "allowed_claims": [
+      "formal_mainnet_manifest"
+    ],
+    "denied_claims": [
+      "testnet_resettable",
+      "faucet_available"
+    ]
+  },
+  "promotion_policy": {
+    "promote_from": [
+      "public_testnet"
+    ],
+    "required_gates": [
+      "public_testnet_exit_review",
+      "MAINNET-1",
+      "MAINNET-2",
+      "MAINNET-3",
+      "MAINNET-4",
+      "no_reset_commitment"
+    ]
+  },
+  "evidence_refs": [
+    "doc/testing/evidence/mainnet-manifest-skeleton-example.md"
+  ]
+}

@@ -51,6 +51,7 @@
   - SC-19: 当前本机 + 2 ECS real-env triad 必须具备一条可审计的“三节点等权 validator”落地路径，明确 validator set、signer binding、static bootstrap、same-window snapshot evidence 与 residual legacy service naming 的边界；当 execution world 已存在 `governance_finality_signer_registry` 时，节点启动/恢复必须优先从该 world-state registry 恢复 validator membership 与 signer binding，而不是继续把 role-separated `observer + sequencer + storage` 或 operator-local env 当成唯一真值拓扑。
   - SC-20: `oasis7` 可以通过独立部署的 bridge-service，把已确认的 `OC` 充值映射为 `New API` 的内部 quota / redeem credit，同时冻结“只支持 one-way service-credit bridge，不是公开兑换所、不是 AMM、也不支持自动提现回 OC”的对外口径。
   - SC-21: validator / finality signer 必须具备一条正式的治理准入流程，至少覆盖 `apply -> approved_candidate -> probation_ready -> active -> rotate/revoke`，并明确 world-state registry 才是正式激活真值；`--node-validator*` 与 operator-local env 只能作为 bootstrap 或显式运维覆盖。
+  - SC-22: p2p 模块必须具备一套正式的公共主链式网络分层机制，明确 `local_devnet -> shared_devnet -> public_testnet -> mainnet` 的 tier 边界、manifest 真值与 claims/promotion 规则，避免把 shared release-train 与正式 testnet/mainnet 继续混写。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -99,6 +100,7 @@
   - PRD-P2P-025: As a producer_system_designer, I want one canonical triad observability stack, so that 当前 real-env triad（物理上为本机 + 2 ECS，runtime 上已收口为 three_equal_validator，历史 service label 仅作兼容别名）的真实运行状态可以在同一轮监控里同时回答资源、链状态、流量、WASM 健康，并进一步定位到具体 runtime 子模块和优化热点。
   - PRD-P2P-026: As a producer_system_designer, I want the live triad to support a three-equal-validator topology, so that the local node is no longer a permanent observer exception and triad semantics can match “three peer-equal validators” when operations explicitly choose that mode.
   - PRD-P2P-027: As a producer_system_designer, I want one canonical one-way `OC -> New API quota` bridge model, so that oasis7 可以把当前主链 Token 用作受控的 AI 服务额度充值资产，同时不误滑成公开兑换所、浏览器热钱包或双向提现承诺。
+  - PRD-P2P-028: As a producer_system_designer, I want one formal public-chain-style network-tier mechanism, so that oasis7 can stop treating `shared_devnet`、`public_testnet` and `mainnet` as informal aliases and instead promote networks through explicit manifest + gate truth.
 - Critical User Flows:
   1. Flow-P2P-001: `网络拓扑变更 -> 共识联调 -> DistFS 同步 -> 节点状态一致性验证`
   2. Flow-P2P-002: `执行 S9/S10 长跑 -> 采集故障与恢复数据 -> 输出收敛报告`
@@ -185,6 +187,7 @@
   - AC-34: `triad-observability-stack` 必须把 real-env triad 的 host/process、chain status、traffic window、wasm window 收敛到统一 repo-owned 监控入口，并在 `testing-manual.md` 冻结 canonical 命令与产物路径。
   - AC-35: `triad-three-equal-validator-topology` 必须把当前 real-env triad 从“本机 observer + 两台云端 validator”提升为“三节点等权 validator”可审计基线，至少覆盖：`3` 个 validator 的 stake/signer binding、local 节点不再以 observer-only 角色运行、repo-owned snapshot/manual 不再把 `partial_with_observer_blocker` 当成唯一有效 claim、same-window evidence 对 legacy service label 与真实 runtime role 的区分，以及 `oasis7_chain_runtime` 在 execution world 已落盘 `governance_finality_signer_registry` 时会优先用该 world-state registry 恢复 validator membership / signer binding；`--node-validator*` 只保留为 bootstrap 或显式运维覆盖。
   - AC-36: `mainchain-token-newapi-quota-bridge-2026-05-06` 专题文档落盘并映射任务链，明确 `one-way OC -> New API quota`、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、manual review 风控、`New API` 内部 credit adapter，以及“不支持自动提现/不承诺公开兑换所”边界。
+  - AC-37: `p2p-formal-network-tiers-testnet-mechanism-2026-05-14` 专题文档与 repo-owned skeleton 必须落盘并映射任务链 `formal-network-tiers-testnet-mechanism (PRD-P2P-028)`，明确 `local_devnet/shared_devnet/public_testnet/mainnet` 四层模型、`network_tier_manifest` 字段集合、`public_testnet` 的 public RPC/explorer/faucet/reset 语义，以及 `mainnet` 的 `no faucet + frozen reset + MAINNET-1~4` gate。
 - Non-Goals:
   - 不在本 PRD 细化 viewer UI 交互。
   - 不替代 runtime 内核的模块执行细节设计。
@@ -214,6 +217,7 @@
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
   - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
+  - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
   - `world-rule.md`
   - `doc/world-simulator/viewer/viewer-manual.md`
@@ -324,6 +328,7 @@
 | PRD-P2P-025 | triad-observability-stack | `test_tier_required` | triad host/process monitor、merged observability summary、testing manual 入口、fixture 回归与 real-env smoke | 当前 real-env triad（本机 + 2 ECS，runtime 已为 three_equal_validator）的 canonical 运维监控入口，并显式区分 legacy service label 与真实 runtime role |
 | PRD-P2P-026 | triad-three-equal-validator-topology | `test_tier_required` | live triad validator-set/signer/bootstrap 改造、same-window snapshot evidence、testing manual claim 口径更新与 legacy service label 边界说明 | 三节点等权 validator 拓扑、live 运维真值与 mixed-topology 历史边界 |
 | PRD-P2P-027 | mainchain-token-newapi-quota-bridge-proposal | `test_tier_required` | `OC -> New API quota` 专题 PRD/design/project 建档、one-way bridge boundary、独立 bridge-service、唯一入账映射、`bridge_ledger` 状态机、credit adapter 与 operator risk gate 冻结 | 链上资产到 AI 服务内部额度的受控桥接口径与后续实现排序 |
+| PRD-P2P-028 | formal-network-tiers-testnet-mechanism | `test_tier_required` | 正式网络分层 / testnet 机制专题 PRD/design/project 建档、`network_tier_manifest` 脚本+smoke+example manifests、`testing-manual` 入口与 current verdict 冻结 | 公共主链式 `shared_devnet/public_testnet/mainnet` 分层口径、manifest 真值与后续 runtime/liveops 接线排序 |
 - S9/S10 长跑结果模板（TASK-P2P-003）:
 | 字段 | 说明 | 来源 |
 | --- | --- | --- |

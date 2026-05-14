@@ -1,0 +1,49 @@
+{
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "shared_devnet",
+  "status": "rehearsal",
+  "network_id": "oasis7-shared-devnet-example",
+  "chain_id": "oasis7-shared-devnet-example",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "output/release-candidates/shared-devnet-example.json",
+    "genesis_ref": "doc/testing/templates/shared-devnet-genesis.example.json",
+    "bootstrap_peer_ref": "doc/testing/templates/shared-devnet-bootstrap.example.txt"
+  },
+  "endpoint_policy": {
+    "rpc_ref": "https://shared-devnet.example.invalid/rpc",
+    "explorer_ref": "https://shared-devnet.example.invalid/explorer",
+    "faucet_ref": null
+  },
+  "validator_policy": {
+    "governance_mode": "shared_ops",
+    "validator_admission": "shared_allowlist",
+    "target_validator_count": 3,
+    "allow_observer_nodes": true
+  },
+  "token_policy": {
+    "symbol": "OC",
+    "faucet_mode": "operator_grant",
+    "reset_policy": "resettable",
+    "value_semantics": "preview"
+  },
+  "claims_policy": {
+    "allowed_claims": [
+      "shared_devnet_rehearsal"
+    ],
+    "denied_claims": [
+      "mainnet_live",
+      "production_oc_settlement"
+    ]
+  },
+  "promotion_policy": {
+    "promote_from": [
+      "local_devnet"
+    ],
+    "required_gates": [
+      "shared_devnet_pass"
+    ]
+  },
+  "evidence_refs": [
+    "doc/testing/evidence/shared-network-shared-devnet-dry-run-2026-03-24.md"
+  ]
+}
