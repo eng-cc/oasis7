@@ -1,9 +1,9 @@
 task_uid: task_7021c28970ef4f40b0367563df7f1e32
-title: "public-chain-style testnet mechanism skeleton"
+title: "formal network tiers and testnet mechanism"
 owner_role: producer_system_designer
 worktree_hint: /home/scc/worktrees/oasis7-p2p-public-chain-testnet-mechanism-2026-05-14
 execution_log_path: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
@@ -14,11 +14,11 @@ source_refs:
 doc_refs:
   - doc/p2p/prd.index.md
 related_prd:
-  - PRD-P2P-022
-  - PRD-P2P-016
+  - PRD-P2P-028
 acceptance:
-  - "Freeze formal devnet/testnet/mainnet network-tier mechanism and task chain"
-  - "Add doc/script skeleton without overclaiming runtime completion"
+  - "Freeze formal local_devnet/shared_devnet/public_testnet/mainnet network-tier mechanism and task chain"
+  - "Complete runtime/launcher/QA/liveops skeleton without overclaiming live public_testnet or mainnet availability"
 handoff_to: []
-updated_at: 2026-05-14T10:09:31+08:00
+updated_at: 2026-05-14T14:35:04+08:00
 last_started_at: 2026-05-14T10:09:31+08:00
+last_closed_at: 2026-05-14T14:35:03+08:00

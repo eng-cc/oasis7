@@ -32,13 +32,18 @@ manifest_path="$tmpdir/public-testnet-smoke.json"
   --promote-from shared_devnet \
   --require-gate shared_devnet_pass \
   --require-gate public_rpc_ready \
+  --require-gate faucet_guard_ready \
+  --require-gate reset_policy_announced \
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
+  --denied-claim production_oc_settlement \
   --evidence-ref doc/testing/evidence/public-testnet-skeleton-example.md >/dev/null
 
 ./scripts/network-tier-manifest.sh validate --manifest "$manifest_path" >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
+./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
+./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
 
 echo "network-tier-manifest smoke passed"

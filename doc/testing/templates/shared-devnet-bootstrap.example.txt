@@ -1,0 +1,2 @@
+/dns4/shared-devnet-bootstrap1.example.invalid/tcp/5611
+/dns4/shared-devnet-bootstrap2.example.invalid/tcp/5612

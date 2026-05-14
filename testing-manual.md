@@ -927,6 +927,10 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-manifest.sh validate \
   --manifest doc/testing/templates/network-tier-mainnet.example.json
+./scripts/network-tier-exit-review.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json
+./scripts/network-tier-exit-review.sh \
+  --manifest doc/testing/templates/network-tier-mainnet.example.json
 ./scripts/network-tier-manifest-smoke.sh
 ```
 - 当前 `network_tier_manifest` 最小职责：
@@ -936,10 +940,14 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - 固定 `validator_admission/governance_mode/target_validator_count`
   - 固定 `faucet_mode/reset_policy/value_semantics`
   - 固定 `allowed_claims/denied_claims` 与 `required_gates`
+- 当前已接线范围：
+  - `oasis7_chain_runtime --network-tier-manifest <path>` 可从 manifest 读取 `chain_id/world_id/bootstrap_peer_ref` 默认值，并在 `/v1/chain/status` 暴露 formal `tier/status`。
+  - `oasis7_game_launcher` 与 `oasis7_web_launcher` 支持 `chain_network_tier_manifest` 透传，不再要求 manifest 模式下重复手填同一套 tier 基本参数。
+  - `./scripts/network-tier-exit-review.sh` 可把 `public_testnet` 的 rehearsal gate 和 `mainnet` 的 `MAINNET-1~4` gate 汇总成最小 exit-review 输入。
 - 当前边界：
   - `shared_devnet` 没有 public RPC/explorer/faucet/reset contract 时，不得叫 `public_testnet`
   - `mainnet` 只要不是 `faucet_mode=none`、`reset_policy=frozen`、`governance_registry_only` 并且缺 `MAINNET-1~4`，就不得叫 `mainnet`
-  - skeleton manifest/example 只代表 schema 已冻结，不代表 runtime/liveops 已完成接线
+  - skeleton manifest/example 与 runtime/launcher 接线，只代表 formal mechanism 已冻结并接到入口，不代表 liveops 已建立 live `public_testnet` / `mainnet`
 
 ### S11：去中心化模块发布运行与告警（world-runtime）
 - 适用范围：线上模块发布（`proposal -> attestation -> apply`）与 builtin 在线清单加载故障分诊。
