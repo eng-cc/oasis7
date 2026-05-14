@@ -152,6 +152,73 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
+  core.state.hostedAccess = {
+    deployment_mode: "hosted_public_join",
+    action_matrix: [
+      {
+        action_id: "prompt_control_apply",
+        required_auth: "strong_auth",
+        availability: "public_player_plane_with_backend_reauth_preview",
+        reason: "backend re-authorization preview is available for prompt control on this hosted lane",
+      },
+      {
+        action_id: "main_token_transfer",
+        required_auth: "strong_auth",
+        availability: "blocked_until_strong_auth",
+        reason: "main token transfer still requires a stronger hosted custody lane",
+      },
+    ],
+  };
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId: "player-123",
+    publicKey: "abcd1234efgh5678",
+    privateKey: "priv",
+    releaseToken: "release-1",
+    source: "hosted_browser_storage",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: "agent-0",
+    error: null,
+  };
+  const authSurface = core.buildAuthSurfaceModel();
+  assert.equal(authSurface.tiers[1].status, "active_hosted_session");
+  assert.equal(authSurface.tiers[2].status, "preview_backend_reauth_available");
+  assert.match(authSurface.tiers[2].reason, /hosted preview backend reauth is available/i);
+  assert.match(authSurface.reconnect, /attempt reconnect_sync first/i);
+  assert.equal(authSurface.capabilities.prompt_control.enabled, true);
+  assert.equal(authSurface.capabilities.main_token_transfer.enabled, false);
+  assert.equal(authSurface.capabilities.main_token_transfer.code, "strong_auth_required");
+  assert.match(authSurface.capabilities.main_token_transfer.reason, /stronger hosted custody lane/i);
+}
+
+{
+  core.state.hostedAccess = {
+    deployment_mode: "hosted_public_join",
+    action_matrix: [],
+  };
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId: "player-legacy",
+    publicKey: "legacy1234efgh5678",
+    privateKey: "priv-legacy",
+    releaseToken: "release-legacy",
+    source: "legacy_viewer_auth_bootstrap",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: "agent-0",
+    error: null,
+  };
+  const authSurface = core.buildAuthSurfaceModel();
+  assert.equal(authSurface.deploymentHint, "hosted_public_join_contract_with_legacy_bootstrap");
+  assert.equal(authSurface.capabilities.main_token_transfer.enabled, false);
+  assert.equal(authSurface.capabilities.main_token_transfer.code, "strong_auth_required");
+  assert.match(authSurface.capabilities.main_token_transfer.reason, /legacy preview player_session/i);
+}
+
+{
   core.state.snapshot.player_gameplay.execution_state = "completed";
   core.state.snapshot.player_gameplay.causality_kind = "agent_override";
   core.state.snapshot.player_gameplay.causality_detail = "rule module policy.guard redirected the accepted action before execution";
