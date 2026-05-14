@@ -18,6 +18,7 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
+- post-create reviewer request: attempt `@copilot`
 - standard path: commit -> prepare-task-pr -> GitHub PR review
 
 Options:
@@ -25,6 +26,7 @@ Options:
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`
   --draft                 Add `--draft` when creating the PR
+  --no-copilot-review     Do not attempt `@copilot` review request after PR create
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
   --json                  Print machine-readable JSON summary only
@@ -76,6 +78,7 @@ REMOTE_NAME="origin"
 CREATE_PR=0
 DRAFT_PR=0
 OUTPUT_JSON=0
+REQUEST_COPILOT_REVIEW=1
 PR_TITLE=""
 BODY_FILE=""
 POSITIONAL=()
@@ -96,6 +99,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --draft)
       DRAFT_PR=1
+      shift
+      ;;
+    --no-copilot-review)
+      REQUEST_COPILOT_REVIEW=0
       shift
       ;;
     --title)
@@ -203,6 +210,10 @@ import sys
 
 print(" ".join(shlex.quote(arg) for arg in sys.argv[1:]))
 PY
+}
+
+warn() {
+  echo "warning: $*" >&2
 }
 
 load_plan_kv() {
@@ -320,6 +331,12 @@ if [[ "$DRAFT_PR" == "1" ]]; then
   CREATE_CMD+=("--draft")
 fi
 CREATE_CMD_RENDERED="$(render_cmd "${CREATE_CMD[@]}")"
+REQUEST_REVIEW_CMD=()
+REQUEST_REVIEW_CMD_RENDERED=""
+if [[ "$REQUEST_COPILOT_REVIEW" == "1" ]]; then
+  REQUEST_REVIEW_CMD=("gh" "pr" "edit" "$SOURCE_BRANCH" "--add-reviewer" "@copilot")
+  REQUEST_REVIEW_CMD_RENDERED="$(render_cmd "${REQUEST_REVIEW_CMD[@]}")"
+fi
 
 SYNC_CMD=""
 if [[ -n "$BASE_WORKTREE" ]]; then
@@ -340,18 +357,23 @@ if [[ "$CREATE_PR" == "1" ]]; then
     git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
   fi
   PR_URL="$("${CREATE_CMD[@]}")"
+  if [[ "${#REQUEST_REVIEW_CMD[@]}" -gt 0 ]]; then
+    if ! "${REQUEST_REVIEW_CMD[@]}" >/dev/null; then
+      warn "PR created, but failed to request @copilot review via: $REQUEST_REVIEW_CMD_RENDERED"
+    fi
+  fi
 fi
 
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$REQUEST_REVIEW_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$(printf '%s;' "${LOCAL_REQUIRED_EXTRA_COMMANDS[@]:-}")" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
-changed_paths = [path for path in sys.argv[21].split(";") if path]
-reason_items = [reason for reason in sys.argv[22].split(";") if reason]
-extra_commands = [cmd for cmd in sys.argv[24].split(";") if cmd]
+changed_paths = [path for path in sys.argv[22].split(";") if path]
+reason_items = [reason for reason in sys.argv[23].split(";") if reason]
+extra_commands = [cmd for cmd in sys.argv[25].split(";") if cmd]
 
 payload = {
     "source_branch": sys.argv[1],
@@ -368,16 +390,17 @@ payload = {
     "unpushed_commit_count": int(sys.argv[12]),
     "remote_only_commit_count": int(sys.argv[13]),
     "create_command": sys.argv[14],
-    "post_merge_commands": [cmd for cmd in sys.argv[15:18] if cmd],
-    "cleanup_commands": [cmd for cmd in sys.argv[15:18] if cmd],
-    "pr_url": sys.argv[18] or None,
+    "review_request_command": sys.argv[15] or None,
+    "post_merge_commands": [cmd for cmd in sys.argv[16:19] if cmd],
+    "cleanup_commands": [cmd for cmd in sys.argv[16:19] if cmd],
+    "pr_url": sys.argv[19] or None,
     "local_required_validation": {
-        "scope": sys.argv[19],
-        "changed_path_count": int(sys.argv[20]),
+        "scope": sys.argv[20],
+        "changed_path_count": int(sys.argv[21]),
         "changed_paths": changed_paths,
-        "reason_summary": sys.argv[22] or None,
+        "reason_summary": sys.argv[23] or None,
         "reason_items": reason_items,
-        "recommended_required_command": sys.argv[23] or None,
+        "recommended_required_command": sys.argv[24] or None,
         "recommended_extra_commands": extra_commands,
     },
 }
