@@ -750,6 +750,23 @@ fn build_oasis7_chain_runtime_args_prefers_network_tier_manifest_when_present() 
     assert!(args.contains(&"--network-tier-manifest".to_string()));
     assert!(args.contains(&"/tmp/public-testnet.json".to_string()));
     assert!(!args.contains(&"--storage-profile".to_string()));
+    assert!(args.contains(&"--node-role".to_string()));
+    assert!(args.contains(&"sequencer".to_string()));
+}
+
+#[test]
+fn parse_options_still_validates_chain_node_role_when_manifest_is_present() {
+    let err = parse_options(
+        [
+            "--chain-network-tier-manifest",
+            "/tmp/public-testnet.json",
+            "--chain-node-role",
+            "invalid",
+        ]
+        .into_iter(),
+    )
+    .expect_err("should fail");
+    assert!(err.contains("--chain-node-role"));
 }
 
 #[test]

@@ -26,11 +26,13 @@ fn temp_dir(label: &str) -> PathBuf {
 fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
     let dir = temp_dir("manifest");
     let peers_path = dir.join("bootstrap.txt");
+    let genesis_path = dir.join("genesis.json");
     fs::write(
         &peers_path,
         "/ip4/127.0.0.1/tcp/4100\n/dns4/bootstrap.example/tcp/4101\n",
     )
     .expect("write peers");
+    fs::write(&genesis_path, "{}\n").expect("write genesis");
     let manifest_path = dir.join("manifest.json");
     fs::write(
         &manifest_path,
@@ -43,7 +45,7 @@ fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
   "chain_id": "oasis7-public-testnet",
   "runtime_refs": {{
     "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
-    "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+    "genesis_ref": "{}",
     "bootstrap_peer_ref": "{}"
   }},
   "endpoint_policy": {{
@@ -65,14 +67,15 @@ fn write_test_network_tier_manifest() -> (PathBuf, PathBuf) {
   }},
   "claims_policy": {{
     "allowed_claims": ["public_testnet"],
-    "denied_claims": ["mainnet_live"]
+    "denied_claims": ["mainnet_live", "production_oc_settlement"]
   }},
   "promotion_policy": {{
     "promote_from": ["shared_devnet"],
-    "required_gates": ["public_rpc_ready"]
+    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
+            genesis_path.display(),
             peers_path.display()
         ),
     )

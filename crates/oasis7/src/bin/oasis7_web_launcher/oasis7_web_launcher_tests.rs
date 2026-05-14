@@ -405,7 +405,8 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
     assert!(args.contains(&"--network-tier-manifest".to_string()));
     assert!(args.contains(&"/tmp/public-testnet.json".to_string()));
     assert!(!args.contains(&"--storage-profile".to_string()));
-    assert!(!args.contains(&"--node-role".to_string()));
+    assert!(args.contains(&"--node-role".to_string()));
+    assert!(args.contains(&"sequencer".to_string()));
 }
 
 #[test]
@@ -667,6 +668,23 @@ fn validate_chain_config_requires_public_entry_confirmation() {
     assert!(issues
         .iter()
         .any(|item| item.contains("explicit confirmation")));
+}
+
+#[test]
+fn validate_chain_config_rejects_invalid_manifest_path() {
+    let issues = validate_chain_config(&LauncherConfig {
+        chain_enabled: true,
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_network_tier_manifest: "/tmp/does-not-exist.json".to_string(),
+        chain_node_role: "sequencer".to_string(),
+        chain_p2p_user_mode: "auto_join".to_string(),
+        chain_node_validators: "chain-a:100".to_string(),
+        ..LauncherConfig::default()
+    });
+    assert!(issues
+        .iter()
+        .any(|item| item.contains("chain network tier manifest is invalid")));
 }
 
 #[test]

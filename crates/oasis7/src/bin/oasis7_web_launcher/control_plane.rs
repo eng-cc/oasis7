@@ -1,5 +1,6 @@
 use super::runtime_paths::viewer_dev_dist_candidates;
 use super::*;
+use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7_proto::storage_profile::StorageProfile;
 use std::io::{BufRead, BufReader, Read};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -794,7 +795,8 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if config.chain_node_id.trim().is_empty() {
         issues.push("chain node id is required".to_string());
     }
-    if config.chain_network_tier_manifest.trim().is_empty() {
+    let network_tier_manifest = config.chain_network_tier_manifest.trim();
+    if network_tier_manifest.is_empty() {
         if config
             .chain_storage_profile
             .parse::<StorageProfile>()
@@ -807,6 +809,15 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
         }
         if parse_chain_role(config.chain_node_role.as_str()).is_err() {
             issues.push("chain role must be one of: sequencer|storage|observer".to_string());
+        }
+    } else {
+        if parse_chain_role(config.chain_node_role.as_str()).is_err() {
+            issues.push("chain role must be one of: sequencer|storage|observer".to_string());
+        }
+        if let Err(err) =
+            LoadedNetworkTierManifest::load(std::path::Path::new(network_tier_manifest))
+        {
+            issues.push(format!("chain network tier manifest is invalid: {err}"));
         }
     }
     match parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()) {
@@ -963,11 +974,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     if chain_node_id.is_empty() {
         return Err("chain node id cannot be empty".to_string());
     }
-    let chain_role = if config.chain_network_tier_manifest.trim().is_empty() {
-        Some(parse_chain_role(config.chain_node_role.as_str())?)
-    } else {
-        None
-    };
+    let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
     let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
     if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
         return Err(
@@ -1018,6 +1025,8 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         config.chain_status_bind.trim().to_string(),
         "--execution-world-dir".to_string(),
         execution_world_dir,
+        "--node-role".to_string(),
+        chain_role,
         "--p2p-user-mode".to_string(),
         chain_p2p_user_mode,
         "--node-tick-ms".to_string(),
@@ -1040,8 +1049,6 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         let storage_profile = config.chain_storage_profile.parse::<StorageProfile>()?;
         args.push("--storage-profile".to_string());
         args.push(storage_profile.as_str().to_string());
-        args.push("--node-role".to_string());
-        args.push(chain_role.expect("role required without manifest"));
     } else {
         args.push("--network-tier-manifest".to_string());
         args.push(config.chain_network_tier_manifest.trim().to_string());

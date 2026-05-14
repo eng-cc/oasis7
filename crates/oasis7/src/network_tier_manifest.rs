@@ -202,6 +202,48 @@ fn validate_manifest(manifest: &NetworkTierManifest, path: &Path) -> Result<(), 
         "token_policy.value_semantics",
         path,
     )?;
+    validate_string_list(
+        manifest.claims_policy.allowed_claims.as_slice(),
+        "claims_policy.allowed_claims",
+        path,
+    )?;
+    validate_string_list(
+        manifest.claims_policy.denied_claims.as_slice(),
+        "claims_policy.denied_claims",
+        path,
+    )?;
+    validate_string_list(
+        manifest.promotion_policy.promote_from.as_slice(),
+        "promotion_policy.promote_from",
+        path,
+    )?;
+    validate_string_list(
+        manifest.promotion_policy.required_gates.as_slice(),
+        "promotion_policy.required_gates",
+        path,
+    )?;
+    validate_string_list(manifest.evidence_refs.as_slice(), "evidence_refs", path)?;
+
+    let genesis_path =
+        resolve_manifest_relative_path(path, manifest.runtime_refs.genesis_ref.as_str());
+    if !genesis_path.is_file() {
+        return Err(format!(
+            "network tier manifest {} references missing runtime_refs.genesis_ref file {}",
+            path.display(),
+            genesis_path.display()
+        ));
+    }
+    let bootstrap_path =
+        resolve_manifest_relative_path(path, manifest.runtime_refs.bootstrap_peer_ref.as_str());
+    if !bootstrap_path.is_file() {
+        return Err(format!(
+            "network tier manifest {} references missing runtime_refs.bootstrap_peer_ref file {}",
+            path.display(),
+            bootstrap_path.display()
+        ));
+    }
+
+    validate_tier_semantics(manifest, path)?;
     Ok(())
 }
 
@@ -231,16 +273,192 @@ fn validate_choice(raw: &str, choices: &[&str], field: &str, path: &Path) -> Res
     }
 }
 
+fn validate_string_list(items: &[String], field: &str, path: &Path) -> Result<(), String> {
+    for item in items {
+        validate_non_empty(item.as_str(), field, path)?;
+    }
+    Ok(())
+}
+
+fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Result<(), String> {
+    let token_policy = &manifest.token_policy;
+    let validator_policy = &manifest.validator_policy;
+    let endpoint_policy = &manifest.endpoint_policy;
+    let claims_policy = &manifest.claims_policy;
+    let required_gates = &manifest.promotion_policy.required_gates;
+    let joined_allowed = claims_policy.allowed_claims.join(" ").to_ascii_lowercase();
+    let joined_denied = claims_policy.denied_claims.join(" ").to_ascii_lowercase();
+
+    match manifest.tier.as_str() {
+        "local_devnet" => {
+            if token_policy.value_semantics != "preview" {
+                return Err(format!(
+                    "network tier manifest {} requires local_devnet value_semantics=preview",
+                    path.display()
+                ));
+            }
+            if token_policy.reset_policy != "ephemeral" {
+                return Err(format!(
+                    "network tier manifest {} requires local_devnet reset_policy=ephemeral",
+                    path.display()
+                ));
+            }
+            if validator_policy.validator_admission != "local_only" {
+                return Err(format!(
+                    "network tier manifest {} requires local_devnet validator_admission=local_only",
+                    path.display()
+                ));
+            }
+        }
+        "shared_devnet" => {
+            if token_policy.value_semantics != "preview" {
+                return Err(format!(
+                    "network tier manifest {} requires shared_devnet value_semantics=preview",
+                    path.display()
+                ));
+            }
+            if !matches!(
+                token_policy.reset_policy.as_str(),
+                "ephemeral" | "resettable"
+            ) {
+                return Err(format!(
+                    "network tier manifest {} requires shared_devnet reset_policy=ephemeral or reset_policy=resettable",
+                    path.display()
+                ));
+            }
+            if joined_allowed.contains("public_testnet") {
+                return Err(format!(
+                    "network tier manifest {} must not allow public_testnet claims for shared_devnet",
+                    path.display()
+                ));
+            }
+        }
+        "public_testnet" => {
+            if token_policy.value_semantics != "testnet" {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet value_semantics=testnet",
+                    path.display()
+                ));
+            }
+            if token_policy.reset_policy != "resettable" {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet reset_policy=resettable",
+                    path.display()
+                ));
+            }
+            if token_policy.faucet_mode != "guarded_testnet_faucet" {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet faucet_mode=guarded_testnet_faucet",
+                    path.display()
+                ));
+            }
+            if !matches!(
+                validator_policy.validator_admission.as_str(),
+                "allowlist_or_governed_candidate" | "shared_allowlist"
+            ) {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet validator_admission to stay in shared_allowlist or allowlist_or_governed_candidate",
+                    path.display()
+                ));
+            }
+            if endpoint_policy
+                .faucet_ref
+                .as_deref()
+                .unwrap_or_default()
+                .trim()
+                .is_empty()
+            {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet endpoint_policy.faucet_ref",
+                    path.display()
+                ));
+            }
+            if !joined_allowed.contains("public_testnet") {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet claims to explicitly allow public_testnet",
+                    path.display()
+                ));
+            }
+            if !joined_denied.contains("production_oc_settlement") {
+                return Err(format!(
+                    "network tier manifest {} requires public_testnet claims to explicitly deny production_oc_settlement",
+                    path.display()
+                ));
+            }
+        }
+        "mainnet" => {
+            if token_policy.value_semantics != "production" {
+                return Err(format!(
+                    "network tier manifest {} requires mainnet value_semantics=production",
+                    path.display()
+                ));
+            }
+            if token_policy.reset_policy != "frozen" {
+                return Err(format!(
+                    "network tier manifest {} requires mainnet reset_policy=frozen",
+                    path.display()
+                ));
+            }
+            if token_policy.faucet_mode != "none" {
+                return Err(format!(
+                    "network tier manifest {} requires mainnet faucet_mode=none",
+                    path.display()
+                ));
+            }
+            if validator_policy.governance_mode != "governance_registry" {
+                return Err(format!(
+                    "network tier manifest {} requires mainnet governance_mode=governance_registry",
+                    path.display()
+                ));
+            }
+            if validator_policy.validator_admission != "governance_registry_only" {
+                return Err(format!(
+                    "network tier manifest {} requires mainnet validator_admission=governance_registry_only",
+                    path.display()
+                ));
+            }
+            if endpoint_policy.faucet_ref.is_some() {
+                return Err(format!(
+                    "network tier manifest {} must not define mainnet endpoint_policy.faucet_ref",
+                    path.display()
+                ));
+            }
+            for gate in ["MAINNET-1", "MAINNET-2", "MAINNET-3", "MAINNET-4"] {
+                if !required_gates.iter().any(|value| value == gate) {
+                    return Err(format!(
+                        "network tier manifest {} requires mainnet gate {}",
+                        path.display(),
+                        gate
+                    ));
+                }
+            }
+            if joined_allowed.contains("faucet") {
+                return Err(format!(
+                    "network tier manifest {} must not allow faucet claims for mainnet",
+                    path.display()
+                ));
+            }
+        }
+        _ => {}
+    }
+
+    if manifest.tier != "mainnet" && !joined_denied.contains("mainnet") {
+        return Err(format!(
+            "network tier manifest {} requires non-mainnet tiers to explicitly deny mainnet claims",
+            path.display()
+        ));
+    }
+
+    Ok(())
+}
+
 fn resolve_manifest_relative_path(manifest_path: &Path, raw: &str) -> PathBuf {
     let candidate = PathBuf::from(raw);
     if candidate.is_absolute() {
         return candidate;
     }
     if let Some(parent) = manifest_path.parent() {
-        let manifest_relative = parent.join(&candidate);
-        if manifest_relative.exists() {
-            return manifest_relative;
-        }
+        return parent.join(&candidate);
     }
     candidate
 }
@@ -323,11 +541,11 @@ mod tests {
   }},
   "claims_policy": {{
     "allowed_claims": ["public_testnet"],
-    "denied_claims": ["mainnet_live"]
+    "denied_claims": ["mainnet_live", "production_oc_settlement"]
   }},
   "promotion_policy": {{
     "promote_from": ["shared_devnet"],
-    "required_gates": ["public_rpc_ready"]
+    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
@@ -403,6 +621,125 @@ mod tests {
 
         let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
         assert!(err.contains("invalid tier"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_manifest_rejects_missing_genesis_ref_file() {
+        let dir = temp_dir("missing-genesis");
+        let peers_path = dir.join("bootstrap.txt");
+        fs::write(&peers_path, "/ip4/127.0.0.1/tcp/4100\n").expect("write peers");
+        let manifest_path = dir.join("manifest.json");
+        fs::write(
+            &manifest_path,
+            format!(
+                r#"{{
+  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
+  "tier": "public_testnet",
+  "status": "specified_skeleton_only",
+  "network_id": "oasis7-public-testnet",
+  "chain_id": "oasis7-public-testnet",
+  "runtime_refs": {{
+    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
+    "genesis_ref": "missing-genesis.json",
+    "bootstrap_peer_ref": "{}"
+  }},
+  "endpoint_policy": {{
+    "rpc_ref": "https://public-testnet.example.invalid/rpc",
+    "explorer_ref": "https://public-testnet.example.invalid/explorer",
+    "faucet_ref": "https://public-testnet.example.invalid/faucet"
+  }},
+  "validator_policy": {{
+    "governance_mode": "shared_ops",
+    "validator_admission": "allowlist_or_governed_candidate",
+    "target_validator_count": 4,
+    "allow_observer_nodes": true
+  }},
+  "token_policy": {{
+    "symbol": "OC",
+    "faucet_mode": "guarded_testnet_faucet",
+    "reset_policy": "resettable",
+    "value_semantics": "testnet"
+  }},
+  "claims_policy": {{
+    "allowed_claims": ["public_testnet"],
+    "denied_claims": ["mainnet_live", "production_oc_settlement"]
+  }},
+  "promotion_policy": {{
+    "promote_from": ["shared_devnet"],
+    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
+  }},
+  "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
+}}"#,
+                peers_path.display()
+            ),
+        )
+        .expect("write manifest");
+
+        let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
+        assert!(err.contains("missing runtime_refs.genesis_ref"));
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn load_manifest_rejects_public_testnet_without_production_settlement_deny() {
+        let dir = temp_dir("claims");
+        let peers_path = dir.join("bootstrap.txt");
+        let genesis_path = dir.join("genesis.json");
+        fs::write(&peers_path, "/ip4/127.0.0.1/tcp/4100\n").expect("write peers");
+        fs::write(&genesis_path, "{}\n").expect("write genesis");
+        let manifest_path = dir.join("manifest.json");
+        fs::write(
+            &manifest_path,
+            format!(
+                r#"{{
+  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
+  "tier": "public_testnet",
+  "status": "specified_skeleton_only",
+  "network_id": "oasis7-public-testnet",
+  "chain_id": "oasis7-public-testnet",
+  "runtime_refs": {{
+    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
+    "genesis_ref": "{}",
+    "bootstrap_peer_ref": "{}"
+  }},
+  "endpoint_policy": {{
+    "rpc_ref": "https://public-testnet.example.invalid/rpc",
+    "explorer_ref": "https://public-testnet.example.invalid/explorer",
+    "faucet_ref": "https://public-testnet.example.invalid/faucet"
+  }},
+  "validator_policy": {{
+    "governance_mode": "shared_ops",
+    "validator_admission": "allowlist_or_governed_candidate",
+    "target_validator_count": 4,
+    "allow_observer_nodes": true
+  }},
+  "token_policy": {{
+    "symbol": "OC",
+    "faucet_mode": "guarded_testnet_faucet",
+    "reset_policy": "resettable",
+    "value_semantics": "testnet"
+  }},
+  "claims_policy": {{
+    "allowed_claims": ["public_testnet"],
+    "denied_claims": ["mainnet_live"]
+  }},
+  "promotion_policy": {{
+    "promote_from": ["shared_devnet"],
+    "required_gates": ["shared_devnet_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
+  }},
+  "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
+}}"#,
+                genesis_path.display(),
+                peers_path.display()
+            ),
+        )
+        .expect("write manifest");
+
+        let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
+        assert!(err.contains("production_oc_settlement"));
 
         let _ = fs::remove_dir_all(dir);
     }
