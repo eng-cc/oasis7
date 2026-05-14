@@ -69,6 +69,7 @@
   - PRD-GAME-011: As a 中循环玩家与玩法 owner, I want agent claims to keep a non-zero main-token-denominated cost and require upkeep, while allowing `slot-1` to auto-draw restricted starter funding from the dedicated pool when runtime says it is available, so that agent control reflects sustained commitment without forcing limited preview users to hold transferable assets or wait for operator approval.
   - PRD-GAME-012: As a 中循环玩家与制作人 owner, I want a stable 10-minute trust loop after onboarding plus a separate first-capability proof gate, so that the game first feels trustworthy and then proves sustained playability without conflating those two verdicts.
   - PRD-GAME-013: As a 制作人与玩法 owner, I want gameplay docs to distinguish physical-world scale from player interaction scale, so that oasis7 keeps a real metric world without accidentally promising Minecraft-style direct block play before the product is ready.
+  - PRD-GAME-014: As a 玩家, I want indirect agent gameplay to preserve a concrete sense of control, so that I feel I am directing outcomes rather than merely observing an autonomous simulation.
 - 模式分层说明：按 `PRD-CORE-009`，`PRD-GAME-008` 所承接的是玩家访问模式 `pure_api`，而不是 provider-backed `headless_agent` 一类 execution lane。
 - 正式游玩前置：按最新 `PRD-CORE-009` 口径，`PRD-GAME-008` 的 `pure_api` 正式游玩与 headed Web/UI 一样，要求 active LLM access；`--no-llm` 仅保留 observer/debug，不再计入正式可玩性与 parity 放行。
 - Critical User Flows:
@@ -152,6 +153,7 @@
   - AC-15: 新增 `PRD-GAME-011` agent 认领成本专题，明确“首个也不免费”、claim bond/upkeep、`restricted starter claim balance`、闲置/欠费回收、tier cap 与 UI/API canonical 字段。
   - AC-16: 新增 `PRD-GAME-012` 10 分钟留存修复专题，明确未来两周只优先推进首次控制地板、工业中循环包、首屏降噪、后果可见化与 active-LLM `10-minute trust gate` 五条 lane，并把 `first capability gate` 作为单独 follow-up verdict。
   - AC-17: 新增 `PRD-GAME-013` 尺度语义专题，明确厘米真值、coarse-grained 子系统分辨率、当前正式玩家动作粒度与 Viewer 视觉夸张边界，并能直接拆出 runtime/viewer/agent/QA 执行任务。
+  - AC-18: 新增 `PRD-GAME-014` 间接控制 control-feeling 专题，明确 accepted intent、主因果、打断/重排与续玩恢复四项 guarantees，并能直接拆出 runtime/viewer/agent/QA 执行任务与 formal lane 验收矩阵。
 - Non-Goals:
   - 不在本 PRD 中给出逐条数值参数表。
   - 不替代 runtime/p2p 的底层实现设计。
@@ -208,6 +210,7 @@
   - NFR-GAME-17: `PRD-GAME-011` 的首个 claim 免费路径命中次数必须为 `0`，并且 claim / upkeep / refund / slash / restricted grant 事件必须 100% 进入 token 审计链路。
   - NFR-GAME-18: `PRD-GAME-012` 的正式 `10-minute trust gate` 必须使用 active-LLM 样本；`--no-llm` 只允许作为 debug/probe lane，不得单独支撑“已可玩/已留存”结论；`first capability gate` 必须与 trust gate 分开判定。
   - NFR-GAME-19: `PRD-GAME-013` 所覆盖的 active 文档与玩家入口 100% 必须区分物理真值、coarse-grained 子系统分辨率、玩家动作粒度与表现层夸张，不允许把 `1cm` 直接包装成当前 block-editing 主玩法承诺。
+  - NFR-GAME-20: `PRD-GAME-014` 所覆盖的 headed Web/UI 与 pure API 正式玩家入口 100% 必须具备 accepted intent、主因果、主阻塞/override reason 与 next-step/recovery 语义，不允许只剩“世界有变化”或原始日志。
 - Security & Privacy: gameplay 不直接处理密钥；涉及玩家反馈与行为数据时遵循最小化采集与脱敏记录。
 
 ## 5. Risks & Roadmap
@@ -236,6 +239,7 @@
 | PRD-GAME-011 | TASK-GAME-039/040/041/042/043/044/045/046/047/048/049/050/051 | `test_tier_required` + `test_tier_full` | 文档治理检查、claim/upkeep/reclaim 状态机回归、restricted bucket 与 provenance 回归、grant lifecycle 与 issuer runbook、Viewer/API parity、经济审计与 abuse suite | agent 占有边界、token sink、受限启动余额、回收与可观测性 |
 | PRD-GAME-012 | TASK-GAME-061/062/063/064/065 | `test_tier_required` + `test_tier_full` | 文档治理检查、headed Web/UI 与 `software_safe` 控制 floor、active-LLM `10-minute trust gate` 样本、工业 capability follow-up 样本与 producer 双层 verdict 结论 | 10 分钟正式信任门、首屏主目标、首个持续能力门 |
 | PRD-GAME-013 | TASK-GAME-066/067/068/069/070 | `test_tier_required` + `test_tier_full` | 文档治理检查、厘米真值与 coarse-grained 子系统映射对账、Viewer 真值/夸张表达复核、dual-mode action contract 对账与 QA 尺度一致性矩阵 | 物理尺度合同、间接控制动作边界、表现层可信度 |
+| PRD-GAME-014 | `indirect-control-feeling-contract-freeze` / `runtime-control-feeling-canonical-contract` / `viewer-control-feeling-surface-alignment` / `agent-control-feeling-reprioritize-contract` / `qa-control-feeling-matrix` | `test_tier_required` + `test_tier_full` | 文档治理检查、canonical accepted-intent/causality contract 对账、headed Web/UI 与 pure API agency surface 复核、reprioritize/override 语义对账、QA control-feeling matrix 与 formal lane 样本抽样 | 间接控制下的玩家控制感、主因果、重排恢复与多端等价性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -254,3 +258,4 @@
 | DEC-GAME-013 | 对 `PRD-GAME-011` 追加 `restricted starter claim balance`，作为 `slot-1` 专用受限资金来源 | 继续要求所有首个 claim 都必须持有可转账 liquid；或直接空投可转账 main token | 受控测试需要启动资金，但不能把启动补贴变成可转账资产，也不能推翻“首个 claim 非免费”的主规则。 |
 | DEC-GAME-014 | 新增独立 `PRD-GAME-012` 作为 10 分钟留存修复专题，并把正式 verdict 拆成 `10-minute trust gate` 与 `first capability gate` | 继续把留存问题拆散到 viewer/runtime/QA 各专题自行优化，或继续要求单个 10 分钟样本同时证明“值得继续玩”和“首个持续能力已闭环” | 当前问题不是单条 lane 的点状回归，而是“控制地板、中循环、首屏和 QA 门禁”需要在同一冲刺窗口统一排序；同时 `PostOnboarding` 里程碑与 10 分钟 trust 样本本来就不是同一时间尺度。 |
 | DEC-GAME-015 | 新增独立 `PRD-GAME-013` 作为尺度语义专题，并把“厘米真值”“粗粒度子系统”“玩家动作粒度”“表现层夸张”拆成四层合同 | 继续只保留底层 `1cm` 描述，或直接把产品方向改成 Minecraft 式逐块具身玩法 | 当前问题不在有没有物理尺度，而在没有正式解释“真实尺度”和“当前交互粒度”的关系；盲目切产品主路线会稀释 `PRD-GAME-012` 的主 blocker。 |
+| DEC-GAME-016 | 新增独立 `PRD-GAME-014` 作为间接控制 control-feeling 专题，并把“accepted intent / 主因果 / 打断重排 / 续玩恢复”冻结成正式 guarantees | 继续把“控制感”分散在留存卡、Viewer 文案、runtime ack 与 issue 讨论里，或直接把问题解释成“需要更多 direct control” | 当前 issue #164 暴露的不是动作数量不足，而是间接控制缺少一份可裁决、可实现、可测试的 agency 合同；先补合同，才能稳定评审后续 UX/runtime/agent 变更。 |

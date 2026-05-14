@@ -170,6 +170,11 @@
 - [x] qa-scale-consistency-matrix (PRD-GAME-013) [test_tier_required]: `qa_engineer` 已在 `doc/testing/evidence/gameplay-scale-consistency-matrix-2026-05-07.md` 完成最终矩阵复核，确认四层尺度合同在 runtime/viewer/agent 三侧一致，并补齐 blocker 签名归档。 Trace: .pm/tasks/task_8205baa6d2fb46388b11c1eed340fdf5.yaml
 - `PRD-GAME-013` 当前规划切片已在 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` 全部收口；该专题完成不等于 `PRD-GAME-012` trust/capability gate 已恢复。
 
+### T10 间接控制 control-feeling 合同（2026-05-14）
+- [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: 新增“间接控制 control-feeling 合同”专题 PRD / design / project，并完成 `game` 根 PRD / project、`gameplay-top-level-design` 主文档、索引与 task execution log 挂载，正式冻结 accepted intent、主因果、打断/重排与续玩恢复四项 guarantees。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
+- 后续待建任务见 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`：
+  `runtime-control-feeling-canonical-contract`、`viewer-control-feeling-surface-alignment`、`agent-control-feeling-reprioritize-contract`、`qa-control-feeling-matrix`。
+
 ## 依赖
 - 模块设计总览：`doc/game/design.md`
 - doc/game/prd.index.md

@@ -14,6 +14,7 @@
 - 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+- 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
@@ -35,6 +36,7 @@
 ## 活跃补充文档
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
+- `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
 - `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`：物理尺度真值、间接控制动作粒度与表现层夸张边界主入口。
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`：试玩执行边界与继续/暂停决策主入口。
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`：closed beta 放行条件与候选级门禁主入口。
@@ -62,6 +64,7 @@
 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.design.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
 | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.design.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` |
 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.design.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.project.md` |
+| `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md` |
 | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.design.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md` |
 | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.design.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md` |
 | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.design.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.project.md` |
