@@ -188,4 +188,30 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
   });
+
+  it("forces goal execution blocked when the empty-entity guard trips", async () => {
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {},
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          stage_status: "active",
+          execution_state: "completed",
+          blocker_kind: null,
+          blocker_detail: null,
+        },
+      }),
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(stagePanel).toBeTruthy();
+    expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
+  });
 });

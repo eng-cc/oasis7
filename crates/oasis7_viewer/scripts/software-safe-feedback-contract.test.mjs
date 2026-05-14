@@ -172,6 +172,20 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
+  core.state.snapshot.model.agents = {};
+  core.state.snapshot.model.locations = {};
+  core.state.snapshot.player_gameplay.execution_state = "completed";
+  core.state.snapshot.player_gameplay.stage_status = "active";
+  core.state.snapshot.player_gameplay.blocker_kind = null;
+  core.state.snapshot.player_gameplay.blocker_detail = null;
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.stageStatus, "blocked");
+  assert.equal(gameplaySummary.executionState, "blocked");
+  assert.equal(gameplaySummary.executionCauseKind, "world_constraint");
+  assert.equal(gameplaySummary.blockerKind, "runtime_snapshot_empty_entities");
+}
+
+{
   const injectedState = core.injectSnapshot({
     time: 12,
     config: {

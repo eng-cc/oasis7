@@ -1515,7 +1515,9 @@ function buildGameplaySummary(locale = state.uiLocale) {
     : emptyEntityBlocker
       ? emptyEntityBlocker.blockerDetail
       : runtimeBlockerDetail;
-  const executionState = gameplay.execution_state
+  const executionState = emptyEntityBlocker
+    ? "blocked"
+    : gameplay.execution_state
     || (() => {
       const recentStage = String(recentFeedback?.stage || "").trim().toLowerCase();
       if (["accepted", "submitted", "queued", "ack"].includes(recentStage)) {
@@ -1559,7 +1561,9 @@ function buildGameplaySummary(locale = state.uiLocale) {
     { id: "completed", label: localeText(locale, "已完成", "Completed") },
     { id: "rejected", label: localeText(locale, "已拒绝", "Rejected") },
   ];
-  const executionCauseKind = gameplay.causality_kind
+  const executionCauseKind = emptyEntityBlocker
+    ? "world_constraint"
+    : gameplay.causality_kind
     || (() => {
       if (executionState === "accepted") return "queued_for_execution";
       if (executionState === "rejected") return "request_rejected";
@@ -1583,7 +1587,9 @@ function buildGameplaySummary(locale = state.uiLocale) {
         return null;
     }
   })();
-  const executionCauseDetail = gameplay.causality_detail
+  const executionCauseDetail = emptyEntityBlocker
+    ? resolvedBlockerDetail || emptyEntityBlocker.blockerDetail || null
+    : gameplay.causality_detail
     || (() => {
       if (executionState === "blocked") {
         return resolvedBlockerDetail || recentFeedback?.reason || null;

@@ -6,6 +6,20 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::auth::verify_session_register_auth_proof;
+use super::live::ViewerLiveDecisionMode;
+use super::protocol::{
+    viewer_event_kind_matches, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
+    AuthoritativeChallengeCommand, AuthoritativeChallengeError,
+    AuthoritativeChallengeResolveRequest, AuthoritativeChallengeStatus,
+    AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
+    AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryAck, AuthoritativeRecoveryCommand,
+    AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackRequest,
+    AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
+    AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
+    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
+    ViewerStream, VIEWER_PROTOCOL_VERSION,
+};
 use crate::geometry::GeoPos;
 use crate::observability::emit_stderr_or_event;
 use crate::runtime::{
@@ -21,21 +35,6 @@ use crate::simulator::{
     SNAPSHOT_VERSION,
 };
 use tracing::Level;
-
-use super::auth::verify_session_register_auth_proof;
-use super::live::ViewerLiveDecisionMode;
-use super::protocol::{
-    viewer_event_kind_matches, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
-    AuthoritativeChallengeCommand, AuthoritativeChallengeError,
-    AuthoritativeChallengeResolveRequest, AuthoritativeChallengeStatus,
-    AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
-    AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryAck, AuthoritativeRecoveryCommand,
-    AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackRequest,
-    AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
-    AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
-    ViewerStream, VIEWER_PROTOCOL_VERSION,
-};
 mod authoritative;
 #[path = "runtime_live/chain_link.rs"]
 mod chain_link;
@@ -52,7 +51,6 @@ mod session_policy;
 mod support;
 #[cfg(test)]
 mod tests;
-
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
     RuntimeSettlementRankingGate, RuntimeStableCheckpoint,
@@ -656,7 +654,7 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
-        let mut latest_runtime_events_for_feedback = Vec::new();
+        let mut runtime_events_for_feedback = Vec::new();
 
         for _ in 0..step_count.max(1) {
             if let Err(reason) = self
@@ -765,7 +763,7 @@ impl ViewerRuntimeLiveServer {
             }
 
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
-            latest_runtime_events_for_feedback = new_events.clone();
+            runtime_events_for_feedback.extend(new_events.iter().cloned());
             let mut mapped_events = Vec::new();
             for runtime_event in &new_events {
                 let event = map_runtime_event(runtime_event, &self.snapshot_config);
@@ -887,8 +885,12 @@ impl ViewerRuntimeLiveServer {
                 &ack,
             );
             let causality =
-                player_gameplay_causality_from_runtime_events(&latest_runtime_events_for_feedback);
+                player_gameplay_causality_from_runtime_events(&runtime_events_for_feedback);
             self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
+            if session.subscribed.contains(&ViewerStream::Snapshot) {
+                let snapshot = self.compat_snapshot();
+                send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+            }
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
 
