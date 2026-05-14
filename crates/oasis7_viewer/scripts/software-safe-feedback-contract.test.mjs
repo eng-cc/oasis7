@@ -89,6 +89,7 @@ const core = await import("../software_safe_src/legacy_core.js");
     player_gameplay: {
       stage_id: "post_onboarding",
       stage_status: "blocked",
+      execution_state: "blocked",
       goal_id: "post_onboarding.recover_capability",
       goal_kind: "RecoverCapability",
       goal_title: "Recover sustainable capability",
@@ -97,6 +98,8 @@ const core = await import("../software_safe_src/legacy_core.js");
       progress_percent: 68,
       blocker_kind: "material_shortage",
       blocker_detail: "iron input exhausted at factory-0",
+      causality_kind: "world_constraint",
+      causality_detail: "iron input exhausted at factory-0",
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
       available_actions: [
@@ -130,6 +133,9 @@ const core = await import("../software_safe_src/legacy_core.js");
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.stageId, "post_onboarding");
   assert.equal(gameplaySummary.stageStatus, "blocked");
+  assert.equal(gameplaySummary.executionState, "blocked");
+  assert.equal(gameplaySummary.executionCauseKind, "world_constraint");
+  assert.match(gameplaySummary.executionCauseLabel, /World Constraint/i);
   assert.equal(gameplaySummary.progressPercent, 68);
   assert.deepEqual(
     gameplaySummary.availableActions.map((action) => action.actionId),
@@ -142,6 +148,27 @@ const core = await import("../software_safe_src/legacy_core.js");
 {
   const gameplaySummary = core.buildGameplaySummary("zh");
   assert.match(gameplaySummary.assetGovernanceHandoff, /资产 \/ 治理动作/);
+  assert.equal(gameplaySummary.executionStateLabel, "已阻塞");
+}
+
+{
+  core.state.snapshot.player_gameplay.execution_state = "completed";
+  core.state.snapshot.player_gameplay.causality_kind = "agent_override";
+  core.state.snapshot.player_gameplay.causality_detail = "rule module policy.guard redirected the accepted action before execution";
+  core.state.snapshot.player_gameplay.recent_feedback = {
+    action: "step",
+    stage: "completed_advanced",
+    effect: "world advanced: logicalTime +1, eventSeq +2",
+    reason: null,
+    hint: null,
+    delta_logical_time: 1,
+    delta_event_seq: 2,
+  };
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.executionState, "completed");
+  assert.equal(gameplaySummary.executionCauseKind, "agent_override");
+  assert.match(gameplaySummary.executionCauseLabel, /Agent Chose Differently/i);
+  assert.match(gameplaySummary.executionCauseDetail, /policy\.guard/i);
 }
 
 {

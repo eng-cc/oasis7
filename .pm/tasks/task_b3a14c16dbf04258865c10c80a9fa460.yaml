@@ -1,0 +1,23 @@
+task_uid: task_b3a14c16dbf04258865c10c80a9fa460
+title: "issue 161 action causality blocker taxonomy"
+owner_role: viewer_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-issue-161-action-causality-blocker-taxonomy
+execution_log_path: .pm/tasks/task_b3a14c16dbf04258865c10c80a9fa460.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-top-level-design.prd.md
+  - doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md
+doc_refs: []
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "Canonical player surface exposes a unified goal execution state machine for player-issued goals."
+  - "Failure reasons stay inside a small blocker taxonomy with actionable next steps."
+  - "Player can distinguish agent choice override from world constraint blockage."
+handoff_to: []
+updated_at: 2026-05-14T09:11:06+08:00
+last_started_at: 2026-05-13T22:28:21+08:00
+last_closed_at: 2026-05-14T09:11:06+08:00

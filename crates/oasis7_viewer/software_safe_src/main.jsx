@@ -257,6 +257,14 @@ function gameplayStageLabel(status, locale) {
   return status || tr(locale, "等待同步", "Waiting for Sync");
 }
 
+function goalExecutionBadgeClass(state) {
+  return state === "blocked" || state === "rejected"
+    ? "badge badge--warn"
+    : state === "completed"
+      ? "badge badge--good"
+      : "badge badge--accent";
+}
+
 function gameplayProgressLabel(progressPercent, locale) {
   return progressPercent == null
     ? tr(locale, "进度待发布", "Progress Pending")
@@ -519,6 +527,34 @@ function WorldSummaryPanel() {
                   {gameplayProgressLabel(gameplay().progressPercent, locale())}
                 </Badge>
               </div>
+              <EventCard
+                title={tr(locale(), "目标执行状态", "Goal Execution")}
+                badge={gameplay().executionStateLabel || gameplay().executionState || "-"}
+                badgeClass={goalExecutionBadgeClass(gameplay().executionState)}
+                meta={tr(locale(), "统一状态机：Accepted -> Executing -> Blocked / Completed / Rejected", "Unified state machine: Accepted -> Executing -> Blocked / Completed / Rejected")}
+              >
+                <div class="badge-row">
+                  <For each={gameplay().executionStateMachine || []}>
+                    {(item) => (
+                      <Badge class={gameplay().executionState === item.id ? goalExecutionBadgeClass(item.id) : "badge"}>
+                        {item.label}
+                      </Badge>
+                    )}
+                  </For>
+                </div>
+                <div class="feedback-summary">
+                  {gameplay().executionSummary
+                    || tr(locale(), "等待目标执行状态更新。", "Waiting for goal execution state updates.")}
+                </div>
+                <Show when={gameplay().executionCauseLabel}>
+                  <div class="badge-row">
+                    <Badge>{gameplay().executionCauseLabel}</Badge>
+                  </div>
+                </Show>
+                <Show when={gameplay().executionCauseDetail}>
+                  <div class="feedback-detail">{gameplay().executionCauseDetail}</div>
+                </Show>
+              </EventCard>
               <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
                 <CalloutCard
                   title={
@@ -526,7 +562,7 @@ function WorldSummaryPanel() {
                       ? tr(locale(), "当前阻塞：空快照", "Current Blocker: Empty Snapshot")
                       : tr(locale(), "当前阻塞", "Current Blocker")
                   }
-                  badge={gameplay().blockerKind || "blocked"}
+                  badge={gameplay().blockerLabel || gameplay().blockerKind || "blocked"}
                   badgeClass="badge badge--warn"
                   variant="warn"
                 >

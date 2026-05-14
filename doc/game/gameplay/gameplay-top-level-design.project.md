@@ -66,6 +66,7 @@
 口径更新（2026-04-15）: T8 当前已将 producer verdict 拆成两层。`10-minute trust gate` 只判断“是否已经值得继续玩”，`first capability gate` 再判断“首个持续能力是否已闭环”。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not_run`；原因不是 capability 已独立判失败，而是 trust floor 再次回退后 capability gate 当前未进入。
 
 - [x] gameplay-early-retention-focus-order (PRD-GAME-012) [test_tier_required]: `producer_system_designer` 已把当前 gameplay scope freeze 正式改写为“`trust gate` 地板恢复 -> `PostOnboarding` capability closure -> 工业停机/修复可读 -> 间接控制因果与下一步”四级优先顺序，并补充 defer 规则：在这些 blocker 清空前，不扩大战争/治理/元进度在首局中的曝光，也不允许用 `--no-llm` / operator-only lane 充当正式放行依据。 Trace: .pm/tasks/task_886e2ef4878645a6a6ab69c588dce57e.yaml
+- [x] issue-161-action-causality-blocker-taxonomy (PRD-GAME-012) [test_tier_required]: `viewer_engineer` 已把玩家目标反馈的统一执行状态机与小型 blocker taxonomy 下沉到 canonical `player_gameplay` snapshot，并在 `software_safe` 正式 Web 主入口显式区分 `world_constraint` 与 `agent_override`，让玩家可以直接判断“世界条件阻塞”还是“agent 改走了另一条已接受的执行路径”。 Trace: .pm/tasks/task_b3a14c16dbf04258865c10c80a9fa460.yaml
 
 ### T9 物理尺度与间接控制对齐（2026-05-07）
 - [x] gameplay-physical-scale-contract-freeze (PRD-GAME-013) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-013` 专题 PRD / design / project，正式冻结“厘米真值 / coarse-grained 子系统 / 玩家动作粒度 / 表现层夸张”四层尺度合同，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载。 Trace: .pm/tasks/task_5dfbbe7c8c0c4557bef2b49612da3081.yaml
