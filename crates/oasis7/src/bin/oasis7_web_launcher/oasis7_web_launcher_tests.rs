@@ -31,6 +31,7 @@ fn parse_options_defaults() {
         options.initial_config.chain_status_bind,
         DEFAULT_CHAIN_STATUS_BIND
     );
+    assert_eq!(options.initial_config.chain_network_tier_manifest, "");
     assert_eq!(
         options.initial_config.chain_storage_profile,
         StorageProfile::DevLocal.as_str()
@@ -142,6 +143,7 @@ fn parse_options_accepts_overrides() {
         options.initial_config.chain_storage_profile,
         "release_default"
     );
+    assert_eq!(options.initial_config.chain_network_tier_manifest, "");
     assert_eq!(options.initial_config.chain_p2p_user_mode, "public_entry");
     assert!(options.initial_config.chain_p2p_accept_public_entry);
     assert_eq!(
@@ -378,6 +380,32 @@ fn build_chain_runtime_args_includes_chain_overrides_when_on() {
     assert!(
         args.contains(&"output/chain-runtime/chain-a/reward-runtime-execution-world".to_string())
     );
+}
+
+#[test]
+fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
+    let config = LauncherConfig {
+        viewer_static_dir: ".".to_string(),
+        chain_enabled: true,
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_network_tier_manifest: "/tmp/public-testnet.json".to_string(),
+        chain_p2p_user_mode: "public_entry".to_string(),
+        chain_p2p_accept_public_entry: true,
+        chain_node_tick_ms: "300".to_string(),
+        chain_pos_slot_duration_ms: "12000".to_string(),
+        chain_pos_ticks_per_slot: "10".to_string(),
+        chain_pos_proposal_tick_phase: "9".to_string(),
+        chain_pos_adaptive_tick_scheduler_enabled: true,
+        chain_pos_slot_clock_genesis_unix_ms: "1700000000000".to_string(),
+        chain_pos_max_past_slot_lag: "32".to_string(),
+        ..LauncherConfig::default()
+    };
+    let args = build_chain_runtime_args(&config).expect("args");
+    assert!(args.contains(&"--network-tier-manifest".to_string()));
+    assert!(args.contains(&"/tmp/public-testnet.json".to_string()));
+    assert!(!args.contains(&"--storage-profile".to_string()));
+    assert!(!args.contains(&"--node-role".to_string()));
 }
 
 #[test]

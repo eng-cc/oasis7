@@ -794,18 +794,20 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if config.chain_node_id.trim().is_empty() {
         issues.push("chain node id is required".to_string());
     }
-    if config
-        .chain_storage_profile
-        .parse::<StorageProfile>()
-        .is_err()
-    {
-        issues.push(
-            "chain storage profile must be one of: dev_local|release_default|soak_forensics"
-                .to_string(),
-        );
-    }
-    if parse_chain_role(config.chain_node_role.as_str()).is_err() {
-        issues.push("chain role must be one of: sequencer|storage|observer".to_string());
+    if config.chain_network_tier_manifest.trim().is_empty() {
+        if config
+            .chain_storage_profile
+            .parse::<StorageProfile>()
+            .is_err()
+        {
+            issues.push(
+                "chain storage profile must be one of: dev_local|release_default|soak_forensics"
+                    .to_string(),
+            );
+        }
+        if parse_chain_role(config.chain_node_role.as_str()).is_err() {
+            issues.push("chain role must be one of: sequencer|storage|observer".to_string());
+        }
     }
     match parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str()) {
         Ok(mode) => {
@@ -961,7 +963,11 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     if chain_node_id.is_empty() {
         return Err("chain node id cannot be empty".to_string());
     }
-    let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
+    let chain_role = if config.chain_network_tier_manifest.trim().is_empty() {
+        Some(parse_chain_role(config.chain_node_role.as_str())?)
+    } else {
+        None
+    };
     let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
     if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
         return Err(
@@ -998,7 +1004,6 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         config.chain_pos_max_past_slot_lag.as_str(),
         "chain pos max past slot lag",
     )?;
-    let storage_profile = config.chain_storage_profile.parse::<StorageProfile>()?;
     let validators = parse_chain_validators(config.chain_node_validators.as_str())?;
     let replication_bootstrap_peers =
         parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())?;
@@ -1011,12 +1016,8 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         resolve_chain_world_id(config),
         "--status-bind".to_string(),
         config.chain_status_bind.trim().to_string(),
-        "--storage-profile".to_string(),
-        storage_profile.as_str().to_string(),
         "--execution-world-dir".to_string(),
         execution_world_dir,
-        "--node-role".to_string(),
-        chain_role,
         "--p2p-user-mode".to_string(),
         chain_p2p_user_mode,
         "--node-tick-ms".to_string(),
@@ -1035,6 +1036,16 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         "--pos-max-past-slot-lag".to_string(),
         pos_max_past_slot_lag.to_string(),
     ];
+    if config.chain_network_tier_manifest.trim().is_empty() {
+        let storage_profile = config.chain_storage_profile.parse::<StorageProfile>()?;
+        args.push("--storage-profile".to_string());
+        args.push(storage_profile.as_str().to_string());
+        args.push("--node-role".to_string());
+        args.push(chain_role.expect("role required without manifest"));
+    } else {
+        args.push("--network-tier-manifest".to_string());
+        args.push(config.chain_network_tier_manifest.trim().to_string());
+    }
     args.push(if config.chain_p2p_accept_public_entry {
         "--p2p-accept-public-entry".to_string()
     } else {

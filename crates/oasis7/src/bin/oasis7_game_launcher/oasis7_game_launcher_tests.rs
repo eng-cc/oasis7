@@ -204,6 +204,7 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.viewer_static_dir, "dist");
     assert_eq!(options.chain_status_bind, "127.0.0.1:6331");
     assert_eq!(options.chain_node_id, "chain-a");
+    assert_eq!(options.chain_network_tier_manifest, "");
     assert_eq!(options.chain_storage_profile, StorageProfile::SoakForensics);
     assert_eq!(options.chain_world_id, Some("live-chain-a".to_string()));
     assert_eq!(options.chain_node_role, "storage");
@@ -734,6 +735,21 @@ fn build_oasis7_chain_runtime_args_supports_all_storage_profiles() {
         assert!(args.contains(&"--storage-profile".to_string()));
         assert!(args.contains(&expected.to_string()));
     }
+}
+
+#[test]
+fn build_oasis7_chain_runtime_args_prefers_network_tier_manifest_when_present() {
+    let options = CliOptions {
+        chain_node_id: "chain-a".to_string(),
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_network_tier_manifest: "/tmp/public-testnet.json".to_string(),
+        chain_storage_profile: StorageProfile::ReleaseDefault,
+        ..CliOptions::default()
+    };
+    let args = build_oasis7_chain_runtime_args(&options);
+    assert!(args.contains(&"--network-tier-manifest".to_string()));
+    assert!(args.contains(&"/tmp/public-testnet.json".to_string()));
+    assert!(!args.contains(&"--storage-profile".to_string()));
 }
 
 #[test]

@@ -65,6 +65,7 @@ const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
+const DEFAULT_CHAIN_NETWORK_TIER_MANIFEST: &str = "";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
@@ -102,6 +103,7 @@ struct LauncherConfig {
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
+    chain_network_tier_manifest: String,
     chain_storage_profile: String,
     chain_world_id: String,
     chain_node_role: String,
@@ -137,6 +139,7 @@ impl Default for LauncherConfig {
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
+            chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal.as_str().to_string(),
             chain_world_id: String::new(),
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
@@ -683,6 +686,10 @@ where
             "--chain-node-id" => {
                 options.initial_config.chain_node_id = next_value(&mut iter, "--chain-node-id")?;
             }
+            "--chain-network-tier-manifest" => {
+                options.initial_config.chain_network_tier_manifest =
+                    next_value(&mut iter, "--chain-network-tier-manifest")?;
+            }
             "--chain-storage-profile" => {
                 options.initial_config.chain_storage_profile =
                     next_value(&mut iter, "--chain-storage-profile")?;
@@ -783,11 +790,18 @@ where
             options.initial_config.chain_status_bind.as_str(),
             "--chain-status-bind",
         )?;
-        options
+        if options
             .initial_config
-            .chain_storage_profile
-            .parse::<StorageProfile>()?;
-        parse_chain_role(options.initial_config.chain_node_role.as_str())?;
+            .chain_network_tier_manifest
+            .trim()
+            .is_empty()
+        {
+            options
+                .initial_config
+                .chain_storage_profile
+                .parse::<StorageProfile>()?;
+            parse_chain_role(options.initial_config.chain_node_role.as_str())?;
+        }
         parse_chain_p2p_user_mode(options.initial_config.chain_p2p_user_mode.as_str())?;
         parse_positive_u64(
             options.initial_config.chain_node_tick_ms.as_str(),

@@ -217,6 +217,8 @@ fn main() {
 }
 
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
+    let mut options = options;
+    apply_network_tier_manifest_defaults(&mut options);
     let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_chain_runtime");
     info!(
         trace_session_id = %trace_session_id,
@@ -403,6 +405,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.node_id.clone(),
         options.world_id.clone(),
         paths.execution_world_dir.clone(),
+        options.loaded_network_tier_manifest.clone(),
         release_security_policy,
         effective_p2p_policy,
         Arc::clone(&reward_runtime_metrics),
@@ -635,8 +638,16 @@ fn build_default_replication_network_config(
             })
             .collect::<Result<_, _>>()?;
     }
-    config.bootstrap_peers = options
-        .replication_network_bootstrap_peers
+    let bootstrap_peers = if options.replication_network_bootstrap_peers.is_empty() {
+        options
+            .loaded_network_tier_manifest
+            .as_ref()
+            .map(|loaded| loaded.bootstrap_peers.clone())
+            .unwrap_or_default()
+    } else {
+        options.replication_network_bootstrap_peers.clone()
+    };
+    config.bootstrap_peers = bootstrap_peers
         .iter()
         .map(|raw| {
             raw.parse()
@@ -645,6 +656,15 @@ fn build_default_replication_network_config(
         .collect::<Result<_, _>>()?;
     apply_traffic_profile_to_replication_network_config(&mut config, options.traffic_profile);
     Ok(config)
+}
+
+fn apply_network_tier_manifest_defaults(options: &mut CliOptions) {
+    let Some(loaded_manifest) = options.loaded_network_tier_manifest.as_ref() else {
+        return;
+    };
+    if options.world_id == cli::DEFAULT_WORLD_ID {
+        options.world_id = loaded_manifest.manifest.chain_id.clone();
+    }
 }
 
 fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
@@ -796,6 +816,9 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[path = "oasis7_chain_runtime/execution_bridge_real_tests.rs"]
 mod execution_bridge_real_tests;
 
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_network_tier_tests.rs"]
+mod network_tier_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_tests.rs"]
 mod observability_tests;

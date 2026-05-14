@@ -106,6 +106,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--chain-node-id" => {
                 options.chain_node_id = parse_required_value(&mut iter, "--chain-node-id")?;
             }
+            "--chain-network-tier-manifest" => {
+                options.chain_network_tier_manifest =
+                    parse_required_value(&mut iter, "--chain-network-tier-manifest")?;
+            }
             "--chain-storage-profile" => {
                 options.chain_storage_profile =
                     parse_required_value(&mut iter, "--chain-storage-profile")?
@@ -245,7 +249,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         if options.chain_node_id.trim().is_empty() {
             return Err("--chain-node-id requires a non-empty value".to_string());
         }
-        parse_chain_node_role(options.chain_node_role.as_str())?;
+        if options.chain_network_tier_manifest.trim().is_empty() {
+            parse_chain_node_role(options.chain_node_role.as_str())?;
+            if options.chain_storage_profile.as_str().trim().is_empty() {
+                return Err("--chain-storage-profile requires a non-empty value".to_string());
+            }
+        }
         parse_chain_p2p_user_mode(options.chain_p2p_user_mode.as_str())?;
         if options.chain_node_tick_ms == 0 {
             return Err("--chain-node-tick-ms must be a positive integer".to_string());
@@ -395,6 +404,8 @@ Options:\n\
   --chain-disable              disable oasis7_chain_runtime\n\
   --chain-status-bind <addr>   oasis7_chain_runtime status bind (default: {DEFAULT_CHAIN_STATUS_BIND})\n\
   --chain-node-id <id>         oasis7_chain_runtime node id (default: {DEFAULT_CHAIN_NODE_ID})\n\
+  --chain-network-tier-manifest <path>\n\
+                               formal network tier manifest json; when set, chain world/bootstrap peers load from manifest and explicit storage profile becomes optional\n\
   --chain-storage-profile <name> oasis7_chain_runtime storage profile (default: dev_local)\n\
   --chain-world-id <id>        oasis7_chain_runtime world id (default: live-<scenario>)\n\
   --chain-node-role <role>     oasis7_chain_runtime role (default: {DEFAULT_CHAIN_NODE_ROLE})\n\
