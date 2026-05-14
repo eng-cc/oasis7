@@ -881,7 +881,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - 当前 liveops 最小职责：
   - 每个窗口固定 `window_id/candidate_id/fallback_candidate_id/owners_on_duty/claim_envelope`
   - 发现真值漂移、QA `block`、共享访问失效或 preview 口径越界时立即 `freeze`
-  - `rollback` 只能回到最近一次 `pass` 的 candidate bundle
+  - `staging/canary` 的 `rollback` 只能回到最近一次 `pass` 的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate，则至少要固定一条受审计 `bootstrap_restore_ready` fallback，并补齐 `restore_steps_ref/fallback_owner_ref/restoration_scope`
   - 没有 `promotion_record`、`incident_review`、`exit_decision` 的 track 不得记完成
 - 当前 `shared_devnet` dry-run 结论：
   - `gate_result=partial`

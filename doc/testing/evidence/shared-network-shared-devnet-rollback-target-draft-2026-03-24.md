@@ -20,15 +20,17 @@
 
 ## Fallback Candidate
 - `fallback_candidate_id`:
-  - `<previous-pass-candidate-id>`
+  - `shared-devnet-bootstrap-fallback`
+- `fallback_class`:
+  - `bootstrap_restore_ready`
 - `fallback_candidate_bundle_ref`:
-  - `<output/release-candidates/fallback.json>`
+  - `<output/release-candidates/bootstrap-fallback.json>`
 - `fallback_gate_ref`:
-  - `<output/shared-network/.../gate/.../summary.md>`
+  - `<bootstrap restore checklist or audited fallback summary>`
 - `fallback_track_result`:
-  - `pass`
+  - `bootstrap_restore_ready`
 - `fallback_owner_ref`:
-  - `<promotion record | incident review | approval record>`
+  - `<operator checklist | approval record>`
 
 ## Rollback Readiness
 - `restore_steps_ref`:
@@ -44,9 +46,11 @@
 - `lane_result`:
   - `partial`
 - `reason`:
-  - formal previous shared-devnet pass fallback is not pinned yet
+  - first shared-devnet pass may use a `bootstrap_restore_ready` fallback, but this draft still lacks audited `restore_steps_ref`, `fallback_owner_ref`, and concrete restoration scope evidence
 
 ## Notes
-- `pass` only if fallback candidate is a formal previous shared-devnet `pass` candidate.
-- `partial` if there is only a local/provisional fallback but no formal shared-devnet `pass` history.
+- `pass` if:
+  - `fallback_class=formal_pass_candidate` and fallback candidate is a formal previous shared-devnet `pass` candidate; or
+  - `fallback_class=bootstrap_restore_ready`, current track is still pursuing the first shared-devnet `pass`, and `restore_steps_ref` + `fallback_owner_ref` + `restoration_scope` are all pinned and audited.
+- `partial` if there is only a local/provisional fallback, or a bootstrap fallback is named but the audited restore contract is incomplete.
 - `block` if fallback truth is missing, inconsistent, or not restorable.

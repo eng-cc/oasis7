@@ -99,6 +99,7 @@
   - 剩余 blocker 已收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline`
   - `P2PARCH-6` matrix baseline 已成为 shared-network required lane，但它当前只足以阻止 claims 越界，不等价于 shared-window `pass`
   - `shared_access / rollback_target_ready` draft 已生成；`mixed_topology_baseline` 现在也已有正式 `partial` 证据文档，但仍等待更强 same-window mixed-topology 真值或 dedicated lab 裁决，并需要 producer/QA pass-uplift decision ref，才能升到 `pass`
+  - `rollback_target_ready` 的 first-pass 语义已收口为：`staging/canary` 仍要求最近一次 formal `pass` candidate，但首条 `shared_devnet pass` 可接受受审计 `bootstrap_restore_ready` fallback；若 `restore_steps_ref/fallback_owner_ref/restoration_scope` 不完整，仍只能记 `partial`
   - 没有正式 `staging/canary`
 
 ## 依赖

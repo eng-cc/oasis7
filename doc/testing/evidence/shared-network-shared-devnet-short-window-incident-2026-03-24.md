@@ -24,6 +24,8 @@
 - `rollback_required`: `no`
 - `rollback_target_candidate_id`:
   - `none_formal_shared_devnet_pass_candidate_yet`
+- `rollback_target_class`:
+  - `bootstrap_restore_ready_not_yet_audited`
 
 ## Follow-up
 - `runtime_owner_action`:
@@ -31,4 +33,4 @@
 - `qa_owner_action`:
   - 下一轮只需复核 `shared_access` 与 `rollback_target_ready` 两条 lane。
 - `liveops_owner_action`:
-  - 准备 shared operator access 记录，并在出现首条 formal shared-devnet `pass` candidate 后再解除 `hold_promotion`。
+  - 准备 shared operator access 记录，并补齐 rollback contract：若仍无历史 formal shared-devnet `pass` candidate`，则至少把 `bootstrap_restore_ready` fallback 的 restore steps / owner ref / scope 审计完成，再解除 `hold_promotion`。

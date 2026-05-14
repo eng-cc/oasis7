@@ -107,10 +107,10 @@
 1. 任何 candidate 必须先完成本地 gate，再进入 `shared_devnet`。
 2. 只有上一轨道结论为 `pass`，才允许 promotion 到下一轨道。
 3. 一旦发现 commit/world/governance 真值漂移，立即 `freeze` 并退回重新编号。
-4. `rollback` 目标必须是最近一次通过的 candidate bundle。
+4. `staging/canary` 的 `rollback` 目标必须是最近一次通过的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate`，可接受受审计的 `bootstrap_restore_ready` fallback，但必须固定 restore steps、fallback owner ref 与 restoration scope。
 
 ## LiveOps Window 规则
-1. 每个 track 必须冻结唯一 `window_id`、`candidate_id`、`fallback_candidate_id`、`owners_on_duty` 和 `claim_envelope`。
+1. 每个 track 必须冻结唯一 `window_id`、`candidate_id`、`fallback_candidate_id`、`fallback_class`、`owners_on_duty` 和 `claim_envelope`。
 2. `shared_devnet` 必须先留下 `promotion_record`，再开共享访问窗口。
 3. `staging` 必须有独立的 upgrade window、incident template 和 rollback rehearsal 记录。
 4. `canary` 必须有固定观察窗、`incident_review` 和 `exit_decision`，否则只能维持 `hold`。
@@ -127,7 +127,7 @@
 | 状态 | 含义 |
 | --- | --- |
 | `pass` | 轨道目标与证据完整，允许推进 |
-| `partial` | 有环境或运行，但仍缺 shared access、mixed-topology、rollback 或其他 required lane 的 shared-grade 结论 |
+| `partial` | 有环境或运行，但仍缺 shared access、mixed-topology、rollback，或 rollback 还只停留在未审计 bootstrap/provisional 级别 |
 | `block` | 未满足 promotion 必需条件，不允许推进 |
 | `frozen` | 事故或漂移导致临时冻结推进 |
 | `restored` | 已回滚到上一通过 bundle，并留下恢复证据 |

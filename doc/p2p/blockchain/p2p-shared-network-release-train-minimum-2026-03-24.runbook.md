@@ -29,7 +29,9 @@
 
 - 同一份已校验的 `release_candidate_bundle`
 - 当前 track 的 QA gate `summary.json/md`
-- 最近一次 `pass` 的 `fallback_candidate_id`
+- `fallback_candidate_id` 与 `fallback_class`
+  - `formal_pass_candidate`
+  - `bootstrap_restore_ready`（仅允许首条 `shared_devnet pass` 使用）
 - 窗口元数据：
   - `window_id`
   - `track`
@@ -48,7 +50,8 @@
 - `release_candidate_bundle` 缺字段、路径失效或 hash 漂移：立即 `freeze`
 - 当前 track QA gate 为 `block`：不得开窗
 - 上一轨不是 `pass` 却申请 promotion：直接 `hold`
-- 没有 fallback candidate 却申请下一轨：直接 `hold`
+- `staging/canary` 没有 formal fallback candidate 却申请下一轨：直接 `hold`
+- `shared_devnet` 若还在争取首条 `pass` 且没有受审计 `bootstrap_restore_ready` fallback：直接 `hold`
 - 共享访问入口、值班 owner、evidence root 未冻结：直接 `hold`
 - required mixed-topology lane 仍停留在 baseline / proxy 近似、没有对应 track 的正式结论：直接 `hold`
 - mixed-topology lane 试图记 `pass` 但没有 same-window evidence 对账或缺少 producer/QA pass-uplift decision ref：直接 `hold`
@@ -65,10 +68,12 @@
   - 固定 `P2PARCH-6` mixed-topology baseline evidence
   - 生成 `promotion_record`
   - 固定 `rollback_target_candidate_id`
+  - 若尚无历史 `shared_devnet pass` candidate`，则补齐一条受审计 `bootstrap_restore_ready` fallback：至少包含 `restore_steps_ref`、`fallback_owner_ref`、`restoration_scope`
 - 收窗判定：
   - `shared-network-track-gate` 为 `pass` 才可申请进入 `staging`
   - 若 shared access 退化成单 owner 私有访问，最多只能记 `partial`
   - 若 mixed-topology 仍只有 baseline / proxy 近似，没有 same-window shared 结论，最多只能记 `partial`
+  - 若 rollback target 只有“未来再补”的占位，没有受审计 restore steps / owner ref / scope，最多只能记 `partial`
   - 若 mixed-topology 想记 `pass`，除 same-window shared evidence 外还必须固定 producer/QA 联审通过的 pass-uplift decision ref
   - 可先用 `shared-devnet-blocker-packet` 生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 三份 draft，再等待真实窗口证据填充
 

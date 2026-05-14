@@ -101,14 +101,14 @@
   - 共享访问仍是 local-only
   - multi-entry closure 还没在同一 candidate 上重跑
   - governance / short-window longrun 还没有 shared-devnet 窗口内的新样本
-  - rollback target 还没有“上一条 shared-devnet pass candidate”真值
+  - rollback target 还没有可审计的 shared-grade fallback；即便首条 `shared_devnet pass` 允许 `bootstrap_restore_ready` fallback，本轮也还没补齐 restore steps / owner ref / scope
 - 因此当前不能 promotion 到 `staging`，更不能升级 public claims。
 
 ## 边界与遗留
 1. 本轮使 shared-network 从 `specified_not_executed` 升到 `partial`，但绝不等于 `shared network validated`。
 2. benchmark `L5` 可以从 `missing` 调整为 `partial`，因为已有首轮可审计 dry run；但 shared execution 仍未达 `pass`。
 3. 下一步不是直接做 `staging`，而是先把 `shared_devnet` 从 `partial` 提升到 `pass`，至少补齐：
-   - 真实 shared access
-   - 同一 candidate 的 multi-entry closure
-   - shared-devnet short-window longrun
-   - 可追溯 fallback candidate
+  - 真实 shared access
+  - 同一 candidate 的 multi-entry closure
+  - shared-devnet short-window longrun
+  - 可追溯 fallback candidate 或受审计 `bootstrap_restore_ready` fallback
