@@ -1,0 +1,53 @@
+{
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "public_testnet",
+  "status": "specified_skeleton_only",
+  "network_id": "oasis7-public-testnet-example",
+  "chain_id": "oasis7-public-testnet-example",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "output/release-candidates/public-testnet-example.json",
+    "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+    "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt"
+  },
+  "endpoint_policy": {
+    "rpc_ref": "https://public-testnet.example.invalid/rpc",
+    "explorer_ref": "https://public-testnet.example.invalid/explorer",
+    "faucet_ref": "https://public-testnet.example.invalid/faucet"
+  },
+  "validator_policy": {
+    "governance_mode": "shared_ops",
+    "validator_admission": "allowlist_or_governed_candidate",
+    "target_validator_count": 4,
+    "allow_observer_nodes": true
+  },
+  "token_policy": {
+    "symbol": "OC",
+    "faucet_mode": "guarded_testnet_faucet",
+    "reset_policy": "resettable",
+    "value_semantics": "testnet"
+  },
+  "claims_policy": {
+    "allowed_claims": [
+      "public_testnet",
+      "resettable_test_network"
+    ],
+    "denied_claims": [
+      "mainnet_live",
+      "production_oc_settlement"
+    ]
+  },
+  "promotion_policy": {
+    "promote_from": [
+      "shared_devnet"
+    ],
+    "required_gates": [
+      "shared_devnet_pass",
+      "public_rpc_ready",
+      "faucet_guard_ready",
+      "reset_policy_announced"
+    ]
+  },
+  "evidence_refs": [
+    "doc/testing/evidence/public-testnet-skeleton-example.md"
+  ]
+}

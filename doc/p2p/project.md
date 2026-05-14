@@ -502,6 +502,28 @@
     - `rg -n "New API|bridge-service|bridge_ledger|one-way|quota|redeem credit|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] formal-network-tiers-testnet-mechanism (PRD-P2P-028) [test_tier_required]: 新增“正式网络分层与 testnet 机制”专题 PRD / design / project，并落 repo-owned `network_tier_manifest` skeleton、smoke 与 `shared_devnet/public_testnet/mainnet` example manifests，明确 `shared_devnet != public_testnet`、`public_testnet` 具备 public RPC/explorer/faucet/reset 语义、`mainnet` 绑定 `no faucet + frozen reset + MAINNET-1~4` gate。 Trace: .pm/tasks/task_7021c28970ef4f40b0367563df7f1e32.yaml
+  - 产物文件:
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md`
+    - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
+    - `scripts/network-tier-manifest.sh`
+    - `scripts/network-tier-manifest-smoke.sh`
+    - `doc/testing/templates/network-tier-shared-devnet.example.json`
+    - `doc/testing/templates/network-tier-public-testnet.example.json`
+    - `doc/testing/templates/network-tier-mainnet.example.json`
+    - `doc/p2p/prd.md`
+    - `doc/p2p/project.md`
+    - `doc/p2p/prd.index.md`
+    - `testing-manual.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/network-tier-manifest-smoke.sh`
+    - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-shared-devnet.example.json`
+    - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-public-testnet.example.json`
+    - `./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json`
+    - `rg -n "public_testnet|mainnet|shared_devnet|specified_skeleton_only|network_tier_manifest" doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.design.md doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md doc/p2p/prd.md doc/p2p/project.md doc/p2p/prd.index.md testing-manual.md scripts/network-tier-manifest.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为独立 `bridge-service` 落地最小 runtime slice，提供绑定 API、deposit route API、repo-owned 状态持久化、活跃 route 复用 / 过期与冲突错误语义，作为后续 watcher / `bridge_ledger` / `New API` adapter 的前置基线。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
   - 产物文件:
     - `crates/oasis7/src/bin/oasis7_newapi_bridge_service.rs`
@@ -743,6 +765,7 @@
 - 最新完成: `bridge-binding-and-route-contract`（已新增独立 `oasis7_newapi_bridge_service` 最小实现，提供 `/v1/bridge/bind`、`/v1/bridge/deposit-route`、repo-owned `bridge-state.json`、活跃 route 复用/过期和 binding 冲突错误语义，作为后续 `newapi-auto-credit-closure` 自动 credit 闭环的前置基线。）
 - 最新完成: `mainchain-token-newapi-quota-bridge-proposal`（已完成 `OC -> New API quota` 专题建档，正式冻结 one-way service-credit bridge、bridge-service 独立部署、唯一入账映射、`bridge_ledger` 幂等对账、credit adapter 与 operator review fallback；当前明确不支持双向兑回、公开兑换所或浏览器热钱包充值口径。）
 - 最新完成: `TASK-P2P-050`（已收紧 local peer record 地址物化逻辑：默认不再把 loopback/private/unspecified 监听地址写进 `direct_addrs`，而是优先使用已确认的 `confirmed_external_direct_addrs`；同时 `ExternalAddrConfirmed/Expired`、relay reservation 与 listen-surface 变化都会重发 peer record，避免状态真值和 discovery 真值继续分叉。）
+- 最新完成: `formal-network-tiers-testnet-mechanism`（已新增正式网络分层与 testnet 机制专题，冻结 `local_devnet/shared_devnet/public_testnet/mainnet` 四层模型，并补 repo-owned `network_tier_manifest` create/validate + smoke + example manifests；当前明确仍只有 skeleton，不代表 live `public_testnet` / `mainnet` 已建立。）
 - 最新完成: `TASK-P2P-048`（已修复 p2p provider 子集请求越界 fallback、discovery 单次拨号后不再重试、request-response 丢失远端错误码，以及 replication peer 选择对 blocked peer 缺少优先避让的回归，并补齐 `oasis7_net/oasis7_node` 定向回归。）
 - 最新完成: `hosted-public-join-player-session-gate`（已把 `hosted_public_join` 的 launcher 真值收口为 public player plane：`oasis7_client_launcher` / `oasis7_web_launcher` / `oasis7_game_launcher` 都不再在该 deployment mode 下拉起本地 `oasis7_chain_runtime` 或 shared-devnet replication requester，页面 contract 也改为 guest/player session lane + operator-managed node admission。）
 - 最新完成: `TASK-P2P-047`（已冻结当前链上代币的创世 `initial_supply = 10,000,000,000 OC`，并把 7 个 bucket 的绝对分配额、首年外部释放绝对边界与 formal freeze sheet 的 supply gate 收成统一真值；当前仍未进入 mint-ready，真实地址绑定与 QA final pass 继续由 `TIGR-6` 阻断。）
