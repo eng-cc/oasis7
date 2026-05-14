@@ -431,6 +431,67 @@ fn snapshot_runtime_snapshot_accepts_stringified_numeric_map_keys() {
 }
 
 #[test]
+fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
+    let mut snapshot = WorldKernel::new().snapshot();
+    snapshot.player_gameplay = Some(PlayerGameplaySnapshot {
+        stage_id: PlayerGameplayStageId::PostOnboarding,
+        stage_status: PlayerGameplayStageStatus::Blocked,
+        execution_state: PlayerGameplayExecutionState::Blocked,
+        goal_id: "post_onboarding.recover_capability".to_string(),
+        goal_kind: PlayerGameplayGoalKind::RecoverCapability,
+        goal_title: "Recover sustainable capability".to_string(),
+        objective: "Restore the first blocked capability chain.".to_string(),
+        progress_detail: "The primary line is blocked.".to_string(),
+        progress_percent: 68,
+        blocker_kind: Some("material_shortage".to_string()),
+        blocker_detail: Some("iron input exhausted at factory-0".to_string()),
+        next_step_hint: "Replenish upstream materials and advance again.".to_string(),
+        causality_kind: Some(PlayerGameplayCausalityKind::WorldConstraint),
+        causality_detail: Some("iron input exhausted at factory-0".to_string()),
+        branch_hint: None,
+        available_actions: Vec::new(),
+        recent_feedback: Some(PlayerGameplayRecentFeedback {
+            action: "step".to_string(),
+            stage: "completed_no_progress".to_string(),
+            effect: "no visible world delta".to_string(),
+            reason: Some("latest command did not create forward progress".to_string()),
+            hint: Some("repair the line, then advance again".to_string()),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        }),
+        agent_claim: None,
+    });
+
+    let mut value: serde_json::Value =
+        serde_json::from_str(&snapshot.to_json().expect("snapshot to json"))
+            .expect("parse snapshot json");
+    value
+        .get_mut("player_gameplay")
+        .and_then(|gameplay| gameplay.as_object_mut())
+        .expect("player gameplay object")
+        .remove("execution_state");
+
+    let migrated = WorldSnapshot::from_json(
+        &serde_json::to_string(&value).expect("serialize migrated snapshot"),
+    )
+    .expect("load legacy player gameplay snapshot");
+
+    let gameplay = migrated
+        .player_gameplay
+        .as_ref()
+        .expect("restored player gameplay");
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Blocked);
+    assert_eq!(
+        gameplay.execution_state,
+        PlayerGameplayExecutionState::Blocked
+    );
+    assert_eq!(
+        gameplay.causality_kind,
+        Some(PlayerGameplayCausalityKind::WorldConstraint)
+    );
+}
+
+#[test]
 fn journal_version_validation_accepts_legacy() {
     let mut journal = WorldJournal::default();
     journal.version = JOURNAL_VERSION.saturating_sub(1);

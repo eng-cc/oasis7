@@ -1,7 +1,7 @@
 //! Persistence utilities: WorldSnapshot, WorldJournal, and error types.
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -190,7 +190,7 @@ pub struct PlayerAgentClaimSnapshot {
     pub owned_claims: Vec<PlayerAgentClaimOwnedSnapshot>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PlayerGameplaySnapshot {
     pub stage_id: PlayerGameplayStageId,
     pub stage_status: PlayerGameplayStageStatus,
@@ -219,6 +219,93 @@ pub struct PlayerGameplaySnapshot {
     pub recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
+}
+
+#[derive(Deserialize)]
+struct PlayerGameplaySnapshotSerde {
+    stage_id: PlayerGameplayStageId,
+    stage_status: PlayerGameplayStageStatus,
+    #[serde(default)]
+    execution_state: Option<PlayerGameplayExecutionState>,
+    goal_id: String,
+    goal_kind: PlayerGameplayGoalKind,
+    goal_title: String,
+    objective: String,
+    progress_detail: String,
+    #[serde(default)]
+    progress_percent: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blocker_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    blocker_detail: Option<String>,
+    next_step_hint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    causality_kind: Option<PlayerGameplayCausalityKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    causality_detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    branch_hint: Option<String>,
+    #[serde(default)]
+    available_actions: Vec<PlayerGameplayAction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recent_feedback: Option<PlayerGameplayRecentFeedback>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent_claim: Option<PlayerAgentClaimSnapshot>,
+}
+
+fn derive_legacy_execution_state(
+    stage_status: PlayerGameplayStageStatus,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> PlayerGameplayExecutionState {
+    if let Some(feedback) = recent_feedback {
+        match feedback.stage.as_str() {
+            "accepted" | "submitted" | "queued" | "ack" => {
+                return PlayerGameplayExecutionState::Accepted;
+            }
+            "rejected" => return PlayerGameplayExecutionState::Rejected,
+            "blocked" | "completed_no_progress" => return PlayerGameplayExecutionState::Blocked,
+            "completed_advanced" => return PlayerGameplayExecutionState::Completed,
+            _ => {}
+        }
+    }
+
+    match stage_status {
+        PlayerGameplayStageStatus::Blocked => PlayerGameplayExecutionState::Blocked,
+        PlayerGameplayStageStatus::BranchReady => PlayerGameplayExecutionState::Completed,
+        PlayerGameplayStageStatus::Active => PlayerGameplayExecutionState::Executing,
+    }
+}
+
+impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let legacy = PlayerGameplaySnapshotSerde::deserialize(deserializer)?;
+        let execution_state = legacy.execution_state.unwrap_or_else(|| {
+            derive_legacy_execution_state(legacy.stage_status, legacy.recent_feedback.as_ref())
+        });
+        Ok(Self {
+            stage_id: legacy.stage_id,
+            stage_status: legacy.stage_status,
+            execution_state,
+            goal_id: legacy.goal_id,
+            goal_kind: legacy.goal_kind,
+            goal_title: legacy.goal_title,
+            objective: legacy.objective,
+            progress_detail: legacy.progress_detail,
+            progress_percent: legacy.progress_percent,
+            blocker_kind: legacy.blocker_kind,
+            blocker_detail: legacy.blocker_detail,
+            next_step_hint: legacy.next_step_hint,
+            causality_kind: legacy.causality_kind,
+            causality_detail: legacy.causality_detail,
+            branch_hint: legacy.branch_hint,
+            available_actions: legacy.available_actions,
+            recent_feedback: legacy.recent_feedback,
+            agent_claim: legacy.agent_claim,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
