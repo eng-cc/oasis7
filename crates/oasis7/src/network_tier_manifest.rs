@@ -502,11 +502,13 @@ mod tests {
     fn load_manifest_reads_bootstrap_peer_file() {
         let dir = temp_dir("load");
         let peers_path = dir.join("bootstrap.txt");
+        let genesis_path = dir.join("genesis.json");
         fs::write(
             &peers_path,
             "# comment\n/ip4/127.0.0.1/tcp/4100\n/dns4/bootstrap.example/tcp/4101\n",
         )
         .expect("write peers");
+        fs::write(&genesis_path, "{}\n").expect("write genesis");
         let manifest_path = dir.join("manifest.json");
         fs::write(
             &manifest_path,
@@ -519,7 +521,7 @@ mod tests {
   "chain_id": "oasis7-public-testnet",
   "runtime_refs": {{
     "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
-    "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+    "genesis_ref": "{}",
     "bootstrap_peer_ref": "{}"
   }},
   "endpoint_policy": {{
@@ -549,6 +551,7 @@ mod tests {
   }},
   "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
 }}"#,
+                genesis_path.display(),
                 peers_path.display()
             ),
         )
