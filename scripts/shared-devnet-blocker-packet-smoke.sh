@@ -76,6 +76,7 @@ run ./scripts/shared-devnet-blocker-packet.sh \
   --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology-shared.md" \
   --mixed-topology-proxy-ref "$smoke_root/evidence/mixed-topology-proxy.md" \
   --fallback-candidate-bundle "$fallback_bundle" \
+  --fallback-class bootstrap_restore_ready \
   --fallback-gate-summary "$smoke_root/evidence/fallback-gate.md" \
   --fallback-owner-ref "$smoke_root/evidence/oncall.md" \
   --restore-steps-ref "$smoke_root/evidence/restore.md"
@@ -85,6 +86,7 @@ ensure_file_contains "$access_out" 'https://shared.example.invalid/viewer'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-baseline.md'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-shared.md'
 ensure_file_contains "$rollback_out" 'shared-devnet-fallback-01'
+ensure_file_contains "$rollback_out" 'bootstrap_restore_ready'
 ensure_file_contains "$rollback_out" 'fallback-gate.md'
 
 echo "shared-devnet blocker packet smoke checks passed"

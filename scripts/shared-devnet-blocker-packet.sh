@@ -46,6 +46,7 @@ Mixed-topology flags:
 
 Rollback flags:
   --fallback-candidate-bundle <bundle.json>
+  --fallback-class <formal_pass_candidate|bootstrap_restore_ready>
   --fallback-gate-summary <summary.md>
   --fallback-owner-ref <ref>
   --restore-steps-ref <ref>           Repeatable
@@ -69,6 +70,7 @@ Examples:
     --independent-operator-ref doc/ops/oncall.md \
     --mixed-topology-baseline-ref doc/testing/evidence/p2p-mixed-topology-validation-matrix-2026-04-03.md \
     --fallback-candidate-bundle output/release-candidates/shared-devnet-20260324-05.json \
+    --fallback-class bootstrap_restore_ready \
     --fallback-gate-summary output/shared-network/shared-devnet-20260324-06/gate/shared_devnet-20260324-175501/summary.md \
     --fallback-owner-ref doc/testing/evidence/shared-network-shared-devnet-short-window-promotion-record-2026-03-24.md
 USAGE
@@ -160,11 +162,12 @@ mixed_topology_reason="P2PARCH-6 matrix baseline is pinned, but same-window shar
 fallback_candidate_bundle=""
 fallback_gate_summary=""
 fallback_owner_ref=""
+fallback_class="formal_pass_candidate"
 rollback_validated_by="<liveops owner / runtime owner>"
 rollback_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
 restoration_scope="<runtime build | world snapshot | governance manifest>"
 rollback_lane_result="partial"
-rollback_reason="formal previous shared-devnet pass fallback is not pinned yet"
+rollback_reason="no audited formal fallback is pinned yet; for the first shared-devnet pass, provide a bootstrap_restore_ready fallback with restore steps, owner ref, and restoration scope"
 declare -a operator_contact_refs=()
 declare -a independent_operator_refs=()
 declare -a access_evidence_refs=()
@@ -274,6 +277,10 @@ while [[ $# -gt 0 ]]; do
       fallback_owner_ref=${2:-}
       shift 2
       ;;
+    --fallback-class)
+      fallback_class=${2:-}
+      shift 2
+      ;;
     --restore-steps-ref)
       restore_steps_refs+=("${2:-}")
       shift 2
@@ -337,6 +344,14 @@ fi
 if [[ -n "$fallback_gate_summary" ]]; then
   require_file "--fallback-gate-summary" "$fallback_gate_summary"
 fi
+case "$fallback_class" in
+  formal_pass_candidate|bootstrap_restore_ready)
+    ;;
+  *)
+    echo "error: unsupported --fallback-class: $fallback_class" >&2
+    exit 2
+    ;;
+esac
 
 mkdir -p "$(dirname "$access_out")" "$(dirname "$mixed_topology_out")" "$(dirname "$rollback_out")"
 
@@ -481,6 +496,8 @@ cat >"$rollback_out" <<EOF
 ## Fallback Candidate
 - \`fallback_candidate_id\`:
   - \`$fallback_candidate_id\`
+- \`fallback_class\`:
+  - \`$fallback_class\`
 - \`fallback_candidate_bundle_ref\`:
   - \`${fallback_candidate_bundle:-<output/release-candidates/fallback.json>}\`
 - \`fallback_gate_ref\`:
@@ -509,8 +526,10 @@ cat >>"$rollback_out" <<EOF
   - $rollback_reason
 
 ## Notes
-- \`pass\` only if fallback candidate is a formal previous shared-devnet \`pass\` candidate.
-- \`partial\` if there is only a local/provisional fallback but no formal shared-devnet \`pass\` history.
+- \`pass\` if:
+  - \`fallback_class=formal_pass_candidate\` and fallback candidate is a formal previous shared-devnet \`pass\` candidate; or
+  - \`fallback_class=bootstrap_restore_ready\`, current track is still pursuing the first shared-devnet \`pass\`, and \`restore_steps_ref\` + \`fallback_owner_ref\` + \`restoration_scope\` are all pinned and audited.
+- \`partial\` if there is only a local/provisional fallback, or a bootstrap fallback is named but the audited restore contract is incomplete.
 - \`block\` if fallback truth is missing, inconsistent, or not restorable.
 EOF
 

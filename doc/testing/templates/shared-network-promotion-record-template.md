@@ -8,6 +8,7 @@
 - `candidate_id`:
 - `approved_from_track`:
 - `fallback_candidate_id`:
+- `fallback_class`:
 - `approved_by`:
 - `approved_at`:
 

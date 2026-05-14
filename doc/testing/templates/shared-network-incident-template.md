@@ -20,6 +20,7 @@
 - `freeze_reason`:
 - `rollback_required`: `yes` / `no`
 - `rollback_target_candidate_id`:
+- `rollback_target_class`:
 
 ## Communication Boundary
 - `public_message_state`:

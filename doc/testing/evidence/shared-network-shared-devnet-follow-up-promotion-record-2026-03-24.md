@@ -8,6 +8,7 @@
 - `candidate_id`: `shared-devnet-20260324-05`
 - `approved_from_track`: `local_required_full_and_governance_baseline`
 - `fallback_candidate_id`: `none_formal_shared_devnet_pass_candidate_yet`
+- `fallback_class`: `bootstrap_restore_ready_not_yet_audited`
 - `approved_by`: `liveops_community`
 - `approved_at`: `2026-03-24 17:12:48 CST`
 
@@ -39,12 +40,12 @@
   - 但 QA gate 仍为 `partial`，shared-devnet 尚未满足 promotion 所需 `pass`。
   - 剩余 blocker 已收敛为 `shared_access`、`short_window_longrun`、`rollback_target_ready`。
 - `follow_up`:
-  - 下一轮 shared-devnet 窗口应直接补 shared access、真实 short-window soak 与 formal fallback candidate。
+  - 下一轮 shared-devnet 窗口应直接补 shared access、真实 short-window soak，以及受审计 rollback contract：若仍无历史 formal `pass` candidate，则至少补齐 `bootstrap_restore_ready` fallback 的 restore steps / owner ref / scope。
 
 ## Residual Risks
 - 风险-1:
   - 当前仍无独立 shared operator / shared endpoint 证据。
 - 风险-2:
-  - 当前 `fallback_candidate_id` 仍没有正式 shared-devnet `pass` 历史真值。
+  - 当前既没有正式 shared-devnet `pass` 历史真值，也没有审计完成的 `bootstrap_restore_ready` fallback contract。
 - 风险-3:
   - 当前 short-window 仍是 dry-run command path，不足以支撑 promotion。

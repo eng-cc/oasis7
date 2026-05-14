@@ -21,6 +21,8 @@
 ## Fallback Candidate
 - `fallback_candidate_id`:
   - `<previous-pass-candidate-id>`
+- `fallback_class`:
+  - `formal_pass_candidate | bootstrap_restore_ready`
 - `fallback_candidate_bundle_ref`:
   - `<output/release-candidates/fallback.json>`
 - `fallback_gate_ref`:
@@ -47,6 +49,8 @@
   - `<why this is pass/partial/block>`
 
 ## Notes
-- `pass` only if fallback candidate is a formal previous shared-devnet `pass` candidate.
-- `partial` if there is only a local/provisional fallback but no formal shared-devnet `pass` history.
+- `pass` if:
+  - `fallback_class=formal_pass_candidate` and the fallback candidate is a formal previous shared-devnet `pass` candidate; or
+  - `fallback_class=bootstrap_restore_ready`, the current track is still pursuing the first shared-devnet `pass`, and `restore_steps_ref` + `fallback_owner_ref` + `restoration_scope` are all pinned and audited.
+- `partial` if there is only a local/provisional fallback, or a bootstrap fallback is mentioned but the audited restore contract is incomplete.
 - `block` if fallback truth is missing, inconsistent, or not restorable.

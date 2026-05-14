@@ -41,12 +41,12 @@
 | Shared track 定义 | `track_id/purpose/world_scope/access_mode/owner_roles/min_entry_gate` | 冻结 `shared_devnet`、`staging`、`canary` 的用途与入口门禁 | `draft -> frozen` | 至少三层；缺任一层则 release train 仍为 `blocked` | `producer_system_designer` 拍板，`runtime_engineer`/`qa_engineer`/`liveops_community` 联审 |
 | Release candidate bundle | `candidate_id/git_commit/runtime_build/world_snapshot_ref/governance_manifest_ref/evidence_refs` | 把单一候选版本推进到共享轨道 | `draft -> promoted -> retired` | 三个轨道必须引用同一 `candidate_id`；字段缺失则不得 promotion | `runtime_engineer` 生成，`qa_engineer` 校验 |
 | Promotion gate | `from_track/to_track/gate_inputs/gate_result/approved_by` | 根据证据决定是否升级到下一轨道 | `pending -> pass/block` | 上一轨道未 `pass`、无 rollback bundle、缺 mixed-topology required lane、或 evidence 不全时一律 `block/hold` | `qa_engineer` 给出结论，`producer_system_designer`/`liveops_community` 审批 |
-| Freeze / rollback | `incident_id/affected_track/fallback_candidate_id/freeze_reason/recovery_status` | 事故时冻结 promotion 并回滚到前一 bundle | `idle -> frozen -> restored` | 回滚目标必须是最近一次 `pass` 的 candidate；只有“停在当前环境观察”不算恢复 | `liveops_community` 执行，`runtime_engineer` 支持 |
+| Freeze / rollback | `incident_id/affected_track/fallback_candidate_id/fallback_class/freeze_reason/recovery_status` | 事故时冻结 promotion 并回滚到前一 bundle，或在首条 `shared_devnet pass` 前回退到受审计 bootstrap fallback | `idle -> frozen -> restored` | `staging/canary` 的回滚目标必须是最近一次 `pass` 的 candidate；首条 `shared_devnet pass` 允许使用受审计 `bootstrap_restore_ready` fallback，但必须固定 restore steps、owner ref 与恢复范围；只有“停在当前环境观察”不算恢复 | `liveops_community` 执行，`runtime_engineer` 支持 |
 | Claims gate | `claim_phrase/min_track_status/reject_reason` | 根据 shared-network 真值决定对外口径 | `draft -> enforced` | 只要 `shared_devnet/staging/canary` 任一缺失或仅 `partial`，就不得说 release train 已建立 | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
   - AC-1: 本专题必须冻结 `shared_devnet`、`staging`、`canary` 三层 shared track 的目标、owner、最小入口门禁和通过标准。
   - AC-2: 本专题必须冻结统一的 `release_candidate_bundle` 字段集合，至少包含 `candidate_id`、`git_commit`、`runtime_build`、`world_snapshot_ref`、`governance_manifest_ref`、`evidence_refs`。
-  - AC-3: 本专题必须明确什么情况只能记为 `partial`，至少包括：仅本地单机运行、没有共享访问、没有固定 candidate id、没有 rollback bundle、没有 QA 证据。
+  - AC-3: 本专题必须明确什么情况只能记为 `partial`，至少包括：仅本地单机运行、没有共享访问、没有固定 candidate id、没有可审计 rollback target、没有 QA 证据。
   - AC-4: 本专题必须明确：shared network / release train 未完成前，仍不得使用 `production release train is established`、`mainnet-grade testing maturity` 或任何高于当前 preview 的口径。
   - AC-5: `testing-manual.md` 必须能找到本专题入口，并明确它是 benchmark `L5` 的正式 execution 入口，而不是已完成能力。
   - AC-6: `doc/p2p/project.md` 必须建立 `TASK-P2P-040` 任务链，并拆出后续 runtime/QA/liveops 子任务。
@@ -76,7 +76,7 @@
 - Edge Cases & Error Handling:
   - 若一个环境只有单 owner 本地访问、没有共享节点或共享运维窗口，则最多记为 `partial_local_only`，不能记为 shared track。
   - 若 `shared_devnet`、`staging`、`canary` 跑的是不同 commit、不同 world snapshot 或不同 governance manifest，则 promotion 直接 `block_version_drift`。
-  - 若没有最近一次 `pass` 的 fallback candidate，就不得进入下一轨道；发生事故时只能 `freeze`，不能宣称可回滚。
+  - 若 `staging/canary` 没有最近一次 `pass` 的 fallback candidate，就不得进入下一轨道；若 `shared_devnet` 还在争取首条 `pass`，则至少要固定一条受审计的 `bootstrap_restore_ready` fallback，并写清 restore steps / owner ref / restoration scope，否则只能维持 `partial`。
   - 若 staging 只是 shared_devnet 的别名、没有独立升级窗口/恢复演练/QA 判定，则不得记为 `staging_ready`。
   - 若 canary 没有明确的 duration、incident review 与 freeze 条件，则不得记为 `canary_complete`。
   - 若 governance truth、genesis truth 或 claims boundary 发生变化但未更新 candidate bundle 编号，则该 bundle 失效，必须重新编号。
@@ -90,8 +90,9 @@
   - NFR-P2P-RTMIN-4: 所有 shared-network 结论必须使用 `pass/partial/block/frozen/restored` 这些显式状态，不得使用 `looks_good` 一类口头结论。
   - NFR-P2P-RTMIN-5: 在 `shared_devnet/staging/canary` 三层都有最新审计轮次的正式证据前，公开口径不得出现 `release train established`、`shared network validated` 或更高成熟度描述。
   - NFR-P2P-RTMIN-6: shared-network 证据不得包含私钥、助记词、离线签名材料或 operator 私密基础设施细节。
-  - NFR-P2P-RTMIN-7: mixed-topology required lane 必须显式区分 `baseline/rehearsal/claim review` 三种阶段；proxy drill 不得在 runbook 或 claims gate 中冒充 dedicated sentry/NAT lab 真值。
-  - NFR-P2P-RTMIN-8: 任何把 shared-devnet mixed-topology lane 提升为 `pass` 的结论，都必须同时固定 same-window evidence ref 与 producer/QA 审计通过的 pass-uplift decision ref，避免仅靠脚本开关改变 gate 语义。
+- NFR-P2P-RTMIN-7: mixed-topology required lane 必须显式区分 `baseline/rehearsal/claim review` 三种阶段；proxy drill 不得在 runbook 或 claims gate 中冒充 dedicated sentry/NAT lab 真值。
+- NFR-P2P-RTMIN-8: 任何把 shared-devnet mixed-topology lane 提升为 `pass` 的结论，都必须同时固定 same-window evidence ref 与 producer/QA 审计通过的 pass-uplift decision ref，避免仅靠脚本开关改变 gate 语义。
+- NFR-P2P-RTMIN-9: 首条 `shared_devnet pass` 若尚无历史 `pass` candidate，可接受受审计的 `bootstrap_restore_ready` fallback，但必须同时固定 `restore_steps_ref`、`fallback_owner_ref`、`restoration_scope` 与 candidate truth 对账证据；否则 `rollback_target_ready` 只能记为 `partial`。
 - Security & Privacy: 本专题涉及共享环境与升级轨道，但不引入新的密钥托管方案。任何 candidate bundle、运行记录与证据都只能引用公钥、版本号、world snapshot 标识和审计结论，不得把敏感 custody 材料写入仓库。
 
 ## 5. Risks & Roadmap
