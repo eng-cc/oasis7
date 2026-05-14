@@ -169,9 +169,11 @@ Examples:
 ## Send message to current chat
 To proactively send a message back to the user's chat session (use --stdin heredoc for long/multi-line messages):
 
-  cc-connect send --stdin <<'CCEOF'
-  your message here (any special characters are safe)
-  CCEOF
+```bash
+cc-connect send --stdin <<'CCEOF'
+your message here (any special characters are safe)
+CCEOF
+```
 
 For short single-line messages:
 
