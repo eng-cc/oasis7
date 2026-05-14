@@ -70,6 +70,26 @@ pub enum PlayerGameplayGoalKind {
     ChooseMidLoopPath,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerGameplayExecutionState {
+    Accepted,
+    Executing,
+    Blocked,
+    Completed,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerGameplayCausalityKind {
+    QueuedForExecution,
+    WorldConstraint,
+    AgentOverride,
+    GoalProgressed,
+    RequestRejected,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerGameplayAction {
     pub action_id: String,
@@ -174,6 +194,7 @@ pub struct PlayerAgentClaimSnapshot {
 pub struct PlayerGameplaySnapshot {
     pub stage_id: PlayerGameplayStageId,
     pub stage_status: PlayerGameplayStageStatus,
+    pub execution_state: PlayerGameplayExecutionState,
     pub goal_id: String,
     pub goal_kind: PlayerGameplayGoalKind,
     pub goal_title: String,
@@ -186,6 +207,10 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocker_detail: Option<String>,
     pub next_step_hint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causality_kind: Option<PlayerGameplayCausalityKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causality_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch_hint: Option<String>,
     #[serde(default)]

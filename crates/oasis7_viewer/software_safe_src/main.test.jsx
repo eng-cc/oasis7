@@ -49,6 +49,7 @@ function sampleSnapshot(overrides = {}) {
     player_gameplay: {
       stage_id: "post_onboarding",
       stage_status: "blocked",
+      execution_state: "blocked",
       goal_id: "post_onboarding.recover_capability",
       goal_kind: "RecoverCapability",
       goal_title: "Recover sustainable capability",
@@ -57,6 +58,8 @@ function sampleSnapshot(overrides = {}) {
       progress_percent: 68,
       blocker_kind: "material_shortage",
       blocker_detail: "iron input exhausted at factory-0",
+      causality_kind: "world_constraint",
+      causality_detail: "iron input exhausted at factory-0",
       blocker_supplemental_detail: null,
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
       branch_hint: null,
@@ -141,6 +144,8 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getByText("Targets")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Industrial World Command Desk")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Current Blocker")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Runtime Diagnostics")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Session Ladder")).toBeInTheDocument();

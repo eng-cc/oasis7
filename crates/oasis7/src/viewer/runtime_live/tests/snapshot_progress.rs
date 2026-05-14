@@ -194,10 +194,112 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
 }
 
 #[test]
+fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let (base_url, serve) = spawn_runtime_provider_probe_server();
+    std::env::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    std::env::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    std::env::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    std::env::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let original_action = crate::runtime::Action::MoveAgent {
+        agent_id: "agent-primary".to_string(),
+        to: crate::geometry::GeoPos::new(100, 0, 0),
+    };
+    let override_action = crate::runtime::Action::MoveAgent {
+        agent_id: "agent-primary".to_string(),
+        to: crate::geometry::GeoPos::new(250, 0, 0),
+    };
+    let causality =
+        super::super::gameplay_snapshot::player_gameplay_causality_from_runtime_events(&[
+            crate::runtime::WorldEvent {
+                id: 1,
+                time: 1,
+                caused_by: None,
+                body: crate::runtime::WorldEventBody::RuleDecisionRecorded(
+                    crate::runtime::RuleDecisionRecord {
+                        action_id: 7,
+                        module_id: "test.rule".to_string(),
+                        stage: crate::runtime::ModuleSubscriptionStage::PreAction,
+                        verdict: crate::runtime::RuleVerdict::Modify,
+                        override_action: Some(override_action.clone()),
+                        cost: crate::runtime::ResourceDelta::default(),
+                        notes: vec!["reroute to safer waypoint".to_string()],
+                    },
+                ),
+            },
+            crate::runtime::WorldEvent {
+                id: 2,
+                time: 1,
+                caused_by: None,
+                body: crate::runtime::WorldEventBody::ActionOverridden(
+                    crate::runtime::ActionOverrideRecord {
+                        action_id: 7,
+                        original_action,
+                        override_action,
+                    },
+                ),
+            },
+        ])
+        .expect("agent override causality");
+    assert_eq!(
+        causality.kind,
+        crate::simulator::PlayerGameplayCausalityKind::AgentOverride
+    );
+    assert!(causality.detail.contains("test.rule"));
+    assert!(causality.detail.contains("reroute to safer waypoint"));
+
+    server.set_latest_player_gameplay_feedback_with_causality(
+        crate::simulator::PlayerGameplayRecentFeedback {
+            action: "move_agent".to_string(),
+            stage: "completed_advanced".to_string(),
+            effect: "world advanced: logicalTime +1, eventSeq +2".to_string(),
+            reason: None,
+            hint: None,
+            delta_logical_time: 1,
+            delta_event_seq: 2,
+        },
+        Some(causality),
+    );
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert_eq!(
+        gameplay.execution_state,
+        crate::simulator::PlayerGameplayExecutionState::Completed
+    );
+    assert_eq!(
+        gameplay.causality_kind,
+        Some(crate::simulator::PlayerGameplayCausalityKind::AgentOverride)
+    );
+    assert!(gameplay
+        .causality_detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("redirected the accepted action")));
+    assert!(gameplay
+        .causality_detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("reroute to safer waypoint")));
+
+    clear_runtime_provider_env();
+    serve.join().expect("server thread should finish");
+}
+
+#[test]
 fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
     let mut gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         &crate::runtime::WorldState::default(),
         true,
+        None,
         None,
         true,
         None,

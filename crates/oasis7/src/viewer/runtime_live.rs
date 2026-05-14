@@ -62,7 +62,8 @@ use control_plane::RuntimeLlmSidecar;
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use gameplay_snapshot::{
     apply_runtime_snapshot_empty_entities_blocker, build_player_gameplay_snapshot,
-    player_gameplay_feedback_from_control_ack,
+    player_gameplay_causality_from_runtime_events, player_gameplay_feedback_from_control_ack,
+    PlayerGameplayCausalitySignal,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
 use session_policy::{
@@ -197,6 +198,7 @@ pub struct ViewerRuntimeLiveServer {
     session_revoke_metadata: BTreeMap<(String, String), RuntimeSessionRevokeMetadata>,
     settlement_ranking_gate: RuntimeSettlementRankingGate,
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
+    latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
 }
 
 const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 3;
@@ -231,6 +233,7 @@ impl ViewerRuntimeLiveServer {
             session_revoke_metadata: BTreeMap::new(),
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
             latest_player_gameplay_feedback: None,
+            latest_player_gameplay_causality: None,
         })
     }
 
@@ -254,9 +257,18 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn set_latest_player_gameplay_feedback(&mut self, feedback: PlayerGameplayRecentFeedback) {
+        self.set_latest_player_gameplay_feedback_with_causality(feedback, None);
+    }
+
+    fn set_latest_player_gameplay_feedback_with_causality(
+        &mut self,
+        feedback: PlayerGameplayRecentFeedback,
+        causality: Option<PlayerGameplayCausalitySignal>,
+    ) {
         if feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0 {
             self.confirm_player_gameplay_progress();
         }
+        self.latest_player_gameplay_causality = causality;
         self.latest_player_gameplay_feedback = Some(feedback);
     }
 
@@ -644,6 +656,7 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
+        let mut latest_runtime_events_for_feedback = Vec::new();
 
         for _ in 0..step_count.max(1) {
             if let Err(reason) = self
@@ -752,6 +765,7 @@ impl ViewerRuntimeLiveServer {
             }
 
             let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
+            latest_runtime_events_for_feedback = new_events.clone();
             let mut mapped_events = Vec::new();
             for runtime_event in &new_events {
                 let event = map_runtime_event(runtime_event, &self.snapshot_config);
@@ -868,10 +882,13 @@ impl ViewerRuntimeLiveServer {
                 error_code: None,
                 error_message: None,
             };
-            self.set_latest_player_gameplay_feedback(player_gameplay_feedback_from_control_ack(
+            let feedback = player_gameplay_feedback_from_control_ack(
                 &control_mode_for_action(action, step_count),
                 &ack,
-            ));
+            );
+            let causality =
+                player_gameplay_causality_from_runtime_events(&latest_runtime_events_for_feedback);
+            self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
 
@@ -995,6 +1012,7 @@ impl ViewerRuntimeLiveServer {
             self.world.state(),
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
+            self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),
             self.llm_sidecar.is_llm_mode() && self.llm_sidecar.supports_agent_chat(),

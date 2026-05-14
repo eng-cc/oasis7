@@ -180,6 +180,10 @@ function resolveInitialUiLocale() {
     || "en";
 }
 
+function localeText(locale, zh, en) {
+  return isLocaleZh(locale) ? zh : en;
+}
+
 function promptOverridesVisibilityStorageKey() {
   return `${PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX}:${window.location.pathname || "viewer.html"}`;
 }
@@ -1500,26 +1504,184 @@ function buildGameplaySummary(locale = state.uiLocale) {
   const runtimeBlockerDetail = gameplay.blocker_detail || null;
   const runtimeAlreadyPublishedEmptyEntityBlocker =
     runtimeBlockerKind === "runtime_snapshot_empty_entities";
+  const resolvedStageStatus = emptyEntityBlocker ? "blocked" : gameplay.stage_status || null;
+  const resolvedBlockerKind = runtimeAlreadyPublishedEmptyEntityBlocker
+    ? runtimeBlockerKind
+    : emptyEntityBlocker
+      ? emptyEntityBlocker.blockerKind
+      : runtimeBlockerKind;
+  const resolvedBlockerDetail = runtimeAlreadyPublishedEmptyEntityBlocker
+    ? runtimeBlockerDetail || emptyEntityBlocker?.blockerDetail || null
+    : emptyEntityBlocker
+      ? emptyEntityBlocker.blockerDetail
+      : runtimeBlockerDetail;
+  const executionState = gameplay.execution_state
+    || (() => {
+      const recentStage = String(recentFeedback?.stage || "").trim().toLowerCase();
+      if (["accepted", "submitted", "queued", "ack"].includes(recentStage)) {
+        return "accepted";
+      }
+      if (recentStage === "rejected") {
+        return "rejected";
+      }
+      if (["blocked", "completed_no_progress"].includes(recentStage)) {
+        return "blocked";
+      }
+      if (recentStage === "completed_advanced") {
+        return "completed";
+      }
+      if (resolvedStageStatus === "blocked") {
+        return "blocked";
+      }
+      if (resolvedStageStatus === "branch_ready") {
+        return "completed";
+      }
+      return "executing";
+    })();
+  const executionStateLabel = (() => {
+    switch (executionState) {
+      case "accepted":
+        return localeText(locale, "已接受", "Accepted");
+      case "blocked":
+        return localeText(locale, "已阻塞", "Blocked");
+      case "completed":
+        return localeText(locale, "已完成", "Completed");
+      case "rejected":
+        return localeText(locale, "已拒绝", "Rejected");
+      default:
+        return localeText(locale, "执行中", "Executing");
+    }
+  })();
+  const executionStateMachine = [
+    { id: "accepted", label: localeText(locale, "已接受", "Accepted") },
+    { id: "executing", label: localeText(locale, "执行中", "Executing") },
+    { id: "blocked", label: localeText(locale, "已阻塞", "Blocked") },
+    { id: "completed", label: localeText(locale, "已完成", "Completed") },
+    { id: "rejected", label: localeText(locale, "已拒绝", "Rejected") },
+  ];
+  const executionCauseKind = gameplay.causality_kind
+    || (() => {
+      if (executionState === "accepted") return "queued_for_execution";
+      if (executionState === "rejected") return "request_rejected";
+      if (executionState === "blocked") return "world_constraint";
+      if (executionState === "completed") return "goal_progressed";
+      return null;
+    })();
+  const executionCauseLabel = (() => {
+    switch (executionCauseKind) {
+      case "queued_for_execution":
+        return localeText(locale, "等待执行", "Queued for Execution");
+      case "world_constraint":
+        return localeText(locale, "世界约束", "World Constraint");
+      case "agent_override":
+        return localeText(locale, "Agent 改走了别的允许路径", "Agent Chose Differently");
+      case "goal_progressed":
+        return localeText(locale, "世界已推进", "World Progressed");
+      case "request_rejected":
+        return localeText(locale, "请求被拒绝", "Request Rejected");
+      default:
+        return null;
+    }
+  })();
+  const executionCauseDetail = gameplay.causality_detail
+    || (() => {
+      if (executionState === "blocked") {
+        return resolvedBlockerDetail || recentFeedback?.reason || null;
+      }
+      if (executionState === "accepted") {
+        return recentFeedback?.hint || recentFeedback?.effect || null;
+      }
+      if (executionState === "completed") {
+        return recentFeedback?.effect || gameplay.progress_detail || null;
+      }
+      if (executionState === "rejected") {
+        return recentFeedback?.reason || null;
+      }
+      return null;
+    })();
+  const executionSummary = (() => {
+    if (executionCauseKind === "agent_override") {
+      return localeText(
+        locale,
+        "本次目标已推动世界继续前进，但执行它的 Agent 最终采用了另一条被允许的计划。",
+        "This goal still advanced the world, but the acting agent finished it through a different allowed plan.",
+      );
+    }
+    switch (executionState) {
+      case "accepted":
+        return localeText(
+          locale,
+          "最新一条目标相关指令已经入队，正在等待 committed world delta 或后续回执。",
+          "The latest goal-affecting command is queued and waiting for committed world delta or follow-up feedback.",
+        );
+      case "blocked":
+        return localeText(
+          locale,
+          "当前目标没有继续推进，主要原因已经被归入可修复的 blocker taxonomy。",
+          "The current goal is not moving forward; the primary reason is now grouped into a repairable blocker taxonomy.",
+        );
+      case "completed":
+        return localeText(
+          locale,
+          "当前目标最近一次执行已经产生世界级结果，可以决定是继续放大、恢复，还是切到下一条主线。",
+          "The current goal's latest execution already produced a world-level result; you can now amplify it, recover it, or pivot to the next line.",
+        );
+      case "rejected":
+        return localeText(
+          locale,
+          "最新请求在执行前被拒绝，需要先修正请求本身或权限/模式前提。",
+          "The latest request was rejected before execution; fix the request itself or its permission/mode prerequisites first.",
+        );
+      default:
+        return localeText(
+          locale,
+          "当前目标正在执行中，先盯住状态机、主因果和下一步，再决定是否继续推进。",
+          "The current goal is executing; read the state machine, primary causality, and next step before pushing again.",
+        );
+    }
+  })();
+  const blockerLabel = (() => {
+    switch (resolvedBlockerKind) {
+      case "material_shortage":
+        return localeText(locale, "缺料", "Missing Material");
+      case "power_shortage":
+        return localeText(locale, "缺电", "Missing Power");
+      case "governance_gate":
+        return localeText(locale, "治理限制", "Governance Restriction");
+      case "no_progress":
+        return localeText(locale, "没有前进", "No Forward Progress");
+      case "llm_required":
+        return localeText(locale, "缺少玩法能力", "Missing Gameplay Capability");
+      case "runtime_sync_unavailable":
+        return localeText(locale, "运行时同步不可用", "Runtime Sync Unavailable");
+      case "execution_world_not_ready":
+        return localeText(locale, "执行世界未就绪", "Execution World Not Ready");
+      case "runtime_snapshot_empty_entities":
+        return localeText(locale, "空快照", "Empty Snapshot");
+      default:
+        return resolvedBlockerKind || null;
+    }
+  })();
 
   return {
     stageId: gameplay.stage_id || null,
-    stageStatus: emptyEntityBlocker ? "blocked" : gameplay.stage_status || null,
+    stageStatus: resolvedStageStatus,
+    executionState,
+    executionStateLabel,
+    executionStateMachine,
+    executionSummary,
+    executionCauseKind,
+    executionCauseLabel,
+    executionCauseDetail,
     goalId: gameplay.goal_id || null,
     goalKind: gameplay.goal_kind || null,
     goalTitle: gameplay.goal_title || null,
     objective: gameplay.objective || null,
     progressDetail: gameplay.progress_detail || null,
     progressPercent,
-    blockerKind: runtimeAlreadyPublishedEmptyEntityBlocker
-      ? runtimeBlockerKind
-      : emptyEntityBlocker
-        ? emptyEntityBlocker.blockerKind
-        : runtimeBlockerKind,
-    blockerDetail: runtimeAlreadyPublishedEmptyEntityBlocker
-      ? runtimeBlockerDetail || emptyEntityBlocker?.blockerDetail || null
-      : emptyEntityBlocker
-        ? emptyEntityBlocker.blockerDetail
-        : runtimeBlockerDetail,
+    blockerKind: resolvedBlockerKind,
+    blockerLabel,
+    blockerDetail: resolvedBlockerDetail,
     blockerSupplementalDetail: emptyEntityBlocker && runtimeBlockerDetail && !runtimeAlreadyPublishedEmptyEntityBlocker
       ? runtimeBlockerDetail
       : null,
