@@ -78,7 +78,33 @@ function sampleSnapshot(overrides = {}) {
   };
 }
 
-async function renderViewerApp({ snapshot = sampleSnapshot(), selection = null } = {}) {
+function sampleHostedPublicJoinAccess(overrides = {}) {
+  return {
+    deployment_mode: "hosted_public_join",
+    action_matrix: [
+      {
+        action_id: "prompt_control_apply",
+        required_auth: "strong_auth",
+        availability: "public_player_plane_with_backend_reauth_preview",
+        reason: "prompt_control_apply is available through browser-local player auth plus backend re-authorization",
+      },
+      {
+        action_id: "main_token_transfer",
+        required_auth: "strong_auth",
+        availability: "blocked_until_strong_auth",
+        reason: "main_token_transfer remains blocked until a higher-trust hosted strong-auth lane exists",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+async function renderViewerApp({
+  snapshot = sampleSnapshot(),
+  selection = null,
+  setupCore = null,
+  setupAfterMount = null,
+} = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
@@ -97,8 +123,15 @@ async function renderViewerApp({ snapshot = sampleSnapshot(), selection = null }
   if (selection) {
     core.applySelection(selection);
   }
+  if (setupCore) {
+    setupCore(core);
+  }
 
   const dispose = mountViewerApp(appRoot);
+  if (setupAfterMount) {
+    setupAfterMount(core);
+    core.requestRender();
+  }
   const cleanup = () => {
     dispose();
     if (activeCleanup === cleanup) {
@@ -213,5 +246,82 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
+  });
+
+  it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.auth.error = "session_revoked";
+        core.state.auth.revokeReason = "qa-kick";
+        core.state.auth.revokedBy = "qa";
+      },
+    });
+
+    screen.getByText("Runtime Diagnostics").click();
+    expect(screen.getAllByRole("button", { name: "Re-acquire Hosted Player Session" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("upgrade_after_player_session")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "The runtime or operator revoked this browser session by qa. Reason: qa-kick. You need to acquire a fresh hosted player session before gameplay, chat, or prompt actions can continue.",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
+    expect(screen.queryByText(/not implemented yet/i)).not.toBeInTheDocument();
+  });
+
+  it("marks hosted backend reauth as available once a browser player session is registered", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "hosted-player-1",
+          publicKey: "oc:pk:test-player",
+          privateKey: "ed25519-secret",
+          releaseToken: "hosted-release-1",
+          source: "hosted_browser_storage",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+        };
+      },
+    });
+
+    screen.getByText("Runtime Diagnostics").click();
+    expect(screen.getAllByRole("button", { name: "Release Player Session" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("preview_backend_reauth_available")).toBeInTheDocument();
+    expect(
+      screen.getByText("page reload will reuse the browser-local hosted key and attempt reconnect_sync first"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
+  });
+
+  it("keeps hosted backend reauth pending until runtime registration finishes", async () => {
+    await renderViewerApp({
+      setupAfterMount(core) {
+        core.state.hostedAccess = sampleHostedPublicJoinAccess();
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "hosted-player-2",
+          publicKey: "oc:pk:test-player-2",
+          privateKey: "ed25519-secret-2",
+          releaseToken: "hosted-release-2",
+          source: "hosted_browser_storage",
+          registrationStatus: "issued",
+          runtimeStatus: "issued",
+        };
+      },
+    });
+
+    screen.getByText("Runtime Diagnostics").click();
+    expect(screen.getAllByText("issued_pending_register").length).toBeGreaterThan(0);
+    expect(screen.queryByText("preview_backend_reauth_available")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "hosted preview backend reauth stays pending until the browser-local player_session finishes runtime registration",
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -1436,6 +1436,7 @@ function authDeploymentHint(auth) {
 function isHostedPublicJoinHint(deploymentHint) {
   return [
     "hosted_public_join_contract",
+    "hosted_public_join_contract_with_browser_session",
     "hosted_public_join_contract_with_legacy_bootstrap",
     "hosted_public_join_likely"
   ].includes(deploymentHint);
@@ -1473,6 +1474,43 @@ function playerSessionReason(auth, deploymentHint) {
 }
 function strongAuthReason() {
   return "strong auth remains a separate upgrade plane; viewer only previews backend reauth for prompt_control and still does not issue hosted-ready asset/governance proofs";
+}
+function buildStrongAuthTier(promptCapability) {
+  const promptPolicy = hostedActionPolicy("prompt_control");
+  if (!promptPolicy || promptPolicy.required_auth !== "strong_auth") {
+    return {
+      status: "separate_upgrade_plane",
+      reason: strongAuthReason()
+    };
+  }
+  if (promptPolicy.availability === "public_player_plane_with_backend_reauth_preview") {
+    if (!state.auth.available) {
+      return {
+        status: "upgrade_after_player_session",
+        reason: "hosted preview backend reauth is available on this join lane after the browser acquires a player_session"
+      };
+    }
+    if (state.auth.registrationStatus === "registered") {
+      return {
+        status: "preview_backend_reauth_available",
+        reason: promptCapability.reason || strongAuthReason()
+      };
+    }
+    return {
+      status: "issued_pending_register",
+      reason: "hosted preview backend reauth stays pending until the browser-local player_session finishes runtime registration"
+    };
+  }
+  if (promptPolicy.availability === "trusted_local_preview_only") {
+    return {
+      status: state.auth.available ? "active_legacy_preview" : "trusted_local_only",
+      reason: promptCapability.reason || strongAuthReason()
+    };
+  }
+  return {
+    status: "blocked_until_strong_auth",
+    reason: promptPolicy.reason || strongAuthReason()
+  };
 }
 function isStrongAuthSensitiveAction(actionId) {
   const policy = hostedActionPolicy(actionId);
@@ -1549,7 +1587,7 @@ function buildSemanticCapability(actionId) {
       actionId,
       enabled: false,
       code: "strong_auth_required",
-      reason: `${actionId} requires strong_auth on the hosted public join path; this browser is still guest_session only and the strong-auth upgrade lane is not implemented yet`
+      reason: `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`
     };
   }
   if (strongAuthSensitive && state.auth.available && deploymentHint === "remote_origin_legacy_bootstrap") {
@@ -1581,6 +1619,7 @@ function buildAuthSurfaceModel() {
   const promptCapability = buildSemanticCapability("prompt_control");
   const chatCapability = buildSemanticCapability("agent_chat");
   const mainTokenTransferCapability = buildSemanticCapability("main_token_transfer");
+  const strongAuthTier = buildStrongAuthTier(promptCapability);
   const currentTier = state.auth.available ? "player_session" : "guest_session";
   const source = state.hostedAccess ? state.auth.available ? state.auth.source === "legacy_viewer_auth_bootstrap" ? "legacy_viewer_auth_bootstrap+hosted_access_hint" : "hosted_player_issue+browser_local_ephemeral_key" : "hosted_access_hint" : state.auth.available ? state.auth.source : "guest_only";
   return {
@@ -1604,8 +1643,8 @@ function buildAuthSurfaceModel() {
       {
         id: "strong_auth",
         label: "strong_auth",
-        status: "not_implemented",
-        reason: strongAuthReason()
+        status: strongAuthTier.status,
+        reason: strongAuthTier.reason
       }
     ],
     capabilities: {
@@ -1614,7 +1653,7 @@ function buildAuthSurfaceModel() {
       main_token_transfer: mainTokenTransferCapability,
       strong_auth_actions: mainTokenTransferCapability
     },
-    reconnect: state.auth.available ? state.auth.source === "legacy_viewer_auth_bootstrap" ? "reconnect still depends on the current preview bootstrap; hosted resume/revoke tokens are not wired yet" : state.auth.registrationStatus === "registered" ? "page reload will reuse the browser-local hosted key and attempt reconnect_sync first" : "browser-local hosted key is persisted, but runtime session restore is still pending this page load" : "page reload is possible, but player-session reconnect/resume is not implemented yet"
+    reconnect: state.auth.available ? state.auth.source === "legacy_viewer_auth_bootstrap" ? "reconnect still depends on the current preview bootstrap; hosted resume/revoke tokens are not wired yet" : state.auth.registrationStatus === "registered" ? "page reload will reuse the browser-local hosted key and attempt reconnect_sync first" : "browser-local hosted key is persisted, but runtime session restore is still pending this page load" : isHostedPublicJoinHint(deploymentHint) ? buildHostedRecoveryHint("en")?.detail || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync" : "page reload is possible, but player-session reconnect/resume is not implemented yet"
   };
 }
 function buildHostedActionMatrixView() {
@@ -5377,7 +5416,7 @@ function WorldSummaryPanel() {
   const hostedActionMatrixView = () => buildHostedActionMatrixView();
   const hostedRecoveryHint = () => buildHostedRecoveryHint(locale());
   const selectedDebug = () => selectedAgentExecutionDebugContext();
-  const tierBadgeClass = (status) => status === "active" || status === "active_legacy_preview" ? "badge badge--good" : status === "superseded" ? "badge" : "badge badge--warn";
+  const tierBadgeClass = (status) => status === "active" || status === "active_legacy_preview" || status === "active_hosted_issue" || status === "preview_backend_reauth_available" ? "badge badge--good" : status === "issued_pending_register" || status === "upgrade_after_player_session" ? "badge badge--accent" : status === "superseded" ? "badge" : "badge badge--warn";
   const showRebindNotice = () => Boolean(state$1.auth.pendingRequestedAgentId) && (state$1.auth.pendingForceRebind || state$1.auth.runtimeStatus === "rebind_retrying" || state$1.auth.runtimeStatus === "rebind_registering");
   const showPlayerSessionSurface = () => !!hostedRecoveryHint() || !state$1.auth.available && String(state$1.hostedAccess?.deployment_mode || "").trim() === "hosted_public_join" || showRebindNotice();
   const diagnosticsSummaryBadges = () => [`debugViewer=${state$1.debugViewerMode}:${state$1.debugViewerStatus}`, `auth=${state$1.auth.available ? state$1.auth.registrationStatus || "ready" : "missing"}`, `events=${state$1.recentEvents.length}`];

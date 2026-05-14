@@ -50,6 +50,8 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 - 当前页面聚焦 `viewer` 实时观察与正式玩法摘要。
 - 支持 `locale=zh|en` 初始化和页面内中英文切换。
 - 支持最小 prompt/chat 控制面；仅在 auth/bootstrap 可用时开放。
+- 在 `hosted_public_join` 路径下，页面支持获取/释放 hosted `player_session`、`reconnect_sync` 恢复，以及 `prompt_control` 的 preview-grade `strong_auth`（需 `Backend Approval Code`）。
+- `main_token_transfer` 仍保持阻断，页面只显示 lane verdict，不提供资产转账表单。
 - 页面不再提供 `standard Viewer` 跳转，也不再承担材质/theme/3D 视觉 QA 职责。
 
 ## Web 闭环

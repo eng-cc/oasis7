@@ -483,8 +483,13 @@ function WorldSummaryPanel() {
   const hostedRecoveryHint = () => core.buildHostedRecoveryHint(locale());
   const selectedDebug = () => core.selectedAgentExecutionDebugContext();
   const tierBadgeClass = (status) =>
-    status === "active" || status === "active_legacy_preview"
+    status === "active"
+      || status === "active_legacy_preview"
+      || status === "active_hosted_issue"
+      || status === "preview_backend_reauth_available"
       ? "badge badge--good"
+      : status === "issued_pending_register" || status === "upgrade_after_player_session"
+        ? "badge badge--accent"
       : status === "superseded"
         ? "badge"
         : "badge badge--warn";
