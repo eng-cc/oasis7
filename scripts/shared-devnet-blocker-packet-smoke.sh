@@ -91,6 +91,24 @@ ensure_file_contains "$rollback_out" 'shared-devnet-fallback-01'
 ensure_file_contains "$rollback_out" 'bootstrap_restore_ready'
 ensure_file_contains "$rollback_out" 'fallback-gate.md'
 
+pass_access_out="$smoke_root/shared-access-pass.md"
+run ./scripts/shared-devnet-blocker-packet.sh \
+  --window-id shared-devnet-20260324-08 \
+  --candidate-bundle "$current_bundle" \
+  --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
+  --access-out "$pass_access_out" \
+  --mixed-topology-out "$smoke_root/mixed-topology-access-pass.md" \
+  --rollback-out "$smoke_root/rollback-access-pass.md" \
+  --viewer-url "https://shared.example.invalid/viewer" \
+  --live-addr "shared.example.invalid:443" \
+  --operator-contact-ref "$smoke_root/evidence/operator.md" \
+  --independent-operator-ref "$smoke_root/evidence/oncall.md" \
+  --access-evidence-ref "$smoke_root/evidence/screenshot.md" \
+  --access-lane-result pass
+
+ensure_file_contains "$pass_access_out" 'shared.example.invalid:443'
+ensure_file_contains "$pass_access_out" 'screenshot.md'
+
 pass_mixed_topology_out="$smoke_root/mixed-topology-pass.md"
 run ./scripts/shared-devnet-blocker-packet.sh \
   --window-id shared-devnet-20260324-07 \

@@ -35,6 +35,7 @@ printf '# governance evidence\n' >"$smoke_root/evidence/governance.md"
 printf '# longrun evidence\n' >"$smoke_root/evidence/longrun.md"
 printf '# mixed topology evidence\n' >"$smoke_root/evidence/mixed-topology.md"
 printf '# mixed topology pass decision\n' >"$smoke_root/evidence/mixed-topology-pass-decision.md"
+printf '# shared access evidence\n' >"$smoke_root/evidence/shared-access.md"
 printf '{"candidate":"fallback"}\n' >"$smoke_root/fallback/pass-bundle.json"
 
 partial_out="$smoke_root/output-partial"
@@ -85,6 +86,30 @@ if ./scripts/shared-devnet-rehearsal.sh \
 fi
 ensure_file_contains "$smoke_root/missing-decision.stderr" '--mixed-topology-pass requires --mixed-topology-pass-decision-ref'
 
+if ./scripts/shared-devnet-rehearsal.sh \
+  --window-id shared-devnet-orch-smoke-missing-access-evidence \
+  --candidate-id shared-devnet-orch-smoke-missing-access-evidence \
+  --candidate-bundle-out "$smoke_root/shared-devnet-orch-smoke-missing-access-evidence.json" \
+  --runtime-build-ref "$smoke_root/runtime/runtime.bin" \
+  --world-snapshot-ref "$smoke_root/world" \
+  --governance-manifest-ref "$smoke_root/world/public_manifest.json" \
+  --allow-dirty-worktree \
+  --out-dir "$smoke_root/output-missing-access-evidence" \
+  --release-gate-mode skip \
+  --web-mode skip \
+  --headless-mode skip \
+  --pure-api-mode skip \
+  --governance-mode skip \
+  --longrun-mode skip \
+  --shared-access-pass \
+  --shared-endpoint-ref "$smoke_root/evidence/shared-endpoint.md" \
+  --shared-operator-ref "$smoke_root/evidence/shared-operator.md" \
+  >/dev/null 2>"$smoke_root/missing-access-evidence.stderr"; then
+  echo "error: shared-access pass should require an access-evidence ref" >&2
+  exit 1
+fi
+ensure_file_contains "$smoke_root/missing-access-evidence.stderr" '--shared-access-pass requires at least one --shared-endpoint-ref, one --shared-operator-ref, and one --shared-access-evidence-ref'
+
 pass_out="$smoke_root/output-pass"
 run ./scripts/shared-devnet-rehearsal.sh \
   --window-id shared-devnet-orch-smoke-pass \
@@ -112,6 +137,7 @@ run ./scripts/shared-devnet-rehearsal.sh \
   --shared-access-pass \
   --shared-endpoint-ref "$smoke_root/evidence/shared-endpoint.md" \
   --shared-operator-ref "$smoke_root/evidence/shared-operator.md" \
+  --shared-access-evidence-ref "$smoke_root/evidence/shared-access.md" \
   --fallback-candidate-bundle "$smoke_root/fallback/pass-bundle.json"
 
 pass_gate=$(find "$pass_out/shared-devnet-orch-smoke-pass/gate" -mindepth 2 -maxdepth 2 -type f -name summary.json | sort | tail -n 1)
@@ -122,5 +148,6 @@ ensure_file_contains "$pass_lanes" $'shared_access\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'mixed_topology_baseline\tqa_engineer\tpass'
 ensure_file_contains "$pass_lanes" $'governance_live_drill\truntime_engineer\tpass'
 ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/mixed-topology-gate.md" 'pass-uplift decision ref'
+ensure_file_contains "$pass_out/shared-devnet-orch-smoke-pass/access-check.md" 'shared access evidence refs'
 
 echo "shared-devnet rehearsal smoke checks passed"

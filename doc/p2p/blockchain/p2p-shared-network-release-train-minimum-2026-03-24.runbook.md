@@ -56,6 +56,7 @@
 - required mixed-topology lane 仍停留在 baseline / proxy 近似、没有对应 track 的正式结论：直接 `hold`
 - mixed-topology lane 试图记 `pass` 但没有 same-window evidence 对账或缺少 producer/QA pass-uplift decision ref：直接 `hold`
 - mixed-topology lane 的 `pass_uplift_decision_ref` 只出现在备注、聊天记录或口头结论里，没有进入正式模板/脚本产物：也视为 `hold`
+- shared-access lane 试图记 `pass` 但没有 shared endpoint、independent operator handoff 或 access evidence 任一正式字段：直接 `hold`
 - 对外口径越过 preview 边界：立即 `freeze`
 
 ## 4. 三层执行循环
@@ -73,6 +74,7 @@
 - 收窗判定：
   - `shared-network-track-gate` 为 `pass` 才可申请进入 `staging`
   - 若 shared access 退化成单 owner 私有访问，最多只能记 `partial`
+  - 若 shared-access 想记 `pass`，除 shared endpoint 与 operator handoff 外，还必须固定独立 access evidence；三项缺任一都只能继续 `partial`
   - 若 mixed-topology 仍只有 baseline / proxy 近似，没有 same-window shared 结论，最多只能记 `partial`
   - 若 rollback target 只有“未来再补”的占位，没有受审计 restore steps / owner ref / scope，最多只能记 `partial`
   - 若 mixed-topology 想记 `pass`，除 same-window shared evidence 外还必须固定 producer/QA 联审通过的 pass-uplift decision ref

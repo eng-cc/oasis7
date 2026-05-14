@@ -112,6 +112,10 @@
    - same-window shared mixed-topology evidence 已固定并与当前 `candidate_id` 对账；
    - producer/QA 联审通过的 `pass_uplift_decision_ref` 已固定；
    - gate/evidence 输出中把 proxy drill 明确标注为近似，而不是 dedicated sentry/NAT lab 真值。
+6. `shared_access` 若要从 `partial` 升到 `pass`，必须满足三项同时成立：
+   - shared endpoint 已固定，且不再是单 owner 私有入口；
+   - independent operator handoff / duty ref 已固定；
+   - 独立 access evidence 已固定，并与当前 `candidate_id` 对账。
 
 ## LiveOps Window 规则
 1. 每个 track 必须冻结唯一 `window_id`、`candidate_id`、`fallback_candidate_id`、`fallback_class`、`owners_on_duty` 和 `claim_envelope`。
@@ -127,6 +131,7 @@
 4. 当前 `shared_devnet` gate 结论仍为 `partial`，promotion recommendation 仍为 `hold_promotion`。
 5. 造成 `partial` 的主因已明确收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline` 三条 lane；其中 mixed-topology 现在已有正式 `partial` 证据，但仍未达到 shared-window `pass`。
 6. mixed-topology 的剩余缺口不再是“没有模板”，而是“没有被正式采纳的 pass-uplift 合同与对应真值”；因此后续收口必须优先保证模板/脚本/编排输出的字段一致，再决定是否接受 proxy/shared-window 近似作为当前 track 的 `pass` 依据。
+7. shared-access 的剩余缺口也不再是“没有结构”，而是“没有真实共享入口与独立 operator/access evidence”；因此后续若要宣称 `pass`，必须先补真实 shared endpoint/operator/access proof，而不是只修改 lane 状态。
 
 ## Partial / Block 语义
 | 状态 | 含义 |
