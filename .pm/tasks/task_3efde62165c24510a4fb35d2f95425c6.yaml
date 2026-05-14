@@ -1,0 +1,19 @@
+task_uid: task_3efde62165c24510a4fb35d2f95425c6
+title: "split cc-connect AGENTS integration into dedicated PR"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-engineering-cc-connect-agents-pr-split
+execution_log_path: .pm/tasks/task_3efde62165c24510a4fb35d2f95425c6.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs: []
+related_prd:
+  - PRD-ENGINEERING-016
+acceptance:
+  - "AGENTS cc-connect instructions move into a dedicated PR branch without unrelated payload"
+handoff_to: []
+updated_at: 2026-05-14T17:06:33+08:00
+last_started_at: 2026-05-14T17:04:49+08:00
+last_closed_at: 2026-05-14T17:06:33+08:00
