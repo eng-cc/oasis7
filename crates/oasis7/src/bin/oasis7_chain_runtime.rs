@@ -662,7 +662,7 @@ fn apply_network_tier_manifest_defaults(options: &mut CliOptions) {
     let Some(loaded_manifest) = options.loaded_network_tier_manifest.as_ref() else {
         return;
     };
-    if options.world_id == cli::DEFAULT_WORLD_ID {
+    if options.world_id.trim().is_empty() || options.world_id == cli::DEFAULT_WORLD_ID {
         options.world_id = loaded_manifest.manifest.chain_id.clone();
     }
 }

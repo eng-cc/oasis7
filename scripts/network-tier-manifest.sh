@@ -224,7 +224,18 @@ case "$mode" in
     require_non_empty "--reset-policy" "$reset_policy"
     require_non_empty "--value-semantics" "$value_semantics"
     mkdir -p "$(dirname "$manifest_path")"
-    NETWORK_TIER_MANIFEST="$manifest_path" python3 - "$tier" "$status" "$network_id" "$chain_id" "$release_candidate_bundle_ref" "$genesis_ref" "$bootstrap_peer_ref" "$rpc_ref" "$explorer_ref" "$faucet_ref" "$governance_mode" "$validator_admission" "$target_validator_count" "$allow_observer_nodes" "$token_symbol" "$faucet_mode" "$reset_policy" "$value_semantics" "${promote_from[*]}" "${require_gates[*]}" "${allowed_claims[*]}" "${denied_claims[*]}" "${evidence_refs[*]}" <<'PY'
+    join_with_newline() {
+      local out=""
+      local item
+      for item in "$@"; do
+        if [[ -n "$out" ]]; then
+          out+=$'\n'
+        fi
+        out+="$item"
+      done
+      printf '%s' "$out"
+    }
+    NETWORK_TIER_MANIFEST="$manifest_path" python3 - "$tier" "$status" "$network_id" "$chain_id" "$release_candidate_bundle_ref" "$genesis_ref" "$bootstrap_peer_ref" "$rpc_ref" "$explorer_ref" "$faucet_ref" "$governance_mode" "$validator_admission" "$target_validator_count" "$allow_observer_nodes" "$token_symbol" "$faucet_mode" "$reset_policy" "$value_semantics" "$(join_with_newline "${promote_from[@]}")" "$(join_with_newline "${require_gates[@]}")" "$(join_with_newline "${allowed_claims[@]}")" "$(join_with_newline "${denied_claims[@]}")" "$(join_with_newline "${evidence_refs[@]}")" <<'PY'
 import json
 import os
 import pathlib
@@ -260,7 +271,15 @@ manifest_path = pathlib.Path(os.environ["NETWORK_TIER_MANIFEST"]).resolve()
 def split_items(raw: str) -> list[str]:
     if not raw:
         return []
-    return [item for item in raw.split(" ") if item]
+    return [item.strip() for item in raw.splitlines() if item.strip()]
+
+def parse_bool(raw: str) -> bool:
+    normalized = raw.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise SystemExit("invalid allow_observer_nodes: expected true or false")
 
 manifest = {
     "schema_version": "oasis7.network_tier_manifest.v1",
@@ -282,7 +301,7 @@ manifest = {
         "governance_mode": governance_mode,
         "validator_admission": validator_admission,
         "target_validator_count": int(target_validator_count),
-        "allow_observer_nodes": allow_observer_nodes.lower() == "true",
+        "allow_observer_nodes": parse_bool(allow_observer_nodes),
     },
     "token_policy": {
         "symbol": token_symbol,
@@ -439,7 +458,7 @@ if tier == "shared_devnet":
     if token_policy["value_semantics"] != "preview":
         raise SystemExit("shared_devnet must use value_semantics=preview")
     if token_policy["reset_policy"] not in {"ephemeral", "resettable"}:
-        raise SystemExit("shared_devnet must use resettable-style policy")
+        raise SystemExit("shared_devnet must use reset_policy=ephemeral or reset_policy=resettable")
 
 if tier == "public_testnet":
     if token_policy["value_semantics"] != "testnet":
