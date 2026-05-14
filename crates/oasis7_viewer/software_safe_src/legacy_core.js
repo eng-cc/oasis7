@@ -902,7 +902,8 @@ function buildStrongAuthTier(promptCapability) {
     if (state.auth.registrationStatus === "registered") {
       return {
         status: "preview_backend_reauth_available",
-        reason: promptCapability.reason || strongAuthReason(),
+        reason:
+          "hosted preview backend reauth is available after the browser-local player_session has completed runtime registration for prompt_control",
       };
     }
     return {
@@ -914,7 +915,8 @@ function buildStrongAuthTier(promptCapability) {
   if (promptPolicy.availability === "trusted_local_preview_only") {
     return {
       status: state.auth.available ? "active_legacy_preview" : "trusted_local_only",
-      reason: promptCapability.reason || strongAuthReason(),
+      reason:
+        "trusted_local_preview keeps prompt_control on the legacy local preview lane; hosted/public strong_auth still remains outside this window",
     };
   }
   return {

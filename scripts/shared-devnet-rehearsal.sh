@@ -51,11 +51,11 @@ Access / rollback:
   --shared-operator-ref <ref>             Shared operator / handoff / runbook ref; repeatable
   --shared-access-evidence-ref <ref>      Independent access proof / screenshot / log ref; repeatable
   --fallback-candidate-bundle <path>      Previous shared-devnet pass bundle to use as rollback target
-  --fallback-gate-ref <ref>               Audited fallback gate / checklist / summary ref
-  --fallback-owner-ref <ref>              Owner handoff / approval ref for fallback execution
+  --fallback-gate-ref <path>              Audited fallback gate / checklist / summary file ref
+  --fallback-owner-ref <path>             Owner handoff / approval file ref for fallback execution
   --fallback-class <formal_pass_candidate|bootstrap_restore_ready>
                                          Rollback fallback class (default: formal_pass_candidate)
-  --rollback-restore-step-ref <ref>       Restore step / checklist ref; repeatable
+  --rollback-restore-step-ref <path>      Restore step / checklist file ref; repeatable
   --rollback-restoration-scope <text>     Audited restoration scope for rollback readiness
 
 Multi-entry evidence:

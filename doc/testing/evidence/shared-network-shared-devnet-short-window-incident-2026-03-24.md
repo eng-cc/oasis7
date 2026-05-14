@@ -33,4 +33,4 @@
 - `qa_owner_action`:
   - 下一轮只需复核 `shared_access` 与 `rollback_target_ready` 两条 lane。
 - `liveops_owner_action`:
-  - 准备 shared operator access 记录，并补齐 rollback contract：若仍无历史 formal shared-devnet `pass` candidate`，则至少把 `bootstrap_restore_ready` fallback 的 restore steps / owner ref / scope 审计完成，再解除 `hold_promotion`。
+  - 准备 shared operator access 记录，并补齐 rollback contract：若仍无历史 formal shared-devnet `pass` candidate，则至少把 `bootstrap_restore_ready` fallback 的 restore steps / owner ref / scope 审计完成，再解除 `hold_promotion`。

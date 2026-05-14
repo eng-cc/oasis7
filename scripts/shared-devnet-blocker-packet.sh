@@ -36,10 +36,10 @@ Shared access flags:
   --access-reason <text>
 
 Mixed-topology flags:
-  --mixed-topology-baseline-ref <ref>
-  --mixed-topology-shared-evidence-ref <ref>   Repeatable
-  --mixed-topology-proxy-ref <ref>             Repeatable
-  --mixed-topology-pass-decision-ref <ref>
+  --mixed-topology-baseline-ref <path>
+  --mixed-topology-shared-evidence-ref <path>   Repeatable
+  --mixed-topology-proxy-ref <path>             Repeatable
+  --mixed-topology-pass-decision-ref <path>
   --mixed-topology-validated-by <text>
   --mixed-topology-validated-at <text>
   --mixed-topology-lane-result <pass|partial|block>
@@ -49,8 +49,8 @@ Rollback flags:
   --fallback-candidate-bundle <bundle.json>
   --fallback-class <formal_pass_candidate|bootstrap_restore_ready>
   --fallback-gate-summary <summary.md>
-  --fallback-owner-ref <ref>
-  --restore-steps-ref <ref>           Repeatable
+  --fallback-owner-ref <path>
+  --restore-steps-ref <path>          Repeatable
   --rollback-validated-by <text>
   --rollback-validated-at <text>
   --restoration-scope <text>

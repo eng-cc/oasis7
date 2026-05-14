@@ -107,7 +107,7 @@
 1. 任何 candidate 必须先完成本地 gate，再进入 `shared_devnet`。
 2. 只有上一轨道结论为 `pass`，才允许 promotion 到下一轨道。
 3. 一旦发现 commit/world/governance 真值漂移，立即 `freeze` 并退回重新编号。
-4. `staging/canary` 的 `rollback` 目标必须是最近一次通过的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate`，可接受受审计的 `bootstrap_restore_ready` fallback，但必须固定 restore steps、fallback owner ref 与 restoration scope。
+4. `staging/canary` 的 `rollback` 目标必须是最近一次通过的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate，可接受受审计的 `bootstrap_restore_ready` fallback，但必须固定 restore steps、fallback owner ref 与 restoration scope。
 5. `mixed_topology_baseline` 若要从 `partial` 升到 `pass`，必须满足三项同时成立：
    - same-window shared mixed-topology evidence 已固定并与当前 `candidate_id` 对账；
    - producer/QA 联审通过的 `pass_uplift_decision_ref` 已固定；
