@@ -109,6 +109,25 @@ run ./scripts/shared-devnet-blocker-packet.sh \
 ensure_file_contains "$pass_access_out" 'shared.example.invalid:443'
 ensure_file_contains "$pass_access_out" 'screenshot.md'
 
+pass_rollback_out="$smoke_root/rollback-pass.md"
+run ./scripts/shared-devnet-blocker-packet.sh \
+  --window-id shared-devnet-20260324-09 \
+  --candidate-bundle "$current_bundle" \
+  --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
+  --access-out "$smoke_root/shared-access-rollback-pass.md" \
+  --mixed-topology-out "$smoke_root/mixed-topology-rollback-pass.md" \
+  --rollback-out "$pass_rollback_out" \
+  --fallback-candidate-bundle "$fallback_bundle" \
+  --fallback-class bootstrap_restore_ready \
+  --fallback-gate-summary "$smoke_root/evidence/fallback-gate.md" \
+  --fallback-owner-ref "$smoke_root/evidence/oncall.md" \
+  --restore-steps-ref "$smoke_root/evidence/restore.md" \
+  --restoration-scope "runtime build | world snapshot | governance manifest" \
+  --rollback-lane-result pass
+
+ensure_file_contains "$pass_rollback_out" 'shared-devnet-fallback-01'
+ensure_file_contains "$pass_rollback_out" 'runtime build | world snapshot | governance manifest'
+
 pass_mixed_topology_out="$smoke_root/mixed-topology-pass.md"
 run ./scripts/shared-devnet-blocker-packet.sh \
   --window-id shared-devnet-20260324-07 \

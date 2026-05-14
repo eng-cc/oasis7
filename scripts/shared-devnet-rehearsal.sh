@@ -51,6 +51,12 @@ Access / rollback:
   --shared-operator-ref <ref>             Shared operator / handoff / runbook ref; repeatable
   --shared-access-evidence-ref <ref>      Independent access proof / screenshot / log ref; repeatable
   --fallback-candidate-bundle <path>      Previous shared-devnet pass bundle to use as rollback target
+  --fallback-gate-ref <ref>               Audited fallback gate / checklist / summary ref
+  --fallback-owner-ref <ref>              Owner handoff / approval ref for fallback execution
+  --fallback-class <formal_pass_candidate|bootstrap_restore_ready>
+                                         Rollback fallback class (default: formal_pass_candidate)
+  --rollback-restore-step-ref <ref>       Restore step / checklist ref; repeatable
+  --rollback-restoration-scope <text>     Audited restoration scope for rollback readiness
 
 Multi-entry evidence:
   --web-evidence-ref <path>               Reuse existing same-window Web evidence
@@ -257,6 +263,10 @@ governance_mode="skip"
 longrun_mode="dry-run"
 shared_access_pass=0
 fallback_candidate_bundle=""
+fallback_gate_ref=""
+fallback_owner_ref=""
+fallback_class="formal_pass_candidate"
+rollback_restoration_scope=""
 allow_dirty_worktree=0
 multi_entry_startup_timeout=240
 s9_duration_secs=300
@@ -292,6 +302,7 @@ declare -a candidate_notes=()
 declare -a shared_endpoint_refs=()
 declare -a shared_operator_refs=()
 declare -a shared_access_evidence_refs=()
+declare -a rollback_restore_step_refs=()
 declare -a passthrough_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -386,6 +397,26 @@ while [[ $# -gt 0 ]]; do
       ;;
     --fallback-candidate-bundle)
       fallback_candidate_bundle=${2:-}
+      shift 2
+      ;;
+    --fallback-gate-ref)
+      fallback_gate_ref=${2:-}
+      shift 2
+      ;;
+    --fallback-owner-ref)
+      fallback_owner_ref=${2:-}
+      shift 2
+      ;;
+    --fallback-class)
+      fallback_class=${2:-}
+      shift 2
+      ;;
+    --rollback-restore-step-ref)
+      rollback_restore_step_refs+=("${2:-}")
+      shift 2
+      ;;
+    --rollback-restoration-scope)
+      rollback_restoration_scope=${2:-}
       shift 2
       ;;
     --web-evidence-ref)
@@ -1018,8 +1049,27 @@ rollback_status="partial"
 rollback_note="there is no previous shared-devnet pass candidate pinned as formal fallback"
 if [[ -n "$fallback_candidate_bundle" ]]; then
   require_file "--fallback-candidate-bundle" "$fallback_candidate_bundle"
-  rollback_status="pass"
-  rollback_note="fallback candidate bundle is pinned for rollback"
+  case "$fallback_class" in
+    formal_pass_candidate|bootstrap_restore_ready)
+      ;;
+    *)
+      echo "error: unsupported --fallback-class: $fallback_class" >&2
+      exit 2
+      ;;
+  esac
+  if [[ -n "$fallback_gate_ref" ]]; then
+    require_file "--fallback-gate-ref" "$fallback_gate_ref"
+  fi
+  if [[ -n "$fallback_owner_ref" ]]; then
+    require_file "--fallback-owner-ref" "$fallback_owner_ref"
+  fi
+  if [[ -n "$fallback_gate_ref" && -n "$fallback_owner_ref" && "${#rollback_restore_step_refs[@]}" -gt 0 && -n "$rollback_restoration_scope" ]]; then
+    rollback_status="pass"
+    rollback_note="fallback bundle, gate ref, owner ref, restore steps, and restoration scope are pinned for rollback"
+  else
+    rollback_status="partial"
+    rollback_note="fallback bundle is pinned, but audited fallback gate/owner/restore scope contract is still incomplete"
+  fi
 fi
 cat >"$rollback_summary_path" <<EOF
 # Shared Devnet Rollback Target Note
@@ -1035,6 +1085,36 @@ if [[ -n "$fallback_candidate_bundle" ]]; then
   cat >>"$rollback_summary_path" <<EOF
 - fallback candidate bundle:
   - \`$fallback_candidate_bundle\`
+- fallback class:
+  - \`$fallback_class\`
+EOF
+fi
+if [[ -n "$fallback_gate_ref" ]]; then
+  cat >>"$rollback_summary_path" <<EOF
+- fallback gate ref:
+  - \`$fallback_gate_ref\`
+EOF
+fi
+if [[ -n "$fallback_owner_ref" ]]; then
+  cat >>"$rollback_summary_path" <<EOF
+- fallback owner ref:
+  - \`$fallback_owner_ref\`
+EOF
+fi
+if [[ "${#rollback_restore_step_refs[@]}" -gt 0 ]]; then
+  cat >>"$rollback_summary_path" <<EOF
+- restore step refs:
+EOF
+  for ref in "${rollback_restore_step_refs[@]}"; do
+    cat >>"$rollback_summary_path" <<EOF
+  - \`$ref\`
+EOF
+  done
+fi
+if [[ -n "$rollback_restoration_scope" ]]; then
+  cat >>"$rollback_summary_path" <<EOF
+- restoration scope:
+  - \`$rollback_restoration_scope\`
 EOF
 fi
 cat >>"$rollback_summary_path" <<EOF

@@ -102,6 +102,7 @@
   - `shared_access` 的 endpoint / operator handoff / access evidence 现在也已被提升为模板/脚本/编排输出的正式字段；后续若要在这个 PR 里继续推进，重点不再是“补结构”，而是拿到真实 shared endpoint 与独立 operator/access proof
   - mixed-topology 的 `pass_uplift_decision_ref` 现在已被提升为模板/脚本/编排输出的正式字段；后续若要在这个 PR 里继续推进，重点不再是“补结构”，而是决定 repo 已有 proxy/shared-window 证据是否足以支撑真实 `pass` 裁决
   - `rollback_target_ready` 的 first-pass 语义已收口为：`staging/canary` 仍要求最近一次 formal `pass` candidate，但首条 `shared_devnet pass` 可接受受审计 `bootstrap_restore_ready` fallback；若 `restore_steps_ref/fallback_owner_ref/restoration_scope` 不完整，仍只能记 `partial`
+  - `rollback_target_ready` 的脚本合同也已收口为：只有 fallback bundle + fallback gate + fallback owner + restore steps + restoration scope 全部齐全时，repo 才允许把该 lane 记为 `pass`
   - 没有正式 `staging/canary`
 
 ## 依赖

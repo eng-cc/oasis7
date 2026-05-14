@@ -368,6 +368,19 @@ fi
 if [[ -n "$fallback_gate_summary" ]]; then
   require_file "--fallback-gate-summary" "$fallback_gate_summary"
 fi
+if [[ -n "$fallback_owner_ref" ]]; then
+  require_file "--fallback-owner-ref" "$fallback_owner_ref"
+fi
+if [[ "$rollback_lane_result" == "pass" ]]; then
+  require_non_empty "--fallback-candidate-bundle" "$fallback_candidate_bundle"
+  require_non_empty "--fallback-gate-summary" "$fallback_gate_summary"
+  require_non_empty "--fallback-owner-ref" "$fallback_owner_ref"
+  require_non_empty "--restoration-scope" "$restoration_scope"
+  if [[ "${#restore_steps_refs[@]}" -eq 0 ]]; then
+    echo "error: --rollback-lane-result pass requires --restore-steps-ref" >&2
+    exit 2
+  fi
+fi
 case "$fallback_class" in
   formal_pass_candidate|bootstrap_restore_ready)
     ;;
@@ -529,7 +542,7 @@ cat >"$rollback_out" <<EOF
 - \`fallback_gate_ref\`:
   - \`${fallback_gate_summary:-<output/shared-network/.../gate/.../summary.md>}\`
 - \`fallback_track_result\`:
-  - \`pass\`
+  - \`${fallback_class/formal_pass_candidate/pass}\`
 - \`fallback_owner_ref\`:
   - \`${fallback_owner_ref:-<promotion record | incident review | approval record>}\`
 
