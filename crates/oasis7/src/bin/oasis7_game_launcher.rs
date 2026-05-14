@@ -97,6 +97,7 @@ const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
+const DEFAULT_CHAIN_NETWORK_TIER_MANIFEST: &str = "";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
 const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
 const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
@@ -152,6 +153,7 @@ struct CliOptions {
     chain_enabled: bool,
     chain_status_bind: String,
     chain_node_id: String,
+    chain_network_tier_manifest: String,
     chain_storage_profile: StorageProfile,
     chain_world_id: Option<String>,
     chain_node_role: String,
@@ -192,6 +194,7 @@ impl Default for CliOptions {
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
             chain_node_id: default_chain_node_id(),
+            chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,
             chain_world_id: None,
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
@@ -455,8 +458,6 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         chain_world_id(options),
         "--status-bind".to_string(),
         options.chain_status_bind.clone(),
-        "--storage-profile".to_string(),
-        options.chain_storage_profile.as_str().to_string(),
         "--execution-world-dir".to_string(),
         execution_world_dir,
         "--node-role".to_string(),
@@ -479,6 +480,13 @@ fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
         "--pos-max-past-slot-lag".to_string(),
         options.chain_pos_max_past_slot_lag.to_string(),
     ];
+    if options.chain_network_tier_manifest.trim().is_empty() {
+        args.push("--storage-profile".to_string());
+        args.push(options.chain_storage_profile.as_str().to_string());
+    } else {
+        args.push("--network-tier-manifest".to_string());
+        args.push(options.chain_network_tier_manifest.trim().to_string());
+    }
     args.push(if options.chain_p2p_accept_public_entry {
         "--p2p-accept-public-entry".to_string()
     } else {

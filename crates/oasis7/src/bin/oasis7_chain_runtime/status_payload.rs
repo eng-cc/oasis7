@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, NodeNetworkPolicy, NodeReachabilityAutoDetection, NodeSnapshot,
@@ -47,6 +48,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) consensus: ChainConsensusStatus,
     pub(super) last_error: Option<String>,
     pub(super) execution_world_dir: String,
+    pub(super) network_tier: Option<ChainNetworkTierStatus>,
     pub(super) p2p: ChainP2pStatus,
     pub(super) observability: ChainNodeObservabilityStatus,
     pub(super) release_security_policy: ReleaseSecurityPolicy,
@@ -56,6 +58,31 @@ pub(super) struct ChainStatusResponse {
     pub(super) traffic: ChainTrafficStatus,
     pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ChainNetworkTierStatus {
+    pub(super) source_path: String,
+    pub(super) schema_version: String,
+    pub(super) tier: String,
+    pub(super) status: String,
+    pub(super) network_id: String,
+    pub(super) chain_id: String,
+    pub(super) bootstrap_peer_count: usize,
+    pub(super) governance_mode: String,
+    pub(super) validator_admission: String,
+    pub(super) target_validator_count: u64,
+    pub(super) allow_observer_nodes: bool,
+    pub(super) token_symbol: String,
+    pub(super) faucet_mode: String,
+    pub(super) reset_policy: String,
+    pub(super) value_semantics: String,
+    pub(super) rpc_ref: String,
+    pub(super) explorer_ref: String,
+    pub(super) faucet_ref: Option<String>,
+    pub(super) required_gates: Vec<String>,
+    pub(super) allowed_claims: Vec<String>,
+    pub(super) denied_claims: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -377,6 +404,7 @@ fn build_chain_node_observability_status(
 pub(super) fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
     live_p2p_recommendation: &NodeUserModeRecommendation,
     applied_effective_user_mode: Option<String>,
     effective_p2p_policy: NodeNetworkPolicy,
@@ -444,6 +472,29 @@ pub(super) fn build_chain_status_payload(
         worker_poll_count: snapshot.tick_count,
         tick_count: snapshot.tick_count,
         last_tick_unix_ms: snapshot.last_tick_unix_ms,
+        network_tier: loaded_network_tier_manifest.map(|loaded| ChainNetworkTierStatus {
+            source_path: loaded.source_path.clone(),
+            schema_version: loaded.manifest.schema_version.clone(),
+            tier: loaded.manifest.tier.clone(),
+            status: loaded.manifest.status.clone(),
+            network_id: loaded.manifest.network_id.clone(),
+            chain_id: loaded.manifest.chain_id.clone(),
+            bootstrap_peer_count: loaded.bootstrap_peers.len(),
+            governance_mode: loaded.manifest.validator_policy.governance_mode.clone(),
+            validator_admission: loaded.manifest.validator_policy.validator_admission.clone(),
+            target_validator_count: loaded.manifest.validator_policy.target_validator_count,
+            allow_observer_nodes: loaded.manifest.validator_policy.allow_observer_nodes,
+            token_symbol: loaded.manifest.token_policy.symbol.clone(),
+            faucet_mode: loaded.manifest.token_policy.faucet_mode.clone(),
+            reset_policy: loaded.manifest.token_policy.reset_policy.clone(),
+            value_semantics: loaded.manifest.token_policy.value_semantics.clone(),
+            rpc_ref: loaded.manifest.endpoint_policy.rpc_ref.clone(),
+            explorer_ref: loaded.manifest.endpoint_policy.explorer_ref.clone(),
+            faucet_ref: loaded.manifest.endpoint_policy.faucet_ref.clone(),
+            required_gates: loaded.manifest.promotion_policy.required_gates.clone(),
+            allowed_claims: loaded.manifest.claims_policy.allowed_claims.clone(),
+            denied_claims: loaded.manifest.claims_policy.denied_claims.clone(),
+        }),
         consensus: ChainConsensusStatus {
             slot: snapshot.consensus.slot,
             epoch: snapshot.consensus.epoch,

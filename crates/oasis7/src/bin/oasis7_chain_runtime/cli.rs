@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::RewardAssetConfig;
 use oasis7_node::{
     NodeAutoNatStatus, NodeHolePunchViability, NodePublicPortReachability,
@@ -98,6 +99,8 @@ pub(super) struct CliOptions {
     pub replication_network_listen_addrs: Vec<String>,
     pub replication_network_bootstrap_peers: Vec<String>,
     pub replication_remote_writer_public_keys: Vec<String>,
+    pub network_tier_manifest_path: Option<PathBuf>,
+    pub loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     pub config_path: String,
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
@@ -153,6 +156,8 @@ impl Default for CliOptions {
             replication_network_listen_addrs: Vec::new(),
             replication_network_bootstrap_peers: Vec::new(),
             replication_remote_writer_public_keys: Vec::new(),
+            network_tier_manifest_path: None,
+            loaded_network_tier_manifest: None,
             config_path: DEFAULT_CONFIG_FILE.to_string(),
             execution_bridge_state_path: None,
             execution_world_dir: None,
@@ -362,6 +367,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                     parse_required_value(&mut iter, "--replication-remote-writer-public-key")?;
                 options.replication_remote_writer_public_keys.push(raw);
             }
+            "--network-tier-manifest" => {
+                let raw = parse_required_value(&mut iter, "--network-tier-manifest")?;
+                options.network_tier_manifest_path = Some(PathBuf::from(raw));
+            }
             "--config" => options.config_path = parse_required_value(&mut iter, "--config")?,
             "--execution-bridge-state" => {
                 let raw = parse_required_value(&mut iter, "--execution-bridge-state")?;
@@ -451,6 +460,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
     if !options.node_gossip_peers.is_empty() && options.node_gossip_bind.is_none() {
         return Err("--node-gossip-peer requires --node-gossip-bind".to_string());
+    }
+    if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
+        let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
+        options.loaded_network_tier_manifest = Some(loaded);
     }
 
     Ok(options)
@@ -615,6 +628,7 @@ Options:\n\
                                     libp2p replication bootstrap peer (repeatable)\n\
   --replication-remote-writer-public-key <public_key_hex>\n\
                                     extra authorized replication fetch requester (repeatable)\n\
+  --network-tier-manifest <path>    load formal network tier manifest json and bootstrap peer ref\n\
   --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\

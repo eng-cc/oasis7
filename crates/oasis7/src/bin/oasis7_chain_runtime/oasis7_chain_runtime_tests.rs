@@ -894,6 +894,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
     let payload = build_chain_status_payload(
         snapshot,
         Path::new("/tmp/execution-world"),
+        None,
         &NodeNetworkPolicy::recommend_for_user_mode(
             NodeRole::Sequencer,
             NodeUserMode::PrivateSafe,
@@ -1026,6 +1027,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
     let payload = build_chain_status_payload(
         snapshot,
         Path::new("/tmp/execution-world"),
+        None,
         &recommendation,
         None,
         NodeNetworkPolicy {

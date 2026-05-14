@@ -3,6 +3,7 @@ pub mod consensus_action_payload;
 pub mod geometry;
 pub mod launcher_bootstrap_peers;
 pub mod models;
+pub mod network_tier_manifest;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod observability;
 #[cfg(not(target_arch = "wasm32"))]
