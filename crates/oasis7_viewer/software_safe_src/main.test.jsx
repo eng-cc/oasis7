@@ -290,6 +290,7 @@ describe("viewer web ui automation baseline", () => {
 
     screen.getByText("Runtime Diagnostics").click();
     expect(screen.getAllByRole("button", { name: "Release Player Session" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("active_hosted_session")).toBeInTheDocument();
     expect(screen.getByText("preview_backend_reauth_available")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -299,6 +300,11 @@ describe("viewer web ui automation baseline", () => {
     expect(
       screen.getByText("page reload will reuse the browser-local hosted key and attempt reconnect_sync first"),
     ).toBeInTheDocument();
+    const assetLane = screen.getByText("Asset / Governance Lane").closest("section");
+    expect(assetLane).toBeTruthy();
+    expect(
+      within(assetLane).getAllByText(/main_token_transfer remains blocked until a higher-trust hosted strong-auth lane exists/i).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("not_implemented")).not.toBeInTheDocument();
   });
 

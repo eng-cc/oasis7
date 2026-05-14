@@ -880,7 +880,7 @@ function playerSessionReason(auth, deploymentHint) {
 }
 
 function strongAuthReason() {
-  return "strong auth remains a separate upgrade plane; viewer only previews backend reauth for prompt_control and still does not issue hosted-ready asset/governance proofs";
+  return "strong auth remains a separate upgrade plane; viewer already supports hosted player-session issue/reconnect/release, but backend reauth stays preview-only for prompt_control and still does not unlock hosted-ready asset/governance proofs";
 }
 
 function buildStrongAuthTier(promptCapability) {
@@ -998,11 +998,14 @@ function buildSemanticCapability(actionId) {
     };
   }
   if (strongAuthSensitive && isHostedPublicJoinHint(deploymentHint)) {
+    const hostedStrongAuthReason = state.auth.available
+      ? `${actionId} still requires strong_auth on the hosted public join path; this browser only has a legacy preview player_session, so backend re-authorization or a private operator plane must take over`
+      : `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`;
     return {
       actionId,
       enabled: false,
       code: "strong_auth_required",
-      reason: `${actionId} requires strong_auth on the hosted public join path; acquire a player_session first, then complete the hosted re-authorization step for this action`,
+      reason: hostedStrongAuthReason,
     };
   }
   if (strongAuthSensitive && state.auth.available && deploymentHint === "remote_origin_legacy_bootstrap") {
@@ -1072,7 +1075,7 @@ function buildAuthSurfaceModel() {
           ? state.auth.source === "legacy_viewer_auth_bootstrap"
             ? "active_legacy_preview"
             : state.auth.registrationStatus === "registered"
-              ? "active_hosted_issue"
+              ? "active_hosted_session"
               : "issued_pending_register"
           : "not_issued",
         reason: playerSessionReason(state.auth, deploymentHint),
@@ -1092,14 +1095,14 @@ function buildAuthSurfaceModel() {
     },
     reconnect: state.auth.available
       ? state.auth.source === "legacy_viewer_auth_bootstrap"
-        ? "reconnect still depends on the current preview bootstrap; hosted resume/revoke tokens are not wired yet"
+        ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap"
         : state.auth.registrationStatus === "registered"
           ? "page reload will reuse the browser-local hosted key and attempt reconnect_sync first"
           : "browser-local hosted key is persisted, but runtime session restore is still pending this page load"
       : isHostedPublicJoinHint(deploymentHint)
         ? buildHostedRecoveryHint("en")?.detail
           || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync"
-        : "page reload is possible, but player-session reconnect/resume is not implemented yet",
+        : "page reload is possible once viewer auth bootstrap or hosted player-session issue succeeds",
   };
 }
 
