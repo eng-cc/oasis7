@@ -33,6 +33,10 @@
   - `<independent operator opened viewer endpoint>`
   - `<independent operator reached live endpoint>`
   - `<candidate_id matched bundle truth>`
+- `candidate_bundle_ref`:
+  - `<output/release-candidates/current.json>`
+- `candidate_gate_summary_ref`:
+  - `<output/shared-network/.../gate/.../summary.md>`
 - `evidence_ref`:
   - `<screenshots | logs | duty record>`
 
@@ -43,6 +47,6 @@
   - `<why this is pass/partial/block>`
 
 ## Notes
-- `pass` only if access is not single-owner local-only rehearsal.
+- `pass` only if access is not single-owner local-only rehearsal and the endpoint, operator handoff, and independent access evidence refs are all pinned.
 - `partial` if endpoint exists but still depends on one local operator or one private machine.
 - `block` if endpoint is unreachable, candidate truth mismatches, or owner handoff is missing.

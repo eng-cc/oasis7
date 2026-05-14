@@ -334,6 +334,14 @@ require_file "--candidate-gate-summary" "$candidate_gate_summary"
 ensure_lane_result "--access-lane-result" "$access_lane_result"
 ensure_lane_result "--mixed-topology-lane-result" "$mixed_topology_lane_result"
 ensure_lane_result "--rollback-lane-result" "$rollback_lane_result"
+if [[ "$access_lane_result" == "pass" ]]; then
+  require_non_empty "--viewer-url" "$viewer_url"
+  require_non_empty "--live-addr" "$live_addr"
+  if [[ "${#operator_contact_refs[@]}" -eq 0 || "${#independent_operator_refs[@]}" -eq 0 || "${#access_evidence_refs[@]}" -eq 0 ]]; then
+    echo "error: --access-lane-result pass requires --operator-contact-ref, --independent-operator-ref, and --access-evidence-ref" >&2
+    exit 2
+  fi
+fi
 if [[ -n "$mixed_topology_baseline_ref" ]]; then
   require_file "--mixed-topology-baseline-ref" "$mixed_topology_baseline_ref"
 fi
@@ -427,7 +435,7 @@ cat >>"$access_out" <<EOF
   - $access_reason
 
 ## Notes
-- \`pass\` only if access is not single-owner local-only rehearsal.
+- \`pass\` only if access is not single-owner local-only rehearsal and the endpoint, operator handoff, and independent access evidence refs are all pinned.
 - \`partial\` if endpoint exists but still depends on one local operator or one private machine.
 - \`block\` if endpoint is unreachable, candidate truth mismatches, or owner handoff is missing.
 EOF

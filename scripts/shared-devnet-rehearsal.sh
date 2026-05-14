@@ -49,6 +49,7 @@ Access / rollback:
   --shared-access-pass                    Mark shared_access as pass; requires refs below
   --shared-endpoint-ref <ref>             Shared endpoint / URL / operator-facing access ref; repeatable
   --shared-operator-ref <ref>             Shared operator / handoff / runbook ref; repeatable
+  --shared-access-evidence-ref <ref>      Independent access proof / screenshot / log ref; repeatable
   --fallback-candidate-bundle <path>      Previous shared-devnet pass bundle to use as rollback target
 
 Multi-entry evidence:
@@ -290,6 +291,7 @@ declare -a candidate_evidence_refs=()
 declare -a candidate_notes=()
 declare -a shared_endpoint_refs=()
 declare -a shared_operator_refs=()
+declare -a shared_access_evidence_refs=()
 declare -a passthrough_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -376,6 +378,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --shared-operator-ref)
       shared_operator_refs+=("${2:-}")
+      shift 2
+      ;;
+    --shared-access-evidence-ref)
+      shared_access_evidence_refs+=("${2:-}")
       shift 2
       ;;
     --fallback-candidate-bundle)
@@ -788,12 +794,12 @@ shared_access_summary_path="$window_dir/access-check.md"
 shared_access_status="partial"
 shared_access_note="access is local-only rehearsal and does not yet prove independent shared operator access"
 if [[ "$shared_access_pass" -eq 1 ]]; then
-  if [[ "${#shared_endpoint_refs[@]}" -eq 0 || "${#shared_operator_refs[@]}" -eq 0 ]]; then
-    echo "error: --shared-access-pass requires at least one --shared-endpoint-ref and one --shared-operator-ref" >&2
+  if [[ "${#shared_endpoint_refs[@]}" -eq 0 || "${#shared_operator_refs[@]}" -eq 0 || "${#shared_access_evidence_refs[@]}" -eq 0 ]]; then
+    echo "error: --shared-access-pass requires at least one --shared-endpoint-ref, one --shared-operator-ref, and one --shared-access-evidence-ref" >&2
     exit 2
   fi
   shared_access_status="pass"
-  shared_access_note="shared endpoint and operator handoff refs are pinned for this window"
+  shared_access_note="shared endpoint, operator handoff, and independent access evidence refs are pinned for this window"
 fi
 {
   echo "# Shared Devnet Access Check"
@@ -825,6 +831,12 @@ fi
   if [[ "${#shared_operator_refs[@]}" -gt 0 ]]; then
     echo "- shared operator refs:"
     for ref in "${shared_operator_refs[@]}"; do
+      echo "  - \`$ref\`"
+    done
+  fi
+  if [[ "${#shared_access_evidence_refs[@]}" -gt 0 ]]; then
+    echo "- shared access evidence refs:"
+    for ref in "${shared_access_evidence_refs[@]}"; do
       echo "  - \`$ref\`"
     done
   fi

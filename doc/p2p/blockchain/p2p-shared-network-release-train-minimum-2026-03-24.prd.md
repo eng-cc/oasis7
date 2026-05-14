@@ -54,6 +54,7 @@
   - AC-8: 本专题必须给出 first shared-devnet dry run、first staging rehearsal、first canary rehearsal 的顺序与阻断条件。
   - AC-9: 本专题必须明确 mixed-topology 是 `shared_devnet/staging/canary` 的 required lane；`P2PARCH-6` matrix baseline 只能作为 shared-devnet 的起始输入，不能单独构成 shared-network `pass` 或 public claim 升级依据。
   - AC-10: 本专题必须明确 `mixed_topology_baseline` 从 `partial` 升到 `pass` 时，至少同时固定 same-window shared evidence、producer/QA 联审通过的 `pass_uplift_decision_ref`，并在 evidence 模板/脚本中保留为显式字段。
+  - AC-11: 本专题必须明确 `shared_access` 从 `partial` 升到 `pass` 时，至少同时固定 shared endpoint、independent operator handoff 与 access evidence，并在 evidence 模板/脚本中保留为显式字段。
 - Non-Goals:
   - 不在本专题内直接搭建真实 shared devnet/testnet/canary 环境。
   - 不在本专题内升级 `limited playable technical preview` 或 `crypto-hardened preview` 口径。
@@ -94,6 +95,7 @@
 - NFR-P2P-RTMIN-7: mixed-topology required lane 必须显式区分 `baseline/rehearsal/claim review` 三种阶段；proxy drill 不得在 runbook 或 claims gate 中冒充 dedicated sentry/NAT lab 真值。
 - NFR-P2P-RTMIN-8: 任何把 shared-devnet mixed-topology lane 提升为 `pass` 的结论，都必须同时固定 same-window evidence ref 与 producer/QA 审计通过的 pass-uplift decision ref，避免仅靠脚本开关改变 gate 语义。
 - NFR-P2P-RTMIN-10: mixed-topology 的 `pass_uplift_decision_ref` 必须进入模板、草稿脚本与编排输出的正式字段集合；不得只在自由文本备注里出现，避免 QA/liveops 在后续 promotion 审计时丢失合同真值。
+- NFR-P2P-RTMIN-11: shared-access 的 endpoint / operator handoff / access evidence 必须进入模板、草稿脚本与编排输出的正式字段集合；不得只在 duty chat、口头交接或 lane 状态翻转中隐含成立。
 - NFR-P2P-RTMIN-9: 首条 `shared_devnet pass` 若尚无历史 `pass` candidate，可接受受审计的 `bootstrap_restore_ready` fallback，但必须同时固定 `restore_steps_ref`、`fallback_owner_ref`、`restoration_scope` 与 candidate truth 对账证据；否则 `rollback_target_ready` 只能记为 `partial`。
 - Security & Privacy: 本专题涉及共享环境与升级轨道，但不引入新的密钥托管方案。任何 candidate bundle、运行记录与证据都只能引用公钥、版本号、world snapshot 标识和审计结论，不得把敏感 custody 材料写入仓库。
 
