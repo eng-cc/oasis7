@@ -75,6 +75,10 @@
 - [x] agent-action-contract-boundary-alignment (PRD-GAME-013) [test_tier_required]: `agent_engineer` 已把 dual-mode / action contract 的现行动作面收口为低频间接控制白名单，并显式把 `jump / attack / use_item / block_editing` 回收到 future embodied candidate gate。 Trace: .pm/tasks/task_15890765ee3b4188a1e2766973f392fc.yaml
 - [x] qa-scale-consistency-matrix (PRD-GAME-013) [test_tier_required]: `qa_engineer` 已完成四层尺度合同一致性矩阵，确认 runtime/viewer/agent 口径一致，并把 blocker 签名归档到 `doc/testing/evidence/gameplay-scale-consistency-matrix-2026-05-07.md`。 Trace: .pm/tasks/task_8205baa6d2fb46388b11c1eed340fdf5.yaml
 
+### T10 间接控制 control-feeling 合同（2026-05-14）
+- [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-014` 专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载，正式冻结 accepted intent、主因果、打断/重排与续玩恢复四项 guarantees。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
+- 后续待建任务统一收口在 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
+
 ## 依赖
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`

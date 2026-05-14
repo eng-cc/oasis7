@@ -271,6 +271,34 @@ oasis7 的世界不是无尺度表格。
 - `10-minute trust gate` 负责回答“是否已经值得继续玩”。
 - `first capability gate` 负责回答“首个持续能力是否已经闭环”，并继续与 `PostOnboarding` 的 `15~45` 分钟里程碑口径对齐。
 
+## 2.9 间接控制下的 control-feeling 合同
+
+oasis7 当前正式主路线不是 direct control，而是 indirect control。
+
+这不等于玩家应该接受“AI 自己做决定，我只看结果”。
+
+当前正式口径要求，玩家在间接控制主路线里仍然必须持续回答 4 个问题：
+
+1. 我刚刚让系统做了什么。
+2. 系统有没有接受这件事。
+3. 为什么现在这样推进、没推进或改道。
+4. 我现在最有效的下一步是什么。
+
+如果任一问题不能在 headed Web/UI 或 pure API 的正式玩家 surface 上被直接回答，那么即便世界还在推进，也不能视为 control-feeling 合格。
+
+因此当前 gameplay 正式冻结 4 条 guarantees：
+
+1. `accepted intent`
+   - 玩家必须能读到当前被接受的主意图，而不是只看到原始事件流。
+2. `execution causality`
+   - 玩家必须知道当前是执行中、被阻塞、被 override、无进展完成还是有进展完成。
+3. `interrupt / reprioritize / recover`
+   - 玩家必须能打断、重排或恢复 agency，而不是只能等 AI 自己继续。
+4. `bounded consequence readability`
+   - 玩家必须看懂当前代价、世界变化、主阻塞与最短下一步。
+
+这 4 条 guarantees 的专题合同见 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
+
 当前 defer 范围：
 - 暂不继续扩大战争/治理/元进度在首局中的曝光。
 - 暂不把新的宏系统入口包装成 first-session 主卖点。

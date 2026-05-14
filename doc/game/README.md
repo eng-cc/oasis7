@@ -8,6 +8,7 @@
 - 想直接按文件名定位某个 gameplay 专题：先读 `doc/game/prd.index.md`。
 - 想快速理解核心玩法骨架，而不是顺扫近期长名单：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`。
 - 想直接看“接下来两周只做什么”：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
+- 想确认“间接控制为什么仍然应该感觉像我在控制，而不是旁观 AI”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 - 想确认当前试玩放行、limited preview 与 closed beta 口径：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`。
 - 想跟进最近最活跃的经济/运营规则变化：先读 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需进入对应 design / project / runbook。
 
@@ -22,7 +23,7 @@
 - `prd.md` 是玩法目标态与阶段口径真值，适合先理解当前 game 模块在管什么、哪些边界已经冻结。
 - `project.md` 是执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进到哪一步。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
-- 高频专题文档继续承担专题真值：`gameplay-top-level-design` 管核心玩法骨架，`gameplay-ten-minute-retention-recovery-2026-04-09` 管当前冲刺窗口，`gameplay-limited-preview-execution-2026-03-22` / `gameplay-closed-beta-readiness-2026-03-21` 管试玩与放行边界，`gameplay-agent-claim-token-cost-2026-03-27` 管近期高频经济规则。
+- 高频专题文档继续承担专题真值：`gameplay-top-level-design` 管核心玩法骨架，`gameplay-ten-minute-retention-recovery-2026-04-09` 管当前冲刺窗口，`gameplay-indirect-control-feeling-contract-2026-05-14` 管间接控制下的 agency 合同，`gameplay-limited-preview-execution-2026-03-22` / `gameplay-closed-beta-readiness-2026-03-21` 管试玩与放行边界，`gameplay-agent-claim-token-cost-2026-03-27` 管近期高频经济规则。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再把 `gameplay/` 下近期专题长名单直接平铺在首屏。
