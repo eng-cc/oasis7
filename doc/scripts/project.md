@@ -329,6 +329,21 @@
     - `python3 -c 'import json,sys; payload=json.load(sys.stdin); local=payload[\"local_required_validation\"]; assert local[\"reason_summary\"] is None or isinstance(local[\"reason_summary\"], str); assert isinstance(local[\"reason_items\"], list)' < <(./scripts/prepare-task-pr.sh --json)`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
+- [x] prepare-task-pr-default-copilot-review (PRD-SCRIPTS-007/008) [test_tier_required]: 为 `scripts/prepare-task-pr.sh --create` 增加默认 `@copilot` reviewer request，并提供显式 opt-out，避免 owner 创建 PR 后还要手工补点 Copilot review。 Trace: .pm/tasks/task_e9e584299de24561b98012c3ddf389fb.yaml
+  - 产物文件:
+    - `scripts/prepare-task-pr.sh`
+    - `scripts/prepare-task-pr.test.sh`
+    - `doc/scripts/prd.md`
+    - `doc/scripts/project.md`
+    - `.pm/tasks/task_e9e584299de24561b98012c3ddf389fb.execution.md`
+  - 验收命令 (`test_tier_required`):
+    - `bash -n scripts/prepare-task-pr.sh`
+    - `./scripts/prepare-task-pr.sh --help`
+    - `python3 -c 'import json,subprocess; payload=json.loads(subprocess.check_output([\"./scripts/prepare-task-pr.sh\",\"temp/prepare-pr-copilot-smoke\",\"--json\"], text=True)); assert payload[\"review_request_command\"] == \"gh pr edit temp/prepare-pr-copilot-smoke --add-reviewer @copilot\"'`
+    - `python3 -c 'import json,subprocess; payload=json.loads(subprocess.check_output([\"./scripts/prepare-task-pr.sh\",\"temp/prepare-pr-copilot-smoke\",\"--json\",\"--no-copilot-review\"], text=True)); assert payload[\"review_request_command\"] is None'`
+    - `./scripts/prepare-task-pr.test.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
 - [x] pm-rebase-conflict-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突，并把唯一允许的安全自动修复边界收口为 `.pm/inbox/signals.jsonl` signal-id 碰撞；git-ignored 本地视图仅提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。 Trace: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.yaml
   - 产物文件:
     - `scripts/pm/rebase-conflict-helper.sh`

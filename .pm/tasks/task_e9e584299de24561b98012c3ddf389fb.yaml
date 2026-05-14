@@ -1,0 +1,24 @@
+task_uid: task_e9e584299de24561b98012c3ddf389fb
+title: "default Copilot review request in prepare-task-pr"
+owner_role: producer_system_designer
+worktree_hint: /home/scc/worktrees/oasis7-scripts-prepare-task-pr-default-copilot-review
+execution_log_path: .pm/tasks/task_e9e584299de24561b98012c3ddf389fb.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - scripts/prepare-task-pr.sh
+  - scripts/prepare-task-pr.test.sh
+  - doc/scripts/prd.md
+  - doc/scripts/project.md
+doc_refs:
+  - doc/scripts/prd.md
+  - doc/scripts/project.md
+related_prd:
+  - PRD-SCRIPTS-007
+  - PRD-SCRIPTS-008
+acceptance: []
+handoff_to: []
+updated_at: 2026-05-14T15:43:00+08:00
+last_started_at: 2026-05-14T15:04:36+08:00
+last_closed_at: 2026-05-14T15:11:28+08:00

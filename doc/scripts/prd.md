@@ -42,6 +42,7 @@
   - SC-10: 仓库必须提供标准化 `git worktree` 创建入口，让每个新需求都能按统一命名、统一路径和统一失败语义落到独立 worktree，而不是依赖人工手写 `git worktree add`。
   - SC-11: 标准化 task worktree bootstrap 入口必须支持“创建后立刻检查模块 PRD / project / 当日 devlog”和“可选预热该 worktree 的隔离 harness”，让新需求能直接进入文档与验证闭环。
   - SC-12: 仓库必须提供标准化 task worktree GitHub PR 收口入口，让已完成需求能够在干净状态下统一执行 PR preflight / create，并把 required checks + review/approval 作为 `main` 的默认保护边界。
+  - SC-12E: `scripts/prepare-task-pr.sh --create` 默认必须在 PR 创建成功后尝试追加 `@copilot` review request；若 GitHub CLI 版本、仓库权限或组织策略不支持，该附加动作只能降级为 warning，不能让原本可用的 PR 创建路径失败；若 owner 明确需要跳过，只能通过显式 opt-out 参数关闭。
   - SC-12A: `scripts/land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不再作为默认最终合流入口；其帮助文案与专题文档必须明确这一边界。
   - SC-12B: 仓库必须提供单命令 task closeout helper，在 commit 前把 `workflow-report --phase close`、`move-task --to-status done|deferred` 与 `.pm` 结构校验收口为一个稳定入口，避免不同 owner 手工串接 close-phase 命令链。
   - SC-12C: 仓库必须提供同一 PR 内 review comment 收口 helper，能够统一盘点 unresolved review threads、按 thread id 执行显式 resolve，并在每次操作后回报 `reviewDecision` / `mergeStateStatus`，避免 comment 处理继续依赖临时 GraphQL 命令拼装。
@@ -81,6 +82,7 @@
   4. Flow-SCR-004: `new-task-worktree.sh <module> <task> -> 校验源 worktree 状态 -> 创建 task/<module>-<task> 分支与独立 worktree -> 输出进入新 worktree 的下一步命令`
   5. Flow-SCR-005: `new-task-worktree.sh <module> <task> --init-docs --with-harness -> 检查 doc/<module>/{prd,project}.md 与当日 devlog -> 在新 worktree 中后台预热 worktree-harness.sh up（formal gameplay 默认 LLM path）-> 输出文档检查与 harness 摘要`
   6. Flow-SCR-006: `prepare-task-pr.sh [task/<module>-<task>] -> 检查 source task worktree 干净状态与 base 分支对齐情况 -> 输出或执行 GitHub PR create 命令 -> 通过 required checks + review/approval 合入 `main` -> 同步本地 `main` 并删除已完成 task worktree/branch`
+  6D. Flow-SCR-006D: `prepare-task-pr.sh --create -> 先执行标准 gh create 命令确保 PR 创建 -> 若未显式 opt-out，则追加一次 `gh pr edit <branch> --add-reviewer @copilot` 尝试请求 Copilot review -> 若 reviewer request 不可用则仅告警，不回滚 PR`
   6A. Flow-SCR-006A: `task-closeout.sh --role <owner_role> --task-uid <TASK-UID> -> 校验 task 已有 last_started_at -> 执行 workflow-report close -> move-task done|deferred -> pm lint -> 输出下一步 prepare-task-pr 提示`
   6B. Flow-SCR-006B: `pr-review-thread-closeout.sh [pr-number] --unresolved-only -> 盘点 unresolved review threads -> 修复并 push 当前 PR -> pr-review-thread-closeout.sh --resolve-thread <id>|--resolve-all-unresolved -> resolve thread -> 回报 reviewDecision / mergeStateStatus 并继续下一轮 comment closeout`
   6C. Flow-SCR-006C: `git rebase origin/main -> 命中 .pm/** 冲突 -> rebase-conflict-helper.sh --json -> 若仅 signals.jsonl 冲突则 --resolve-signals -> 若命中 registry/backlog 视图则保留 main 删除并执行 sync-views -> 其余 canonical task/memory/stage 冲突人工处理`
@@ -121,6 +123,7 @@
   - AC-16: `scripts/new-task-worktree.sh --json --init-docs` 必须输出机器可读 `doc_checks`；加 `--with-harness` 时，stdout 仍保持单个 JSON 对象，并附带 `harness` 摘要字段。
   - AC-17: 新增 `scripts/prepare-task-pr.sh`，默认以当前 task branch 为 source、以 `origin/main`（若存在）或本地 `main` 为对齐基线，执行“source clean 检查 -> base 对齐检查 -> 输出或执行 GitHub PR create 命令 -> 输出 PR 合入后的本地同步/cleanup 命令”。
   - AC-18: `scripts/prepare-task-pr.sh --help` 必须明确列出 `--base`、`--remote`、`--create`、`--draft` 与 `--json`；`--json` 至少输出 `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands` 与 `local_required_validation.scope` / `local_required_validation.reason_summary` / `local_required_validation.recommended_required_command`。
+  - AC-18J: `scripts/prepare-task-pr.sh` 必须把 Copilot reviewer request 与 `gh pr create` 主路径解耦：`create_command` 保持原有可用的 PR 创建命令，另以结构化字段暴露默认的 `review_request_command`；`--help` 必须公开一个显式 opt-out 参数用于关闭该默认附加 reviewer request。执行 `--create` 时，若 `review_request_command` 因 CLI 版本、仓库权限或组织策略失败，脚本只能输出 warning，不得让已创建的 PR 失败退出。
   - AC-18A: 新增 `scripts/pm/task-closeout.sh`，默认目标状态为 `done`，执行 `workflow-report close -> move-task done|deferred -> pm lint` 的标准 close-phase 链；若 task 缺少 `last_started_at` 或已经处于 `done/deferred`，脚本必须在写入前失败退出。
   - AC-18B: `scripts/pm/task-closeout.sh --help` 必须明确列出 `--role`、`--task-uid`、`--to-status`、`--no-lint` 与 `--json`；`--json` 至少输出 `task_uid`、`previous_status`、`final_status`、`last_started_at`、`last_closed_at`、`pm_lint.status`、`workflow_close` 与 `move_task`。
   - AC-18C: 新增 `scripts/pr-review-thread-closeout.sh`，默认按当前 branch 关联的 PR 读取 review threads；`--unresolved-only` 仅返回 unresolved threads，`--resolve-thread <id>` 可重复，`--resolve-all-unresolved` 只在显式传入时执行批量 resolve。
