@@ -35,6 +35,7 @@ printf '# screenshot\n' >"$smoke_root/evidence/screenshot.md"
 printf '# mixed topology baseline\n' >"$smoke_root/evidence/mixed-topology-baseline.md"
 printf '# mixed topology shared window\n' >"$smoke_root/evidence/mixed-topology-shared.md"
 printf '# proxy drill\n' >"$smoke_root/evidence/mixed-topology-proxy.md"
+printf '# pass uplift review\n' >"$smoke_root/evidence/mixed-topology-pass-decision.md"
 
 current_bundle="$smoke_root/current.json"
 fallback_bundle="$smoke_root/fallback.json"
@@ -85,8 +86,25 @@ ensure_file_contains "$access_out" 'shared-devnet-current-01'
 ensure_file_contains "$access_out" 'https://shared.example.invalid/viewer'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-baseline.md'
 ensure_file_contains "$mixed_topology_out" 'mixed-topology-shared.md'
+ensure_file_contains "$mixed_topology_out" 'required when lane_result=pass'
 ensure_file_contains "$rollback_out" 'shared-devnet-fallback-01'
 ensure_file_contains "$rollback_out" 'bootstrap_restore_ready'
 ensure_file_contains "$rollback_out" 'fallback-gate.md'
+
+pass_mixed_topology_out="$smoke_root/mixed-topology-pass.md"
+run ./scripts/shared-devnet-blocker-packet.sh \
+  --window-id shared-devnet-20260324-07 \
+  --candidate-bundle "$current_bundle" \
+  --candidate-gate-summary "$smoke_root/evidence/current-gate.md" \
+  --access-out "$smoke_root/shared-access-pass.md" \
+  --mixed-topology-out "$pass_mixed_topology_out" \
+  --rollback-out "$smoke_root/rollback-pass.md" \
+  --mixed-topology-baseline-ref "$smoke_root/evidence/mixed-topology-baseline.md" \
+  --mixed-topology-shared-evidence-ref "$smoke_root/evidence/mixed-topology-shared.md" \
+  --mixed-topology-pass-decision-ref "$smoke_root/evidence/mixed-topology-pass-decision.md" \
+  --mixed-topology-lane-result pass
+
+ensure_file_contains "$pass_mixed_topology_out" 'mixed-topology-pass-decision.md'
+ensure_file_contains "$pass_mixed_topology_out" '`pass_uplift_decision_ref`:'
 
 echo "shared-devnet blocker packet smoke checks passed"

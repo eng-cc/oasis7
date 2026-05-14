@@ -55,6 +55,7 @@
 - 共享访问入口、值班 owner、evidence root 未冻结：直接 `hold`
 - required mixed-topology lane 仍停留在 baseline / proxy 近似、没有对应 track 的正式结论：直接 `hold`
 - mixed-topology lane 试图记 `pass` 但没有 same-window evidence 对账或缺少 producer/QA pass-uplift decision ref：直接 `hold`
+- mixed-topology lane 的 `pass_uplift_decision_ref` 只出现在备注、聊天记录或口头结论里，没有进入正式模板/脚本产物：也视为 `hold`
 - 对外口径越过 preview 边界：立即 `freeze`
 
 ## 4. 三层执行循环
@@ -75,6 +76,7 @@
   - 若 mixed-topology 仍只有 baseline / proxy 近似，没有 same-window shared 结论，最多只能记 `partial`
   - 若 rollback target 只有“未来再补”的占位，没有受审计 restore steps / owner ref / scope，最多只能记 `partial`
   - 若 mixed-topology 想记 `pass`，除 same-window shared evidence 外还必须固定 producer/QA 联审通过的 pass-uplift decision ref
+  - mixed-topology 的 pass-uplift 决议必须进入正式 evidence 字段，而不是只写在 Notes；否则即使 reviewer 同意，也不能把 lane 升到 `pass`
   - 可先用 `shared-devnet-blocker-packet` 生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 三份 draft，再等待真实窗口证据填充
 
 ### 4.2 `staging`
@@ -177,4 +179,4 @@
   - `shared_access`
   - `rollback_target_ready`
   - `mixed_topology_baseline`
-- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`；如果 mixed-topology 继续停留在 proxy/shared-window 近似，或没有 pass-uplift decision ref，就必须显式保持 `partial`，不能口头升级。
+- 下一步不是升级 public claims，也不是直接进 `staging`，而是先把这三条 lane 提升到 `pass`；如果 mixed-topology 继续停留在 proxy/shared-window 近似、没有 pass-uplift decision ref，或该 decision ref 没进入正式 evidence 字段，就必须显式保持 `partial`，不能口头升级。
