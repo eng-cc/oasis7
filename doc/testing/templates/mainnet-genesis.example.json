@@ -1,0 +1,15 @@
+{
+  "schema_version": "oasis7.genesis.example.v1",
+  "network_tier": "mainnet",
+  "chain_id": "oasis7-mainnet-example",
+  "world_id": "oasis7-mainnet-example",
+  "main_token": {
+    "symbol": "OC",
+    "initial_supply": "10000000000"
+  },
+  "notes": [
+    "mainnet example genesis placeholder only",
+    "frozen reset policy required",
+    "not an activated production artifact"
+  ]
+}

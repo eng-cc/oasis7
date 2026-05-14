@@ -1,0 +1,15 @@
+{
+  "schema_version": "oasis7.genesis.example.v1",
+  "network_tier": "public_testnet",
+  "chain_id": "oasis7-public-testnet-example",
+  "world_id": "oasis7-public-testnet-example",
+  "main_token": {
+    "symbol": "OC",
+    "initial_supply": "10000000000"
+  },
+  "notes": [
+    "public_testnet example genesis only",
+    "resettable rehearsal surface",
+    "not a mainnet or production settlement artifact"
+  ]
+}

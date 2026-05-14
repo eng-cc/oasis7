@@ -1,0 +1,2 @@
+/dns4/mainnet-bootstrap1.example.invalid/tcp/5811
+/dns4/mainnet-bootstrap2.example.invalid/tcp/5812

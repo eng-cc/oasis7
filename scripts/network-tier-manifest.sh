@@ -355,6 +355,15 @@ faucet_modes = {"none", "operator_grant", "guarded_testnet_faucet"}
 reset_policies = {"ephemeral", "resettable", "frozen"}
 value_semantics = {"preview", "testnet", "production"}
 
+def resolve_ref(raw: str) -> pathlib.Path:
+    candidate = pathlib.Path(raw)
+    if candidate.is_absolute():
+        return candidate
+    manifest_relative = manifest_path.parent / candidate
+    if manifest_relative.exists():
+        return manifest_relative.resolve()
+    return (pathlib.Path.cwd() / candidate).resolve()
+
 def require_enum(name: str, value: str, allowed: set[str]) -> None:
     if value not in allowed:
         raise SystemExit(f"invalid {name}: {value}")
@@ -376,6 +385,13 @@ for field in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref
     if not isinstance(value, str) or not value.strip():
         raise SystemExit(f"invalid runtime_refs.{field}")
 
+genesis_ref_path = resolve_ref(data["runtime_refs"]["genesis_ref"])
+bootstrap_ref_path = resolve_ref(data["runtime_refs"]["bootstrap_peer_ref"])
+if not genesis_ref_path.is_file():
+    raise SystemExit(f"missing runtime_refs.genesis_ref file: {genesis_ref_path}")
+if not bootstrap_ref_path.is_file():
+    raise SystemExit(f"missing runtime_refs.bootstrap_peer_ref file: {bootstrap_ref_path}")
+
 for field in ("rpc_ref", "explorer_ref"):
     value = data["endpoint_policy"].get(field)
     if not isinstance(value, str) or not value.strip():
@@ -392,11 +408,15 @@ for field in ("allowed_claims", "denied_claims"):
     value = data["claims_policy"].get(field)
     if not isinstance(value, list):
         raise SystemExit(f"invalid claims_policy.{field}")
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        raise SystemExit(f"invalid claims_policy.{field} entry")
 
 for field in ("promote_from", "required_gates"):
     value = data["promotion_policy"].get(field)
     if not isinstance(value, list):
         raise SystemExit(f"invalid promotion_policy.{field}")
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        raise SystemExit(f"invalid promotion_policy.{field} entry")
 
 if not isinstance(data["evidence_refs"], list):
     raise SystemExit("invalid evidence_refs")
@@ -455,10 +475,22 @@ joined_denied = " ".join(claims_policy["denied_claims"]).lower()
 if tier != "mainnet" and "mainnet" not in joined_denied:
     raise SystemExit("non-mainnet tiers must explicitly deny mainnet claims")
 
+joined_allowed = " ".join(claims_policy["allowed_claims"]).lower()
+if tier == "public_testnet" and "public_testnet" not in joined_allowed:
+    raise SystemExit("public_testnet must explicitly allow public_testnet claims")
+if tier == "public_testnet" and "production_oc_settlement" not in joined_denied:
+    raise SystemExit("public_testnet must explicitly deny production_oc_settlement claims")
+if tier == "shared_devnet" and "public_testnet" in joined_allowed:
+    raise SystemExit("shared_devnet must not allow public_testnet claims")
+if tier == "mainnet" and "faucet" in joined_allowed:
+    raise SystemExit("mainnet must not allow faucet claims")
+
 print(json.dumps(
     {
         "schema_version": data["schema_version"],
         "manifest_path": str(manifest_path),
+        "genesis_ref_path": str(genesis_ref_path),
+        "bootstrap_peer_ref_path": str(bootstrap_ref_path),
         "tier": tier,
         "status": data["status"],
         "network_id": data["network_id"],

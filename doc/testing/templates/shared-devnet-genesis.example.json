@@ -1,0 +1,15 @@
+{
+  "schema_version": "oasis7.genesis.example.v1",
+  "network_tier": "shared_devnet",
+  "chain_id": "oasis7-shared-devnet-example",
+  "world_id": "oasis7-shared-devnet-example",
+  "main_token": {
+    "symbol": "OC",
+    "initial_supply": "10000000000"
+  },
+  "notes": [
+    "shared_devnet example genesis only",
+    "not a public testnet claim",
+    "not a live network artifact"
+  ]
+}
