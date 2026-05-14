@@ -861,6 +861,38 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `rollback_target_ready` 若准备从 `partial` 升到 `pass`，必须把 fallback gate、fallback owner、restore steps 和 restoration scope 同时写成正式字段；脚本层面也必须一起提供，不能只改 lane 状态
   - mixed-topology 若准备从 `partial` 升到 `pass`，必须把 `pass_uplift_decision_ref` 作为正式字段写入草稿；脚本层面也必须与 same-window evidence 一起提供，不能只改 lane 状态
   - 仅生成 `partial` draft 时不需要提供 `--mixed-topology-pass-decision-ref`；只有 lane 要升到 `pass` 时才补这条 audited decision ref
+- 当前补证据标准命令：
+```bash
+./scripts/shared-devnet-rehearsal.sh \
+  --window-id <shared-devnet-window-id> \
+  --candidate-bundle <output/release-candidates/current.json> \
+  --out-dir <output/shared-network/...> \
+  --release-gate-mode skip \
+  --web-mode evidence \
+  --web-evidence-ref <same-window web evidence> \
+  --headless-mode evidence \
+  --headless-evidence-ref <same-window no-ui evidence> \
+  --pure-api-mode evidence \
+  --pure-api-evidence-ref <same-window pure-api evidence> \
+  --governance-mode evidence \
+  --governance-window-evidence-ref <same-window governance evidence> \
+  --longrun-mode evidence \
+  --longrun-window-evidence-ref <same-window longrun evidence> \
+  --shared-access-pass \
+  --shared-endpoint-ref <shared endpoint ref> \
+  --shared-operator-ref <shared operator/handoff ref> \
+  --shared-access-evidence-ref <independent access evidence ref> \
+  --fallback-candidate-bundle <output/release-candidates/fallback.json> \
+  --fallback-gate-ref <audited fallback gate ref> \
+  --fallback-owner-ref <approval/handoff ref> \
+  --fallback-class <formal_pass_candidate|bootstrap_restore_ready> \
+  --rollback-restore-step-ref <restore checklist/log ref> \
+  --rollback-restoration-scope "runtime build | world snapshot | governance manifest" \
+  --mixed-topology-pass \
+  --mixed-topology-shared-evidence-ref <same-window mixed-topology evidence> \
+  --mixed-topology-pass-decision-ref <producer/QA decision ref>
+```
+- 上述命令适用于：同一 `window_id`、同一 `candidate_bundle` 下，把 `shared_access / rollback_target_ready / mixed_topology_baseline` 一次性从 `partial` 补到 `pass`。
 - 当前 QA gate 最小职责：
   - 按 `shared_devnet / staging / canary` 校验 required lanes 是否齐全
   - `shared_devnet` 必须包含 `candidate_bundle_integrity / shared_access / multi_entry_closure / mixed_topology_baseline / governance_live_drill / short_window_longrun / rollback_target_ready`
