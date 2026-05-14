@@ -108,6 +108,10 @@
 2. 只有上一轨道结论为 `pass`，才允许 promotion 到下一轨道。
 3. 一旦发现 commit/world/governance 真值漂移，立即 `freeze` 并退回重新编号。
 4. `staging/canary` 的 `rollback` 目标必须是最近一次通过的 candidate bundle；首条 `shared_devnet pass` 若尚无历史 `pass` candidate`，可接受受审计的 `bootstrap_restore_ready` fallback，但必须固定 restore steps、fallback owner ref 与 restoration scope。
+5. `mixed_topology_baseline` 若要从 `partial` 升到 `pass`，必须满足三项同时成立：
+   - same-window shared mixed-topology evidence 已固定并与当前 `candidate_id` 对账；
+   - producer/QA 联审通过的 `pass_uplift_decision_ref` 已固定；
+   - gate/evidence 输出中把 proxy drill 明确标注为近似，而不是 dedicated sentry/NAT lab 真值。
 
 ## LiveOps Window 规则
 1. 每个 track 必须冻结唯一 `window_id`、`candidate_id`、`fallback_candidate_id`、`fallback_class`、`owners_on_duty` 和 `claim_envelope`。
@@ -122,6 +126,7 @@
 3. follow-up window `shared-devnet-20260324-06` 已把 `short_window_longrun` 提升到 `pass`，并留下真实 S9/S10 short-window evidence。
 4. 当前 `shared_devnet` gate 结论仍为 `partial`，promotion recommendation 仍为 `hold_promotion`。
 5. 造成 `partial` 的主因已明确收敛到 `shared_access / rollback_target_ready / mixed_topology_baseline` 三条 lane；其中 mixed-topology 现在已有正式 `partial` 证据，但仍未达到 shared-window `pass`。
+6. mixed-topology 的剩余缺口不再是“没有模板”，而是“没有被正式采纳的 pass-uplift 合同与对应真值”；因此后续收口必须优先保证模板/脚本/编排输出的字段一致，再决定是否接受 proxy/shared-window 近似作为当前 track 的 `pass` 依据。
 
 ## Partial / Block 语义
 | 状态 | 含义 |

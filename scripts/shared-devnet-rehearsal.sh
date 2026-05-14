@@ -1074,6 +1074,11 @@ if [[ -n "$mixed_topology_pass_decision_ref" ]]; then
 - pass-uplift decision ref:
   - \`$mixed_topology_pass_decision_ref\`
 EOF
+else
+  cat >>"$mixed_topology_summary_path" <<EOF
+- pass-uplift decision ref:
+  - missing; required before mixed-topology lane can be promoted to \`pass\`
+EOF
 fi
 cat >>"$mixed_topology_summary_path" <<EOF
 

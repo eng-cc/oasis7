@@ -44,6 +44,8 @@
   - `partial`
 - `reason`:
   - `P2PARCH-6` matrix baseline and same-window shared-devnet rehearsal evidence are now pinned together, but the latest 2026-04-07 full proxy execution still fails with audited consensus/recovery signatures and has not crossed the dedicated shared-window pass bar.
+- `pass_uplift_decision_ref`:
+  - `<not applicable while lane_result=partial; required for pass uplift>`
 
 ## Notes
 - This document upgrades the lane from an implicit missing scaffold to an explicit audited `partial` evidence packet.

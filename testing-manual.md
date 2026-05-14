@@ -855,6 +855,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 - 当前 `shared-devnet-blocker-packet` 最小职责：
   - 基于已通过的 candidate bundle 和当前 gate 输出，生成 `shared_access` / `mixed_topology_baseline` / `rollback_target_ready` 的实例草稿
   - 固定三条 blocker 的留证字段，避免后续 shared operator / fallback candidate / same-window mixed-topology 输入到位后还要手工重写结构
+  - mixed-topology 若准备从 `partial` 升到 `pass`，必须把 `pass_uplift_decision_ref` 作为正式字段写入草稿；脚本层面也必须与 same-window evidence 一起提供，不能只改 lane 状态
+  - 仅生成 `partial` draft 时不需要提供 `--mixed-topology-pass-decision-ref`；只有 lane 要升到 `pass` 时才补这条 audited decision ref
 - 当前 QA gate 最小职责：
   - 按 `shared_devnet / staging / canary` 校验 required lanes 是否齐全
   - `shared_devnet` 必须包含 `candidate_bundle_integrity / shared_access / multi_entry_closure / mixed_topology_baseline / governance_live_drill / short_window_longrun / rollback_target_ready`

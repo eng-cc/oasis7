@@ -39,6 +39,7 @@ Mixed-topology flags:
   --mixed-topology-baseline-ref <ref>
   --mixed-topology-shared-evidence-ref <ref>   Repeatable
   --mixed-topology-proxy-ref <ref>             Repeatable
+  --mixed-topology-pass-decision-ref <ref>
   --mixed-topology-validated-by <text>
   --mixed-topology-validated-at <text>
   --mixed-topology-lane-result <pass|partial|block>
@@ -159,6 +160,7 @@ mixed_topology_validated_by="<qa owner / runtime owner>"
 mixed_topology_validated_at="<YYYY-MM-DD HH:MM:SS TZ>"
 mixed_topology_lane_result="partial"
 mixed_topology_reason="P2PARCH-6 matrix baseline is pinned, but same-window shared mixed-topology evidence is still missing or only proxy-level"
+mixed_topology_pass_decision_ref=""
 fallback_candidate_bundle=""
 fallback_gate_summary=""
 fallback_owner_ref=""
@@ -249,6 +251,10 @@ while [[ $# -gt 0 ]]; do
       mixed_topology_proxy_refs+=("${2:-}")
       shift 2
       ;;
+    --mixed-topology-pass-decision-ref)
+      mixed_topology_pass_decision_ref=${2:-}
+      shift 2
+      ;;
     --mixed-topology-validated-by)
       mixed_topology_validated_by=${2:-}
       shift 2
@@ -330,6 +336,16 @@ ensure_lane_result "--mixed-topology-lane-result" "$mixed_topology_lane_result"
 ensure_lane_result "--rollback-lane-result" "$rollback_lane_result"
 if [[ -n "$mixed_topology_baseline_ref" ]]; then
   require_file "--mixed-topology-baseline-ref" "$mixed_topology_baseline_ref"
+fi
+if [[ -n "$mixed_topology_pass_decision_ref" ]]; then
+  require_file "--mixed-topology-pass-decision-ref" "$mixed_topology_pass_decision_ref"
+fi
+if [[ "$mixed_topology_lane_result" == "pass" ]]; then
+  if [[ "${#mixed_topology_shared_evidence_refs[@]}" -eq 0 ]]; then
+    echo "error: --mixed-topology-lane-result pass requires --mixed-topology-shared-evidence-ref" >&2
+    exit 2
+  fi
+  require_non_empty "--mixed-topology-pass-decision-ref" "$mixed_topology_pass_decision_ref"
 fi
 
 ./scripts/release-candidate-bundle.sh validate --bundle "$candidate_bundle" >/dev/null
@@ -465,6 +481,8 @@ cat >>"$mixed_topology_out" <<EOF
   - \`$mixed_topology_lane_result\`
 - \`reason\`:
   - $mixed_topology_reason
+- \`pass_uplift_decision_ref\`:
+  - \`${mixed_topology_pass_decision_ref:-<required when lane_result=pass; producer/QA decision note or review doc>}\`
 
 ## Notes
 - \`pass\` only if same-window shared mixed-topology evidence is pinned, reviewed against the current candidate truth, and backed by an audited producer/QA pass-uplift decision ref.
