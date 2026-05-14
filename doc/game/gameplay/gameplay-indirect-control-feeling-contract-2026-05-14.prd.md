@@ -98,7 +98,8 @@
   - `crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs`
   - `crates/oasis7/src/bin/oasis7_pure_api_client.rs`
   - `crates/oasis7_viewer/software_safe.js`
-  - `crates/oasis7_viewer/src/egui_right_panel_player_guide/mod.rs`
+  - `crates/oasis7_viewer/software_safe_src/main.jsx`
+  - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
   - accepted intent 已被新动作替换，但表面仍像旧意图在执行：必须显式标记 `replaced` 或 `reprioritized`，否则判定为因果漂移。
