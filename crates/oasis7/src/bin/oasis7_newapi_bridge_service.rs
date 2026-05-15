@@ -28,10 +28,7 @@ mod tests;
 
 use api::{read_http_request, write_http_response, HttpRequest};
 use model::{BindBridgeUserRequest, CreateDepositRouteRequest, OperatorReviewRequest};
-use service::{
-    BridgePricingRuleConfig, BridgeService, BridgeServiceConfig, BridgeServiceError,
-    CreditTargetType,
-};
+use service::{BridgePricingRuleConfig, BridgeService, BridgeServiceConfig, BridgeServiceError};
 use store::BridgeStateStore;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5852";
@@ -41,7 +38,7 @@ const DEFAULT_DEPOSIT_ACCOUNT_PREFIX: &str = "oc:bridge:";
 const TRACE_SESSION_PROCESS_LABEL: &str = "oasis7_newapi_bridge_service";
 const DEFAULT_CHAIN_TIMEOUT_MS: u64 = 5_000;
 const DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED: u64 = 1;
-const DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS: u64 = 5_000;
+const DEFAULT_LETAI_TIMEOUT_MS: u64 = 5_000;
 const DEFAULT_MAX_CREDIT_ATTEMPTS: u32 = 3;
 
 #[derive(Debug, Clone)]
@@ -54,10 +51,10 @@ struct CliOptions {
     chain_timeout_ms: u64,
     chain_confirmations_required: u64,
     pricing_rules: Vec<BridgePricingRuleConfig>,
-    credit_adapter_url: Option<String>,
-    credit_adapter_auth_token: Option<String>,
-    credit_adapter_timeout_ms: u64,
-    credit_target_type: CreditTargetType,
+    letai_base_url: Option<String>,
+    letai_platform_key: Option<String>,
+    letai_parent_channel_id: Option<String>,
+    letai_timeout_ms: u64,
     max_credit_attempts: u32,
     reconcile_interval_seconds: u64,
 }
@@ -73,10 +70,10 @@ impl Default for CliOptions {
             chain_timeout_ms: DEFAULT_CHAIN_TIMEOUT_MS,
             chain_confirmations_required: DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED,
             pricing_rules: Vec::new(),
-            credit_adapter_url: None,
-            credit_adapter_auth_token: None,
-            credit_adapter_timeout_ms: DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS,
-            credit_target_type: CreditTargetType::Quota,
+            letai_base_url: None,
+            letai_platform_key: None,
+            letai_parent_channel_id: None,
+            letai_timeout_ms: DEFAULT_LETAI_TIMEOUT_MS,
             max_credit_attempts: DEFAULT_MAX_CREDIT_ATTEMPTS,
             reconcile_interval_seconds: 0,
         }
@@ -110,10 +107,10 @@ fn run() -> Result<(), String> {
             chain_timeout_ms: options.chain_timeout_ms,
             chain_confirmations_required: options.chain_confirmations_required,
             pricing_rules: options.pricing_rules.clone(),
-            credit_adapter_url: options.credit_adapter_url.clone(),
-            credit_adapter_auth_token: options.credit_adapter_auth_token.clone(),
-            credit_adapter_timeout_ms: options.credit_adapter_timeout_ms,
-            credit_target_type: options.credit_target_type.clone(),
+            letai_base_url: options.letai_base_url.clone(),
+            letai_platform_key: options.letai_platform_key.clone(),
+            letai_parent_channel_id: options.letai_parent_channel_id.clone(),
+            letai_timeout_ms: options.letai_timeout_ms,
             max_credit_attempts: options.max_credit_attempts,
         },
     ));
@@ -238,34 +235,34 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
                 options.pricing_rules.push(parse_pricing_rule(value)?);
                 index += 2;
             }
-            "--credit-adapter-url" => {
+            "--letai-base-url" => {
                 let value = args
                     .get(index + 1)
-                    .ok_or_else(|| "--credit-adapter-url requires a value".to_string())?;
-                options.credit_adapter_url = Some(value.trim().to_string());
+                    .ok_or_else(|| "--letai-base-url requires a value".to_string())?;
+                options.letai_base_url = Some(value.trim().to_string());
                 index += 2;
             }
-            "--credit-adapter-auth-token" => {
+            "--letai-platform-key" => {
                 let value = args
                     .get(index + 1)
-                    .ok_or_else(|| "--credit-adapter-auth-token requires a value".to_string())?;
-                options.credit_adapter_auth_token = Some(value.to_string());
+                    .ok_or_else(|| "--letai-platform-key requires a value".to_string())?;
+                options.letai_platform_key = Some(value.to_string());
                 index += 2;
             }
-            "--credit-adapter-timeout-ms" => {
+            "--letai-parent-channel-id" => {
                 let value = args
                     .get(index + 1)
-                    .ok_or_else(|| "--credit-adapter-timeout-ms requires a value".to_string())?;
-                options.credit_adapter_timeout_ms = value
+                    .ok_or_else(|| "--letai-parent-channel-id requires a value".to_string())?;
+                options.letai_parent_channel_id = Some(value.trim().to_string());
+                index += 2;
+            }
+            "--letai-timeout-ms" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--letai-timeout-ms requires a value".to_string())?;
+                options.letai_timeout_ms = value
                     .parse::<u64>()
-                    .map_err(|_| format!("invalid --credit-adapter-timeout-ms value `{value}`"))?;
-                index += 2;
-            }
-            "--credit-target-type" => {
-                let value = args
-                    .get(index + 1)
-                    .ok_or_else(|| "--credit-target-type requires a value".to_string())?;
-                options.credit_target_type = CreditTargetType::parse(value)?;
+                    .map_err(|_| format!("invalid --letai-timeout-ms value `{value}`"))?;
                 index += 2;
             }
             "--max-credit-attempts" => {
@@ -311,8 +308,8 @@ fn parse_cli_options(args: Vec<String>) -> Result<CliOptions, String> {
     if options.chain_confirmations_required == 0 {
         return Err("--chain-confirmations-required must be greater than 0".to_string());
     }
-    if options.credit_adapter_timeout_ms == 0 {
-        return Err("--credit-adapter-timeout-ms must be greater than 0".to_string());
+    if options.letai_timeout_ms == 0 {
+        return Err("--letai-timeout-ms must be greater than 0".to_string());
     }
     if options.max_credit_attempts == 0 {
         return Err("--max-credit-attempts must be greater than 0".to_string());
@@ -332,10 +329,10 @@ fn print_help() {
         "  --chain-confirmations-required <n>   default: {DEFAULT_CHAIN_CONFIRMATIONS_REQUIRED}"
     );
     println!("  --pricing-rule <version:oc:credit[:bonus]>  repeatable exact-match pricing rule");
-    println!("  --credit-adapter-url <url>           optional New API credit endpoint");
-    println!("  --credit-adapter-auth-token <token>  optional bearer token for credit adapter");
-    println!("  --credit-adapter-timeout-ms <ms>     default: {DEFAULT_CREDIT_ADAPTER_TIMEOUT_MS}");
-    println!("  --credit-target-type <quota|redeem_credit>   default: quota");
+    println!("  --letai-base-url <url>               optional LetAI OpenAPI base URL");
+    println!("  --letai-platform-key <token>         optional LetAI platform management key");
+    println!("  --letai-parent-channel-id <id>       optional LetAI parent channel identifier");
+    println!("  --letai-timeout-ms <ms>              default: {DEFAULT_LETAI_TIMEOUT_MS}");
     println!("  --max-credit-attempts <n>            default: {DEFAULT_MAX_CREDIT_ATTEMPTS}");
     println!("  --reconcile-interval-seconds <n>     default: disabled");
 }

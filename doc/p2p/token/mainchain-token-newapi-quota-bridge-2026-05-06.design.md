@@ -1,72 +1,88 @@
-# oasis7 主链 Token 到 New API 内部额度桥接方案（设计文档）
+# oasis7 主链 Token 到 LetAI Run OpenAPI 额度桥接方案（设计文档）
 
 - 对应需求文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
 - 对应项目管理文档: `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
 
-审计轮次: 1
+审计轮次: 2
 
 ## 1. 设计目标
-- 把 `OC` 到 `New API` 站内额度的路径定义成一条受控、独立部署、可对账的服务桥。
-- 保持 `oasis7` runtime 只提供链上资产真值，不把 `New API` credit 逻辑塞回链上或浏览器。
-- 为后续实现冻结最小状态机、部署边界、接口契约与 operator runbook 输入。
+- 把 `OC` 到 LetAI Run 调用额度的路径定义成一条受控、独立部署、可对账的 OpenAPI bridge。
+- 让 bridge-service 直接表达 LetAI 的真实对象模型：`platform user -> project -> token_key -> topup -> query verification`。
+- 保持 `oasis7` runtime 只提供链上资产真值，不把 LetAI 用户/项目/Token 逻辑塞回链上或浏览器。
 
 ## 2. 架构拆分
 - `bridge-portal`
-  - 负责用户绑定、查看 deposit route、查看 credit 状态。
-  - 不持有链上私钥；只展示 route / order / beneficiary。
+  - 负责用户绑定、查看 deposit route、查看 project/token/topup 状态。
+  - 不持有链上私钥；只展示 route / beneficiary / audit status。
 - `bridge-core`
-  - 负责 route 分配、pricing 解析、`bridge_ledger` 状态机、幂等重试与 operator action。
+  - 负责 route 分配、pricing 解析、`bridge_ledger` 状态机、LetAI 资源映射、幂等重试与 operator action。
 - `chain-watcher`
   - 负责从 `oasis7` 链侧观察 deposit truth。
   - 只读，不写链。
-- `newapi-credit-adapter`
-  - 负责把 confirmed deposit 转成 `New API` 的 quota mutation 或 redeem credit issuance。
-  - 必须支持幂等键与审计回写。
+- `letai-openapi-adapter`
+  - 负责 `users/upsert`、项目创建/Token 返回、用户 topup、额度概览、日志查询与项目 Token 汇总。
+  - 必须支持幂等键、query verification 与审计回写。
 - `bridge-db`
-  - 保存用户绑定、route、pricing、`bridge_ledger`、operator 审计日志。
-
-### 2026-05-08 落地切片
-- watcher 当前通过 operator-configured `--chain-base-url` 轮询 `GET /v1/chain/explorer/overview` 与 `GET /v1/chain/explorer/txs?account_id=<deposit_account_id>&status=confirmed`，以 `committed_height - block_height + 1` 计算确认数。
-- bridge-service 只扫描自己发出的 `deposit_route`，不做“按 `oc:bridge:` 前缀扫全链”的猜测式归属；任何未绑定、超额、少额、重复 route 入账都直接进入 `manual_review`。
-- pricing 当前使用 operator-configured repeatable `--pricing-rule <pricing_version>:<oc_amount>:<credit_units>[:<bonus_units>]` 精确匹配；`topup_plan_id` 目前不会自动折算，命中时进入 `manual_review`。
-- `New API` credit path 不在 repo 内硬编码；bridge-service 只要求 operator 通过 `--credit-adapter-url` / `--credit-adapter-auth-token` 注入真实 admin-side 写入口，并对同一 `idempotency_key` 做幂等。
+  - 保存 bridge binding、route、pricing、`bridge_ledger`、LetAI user/project/token 映射与 operator 审计日志。
 
 ## 3. 最小数据模型
 - `bridge_user_binding`
   - `bridge_user_id`
   - `newapi_user_ref`
   - `oasis_sender_account_id`
+  - `letai_external_user_id`
+  - `platform_user_id`
+  - `letai_external_user_name`
+  - `email`
+  - `metadata`
   - `status`
   - `created_at`
+  - `updated_at`
+- `letai_project_binding`
+  - `bridge_user_id`
+  - `letai_external_project_id`
+  - `platform_project_id`
+  - `project_name`
+  - `token_key`
+  - `token_status`
+  - `created_at`
+  - `updated_at`
 - `deposit_route`
   - `route_id`
+  - `bridge_user_id`
   - `beneficiary_ref`
   - `deposit_account_id`
   - `route_type`
+  - `pricing_version`
+  - `topup_plan_id`
   - `expires_at`
   - `status`
 - `bridge_ledger`
   - `bridge_deposit_id`
   - `route_id`
+  - `bridge_user_id`
   - `chain_tx_id`
   - `chain_action_id`
-  - `from_account_id`
-  - `to_account_id`
   - `amount_oc`
   - `expected_amount_oc`
   - `pricing_version`
   - `credit_units`
   - `bonus_units`
   - `total_credit_units`
+  - `platform_user_id`
+  - `platform_project_id`
+  - `token_key`
+  - `external_order_id`
+  - `quota`
+  - `amount_audit`
+  - `currency`
+  - `topup_receipt`
+  - `user_snapshot`
+  - `project_snapshot`
+  - `topup_log_snapshot`
   - `idempotency_key`
-  - `confirmations`
-  - `required_confirmations`
-  - `block_height`
-  - `target_type`
   - `state`
-  - `adapter_receipt`
   - `review_reason`
-  - `review_resolution`
   - `operator_note`
   - `credit_attempt_count`
   - `last_error_code`
@@ -75,57 +91,79 @@
   - `updated_at`
 - `pricing_schedule`
   - `pricing_version`
-  - `effective_at`
   - `oc_amount`
-  - `credit_units`
-  - `bonus_units`
+  - `quota_units`
+  - `bonus_quota_units`
   - `status`
 
 ## 4. 状态机
+- `bridge_user_binding`
+  - `active_local_only -> user_ready`
+  - `user_ready -> project_ready`
+  - `project_ready -> project_token_ready`
+  - 任意状态可进入 `manual_review`
 - `deposit_route`
   - `draft -> issued -> settled`
   - `draft -> issued -> expired`
   - `issued -> disabled`
 - `bridge_ledger`
-  - `detected -> pending_confirmations -> confirmed -> crediting -> credited -> reconciled`
-  - `detected -> manual_review`
-  - `pending_confirmations -> manual_review`
-  - `crediting -> failed -> manual_review`
+  - `detected -> pending_confirmations -> confirmed`
+  - `confirmed -> provisioning_user -> provisioning_project -> crediting -> credited -> verifying -> reconciled`
+  - `confirmed -> provisioning_user -> manual_review`
+  - `confirmed -> provisioning_project -> manual_review`
+  - `crediting -> failed -> crediting`
+  - `credited -> verifying -> manual_review`
   - `manual_review -> resolved -> reconciled`
   - `manual_review -> closed`
 
 ## 5. 关键接口契约
 - `POST /v1/bridge/bind`
-  - 输入: `newapi_user_ref`, `oasis_sender_account_id`
-  - 输出: `binding_status`
-  - 约束: 只建立受控绑定，不隐式开户。
+  - 输入: `newapi_user_ref`, `oasis_sender_account_id`, optional `external_user_name`, `email`, `metadata`
+  - 输出: `bridge_user_id`, local binding status
+  - 约束: 只建立受控 bridge binding，不隐式 topup。
 - `POST /v1/bridge/deposit-route`
   - 输入: `bridge_user_id`, `pricing_version` 或 `topup_plan_id`
   - 输出: `route_id`, `deposit_account_id`, `expires_at`
   - 约束: 每个活跃 route 必须可唯一映射 beneficiary。
 - `POST /v1/bridge/reconcile`
-  - 输入: 空 body；由 operator 或后台 interval 触发一次 `scan routes -> observe deposits -> promote confirmations -> apply credit`
+  - 输入: 空 body；由 operator 或后台 interval 触发一次 `scan routes -> observe deposits -> ensure user/project/token -> topup -> verify`
   - 输出: `latest_committed_height`、`observed_new_deposit_count`、`reconciled_credit_count`、`manual_review_count`
-  - 约束: 若 `chain-base-url` 或 `credit-adapter-url` 未配置，返回 operator-facing error，不猜测默认路径。
+  - 约束: 若 `chain-base-url`、LetAI base URL 或 platform key 未配置，返回 operator-facing error。
 - `POST /v1/bridge/operator/review/{bridge_deposit_id}`
   - 输入: `resolution`, `operator_note`
   - 输出: `next_state`
-  - 约束: 当前最小实现只支持 `mark_resolved|close`，不在 bridge-service 内提供“人工改 credit_units 后重发”的隐式后门。
-- `New API credit adapter`
-  - 输入: `bridge_deposit_id`, `beneficiary_ref`, `pricing_version`, `amount_oc`, `credit_units`, `bonus_units`, `total_credit_units`, `target_type`, `chain_tx_id`, `idempotency_key`
-  - 输出: 任意 JSON `adapter_receipt`
-  - 约束: bridge-service 以 HTTP `2xx` 视为 success；非 `2xx` / timeout 会保留同一 `idempotency_key` 重试，不得双发。
+  - 约束: 当前最小实现仍只支持 `mark_resolved|close`。
+- `LetAI OpenAPI`
+  - `POST /api/platform/open/users/upsert`
+  - `POST /api/platform/open/users/:platform_user_id/topups`
+  - `GET /api/platform/open/users/:platform_user_id/...`
+  - “创建或获取项目并返回 Token”
+  - “查询项目 Token 汇总”
+  - 约束:
+    - `Authorization: Bearer <platform-key>`
+    - `token_key` 只用于实际模型调用，不用于管理接口
+    - `external_user_id` / `external_project_id` / `external_order_id` 必须稳定幂等
 
-## 6. 推荐实现顺序
-1. 已完成 `bridge_ledger` 状态机和 route/binding 数据模型。
-2. 已完成 watcher 与确认窗口逻辑（基于 explorer poll + block height confirmation）。
-3. 已完成 `New API` credit adapter 的 generic HTTP bridge。
-4. 后续再做 operator dashboard、用户 portal 和 richer manual-review action。
+## 6. 编排顺序
+1. watcher 观察 route 对应链上 confirmed deposit。
+2. pricing engine 把 `OC` 金额折算成 LetAI `quota`。
+3. `users/upsert` 确保 `platform_user_id` 存在，并回写 binding。
+4. `ensure project + token_key` 确保 bridge user 绑定独立 project，回写 `platform_project_id/token_key`。
+5. 调用 topup，使用稳定 `external_order_id`。
+6. 调用用户概览 / 日志 / 项目汇总做验证。
+7. 回写 ledger snapshots，标记 `reconciled` 或 `manual_review`。
 
-## 7. 风险门禁
-- 没有唯一入账映射时，不允许自动 credit。
-- 没有确认窗口时，不允许自动 credit。
-- `New API` adapter 不支持幂等时，不允许自动 credit。
-- 当前 exact-match pricing rule 之外的充值形态一律不得自动折算，避免把 underpay / overpay / plan drift 静默吞成额度。
-- bridge custody 若需要进入浏览器或 public bootstrap，提案直接失败。
-- 对外文案若把该能力称为“公开兑换所”或“双向提现”，提案直接失败。
+## 7. 推荐实现顺序
+1. 先扩展 `model.rs` / `store.rs`，补齐 LetAI user/project/token/topup/query 字段。
+2. 替换 generic `credit_adapter.rs` 为 LetAI OpenAPI adapter，支持多接口。
+3. 重写 `service.rs` reconcile 编排，从 `Confirmed` 推进到 `Reconciled`。
+4. 重写测试桩，覆盖 user/project/token/topup/query 的 happy path、retry 和 manual review。
+5. 最后再补 richer operator dashboard / portal。
+
+## 8. 风险门禁
+- 没有 `platform_user_id` 时，不允许继续 project/topup。
+- 没有 `platform_project_id/token_key` 时，不允许继续 topup。
+- topup 没有 query verification snapshot 时，不允许标记 reconciled。
+- `external_order_id` 不稳定时，不允许自动重试。
+- 当前 exact-match pricing rule 之外的充值形态一律进入 `manual_review`。
+- `token_key` 若需要进入浏览器或 public bootstrap，提案直接失败。
