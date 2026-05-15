@@ -10,12 +10,40 @@ pub(super) enum BridgeBindingStatus {
     Disabled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(super) struct BridgeBinding {
     pub(super) bridge_user_id: String,
     pub(super) newapi_user_ref: String,
     pub(super) oasis_sender_account_id: String,
+    pub(super) letai_external_user_id: String,
+    #[serde(default)]
+    pub(super) letai_external_user_name: Option<String>,
+    #[serde(default)]
+    pub(super) email: Option<String>,
+    #[serde(default)]
+    pub(super) metadata: Option<Value>,
+    #[serde(default)]
+    pub(super) platform_user_id: Option<String>,
     pub(super) status: BridgeBindingStatus,
+    pub(super) created_at_unix_ms: i64,
+    pub(super) updated_at_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(super) struct LetaiProjectBinding {
+    pub(super) bridge_user_id: String,
+    pub(super) letai_external_project_id: String,
+    pub(super) project_name: String,
+    #[serde(default)]
+    pub(super) parent_channel_id: Option<String>,
+    #[serde(default)]
+    pub(super) metadata: Option<Value>,
+    #[serde(default)]
+    pub(super) platform_project_id: Option<String>,
+    #[serde(default)]
+    pub(super) token_key: Option<String>,
+    #[serde(default)]
+    pub(super) token_status: Option<String>,
     pub(super) created_at_unix_ms: i64,
     pub(super) updated_at_unix_ms: i64,
 }
@@ -50,8 +78,11 @@ pub(super) enum BridgeLedgerState {
     Detected,
     PendingConfirmations,
     Confirmed,
+    ProvisioningUser,
+    ProvisioningProject,
     Crediting,
     Credited,
+    Verifying,
     Reconciled,
     Failed,
     ManualReview,
@@ -79,8 +110,29 @@ pub(super) struct BridgeLedgerEntry {
     pub(super) confirmations: u64,
     pub(super) required_confirmations: u64,
     pub(super) block_height: Option<u64>,
-    pub(super) target_type: String,
     pub(super) idempotency_key: String,
+    #[serde(default)]
+    pub(super) platform_user_id: Option<String>,
+    #[serde(default)]
+    pub(super) platform_project_id: Option<String>,
+    #[serde(default)]
+    pub(super) token_key: Option<String>,
+    #[serde(default)]
+    pub(super) external_order_id: Option<String>,
+    #[serde(default)]
+    pub(super) quota: Option<u64>,
+    #[serde(default)]
+    pub(super) amount_audit: Option<String>,
+    #[serde(default)]
+    pub(super) currency: Option<String>,
+    #[serde(default, alias = "adapter_receipt")]
+    pub(super) topup_receipt: Option<Value>,
+    #[serde(default)]
+    pub(super) user_snapshot: Option<Value>,
+    #[serde(default)]
+    pub(super) project_snapshot: Option<Value>,
+    #[serde(default)]
+    pub(super) topup_log_snapshot: Option<Value>,
     pub(super) state: BridgeLedgerState,
     #[serde(default)]
     pub(super) credit_attempt_count: u32,
@@ -90,8 +142,6 @@ pub(super) struct BridgeLedgerEntry {
     pub(super) review_resolution: Option<String>,
     #[serde(default)]
     pub(super) operator_note: Option<String>,
-    #[serde(default)]
-    pub(super) adapter_receipt: Option<Value>,
     #[serde(default)]
     pub(super) last_error_code: Option<String>,
     #[serde(default)]
@@ -110,6 +160,8 @@ pub(super) struct PersistedBridgeState {
     #[serde(default)]
     pub(super) bindings: Vec<BridgeBinding>,
     #[serde(default)]
+    pub(super) project_bindings: Vec<LetaiProjectBinding>,
+    #[serde(default)]
     pub(super) routes: Vec<DepositRoute>,
     #[serde(default)]
     pub(super) ledger: Vec<BridgeLedgerEntry>,
@@ -123,6 +175,7 @@ impl Default for PersistedBridgeState {
             next_route_seq: 1,
             next_deposit_seq: default_next_deposit_seq(),
             bindings: Vec::new(),
+            project_bindings: Vec::new(),
             routes: Vec::new(),
             ledger: Vec::new(),
         }
@@ -133,18 +186,37 @@ fn default_next_deposit_seq() -> u64 {
     1
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub(super) struct BindBridgeUserRequest {
     pub(super) newapi_user_ref: String,
     pub(super) oasis_sender_account_id: String,
+    #[serde(default)]
+    pub(super) external_user_name: Option<String>,
+    #[serde(default)]
+    pub(super) email: Option<String>,
+    #[serde(default)]
+    pub(super) metadata: Option<Value>,
+    #[serde(default)]
+    pub(super) project_name: Option<String>,
+    #[serde(default)]
+    pub(super) project_metadata: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub(super) struct BindBridgeUserResponse {
     pub(super) ok: bool,
     pub(super) bridge_user_id: String,
     pub(super) newapi_user_ref: String,
     pub(super) oasis_sender_account_id: String,
+    pub(super) letai_external_user_id: String,
+    pub(super) letai_external_project_id: String,
+    pub(super) project_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) platform_user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) platform_project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) token_key: Option<String>,
     pub(super) binding_status: BridgeBindingStatus,
     pub(super) reused_existing_binding: bool,
     pub(super) created_at_unix_ms: i64,
@@ -195,6 +267,7 @@ pub(super) struct BridgeHealthResponse {
     pub(super) observed_at_unix_ms: i64,
     pub(super) binding_count: usize,
     pub(super) active_binding_count: usize,
+    pub(super) project_binding_count: usize,
     pub(super) route_count: usize,
     pub(super) active_route_count: usize,
     pub(super) ledger_count: usize,

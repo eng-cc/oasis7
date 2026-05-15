@@ -1,0 +1,25 @@
+task_uid: task_02c8644356c54ef0b035632c651e4ee1
+title: "LetAI OpenAPI bridge full closure"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-p2p-letai-openapi-bridge-full-closure
+execution_log_path: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md
+  - doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md
+doc_refs: []
+related_prd:
+  - PRD-P2P-TBRIDGE-001
+  - PRD-P2P-TBRIDGE-002
+  - PRD-P2P-TBRIDGE-003
+  - PRD-P2P-TBRIDGE-004
+acceptance:
+  - "设计 LetAI OpenAPI 专用用户/项目/token_key/充值/验后查询完整桥接闭环"
+  - "实现 oasis7_newapi_bridge_service 对 LetAI OpenAPI 的正式 adapter 与状态持久化映射"
+  - "补齐定向测试，覆盖动态创建 token_key 与充值幂等"
+handoff_to: []
+updated_at: 2026-05-15T14:29:58+08:00
+last_started_at: 2026-05-14T23:13:43+08:00
+last_closed_at: 2026-05-15T14:29:58+08:00

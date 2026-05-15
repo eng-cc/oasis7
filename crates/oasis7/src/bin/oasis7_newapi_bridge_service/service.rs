@@ -1,42 +1,21 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[path = "service_letai.rs"]
+mod service_letai;
+
+use self::service_letai::ensure_project_binding;
 use super::chain_client::{ChainExplorerClient, ObservedChainTransfer};
-use super::credit_adapter::{CreditApplyRequest, NewApiCreditAdapter};
+use super::credit_adapter::LetaiOpenApiAdapter;
 use super::model::{
     BindBridgeUserRequest, BindBridgeUserResponse, BridgeBinding, BridgeBindingStatus,
     BridgeHealthResponse, BridgeLedgerEntry, BridgeLedgerState, BridgeReconcileResponse,
     CreateDepositRouteRequest, CreateDepositRouteResponse, DepositRoute, DepositRouteStatus,
-    OperatorReviewRequest, OperatorReviewResponse,
+    LetaiProjectBinding, OperatorReviewRequest, OperatorReviewResponse,
 };
 use super::store::{BridgeStateStore, StoreMutateError};
 
 const ROUTE_TYPE_OPERATOR_ASSIGNED_ACCOUNT: &str = "operator_assigned_account";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum CreditTargetType {
-    Quota,
-    RedeemCredit,
-}
-
-impl CreditTargetType {
-    pub(super) fn parse(raw: &str) -> Result<Self, String> {
-        match raw.trim() {
-            "quota" => Ok(Self::Quota),
-            "redeem_credit" => Ok(Self::RedeemCredit),
-            other => Err(format!(
-                "invalid credit target type `{other}`; expected `quota` or `redeem_credit`"
-            )),
-        }
-    }
-
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Quota => "quota",
-            Self::RedeemCredit => "redeem_credit",
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct BridgePricingRuleConfig {
@@ -54,10 +33,10 @@ pub(super) struct BridgeServiceConfig {
     pub(super) chain_timeout_ms: u64,
     pub(super) chain_confirmations_required: u64,
     pub(super) pricing_rules: Vec<BridgePricingRuleConfig>,
-    pub(super) credit_adapter_url: Option<String>,
-    pub(super) credit_adapter_auth_token: Option<String>,
-    pub(super) credit_adapter_timeout_ms: u64,
-    pub(super) credit_target_type: CreditTargetType,
+    pub(super) letai_base_url: Option<String>,
+    pub(super) letai_platform_key: Option<String>,
+    pub(super) letai_parent_channel_id: Option<String>,
+    pub(super) letai_timeout_ms: u64,
     pub(super) max_credit_attempts: u32,
 }
 
@@ -149,6 +128,7 @@ impl BridgeService {
             observed_at_unix_ms: now_unix_ms,
             binding_count: snapshot.bindings.len(),
             active_binding_count,
+            project_binding_count: snapshot.project_bindings.len(),
             route_count: snapshot.routes.len(),
             active_route_count,
             ledger_count: snapshot.ledger.len(),
@@ -186,23 +166,46 @@ impl BridgeService {
             "oasis_sender_account_id",
             request.oasis_sender_account_id.as_str(),
         )?;
+        let external_user_name = normalize_optional(request.external_user_name.as_deref());
+        let email = normalize_optional(request.email.as_deref());
+        let project_name = normalize_optional(request.project_name.as_deref())
+            .unwrap_or_else(|| Self::default_project_name(newapi_user_ref.as_str()));
+        let letai_external_user_id = Self::build_letai_external_user_id(newapi_user_ref.as_str());
         self.store
             .mutate(|state| {
                 expire_routes(state.routes.as_mut_slice(), now_unix_ms);
-                if let Some(existing) = state.bindings.iter().find(|binding| {
+                if let Some(existing_index) = state.bindings.iter().position(|binding| {
                     binding.status == BridgeBindingStatus::Active
                         && binding.newapi_user_ref == newapi_user_ref
                         && binding.oasis_sender_account_id == oasis_sender_account_id
                 }) {
-                    return Ok(BindBridgeUserResponse {
-                        ok: true,
-                        bridge_user_id: existing.bridge_user_id.clone(),
-                        newapi_user_ref: existing.newapi_user_ref.clone(),
-                        oasis_sender_account_id: existing.oasis_sender_account_id.clone(),
-                        binding_status: existing.status.clone(),
-                        reused_existing_binding: true,
-                        created_at_unix_ms: existing.created_at_unix_ms,
-                    });
+                    let bridge_user_id = {
+                        let existing = &mut state.bindings[existing_index];
+                        existing.letai_external_user_name = external_user_name
+                            .clone()
+                            .or(existing.letai_external_user_name.clone());
+                        existing.email = email.clone().or(existing.email.clone());
+                        if request.metadata.is_some() {
+                            existing.metadata = request.metadata.clone();
+                        }
+                        existing.updated_at_unix_ms = now_unix_ms;
+                        existing.bridge_user_id.clone()
+                    };
+                    let project_binding = ensure_project_binding(
+                        state,
+                        bridge_user_id.as_str(),
+                        newapi_user_ref.as_str(),
+                        Some(project_name.as_str()),
+                        request.project_metadata.clone(),
+                        now_unix_ms,
+                    );
+                    let existing = state
+                        .bindings
+                        .iter()
+                        .find(|binding| binding.bridge_user_id == bridge_user_id)
+                        .cloned()
+                        .expect("binding exists after update");
+                    return Ok(bind_response(&existing, &project_binding, true));
                 }
 
                 if let Some(existing) = state.bindings.iter().find(|binding| {
@@ -236,20 +239,31 @@ impl BridgeService {
                     bridge_user_id: bridge_user_id.clone(),
                     newapi_user_ref: newapi_user_ref.clone(),
                     oasis_sender_account_id: oasis_sender_account_id.clone(),
+                    letai_external_user_id,
+                    letai_external_user_name: external_user_name,
+                    email,
+                    metadata: request.metadata.clone(),
+                    platform_user_id: None,
                     status: BridgeBindingStatus::Active,
                     created_at_unix_ms: now_unix_ms,
                     updated_at_unix_ms: now_unix_ms,
                 };
-                state.bindings.push(binding.clone());
-                Ok(BindBridgeUserResponse {
-                    ok: true,
-                    bridge_user_id,
-                    newapi_user_ref: binding.newapi_user_ref,
-                    oasis_sender_account_id: binding.oasis_sender_account_id,
-                    binding_status: binding.status,
-                    reused_existing_binding: false,
-                    created_at_unix_ms: binding.created_at_unix_ms,
-                })
+                state.bindings.push(binding);
+                let project_binding = ensure_project_binding(
+                    state,
+                    bridge_user_id.as_str(),
+                    newapi_user_ref.as_str(),
+                    Some(project_name.as_str()),
+                    request.project_metadata.clone(),
+                    now_unix_ms,
+                );
+                let binding = state
+                    .bindings
+                    .iter()
+                    .find(|binding| binding.bridge_user_id == bridge_user_id)
+                    .cloned()
+                    .expect("binding exists after insert");
+                Ok(bind_response(&binding, &project_binding, false))
             })
             .map_err(|err| map_store_error(err, "persist bind bridge user failed"))
     }
@@ -451,9 +465,25 @@ impl BridgeService {
             .map_err(|err| map_store_error(err, "persist operator review failed"))
     }
 
-    #[cfg(test)]
     pub(super) fn snapshot(&self) -> super::model::PersistedBridgeState {
         self.store.snapshot()
+    }
+
+    pub(super) fn store_mutate<T, F>(&self, op: F) -> Result<T, BridgeServiceError>
+    where
+        F: FnOnce(&mut super::model::PersistedBridgeState) -> Result<T, BridgeServiceError>,
+    {
+        self.store
+            .mutate(op)
+            .map_err(|err| map_store_error(err, "persist LetAI bridge state failed"))
+    }
+
+    pub(super) fn max_credit_attempts(&self) -> u32 {
+        self.config.max_credit_attempts.max(1)
+    }
+
+    pub(super) fn letai_parent_channel_id(&self) -> Option<String> {
+        self.config.letai_parent_channel_id.clone()
     }
 
     fn chain_client(&self) -> Result<ChainExplorerClient, BridgeServiceError> {
@@ -467,17 +497,24 @@ impl BridgeService {
             .map_err(BridgeServiceError::internal)
     }
 
-    fn credit_adapter(&self) -> Result<NewApiCreditAdapter, BridgeServiceError> {
-        let Some(endpoint_url) = self.config.credit_adapter_url.as_deref() else {
+    fn letai_adapter(&self) -> Result<LetaiOpenApiAdapter, BridgeServiceError> {
+        let Some(base_url) = self.config.letai_base_url.as_deref() else {
             return Err(BridgeServiceError::service_unavailable(
-                "credit_adapter_not_configured",
-                "bridge auto credit requires operator flag `--credit-adapter-url`",
+                "letai_openapi_not_configured",
+                "bridge auto credit requires operator flags `--letai-base-url` and `--letai-platform-key`",
             ));
         };
-        NewApiCreditAdapter::new(
-            endpoint_url,
-            self.config.credit_adapter_auth_token.as_deref(),
-            self.config.credit_adapter_timeout_ms,
+        let Some(platform_key) = self.config.letai_platform_key.as_deref() else {
+            return Err(BridgeServiceError::service_unavailable(
+                "letai_openapi_not_configured",
+                "bridge auto credit requires operator flags `--letai-base-url` and `--letai-platform-key`",
+            ));
+        };
+        LetaiOpenApiAdapter::new(
+            base_url,
+            platform_key,
+            self.config.letai_parent_channel_id.as_deref(),
+            self.config.letai_timeout_ms,
         )
         .map_err(BridgeServiceError::internal)
     }
@@ -490,7 +527,6 @@ impl BridgeService {
         now_unix_ms: i64,
     ) -> Result<ObserveOutcome, BridgeServiceError> {
         let pricing_rules = self.pricing_rules_by_version();
-        let target_type = self.config.credit_target_type.as_str().to_string();
         let required_confirmations = self.config.chain_confirmations_required.max(1);
         self.store
             .mutate(|state| {
@@ -643,14 +679,23 @@ impl BridgeService {
                     confirmations,
                     required_confirmations,
                     block_height: transfer.block_height,
-                    target_type,
                     idempotency_key,
+                    platform_user_id: None,
+                    platform_project_id: None,
+                    token_key: None,
+                    external_order_id: None,
+                    quota: None,
+                    amount_audit: None,
+                    currency: None,
+                    topup_receipt: None,
+                    user_snapshot: None,
+                    project_snapshot: None,
+                    topup_log_snapshot: None,
                     state: state_name,
                     credit_attempt_count: 0,
                     review_reason,
                     review_resolution: None,
                     operator_note: None,
-                    adapter_receipt: None,
                     last_error_code: None,
                     last_error: None,
                     observed_at_unix_ms: now_unix_ms,
@@ -699,137 +744,6 @@ impl BridgeService {
             .map_err(|err| map_store_error(err, "persist confirmation promotion failed"))
     }
 
-    fn process_credit_ready_entries(&self, now_unix_ms: i64) -> Result<usize, BridgeServiceError> {
-        let ready_entries = self
-            .store
-            .snapshot()
-            .ledger
-            .into_iter()
-            .filter(|entry| {
-                entry.state == BridgeLedgerState::Confirmed
-                    || (entry.state == BridgeLedgerState::Failed
-                        && entry.credit_attempt_count < self.config.max_credit_attempts.max(1))
-            })
-            .collect::<Vec<_>>();
-        if ready_entries.is_empty() {
-            return Ok(0);
-        }
-        let adapter = self.credit_adapter()?;
-        let mut reconciled = 0usize;
-        for entry in ready_entries {
-            if self.try_apply_credit(&adapter, entry.bridge_deposit_id.as_str(), now_unix_ms)? {
-                reconciled += 1;
-            }
-        }
-        Ok(reconciled)
-    }
-
-    fn try_apply_credit(
-        &self,
-        adapter: &NewApiCreditAdapter,
-        bridge_deposit_id: &str,
-        now_unix_ms: i64,
-    ) -> Result<bool, BridgeServiceError> {
-        let bridge_deposit_id = bridge_deposit_id.to_string();
-        let ledger_entry = self
-            .store
-            .mutate(|state| {
-                let Some(entry) = state
-                    .ledger
-                    .iter_mut()
-                    .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
-                else {
-                    return Err(BridgeServiceError::not_found(
-                        "bridge_deposit_not_found",
-                        format!("bridge deposit `{bridge_deposit_id}` does not exist"),
-                    ));
-                };
-                if entry.state != BridgeLedgerState::Confirmed
-                    && entry.state != BridgeLedgerState::Failed
-                {
-                    return Ok(None);
-                }
-                entry.state = BridgeLedgerState::Crediting;
-                entry.updated_at_unix_ms = now_unix_ms;
-                Ok(Some(entry.clone()))
-            })
-            .map_err(|err| map_store_error(err, "persist crediting state failed"))?;
-
-        let Some(ledger_entry) = ledger_entry else {
-            return Ok(false);
-        };
-
-        let request = CreditApplyRequest {
-            bridge_deposit_id: ledger_entry.bridge_deposit_id.clone(),
-            beneficiary_ref: ledger_entry.beneficiary_ref.clone(),
-            pricing_version: ledger_entry.pricing_version.clone(),
-            topup_plan_id: ledger_entry.topup_plan_id.clone(),
-            amount_oc: ledger_entry.amount_oc,
-            credit_units: ledger_entry.credit_units,
-            bonus_units: ledger_entry.bonus_units,
-            total_credit_units: ledger_entry.total_credit_units,
-            target_type: ledger_entry.target_type.clone(),
-            chain_tx_id: ledger_entry.chain_tx_id.clone(),
-            chain_action_id: ledger_entry.chain_action_id,
-            idempotency_key: ledger_entry.idempotency_key.clone(),
-        };
-
-        match adapter.apply_credit(&request) {
-            Ok(receipt) => {
-                self.store
-                    .mutate(|state| {
-                        let Some(entry) = state
-                            .ledger
-                            .iter_mut()
-                            .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
-                        else {
-                            return Err(BridgeServiceError::not_found(
-                                "bridge_deposit_not_found",
-                                format!("bridge deposit `{bridge_deposit_id}` does not exist"),
-                            ));
-                        };
-                        entry.state = BridgeLedgerState::Reconciled;
-                        entry.adapter_receipt = Some(receipt.clone());
-                        entry.last_error_code = None;
-                        entry.last_error = None;
-                        entry.review_reason = None;
-                        entry.updated_at_unix_ms = now_unix_ms;
-                        Ok(())
-                    })
-                    .map_err(|err| map_store_error(err, "persist reconciled credit failed"))?;
-                Ok(true)
-            }
-            Err(err) => {
-                self.store
-                    .mutate(|state| {
-                        let Some(entry) = state
-                            .ledger
-                            .iter_mut()
-                            .find(|entry| entry.bridge_deposit_id == bridge_deposit_id)
-                        else {
-                            return Err(BridgeServiceError::not_found(
-                                "bridge_deposit_not_found",
-                                format!("bridge deposit `{bridge_deposit_id}` does not exist"),
-                            ));
-                        };
-                        entry.credit_attempt_count = entry.credit_attempt_count.saturating_add(1);
-                        entry.last_error_code = Some("credit_adapter_request_failed".to_string());
-                        entry.last_error = Some(err.clone());
-                        entry.updated_at_unix_ms = now_unix_ms;
-                        if entry.credit_attempt_count >= self.config.max_credit_attempts.max(1) {
-                            entry.state = BridgeLedgerState::ManualReview;
-                            entry.review_reason = Some("credit_adapter_request_failed".to_string());
-                        } else {
-                            entry.state = BridgeLedgerState::Failed;
-                        }
-                        Ok(())
-                    })
-                    .map_err(|err| map_store_error(err, "persist failed credit failed"))?;
-                Ok(false)
-            }
-        }
-    }
-
     fn pricing_rules_by_version(&self) -> BTreeMap<String, BridgePricingRuleConfig> {
         self.config
             .pricing_rules
@@ -837,6 +751,28 @@ impl BridgeService {
             .cloned()
             .map(|rule| (rule.pricing_version.clone(), rule))
             .collect()
+    }
+}
+
+fn bind_response(
+    binding: &BridgeBinding,
+    project_binding: &LetaiProjectBinding,
+    reused_existing_binding: bool,
+) -> BindBridgeUserResponse {
+    BindBridgeUserResponse {
+        ok: true,
+        bridge_user_id: binding.bridge_user_id.clone(),
+        newapi_user_ref: binding.newapi_user_ref.clone(),
+        oasis_sender_account_id: binding.oasis_sender_account_id.clone(),
+        letai_external_user_id: binding.letai_external_user_id.clone(),
+        letai_external_project_id: project_binding.letai_external_project_id.clone(),
+        project_name: project_binding.project_name.clone(),
+        platform_user_id: binding.platform_user_id.clone(),
+        platform_project_id: project_binding.platform_project_id.clone(),
+        token_key: project_binding.token_key.clone(),
+        binding_status: binding.status.clone(),
+        reused_existing_binding,
+        created_at_unix_ms: binding.created_at_unix_ms,
     }
 }
 
@@ -995,4 +931,22 @@ fn ledger_matches_transfer(
 
 fn build_idempotency_key(route_id: &str, chain_tx_id: &str, chain_action_id: u64) -> String {
     format!("bridge-credit:{route_id}:{chain_tx_id}:{chain_action_id}")
+}
+
+impl BridgeService {
+    pub(super) fn build_external_order_id(bridge_deposit_id: &str) -> String {
+        format!("letai-topup:{bridge_deposit_id}")
+    }
+
+    pub(super) fn build_letai_external_user_id(newapi_user_ref: &str) -> String {
+        format!("oasis7-user:{newapi_user_ref}")
+    }
+
+    pub(super) fn build_letai_external_project_id(bridge_user_id: &str) -> String {
+        format!("oasis7-project:{bridge_user_id}")
+    }
+
+    pub(super) fn default_project_name(newapi_user_ref: &str) -> String {
+        format!("{newapi_user_ref}-default")
+    }
 }

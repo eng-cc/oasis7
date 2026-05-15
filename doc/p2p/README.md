@@ -9,7 +9,7 @@
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - 想先看 hosted world 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
-- 想先看 Token 分配 / 治理签名 / 生产 signer 外部化 / `OC -> New API quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
+- 想先看 Token 分配 / 治理签名 / 生产 signer 外部化 / `OC -> LetAI Run OpenAPI quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 - 当前链上代币的正式产品名固定为“绿洲币 / Oasis Coin”；当前 runtime symbol/ticker 为 `OC`，公钥派生账户前缀为 `oc:pk:`；当前创世 `initial_supply` 已冻结为 `10,000,000,000 OC`。
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/p2p/prd.index.md`
 
@@ -44,7 +44,7 @@
 - `node/`：节点能力、奖励、身份与复制链路；默认先读 `node/README.md`。
 - `observer/`：观察者同步模式与可观测性。
 - `blockchain/`：区块链与 P2PFS 硬化阶段。
-- `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> New API` 服务额度桥接方案。
+- `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案。
 - `viewer-live/`：viewer live 发行与开关策略。
 - `consensus/`：共识相关专题。
 - `distributed/`：分布式运行时专题。
