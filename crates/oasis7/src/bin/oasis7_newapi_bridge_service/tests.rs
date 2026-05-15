@@ -426,6 +426,88 @@ fn reconcile_moves_to_manual_review_when_project_binding_missing() {
 }
 
 #[test]
+fn reconcile_retries_resolved_rows_after_operator_review() {
+    let chain_server = MockChainServer::spawn();
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-resolved-retry",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+    let project_binding = test_service.service.snapshot().project_bindings[0].clone();
+    test_service
+        .service
+        .store_mutate_test(|state| {
+            state.project_bindings.clear();
+            Ok(())
+        })
+        .expect("remove project binding");
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-resolved-retry".to_string(),
+            action_id: 17,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id,
+            amount: 100,
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+
+    let first = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("first reconcile");
+    assert_eq!(first.reconciled_credit_count, 0);
+    assert_eq!(first.manual_review_count, 1);
+    let manual_review_id = test_service
+        .service
+        .snapshot()
+        .ledger
+        .iter()
+        .find(|entry| entry.state == BridgeLedgerState::ManualReview)
+        .map(|entry| entry.bridge_deposit_id.clone())
+        .expect("manual review entry");
+
+    test_service
+        .service
+        .store_mutate_test(|state| {
+            state.project_bindings.push(project_binding);
+            Ok(())
+        })
+        .expect("restore project binding");
+    let review = test_service
+        .service
+        .apply_operator_review(
+            manual_review_id.as_str(),
+            OperatorReviewRequest {
+                resolution: "mark_resolved".to_string(),
+                operator_note: Some("binding restored".to_string()),
+            },
+            7_000,
+        )
+        .expect("mark resolved");
+    assert_eq!(review.state, BridgeLedgerState::Resolved);
+
+    let second = test_service
+        .service
+        .reconcile_once(8_000)
+        .expect("second reconcile");
+    assert_eq!(second.reconciled_credit_count, 1);
+    assert_eq!(second.manual_review_count, 0);
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(snapshot.ledger[0].state, BridgeLedgerState::Reconciled);
+    assert_eq!(letai_server.recorded_topup_requests().len(), 1);
+}
+
+#[test]
 fn operator_review_can_close_manual_review_row() {
     let chain_server = MockChainServer::spawn();
     let letai_server = MockLetaiServer::spawn();
@@ -860,9 +942,17 @@ fn reconcile_recovers_inflight_rows_after_restart() {
         .reconcile_once(6_000)
         .expect("first reconcile");
     assert_eq!(first.reconciled_credit_count, 1);
+    assert_eq!(letai_server.recorded_topup_requests().len(), 1);
 
-    let snapshot = test_service.service.snapshot();
-    let ledger = snapshot.ledger[0].clone();
+    test_service
+        .service
+        .store_mutate_test(|state| {
+            state.ledger[0].state = BridgeLedgerState::Credited;
+            state.ledger[0].updated_at_unix_ms = 6_500;
+            Ok(())
+        })
+        .expect("reset ledger to credited");
+
     let restarted = test_service_with_endpoints(
         "reconcile-restart",
         900,
@@ -871,25 +961,18 @@ fn reconcile_recovers_inflight_rows_after_restart() {
         1,
         Some(test_service.state_path.clone()),
     );
-    restarted
-        .service
-        .store_mutate_test(|state| {
-            state.ledger.clear();
-            state.ledger.push(ledger);
-            Ok(())
-        })
-        .expect("restore ledger");
 
     let second = restarted
         .service
         .reconcile_once(7_000)
         .expect("second reconcile");
-    assert_eq!(second.reconciled_credit_count, 0);
+    assert_eq!(second.reconciled_credit_count, 1);
     assert_eq!(second.manual_review_count, 0);
     assert_eq!(
         restarted.service.snapshot().ledger[0].state,
         BridgeLedgerState::Reconciled
     );
+    assert_eq!(letai_server.recorded_topup_requests().len(), 1);
 }
 
 #[test]
