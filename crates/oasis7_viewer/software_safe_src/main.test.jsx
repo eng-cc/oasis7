@@ -247,7 +247,6 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
   });
-
   it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
     await renderViewerApp({
       setupAfterMount(core) {
