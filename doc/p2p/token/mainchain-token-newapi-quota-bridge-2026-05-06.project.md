@@ -8,9 +8,9 @@
 ## 任务拆解（含 PRD-ID 映射）
 - [x] mainchain-token-newapi-quota-bridge-proposal (PRD-P2P-027) [test_tier_required]: 建档 `OC -> LetAI Run OpenAPI quota` 专题 PRD / design / project，冻结 one-way bridge、独立部署、用户/项目/`token_key` 真对象模型、`bridge_ledger`、manual review fallback 与对外 claim denylist。 Trace: .pm/tasks/task_439da73e233f4395923f4d8cff007305.yaml
 - [x] bridge-binding-and-route-contract (PRD-P2P-TBRIDGE-001) [test_tier_required]: 为 bridge-service 落地 repo-owned 持久化、用户绑定、deposit route、唯一 beneficiary 映射与过期策略，补最小 HTTP schema / API 合同、冲突错误与定向测试。 Trace: .pm/tasks/task_e56e4cfdb9534919a6f7bc7c6ba62ee9.yaml
-- [ ] letai-openapi-resource-model-closure (PRD-P2P-TBRIDGE-002) [test_tier_required]: 扩展 bridge 持久化状态，补齐 `platform_user_id`、`platform_project_id`、`token_key`、`external_order_id`、query snapshots 与 pricing->quota 映射。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
+- [x] letai-openapi-resource-model-closure (PRD-P2P-TBRIDGE-002) [test_tier_required]: 扩展 bridge 持久化状态，补齐 `platform_user_id`、`platform_project_id`、`token_key`、`external_order_id`、query snapshots 与 pricing->quota 映射。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-openapi-adapter-integration (PRD-P2P-TBRIDGE-003) [test_tier_required]: 以 LetAI Run OpenAPI 替换 generic `credit adapter`，实现 user upsert、项目创建/Token 返回、用户 topup、额度概览与日志验证。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
-- [ ] letai-reconcile-and-verification-closure (PRD-P2P-TBRIDGE-004) [test_tier_required]: 重写 `oasis7_newapi_bridge_service` reconcile worker，使其按 `confirmed -> user -> project -> token -> topup -> verify -> reconciled/manual_review` 编排，并补齐 retry / verification mismatch 收口。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
+- [x] letai-reconcile-and-verification-closure (PRD-P2P-TBRIDGE-004) [test_tier_required]: 重写 `oasis7_newapi_bridge_service` reconcile worker，使其按 `confirmed -> user -> project -> token -> topup -> verify -> reconciled/manual_review` 编排，并补齐 retry / verification mismatch 收口。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-bridge-required-tests-and-runbook (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 重写测试桩与 operator runbook，覆盖首次建用户/项目、已有项目复用、稳定 `external_order_id` 重试、topup 查询验证与 manual review。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 
 ## 状态

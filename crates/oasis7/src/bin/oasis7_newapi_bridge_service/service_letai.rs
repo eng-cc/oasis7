@@ -22,6 +22,7 @@ impl BridgeService {
                 matches!(
                     entry.state,
                     BridgeLedgerState::Confirmed
+                        | BridgeLedgerState::Resolved
                         | BridgeLedgerState::ProvisioningUser
                         | BridgeLedgerState::ProvisioningProject
                         | BridgeLedgerState::Crediting
@@ -157,35 +158,37 @@ impl BridgeService {
             BridgeService::build_external_order_id(ledger_entry.bridge_deposit_id.as_str())
         });
         let quota = ledger_entry.total_credit_units;
-        let topup_request = LetaiUserTopupRequest {
-            external_order_id: external_order_id.clone(),
-            quota,
-            amount: Some(ledger_entry.amount_oc.to_string()),
-            currency: Some("OC".to_string()),
-        };
-        let topup_receipt =
-            match adapter.topup_user(upsert_result.platform_user_id.as_str(), &topup_request) {
-                Ok(receipt) => receipt,
-                Err(err) => {
-                    self.record_retryable_failure(
-                        bridge_deposit_id,
-                        err.code,
-                        err.message.as_str(),
-                        now_unix_ms,
-                    )?;
-                    return Ok(false);
-                }
+        if ledger_entry.state != BridgeLedgerState::Credited {
+            let topup_request = LetaiUserTopupRequest {
+                external_order_id: external_order_id.clone(),
+                quota,
+                amount: Some(ledger_entry.amount_oc.to_string()),
+                currency: Some("OC".to_string()),
             };
-        self.persist_topup_receipt(
-            bridge_deposit_id,
-            upsert_result.platform_user_id.as_str(),
-            ensure_project_result.platform_project_id.as_str(),
-            ensure_project_result.token_key.as_str(),
-            external_order_id.as_str(),
-            quota,
-            &topup_receipt,
-            now_unix_ms,
-        )?;
+            let topup_receipt =
+                match adapter.topup_user(upsert_result.platform_user_id.as_str(), &topup_request) {
+                    Ok(receipt) => receipt,
+                    Err(err) => {
+                        self.record_retryable_failure(
+                            bridge_deposit_id,
+                            err.code,
+                            err.message.as_str(),
+                            now_unix_ms,
+                        )?;
+                        return Ok(false);
+                    }
+                };
+            self.persist_topup_receipt(
+                bridge_deposit_id,
+                upsert_result.platform_user_id.as_str(),
+                ensure_project_result.platform_project_id.as_str(),
+                ensure_project_result.token_key.as_str(),
+                external_order_id.as_str(),
+                quota,
+                &topup_receipt,
+                now_unix_ms,
+            )?;
+        }
 
         let user_snapshot =
             match adapter.fetch_user_summary(upsert_result.platform_user_id.as_str()) {
@@ -294,6 +297,7 @@ impl BridgeService {
                 entry.state,
                 BridgeLedgerState::Confirmed
                     | BridgeLedgerState::Failed
+                    | BridgeLedgerState::Resolved
                     | BridgeLedgerState::ProvisioningUser
                     | BridgeLedgerState::ProvisioningProject
                     | BridgeLedgerState::Crediting
@@ -301,8 +305,16 @@ impl BridgeService {
             ) {
                 return Ok(None);
             }
-            entry.state = BridgeLedgerState::ProvisioningUser;
-            entry.updated_at_unix_ms = now_unix_ms;
+            let next_state = match entry.state {
+                BridgeLedgerState::Confirmed
+                | BridgeLedgerState::Failed
+                | BridgeLedgerState::Resolved => BridgeLedgerState::ProvisioningUser,
+                _ => entry.state.clone(),
+            };
+            if entry.state != next_state {
+                entry.state = next_state;
+                entry.updated_at_unix_ms = now_unix_ms;
+            }
             Ok(Some(entry.clone()))
         })
     }
