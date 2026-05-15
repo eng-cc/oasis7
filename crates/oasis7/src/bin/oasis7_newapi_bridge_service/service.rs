@@ -478,6 +478,14 @@ impl BridgeService {
             .map_err(|err| map_store_error(err, "persist LetAI bridge state failed"))
     }
 
+    #[cfg(test)]
+    pub(super) fn store_mutate_test<T, F>(&self, op: F) -> Result<T, BridgeServiceError>
+    where
+        F: FnOnce(&mut super::model::PersistedBridgeState) -> Result<T, BridgeServiceError>,
+    {
+        self.store_mutate(op)
+    }
+
     pub(super) fn max_credit_attempts(&self) -> u32 {
         self.config.max_credit_attempts.max(1)
     }
@@ -767,9 +775,6 @@ fn bind_response(
         letai_external_user_id: binding.letai_external_user_id.clone(),
         letai_external_project_id: project_binding.letai_external_project_id.clone(),
         project_name: project_binding.project_name.clone(),
-        platform_user_id: binding.platform_user_id.clone(),
-        platform_project_id: project_binding.platform_project_id.clone(),
-        token_key: project_binding.token_key.clone(),
         binding_status: binding.status.clone(),
         reused_existing_binding,
         created_at_unix_ms: binding.created_at_unix_ms,

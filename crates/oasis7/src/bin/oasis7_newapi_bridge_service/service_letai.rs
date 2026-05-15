@@ -19,9 +19,15 @@ impl BridgeService {
             .ledger
             .into_iter()
             .filter(|entry| {
-                entry.state == BridgeLedgerState::Confirmed
-                    || (entry.state == BridgeLedgerState::Failed
-                        && entry.credit_attempt_count < self.max_credit_attempts())
+                matches!(
+                    entry.state,
+                    BridgeLedgerState::Confirmed
+                        | BridgeLedgerState::ProvisioningUser
+                        | BridgeLedgerState::ProvisioningProject
+                        | BridgeLedgerState::Crediting
+                        | BridgeLedgerState::Credited
+                ) || (entry.state == BridgeLedgerState::Failed
+                    && entry.credit_attempt_count < self.max_credit_attempts())
             })
             .collect::<Vec<_>>();
         if ready_entries.is_empty() {
@@ -57,27 +63,38 @@ impl BridgeService {
                 binding.bridge_user_id == ledger_entry.bridge_user_id
                     && binding.status == BridgeBindingStatus::Active
             })
-            .cloned()
-            .ok_or_else(|| {
-                BridgeServiceError::not_found(
-                    "binding_not_found",
-                    format!(
-                        "active bridge binding `{}` does not exist",
-                        ledger_entry.bridge_user_id
-                    ),
-                )
-            })?;
+            .cloned();
+        let Some(binding) = binding else {
+            let message = format!(
+                "active bridge binding `{}` does not exist",
+                ledger_entry.bridge_user_id
+            );
+            self.record_manual_review(
+                bridge_deposit_id,
+                "binding_not_found",
+                message.as_str(),
+                now_unix_ms,
+            )?;
+            return Ok(false);
+        };
         let project_binding = snapshot
             .project_bindings
             .iter()
             .find(|project| project.bridge_user_id == ledger_entry.bridge_user_id)
-            .cloned()
-            .ok_or_else(|| {
-                BridgeServiceError::internal(format!(
-                    "missing LetAI project binding for {}",
-                    ledger_entry.bridge_user_id
-                ))
-            })?;
+            .cloned();
+        let Some(project_binding) = project_binding else {
+            let message = format!(
+                "missing LetAI project binding for {}",
+                ledger_entry.bridge_user_id
+            );
+            self.record_manual_review(
+                bridge_deposit_id,
+                "project_binding_not_found",
+                message.as_str(),
+                now_unix_ms,
+            )?;
+            return Ok(false);
+        };
 
         let upsert_result = match adapter.upsert_user(&LetaiUserUpsertRequest {
             external_user_id: binding.letai_external_user_id.clone(),
@@ -273,9 +290,15 @@ impl BridgeService {
                     format!("bridge deposit `{bridge_deposit_id}` does not exist"),
                 ));
             };
-            if entry.state != BridgeLedgerState::Confirmed
-                && entry.state != BridgeLedgerState::Failed
-            {
+            if !matches!(
+                entry.state,
+                BridgeLedgerState::Confirmed
+                    | BridgeLedgerState::Failed
+                    | BridgeLedgerState::ProvisioningUser
+                    | BridgeLedgerState::ProvisioningProject
+                    | BridgeLedgerState::Crediting
+                    | BridgeLedgerState::Credited
+            ) {
                 return Ok(None);
             }
             entry.state = BridgeLedgerState::ProvisioningUser;

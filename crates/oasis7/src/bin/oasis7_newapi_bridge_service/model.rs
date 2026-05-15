@@ -211,12 +211,6 @@ pub(super) struct BindBridgeUserResponse {
     pub(super) letai_external_user_id: String,
     pub(super) letai_external_project_id: String,
     pub(super) project_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) platform_user_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) platform_project_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) token_key: Option<String>,
     pub(super) binding_status: BridgeBindingStatus,
     pub(super) reused_existing_binding: bool,
     pub(super) created_at_unix_ms: i64,
