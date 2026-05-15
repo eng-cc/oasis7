@@ -227,7 +227,10 @@ fn decode_json_response(
     if !status.is_success() {
         return Err(request_error(
             "letai_response_not_success",
-            format!("{label} returned status {status}: {body}"),
+            format!(
+                "{label} returned status {status}: {}",
+                redact_response_body(body.as_str())
+            ),
         ));
     }
     if body.trim().is_empty() {
@@ -236,7 +239,10 @@ fn decode_json_response(
     let payload = serde_json::from_str::<Value>(body.as_str()).map_err(|err| {
         request_error(
             "letai_response_decode_failed",
-            format!("{label} decode failed: {err}; body={body}"),
+            format!(
+                "{label} decode failed: {err}; body={}",
+                redact_response_body(body.as_str())
+            ),
         )
     })?;
     if let Some(false) = payload.get("ok").and_then(Value::as_bool) {
@@ -253,6 +259,10 @@ fn decode_json_response(
         ));
     }
     Ok(payload)
+}
+
+fn redact_response_body(body: &str) -> String {
+    format!("[redacted response body, {} bytes]", body.len())
 }
 
 fn extract_required_string(
@@ -326,4 +336,48 @@ fn normalize_required(field: &str, raw: &str) -> Result<String, String> {
 
 fn format_error_code(code: Option<&str>) -> String {
     code.map(|code| format!(" ({code})")).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_json_response, redact_response_body};
+    use crate::api::write_http_response;
+    use reqwest::blocking::Client;
+    use std::io::Read;
+    use std::net::TcpListener;
+    use std::thread;
+
+    #[test]
+    fn redact_response_body_masks_sensitive_keys_and_truncates() {
+        let body = format!("{{\"token_key\":\"{}\"}}", "x".repeat(500));
+        let redacted = redact_response_body(body.as_str());
+        assert!(!redacted.contains("token_key"));
+        assert!(!redacted.contains('x'));
+        assert!(redacted.contains("redacted response body"));
+    }
+
+    #[test]
+    fn decode_json_response_redacts_error_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("addr");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request).expect("read request");
+            let body = br#"{"token_key":"secret","ok":false}"#;
+            write_http_response(
+                &mut stream,
+                500,
+                "application/json; charset=utf-8",
+                body,
+                false,
+            )
+            .expect("write response");
+        });
+        let client = Client::new();
+        let response = client.get(format!("http://{}", addr)).send().expect("send");
+        let err = decode_json_response(response, "LetAI GET").expect_err("expected error");
+        assert!(!err.message.contains("secret"));
+        assert!(!err.message.contains("token_key"));
+    }
 }

@@ -173,6 +173,7 @@ fn reconcile_provisions_letai_user_project_token_and_marks_reconciled() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         2,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
 
@@ -242,6 +243,7 @@ fn reconcile_marks_underpay_for_manual_review() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         1,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
 
@@ -284,6 +286,7 @@ fn reconcile_retries_topup_with_stable_external_order_id() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         1,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
 
@@ -341,6 +344,7 @@ fn reconcile_moves_to_manual_review_when_verification_logs_missing() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         1,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
 
@@ -373,6 +377,55 @@ fn reconcile_moves_to_manual_review_when_verification_logs_missing() {
 }
 
 #[test]
+fn reconcile_moves_to_manual_review_when_project_binding_missing() {
+    let chain_server = MockChainServer::spawn();
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-project-binding-missing",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+    test_service
+        .service
+        .store_mutate_test(|state| {
+            state.project_bindings.clear();
+            Ok(())
+        })
+        .expect("remove project binding");
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-project-binding-missing".to_string(),
+            action_id: 16,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id,
+            amount: 100,
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+
+    let reconcile = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("reconcile");
+    assert_eq!(reconcile.reconciled_credit_count, 0);
+    assert_eq!(reconcile.manual_review_count, 1);
+    let snapshot = test_service.service.snapshot();
+    assert_eq!(snapshot.ledger[0].state, BridgeLedgerState::ManualReview);
+    assert_eq!(
+        snapshot.ledger[0].review_reason.as_deref(),
+        Some("project_binding_not_found")
+    );
+}
+
+#[test]
 fn operator_review_can_close_manual_review_row() {
     let chain_server = MockChainServer::spawn();
     let letai_server = MockLetaiServer::spawn();
@@ -382,6 +435,7 @@ fn operator_review_can_close_manual_review_row() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         1,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
 
@@ -483,6 +537,7 @@ fn dispatch_request_handles_bind_and_route_http_contract() {
         Some(chain_server.base_url.clone()),
         Some(letai_server.base_url.clone()),
         1,
+        None,
     );
     let bind_response = dispatch_request(
         &test_service.service,
@@ -676,6 +731,7 @@ fn reconcile_requires_letai_configuration() {
         Some(chain_server.base_url.clone()),
         None,
         1,
+        None,
     );
     let deposit_account_id = issue_default_route(&test_service);
     chain_server.set_state(MockChainState {
@@ -713,7 +769,7 @@ struct TestBridgeService {
 }
 
 fn test_service(name: &str, route_ttl_seconds: u64) -> TestBridgeService {
-    test_service_with_endpoints(name, route_ttl_seconds, None, None, 1)
+    test_service_with_endpoints(name, route_ttl_seconds, None, None, 1, None)
 }
 
 fn test_service_with_endpoints(
@@ -722,8 +778,9 @@ fn test_service_with_endpoints(
     chain_base_url: Option<String>,
     letai_base_url: Option<String>,
     chain_confirmations_required: u64,
+    state_path: Option<PathBuf>,
 ) -> TestBridgeService {
-    let state_path = temp_state_path(name);
+    let state_path = state_path.unwrap_or_else(|| temp_state_path(name));
     let store =
         Arc::new(BridgeStateStore::new(state_path.clone()).expect("create bridge state store"));
     TestBridgeService {
@@ -768,6 +825,96 @@ fn bind_default_user(test_service: &TestBridgeService) -> super::model::BindBrid
             1_000,
         )
         .expect("binding")
+}
+
+#[test]
+fn reconcile_recovers_inflight_rows_after_restart() {
+    let chain_server = MockChainServer::spawn();
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-restart",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    let deposit_account_id = issue_default_route(&test_service);
+
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: vec![MockChainTx {
+            tx_hash: "tx-restart".to_string(),
+            action_id: 15,
+            from_account_id: "oc:pk:sender-1".to_string(),
+            to_account_id: deposit_account_id,
+            amount: 100,
+            submitted_at_unix_ms: 5_000,
+            updated_at_unix_ms: 5_100,
+            block_height: Some(10),
+        }],
+    });
+
+    let first = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("first reconcile");
+    assert_eq!(first.reconciled_credit_count, 1);
+
+    let snapshot = test_service.service.snapshot();
+    let ledger = snapshot.ledger[0].clone();
+    let restarted = test_service_with_endpoints(
+        "reconcile-restart",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        Some(test_service.state_path.clone()),
+    );
+    restarted
+        .service
+        .store_mutate_test(|state| {
+            state.ledger.clear();
+            state.ledger.push(ledger);
+            Ok(())
+        })
+        .expect("restore ledger");
+
+    let second = restarted
+        .service
+        .reconcile_once(7_000)
+        .expect("second reconcile");
+    assert_eq!(second.reconciled_credit_count, 0);
+    assert_eq!(second.manual_review_count, 0);
+    assert_eq!(
+        restarted.service.snapshot().ledger[0].state,
+        BridgeLedgerState::Reconciled
+    );
+}
+
+#[test]
+fn bind_response_does_not_expose_platform_credentials() {
+    let test_service = test_service("bind-redaction", 900);
+    let response = dispatch_request(
+        &test_service.service,
+        HttpRequest {
+            method: "POST".to_string(),
+            path: "/v1/bridge/bind".to_string(),
+            body: serde_json::to_vec(&json!({
+                "newapi_user_ref": "user-1",
+                "oasis_sender_account_id": "oc:pk:sender-1",
+                "external_user_name": "User One"
+            }))
+            .expect("encode bind request"),
+        },
+    )
+    .expect("dispatch bind");
+    assert_eq!(response.status_code, 200);
+    let bind_json: Value =
+        serde_json::from_slice(response.body.as_slice()).expect("parse bind response");
+    assert!(bind_json.get("platform_user_id").is_none());
+    assert!(bind_json.get("platform_project_id").is_none());
+    assert!(bind_json.get("token_key").is_none());
 }
 
 fn issue_default_route(test_service: &TestBridgeService) -> String {
