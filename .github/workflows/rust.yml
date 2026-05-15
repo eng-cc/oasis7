@@ -60,6 +60,7 @@ jobs:
           echo "run_viewer_wasm_check=${{ steps.scope.outputs.run_viewer_wasm_check }}"
           echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
+          echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
       - name: Install pinned Rust toolchains
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt
@@ -78,6 +79,9 @@ jobs:
         if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' }}
         with:
           shared-key: ci-required-gate-v1
+      - name: Install trunk
+        if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
+        run: cargo install trunk --locked
       - name: Install system deps
         if: ${{ steps.scope.outputs.needs_system_deps == 'true' }}
         run: |
