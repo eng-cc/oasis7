@@ -11,7 +11,7 @@
 - [ ] letai-openapi-resource-model-closure (PRD-P2P-TBRIDGE-002) [test_tier_required]: 扩展 bridge 持久化状态，补齐 `platform_user_id`、`platform_project_id`、`token_key`、`external_order_id`、query snapshots 与 pricing->quota 映射。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [x] letai-openapi-adapter-integration (PRD-P2P-TBRIDGE-003) [test_tier_required]: 以 LetAI Run OpenAPI 替换 generic `credit adapter`，实现 user upsert、项目创建/Token 返回、用户 topup、额度概览与日志验证。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 - [ ] letai-reconcile-and-verification-closure (PRD-P2P-TBRIDGE-004) [test_tier_required]: 重写 `oasis7_newapi_bridge_service` reconcile worker，使其按 `confirmed -> user -> project -> token -> topup -> verify -> reconciled/manual_review` 编排，并补齐 retry / verification mismatch 收口。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
-- [ ] letai-bridge-required-tests-and-runbook (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 重写测试桩与 operator runbook，覆盖首次建用户/项目、已有项目复用、稳定 `external_order_id` 重试、topup 查询验证与 manual review。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
+- [x] letai-bridge-required-tests-and-runbook (PRD-P2P-TBRIDGE-003/004) [test_tier_required]: 重写测试桩与 operator runbook，覆盖首次建用户/项目、已有项目复用、稳定 `external_order_id` 重试、topup 查询验证与 manual review。 Trace: .pm/tasks/task_02c8644356c54ef0b035632c651e4ee1.yaml
 
 ## 状态
 - 当前阶段: `letai-openapi-full-closure`
@@ -38,6 +38,7 @@
 ## 验证命令
 - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture`
 - `rg -n "LetAI|token_key|platform_user_id|platform_project_id|external_order_id|OpenAPI|one-way|自动提现|公开兑换所" doc/p2p/prd.md doc/p2p/project.md doc/p2p/README.md doc/p2p/prd.index.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.design.md doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
+- `rg -n "bridge-service|operator runbook|manual_review|external_order_id|token_key|独立部署|回滚" doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
@@ -46,3 +47,7 @@
 - `token_key` 是可直接调用模型的凭证，必须避免出现在公共响应和不必要日志里。
 - 当前 watcher 只扫描 bridge-service 自己发出的 route，不覆盖全链模糊归属场景。
 - 当前 operator review 仍只支持 `mark_resolved|close`；若需要“改额度后重发”或 richer rollback UI，需另开后续任务。
+
+## 活跃补充文档
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`
+  - 覆盖 operator 输入、推荐启动命令、首次演练、日常巡检、manual review 与回滚边界。

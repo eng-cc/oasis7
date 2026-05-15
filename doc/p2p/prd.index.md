@@ -44,6 +44,7 @@
 ## 活跃补充文档
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的执行 companion runbook，不并入下方 PRD 三件套长表。
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`：LetAI Run OpenAPI bridge 的 operator companion runbook，覆盖独立部署、首次演练、manual review 与回滚边界。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
@@ -163,6 +164,7 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - `*.release.md` 为发布补充材料，不参与 PRD 任务配对规则。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24` 另有执行 companion：`doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`。
+- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`。
 - ROUND-002 主从口径（observer）：`observer-sync-source-mode` 为主文档；`observer-sync-source-dht-mode` 为 DHT 增量子文档。
 - ROUND-002 主从口径（observer）：`observer-sync-mode-runtime-metrics` 为主文档；`metrics-runtime-bridge` 与 `observability` 为增量子文档。
 - ROUND-002 主从口径（node）：`node-contribution-points` 为主文档；`runtime-closure` 与 `multi-node-closure-test` 为增量子文档。
