@@ -919,7 +919,6 @@ fn collect_required_config_issues_reports_missing_required_fields() {
     };
 
     let issues = collect_required_config_issues(&config);
-    assert!(issues.contains(&ConfigIssue::ScenarioRequired));
     assert!(issues.contains(&ConfigIssue::LiveBindInvalid));
     assert!(issues.contains(&ConfigIssue::WebBindInvalid));
     assert!(issues.contains(&ConfigIssue::ViewerHostRequired));

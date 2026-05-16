@@ -58,7 +58,9 @@ pub use protocol::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{
-    ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError,
+    viewer_bootstrap_formal_release_runtime_world, ViewerRuntimeLiveServer,
+    ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError,
+    VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use server::{ViewerServer, ViewerServerConfig, ViewerServerError};

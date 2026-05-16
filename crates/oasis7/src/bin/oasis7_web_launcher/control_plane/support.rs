@@ -1,4 +1,5 @@
 use super::*;
+use oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID;
 use tracing::Level;
 
 fn encode_query_value(value: &str) -> String {
@@ -128,12 +129,12 @@ pub(super) fn chain_execution_world_dir(node_id: &str) -> String {
 
 pub(super) fn resolve_chain_world_id(config: &LauncherConfig) -> String {
     if config.chain_world_id.trim().is_empty() {
-        let scenario = if config.scenario.trim().is_empty() {
-            DEFAULT_SCENARIO
+        let scenario = config.scenario.trim();
+        if scenario.is_empty() {
+            VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string()
         } else {
-            config.scenario.trim()
-        };
-        format!("live-{scenario}")
+            format!("live-{scenario}")
+        }
     } else {
         config.chain_world_id.trim().to_string()
     }

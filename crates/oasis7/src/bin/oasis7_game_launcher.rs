@@ -40,6 +40,7 @@ use cli::{
 };
 use hosted_access::{DeploymentMode, DEFAULT_DEPLOYMENT_MODE};
 use hosted_player_session::HostedPlayerSessionIssuer;
+use oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID;
 use runtime_paths::{
     resolve_oasis7_chain_runtime_binary, resolve_oasis7_viewer_live_binary,
     resolve_viewer_static_dir,
@@ -60,7 +61,7 @@ use url_encoding::encoded_query_pair;
 #[cfg(test)]
 use viewer_live_command::apply_viewer_live_env_overrides;
 use viewer_live_command::build_oasis7_viewer_live_command;
-const DEFAULT_SCENARIO: &str = "llm_bootstrap";
+const DEFAULT_SCENARIO: &str = "";
 const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
@@ -121,6 +122,15 @@ fn default_chain_node_id() -> String {
         .unwrap_or_default()
         .as_millis();
     format!("{DEFAULT_CHAIN_NODE_ID}-fresh-{}-{now}", process::id())
+}
+
+fn default_chain_world_id(scenario: &str) -> String {
+    let scenario = scenario.trim();
+    if scenario.is_empty() {
+        VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string()
+    } else {
+        format!("live-{scenario}")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,7 +206,7 @@ impl Default for CliOptions {
             chain_node_id: default_chain_node_id(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,
-            chain_world_id: None,
+            chain_world_id: Some(default_chain_world_id(DEFAULT_SCENARIO)),
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
