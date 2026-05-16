@@ -370,9 +370,6 @@ pub(super) fn collect_required_config_issues(config: &LaunchConfig) -> Vec<Confi
         }
     }
 
-    if config.scenario.trim().is_empty() {
-        issues.push(ConfigIssue::ScenarioRequired);
-    }
     if parse_host_port(config.live_bind.as_str(), "live bind").is_err() {
         issues.push(ConfigIssue::LiveBindInvalid);
     }
@@ -527,9 +524,6 @@ fn hosted_public_join_local_chain_runtime_error() -> String {
 
 #[cfg(test)]
 pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, String> {
-    if config.scenario.trim().is_empty() {
-        return Err("scenario cannot be empty".to_string());
-    }
     let deployment_mode = match config.deployment_mode.trim() {
         "trusted_local_only" => "trusted_local_only",
         "hosted_public_join" => "hosted_public_join",
@@ -552,8 +546,6 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
     let mut args = vec![
         "--deployment-mode".to_string(),
         deployment_mode.to_string(),
-        "--scenario".to_string(),
-        config.scenario.trim().to_string(),
         "--live-bind".to_string(),
         config.live_bind.trim().to_string(),
         "--web-bind".to_string(),
@@ -566,6 +558,12 @@ pub(super) fn build_launcher_args(config: &LaunchConfig) -> Result<Vec<String>, 
         config.viewer_static_dir.trim().to_string(),
         "--chain-disable".to_string(),
     ];
+    if !config.scenario.trim().is_empty() {
+        args.splice(
+            2..2,
+            ["--scenario".to_string(), config.scenario.trim().to_string()],
+        );
+    }
     if config.llm_enabled {
         args.push("--with-llm".to_string());
         args.push("--agent-decision-source".to_string());
@@ -671,7 +669,7 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())?;
     let scenario = config.scenario.trim();
     let default_world_id = if scenario.is_empty() {
-        format!("live-{DEFAULT_SCENARIO}")
+        oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string()
     } else {
         format!("live-{scenario}")
     };

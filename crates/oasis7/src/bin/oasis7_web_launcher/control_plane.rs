@@ -752,9 +752,6 @@ pub(super) fn validate_game_config_with_launcher_bin(
             "deployment mode must be one of: trusted_local_only|hosted_public_join".to_string(),
         );
     }
-    if config.scenario.trim().is_empty() {
-        issues.push("scenario is required".to_string());
-    }
     if parse_host_port(config.live_bind.as_str(), "live bind").is_err() {
         issues.push("live bind must be in <host:port> format".to_string());
     }
@@ -914,9 +911,6 @@ pub(super) fn build_launcher_args_with_launcher_bin(
     config: &LauncherConfig,
     launcher_bin: &str,
 ) -> Result<Vec<String>, String> {
-    if config.scenario.trim().is_empty() {
-        return Err("scenario cannot be empty".to_string());
-    }
     parse_host_port(config.live_bind.as_str(), "live bind")?;
     parse_host_port(config.web_bind.as_str(), "web bind")?;
     let viewer_port = parse_port(config.viewer_port.as_str(), "viewer port")?;
@@ -938,8 +932,6 @@ pub(super) fn build_launcher_args_with_launcher_bin(
     let mut args = vec![
         "--deployment-mode".to_string(),
         config.deployment_mode.trim().to_string(),
-        "--scenario".to_string(),
-        config.scenario.trim().to_string(),
         "--live-bind".to_string(),
         config.live_bind.trim().to_string(),
         "--web-bind".to_string(),
@@ -961,6 +953,12 @@ pub(super) fn build_launcher_args_with_launcher_bin(
         args.push("--no-open-browser".to_string());
     }
     args.push("--chain-disable".to_string());
+    if !config.scenario.trim().is_empty() {
+        args.splice(
+            2..2,
+            ["--scenario".to_string(), config.scenario.trim().to_string()],
+        );
+    }
 
     Ok(args)
 }

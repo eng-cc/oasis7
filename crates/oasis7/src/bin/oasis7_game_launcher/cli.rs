@@ -394,7 +394,7 @@ Start player stack with one command:\n\
 - print URL and optionally open browser\n\n\
 Options:\n\
   --deployment-mode <mode>    trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
-  --scenario <name>            oasis7_viewer_live scenario (default: {DEFAULT_SCENARIO})\n\
+  --scenario <name>            optional debug scenario; default uses formal release fixed world\n\
   --live-bind <host:port>      oasis7_viewer_live bind (default: {DEFAULT_LIVE_BIND})\n\
   --web-bind <host:port>       oasis7_viewer_live web bridge bind (default: {DEFAULT_WEB_BIND})\n\
   --viewer-host <host>         web viewer host (default: {DEFAULT_VIEWER_HOST})\n\

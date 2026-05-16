@@ -7,8 +7,10 @@ pub(super) fn build_oasis7_viewer_live_command(
     repo_has_node_config_file: bool,
 ) -> Command {
     let mut command = Command::new(path);
+    if !options.scenario.trim().is_empty() {
+        command.arg(options.scenario.as_str());
+    }
     command
-        .arg(options.scenario.as_str())
         .arg("--bind")
         .arg(options.live_bind.as_str())
         .arg("--web-bind")

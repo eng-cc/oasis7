@@ -69,10 +69,14 @@ use session_policy::{
     session_revoke_metadata_key, RuntimeSessionPolicy, RuntimeSessionRevokeMetadata,
 };
 use support::{
-    bootstrap_runtime_world, is_expected_disconnect_error, is_timeout_error,
-    latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
-    RuntimeLiveScript, RuntimeLiveSession,
+    bootstrap_formal_release_runtime_world, bootstrap_runtime_world, is_expected_disconnect_error,
+    is_timeout_error, latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
+    RuntimeLiveScript, RuntimeLiveSession, FORMAL_RELEASE_DEFAULT_WORLD_ID,
 };
+
+pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
+
+pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 
 const AUTHORITATIVE_BATCH_CONFIRM_DELAY_TICKS: u64 = 1;
 const AUTHORITATIVE_BATCH_FINALITY_WINDOW_TICKS: u64 = 2;
@@ -87,72 +91,13 @@ const RUNTIME_CONTROL_REQUIRED_HINT: &str =
 #[derive(Debug, Clone)]
 pub struct ViewerRuntimeLiveServerConfig {
     pub bind_addr: String,
-    pub scenario: WorldScenario,
+    pub scenario: Option<WorldScenario>,
     pub world_id: String,
     pub decision_mode: ViewerLiveDecisionMode,
     pub play_step_interval: Duration,
     pub chain_poll_interval: Duration,
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
-}
-
-impl ViewerRuntimeLiveServerConfig {
-    pub fn new(scenario: WorldScenario) -> Self {
-        Self {
-            bind_addr: "127.0.0.1:5010".to_string(),
-            world_id: format!("live-runtime-{}", scenario.as_str()),
-            scenario,
-            decision_mode: ViewerLiveDecisionMode::Script,
-            play_step_interval: Duration::from_millis(800),
-            chain_poll_interval: Duration::from_millis(200),
-            hosted_public_join_mode: false,
-            chain_status_bind: None,
-        }
-    }
-
-    pub fn with_bind_addr(mut self, addr: impl Into<String>) -> Self {
-        self.bind_addr = addr.into();
-        self
-    }
-
-    pub fn with_world_id(mut self, world_id: impl Into<String>) -> Self {
-        self.world_id = world_id.into();
-        self
-    }
-
-    pub fn with_decision_mode(mut self, mode: ViewerLiveDecisionMode) -> Self {
-        self.decision_mode = mode;
-        self
-    }
-
-    pub fn with_llm_mode(mut self, enabled: bool) -> Self {
-        self.decision_mode = if enabled {
-            ViewerLiveDecisionMode::Llm
-        } else {
-            ViewerLiveDecisionMode::Script
-        };
-        self
-    }
-
-    pub fn with_play_step_interval(mut self, interval: Duration) -> Self {
-        self.play_step_interval = interval.max(Duration::from_millis(50));
-        self
-    }
-
-    pub fn with_chain_poll_interval(mut self, interval: Duration) -> Self {
-        self.chain_poll_interval = interval.max(Duration::from_millis(50));
-        self
-    }
-
-    pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
-        self.hosted_public_join_mode = enabled;
-        self
-    }
-
-    pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
-        self.chain_status_bind = Some(addr.into());
-        self
-    }
 }
 
 #[derive(Debug)]
@@ -205,8 +150,13 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
-        let (world, snapshot_config) =
-            bootstrap_runtime_world(config.scenario).map_err(ViewerRuntimeLiveServerError::Init)?;
+        let (world, snapshot_config) = match config.scenario {
+            Some(scenario) => {
+                bootstrap_runtime_world(scenario).map_err(ViewerRuntimeLiveServerError::Init)?
+            }
+            None => bootstrap_formal_release_runtime_world()
+                .map_err(ViewerRuntimeLiveServerError::Init)?,
+        };
         let initial_world_time = world.state().time;
         let llm_sidecar = RuntimeLlmSidecar::new(config.decision_mode);
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);

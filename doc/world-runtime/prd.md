@@ -57,6 +57,7 @@
 - SC-24: `/v1/chain/status` 必须显式暴露 commit freshness、pending proposal/queue pressure 摘要、recent finality latency summary、transfer lifecycle/confirmation latency summary 与入站时序拒绝计数，让节点运营者无需翻原始日志即可判断“卡在没提案、卡在未提交、卡在 submit buffer/队列积压、还是卡在 transfer 长时间未确认”。
 - SC-25: 首个 agent `slot-1` claim 必须补齐“canonical quote -> 若专用池足够则自动补足 restricted starter amount -> 直接 `ClaimAgent`”的链上闭环；`/v1/chain/agent-claim/**` 需要让玩家在不经过运营审批的前提下直连 claim，并由 runtime 真值暴露自动资助额度与 claim 结果。
 - SC-26: builtin wasm 模块边界中的 `GeoPos` 与一切 `*_cm` 坐标字段必须维持整数厘米合同；持久化状态允许兼容读取旧的“整值浮点”厘米表示，但动作/事件/观测入口不得接受 fractional cm，也不得再输出 `0.0` 这类浮点厘米表象。
+- SC-27: 正式发布默认入口不得再把 `llm_bootstrap` 或其他调试场景当作初始世界；`oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、`oasis7_client_launcher` 与 `oasis7_chain_runtime` 首次启动必须共享同一份固定 genesis / 固定 bootstrap world，并避免默认注入 5 个预置 agent。
 
 ## 2. User Experience & Functionality
 - User Personas:

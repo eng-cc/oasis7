@@ -418,6 +418,37 @@
     - `crates/oasis7_net/src/lib.rs`
     - `crates/oasis7_net/src/libp2p_net.rs`
     - `crates/oasis7_net/src/libp2p_net/api.rs`
+- [x] formal-release-fixed-genesis-default (PRD-WORLD_RUNTIME-027) [test_tier_required]: 将正式版本默认启动链路从 `llm_bootstrap` 调试场景切到固定 genesis / 固定 bootstrap world，确保 `oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、`oasis7_client_launcher` 与 `oasis7_chain_runtime` 首次启动共享同一份 release default world，且不再默认注入 5 个预置 agent。 Trace: .pm/tasks/task_f7cfa848f7c04ea9b560458487c62755.yaml
+  - 产物文件:
+    - `doc/world-runtime/prd.md`
+    - `doc/world-runtime/project.md`
+    - `.pm/tasks/task_f7cfa848f7c04ea9b560458487c62755.yaml`
+    - `.pm/tasks/task_f7cfa848f7c04ea9b560458487c62755.execution.md`
+    - `crates/oasis7/src/viewer/mod.rs`
+    - `crates/oasis7/src/viewer/runtime_live.rs`
+    - `crates/oasis7/src/viewer/runtime_live/support.rs`
+    - `crates/oasis7/src/bin/oasis7_viewer_live.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/viewer_live_command.rs`
+    - `crates/oasis7/src/bin/oasis7_game_launcher/oasis7_game_launcher_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/support.rs`
+    - `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`
+    - `crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/driver.rs`
+    - `crates/oasis7_client_launcher/src/main.rs`
+    - `crates/oasis7_client_launcher/src/launcher_core.rs`
+    - `crates/oasis7_client_launcher/src/config_ui.rs`
+    - `crates/oasis7_client_launcher/src/main_tests.rs`
+    - `crates/oasis7_client_launcher/src/main_tests_onboarding.rs`
+  - 验收命令 (`test_tier_required`):
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_viewer_live parse_options_defaults -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher parse_options_defaults -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher build_viewer_live_command_wires_llm_timeout_default_into_spawn_path -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher validate_game_config_reports_missing_required_fields -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7 bootstrap_formal_release_runtime_world_uses_single_fixed_bootstrap_agent -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher collect_required_config_issues_reports_missing_required_fields -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo test -p oasis7_client_launcher onboarding_auto_open_targets_fix_config_step_when_required_fields_missing -- --nocapture`
+    - `env -u RUSTC_WRAPPER cargo check -p oasis7 --bin oasis7_chain_runtime`
     - `crates/oasis7_net/src/libp2p_net/discovery.rs`
     - `crates/oasis7_net/src/libp2p_net/runtime_loop.rs`
     - `crates/oasis7_net/src/libp2p_net/traffic_metrics.rs`

@@ -523,7 +523,6 @@ fn validate_game_config_reports_missing_required_fields() {
     };
     let issues = validate_game_config(&config);
     assert!(!issues.is_empty());
-    assert!(issues.iter().any(|item| item.contains("scenario")));
     assert!(issues.iter().any(|item| item.contains("live bind")));
     assert!(issues.iter().any(|item| item.contains("viewer host")));
     assert!(issues

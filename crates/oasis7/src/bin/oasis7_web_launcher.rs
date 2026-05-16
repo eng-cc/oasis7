@@ -55,7 +55,7 @@ use viewer_auth_bootstrap::{
 };
 
 const DEFAULT_LISTEN_BIND: &str = "0.0.0.0:5410";
-const DEFAULT_SCENARIO: &str = "llm_bootstrap";
+const DEFAULT_SCENARIO: &str = "";
 const DEFAULT_LIVE_BIND: &str = "0.0.0.0:5023";
 const DEFAULT_WEB_BIND: &str = "0.0.0.0:5011";
 const DEFAULT_VIEWER_HOST: &str = "0.0.0.0";

@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn first_check_opens_startup_guide_once_for_game_issues() {
     let mut app = ClientLauncherApp::default();
-    let game_issues = [ConfigIssue::ScenarioRequired];
+    let game_issues = [ConfigIssue::LiveBindInvalid];
     app.maybe_open_startup_guide_on_first_check(&game_issues, &[]);
     assert!(app.startup_guide_state.open);
     assert_eq!(app.startup_guide_state.target, StartupGuideTarget::Game);
@@ -17,7 +17,7 @@ fn first_check_opens_startup_guide_once_for_game_issues() {
 #[test]
 fn handle_start_game_click_opens_startup_guide_when_invalid() {
     let mut app = ClientLauncherApp::default();
-    let game_issues = [ConfigIssue::ScenarioRequired];
+    let game_issues = [ConfigIssue::LiveBindInvalid];
     app.handle_start_game_click(&game_issues);
     assert_eq!(app.status, LauncherStatus::InvalidArgs);
     assert!(app.startup_guide_state.open);
@@ -50,7 +50,6 @@ fn apply_safe_defaults_for_game_target_recovers_required_fields() {
     app.apply_safe_defaults_for_startup_target(StartupGuideTarget::Game);
 
     let game_issues = collect_required_config_issues(&app.config);
-    assert!(!game_issues.contains(&ConfigIssue::ScenarioRequired));
     assert!(!game_issues.contains(&ConfigIssue::LiveBindInvalid));
     assert!(!game_issues.contains(&ConfigIssue::WebBindInvalid));
     assert!(!game_issues.contains(&ConfigIssue::ViewerHostRequired));
@@ -98,7 +97,7 @@ fn onboarding_auto_open_targets_fix_config_step_when_required_fields_missing() {
     app.onboarding_state.auto_open_checked = false;
     app.onboarding_state.completed = false;
     app.onboarding_state.open = false;
-    let game_issues = [ConfigIssue::ScenarioRequired];
+    let game_issues = [ConfigIssue::LiveBindInvalid];
     app.maybe_open_onboarding_on_first_visit(&game_issues, &[], false, false);
     assert!(app.onboarding_state.open);
     assert_eq!(app.onboarding_state.step, OnboardingStep::FixConfig);
@@ -166,7 +165,7 @@ fn resolve_next_task_hint_prioritizes_config_fix_then_start_order() {
         NextTaskHint::FixChainConfig
     );
     assert_eq!(
-        resolve_next_task_hint(true, &[ConfigIssue::ScenarioRequired], &[], false, false),
+        resolve_next_task_hint(true, &[ConfigIssue::LiveBindInvalid], &[], false, false),
         NextTaskHint::FixGameConfig
     );
     assert_eq!(
@@ -188,17 +187,17 @@ fn resolve_config_guide_target_follows_blocking_priority() {
     assert_eq!(
         resolve_config_guide_target(
             true,
-            &[ConfigIssue::ScenarioRequired],
+            &[ConfigIssue::LiveBindInvalid],
             &[ConfigIssue::ChainNodeIdRequired],
         ),
         Some(ConfigGuideTargetHint::Chain)
     );
     assert_eq!(
-        resolve_config_guide_target(true, &[ConfigIssue::ScenarioRequired], &[]),
+        resolve_config_guide_target(true, &[ConfigIssue::LiveBindInvalid], &[]),
         Some(ConfigGuideTargetHint::Game)
     );
     assert_eq!(
-        resolve_config_guide_target(false, &[ConfigIssue::ScenarioRequired], &[]),
+        resolve_config_guide_target(false, &[ConfigIssue::LiveBindInvalid], &[]),
         Some(ConfigGuideTargetHint::Game)
     );
     assert_eq!(resolve_config_guide_target(true, &[], &[]), None);
@@ -219,7 +218,7 @@ fn resolve_primary_disabled_cta_prefers_first_blocking_action() {
         Some(DisabledActionCta::StartChain)
     );
     assert_eq!(
-        resolve_primary_disabled_cta(true, &[ConfigIssue::ScenarioRequired], &[], true),
+        resolve_primary_disabled_cta(true, &[ConfigIssue::LiveBindInvalid], &[], true),
         Some(DisabledActionCta::FixGameConfig)
     );
     assert_eq!(resolve_primary_disabled_cta(true, &[], &[], true), None);
@@ -238,7 +237,7 @@ fn resolve_disabled_cta_plan_prioritizes_chain_fix_before_game_fix() {
     let (primary, secondary) = resolve_disabled_cta_plan(
         &ChainRuntimeStatus::ConfigError("bad bind".to_string()),
         true,
-        &[ConfigIssue::ScenarioRequired],
+        &[ConfigIssue::LiveBindInvalid],
         &[ConfigIssue::ChainNodeIdRequired],
     );
     assert_eq!(primary, Some(DisabledActionCta::FixChainConfig));

@@ -3,6 +3,91 @@ use std::io::Write;
 
 use super::*;
 
+pub(crate) const FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = "live-formal-release-default";
+pub(crate) const FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID: &str = "starter-agent-0";
+
+impl ViewerRuntimeLiveServerConfig {
+    pub fn new(scenario: WorldScenario) -> Self {
+        Self {
+            bind_addr: "127.0.0.1:5010".to_string(),
+            world_id: format!("live-runtime-{}", scenario.as_str()),
+            scenario: Some(scenario),
+            decision_mode: ViewerLiveDecisionMode::Script,
+            play_step_interval: Duration::from_millis(800),
+            chain_poll_interval: Duration::from_millis(200),
+            hosted_public_join_mode: false,
+            chain_status_bind: None,
+        }
+    }
+
+    pub fn formal_release_default() -> Self {
+        Self {
+            bind_addr: "127.0.0.1:5010".to_string(),
+            world_id: FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string(),
+            scenario: None,
+            decision_mode: ViewerLiveDecisionMode::Script,
+            play_step_interval: Duration::from_millis(800),
+            chain_poll_interval: Duration::from_millis(200),
+            hosted_public_join_mode: false,
+            chain_status_bind: None,
+        }
+    }
+
+    pub fn with_bind_addr(mut self, addr: impl Into<String>) -> Self {
+        self.bind_addr = addr.into();
+        self
+    }
+
+    pub fn with_world_id(mut self, world_id: impl Into<String>) -> Self {
+        self.world_id = world_id.into();
+        self
+    }
+
+    pub fn with_optional_scenario(mut self, scenario: Option<WorldScenario>) -> Self {
+        self.scenario = scenario;
+        if self.world_id.trim().is_empty() {
+            self.world_id = scenario
+                .map(|value| format!("live-runtime-{}", value.as_str()))
+                .unwrap_or_else(|| FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string());
+        }
+        self
+    }
+
+    pub fn with_decision_mode(mut self, mode: ViewerLiveDecisionMode) -> Self {
+        self.decision_mode = mode;
+        self
+    }
+
+    pub fn with_llm_mode(mut self, enabled: bool) -> Self {
+        self.decision_mode = if enabled {
+            ViewerLiveDecisionMode::Llm
+        } else {
+            ViewerLiveDecisionMode::Script
+        };
+        self
+    }
+
+    pub fn with_play_step_interval(mut self, interval: Duration) -> Self {
+        self.play_step_interval = interval.max(Duration::from_millis(50));
+        self
+    }
+
+    pub fn with_chain_poll_interval(mut self, interval: Duration) -> Self {
+        self.chain_poll_interval = interval.max(Duration::from_millis(50));
+        self
+    }
+
+    pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
+        self.hosted_public_join_mode = enabled;
+        self
+    }
+
+    pub fn with_chain_status_bind(mut self, addr: impl Into<String>) -> Self {
+        self.chain_status_bind = Some(addr.into());
+        self
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(super) struct RuntimeLiveScript {
     phase: u8,
@@ -255,6 +340,70 @@ pub(super) fn bootstrap_runtime_world(
     Ok((world, config))
 }
 
+pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldConfig), String> {
+    let config = WorldConfig::default();
+    let mut world = RuntimeWorld::new_production_hardened();
+    let bootstrap_pos = GeoPos::new(
+        config.space.width_cm / 2,
+        config.space.depth_cm / 2,
+        config.space.height_cm / 2,
+    );
+    world.set_resource_balance(ResourceKind::Electricity, 400);
+    for (material, amount) in [
+        ("structural_frame", 40),
+        ("circuit_board", 4),
+        ("servo_motor", 2),
+        ("heat_coil", 6),
+        ("refractory_brick", 8),
+        ("iron_ore", 60),
+        ("carbon_fuel", 20),
+        ("copper_ore", 60),
+        ("silicate_ore", 20),
+        ("hardware_part", 40),
+    ] {
+        world
+            .set_material_balance(material, amount)
+            .map_err(|err| {
+                format!(
+                    "formal release bootstrap set material balance failed material={} err={err:?}",
+                    material
+                )
+            })?;
+    }
+    world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID.to_string(),
+        pos: bootstrap_pos,
+    });
+    world
+        .step()
+        .map_err(|err| format!("formal release bootstrap register step failed: {err:?}"))?;
+    world
+        .set_agent_resource_balance(
+            FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID,
+            ResourceKind::Electricity,
+            32,
+        )
+        .map_err(|err| {
+            format!(
+                "formal release bootstrap set electricity failed agent={} err={err:?}",
+                FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID
+            )
+        })?;
+    world
+        .set_agent_resource_balance(
+            FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID,
+            ResourceKind::Data,
+            8,
+        )
+        .map_err(|err| {
+            format!(
+                "formal release bootstrap set data failed agent={} err={err:?}",
+                FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID
+            )
+        })?;
+    Ok((world, config))
+}
+
 pub(super) fn runtime_metrics(world: &RuntimeWorld) -> RunnerMetrics {
     let total_ticks = world.state().time;
     let total_actions = world.journal().len() as u64;
@@ -350,5 +499,19 @@ mod tests {
         let (world, _) =
             bootstrap_runtime_world(WorldScenario::Minimal).expect("bootstrap runtime live world");
         assert!(world.release_security_policy().is_production_hardened());
+    }
+
+    #[test]
+    fn bootstrap_formal_release_runtime_world_uses_single_fixed_bootstrap_agent() {
+        let (world, _) =
+            bootstrap_formal_release_runtime_world().expect("formal release bootstrap");
+        let agent = world
+            .state()
+            .agents
+            .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
+            .expect("bootstrap agent should exist");
+        assert_eq!(world.state().agents.len(), 1);
+        assert_eq!(agent.state.resources.get(ResourceKind::Electricity), 32);
+        assert_eq!(agent.state.resources.get(ResourceKind::Data), 8);
     }
 }

@@ -90,7 +90,7 @@ pub(crate) use web_api_support::{
 #[cfg(target_arch = "wasm32")]
 pub(crate) use web_api_support::{WebFeedbackSubmitRequest, WebFeedbackSubmitResponse};
 
-const DEFAULT_SCENARIO: &str = "llm_bootstrap";
+const DEFAULT_SCENARIO: &str = "";
 const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
@@ -622,7 +622,6 @@ fn chain_runtime_status_from_web(status: &str, detail: Option<&str>) -> ChainRun
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigIssue {
     LlmRequired,
-    ScenarioRequired,
     LiveBindInvalid,
     WebBindInvalid,
     ViewerHostRequired,
@@ -665,8 +664,6 @@ impl ConfigIssue {
             (Self::LlmRequired, UiLanguage::EnUs) => {
                 "LLM must stay enabled; no-LLM is no longer a playable entry path"
             }
-            (Self::ScenarioRequired, UiLanguage::ZhCn) => "场景（scenario）是必填项",
-            (Self::ScenarioRequired, UiLanguage::EnUs) => "Scenario is required",
             (Self::LiveBindInvalid, UiLanguage::ZhCn) => "实时服务绑定必须是 <host:port>",
             (Self::LiveBindInvalid, UiLanguage::EnUs) => "Live bind must be in <host:port> format",
             (Self::WebBindInvalid, UiLanguage::ZhCn) => "WebSocket 绑定必须是 <host:port>",

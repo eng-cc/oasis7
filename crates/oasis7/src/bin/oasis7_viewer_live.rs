@@ -10,7 +10,7 @@ use oasis7::viewer::{
 };
 use tracing::{error, info, warn};
 
-const DEFAULT_SCENARIO: &str = "llm_bootstrap";
+const DEFAULT_SCENARIO_LABEL: &str = "formal_release_default";
 const DEFAULT_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_DEPLOYMENT_MODE: &str = "trusted_local_only";
@@ -21,7 +21,7 @@ const RUNTIME_ALIAS_REMOVAL_HINT: &str =
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
-    scenario: WorldScenario,
+    scenario: Option<WorldScenario>,
     bind_addr: String,
     web_bind_addr: Option<String>,
     llm_mode: bool,
@@ -32,7 +32,7 @@ struct CliOptions {
 impl Default for CliOptions {
     fn default() -> Self {
         Self {
-            scenario: WorldScenario::LlmBootstrap,
+            scenario: None,
             bind_addr: DEFAULT_BIND.to_string(),
             web_bind_addr: Some(DEFAULT_WEB_BIND.to_string()),
             llm_mode: true,
@@ -74,7 +74,10 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         llm_mode = options.llm_mode,
         deployment_mode = %options.deployment_mode,
         chain_status_bind = ?options.chain_status_bind,
-        scenario = %options.scenario.as_str(),
+        scenario = %options
+            .scenario
+            .map(|value| value.as_str().to_string())
+            .unwrap_or_else(|| DEFAULT_SCENARIO_LABEL.to_string()),
         "starting viewer live runtime"
     );
     if let Some(web_bind_addr) = options.web_bind_addr.clone() {
@@ -90,7 +93,11 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         });
     }
 
-    let config = ViewerRuntimeLiveServerConfig::new(options.scenario)
+    let base_config = match options.scenario {
+        Some(scenario) => ViewerRuntimeLiveServerConfig::new(scenario),
+        None => ViewerRuntimeLiveServerConfig::formal_release_default(),
+    };
+    let config = base_config
         .with_bind_addr(options.bind_addr)
         .with_hosted_public_join_mode(options.deployment_mode == "hosted_public_join")
         .with_decision_mode(if options.llm_mode {
@@ -120,7 +127,7 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             if scenario_set {
                 return Err(format!("unexpected positional argument `{arg}`"));
             }
-            options.scenario = parse_world_scenario(arg)?;
+            options.scenario = Some(parse_world_scenario(arg)?);
             scenario_set = true;
             continue;
         }
@@ -239,7 +246,7 @@ fn print_help() {
         "Usage: oasis7_viewer_live [scenario] [options]\n\n\
 Starts pure viewer live server (no embedded chain/node runtime).\n\n\
 Options:\n\
-  [scenario]                world scenario (default: {DEFAULT_SCENARIO})\n\
+  [scenario]                world scenario (optional; default: {DEFAULT_SCENARIO_LABEL})\n\
   --bind <host:port>        viewer live server bind (default: {DEFAULT_BIND})\n\
   --web-bind <host:port>    websocket bridge bind (default: {DEFAULT_WEB_BIND})\n\
   --no-web-bind             disable websocket bridge\n\
@@ -261,7 +268,7 @@ mod tests {
     #[test]
     fn parse_options_defaults() {
         let options = parse_options(std::iter::empty()).expect("defaults");
-        assert_eq!(options.scenario, WorldScenario::LlmBootstrap);
+        assert_eq!(options.scenario, None);
         assert_eq!(options.bind_addr, DEFAULT_BIND);
         assert_eq!(options.web_bind_addr.as_deref(), Some(DEFAULT_WEB_BIND));
         assert!(options.llm_mode);
@@ -287,7 +294,10 @@ mod tests {
             .into_iter(),
         )
         .expect("custom values");
-        assert_eq!(options.scenario, WorldScenario::AsteroidFragmentBootstrap);
+        assert_eq!(
+            options.scenario,
+            Some(WorldScenario::AsteroidFragmentBootstrap)
+        );
         assert_eq!(options.bind_addr, "127.0.0.1:6200");
         assert_eq!(options.web_bind_addr.as_deref(), Some("127.0.0.1:6300"));
         assert!(options.llm_mode);
