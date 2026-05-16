@@ -10,6 +10,7 @@
 ## 1. Executive Summary
 - Problem Statement: 当前 `oasis7_viewer_live` / `oasis7_chain_runtime` 的默认运行态持久化在短时本地闭环中也会产生明显的磁盘膨胀：一次约 `2102` 高度的运行样本中，`output/chain-runtime/viewer-live-node/store` 约 `1.18 GiB`、`reward-runtime-execution-world/.distfs-state/blobs` 约 `635 MiB`，而当前最新执行世界实际只引用约 `1.55 MiB` 的 sidecar blob。执行桥接按高度保留全量 `snapshot_ref`、执行世界 sidecar 缺少引用回收、`snapshot.json` 中 `tick_consensus_records` 持续增长，导致本地调试、重复启动与长跑验证的磁盘成本过高。
 - Proposed Solution: 为 runtime 引入“canonical replay log + checkpoint + 分层保留 + 引用治理 + 指标可观测”方案：把运行态数据拆分为当前可恢复 head、热历史窗口、稀疏检查点、权威变更日志、冷元数据与可回收孤儿 blob 六类数据，分别实施 retention / compaction / GC；同时对 `tick_consensus_records` 做热冷分层，明确“日志为真、快照为缓存”的回放契约，在控制默认磁盘占用的同时保证可追溯与可回放。
+- Proposed Solution 补充（2026-05-15）: 在不改变 `content_hash` / `snapshot_ref` / `journal_ref` 合同的前提下，`LocalCasStore` 允许对大体积 blob 采用“磁盘透明压缩、读出仍返回原始 bytes”的落盘策略，优先压缩 execution bridge snapshots/journals 与 sidecar segments 的重复结构数据。
 - Success Criteria:
   - SC-1: 默认 `dev_local` / launcher profile 在 `llm_bootstrap` 场景连续运行到 `2500` committed heights 后，`output/chain-runtime/<node_id>/store` 稳态占用 `<= 256 MiB`。
   - SC-2: `reward-runtime-execution-world/.distfs-state/blobs` 在每次成功保存后仅保留被当前有效 manifest / journal segments / 受保护 generation 引用的 blob；`2500` heights 样本下总占用 `<= 16 MiB`，孤儿 blob 数量为 `0`。
@@ -17,6 +18,7 @@
   - SC-4: 在 retention / GC 执行后，latest-state 重启恢复成功率 `100%`，恢复后的 `execution_state_root` 与 GC 前一致。
   - SC-5: status/metrics 输出必须包含当前 storage profile、各目录字节数、pin 集大小、最近一次 GC 结果与失败原因，供 launcher / soak / release gate 直接消费。
   - SC-6: 对 retention policy 明确保留的任意目标高度 `H`，系统必须能从最近 checkpoint + canonical replay log 重建出与原记录一致的 `execution_state_root`。
+  - SC-7: `release_default` 必须把 `execution_hot_head_heights` 收敛到不高于 `execution_checkpoint_interval`；在 exact-height restore 仍依赖热窗口快照的前提下，默认发布档位不得再为同一 replay 区间重复保留额外一倍的 execution snapshots。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -49,8 +51,9 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| Storage profile 选择 | `storage_profile`, `execution_hot_head_heights`, `execution_checkpoint_interval`, `sidecar_generations_keep`, `tick_consensus_hot_limit` | runtime / launcher / script 启动时加载统一 profile 枚举，可由 CLI/config 显式覆盖，默认 `dev_local` | `configured -> active -> degraded/failed` | 显式参数覆盖 profile 默认值；非法组合直接拒绝启动 | 仅启动参数/配置维护者可放宽预算 |
+| Storage profile 选择 | `storage_profile`, `execution_hot_head_heights`, `execution_checkpoint_interval`, `sidecar_generations_keep`, `tick_consensus_hot_limit` | runtime / launcher / script 启动时加载统一 profile 枚举，可由 CLI/config 显式覆盖，默认 `dev_local` | `configured -> active -> degraded/failed` | 显式参数覆盖 profile 默认值；非法组合直接拒绝启动；`release_default` 默认要求 `execution_hot_head_heights <= execution_checkpoint_interval`，避免在 checkpoint 已覆盖的区间内重复保留整份 execution snapshot | 仅启动参数/配置维护者可放宽预算 |
 | Execution bridge retention | `snapshot_ref`, `journal_ref`, `height`, `retention_class=head/checkpoint/archive` | 每个高度写 record 后重算 pin set，并对 unpinned blob 执行 sweep | `written -> pinned -> pruned/archived` | latest 高度永远保留；checkpoint 按高度升序选取；journal ref 仅按被引用集合保留 | 自动执行，无用户绕过入口 |
+| CAS blob 落盘压缩 | `content_hash`, `blob_encoding`, `raw_size_bytes`, `stored_size_bytes` | 大体积 blob 写入 CAS 时可透明压缩；读路径始终返回原始 bytes，hash 校验仍基于原始 payload | `raw -> compressed-on-disk` 或 `raw -> raw-on-disk` | 仅当压缩后连同 header 都小于原始 bytes 时才启用；`content_hash` 始终保持原始 payload hash，不因磁盘编码变化 | 自动执行；调用方无感知 |
 | Sidecar manifest GC | `generation_id`, `manifest_hash`, `journal_segment_hashes`, `pinned_blob_hashes` | world 保存成功后执行两阶段 pin/sweep；失败则回退到旧 generation | `saving -> committed -> swept` 或 `saving -> rollback` | 仅清理未被 latest/rollback generation 引用的 blob | 自动执行；仅 runtime 自身可写 |
 | Tick consensus compaction | `tick_consensus_hot_limit`, `archive_segment_size`, `archive_index` | 超出热窗口时把旧记录转入 archive 段并更新索引 | `hot -> archived` | 热窗口按最新 tick 保留；archive segment 按 tick 连续范围分段；archive seek 必须能按 `from_tick..to_tick` 读回 | 自动执行；审计只读 |
 | Replay contract | `commit_ref`, `checkpoint_anchor`, `retained_heights`, `replay_profile` | 指定高度回放时从最近 checkpoint + canonical log 重建目标状态 | `requested -> replaying -> matched/mismatched` | 仅对 retention policy 保留的高度提供强保证；重建结果以 `execution_state_root` 校验 | 自动执行；测试/审计只读 |

@@ -329,6 +329,23 @@ fn find_nearest_execution_checkpoint_manifest(
     .map(Some)
 }
 
+fn infer_retained_hot_window_start_height(
+    execution_records_dir: &Path,
+) -> Result<Option<u64>, String> {
+    for height in list_execution_bridge_record_heights(execution_records_dir)? {
+        let record = load_execution_bridge_record(
+            execution_bridge_record_path(execution_records_dir, height).as_path(),
+        )?;
+        if record.latest_state_ref.is_some()
+            || record.snapshot_ref.is_some()
+            || record.journal_ref.is_some()
+        {
+            return Ok(Some(height));
+        }
+    }
+    Ok(None)
+}
+
 pub(super) fn build_execution_replay_plan(
     execution_records_dir: &Path,
     execution_store: &LocalCasStore,
@@ -349,8 +366,11 @@ pub(super) fn build_execution_replay_plan(
         .copied()
         .unwrap_or(0);
     if checkpoint.is_none() && latest_height > 0 {
-        let hot_window_start_height = latest_height
-            .saturating_sub(EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS.saturating_sub(1));
+        let hot_window_start_height =
+            infer_retained_hot_window_start_height(execution_records_dir)?.unwrap_or_else(|| {
+                latest_height
+                    .saturating_sub(EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS.saturating_sub(1))
+            });
         if target_height < hot_window_start_height {
             return Err(format!(
                 "execution replay plan target height {} is outside retained hot window {}..{} and no checkpoint is available",

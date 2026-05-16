@@ -5,13 +5,15 @@ use super::super::checkpoint::{
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
     run_execution_bridge_retention_maintenance, sync_execution_bridge_pin_set,
 };
-use super::super::driver::bridge_committed_heights;
+use super::super::driver::{bridge_committed_heights, NodeRuntimeExecutionDriver};
 use super::super::external_effect::build_execution_replay_plan;
 use super::*;
 use std::collections::BTreeSet;
 
 use oasis7::runtime::BlobStore;
 use oasis7::runtime::{LocalCasStore, World as RuntimeWorld};
+use oasis7_node::{compute_consensus_action_root, NodeExecutionCommitContext, NodeExecutionHook};
+use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 
@@ -313,6 +315,62 @@ fn bridge_committed_heights_sweeps_archive_refs_outside_default_hot_window() {
         Some(checkpoint_height)
     );
     assert_eq!(plan.start_height, checkpoint_height + 1);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_uses_storage_profile_hot_window_budget() {
+    let dir = temp_dir("execution-driver-storage-profile-hot-window");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root,
+        &storage_profile,
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    for height in 1..=65 {
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                height,
+                slot: height.saturating_sub(1),
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: empty_action_root.clone(),
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: height as i64 * 1_000,
+            })
+            .expect("commit with release_default profile");
+    }
+
+    let record_1 = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+    )
+    .expect("load record 1");
+    let record_2 = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 2).as_path(),
+    )
+    .expect("load record 2");
+    let record_65 = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 65).as_path(),
+    )
+    .expect("load record 65");
+
+    assert!(record_1.snapshot_ref.is_none());
+    assert!(record_1.journal_ref.is_none());
+    assert!(record_2.snapshot_ref.is_some());
+    assert!(record_2.journal_ref.is_some());
+    assert!(record_65.latest_state_ref.is_some());
 
     let _ = fs::remove_dir_all(dir);
 }

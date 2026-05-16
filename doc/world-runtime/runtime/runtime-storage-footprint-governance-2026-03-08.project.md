@@ -58,6 +58,7 @@
 
 ### T8 Replication footprint follow-up
 - [x] replication-storage-footprint-optimization (PRD-WORLD_RUNTIME-013/015) [test_tier_required]: 为 `node-distfs` replication store 增加 cold-index-aware orphan sweep，将 `files_index` / `replication_commit_messages` / cold-index 落盘切到 compact JSON，并把冷 commit 归档从“一块一文件”收敛为 segmented pack + offset 索引，减少 legacy orphan blob、inode 数和 pretty-json 块膨胀。 Trace: .pm/tasks/task_2aa685ee43244129b35535bea1f47fed.yaml
+- [x] release-default-hot-window-budget-tuning (PRD-WORLD_RUNTIME-013/014/015) [test_tier_required]: 基于真实 triad 样本确认默认磁盘占用主要由 execution hot snapshots 主导，在 exact-height restore 仍依赖热窗口快照的前提下，将 `release_default.execution_hot_head_heights` 从 `128` 收紧到与 checkpoint cadence 对齐的 `64`，先砍掉重复 snapshot 驻留预算而不改 replay / recovery 合同。 Trace: .pm/tasks/task_dfb9d8eedfe14f218c2f6e77151dad25.yaml
 
 ## 执行顺序与依赖
 - M1（契约冻结）: 先完成 T1.1 ~ T1.4，冻结 replay truth-source、checkpoint manifest 与外部 effect contract；T2 / T3 / T6 以此为前置。
@@ -106,4 +107,7 @@
 - 本轮新增（2026-04-26 / T8.1）: `LocalCasStore` 现会在 path overwrite/delete 后即时清理不再被 `files_index`/pin 引用的旧 blob；`files_index`、热 commit mirror 与 cold-index 现改为 compact JSON 落盘，避免 pretty-json 把 `<1 KiB` 提交记录推过 `4 KiB` 块边界。
 - 本轮新增（2026-04-26 / T8.1）: `replication_commit_messages` 冷归档现默认写入 `<namespace>.cold-index/segments/*.pack` 的固定高度段 pack 文件，cold index 仅记录 `segment_id + offset + len + content_hash`；同段多条冷 commit 共享同一文件，避免继续为每条冷 commit 保留独立 CAS blob。
 - 本轮新增（2026-04-26 / T8.1）: 旧 `height -> content_hash` 冷索引兼容样本会在第一次读回时自动迁移到 pack ref，并在 pack 索引落盘后删除不再被 file index / pin 引用的 legacy cold blob。
+- 本轮新增（2026-05-15 / release-default budget）: 针对本地三节点真实样本复盘后确认，`release_default` 体积膨胀主要来自 `execution_store_root` 热窗口里的整份 execution snapshots，而不是 checkpoint 或 journal。由于当前 `stale/non-contiguous` 恢复仍按具体高度直接读取热窗口 snapshot，尚不能安全删除所有非最新热高度 snapshot，因此本轮先把 `release_default.execution_hot_head_heights` 从 `128` 收紧到 `64`，与 `execution_checkpoint_interval=64` 对齐，优先砍掉默认档位的重复 snapshot 驻留预算。
+- 本轮验证（2026-05-15 / release-default budget）: 已新增定向回归，确认 `release_default` 在 `height=65` 时高度 `1` 的 snapshot/journal refs 会被裁剪，而高度 `2..65` 仍保留当前 64 高度热窗口所需的恢复数据；同时保留 `height=64` 的 checkpoint cadence 不变。
+- 本轮新增（2026-05-15 / transparent blob compression）: `LocalCasStore` 已支持对大于阈值且压缩后更小的 blob 采用“磁盘透明压缩、读出仍返回原始 bytes”的落盘策略，不改变 `content_hash` 合同；这会直接作用于 execution bridge snapshots/journals 与 runtime sidecar blobs，而不要求上层 record/manifest/schema 迁移。
 - 下一任务: 无（本专题当前轮次完成）

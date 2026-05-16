@@ -61,6 +61,44 @@ fn cas_sha256_roundtrip_and_verify() {
 }
 
 #[test]
+fn cas_transparently_compresses_large_blob_on_disk() {
+    let dir = temp_dir("cas-compressed-blob");
+    let store = LocalCasStore::new(&dir);
+
+    let bytes = vec![b'a'; 16 * 1024];
+    let hash = store.put_bytes(&bytes).expect("put");
+    let blob_path = store.blobs_dir().join(format!("{hash}.blob"));
+    let disk_bytes = fs::read(blob_path.as_path()).expect("read blob from disk");
+
+    assert!(disk_bytes.starts_with(b"O7CBLOB1"));
+    assert!(disk_bytes.len() < bytes.len());
+    assert_eq!(store.get(&hash).expect("get"), bytes);
+    assert_eq!(store.get_verified(&hash).expect("verified get"), bytes);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cas_does_not_misdecode_raw_blob_that_looks_like_compressed_payload() {
+    let dir = temp_dir("cas-magic-collision");
+    let store = LocalCasStore::new(&dir);
+
+    let mut bytes = b"O7CBLOB1".to_vec();
+    bytes.extend_from_slice(&(4_u64).to_le_bytes());
+    bytes.extend_from_slice(
+        zstd::stream::encode_all(b"evil".as_slice(), 3)
+            .expect("encode fake compressed suffix")
+            .as_slice(),
+    );
+    let hash = store.put_bytes(&bytes).expect("put");
+
+    assert_eq!(store.get(&hash).expect("get"), bytes);
+    assert_eq!(store.get_verified(&hash).expect("verified get"), bytes);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn segment_and_assemble_roundtrip() {
     let dir = temp_dir("segment");
     let store = LocalCasStore::new(&dir);
