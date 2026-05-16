@@ -201,11 +201,7 @@ fn player_gameplay_last_world_change(
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
 ) -> Option<String> {
     recent_feedback
-        .filter(|feedback| {
-            feedback.delta_logical_time > 0
-                || feedback.delta_event_seq > 0
-                || feedback.stage == "completed_advanced"
-        })
+        .filter(|feedback| feedback.delta_logical_time > 0 || feedback.delta_event_seq > 0)
         .map(|feedback| feedback.effect.clone())
         .filter(|effect| !effect.trim().is_empty())
         .or_else(|| {
