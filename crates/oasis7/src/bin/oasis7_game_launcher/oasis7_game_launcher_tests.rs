@@ -118,6 +118,7 @@ fn parse_options_defaults() {
     assert!(!options.chain_pos_adaptive_tick_scheduler_enabled);
     assert_eq!(options.chain_pos_slot_clock_genesis_unix_ms, None);
     assert_eq!(options.chain_pos_max_past_slot_lag, 256);
+    assert_eq!(options.chain_world_id, None);
 }
 
 #[test]
@@ -717,6 +718,20 @@ fn build_oasis7_chain_runtime_args_includes_storage_profile() {
     assert!(
         args.contains(&"output/chain-runtime/chain-a/reward-runtime-execution-world".to_string())
     );
+}
+
+#[test]
+fn build_oasis7_chain_runtime_args_derives_world_id_from_explicit_scenario() {
+    let options = CliOptions {
+        scenario: "sandbox".to_string(),
+        chain_node_id: "chain-a".to_string(),
+        chain_status_bind: "127.0.0.1:6121".to_string(),
+        chain_world_id: None,
+        ..CliOptions::default()
+    };
+    let args = build_oasis7_chain_runtime_args(&options);
+    assert!(args.contains(&"--world-id".to_string()));
+    assert!(args.contains(&"live-sandbox".to_string()));
 }
 
 #[test]

@@ -206,7 +206,7 @@ impl Default for CliOptions {
             chain_node_id: default_chain_node_id(),
             chain_network_tier_manifest: DEFAULT_CHAIN_NETWORK_TIER_MANIFEST.to_string(),
             chain_storage_profile: StorageProfile::DevLocal,
-            chain_world_id: Some(default_chain_world_id(DEFAULT_SCENARIO)),
+            chain_world_id: None,
             chain_node_role: DEFAULT_CHAIN_NODE_ROLE.to_string(),
             chain_p2p_user_mode: DEFAULT_CHAIN_P2P_USER_MODE.to_string(),
             chain_p2p_accept_public_entry: false,
@@ -439,7 +439,7 @@ fn chain_world_id(options: &CliOptions) -> String {
     options
         .chain_world_id
         .clone()
-        .unwrap_or_else(|| format!("live-{}", options.scenario))
+        .unwrap_or_else(|| default_chain_world_id(options.scenario.as_str()))
 }
 
 fn chain_execution_world_dir(node_id: &str) -> String {
