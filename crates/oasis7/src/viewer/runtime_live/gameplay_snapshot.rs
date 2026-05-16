@@ -95,13 +95,24 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
     mode: &ViewerControl,
     ack: &ControlCompletionAck,
 ) -> PlayerGameplayRecentFeedback {
-    let action = match mode {
-        ViewerControl::Pause => "pause",
-        ViewerControl::Play => "play",
-        ViewerControl::Step { .. } => "step",
-        ViewerControl::Seek { .. } => "seek",
-    }
-    .to_string();
+    let (action, intent_summary) = match mode {
+        ViewerControl::Pause => (
+            "pause".to_string(),
+            "pause live world advancement".to_string(),
+        ),
+        ViewerControl::Play => (
+            "play".to_string(),
+            "continue advancing the live world".to_string(),
+        ),
+        ViewerControl::Step { count } => (
+            "step".to_string(),
+            format!("advance the live world by {count} step(s)"),
+        ),
+        ViewerControl::Seek { tick } => (
+            "seek".to_string(),
+            format!("seek the live world to tick {tick}"),
+        ),
+    };
     let (stage, reason, hint) = match ack.status {
         ControlCompletionStatus::Advanced => ("completed_advanced".to_string(), None, None),
         ControlCompletionStatus::TimeoutNoProgress => (
@@ -138,11 +149,88 @@ pub(super) fn player_gameplay_feedback_from_control_ack(
         action,
         stage,
         effect,
+        intent_summary: Some(intent_summary),
+        target_agent_id: None,
         reason,
         hint,
         delta_logical_time: ack.delta_logical_time,
         delta_event_seq: ack.delta_event_seq,
     }
+}
+
+fn player_gameplay_intent_scope(action: &str) -> Option<&'static str> {
+    if action.starts_with("gameplay_action:") {
+        Some("gameplay_action")
+    } else if action.starts_with("prompt_control.") {
+        Some("prompt_control")
+    } else if action == "agent_chat" {
+        Some("agent_chat")
+    } else if matches!(action, "play" | "pause" | "step" | "seek") {
+        Some("world_control")
+    } else if action == "chain_sync" {
+        Some("world_sync")
+    } else {
+        None
+    }
+}
+
+fn player_gameplay_intent_summary(feedback: &PlayerGameplayRecentFeedback) -> Option<String> {
+    feedback.intent_summary.clone().or_else(|| {
+        if feedback.action.is_empty() {
+            None
+        } else {
+            Some(feedback.action.replace('_', " "))
+        }
+    })
+}
+
+fn player_gameplay_status_reason(
+    gameplay: &PlayerGameplaySnapshot,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<String> {
+    gameplay
+        .causality_detail
+        .clone()
+        .or_else(|| gameplay.blocker_detail.clone())
+        .or_else(|| recent_feedback.and_then(|feedback| feedback.reason.clone()))
+        .or_else(|| gameplay.blocker_kind.clone())
+}
+
+fn player_gameplay_last_world_change(
+    gameplay: &PlayerGameplaySnapshot,
+    recent_feedback: Option<&PlayerGameplayRecentFeedback>,
+) -> Option<String> {
+    recent_feedback
+        .filter(|feedback| {
+            feedback.delta_logical_time > 0
+                || feedback.delta_event_seq > 0
+                || feedback.stage == "completed_advanced"
+        })
+        .map(|feedback| feedback.effect.clone())
+        .filter(|effect| !effect.trim().is_empty())
+        .or_else(|| {
+            matches!(
+                gameplay.causality_kind,
+                Some(PlayerGameplayCausalityKind::GoalProgressed)
+            )
+            .then(|| gameplay.progress_detail.clone())
+        })
+}
+
+fn player_gameplay_primary_blocker(
+    gameplay: &PlayerGameplaySnapshot,
+    status_reason: Option<&String>,
+) -> Option<String> {
+    if gameplay.execution_state != PlayerGameplayExecutionState::Blocked
+        && gameplay.stage_status != PlayerGameplayStageStatus::Blocked
+    {
+        return None;
+    }
+    gameplay
+        .blocker_detail
+        .clone()
+        .or_else(|| gameplay.blocker_kind.clone())
+        .or_else(|| status_reason.cloned())
 }
 
 fn derive_player_gameplay_execution_state(
@@ -237,6 +325,20 @@ fn finalize_player_gameplay_snapshot(
         derive_player_gameplay_causality(&gameplay, recent_feedback, causality_signal);
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
+    let status_reason = player_gameplay_status_reason(&gameplay, recent_feedback);
+    gameplay.accepted_intent_id = recent_feedback
+        .map(|feedback| feedback.action.clone())
+        .filter(|value| !value.is_empty());
+    gameplay.intent_summary = recent_feedback.and_then(player_gameplay_intent_summary);
+    gameplay.intent_scope = recent_feedback.and_then(|feedback| {
+        player_gameplay_intent_scope(feedback.action.as_str()).map(str::to_string)
+    });
+    gameplay.intent_target = recent_feedback.and_then(|feedback| feedback.target_agent_id.clone());
+    gameplay.status_reason = status_reason.clone();
+    gameplay.last_world_change = player_gameplay_last_world_change(&gameplay, recent_feedback);
+    gameplay.resume_anchor = Some(format!("{} ({})", gameplay.goal_title, gameplay.goal_id));
+    gameplay.primary_blocker = player_gameplay_primary_blocker(&gameplay, status_reason.as_ref());
+    gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     gameplay
 }
 
@@ -269,6 +371,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::FirstSessionLoop,
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "first_session_loop.configure_llm_access".to_string(),
             goal_kind: PlayerGameplayGoalKind::CreateFirstWorldFeedback,
             goal_title: "Configure LLM access before entering the world".to_string(),
@@ -284,9 +390,14 @@ pub(super) fn build_player_gameplay_snapshot(
             next_step_hint:
                 "Enable --llm and configure a reachable provider before retrying play, step, or gameplay actions."
                     .to_string(),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -352,6 +463,10 @@ pub(super) fn build_player_gameplay_snapshot(
                 stage_id: PlayerGameplayStageId::FirstSessionLoop,
                 stage_status: PlayerGameplayStageStatus::Blocked,
                 execution_state: PlayerGameplayExecutionState::Executing,
+                accepted_intent_id: None,
+                intent_summary: None,
+                intent_scope: None,
+                intent_target: None,
                 goal_id: "first_session_loop.recover_runtime_sync".to_string(),
                 goal_kind: PlayerGameplayGoalKind::CreateFirstWorldFeedback,
                 goal_title: "Recover committed runtime sync".to_string(),
@@ -363,9 +478,14 @@ pub(super) fn build_player_gameplay_snapshot(
                 blocker_kind: Some(blocker_kind),
                 blocker_detail: Some(blocker_detail),
                 next_step_hint,
+                status_reason: None,
+                last_world_change: None,
                 causality_kind: None,
                 causality_detail: None,
                 branch_hint: None,
+                resume_anchor: None,
+                primary_blocker: None,
+                resume_next_step: None,
                 available_actions,
                 recent_feedback: recent_feedback.cloned(),
                 agent_claim,
@@ -386,6 +506,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::FirstSessionLoop,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "first_session_loop.create_first_world_feedback".to_string(),
             goal_kind: PlayerGameplayGoalKind::CreateFirstWorldFeedback,
             goal_title: "Create the first visible world feedback".to_string(),
@@ -395,9 +519,14 @@ pub(super) fn build_player_gameplay_snapshot(
             blocker_kind: None,
             blocker_detail: None,
             next_step_hint: "Request a snapshot, advance 1 step, then inspect the new delta and events.".to_string(),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -431,6 +560,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "post_onboarding.recover_capability".to_string(),
             goal_kind: PlayerGameplayGoalKind::RecoverCapability,
             goal_title: "Recover sustainable capability".to_string(),
@@ -442,9 +575,14 @@ pub(super) fn build_player_gameplay_snapshot(
             blocker_kind: Some(blocker_kind.clone()),
             blocker_detail: Some(blocker_detail.clone()),
             next_step_hint: blocker_next_step(blocker_kind.as_str(), blocker_detail.as_str()),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -483,6 +621,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::Active,
                     execution_state: PlayerGameplayExecutionState::Executing,
+                    accepted_intent_id: None,
+                    intent_summary: None,
+                    intent_scope: None,
+                    intent_target: None,
                     goal_id: "post_onboarding.stabilize_first_line_after_output".to_string(),
                     goal_kind: PlayerGameplayGoalKind::StabilizeFirstLine,
                     goal_title: "Harden your first output into resilient production".to_string(),
@@ -492,9 +634,14 @@ pub(super) fn build_player_gameplay_snapshot(
                     blocker_kind: None,
                     blocker_detail: None,
                     next_step_hint,
+                    status_reason: None,
+                    last_world_change: None,
                     causality_kind: None,
                     causality_detail: None,
                     branch_hint: None,
+                    resume_anchor: None,
+                    primary_blocker: None,
+                    resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -505,6 +652,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
+                    accepted_intent_id: None,
+                    intent_summary: None,
+                    intent_scope: None,
+                    intent_target: None,
                     goal_id: "post_onboarding.choose_first_expansion_tradeoff".to_string(),
                     goal_kind: PlayerGameplayGoalKind::ChooseFirstExpansionTradeoff,
                     goal_title: "Choose the first expansion tradeoff".to_string(),
@@ -514,12 +665,17 @@ pub(super) fn build_player_gameplay_snapshot(
                     blocker_kind: None,
                     blocker_detail: None,
                     next_step_hint: "Advance again and commit to one tradeoff: add capacity, protect upstream inputs, or widen distribution coverage.".to_string(),
+                    status_reason: None,
+                    last_world_change: None,
                     causality_kind: None,
                     causality_detail: None,
                     branch_hint: Some(
                         "Tradeoffs unlocked: throughput expansion / input resilience / logistics reach"
                             .to_string(),
                     ),
+                    resume_anchor: None,
+                    primary_blocker: None,
+                    resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -530,6 +686,10 @@ pub(super) fn build_player_gameplay_snapshot(
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
+                    accepted_intent_id: None,
+                    intent_summary: None,
+                    intent_scope: None,
+                    intent_target: None,
                     goal_id: "post_onboarding.choose_midloop_path".to_string(),
                     goal_kind: PlayerGameplayGoalKind::ChooseMidLoopPath,
                     goal_title: "Choose your mid-loop path".to_string(),
@@ -539,12 +699,17 @@ pub(super) fn build_player_gameplay_snapshot(
                     blocker_kind: None,
                     blocker_detail: None,
                     next_step_hint: "Keep advancing and either expand production, push governance, or secure a critical node.".to_string(),
+                    status_reason: None,
+                    last_world_change: None,
                     causality_kind: None,
                     causality_detail: None,
                     branch_hint: Some(
                         "Branches unlocked: production expansion / governance influence / conflict security"
                             .to_string(),
                     ),
+                    resume_anchor: None,
+                    primary_blocker: None,
+                    resume_next_step: None,
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -558,6 +723,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "post_onboarding.stabilize_first_line".to_string(),
             goal_kind: PlayerGameplayGoalKind::StabilizeFirstLine,
             goal_title: "Stabilize your first line".to_string(),
@@ -567,9 +736,14 @@ pub(super) fn build_player_gameplay_snapshot(
             blocker_kind: None,
             blocker_detail: None,
             next_step_hint: "Advance 1-2 more times and watch for output, recovery, or blocker feedback.".to_string(),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -581,6 +755,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "post_onboarding.start_factory_run".to_string(),
             goal_kind: PlayerGameplayGoalKind::StartFactoryRun,
             goal_title: "Start your first factory run".to_string(),
@@ -590,9 +768,14 @@ pub(super) fn build_player_gameplay_snapshot(
             blocker_kind: None,
             blocker_detail: None,
             next_step_hint: "Keep advancing until the factory starts a recipe, yields output, or returns a blocker.".to_string(),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -604,6 +787,10 @@ pub(super) fn build_player_gameplay_snapshot(
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
+            accepted_intent_id: None,
+            intent_summary: None,
+            intent_scope: None,
+            intent_target: None,
             goal_id: "post_onboarding.turn_material_flow_into_output".to_string(),
             goal_kind: PlayerGameplayGoalKind::TurnMaterialFlowIntoOutput,
             goal_title: "Turn material flow into output".to_string(),
@@ -613,9 +800,14 @@ pub(super) fn build_player_gameplay_snapshot(
             blocker_kind: None,
             blocker_detail: None,
             next_step_hint: "Keep harvesting, refining, building, or starting the first recipe until stable output appears.".to_string(),
+            status_reason: None,
+            last_world_change: None,
             causality_kind: None,
             causality_detail: None,
             branch_hint: None,
+            resume_anchor: None,
+            primary_blocker: None,
+            resume_next_step: None,
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -626,6 +818,10 @@ pub(super) fn build_player_gameplay_snapshot(
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Active,
         execution_state: PlayerGameplayExecutionState::Executing,
+        accepted_intent_id: None,
+        intent_summary: None,
+        intent_scope: None,
+        intent_target: None,
         goal_id: "post_onboarding.establish_first_capability".to_string(),
         goal_kind: PlayerGameplayGoalKind::EstablishFirstCapability,
         goal_title: "Establish your first sustainable capability".to_string(),
@@ -635,9 +831,14 @@ pub(super) fn build_player_gameplay_snapshot(
         blocker_kind: None,
         blocker_detail: None,
         next_step_hint: "Advance 2-3 more times and prioritize the first output, the first stable line, or one clear recovery signal.".to_string(),
+        status_reason: None,
+        last_world_change: None,
         causality_kind: None,
         causality_detail: None,
         branch_hint: None,
+        resume_anchor: None,
+        primary_blocker: None,
+        resume_next_step: None,
         available_actions,
         recent_feedback: recent_feedback.cloned(),
         agent_claim,
@@ -673,6 +874,9 @@ pub(super) fn apply_runtime_snapshot_empty_entities_blocker(
             .to_string();
     gameplay.causality_kind = Some(PlayerGameplayCausalityKind::WorldConstraint);
     gameplay.causality_detail = gameplay.blocker_detail.clone();
+    gameplay.status_reason = gameplay.blocker_detail.clone();
+    gameplay.primary_blocker = gameplay.blocker_detail.clone();
+    gameplay.resume_next_step = Some(gameplay.next_step_hint.clone());
     for action in &mut gameplay.available_actions {
         if action.protocol_action == "request_snapshot" {
             continue;

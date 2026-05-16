@@ -324,6 +324,11 @@ impl ViewerRuntimeLiveServer {
                     "submitted gameplay action {} for {} to chain runtime as consensus action {}",
                     request.action_id, request.target_agent_id, submitted_action_id
                 ),
+                intent_summary: Some(format!(
+                    "submit gameplay action {} for {}",
+                    request.action_id, request.target_agent_id
+                )),
+                target_agent_id: Some(request.target_agent_id.clone()),
                 reason: None,
                 hint: Some(
                     "wait for committed world sync to observe the gameplay action outcome"
@@ -355,6 +360,11 @@ impl ViewerRuntimeLiveServer {
                 "queued gameplay action {} for {} as runtime action {}",
                 request.action_id, request.target_agent_id, runtime_action_id
             ),
+            intent_summary: Some(format!(
+                "queue gameplay action {} for {}",
+                request.action_id, request.target_agent_id
+            )),
+            target_agent_id: Some(request.target_agent_id.clone()),
             reason: None,
             hint: Some(match request.action_id.as_str() {
                 ACTION_RELEASE_AGENT_CLAIM => {

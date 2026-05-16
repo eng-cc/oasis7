@@ -513,6 +513,17 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
         .handle_prompt_control(crate::viewer::PromptControlCommand::Apply { request })
         .expect("llm mode apply");
     assert_eq!(ack.version, 1);
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("prompt-control feedback recorded");
+    assert_eq!(feedback.action, "prompt_control.apply");
+    assert_eq!(feedback.stage, "completed_advanced");
+    assert_eq!(feedback.target_agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(feedback
+        .intent_summary
+        .as_deref()
+        .is_some_and(|summary| summary.contains(agent_id.as_str())));
     let snapshot = server.compat_snapshot();
     let profile = snapshot
         .model

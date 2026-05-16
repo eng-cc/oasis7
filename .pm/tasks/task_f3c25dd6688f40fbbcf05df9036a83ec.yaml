@@ -1,0 +1,22 @@
+task_uid: task_f3c25dd6688f40fbbcf05df9036a83ec
+title: "Align canonical accepted-intent and causality contract for indirect control"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-runtime-control-feeling-canonical-contract
+execution_log_path: .pm/tasks/task_f3c25dd6688f40fbbcf05df9036a83ec.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md
+related_prd:
+  - PRD-GAME-014
+acceptance:
+  - "canonical surface exposes accepted intent, execution status, blocker or override reason, resume anchor, and next-step truth for indirect control"
+  - "viewer and pure API no longer depend on private UI-only assembly to explain current indirect-control causality"
+handoff_to: []
+updated_at: 2026-05-16T18:49:51+08:00
+last_started_at: 2026-05-16T18:29:44+08:00
+last_closed_at: 2026-05-16T18:49:51+08:00

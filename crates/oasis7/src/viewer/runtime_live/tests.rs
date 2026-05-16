@@ -1102,6 +1102,8 @@ fn chain_linked_runtime_empty_poll_does_not_advance_world() {
         stage: "blocked".to_string(),
         effect: "committed runtime sync failed before the viewer could observe new world state"
             .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: Some("simulated missing persistence".to_string()),
         hint: Some("wait for execution world persistence".to_string()),
         delta_logical_time: 0,
