@@ -77,6 +77,7 @@
 
 ### T10 间接控制 control-feeling 合同（2026-05-14）
 - [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-014` 专题 PRD / design / project，并完成 `game` 根入口、`gameplay` 主文档、索引与当前 task execution log 挂载，正式冻结 accepted intent、主因果、打断/重排与续玩恢复四项 guarantees。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
+- [x] runtime-control-feeling-canonical-contract (PRD-GAME-014) [test_tier_required]: `runtime_engineer` 已把 `player_gameplay` canonical snapshot 与 recent-feedback 真值对齐到 control-feeling 合同，正式补齐 accepted intent、intent scope/target、status reason、last world change、resume anchor、primary blocker 与 resume-next-step 字段，并让 `prompt_control` / `agent_chat` / `gameplay_action` / world-control 共享同一 runtime 语义面。 Trace: .pm/tasks/task_f3c25dd6688f40fbbcf05df9036a83ec.yaml
 - 后续待建任务统一收口在 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
 
 ## 依赖

@@ -907,6 +907,17 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
 
     let ack = server.handle_agent_chat(request).expect("chat accepted");
     assert_eq!(ack.agent_id, agent_id);
+    let feedback = server
+        .latest_player_gameplay_feedback
+        .as_ref()
+        .expect("agent-chat feedback recorded");
+    assert_eq!(feedback.action, "agent_chat");
+    assert_eq!(feedback.stage, "accepted");
+    assert_eq!(feedback.target_agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(feedback
+        .intent_summary
+        .as_deref()
+        .is_some_and(|summary| summary.contains(agent_id.as_str())));
 
     let events: Vec<_> = server.pending_virtual_events.drain(..).collect();
     assert!(events.iter().any(|event| matches!(

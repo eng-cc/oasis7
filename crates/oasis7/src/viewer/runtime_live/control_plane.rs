@@ -253,6 +253,23 @@ impl ViewerRuntimeLiveServer {
             rolled_back_to_version: None,
         });
         self.llm_sidecar.request_decision();
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+            action: "prompt_control.apply".to_string(),
+            stage: "completed_advanced".to_string(),
+            effect: format!(
+                "updated prompt guidance for {} to version {}",
+                request.agent_id, candidate.version
+            ),
+            intent_summary: Some(format!("apply updated prompt guidance for {}", request.agent_id)),
+            target_agent_id: Some(request.agent_id.clone()),
+            reason: None,
+            hint: Some(
+                "continue the world and watch whether the new prompt guidance changes the agent's next decision"
+                    .to_string(),
+            ),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        });
 
         Ok(PromptControlAck {
             agent_id: request.agent_id,
@@ -344,6 +361,26 @@ impl ViewerRuntimeLiveServer {
             rolled_back_to_version: Some(request.to_version),
         });
         self.llm_sidecar.request_decision();
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+            action: "prompt_control.rollback".to_string(),
+            stage: "completed_advanced".to_string(),
+            effect: format!(
+                "rolled back prompt guidance for {} to base version {} via version {}",
+                request.agent_id, request.to_version, candidate.version
+            ),
+            intent_summary: Some(format!(
+                "roll back prompt guidance for {}",
+                request.agent_id
+            )),
+            target_agent_id: Some(request.agent_id.clone()),
+            reason: None,
+            hint: Some(
+                "continue the world and confirm the agent now follows the restored guidance"
+                    .to_string(),
+            ),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        });
 
         Ok(PromptControlAck {
             agent_id: request.agent_id,
@@ -460,6 +497,20 @@ impl ViewerRuntimeLiveServer {
             Err(error) => return Err(error),
         }
         self.enqueue_agent_chat_echo_event_if_enabled(agent_id.as_str(), message.as_str());
+        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+            action: "agent_chat".to_string(),
+            stage: "accepted".to_string(),
+            effect: format!("queued direct agent instruction for {}", agent_id),
+            intent_summary: Some(format!("send direct instruction to {}", agent_id)),
+            target_agent_id: Some(agent_id.clone()),
+            reason: None,
+            hint: Some(
+                "continue the world and watch for the agent's reply or the next visible world consequence"
+                    .to_string(),
+            ),
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        });
         let ack = AgentChatAck {
             agent_id: agent_id.clone(),
             accepted_at_tick: self.world.state().time,

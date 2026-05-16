@@ -107,6 +107,10 @@ pub struct PlayerGameplayRecentFeedback {
     pub stage: String,
     pub effect: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
@@ -195,6 +199,14 @@ pub struct PlayerGameplaySnapshot {
     pub stage_id: PlayerGameplayStageId,
     pub stage_status: PlayerGameplayStageStatus,
     pub execution_state: PlayerGameplayExecutionState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_intent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_target: Option<String>,
     pub goal_id: String,
     pub goal_kind: PlayerGameplayGoalKind,
     pub goal_title: String,
@@ -208,11 +220,21 @@ pub struct PlayerGameplaySnapshot {
     pub blocker_detail: Option<String>,
     pub next_step_hint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_world_change: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub causality_kind: Option<PlayerGameplayCausalityKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub causality_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_anchor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_blocker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_next_step: Option<String>,
     #[serde(default)]
     pub available_actions: Vec<PlayerGameplayAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -227,6 +249,14 @@ struct PlayerGameplaySnapshotSerde {
     stage_status: PlayerGameplayStageStatus,
     #[serde(default)]
     execution_state: Option<PlayerGameplayExecutionState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    accepted_intent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    intent_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    intent_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    intent_target: Option<String>,
     goal_id: String,
     goal_kind: PlayerGameplayGoalKind,
     goal_title: String,
@@ -240,11 +270,21 @@ struct PlayerGameplaySnapshotSerde {
     blocker_detail: Option<String>,
     next_step_hint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    status_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_world_change: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     causality_kind: Option<PlayerGameplayCausalityKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     causality_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     branch_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resume_anchor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    primary_blocker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resume_next_step: Option<String>,
     #[serde(default)]
     available_actions: Vec<PlayerGameplayAction>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -289,6 +329,10 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             stage_id: legacy.stage_id,
             stage_status: legacy.stage_status,
             execution_state,
+            accepted_intent_id: legacy.accepted_intent_id,
+            intent_summary: legacy.intent_summary,
+            intent_scope: legacy.intent_scope,
+            intent_target: legacy.intent_target,
             goal_id: legacy.goal_id,
             goal_kind: legacy.goal_kind,
             goal_title: legacy.goal_title,
@@ -298,9 +342,14 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             blocker_kind: legacy.blocker_kind,
             blocker_detail: legacy.blocker_detail,
             next_step_hint: legacy.next_step_hint,
+            status_reason: legacy.status_reason,
+            last_world_change: legacy.last_world_change,
             causality_kind: legacy.causality_kind,
             causality_detail: legacy.causality_detail,
             branch_hint: legacy.branch_hint,
+            resume_anchor: legacy.resume_anchor,
+            primary_blocker: legacy.primary_blocker,
+            resume_next_step: legacy.resume_next_step,
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
             agent_claim: legacy.agent_claim,

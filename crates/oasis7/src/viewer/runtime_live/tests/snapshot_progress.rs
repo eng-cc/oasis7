@@ -260,6 +260,8 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
             action: "move_agent".to_string(),
             stage: "completed_advanced".to_string(),
             effect: "world advanced: logicalTime +1, eventSeq +2".to_string(),
+            intent_summary: None,
+            target_agent_id: None,
             reason: None,
             hint: None,
             delta_logical_time: 1,
@@ -289,9 +291,80 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
         .causality_detail
         .as_deref()
         .is_some_and(|detail| detail.contains("reroute to safer waypoint")));
+    assert_eq!(gameplay.accepted_intent_id.as_deref(), Some("move_agent"));
+    assert_eq!(
+        gameplay.status_reason.as_deref(),
+        gameplay.causality_detail.as_deref()
+    );
+    assert_eq!(
+        gameplay.last_world_change.as_deref(),
+        Some("world advanced: logicalTime +1, eventSeq +2")
+    );
+    assert_eq!(
+        gameplay.resume_anchor.as_deref(),
+        Some("Establish your first sustainable capability (post_onboarding.establish_first_capability)")
+    );
+    assert_eq!(
+        gameplay.resume_next_step.as_deref(),
+        Some("Advance 2-3 more times and prioritize the first output, the first stable line, or one clear recovery signal.")
+    );
 
     clear_runtime_provider_env();
     serve.join().expect("server thread should finish");
+}
+
+#[test]
+fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedback() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
+        action: "gameplay_action:build_factory_smelter_mk1".to_string(),
+        stage: "accepted".to_string(),
+        effect: "queued gameplay action build_factory_smelter_mk1 for agent-0 as runtime action 7"
+            .to_string(),
+        intent_summary: Some(
+            "queue gameplay action build_factory_smelter_mk1 for agent-0".to_string(),
+        ),
+        target_agent_id: Some("agent-0".to_string()),
+        reason: None,
+        hint: Some("advance 1-2 steps to apply the queued gameplay action".to_string()),
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    });
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert_eq!(
+        gameplay.accepted_intent_id.as_deref(),
+        Some("gameplay_action:build_factory_smelter_mk1")
+    );
+    assert_eq!(
+        gameplay.intent_summary.as_deref(),
+        Some("queue gameplay action build_factory_smelter_mk1 for agent-0")
+    );
+    assert_eq!(gameplay.intent_scope.as_deref(), Some("gameplay_action"));
+    assert_eq!(gameplay.intent_target.as_deref(), Some("agent-0"));
+    assert_eq!(
+        gameplay.status_reason.as_deref(),
+        Some("advance 1-2 steps to apply the queued gameplay action")
+    );
+    assert_eq!(gameplay.last_world_change, None);
+    assert_eq!(
+        gameplay.resume_anchor.as_deref(),
+        Some("Create the first visible world feedback (first_session_loop.create_first_world_feedback)")
+    );
+    assert_eq!(
+        gameplay.resume_next_step.as_deref(),
+        Some("Request a snapshot, advance 1 step, then inspect the new delta and events.")
+    );
 }
 
 #[test]
@@ -569,6 +642,8 @@ fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
         action: "step".to_string(),
         stage: "completed_advanced".to_string(),
         effect: "world advanced: logicalTime +1, eventSeq +1".to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: None,
         hint: None,
         delta_logical_time: 1,
@@ -637,6 +712,8 @@ fn compat_snapshot_keeps_first_session_loop_after_bootstrap_tick_blocked_feedbac
         stage: "blocked".to_string(),
         effect: "gameplay blocked before requested advance completed: logicalTime +0, eventSeq +0"
             .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: Some("simulated retention blocker".to_string()),
         hint: Some("repair the blocker before retrying play".to_string()),
         delta_logical_time: 0,
@@ -684,6 +761,8 @@ fn compat_snapshot_blocks_first_session_when_chain_sync_is_unavailable() {
         stage: "blocked".to_string(),
         effect: "committed runtime sync failed before the viewer could observe new world state"
             .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: Some(
             "execution world is not ready; missing persistence file(s): snapshot.json, journal.json"
                 .to_string(),
@@ -739,6 +818,8 @@ fn compat_snapshot_keeps_post_onboarding_blocked_after_confirmed_progress() {
         stage: "blocked".to_string(),
         effect: "gameplay blocked before requested advance completed: logicalTime +0, eventSeq +0"
             .to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: Some("simulated retention blocker".to_string()),
         hint: Some("repair the blocker before retrying play".to_string()),
         delta_logical_time: 0,
@@ -783,6 +864,8 @@ fn compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress() 
         action: "play".to_string(),
         stage: "completed_no_progress".to_string(),
         effect: "no visible world delta: logicalTime +0, eventSeq +0".to_string(),
+        intent_summary: None,
+        target_agent_id: None,
         reason: Some("latest command did not create forward progress".to_string()),
         hint: Some("inspect blockers before retrying play".to_string()),
         delta_logical_time: 0,
