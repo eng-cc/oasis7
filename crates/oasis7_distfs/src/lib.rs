@@ -8,10 +8,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use zstd::stream::{decode_all as zstd_decode_all, encode_all as zstd_encode_all};
 const BLOBS_DIR: &str = "blobs";
 const PINS_FILE: &str = "pins.json";
 const FILES_INDEX_FILE: &str = "files_index.json";
 const FILE_INDEX_VERSION: u64 = 1;
+const COMPRESSED_BLOB_MAGIC: &[u8; 8] = b"O7CBLOB1";
+const COMPRESSED_BLOB_HASH_HEX_LEN: usize = 64;
+const COMPRESSED_BLOB_HEADER_LEN: usize = 16 + COMPRESSED_BLOB_HASH_HEX_LEN;
+const COMPRESSIBLE_BLOB_MIN_BYTES: usize = 1024;
+const COMPRESSED_BLOB_ZSTD_LEVEL: i32 = 3;
 mod challenge;
 mod challenge_scheduler;
 mod feedback;
@@ -152,6 +158,55 @@ impl LocalCasStore {
         fs::create_dir_all(&self.root)?;
         fs::create_dir_all(&self.blobs_dir)?;
         Ok(())
+    }
+
+    fn maybe_encode_blob_for_disk(
+        &self,
+        content_hash: &str,
+        bytes: &[u8],
+    ) -> Result<Vec<u8>, WorldError> {
+        if bytes.len() < COMPRESSIBLE_BLOB_MIN_BYTES {
+            return Ok(bytes.to_vec());
+        }
+        let compressed = zstd_encode_all(bytes, COMPRESSED_BLOB_ZSTD_LEVEL).map_err(|err| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("compress blob for disk failed: {err}"),
+            }
+        })?;
+        let encoded_len = COMPRESSED_BLOB_HEADER_LEN.saturating_add(compressed.len());
+        if encoded_len >= bytes.len() {
+            return Ok(bytes.to_vec());
+        }
+
+        let mut encoded = Vec::with_capacity(encoded_len);
+        encoded.extend_from_slice(COMPRESSED_BLOB_MAGIC);
+        encoded.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        encoded.extend_from_slice(content_hash.as_bytes());
+        encoded.extend_from_slice(compressed.as_slice());
+        Ok(encoded)
+    }
+
+    fn decode_blob_from_disk(&self, content_hash: &str, disk_bytes: Vec<u8>) -> Vec<u8> {
+        if disk_bytes.len() < COMPRESSED_BLOB_HEADER_LEN
+            || !disk_bytes.starts_with(COMPRESSED_BLOB_MAGIC)
+        {
+            return disk_bytes;
+        }
+
+        let Some(raw_len_bytes) = disk_bytes.get(8..16) else {
+            return disk_bytes;
+        };
+        let expected_raw_len = u64::from_le_bytes(raw_len_bytes.try_into().unwrap_or([0; 8]));
+        let Some(encoded_hash_bytes) = disk_bytes.get(16..COMPRESSED_BLOB_HEADER_LEN) else {
+            return disk_bytes;
+        };
+        if encoded_hash_bytes != content_hash.as_bytes() {
+            return disk_bytes;
+        }
+        match zstd_decode_all(&disk_bytes[COMPRESSED_BLOB_HEADER_LEN..]) {
+            Ok(decoded) if decoded.len() as u64 == expected_raw_len => decoded,
+            _ => disk_bytes,
+        }
     }
 
     fn blob_path(&self, content_hash: &str) -> Result<PathBuf, WorldError> {
@@ -458,7 +513,8 @@ impl BlobStore for LocalCasStore {
         if path.exists() {
             return Ok(());
         }
-        write_bytes_atomic(&path, bytes)?;
+        let disk_bytes = self.maybe_encode_blob_for_disk(content_hash, bytes)?;
+        write_bytes_atomic(&path, disk_bytes.as_slice())?;
         Ok(())
     }
 
@@ -475,7 +531,8 @@ impl BlobStore for LocalCasStore {
                 content_hash: content_hash.to_string(),
             });
         }
-        Ok(fs::read(path)?)
+        let disk_bytes = fs::read(path)?;
+        Ok(self.decode_blob_from_disk(content_hash, disk_bytes))
     }
 
     fn has(&self, content_hash: &str) -> Result<bool, WorldError> {

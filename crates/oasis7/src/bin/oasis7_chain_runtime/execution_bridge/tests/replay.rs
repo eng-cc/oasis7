@@ -1,6 +1,7 @@
 use super::super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_latest_path,
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
+    run_execution_bridge_retention_maintenance,
 };
 use super::super::external_effect::build_execution_replay_plan;
 use super::*;
@@ -33,8 +34,17 @@ fn execution_replay_plan_rejects_target_outside_hot_window_without_checkpoint() 
     let dir = temp_dir("execution-replay-plan-outside-hot-window");
     let records_dir = dir.join("records");
     fs::create_dir_all(records_dir.as_path()).expect("create records dir");
-    for height in 1..=40 {
-        persist_test_execution_record(records_dir.as_path(), height, &format!("exec-h{height}"));
+    for height in 1..=80 {
+        let mut record = persist_test_execution_record(
+            records_dir.as_path(),
+            height,
+            &format!("exec-h{height}"),
+        );
+        record.latest_state_ref = None;
+        record.snapshot_ref = None;
+        record.journal_ref = None;
+        persist_execution_bridge_record(records_dir.as_path(), &record)
+            .expect("persist pruned execution record");
     }
 
     let store = LocalCasStore::new(dir.join("store"));
@@ -43,6 +53,34 @@ fn execution_replay_plan_rejects_target_outside_hot_window_without_checkpoint() 
     assert!(
         err.contains("outside retained hot window"),
         "unexpected replay-plan hot-window error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn execution_replay_plan_uses_actual_retained_hot_window_without_checkpoint() {
+    let dir = temp_dir("execution-replay-plan-retained-hot-window");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+    for height in 1..=65 {
+        let _ =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+    }
+    run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 64)
+        .expect("run retention maintenance");
+
+    let retained_plan =
+        build_execution_replay_plan(records_dir.as_path(), &store, 2).expect("build retained plan");
+    assert_eq!(retained_plan.start_height, 1);
+    assert_eq!(retained_plan.target_height, 2);
+
+    let err = build_execution_replay_plan(records_dir.as_path(), &store, 1)
+        .expect_err("target outside retained hot window should fail closed");
+    assert!(
+        err.contains("outside retained hot window"),
+        "unexpected retained hot-window error: {err}"
     );
 
     let _ = fs::remove_dir_all(dir);

@@ -78,7 +78,7 @@ impl StorageProfileConfig {
             },
             StorageProfile::ReleaseDefault => Self {
                 profile,
-                execution_hot_head_heights: 128,
+                execution_hot_head_heights: 64,
                 execution_checkpoint_interval: 64,
                 execution_checkpoint_keep: 8,
                 execution_sidecar_generations_keep: 4,
@@ -172,6 +172,11 @@ mod tests {
         assert!(
             soak_forensics.execution_checkpoint_interval
                 < release_default.execution_checkpoint_interval
+        );
+        assert_eq!(release_default.execution_hot_head_heights, 64);
+        assert_eq!(
+            release_default.execution_hot_head_heights,
+            release_default.execution_checkpoint_interval
         );
     }
 }

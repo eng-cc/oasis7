@@ -871,6 +871,8 @@
 - 模块进展补充（2026-03-11 / T7.2 QA 复验）: `qa_engineer` 已基于真实 `oasis7_chain_runtime` 样本完成修复后复验，`doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md` 已确认 `<64` 无 checkpoint、`>=64` 生成首个 checkpoint，下一步转入 T7.3 的 GC fail-safe / orphan 证据补齐。
 - 模块进展补充（2026-03-11 / T7.3 handoff）: `qa_engineer` 已新增 `doc/world-runtime/qa-to-runtime-task-world_runtime-033-t7.3-orphan-gc-failsafe-2026-03-11.md`，将 pre-checkpoint 窗口瞬时 `orphan_blob_count=1` 交接给 `runtime_engineer` 作为下一步闭环目标。
 - 模块进展补充（2026-03-11 / T7.3 收口）: `runtime_engineer` 已新增 `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` 与定向回归 `collect_storage_metrics_sidecar_orphan_recovers_after_successful_save`，将该 orphan 信号收敛为“可被下一次成功 save/GC 清零的窗口态”。
+- 模块进展补充（2026-05-15 / release-default budget）: 基于本地三节点真实样本复盘，默认磁盘增量主要来自 `execution_store_root` 热窗口 snapshots，而不是 checkpoint 或 journal。本轮已把 `release_default.execution_hot_head_heights` 从 `128` 收紧到 `64`，与 `execution_checkpoint_interval=64` 对齐，在不改动当前 exact-height restore 合同的前提下先削减默认档位的重复 snapshot 驻留预算。Trace: `.pm/tasks/task_dfb9d8eedfe14f218c2f6e77151dad25.yaml`。
+- 模块进展补充（2026-05-15 / transparent blob compression）: 已为 `LocalCasStore` 增加大 blob 的磁盘透明压缩：`content_hash` 仍然基于原始 payload，读路径仍返回原始 bytes，但 `.blob` 文件在压缩后更小的情况下会以压缩格式落盘。该策略无需上层 schema 迁移，直接覆盖 execution bridge snapshots/journals 与 runtime sidecar blobs。
 
 ### Handoff Acknowledgement
 - 接收方确认范围：`已接收 TASK-WORLD_RUNTIME-002/003/004；当前提交完成边界清单、回归模板与发布门禁指标模板`
