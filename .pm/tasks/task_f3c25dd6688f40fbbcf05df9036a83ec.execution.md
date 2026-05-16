@@ -17,3 +17,8 @@ Example:
 - 完成内容: 将 `world control`、`gameplay_action`、`prompt_control.apply/rollback`、`agent_chat` 与 `chain_sync` 的 recent feedback 全部补齐 intent summary / target，使 `player_gameplay` 不再只暴露 goal/progress/blocker/next_step，而能直接回答“刚刚接受了什么意图、当前为什么这样、回流时从哪里继续”。
 - 完成内容: 补充定向回归，覆盖 snapshot contract 字段、agent override causality、prompt-control feedback、agent-chat feedback 与 persistence roundtrip/backfill；并同步回写 `doc/game/project.md`、`doc/game/gameplay/gameplay-top-level-design.project.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`。
 - 遗留事项: 下一切片转入 `viewer-control-feeling-surface-alignment`，把当前 runtime 新增字段抬到 headed Web/UI 与 `software_safe` 的正式玩家 surface；本任务不改变 active-LLM `trust gate = hold`、`first capability gate = not_run` 结论。
+
+## 2026-05-16 19:26:47 CST / runtime_engineer
+- 完成内容: 响应 PR #228 review comment，收紧 `player_gameplay_last_world_change` 判定，只在 `delta_logical_time > 0` 或 `delta_event_seq > 0` 时把 recent feedback 视为真实 world change，避免零增量的 `prompt_control` 完成态污染 canonical `last_world_change`。
+- 完成内容: 新增零增量 `completed_advanced` 回归测试，并复跑 `viewer::runtime_live::tests::snapshot_progress`，确认 `completed_advanced` 仍会保留在 recent feedback surface，但不再被误记为 world progression。
+- 遗留事项: 等待 GitHub required checks / review 通过后合并 PR #228；本次 comment closeout 不改变任务目标与下一切片规划。

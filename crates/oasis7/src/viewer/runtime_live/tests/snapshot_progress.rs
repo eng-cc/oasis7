@@ -670,6 +670,45 @@ fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
 }
 
 #[test]
+fn compat_snapshot_ignores_zero_delta_completed_advanced_for_last_world_change() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
+        action: "prompt_control.apply".to_string(),
+        stage: "completed_advanced".to_string(),
+        effect: "applied prompt-control override".to_string(),
+        intent_summary: Some("apply prompt-control override".to_string()),
+        target_agent_id: None,
+        reason: None,
+        hint: None,
+        delta_logical_time: 0,
+        delta_event_seq: 0,
+    });
+
+    let snapshot = server.compat_snapshot();
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert_ne!(
+        gameplay.last_world_change.as_deref(),
+        Some("applied prompt-control override")
+    );
+    assert_eq!(
+        gameplay
+            .recent_feedback
+            .as_ref()
+            .expect("recent feedback")
+            .stage,
+        "completed_advanced"
+    );
+}
+
+#[test]
 fn compat_snapshot_keeps_first_session_loop_for_fresh_llm_session() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
