@@ -34,6 +34,7 @@
 - `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`：面向第一次接触仓库读者的白皮书式项目总览，适合先理解“项目是什么、为什么存在、当前做到哪一步”，再下钻正式真值源。
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
+- `doc/readme/governance/readme-xiaohongshu-distillation-emoji-post-pack-2026-05-16.md`：小红书第十五篇“被蒸馏”表情包素材包入口，已固定推荐标题、发布配文、逐张梗图文案与 GPT Image 2 出图方案，适合直接判断热点收口方式、视觉方向与发布边界。
 - `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
 - `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md`：小红书第十三篇素材包入口，现已收口为“开发者、玩家和认真把它讲出去的人一起参与把游戏做起来”的版本，并补齐共同参与主题封面与 4 页轮播入口，适合直接判断正文、评论区问题、封面/轮播资产与禁滑坡边界。
 - `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`：小红书博主 / 微信公众号绿洲币激励入口，适合判断两类宣传对象的奖励边界、证据字段与禁语。
@@ -97,6 +98,7 @@
 | `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | `execution_log` | invite-only limited preview 首轮真实执行记录 |
 | `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md` | `overview` | 面向第一次接触项目读者的白皮书式 Explanation 总览 |
 | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` | `material` | invite-only limited preview 招募与沟通包 |
+| `doc/readme/governance/readme-xiaohongshu-distillation-emoji-post-pack-2026-05-16.md` | `material` | 小红书“被蒸馏 / 蒸馏同事”表情包主题素材包，固定发布配文、逐张梗图文案与 GPT Image 2 系列化出图方案 |
 | `doc/readme/governance/readme-xiaohongshu-token-usage-post-pack-2026-04-20.md` | `material` | 小红书真实累计 token 用量主题帖素材包，已收口为“AI 进入长期项目后会变成研发流程参与成本”的推荐发布版 |
 | `doc/readme/governance/readme-xiaohongshu-future-ownership-post-pack-2026-04-13.md` | `material` | 小红书“共同参与把游戏做起来”主题帖素材包，已收口为开发者、玩家和传播者共同参与的推荐发布版，并补齐封面与 4 页轮播 HTML/PNG 资产 |
 | `doc/readme/governance/readme-xiaohongshu-wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md` | `material` | 小红书博主 / 微信公众号绿洲币激励操作包 |

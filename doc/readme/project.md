@@ -970,6 +970,9 @@
 - [x] site-whitepaper-entry-alignment (PRD-README-049) [test_tier_required]: 按白皮书式项目总览更新站点首页与文档中心的公开 framing，补齐“两阶段路径”、目标态 ownership/gov 边界表达，并新增站内白皮书静态展示页与展示入口。 Trace: .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml
   - 产物文件: `site/index.html`、`site/en/index.html`、`site/doc/cn/index.html`、`site/doc/en/index.html`、`site/doc/cn/project-overview.html`、`site/doc/en/project-overview.html`、`doc/readme/prd.md`、`doc/readme/project.md`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml`、`.pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`
   - 验收命令 (`test_tier_required`): `rg -n "PRD-README-049|AC-38|DEC-RM-049|白皮书|Project Overview|开放世界沙盒游戏|开放世界游戏平台|technical preview|共同塑造|共同治理|共同受益" doc/readme/prd.md doc/readme/project.md site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html site/doc/cn/project-overview.html site/doc/en/project-overview.html .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.yaml .pm/tasks/task_5e52a8a4ece04bcb932054e907c235ed.execution.md`、`./scripts/doc-governance-check.sh`、`git diff --check`
+- [x] xiaohongshu-distillation-emoji-post-pack (PRD-README-050) [test_tier_required]: 为小红书第十五篇补齐“被蒸馏”表情包素材包，固定推荐标题、发布配文、逐张表情包文案、GPT Image 2 基准图/扩展图提示词策略、评论区引导与禁滑坡边界，并保持“好笑但不冒犯、能转发、非点名控诉”的发布口径。 Trace: .pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.yaml
+  - 产物文件: `doc/readme/prd.md`、`doc/readme/project.md`、`doc/readme/prd.index.md`、`doc/readme/governance/README.md`、`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`doc/readme/governance/readme-xiaohongshu-distillation-emoji-post-pack-2026-05-16.md`、`.pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.yaml`、`.pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.execution.md`
+  - 验收命令 (`test_tier_required`): `rg -n "PRD-README-050|AC-39|DEC-RM-050|xiaohongshu-distillation-emoji-post-pack|被蒸馏|蒸馏同事|GPT Image 2|表情包" doc/readme/prd.md doc/readme/project.md doc/readme/prd.index.md doc/readme/governance/README.md doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md doc/readme/governance/readme-xiaohongshu-distillation-emoji-post-pack-2026-05-16.md .pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.yaml .pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.execution.md`、`./scripts/doc-governance-check.sh`、`git diff --check`
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 为 `doc/readme/governance/` 建立热点路径治理专题三件套、新增 `doc/readme/governance/README.md` 作为 canonical 子域入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
 
 ## 依赖
@@ -978,20 +981,16 @@
 - `.agents/skills/prd/check.md`
 
 ## 状态
-- 更新日期: 2026-04-25
+- 更新日期: 2026-05-16
 - 当前状态: completed
-- 下一任务: 无（当前模块主项目无未完成任务；若后续继续扩展主站白皮书页内容或做站点内中英更多专题页，再新开独立任务。）
+- 下一任务: 无（当前模块主项目无未完成任务；若后续继续把第十五篇落成真实图像资产、补封面/轮播 HTML/PNG，或扩展更多渠道素材，再新开独立任务。）
+- 最新完成: `xiaohongshu-distillation-emoji-post-pack`（已为小红书第十五篇补齐“被蒸馏”表情包素材包，固定标题、配文、逐张梗图文案与 GPT Image 2 出图方案，把热点收口为“打工人对知识沉淀/可替代性的共鸣式自嘲”，不滑向点名控诉或泛 AI 恐慌。）
 - 最新完成: `site-whitepaper-entry-alignment`（已把站点首页和文档中心继续收口到白皮书式项目总览口径，新增站内 `project-overview.html` 中英文静态页，并把原先跳 GitHub blob 的总览入口改成站内展示入口。）
 - 最新完成: `whitepaper-style-overview`（已新增 `readme-project-overview-whitepaper-2026-04-25.md` 作为 Explanation 类型项目总览，把“项目是什么、为什么要做、世界/玩法/系统如何组合、当前技术预览边界是什么”压到一份长说明里，并把入口接回根 README 与 `readme/governance`。）
 - 最新完成: `xiaohongshu-token-usage-post-pack`（已为小红书第十四篇补齐真实累计 token 用量素材包，用项目累计请求 / token / 花费数据解释 AI 成本主要烧在需求反复、文档、返工、验证与上下文切换，而不是单次生成炫技。）
 - 最新完成: `readme-governance-path-governance`（已为 `doc/readme/governance/` 补齐 canonical 子域入口 `doc/readme/governance/README.md`，并把模块首屏从“若干具体 liveops/operator 文档直链”收口为“先进入热点子域再按主题分流”。）
 - 最新完成: `game-positioning-alignment`（已将根 README、世界规则入口与站点首页中英首页的公开主定位统一收口为“文明模拟游戏”，并保持技术预览 / 尚不可玩边界不变。）
 - 最新完成: `TASK-README-080`（已将第十三篇的多轮文案迭代、共同参与主题收口、封面与 4 页轮播资产统一折叠到同一任务追踪中，PR 只保留一个 task 文档入口。）
-- 最新完成: `TASK-README-074/073`（已把普通 merged PR 的 contributor reward ceiling 收紧到 `150 OC`，并对 planned grant 做 actual-value review，下调过高计划值后同步回写 reward ledger 相关文档。）
-- 最新完成: `TASK-README-067`（已为小红书博主和微信公众号补齐绿洲币激励专题，明确两类对象的计分、固定 `300 / 800 / 1500 OC` 档位、证据、审批链、发放回填、反作弊与禁语边界。）
-- 最新完成: `TASK-README-065/064`（已完成小红书第十二篇长文与封面资产，收口“岗位内容分层 / 问题定义 / 流程重构 / 结果负责”的表达边界。）
-- 最新完成: `TASK-README-063/062/061/060/059/058/057/056`（已覆盖 Moltbook repair-certification follow-up、第十与第十一篇素材、轮播资产及“优秀同事密度”补强。）
-- 更早完成: `TASK-README-071/070/067/026/025/023/022/021/020/019/018`（已覆盖 reward round scan、渠道激励包、closed beta candidate / Moltbook runbook 与早期 readme 入口治理。）
 - PRD / ROUND 状态: strict schema 已对齐（含第 6 章验证与决策记录）；gap 子簇主从化已完成（gap12345 主入口，其它 gap 专题增量维护）。
 - 模块进展补充: 已补齐 README 口径一致性巡检、链接检查、季度审查模板、对外口径简报/公告底稿模板，以及 Moltbook 推广方案、主贴模板、GitHub 反馈 CTA 与更短 feed-native 版本。
 - 说明: 本文档仅维护 readme 模块设计执行状态；过程记录在 `doc/devlog/2026-03-03.md` 与 `doc/devlog/2026-03-11.md`。

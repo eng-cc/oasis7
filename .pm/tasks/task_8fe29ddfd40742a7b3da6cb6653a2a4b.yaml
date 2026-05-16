@@ -1,0 +1,24 @@
+task_uid: task_8fe29ddfd40742a7b3da6cb6653a2a4b
+title: "xiaohongshu distillation emoji post pack"
+owner_role: liveops_community
+worktree_hint: /home/scc/worktrees/oasis7-readme-xiaohongshu-distillation-emoji-post-pack
+execution_log_path: .pm/tasks/task_8fe29ddfd40742a7b3da6cb6653a2a4b.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/readme/project.md
+  - doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md
+doc_refs:
+  - doc/readme/prd.md
+  - doc/readme/project.md
+related_prd:
+  - PRD-README-050
+acceptance:
+  - "新增一份小红书蒸馏表情包素材包文档，固定标题、配文、逐张文案、Image 2 出图方案与发布边界"
+  - "同步回写 doc/readme/prd.md、doc/readme/project.md、doc/readme/prd.index.md 与小红书 runbook Source Docs"
+  - "通过 doc-governance-check、git diff --check 与关键 rg 验收"
+handoff_to: []
+updated_at: 2026-05-16T19:00:15+08:00
+last_started_at: 2026-05-16T18:51:25+08:00
+last_closed_at: 2026-05-16T19:00:15+08:00
