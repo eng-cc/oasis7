@@ -9,12 +9,13 @@
 
 - [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: `producer_system_designer` 已新增“间接控制 control-feeling 合同”专题 PRD / design / project，并完成 `game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 挂载，明确 accepted intent、主因果、重排/打断与续玩恢复四项 guarantees 是正式 agency 地板。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
 - [x] runtime-control-feeling-canonical-contract (PRD-GAME-014) [test_tier_required]: `runtime_engineer` 已对齐 canonical accepted intent、status reason、blocker/override reason、last world change、resume anchor 与 resume-next-step truth，并补齐 `gameplay_action`、`prompt_control`、`agent_chat` 与 world-control feedback 的统一 runtime surface。 Trace: .pm/tasks/task_f3c25dd6688f40fbbcf05df9036a83ec.yaml
+- [x] viewer-control-feeling-surface-alignment (PRD-GAME-014/012) [test_tier_required]: `viewer_engineer` 已把 `software_safe` / headed Web 正式玩家入口收口到“accepted intent -> execution state -> goal narrative -> recommended action”的 agency surface：首屏把 `Accepted Intent` 提升到 hero 级语义、`Current Selection` 降为辅助 badge、`Current Goal` 合并 blocker 与 next-step 叙事、available actions 补单条推荐动作 CTA，并继续把 diagnostics / advanced prompt controls 压到按需展开层；同时保持 pure API 仍直接输出同一份 canonical `snapshot.player_gameplay`。 Trace: .pm/tasks/task_55742c3195d94538bc9e9bb73426ada1.yaml
 
 ## 后续待建任务
 
 | topic slug | owner role | status | 目标 |
 | --- | --- | --- | --- |
-| `viewer-control-feeling-surface-alignment` | `viewer_engineer` | `planned` | 收口 headed Web/UI 首屏与续玩面，把 accepted intent、主因果、后果与下一步作为正式玩家 surface。 |
+| `viewer-control-feeling-surface-alignment` | `viewer_engineer` | `completed` | 已收口 headed Web/UI 首屏与续玩面，把 accepted intent、主因果、后果与下一步作为正式玩家 surface。 |
 | `agent-control-feeling-reprioritize-contract` | `agent_engineer` | `planned` | 对齐 dual-mode / action contract 的 interrupt、reprioritize、override explanation 与 handoff 语义。 |
 | `qa-control-feeling-matrix` | `qa_engineer` | `planned` | 建立 control-feeling matrix，给每条 guarantee 定义 pass/blocker 签名，并接入 trust/capability 样本复核。 |
 
@@ -66,8 +67,8 @@
   - [x] accepted intent、主因果、blocker/override、resume/next-step truth 已在 canonical surface 上对齐
   - [x] Viewer / API 不再需要私有拼装才能回答“我现在为什么在这里”
 - `viewer-control-feeling-surface-alignment`
-  - [ ] headed Web/UI 与 pure API 都能展示同等级 agency surface
-  - [ ] 主意图、主因果、后果与下一步不再被噪音淹没
+  - [x] headed Web/UI 已把 runtime canonical accepted intent / blocker / next-step / resume truth 抬到正式玩家 surface；pure API 继续直接输出同一份 `snapshot.player_gameplay`
+  - [x] 主意图、主因果、后果与下一步不再被噪音淹没，且 available actions 已补单条推荐动作 CTA
 - `agent-control-feeling-reprioritize-contract`
   - [ ] interrupt / reprioritize / override explanation 已具备正式 contract
   - [ ] dual-mode / action contract 不再隐含“AI 自己改道但不解释”的灰区
@@ -89,10 +90,11 @@
 
 ## 状态
 
-- 更新日期: 2026-05-16
+- 更新日期: 2026-05-17
 - 当前状态: in_progress
-- 当前 owner: `runtime_engineer`
-- 下一任务: `viewer-control-feeling-surface-alignment`
+- 当前 owner: `viewer_engineer`
+- 下一任务: `agent-control-feeling-reprioritize-contract`
 - 说明:
   - 本专题当前已完成合同冻结与 canonical runtime surface 对齐，不等于 active-LLM formal lane 的 trust/capability gate 已恢复。
   - 本专题不改动当前“间接控制文明模拟”主路线，也不把 issue #164 解释成 direct-control 立项。
+  - `viewer-control-feeling-surface-alignment` 已在 `crates/oasis7_viewer/software_safe_src/{legacy_core.js,main.jsx}` 与回归测试中落地：当前正式 Web 入口会先回答“我刚刚让系统做什么”，再回答“系统为什么这样”，最后给出推荐动作，而不是把目标、阻塞、下一步和 diagnostics 平铺成工具面。

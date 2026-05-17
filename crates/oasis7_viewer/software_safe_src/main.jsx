@@ -265,6 +265,30 @@ function goalExecutionBadgeClass(state) {
       : "badge badge--accent";
 }
 
+function gameplayActionButtonLabel(action, locale) {
+  if (action.executeKind === "request_snapshot") {
+    return tr(locale, "刷新快照", "Refresh Snapshot");
+  }
+  if (action.executeKind === "step") {
+    return tr(locale, "推进一步", "Advance One Step");
+  }
+  if (action.executeKind === "play") {
+    return tr(locale, "恢复实时推进", "Resume Live Play");
+  }
+  if (action.executeKind === "agent_chat") {
+    return tr(locale, "切到聊天面板", "Use Chat Panel");
+  }
+  return tr(locale, "提交玩法动作", "Submit Gameplay Action");
+}
+
+function renderGameplayAction(action) {
+  if (action.executeKind === "agent_chat") {
+    core.applySelection({ kind: "agent", id: action.targetAgentId });
+    return;
+  }
+  core.sendGameplayAction(action);
+}
+
 function gameplayProgressLabel(progressPercent, locale) {
   return progressPercent == null
     ? tr(locale, "进度待发布", "Progress Pending")
@@ -294,15 +318,26 @@ function WorldStageHero() {
   const selectedLabel = () =>
     core.state.selectedKind && core.state.selectedId
       ? `${core.state.selectedKind}:${core.state.selectedId}`
-      : tr(locale(), "尚未选择目标", "No target selected");
+      : null;
   const selectionHint = () =>
     core.state.selectedKind && core.state.selectedId
       ? tr(locale(), "右侧命令面会围绕这个对象展开。", "The command surface on the right now follows this target.")
       : tr(locale(), "先从左侧锁定一个 Agent 或地点，再进入右侧命令面。", "Lock onto an agent or location from the left before entering the command surface.");
   const stageLabel = () => gameplayStageLabel(gameplaySummary()?.stageStatus, locale());
   const nextStepCopy = () =>
-    gameplaySummary()?.nextStepHint
+    gameplaySummary()?.narrativeNextStep
     || tr(locale(), "先读世界状态，再决定是否推进、恢复或对目标发消息。", "Read the world first, then decide whether to advance, resume, or message the target.");
+  const acceptedIntentTitle = () =>
+    gameplaySummary()?.acceptedIntentSummary
+    || tr(locale(), "先提交一条明确意图", "Commit one clear intent first");
+  const acceptedIntentDetail = () =>
+    gameplaySummary()?.acceptedIntentTarget
+      ? tr(
+        locale(),
+        `当前意图正围绕 ${gameplaySummary().acceptedIntentTarget} 展开。`,
+        `The current intent is centered on ${gameplaySummary().acceptedIntentTarget}.`,
+      )
+      : selectionHint();
 
   return (
     <div class="stage-hero">
@@ -319,11 +354,19 @@ function WorldStageHero() {
                 locale(),
                 "这张入口页优先保留世界、目标和关键动作；高级诊断与治理能力按需展开。",
                 "This entry keeps the world, objective, and primary actions in front. Advanced diagnostics and governance stay on demand.",
-              )}
+            )}
           </div>
         </div>
         <ViewerEntryMenu />
       </div>
+      <Show when={selectedLabel()}>
+        {(selected) => (
+          <div class="badge-row">
+            <Badge class="badge badge--accent">{tr(locale(), "当前选择", "Current Selection")}</Badge>
+            <Badge>{selected()}</Badge>
+          </div>
+        )}
+      </Show>
       <div class="hero-focus-grid">
         <div class="hero-focus-card">
           <div class="hero-focus-card__label">{tr(locale(), "局势", "Situation")}</div>
@@ -333,9 +376,9 @@ function WorldStageHero() {
           <div class="hero-focus-card__detail">{gameplayProgressLabel(gameplaySummary()?.progressPercent, locale())}</div>
         </div>
         <div class="hero-focus-card">
-          <div class="hero-focus-card__label">{tr(locale(), "当前选择", "Current Selection")}</div>
-          <div class="hero-focus-card__value">{selectedLabel()}</div>
-          <div class="hero-focus-card__detail">{selectionHint()}</div>
+          <div class="hero-focus-card__label">{tr(locale(), "已接受意图", "Accepted Intent")}</div>
+          <div class="hero-focus-card__value hero-focus-card__value--body">{acceptedIntentTitle()}</div>
+          <div class="hero-focus-card__detail">{acceptedIntentDetail()}</div>
         </div>
         <div class="hero-focus-card">
           <div class="hero-focus-card__label">{tr(locale(), "下一步", "Next Step")}</div>
@@ -534,6 +577,25 @@ function WorldSummaryPanel() {
                 </Badge>
               </div>
               <EventCard
+                title={tr(locale(), "已接受意图", "Accepted Intent")}
+                badge={gameplay().acceptedIntentScope || gameplay().executionStateLabel || "-"}
+                badgeClass={goalExecutionBadgeClass(gameplay().executionState)}
+                meta={
+                  gameplay().acceptedIntentTarget
+                    ? tr(locale(), `当前作用对象 ${gameplay().acceptedIntentTarget}`, `Current target ${gameplay().acceptedIntentTarget}`)
+                    : tr(locale(), "当前主意图", "Current primary intent")
+                }
+              >
+                <div class="feedback-summary">{gameplay().acceptedIntentSummary}</div>
+                <div class="feedback-detail">{gameplay().acceptedIntentDetail}</div>
+                <Show when={gameplay().resumeAnchor}>
+                  <div class="badge-row">
+                    <Badge>{tr(locale(), "续玩锚点", "Resume Anchor")}</Badge>
+                  </div>
+                  <div class="feedback-detail">{gameplay().resumeAnchor}</div>
+                </Show>
+              </EventCard>
+              <EventCard
                 title={tr(locale(), "目标执行状态", "Goal Execution")}
                 badge={gameplay().executionStateLabel || gameplay().executionState || "-"}
                 badgeClass={goalExecutionBadgeClass(gameplay().executionState)}
@@ -561,34 +623,6 @@ function WorldSummaryPanel() {
                   <div class="feedback-detail">{gameplay().executionCauseDetail}</div>
                 </Show>
               </EventCard>
-              <Show when={gameplay().blockerKind || gameplay().blockerDetail}>
-                <CalloutCard
-                  title={
-                    gameplay().blockerKind === "runtime_snapshot_empty_entities"
-                      ? tr(locale(), "当前阻塞：空快照", "Current Blocker: Empty Snapshot")
-                      : tr(locale(), "当前阻塞", "Current Blocker")
-                  }
-                  badge={gameplay().blockerLabel || gameplay().blockerKind || "blocked"}
-                  badgeClass="badge badge--warn"
-                  variant="warn"
-                >
-                  <div class="feedback-summary">
-                    {gameplay().blockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
-                  </div>
-                  <Show when={gameplay().blockerSupplementalDetail}>
-                    <div class="feedback-detail">{gameplay().blockerSupplementalDetail}</div>
-                  </Show>
-                  <Show when={gameplay().nextStepHint}>
-                    <div class="feedback-detail">{gameplay().nextStepHint}</div>
-                  </Show>
-                  <Show when={gameplay().entityCounts}>
-                    <div class="badge-row">
-                      <Badge>{`agents=${gameplay().entityCounts.agents}`}</Badge>
-                      <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
-                    </div>
-                  </Show>
-                </CalloutCard>
-              </Show>
               <EventCard
                 title={gameplay().goalTitle || tr(locale(), "当前目标", "Current Goal")}
                 badge={gameplay().progressPercent == null ? "n/a" : `${gameplay().progressPercent}%`}
@@ -597,6 +631,34 @@ function WorldSummaryPanel() {
               >
                 <Show when={gameplay().progressDetail}>
                   <div class="feedback-detail">{gameplay().progressDetail}</div>
+                </Show>
+                <Show when={gameplay().blockerKind || gameplay().narrativeBlockerDetail}>
+                  <div class="badge-row" style="margin-top:10px;">
+                    <Badge class="badge badge--warn">
+                      {gameplay().blockerLabel || gameplay().blockerKind || tr(locale(), "当前阻塞", "Current Blocker")}
+                    </Badge>
+                  </div>
+                  <div class="feedback-detail">
+                    {gameplay().narrativeBlockerDetail || tr(locale(), "当前玩法被阻塞，需要显式恢复。", "Gameplay is blocked and needs explicit recovery.")}
+                  </div>
+                </Show>
+                <Show when={gameplay().blockerSupplementalDetail}>
+                  <div class="feedback-detail">{gameplay().blockerSupplementalDetail}</div>
+                </Show>
+                <div class="badge-row" style="margin-top:10px;">
+                  <Badge class="badge badge--accent">{tr(locale(), "下一步", "Next Step")}</Badge>
+                </div>
+                <div class="feedback-summary">
+                  {gameplay().narrativeNextStep || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
+                </div>
+                <Show when={gameplay().branchHint}>
+                  <div class="feedback-detail">{gameplay().branchHint}</div>
+                </Show>
+                <Show when={gameplay().entityCounts}>
+                  <div class="badge-row">
+                    <Badge>{`agents=${gameplay().entityCounts.agents}`}</Badge>
+                    <Badge>{`locations=${gameplay().entityCounts.locations}`}</Badge>
+                  </div>
                 </Show>
               </EventCard>
               <Show when={gameplay().recentFeedback}>
@@ -614,7 +676,9 @@ function WorldSummaryPanel() {
                     }
                   >
                     <div class="feedback-summary">
-                      {feedback().effect || feedback().reason || "Gameplay feedback updated."}
+                      {feedback().effect
+                        || feedback().reason
+                        || tr(locale(), "最新回执已更新，但还没有新的世界级后果。", "The latest feedback is in, but there is no new world-level consequence yet.")}
                     </div>
                     <Show when={feedback().reason}>
                       <div class="feedback-detail">{feedback().reason}</div>
@@ -625,16 +689,33 @@ function WorldSummaryPanel() {
                   </EventCard>
                 )}
               </Show>
-              <EventCard title={tr(locale(), "下一步", "Next Step")} badge={gameplay().stageStatus || "-"}>
-                <div class="feedback-summary">
-                  {gameplay().nextStepHint || tr(locale(), "等待下一次 runtime 指引更新。", "Wait for the next runtime guidance update.")}
-                </div>
-                <Show when={gameplay().branchHint}>
-                  <div class="feedback-detail">{gameplay().branchHint}</div>
-                </Show>
-              </EventCard>
               <Show when={gameplayActionFeedback()}>
                 {(feedback) => <FeedbackCard feedback={feedback()} display={gameplayActionFeedbackDisplay()} />}
+              </Show>
+              <Show when={gameplay().recommendedAction}>
+                {(action) => (
+                  <CalloutCard
+                    title={tr(locale(), "推荐动作", "Recommended Action")}
+                    badge={action().executeKind || "ready"}
+                    badgeClass="badge badge--good"
+                  >
+                    <div class="feedback-summary">
+                      {action().label || action().actionId || tr(locale(), "当前存在一条更合适的推进动作。", "One action is currently the best next move.")}
+                    </div>
+                    <div class="feedback-detail">
+                      {gameplay().narrativeNextStep
+                        || tr(locale(), "先执行这一步，再判断是否需要切到聊天、恢复或改道。", "Take this action first, then decide whether to chat, resume, or reprioritize.")}
+                    </div>
+                    <div class="toolbar">
+                      <button
+                        disabled={Boolean(action().disabledReason)}
+                        onClick={() => renderGameplayAction(action())}
+                      >
+                        {gameplayActionButtonLabel(action(), locale())}
+                      </button>
+                    </div>
+                  </CalloutCard>
+                )}
               </Show>
               <div>
                 <div class="panel__title" style="margin-bottom:10px;">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
@@ -648,8 +729,12 @@ function WorldSummaryPanel() {
                         <EventCard
                           class="event-card event-card--action"
                           title={action.label || action.actionId || "unknown_action"}
-                          badge={action.disabledReason ? "handoff" : "ready"}
-                          badgeClass={action.disabledReason ? "badge badge--warn" : "badge badge--good"}
+                          badge={gameplay().recommendedAction?.actionId === action.actionId
+                            ? tr(locale(), "recommended", "recommended")
+                            : action.disabledReason ? "handoff" : "ready"}
+                          badgeClass={gameplay().recommendedAction?.actionId === action.actionId
+                            ? "badge badge--accent"
+                            : action.disabledReason ? "badge badge--warn" : "badge badge--good"}
                           meta={
                             action.targetAgentId
                               ? tr(locale(), `作用对象 ${action.targetAgentId}`, `Acts on ${action.targetAgentId}`)
@@ -666,15 +751,9 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 disabled={Boolean(action.disabledReason)}
-                                onClick={() => core.sendGameplayAction(action)}
+                                onClick={() => renderGameplayAction(action)}
                               >
-                                {action.executeKind === "request_snapshot"
-                                  ? tr(locale(), "刷新快照", "Refresh Snapshot")
-                                  : action.executeKind === "step"
-                                    ? tr(locale(), "推进一步", "Advance One Step")
-                                    : action.executeKind === "play"
-                                      ? tr(locale(), "恢复实时推进", "Resume Live Play")
-                                      : tr(locale(), "提交玩法动作", "Submit Gameplay Action")}
+                                {gameplayActionButtonLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
@@ -682,9 +761,9 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 disabled={Boolean(action.disabledReason)}
-                                onClick={() => core.applySelection({ kind: "agent", id: action.targetAgentId })}
+                                onClick={() => renderGameplayAction(action)}
                               >
-                                {tr(locale(), "切到聊天面板", "Use Chat Panel")}
+                                {gameplayActionButtonLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
