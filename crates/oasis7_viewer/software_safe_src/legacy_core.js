@@ -18,6 +18,7 @@ const HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
 const HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 30000;
 const DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
 const MAX_EVENTS = 24;
+const MAX_DECISION_TRACES = 12;
 const SOFTWARE_RENDERER_MARKERS = [
   "swiftshader",
   "llvmpipe",
@@ -74,6 +75,7 @@ export const state = {
   hostedAccess: null,
   hostedAdmission: null,
   recentEvents: [],
+  recentDecisionTraces: [],
   chatHistory: [],
   selectedObject: null,
   auth: {
@@ -1827,6 +1829,11 @@ function getState() {
     hostedActionMatrix: clone(hostedActionMatrixView),
     hostedAdmission: clone(state.hostedAdmission),
     gameplaySummary: clone(gameplaySummary),
+    lastDecisionTrace: snapshotDecisionTrace(state.recentDecisionTraces[0] || null),
+    recentDecisionTracesCount: state.recentDecisionTraces.length,
+    recentDecisionTraces: state.recentDecisionTraces
+      .slice(0, 4)
+      .map((trace) => snapshotDecisionTrace(trace)),
     strongAuthApprovalCodeConfigured: !!String(state.strongAuth.approvalCode || "").trim(),
     strongAuthLastGrantActionId: state.strongAuth.lastGrantActionId,
     strongAuthLastGrantExpiresAtUnixMs: state.strongAuth.lastGrantExpiresAtUnixMs,
@@ -2260,6 +2267,44 @@ function handleMetrics(time, metrics) {
   state.metrics = metrics || null;
   state.traceCount = Number(metrics?.decision_trace_count || 0);
   state.logicalTime = Math.max(state.logicalTime, Number(time || 0), Number(metrics?.total_ticks || 0));
+  state.tick = state.logicalTime;
+}
+
+function clipTraceText(value, limit = 480) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return null;
+  }
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit)}…`;
+}
+
+function snapshotDecisionTrace(trace) {
+  if (!trace || typeof trace !== "object") {
+    return null;
+  }
+  return {
+    agent_id: trace.agent_id || null,
+    time: Number(trace.time || 0),
+    decision: clone(trace.decision || null),
+    llm_error: trace.llm_error || null,
+    parse_error: trace.parse_error || null,
+    llm_input_excerpt: clipTraceText(trace.llm_input),
+    llm_output_excerpt: clipTraceText(trace.llm_output),
+    llm_diagnostics: clone(trace.llm_diagnostics || null),
+  };
+}
+
+function handleDecisionTrace(trace) {
+  if (!trace || typeof trace !== "object") {
+    return;
+  }
+  state.recentDecisionTraces.unshift(clone(trace));
+  state.recentDecisionTraces = state.recentDecisionTraces.slice(0, MAX_DECISION_TRACES);
+  state.traceCount = Math.max(state.traceCount, state.recentDecisionTraces.length);
+  state.logicalTime = Math.max(state.logicalTime, Number(trace?.time || 0));
   state.tick = state.logicalTime;
 }
 
@@ -3749,6 +3794,9 @@ function handleViewerMessage(message) {
     }
     case "metrics":
       handleMetrics(message.time, message.metrics);
+      break;
+    case "decision_trace":
+      handleDecisionTrace(message.trace);
       break;
     case "control_completion_ack":
       handleControlCompletionAck(message.ack);

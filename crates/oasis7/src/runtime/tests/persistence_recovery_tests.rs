@@ -1,4 +1,5 @@
 use super::*;
+use oasis7_distfs::assemble_snapshot;
 
 #[test]
 fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
@@ -63,6 +64,52 @@ fn snapshot_json_without_era_fields_keeps_backward_compatibility() {
     assert_eq!(restored.action_id_era, 0);
     assert_eq!(restored.intent_id_era, 0);
     assert_eq!(restored.proposal_id_era, 0);
+}
+
+#[test]
+fn sample_issue160_execution_world_matches_tick_consensus_after_distfs_restore() {
+    let dir = std::path::Path::new(
+        "output/chain-runtime/viewer-live-node-playtest-issue160-trust-refresh-fix1/reward-runtime-execution-world",
+    );
+    if !dir.exists() {
+        return;
+    }
+
+    let snapshot_json = Snapshot::load_json(dir.join("snapshot.json")).expect("load snapshot json");
+    let journal = Journal::load_json(dir.join("journal.json")).expect("load journal json");
+    let manifest: oasis7_proto::distributed::SnapshotManifest =
+        crate::runtime::util::read_json_from_path(dir.join("snapshot.manifest.json").as_path())
+            .expect("load distfs snapshot manifest");
+    let store = LocalCasStore::new(dir.join(".distfs-state"));
+    let snapshot_distfs: Snapshot =
+        assemble_snapshot(&manifest, &store).expect("assemble distfs snapshot");
+
+    let world_from_json =
+        World::from_snapshot(snapshot_json.clone(), journal.clone()).expect("world from json");
+    let world_from_distfs =
+        World::from_snapshot(snapshot_distfs.clone(), journal).expect("world from distfs");
+
+    let json_tick_root = snapshot_json
+        .tick_consensus_records
+        .last()
+        .map(|record| record.block.header.state_root.clone())
+        .expect("json tick consensus record");
+    let distfs_tick_root = snapshot_distfs
+        .tick_consensus_records
+        .last()
+        .map(|record| record.block.header.state_root.clone())
+        .expect("distfs tick consensus record");
+    let json_world_tick_root = world_from_json
+        .latest_tick_consensus_record()
+        .map(|record| record.block.header.state_root.clone())
+        .expect("json world tick root");
+    let distfs_world_tick_root = world_from_distfs
+        .latest_tick_consensus_record()
+        .map(|record| record.block.header.state_root.clone())
+        .expect("distfs world tick root");
+
+    assert_eq!(json_tick_root, json_world_tick_root);
+    assert_eq!(distfs_tick_root, distfs_world_tick_root);
 }
 
 #[test]

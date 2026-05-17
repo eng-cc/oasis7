@@ -430,6 +430,7 @@ pub struct ProviderBackedAgentBehavior<P: DecisionProvider> {
     fixture_id: Option<String>,
     replay_id: Option<String>,
     timeout_budget_ms: u64,
+    base_memory_summary: Option<String>,
     memory_summary: Option<String>,
     recent_event_summary: VecDeque<String>,
     pending_trace: Option<AgentDecisionTrace>,
@@ -455,6 +456,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
             fixture_id: None,
             replay_id: None,
             timeout_budget_ms: DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS,
+            base_memory_summary: None,
             memory_summary: None,
             recent_event_summary: VecDeque::new(),
             pending_trace: None,
@@ -515,8 +517,22 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     }
 
     pub fn with_memory_summary(mut self, memory_summary: impl Into<String>) -> Self {
-        self.memory_summary = Some(memory_summary.into());
+        self.base_memory_summary = Some(memory_summary.into());
         self
+    }
+
+    fn composed_memory_summary(&self) -> Option<String> {
+        match (
+            self.base_memory_summary.as_deref(),
+            self.memory_summary.as_deref(),
+        ) {
+            (Some(base), Some(latest)) if latest != base => {
+                Some(format!("{base}\nrecent_action_feedback={latest}"))
+            }
+            (Some(base), _) => Some(base.to_string()),
+            (None, Some(latest)) => Some(latest.to_string()),
+            (None, None) => None,
+        }
     }
 
     fn push_recent_event_summary(&mut self, summary: String) {
@@ -527,6 +543,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
     }
 
     fn build_request(&self, observation: &Observation) -> DecisionRequest {
+        let memory_summary = self.composed_memory_summary();
         DecisionRequest {
             observation: ObservationEnvelope {
                 agent_id: self.agent_id.clone(),
@@ -539,7 +556,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
                 observation: provider_observation_from_runtime_observation(
                     self.execution_mode,
                     observation,
-                    self.memory_summary.as_deref(),
+                    memory_summary.as_deref(),
                     &self
                         .recent_event_summary
                         .iter()
@@ -548,7 +565,7 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
                     &self.action_catalog,
                 ),
                 recent_event_summary: self.recent_event_summary.iter().cloned().collect(),
-                memory_summary: self.memory_summary.clone(),
+                memory_summary: memory_summary.clone(),
                 action_catalog: self.action_catalog.clone(),
                 timeout_budget_ms: self.timeout_budget_ms,
             },

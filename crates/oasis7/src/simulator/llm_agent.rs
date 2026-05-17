@@ -30,6 +30,7 @@ use super::types::{
 mod behavior_guardrails;
 mod behavior_loop;
 mod behavior_prompt;
+mod behavior_prompt_modules;
 mod behavior_runtime_helpers;
 mod config_helpers;
 mod decision_flow;
@@ -768,6 +769,9 @@ pub struct OpenAiChatCompletionClient {
     request_timeout_ms: u64,
 }
 
+const OPENAI_RATE_LIMIT_RETRY_DELAY_MS: u64 = 250;
+const OPENAI_RATE_LIMIT_RETRY_ATTEMPTS: u32 = 1;
+
 impl OpenAiChatCompletionClient {
     pub fn from_config(config: &LlmAgentConfig) -> Result<Self, LlmClientError> {
         let request_timeout_ms = config.timeout_ms.max(1);
@@ -1002,33 +1006,54 @@ impl LlmCompletionClient for OpenAiChatCompletionClient {
         request: &LlmCompletionRequest,
     ) -> Result<LlmCompletionResult, LlmClientError> {
         let payload = build_responses_request_payload(request)?;
-
-        match self.send_responses_request(&self.client, payload.clone()) {
-            Ok(result) => return Ok(result),
-            Err(OpenAiRequestError::ParseBody(raw_body)) => {
-                return Err(LlmClientError::DecodeResponse {
-                    message: format!(
-                        "responses sdk decode failed (primary request): {}",
-                        summarize_trace_text(raw_body.as_str(), 320)
-                    ),
-                });
-            }
-            Err(OpenAiRequestError::Timeout(err)) => {
-                return Err(LlmClientError::Http {
-                    message: format!(
-                        "request timed out after {}ms: {}",
-                        self.request_timeout_ms, err
-                    ),
-                });
-            }
-            Err(OpenAiRequestError::Completion(err)) => {
-                return Err(err);
-            }
-            Err(OpenAiRequestError::Other(err)) => {
-                return Err(LlmClientError::Http { message: err });
+        for attempt in 0..=OPENAI_RATE_LIMIT_RETRY_ATTEMPTS {
+            match self.send_responses_request(&self.client, payload.clone()) {
+                Ok(result) => return Ok(result),
+                Err(OpenAiRequestError::ParseBody(raw_body))
+                    if attempt < OPENAI_RATE_LIMIT_RETRY_ATTEMPTS
+                        && is_openai_concurrency_limit_error(raw_body.as_str()) =>
+                {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    std::thread::sleep(std::time::Duration::from_millis(
+                        OPENAI_RATE_LIMIT_RETRY_DELAY_MS,
+                    ));
+                    continue;
+                }
+                Err(OpenAiRequestError::ParseBody(raw_body)) => {
+                    return Err(LlmClientError::DecodeResponse {
+                        message: format!(
+                            "responses sdk decode failed (primary request): {}",
+                            summarize_trace_text(raw_body.as_str(), 320)
+                        ),
+                    });
+                }
+                Err(OpenAiRequestError::Timeout(err)) => {
+                    return Err(LlmClientError::Http {
+                        message: format!(
+                            "request timed out after {}ms: {}",
+                            self.request_timeout_ms, err
+                        ),
+                    });
+                }
+                Err(OpenAiRequestError::Completion(err)) => {
+                    return Err(err);
+                }
+                Err(OpenAiRequestError::Other(err)) => {
+                    return Err(LlmClientError::Http { message: err });
+                }
             }
         }
+
+        Err(LlmClientError::Http {
+            message: "responses request exhausted retry budget".to_string(),
+        })
     }
+}
+
+fn is_openai_concurrency_limit_error(raw_body: &str) -> bool {
+    let lowered = raw_body.to_ascii_lowercase();
+    lowered.contains("\"type\":\"rate_limit_error\"")
+        && lowered.contains("concurrency limit exceeded")
 }
 
 #[derive(Debug)]

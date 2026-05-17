@@ -56,14 +56,15 @@ const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
 const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
-const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
 
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
-use self::provider_support::{env_requests_provider_backend, provider_phase1_action_catalog};
+use self::provider_support::{
+    env_requests_provider_backend, provider_phase1_action_catalog, provider_phase1_memory_summary,
+};
 use self::runtime_support::{
     hash_chat_message, normalize_optional_public_key, restore_behavior_long_term_memory_from_model,
     runtime_provider_check_cache_key, runtime_provider_check_now_unix_ms,
@@ -101,9 +102,10 @@ fn resolve_runtime_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
     let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1))
-        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
+        .map(|value| value.max(1));
+    runtime_timeout_ceiling_ms.map_or(configured_timeout_ms, |ceiling_ms| {
+        configured_timeout_ms.min(ceiling_ms)
+    })
 }
 
 enum RuntimeDecisionRunner {
@@ -149,6 +151,17 @@ impl RuntimeLlmDecision {
             decision_trace: Some(trace),
         }
     }
+}
+
+fn runtime_live_phase1_short_term_goal() -> String {
+    concat!(
+        "post_onboarding.establish_first_capability 阶段，先做第一条可持续工业线。 ",
+        "开局默认种子资源通常已足够首个 smelter：若 self_resources.electricity>=10 且 data>=5 且还没有 factory.smelter.mk1，",
+        "优先 build_factory(factory.smelter.mk1)，不要先 harvest_radiation。 ",
+        "只有在 electricity<10 时才先 harvest_radiation；只有在 data<5 时才先 mine_compound/refine_compound。 ",
+        "smelter 建好后立刻 schedule_recipe(recipe.smelter.iron_ingot 或其他首批 smelter 配方)，避免 wait。"
+    )
+    .to_string()
 }
 
 pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
@@ -755,13 +768,24 @@ impl RuntimeLlmSidecar {
                     let client = OpenAiChatCompletionClient::from_config(&config)
                         .map_err(|err| format!("llm init failed for {}: {:?}", agent_id, err))?;
                     let mut behavior = LlmAgentBehavior::new(agent_id.clone(), config, client);
-                    if let Some(profile) = self.prompt_profiles.get(agent_id.as_str()) {
-                        behavior.apply_prompt_overrides(
-                            profile.system_prompt_override.clone(),
-                            profile.short_term_goal_override.clone(),
-                            profile.long_term_goal_override.clone(),
-                        );
-                    }
+                    let short_term_goal_override = self
+                        .prompt_profiles
+                        .get(agent_id.as_str())
+                        .and_then(|profile| profile.short_term_goal_override.clone())
+                        .or_else(|| Some(runtime_live_phase1_short_term_goal()));
+                    let system_prompt_override = self
+                        .prompt_profiles
+                        .get(agent_id.as_str())
+                        .and_then(|profile| profile.system_prompt_override.clone());
+                    let long_term_goal_override = self
+                        .prompt_profiles
+                        .get(agent_id.as_str())
+                        .and_then(|profile| profile.long_term_goal_override.clone());
+                    behavior.apply_prompt_overrides(
+                        system_prompt_override,
+                        short_term_goal_override,
+                        long_term_goal_override,
+                    );
                     restore_behavior_long_term_memory_from_model(
                         &mut behavior,
                         kernel,
@@ -794,7 +818,8 @@ impl RuntimeLlmSidecar {
                     ))
                     .with_agent_profile(settings.agent_profile.clone())
                     .with_execution_mode(settings.execution_mode)
-                    .with_environment_class("runtime_live");
+                    .with_environment_class("runtime_live")
+                    .with_memory_summary(provider_phase1_memory_summary());
                     let behavior =
                         if let Some(fallback_reason) = settings.fallback_reason.as_deref() {
                             behavior.with_fallback_reason(fallback_reason)
@@ -881,10 +906,10 @@ mod tests {
     }
 
     #[test]
-    fn runtime_live_llm_timeout_defaults_to_trust_floor_budget() {
+    fn runtime_live_llm_timeout_defaults_to_configured_budget() {
         let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
         std::env::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
+        assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 180_000);
         assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
     }
 

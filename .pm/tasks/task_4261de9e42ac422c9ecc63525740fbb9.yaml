@@ -1,0 +1,25 @@
+task_uid: task_4261de9e42ac422c9ecc63525740fbb9
+title: "close issue 160 first capability gate after PostOnboarding"
+owner_role: runtime_engineer
+worktree_hint: /home/scc/worktrees/oasis7-game-issue-160-first-capability-gate
+execution_log_path: .pm/tasks/task_4261de9e42ac422c9ecc63525740fbb9.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/game/project.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+  - doc/game/gameplay/gameplay-top-level-design.project.md
+doc_refs:
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md
+  - doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md
+related_prd:
+  - PRD-GAME-012
+acceptance:
+  - "Active-LLM formal lane is rerun on current main truth and trust/capability verdicts are updated from fresh evidence."
+  - "If a repo-side blocker remains for first capability closure, the blocker is fixed or narrowed to a documented remaining gap with validation evidence."
+  - "Project/task docs and execution log reflect the new issue-160 truth without stale trust-gate wording."
+handoff_to: []
+updated_at: 2026-05-17T18:11:58+08:00
+last_started_at: 2026-05-16T21:17:43+08:00
+last_closed_at: 2026-05-17T18:11:58+08:00

@@ -96,9 +96,9 @@
 - 更新日期: 2026-05-07
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: 由 `qa_engineer` 基于当前 `main` 重新执行 active-LLM formal trust-gate 样本；`runtime_engineer` 已先清掉 launcher 在 fresh execution world 缺少初始 `snapshot.json/journal.json` 时提前退出的 startup blocker，因此下一轮 verdict 应回到正式 trust sample，而不是停在 bootstrap 失败。
+- 下一任务: 当前专题的历史 `hold/not_run` baseline 已被 fresh formal evidence 刷新；后续只在出现新回退时再补新的 active-LLM formal rerun，而不是继续把 `#160` 当作当前未解 blocker。
 
-口径更新（2026-04-15）: `PRD-GAME-012` 当前正式 verdict 已拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。当前 active-LLM formal truth 仍是 `trust gate = hold`、`capability gate = not_run`；原因不是 capability 已单独判失败，而是 trust floor 回退后当前 formal lane 尚未进入 capability gate。
+- 口径更新（2026-05-17）: `PRD-GAME-012` 当前正式 verdict 继续拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。2026-04-15 的 `trust gate = hold / capability gate = not_run` 保留为历史 baseline；当前 fresh active-LLM formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`，证据见 `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`。
 - 说明:
   - 本专题不改变当前阶段，也不改变 active-LLM 正式游玩前置。
   - 本专题优先级高于新的宏系统扩面与宣传性包装。
@@ -110,6 +110,6 @@
   - viewer follow-up `task_a0173315eb4d44c9b83073dd55442f48` 已补齐上一条修复里仍残留的 advanced industrial recipe surface drift：`player_gameplay` 现在会显式暴露 runtime 已支持的 `scale_out` / `governance` 配方动作，active-LLM recipe truth 也扩到 runtime 已开放的 smelter / assembler 高阶配方，shadow kernel 决策面不再漏掉 `recipe.smelter.alloy_plate`、`recipe.assembler.gear`、`recipe.assembler.sensor_pack`、`recipe.assembler.module_rack`、`recipe.assembler.factory_core`。这条 follow-up 的目标是避免 canonical gameplay、LLM 提示与 shadow decision path 继续各说各话，把 runtime 明明可执行的工业能力链留在“支持但永远不会被选中”的灰区。
   - runtime follow-up `task_ed2dd76639264739a61a25c0d89c3352` 已收口当前 retention slice 的另一组 canonical truth regressions：`player_gameplay` 现在会优先跟随当前主线能力链，而不是被字典序更靠前的次级 blocked 工厂劫持；`industry_progress.stage` 也会在回收最后一座已完成产出的工厂后按现存工厂完成度重新回退，不再让历史累计完成数把失效能力误报成 `choose_first_expansion_tradeoff` 或 `choose_midloop_path`。该切片只修复真值误判，不替代新的 active-LLM formal retention 样本。
   - runtime follow-up `task_167a5da426df4c42bf0aa4de26ec1b61` 已收口另一组确定性 progression regressions：`runtime_live` 现在只会在真实玩家控制已确认产生前向增量后，才把后续 `blocked` / `completed_no_progress` 归入 `post_onboarding.recover_capability`，不再把 fresh session 的 bootstrap tick 或背景时间推进误判成正式阶段推进；同时 gameplay industrial action 的建厂门槛已改成与 runtime `BuildFactory` 真值一致，按 `agent ledger -> world fallback` 判断 smelter/assembler build 是否可执行，避免前台 action 卡片仅因忽略 agent ledger 而把可执行扩产链误报为材料不足。
-  - `TASK-GAME-065` 的最新正式结论是：active-LLM `software_safe` formal floor 已恢复，不再以 `Responses API` 10 秒超时作为当前阻断项；但当前 `10-minute trust gate` 仍为 `hold`，因为 `3` 条正式样本里只有 `1` 条保持连续 progression，另 `2` 条出现 `post_onboarding -> first_session_loop` 回退并冻结世界时间。
-  - 同一批 trust 样本也尚未证明 `first capability gate`，但 capability 未闭环已不再作为单独拉低 trust verdict 的唯一理由；它改由后续 `30` 分钟或 `1~3` 次会话样本单列追踪。
-  - 最新 `240s` active-LLM 对照复跑没有再复现硬冻结，但仍稳定停在 `post_onboarding.establish_first_capability / 20%`；这说明“冻结放大器”与“长期不推进”是两条相关但独立的 blocker，前者继续阻断 trust gate，后者继续阻断 capability gate。
+  - `TASK-GAME-065` 的历史正式结论保留为 failure archive：当时 active-LLM `software_safe` floor 虽恢复，但 trust/capability 仍未通过。
+  - 后续 `issue-160-first-capability-closeout` 已继续拆除“冻结放大器”与“20% 长停”两条 blocker，并以 `issue160-trust-refresh-fix11-capability-window` 把 formal lane 推进到 `post_onboarding.choose_first_expansion_tradeoff / 92%`。
+  - 因此本专题当前应把 2026-04-15 样本集视为历史基线，而不是继续当作今天的 active blocker 文案。

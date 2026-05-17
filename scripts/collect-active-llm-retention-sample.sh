@@ -425,6 +425,10 @@ payload = {
             "blockerDetail": summary.get("blockerDetail"),
             "nextStepHint": summary.get("nextStepHint"),
         },
+        "traceCount": state.get("traceCount"),
+        "recentDecisionTracesCount": state.get("recentDecisionTracesCount"),
+        "lastDecisionTrace": state.get("lastDecisionTrace"),
+        "recentDecisionTraces": state.get("recentDecisionTraces"),
         "lastControlFeedback": {
             "id": feedback.get("id"),
             "action": feedback.get("action"),
